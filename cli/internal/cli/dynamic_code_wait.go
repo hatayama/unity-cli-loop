@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
@@ -13,7 +14,7 @@ const (
 )
 
 func shouldWaitForExecuteDynamicCodeDomainReload(command string, params map[string]any) bool {
-	if command != executeDynamicCodeCommandName {
+	if command != clicore.ExecuteDynamicCodeCommandName {
 		return false
 	}
 	if compileOnly, ok := params[dynamicCodeCompileOnlyParam].(bool); ok && compileOnly {
@@ -23,7 +24,7 @@ func shouldWaitForExecuteDynamicCodeDomainReload(command string, params map[stri
 }
 
 func domainReloadWaitEnabled(params map[string]any, defaultValue bool) bool {
-	value, ok := params[domainReloadWaitParam].(bool)
+	value, ok := params[clicore.DomainReloadWaitParam].(bool)
 	if ok {
 		return value
 	}
@@ -48,7 +49,7 @@ func shouldWaitForExecuteDynamicCodeDisconnect(err error, outcome unityipc.Unity
 	if !outcome.RequestDispatched {
 		return false
 	}
-	return isTransportDisconnectError(err)
+	return clicore.IsTransportDisconnectError(err)
 }
 
 func stripExecuteDynamicCodeControlResult(result []byte) []byte {

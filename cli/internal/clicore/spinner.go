@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"fmt"
@@ -16,9 +16,9 @@ const (
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
-type terminalSpinner struct {
+type TerminalSpinner struct {
 	writer   io.Writer
-	enabled  bool
+	Enabled  bool
 	message  string
 	frame    int
 	done     chan struct{}
@@ -27,11 +27,11 @@ type terminalSpinner struct {
 	mutex    sync.Mutex
 }
 
-func newToolSpinner(stderr io.Writer, command string) *terminalSpinner {
+func NewToolSpinner(stderr io.Writer, command string) *TerminalSpinner {
 	return newSpinner(stderr, shouldShowToolFeedback(command) && isTerminalWriter(stderr), "Connecting to Unity...")
 }
 
-func newLaunchSpinner(stdout io.Writer, stderr io.Writer) *terminalSpinner {
+func NewLaunchSpinner(stdout io.Writer, stderr io.Writer) *TerminalSpinner {
 	if isTerminalWriter(stdout) {
 		return newSpinner(stdout, true, "Waiting for Unity to finish starting...")
 	}
@@ -42,7 +42,7 @@ func newLaunchSpinner(stdout io.Writer, stderr io.Writer) *terminalSpinner {
 // and passes display-ready payloads (such as the heartbeat main-thread stall
 // notice) through to the spinner verbatim. Without this mapping the stall
 // diagnosis built by the IPC client would never reach the user.
-func newSpinnerProgressFunc(spinner *terminalSpinner, executingMessage string) unityipc.ProgressFunc {
+func NewSpinnerProgressFunc(spinner *TerminalSpinner, executingMessage string) unityipc.ProgressFunc {
 	return func(message string) {
 		if message == unityipc.ProgressEventConnected || message == unityipc.ProgressEventAccepted {
 			spinner.Update(executingMessage)
@@ -52,10 +52,10 @@ func newSpinnerProgressFunc(spinner *terminalSpinner, executingMessage string) u
 	}
 }
 
-func newSpinner(writer io.Writer, enabled bool, message string) *terminalSpinner {
-	spinner := &terminalSpinner{
+func newSpinner(writer io.Writer, enabled bool, message string) *TerminalSpinner {
+	spinner := &TerminalSpinner{
 		writer:  writer,
-		enabled: enabled,
+		Enabled: enabled,
 		message: message,
 		done:    make(chan struct{}),
 		stopped: make(chan struct{}),
@@ -71,8 +71,8 @@ func newSpinner(writer io.Writer, enabled bool, message string) *terminalSpinner
 	return spinner
 }
 
-func (spinner *terminalSpinner) Update(message string) {
-	if !spinner.enabled {
+func (spinner *TerminalSpinner) Update(message string) {
+	if !spinner.Enabled {
 		return
 	}
 
@@ -82,8 +82,8 @@ func (spinner *terminalSpinner) Update(message string) {
 	spinner.render()
 }
 
-func (spinner *terminalSpinner) Stop() {
-	if !spinner.enabled {
+func (spinner *TerminalSpinner) Stop() {
+	if !spinner.Enabled {
 		return
 	}
 
@@ -96,7 +96,7 @@ func (spinner *terminalSpinner) Stop() {
 	})
 }
 
-func (spinner *terminalSpinner) run() {
+func (spinner *TerminalSpinner) run() {
 	ticker := time.NewTicker(spinnerFrameInterval)
 	defer ticker.Stop()
 	defer close(spinner.stopped)
@@ -111,7 +111,7 @@ func (spinner *terminalSpinner) run() {
 	}
 }
 
-func (spinner *terminalSpinner) render() {
+func (spinner *TerminalSpinner) render() {
 	spinner.mutex.Lock()
 	defer spinner.mutex.Unlock()
 
@@ -135,5 +135,5 @@ func isTerminalWriter(writer io.Writer) bool {
 }
 
 func shouldShowToolFeedback(command string) bool {
-	return command != executeDynamicCodeCommandName
+	return command != ExecuteDynamicCodeCommandName
 }

@@ -5,6 +5,7 @@ import (
 	"io"
 
 	clicontract "github.com/hatayama/unity-cli-loop/cli"
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 var (
@@ -20,5 +21,5 @@ func writeDispatcherVersionJSON(stdout io.Writer) {
 	if err != nil {
 		panic(err)
 	}
-	writeLine(stdout, string(content))
+	clicore.WriteLine(stdout, string(content))
 }

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
@@ -24,10 +25,10 @@ func TestSendWithTransientConnectionRetryReportsUnityServerNotResponding(t *test
 	originalPoll := serverConnectionRetryPoll
 	focusCallCount := 0
 	restoreCallCount := 0
-	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 123}, nil
+	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 123}, nil
 	}
-	focusUnityProcessForConnectionRetry = func(context.Context, int) (restoreFocusFunc, error) {
+	focusUnityProcessForConnectionRetry = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
 		focusCallCount++
 		return func(context.Context) error {
 			restoreCallCount++
@@ -58,7 +59,7 @@ func TestSendWithTransientConnectionRetryReportsUnityServerNotResponding(t *test
 		map[string]any{},
 		nil)
 
-	var notRespondingErr unityServerNotRespondingError
+	var notRespondingErr clicore.UnityServerNotRespondingError
 	if !errors.As(err, &notRespondingErr) {
 		t.Fatalf("expected unityServerNotRespondingError, got %v", err)
 	}
@@ -78,10 +79,10 @@ func TestSendWithTransientConnectionRetryWritesFocusSuccessVibeLog(t *testing.T)
 	originalFocus := focusUnityProcessForConnectionRetry
 	originalTimeout := serverConnectionRetryTimeout
 	originalPoll := serverConnectionRetryPoll
-	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 456}, nil
+	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 456}, nil
 	}
-	focusUnityProcessForConnectionRetry = func(context.Context, int) (restoreFocusFunc, error) {
+	focusUnityProcessForConnectionRetry = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
 		return nil, nil
 	}
 	serverConnectionRetryTimeout = time.Nanosecond
@@ -131,10 +132,10 @@ func TestSendWithTransientConnectionRetryWritesFocusFailureVibeLog(t *testing.T)
 	originalFocus := focusUnityProcessForConnectionRetry
 	originalTimeout := serverConnectionRetryTimeout
 	originalPoll := serverConnectionRetryPoll
-	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 789}, nil
+	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 789}, nil
 	}
-	focusUnityProcessForConnectionRetry = func(context.Context, int) (restoreFocusFunc, error) {
+	focusUnityProcessForConnectionRetry = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
 		return nil, fmt.Errorf("focus denied")
 	}
 	serverConnectionRetryTimeout = time.Nanosecond
@@ -182,7 +183,7 @@ func TestSendWithTransientConnectionRetryClassifiesProcessProbeTimeout(t *testin
 	originalFinder := findRunningUnityProcessForConnectionRetry
 	originalTimeout := serverConnectionRetryTimeout
 	originalPoll := serverConnectionRetryPoll
-	findRunningUnityProcessForConnectionRetry = func(ctx context.Context, projectRoot string) (*unityProcess, error) {
+	findRunningUnityProcessForConnectionRetry = func(ctx context.Context, projectRoot string) (*clicore.UnityProcess, error) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}
@@ -209,7 +210,7 @@ func TestSendWithTransientConnectionRetryClassifiesProcessProbeTimeout(t *testin
 		map[string]any{},
 		nil)
 
-	var notRespondingErr unityServerNotRespondingError
+	var notRespondingErr clicore.UnityServerNotRespondingError
 	if !errors.As(err, &notRespondingErr) {
 		t.Fatalf("expected unityServerNotRespondingError, got %v", err)
 	}
@@ -217,7 +218,7 @@ func TestSendWithTransientConnectionRetryClassifiesProcessProbeTimeout(t *testin
 
 func readOnlyCliVibeLog(t *testing.T, projectRoot string) string {
 	t.Helper()
-	logFiles, err := filepath.Glob(filepath.Join(projectRoot, cliVibeLogDirectory, cliVibeLogPrefix+"_*.json"))
+	logFiles, err := filepath.Glob(filepath.Join(projectRoot, clicore.CLIVibeLogDirectory, clicore.CLIVibeLogPrefix+"_*.json"))
 	if err != nil {
 		t.Fatalf("failed to glob CLI Vibe logs: %v", err)
 	}
@@ -229,6 +230,24 @@ func readOnlyCliVibeLog(t *testing.T, projectRoot string) string {
 		t.Fatalf("failed to read CLI Vibe log: %v", err)
 	}
 	return string(content)
+}
+
+func enableCliVibeLog(t *testing.T) {
+	t.Helper()
+	t.Setenv(clicore.CLIVibeLogEnvName, "1")
+}
+
+// timeoutOnlyError is duplicated from internal/clicore's test helper of the
+// same name: test helpers cannot be shared across packages, and both
+// packages exercise timeout-only error classification.
+type timeoutOnlyError struct{}
+
+func (timeoutOnlyError) Error() string {
+	return "i/o timeout"
+}
+
+func (timeoutOnlyError) Timeout() bool {
+	return true
 }
 
 // Verifies dispatched pre-accept timeouts are treated as focus-worthy slow Unity responses.
@@ -327,14 +346,14 @@ func TestConnectionRetryFocusControllerRetriesAfterProcessDiscoveryMiss(t *testi
 	originalFocus := focusUnityProcessForConnectionRetry
 	findCallCount := 0
 	focusCallCount := 0
-	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*unityProcess, error) {
+	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*clicore.UnityProcess, error) {
 		findCallCount++
 		if findCallCount == 1 {
 			return nil, nil
 		}
-		return &unityProcess{pid: 123}, nil
+		return &clicore.UnityProcess{Pid: 123}, nil
 	}
-	focusUnityProcessForConnectionRetry = func(context.Context, int) (restoreFocusFunc, error) {
+	focusUnityProcessForConnectionRetry = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
 		focusCallCount++
 		return nil, nil
 	}
@@ -525,10 +544,10 @@ func TestSendWithTransientConnectionRetryKeepsUnityFocusedAfterPreAcceptTimeout(
 	originalTimeout := serverConnectionRetryTimeout
 	focusCallCount := 0
 	restoreCallCount := 0
-	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 123}, nil
+	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 123}, nil
 	}
-	focusUnityProcessForConnectionRetry = func(context.Context, int) (restoreFocusFunc, error) {
+	focusUnityProcessForConnectionRetry = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
 		focusCallCount++
 		return func(context.Context) error {
 			restoreCallCount++
@@ -674,7 +693,7 @@ func TestSendWithTransientConnectionRetryReturnsBusyAfterRetryWindow(t *testing.
 	// guard while retryContext.Err() is still nil and surface the dial error instead.
 	// Block until the context is done, like a real OS process scan that always
 	// outlasts those microseconds, so the busy guard sees the expired context.
-	findRunningUnityProcessForConnectionRetry = func(ctx context.Context, projectRoot string) (*unityProcess, error) {
+	findRunningUnityProcessForConnectionRetry = func(ctx context.Context, projectRoot string) (*clicore.UnityProcess, error) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}
@@ -747,10 +766,10 @@ func TestSendWithTransientConnectionRetryExtendsWindowWhileUnityProcessRuns(t *t
 	originalFocus := focusUnityProcessForConnectionRetry
 	originalTimeout := serverConnectionRetryTimeout
 	originalPoll := serverConnectionRetryPoll
-	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 123}, nil
+	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 123}, nil
 	}
-	focusUnityProcessForConnectionRetry = func(context.Context, int) (restoreFocusFunc, error) {
+	focusUnityProcessForConnectionRetry = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
 		return func(context.Context) error { return nil }, nil
 	}
 	// Base window expires well before the server comes up; only the extended

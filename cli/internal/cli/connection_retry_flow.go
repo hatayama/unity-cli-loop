@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
@@ -12,7 +13,7 @@ func newConnectionRetryClient(
 	responseTimeout time.Duration,
 	mainThreadStallHandler func(float64),
 ) *unityipc.Client {
-	client := unityipc.NewClient(connection, version)
+	client := unityipc.NewClient(connection, clicore.Version)
 	if responseTimeout > 0 {
 		client = client.WithResponseTimeout(responseTimeout)
 	}
@@ -79,7 +80,7 @@ func finishUndispatchedRetryProbe(
 	outcome unityipc.UnitySendOutcome,
 	err error,
 	processErr error,
-	runningProcess *unityProcess,
+	runningProcess *clicore.UnityProcess,
 	lastOutcome unityipc.UnitySendOutcome,
 	lastErr error,
 ) (bool, unityipc.UnitySendOutcome, error) {
@@ -143,10 +144,10 @@ func finishUnityAliveRetry(
 	return lastOutcome, newUnityServerNotRespondingError(connection, lastErr)
 }
 
-func newUnityServerNotRespondingError(connection unityipc.Connection, cause error) unityServerNotRespondingError {
-	return unityServerNotRespondingError{
-		projectRoot: connection.ProjectRoot,
-		endpoint:    connection.Endpoint.Address,
-		cause:       cause,
+func newUnityServerNotRespondingError(connection unityipc.Connection, cause error) clicore.UnityServerNotRespondingError {
+	return clicore.UnityServerNotRespondingError{
+		ProjectRoot: connection.ProjectRoot,
+		Endpoint:    connection.Endpoint.Address,
+		Cause:       cause,
 	}
 }

@@ -9,14 +9,15 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/project"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
 func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
-	remainingArgs, projectPath, err := parseGlobalProjectPath(args)
+	remainingArgs, projectPath, err := clicore.ParseGlobalProjectPath(args)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{})
 		return 1
 	}
 
@@ -27,32 +28,32 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 	command := remainingArgs[0]
 	commandArgs := remainingArgs[1:]
 
-	if isDispatcherOwnedCommand(command) || shouldHandleCompletionRequest(remainingArgs) {
-		writeErrorEnvelope(stderr, dispatcherOwnedCommandError(command))
+	if isDispatcherOwnedCommand(command) || clicore.ShouldHandleCompletionRequest(remainingArgs) {
+		clicore.WriteErrorEnvelope(stderr, dispatcherOwnedCommandError(command))
 		return 1
 	}
-	if isUnknownLeadingOption(command) {
-		writeClassifiedError(stderr, &argumentError{
-			message:     "Unknown global option: " + command,
-			option:      command,
-			nextActions: []string{"Run `uloop --help` to inspect supported global options."},
-		}, errorContext{})
+	if clicore.IsUnknownLeadingOption(command) {
+		clicore.WriteClassifiedError(stderr, &clicore.ArgumentError{
+			Message:     "Unknown global option: " + command,
+			Option:      command,
+			NextActions: []string{"Run `uloop --help` to inspect supported global options."},
+		}, clicore.ErrorContext{})
 		return 1
 	}
-	if containsHelpRequest(commandArgs) {
+	if clicore.ContainsHelpRequest(commandArgs) {
 		printRunnerUsage(stdout)
 		return 0
 	}
 
 	startPath, err := os.Getwd()
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: command})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: command})
 		return 1
 	}
 
 	connection, err := project.ResolveConnection(startPath, projectPath)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: command})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: command})
 		return 1
 	}
 	return runResolvedProjectCommand(ctx, connection, command, commandArgs, startPath, stdout, stderr)
@@ -71,67 +72,67 @@ func runTool(ctx context.Context, connection unityipc.Connection, command string
 
 	applyDebugTimingParams(command, params)
 	startedAt := time.Now()
-	spinner := newToolSpinner(stderr, command)
+	spinner := clicore.NewToolSpinner(stderr, command)
 	outcome, err := sendWithTransientConnectionRetry(
 		ctx,
 		connection,
 		command,
 		params,
-		newSpinnerProgressFunc(spinner, fmt.Sprintf("Executing %s...", command)),
+		clicore.NewSpinnerProgressFunc(spinner, fmt.Sprintf("Executing %s...", command)),
 	)
 	spinner.Stop()
 	if err != nil {
 		writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
-		writeToolFailure(stderr, err, outcome, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     command,
+		clicore.WriteToolFailure(stderr, err, outcome, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     command,
 		})
 		return 1
 	}
-	writeJSON(stdout, stripDebugTimingResult(command, outcome.Result))
+	clicore.WriteJSON(stdout, stripDebugTimingResult(command, outcome.Result))
 	writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
 	return 0
 }
 
 func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection unityipc.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
-	applyDebugTimingParams(executeDynamicCodeCommandName, params)
+	applyDebugTimingParams(clicore.ExecuteDynamicCodeCommandName, params)
 	startedAt := time.Now()
-	spinner := newToolSpinner(stderr, executeDynamicCodeCommandName)
+	spinner := clicore.NewToolSpinner(stderr, clicore.ExecuteDynamicCodeCommandName)
 	outcome, err := sendWithTransientConnectionRetry(
 		ctx,
 		connection,
-		executeDynamicCodeCommandName,
+		clicore.ExecuteDynamicCodeCommandName,
 		params,
-		newSpinnerProgressFunc(spinner, "Executing execute-dynamic-code..."),
+		clicore.NewSpinnerProgressFunc(spinner, "Executing execute-dynamic-code..."),
 	)
 	if err != nil {
 		if shouldWaitForExecuteDynamicCodeDisconnect(err, outcome) {
 			spinner.Update("Connection lost during execute-dynamic-code. Waiting for domain reload to complete...")
-			if waitErr := waitForToolReadiness(ctx, connection.ProjectRoot); waitErr != nil {
+			if waitErr := clicore.WaitForToolReadiness(ctx, connection.ProjectRoot); waitErr != nil {
 				spinner.Stop()
-				writeClassifiedError(stderr, waitErr, errorContext{
-					projectRoot: connection.ProjectRoot,
-					command:     executeDynamicCodeCommandName,
+				clicore.WriteClassifiedError(stderr, waitErr, clicore.ErrorContext{
+					ProjectRoot: connection.ProjectRoot,
+					Command:     clicore.ExecuteDynamicCodeCommandName,
 				})
 				return 1
 			}
 		}
 		spinner.Stop()
-		writeDebugTiming(stderr, executeDynamicCodeCommandName, time.Since(startedAt), outcome)
-		writeToolFailure(stderr, err, outcome, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     executeDynamicCodeCommandName,
+		writeDebugTiming(stderr, clicore.ExecuteDynamicCodeCommandName, time.Since(startedAt), outcome)
+		clicore.WriteToolFailure(stderr, err, outcome, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.ExecuteDynamicCodeCommandName,
 		})
 		return 1
 	}
 
 	if executeDynamicCodeDomainReloadWaitRequired(outcome.Result) {
 		spinner.Update("Waiting for domain reload to complete...")
-		if err := waitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
+		if err := clicore.WaitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
 			spinner.Stop()
-			writeClassifiedError(stderr, err, errorContext{
-				projectRoot: connection.ProjectRoot,
-				command:     executeDynamicCodeCommandName,
+			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{
+				ProjectRoot: connection.ProjectRoot,
+				Command:     clicore.ExecuteDynamicCodeCommandName,
 			})
 			return 1
 		}
@@ -139,32 +140,32 @@ func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection u
 
 	spinner.Stop()
 	result := stripExecuteDynamicCodeControlResult(outcome.Result)
-	writeJSON(stdout, stripDebugTimingResult(executeDynamicCodeCommandName, result))
-	writeDebugTiming(stderr, executeDynamicCodeCommandName, time.Since(startedAt), outcome)
+	clicore.WriteJSON(stdout, stripDebugTimingResult(clicore.ExecuteDynamicCodeCommandName, result))
+	writeDebugTiming(stderr, clicore.ExecuteDynamicCodeCommandName, time.Since(startedAt), outcome)
 	return 0
 }
 
 func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
 	requestID, err := prepareCompileWaitParams(params)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     compileCommandName,
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.CompileCommandName,
 		})
 		return 1
 	}
 
-	logCliDebugModeResolved(connection, compileCommandName)
+	logCliDebugModeResolved(connection, clicore.CompileCommandName)
 	logCompileRequestPrepared(connection, params, requestID)
 
 	startedAt := time.Now()
-	spinner := newToolSpinner(stderr, compileCommandName)
+	spinner := clicore.NewToolSpinner(stderr, clicore.CompileCommandName)
 	outcome, err := sendWithTransientConnectionRetryAndResponseTimeout(
 		ctx,
 		connection,
-		compileCommandName,
+		clicore.CompileCommandName,
 		params,
-		newSpinnerProgressFunc(spinner, "Executing compile..."),
+		clicore.NewSpinnerProgressFunc(spinner, "Executing compile..."),
 		compileResponseTimeout,
 	)
 	logCompileRequestSendResult(connection, requestID, outcome, err, startedAt)
@@ -173,9 +174,9 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 	}
 	if !shouldWaitForCompileStatus(err, outcome) {
 		spinner.Stop()
-		writeToolFailure(stderr, err, outcome, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     compileCommandName,
+		clicore.WriteToolFailure(stderr, err, outcome, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.CompileCommandName,
 		})
 		return 1
 	}
@@ -190,28 +191,28 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 	})
 	if waitErr != nil {
 		spinner.Stop()
-		writeClassifiedError(stderr, waitErr, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     compileCommandName,
+		clicore.WriteClassifiedError(stderr, waitErr, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.CompileCommandName,
 		})
 		return 1
 	}
 	if !completed {
 		spinner.Stop()
-		writeErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot))
+		clicore.WriteErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot))
 		return 1
 	}
 	switch compileResultReadinessWaitMode(result) {
 	case compileReadinessWaitWarmup:
 		spinner.Update("Warming execute-dynamic-code after compile...")
-		if err := waitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
+		if err := clicore.WaitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
 			spinner.Stop()
 			writePostCompileWarmupWarning(stderr, err)
 		}
 	}
 	spinner.Stop()
-	writeJSON(stdout, result)
-	writeDebugTiming(stderr, compileCommandName, time.Since(startedAt), outcome)
+	clicore.WriteJSON(stdout, result)
+	writeDebugTiming(stderr, clicore.CompileCommandName, time.Since(startedAt), outcome)
 	return 0
 }
 
@@ -225,54 +226,54 @@ func writePostCompileWarmupWarning(stderr io.Writer, err error) {
 }
 
 func runList(ctx context.Context, connection unityipc.Connection, stdout io.Writer, stderr io.Writer) int {
-	spinner := newToolSpinner(stderr, "list")
+	spinner := clicore.NewToolSpinner(stderr, "list")
 	outcome, err := sendWithTransientConnectionRetry(
 		ctx,
 		connection,
 		"get-tool-details",
 		map[string]any{},
-		newSpinnerProgressFunc(spinner, "Fetching tool list..."),
+		clicore.NewSpinnerProgressFunc(spinner, "Fetching tool list..."),
 	)
 	spinner.Stop()
 	if err != nil {
-		writeToolFailure(stderr, err, outcome, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     "list",
+		clicore.WriteToolFailure(stderr, err, outcome, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     "list",
 		})
 		return 1
 	}
-	writeJSON(stdout, formatToolListResult(outcome.Result))
+	clicore.WriteJSON(stdout, formatToolListResult(outcome.Result))
 	return 0
 }
 
 func runSync(ctx context.Context, connection unityipc.Connection, stdout io.Writer, stderr io.Writer) int {
-	spinner := newToolSpinner(stderr, "sync")
+	spinner := clicore.NewToolSpinner(stderr, "sync")
 	outcome, err := sendWithTransientConnectionRetry(
 		ctx,
 		connection,
 		"get-tool-details",
 		map[string]any{},
-		newSpinnerProgressFunc(spinner, "Syncing tools..."),
+		clicore.NewSpinnerProgressFunc(spinner, "Syncing tools..."),
 	)
 	spinner.Stop()
 	if err != nil {
-		writeToolFailure(stderr, err, outcome, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     "sync",
+		clicore.WriteToolFailure(stderr, err, outcome, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     "sync",
 		})
 		return 1
 	}
 
-	cachePath := filepath.Join(connection.ProjectRoot, cacheDirectoryName, cacheFileName)
+	cachePath := filepath.Join(connection.ProjectRoot, clicore.CacheDirectoryName, clicore.CacheFileName)
 	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: connection.ProjectRoot, command: "sync"})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: "sync"})
 		return 1
 	}
 	if err := os.WriteFile(cachePath, outcome.Result, 0o644); err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: connection.ProjectRoot, command: "sync"})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: "sync"})
 		return 1
 	}
-	writeFormat(stdout, "Tools synced to %s\n", cachePath)
+	clicore.WriteFormat(stdout, "Tools synced to %s\n", cachePath)
 	return 0
 }
 

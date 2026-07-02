@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	clicontract "github.com/hatayama/unity-cli-loop/cli"
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/update"
 )
 
@@ -46,7 +47,7 @@ func TestUpdateCommandForWindowsUsesPowerShellInstaller(t *testing.T) {
 		t.Fatalf("updateCommandForOS failed: %v", err)
 	}
 
-	if commandName != windowsPowerShellCommand {
+	if commandName != "powershell" {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
@@ -138,7 +139,7 @@ func TestUpdateCommandForWindowsUsesRequestedVersion(t *testing.T) {
 		t.Fatalf("updateCommandForOSWithOptions failed: %v", err)
 	}
 
-	if commandName != windowsPowerShellCommand {
+	if commandName != "powershell" {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
@@ -205,7 +206,7 @@ func TestTryHandleUpdateRequestReportsVersionChange(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	handled, code := tryHandleUpdateRequest(context.Background(), []string{updateCommandName}, &stdout, &stderr)
+	handled, code := tryHandleUpdateRequest(context.Background(), []string{clicore.UpdateCommandName}, &stdout, &stderr)
 
 	if !handled || code != 0 {
 		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
@@ -227,7 +228,7 @@ func TestTryHandleUpdateRequestReportsAlreadyCurrentVersion(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	handled, code := tryHandleUpdateRequest(context.Background(), []string{updateCommandName}, &stdout, &stderr)
+	handled, code := tryHandleUpdateRequest(context.Background(), []string{clicore.UpdateCommandName}, &stdout, &stderr)
 
 	if !handled || code != 0 {
 		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())

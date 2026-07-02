@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/project"
 )
 
@@ -16,9 +17,9 @@ const (
 func printHelp(stdout io.Writer) {
 	printMainHelp(
 		stdout,
-		version,
+		clicore.Version,
 		nativeCLIDescription,
-		toolsCache{},
+		clicore.ToolsCache{},
 		false)
 }
 
@@ -35,8 +36,8 @@ func printHelpForResolvedProject(stdout io.Writer, explicitProjectPath string) {
 		return
 	}
 
-	cache, ok := loadProjectToolCache(connection.ProjectRoot)
-	printMainHelp(stdout, version, nativeCLIDescription, cache, ok)
+	cache, ok := clicore.LoadProjectToolCache(connection.ProjectRoot)
+	printMainHelp(stdout, clicore.Version, nativeCLIDescription, cache, ok)
 }
 
 func printLauncherHelp(stdout io.Writer) {
@@ -44,53 +45,53 @@ func printLauncherHelp(stdout io.Writer) {
 		stdout,
 		dispatcherVersion,
 		"Dispatcher launcher. Finds the Unity project, then dispatches live Unity tool commands.",
-		toolsCache{},
+		clicore.ToolsCache{},
 		false)
 }
 
-func printMainHelp(stdout io.Writer, displayVersion string, description string, cache toolsCache, hasProjectToolCache bool) {
-	writeFormat(stdout, "uloop %s\n\n", displayVersion)
-	writeLine(stdout, "Usage:")
-	writeLine(stdout, "  uloop <command> [options]")
-	writeLine(stdout, "")
-	writeLine(stdout, description)
-	writeLine(stdout, "")
+func printMainHelp(stdout io.Writer, displayVersion string, description string, cache clicore.ToolsCache, hasProjectToolCache bool) {
+	clicore.WriteFormat(stdout, "uloop %s\n\n", displayVersion)
+	clicore.WriteLine(stdout, "Usage:")
+	clicore.WriteLine(stdout, "  uloop <command> [options]")
+	clicore.WriteLine(stdout, "")
+	clicore.WriteLine(stdout, description)
+	clicore.WriteLine(stdout, "")
 	printNativeCommandHelp(stdout)
-	writeLine(stdout, "")
+	clicore.WriteLine(stdout, "")
 	printGlobalOptionsHelp(stdout)
-	writeLine(stdout, "")
+	clicore.WriteLine(stdout, "")
 	printUnityToolCommandHelp(stdout, cache, hasProjectToolCache)
-	writeLine(stdout, "")
-	writeLine(stdout, "More:")
-	writeLine(stdout, "  uloop list                                  Show the live Unity tool list")
-	writeLine(stdout, "  uloop --project-path /path/to/project list  Show tools for another Unity project")
-	writeLine(stdout, "  uloop <command> --help                      Show help for native and Unity tool commands")
-	writeLine(stdout, "  uloop completion --help                     Show shell completion setup and helpers")
+	clicore.WriteLine(stdout, "")
+	clicore.WriteLine(stdout, "More:")
+	clicore.WriteLine(stdout, "  uloop list                                  Show the live Unity tool list")
+	clicore.WriteLine(stdout, "  uloop --project-path /path/to/project list  Show tools for another Unity project")
+	clicore.WriteLine(stdout, "  uloop <command> --help                      Show help for native and Unity tool commands")
+	clicore.WriteLine(stdout, "  uloop completion --help                     Show shell completion setup and helpers")
 }
 
 func printNativeCommandHelp(stdout io.Writer) {
-	writeLine(stdout, "Native commands:")
-	for _, entry := range nativeCommands {
-		writeFormat(stdout, "  %-14s %s\n", entry.name, entry.description)
+	clicore.WriteLine(stdout, "Native commands:")
+	for _, entry := range clicore.NativeCommands {
+		clicore.WriteFormat(stdout, "  %-14s %s\n", entry.Name, entry.Description)
 	}
 }
 
 func printGlobalOptionsHelp(stdout io.Writer) {
-	writeLine(stdout, "Global options:")
-	writeLine(stdout, "  --project-path <path>   Run against a Unity project outside the current directory")
+	clicore.WriteLine(stdout, "Global options:")
+	clicore.WriteLine(stdout, "  --project-path <path>   Run against a Unity project outside the current directory")
 }
 
-func printUnityToolCommandHelp(stdout io.Writer, cache toolsCache, hasProjectToolCache bool) {
+func printUnityToolCommandHelp(stdout io.Writer, cache clicore.ToolsCache, hasProjectToolCache bool) {
 	if !hasProjectToolCache {
-		writeLine(stdout, "Unity tool commands are project-specific.")
-		writeLine(stdout, "  Run `uloop list` inside a Unity project to show the live tool list.")
-		writeLine(stdout, "  Run `uloop sync` after the Editor tool set changes to refresh cached commands.")
+		clicore.WriteLine(stdout, "Unity tool commands are project-specific.")
+		clicore.WriteLine(stdout, "  Run `uloop list` inside a Unity project to show the live tool list.")
+		clicore.WriteLine(stdout, "  Run `uloop sync` after the Editor tool set changes to refresh cached commands.")
 		return
 	}
 
-	writeLine(stdout, "Unity tool commands from this project's cache:")
+	clicore.WriteLine(stdout, "Unity tool commands from this project's cache:")
 	if len(cache.Tools) == 0 {
-		writeLine(stdout, "  No cached Unity tools found. Run `uloop sync` while Unity is running.")
+		clicore.WriteLine(stdout, "  No cached Unity tools found. Run `uloop sync` while Unity is running.")
 		return
 	}
 
@@ -98,14 +99,14 @@ func printUnityToolCommandHelp(stdout io.Writer, cache toolsCache, hasProjectToo
 		if isNativeCommandName(tool.Name) {
 			continue
 		}
-		writeFormat(stdout, "  %-22s %s\n", tool.Name, commandListDescription(tool.Description))
+		clicore.WriteFormat(stdout, "  %-22s %s\n", tool.Name, commandListDescription(tool.Description))
 	}
-	writeLine(stdout, "  Run `uloop sync` after the Editor tool set changes to refresh this list.")
+	clicore.WriteLine(stdout, "  Run `uloop sync` after the Editor tool set changes to refresh this list.")
 }
 
 func isNativeCommandName(name string) bool {
-	for _, entry := range nativeCommands {
-		if entry.name == name {
+	for _, entry := range clicore.NativeCommands {
+		if entry.Name == name {
 			return true
 		}
 	}
@@ -113,7 +114,7 @@ func isNativeCommandName(name string) bool {
 }
 
 func commandListDescription(description string) string {
-	line := firstHelpLine(description)
+	line := clicore.FirstHelpLine(description)
 	for index, value := range line {
 		if value == '.' || value == '!' || value == '?' {
 			return strings.TrimSpace(line[:index+len(string(value))])
@@ -127,14 +128,14 @@ func commandListDescription(description string) string {
 	return strings.TrimSpace(string(runes[:maxCommandListDescriptionLength-3])) + "..."
 }
 
-func loadCompletionTools(startPath string, projectPath string) toolsCache {
+func loadCompletionTools(startPath string, projectPath string) clicore.ToolsCache {
 	connection, err := project.ResolveConnection(startPath, projectPath)
 	if err != nil {
-		return loadDefaultTools()
+		return clicore.LoadDefaultTools()
 	}
-	cache, err := loadTools(connection.ProjectRoot)
+	cache, err := clicore.LoadTools(connection.ProjectRoot)
 	if err != nil {
-		return loadDefaultTools()
+		return clicore.LoadDefaultTools()
 	}
 	return cache
 }

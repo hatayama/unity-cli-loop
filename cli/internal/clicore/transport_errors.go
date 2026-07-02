@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"errors"
@@ -13,7 +13,7 @@ import (
 // recovery (status polling) depends on this classification, so typed causes are
 // checked first: error strings differ across platforms and locales (notably Windows
 // named pipes), and a missed match would fail the command instead of recovering.
-func isTransportDisconnectError(err error) bool {
+func IsTransportDisconnectError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -39,7 +39,7 @@ func isTransportDisconnectError(err error) bool {
 // Reports whether the error is a connection deadline expiry. The Timeout() probe
 // runs through the unwrap chain because go-winio's named pipe deadline error is not
 // os.ErrDeadlineExceeded and os.IsTimeout does not unwrap fmt.Errorf("%w") wrapping.
-func isFinalResponseTimeoutError(err error) bool {
+func IsFinalResponseTimeoutError(err error) bool {
 	if err == nil {
 		return false
 	}

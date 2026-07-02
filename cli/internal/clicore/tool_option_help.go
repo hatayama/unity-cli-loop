@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"fmt"
@@ -10,51 +10,51 @@ import (
 // the Code parameter instead of requiring the value inline, so option-name and
 // option-help listings need to know about it even though Unity's tool schema does not.
 const (
-	dynamicCodeFileFlagName    = "code-file"
-	dynamicCodeFileOptionName  = "--" + dynamicCodeFileFlagName
-	dynamicCodeFileOptionUsage = dynamicCodeFileOptionName + " <path>"
+	DynamicCodeFileFlagName    = "code-file"
+	DynamicCodeFileOptionName  = "--" + DynamicCodeFileFlagName
+	DynamicCodeFileOptionUsage = DynamicCodeFileOptionName + " <path>"
 )
 
-const dynamicCodeFileOptionDescription = "Read C# code from a file instead of --code when shell quoting would alter multiline code"
+const DynamicCodeFileOptionDescription = "Read C# code from a file instead of --code when shell quoting would alter multiline code"
 
-// optionHelpEntry is one row of a tool's --help option listing.
-type optionHelpEntry struct {
-	name        string
-	usage       string
-	description string
+// OptionHelpEntry is one row of a tool's --help option listing.
+type OptionHelpEntry struct {
+	Name        string
+	Usage       string
+	Description string
 }
 
-func visibleOptionHelpEntriesForTool(tool toolDefinition) []optionHelpEntry {
+func VisibleOptionHelpEntriesForTool(tool ToolDefinition) []OptionHelpEntry {
 	schema := tool.EffectiveInputSchema()
-	entries := make([]optionHelpEntry, 0, len(schema.Properties))
+	entries := make([]OptionHelpEntry, 0, len(schema.Properties))
 	for propertyName, property := range schema.Properties {
 		if property.Hidden {
 			continue
 		}
 
-		optionName := "--" + optionNameForProperty(tool.Name, propertyName, property)
-		entries = append(entries, optionHelpEntry{
-			name:        optionName,
-			usage:       optionUsage(optionName, property),
-			description: optionDescription(tool.Name, propertyName, property),
+		optionName := "--" + OptionNameForProperty(tool.Name, propertyName, property)
+		entries = append(entries, OptionHelpEntry{
+			Name:        optionName,
+			Usage:       optionUsage(optionName, property),
+			Description: optionDescription(tool.Name, propertyName, property),
 		})
 	}
 
 	entries = appendDynamicCodeFileOptionHelpEntry(tool, entries)
 	sort.Slice(entries, func(i int, j int) bool {
-		return entries[i].name < entries[j].name
+		return entries[i].Name < entries[j].Name
 	})
 	return entries
 }
 
-func optionUsage(optionName string, property toolProperty) string {
-	if isBooleanProperty(property) {
+func optionUsage(optionName string, property ToolProperty) string {
+	if IsBooleanProperty(property) {
 		return optionName
 	}
 	return optionName + " <" + optionValueName(property) + ">"
 }
 
-func optionValueName(property toolProperty) string {
+func optionValueName(property ToolProperty) string {
 	switch strings.ToLower(property.Type) {
 	case "integer":
 		return "integer"
@@ -69,16 +69,16 @@ func optionValueName(property toolProperty) string {
 	}
 }
 
-func optionDescription(toolName string, propertyName string, property toolProperty) string {
+func optionDescription(toolName string, propertyName string, property ToolProperty) string {
 	if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
-		return optionSummary(toolName, propertyName, property) + "; default: auto-save enabled"
+		return OptionSummary(toolName, propertyName, property) + "; default: auto-save enabled"
 	}
 	if isCompileReloadExternalSceneChangesOption(toolName, propertyName, property) {
-		return optionSummary(toolName, propertyName, property) + "; default: auto-reload enabled"
+		return OptionSummary(toolName, propertyName, property) + "; default: auto-reload enabled"
 	}
 
 	parts := []string{}
-	if description := optionSummary(toolName, propertyName, property); description != "" {
+	if description := OptionSummary(toolName, propertyName, property); description != "" {
 		parts = append(parts, description)
 	}
 	if propertyDefault := property.EffectiveDefault(); propertyDefault != nil {
@@ -100,48 +100,48 @@ func defaultValueText(value any) string {
 	return fmt.Sprint(value)
 }
 
-func optionSummary(toolName string, propertyName string, property toolProperty) string {
-	if isNegatedBooleanProperty(property) {
+func OptionSummary(toolName string, propertyName string, property ToolProperty) string {
+	if IsNegatedBooleanProperty(property) {
 		if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
 			return "Fail before execution if unsaved editor changes remain instead of auto-saving them"
 		}
 		if isCompileReloadExternalSceneChangesOption(toolName, propertyName, property) {
 			return "Stop before execution if open Scene files changed externally instead of auto-reloading them"
 		}
-		summary := firstHelpLine(property.Description)
+		summary := FirstHelpLine(property.Description)
 		normalizedSummary := strings.ToLower(summary)
 		if strings.HasPrefix(normalizedSummary, "disable ") || strings.HasPrefix(normalizedSummary, "do not ") {
 			return summary
 		}
 		return "Disable " + pascalToWords(propertyName)
 	}
-	return firstHelpLine(property.Description)
+	return FirstHelpLine(property.Description)
 }
 
-func appendDynamicCodeFileOptionName(tool toolDefinition, options []string) []string {
-	if tool.Name != executeDynamicCodeCommandName {
+func appendDynamicCodeFileOptionName(tool ToolDefinition, options []string) []string {
+	if tool.Name != ExecuteDynamicCodeCommandName {
 		return options
 	}
 	for _, option := range options {
-		if option == dynamicCodeFileOptionName {
+		if option == DynamicCodeFileOptionName {
 			return options
 		}
 	}
-	return append(options, dynamicCodeFileOptionName)
+	return append(options, DynamicCodeFileOptionName)
 }
 
-func appendDynamicCodeFileOptionHelpEntry(tool toolDefinition, entries []optionHelpEntry) []optionHelpEntry {
-	if tool.Name != executeDynamicCodeCommandName {
+func appendDynamicCodeFileOptionHelpEntry(tool ToolDefinition, entries []OptionHelpEntry) []OptionHelpEntry {
+	if tool.Name != ExecuteDynamicCodeCommandName {
 		return entries
 	}
 	for _, entry := range entries {
-		if entry.name == dynamicCodeFileOptionName {
+		if entry.Name == DynamicCodeFileOptionName {
 			return entries
 		}
 	}
-	return append(entries, optionHelpEntry{
-		name:        dynamicCodeFileOptionName,
-		usage:       dynamicCodeFileOptionUsage,
-		description: dynamicCodeFileOptionDescription,
+	return append(entries, OptionHelpEntry{
+		Name:        DynamicCodeFileOptionName,
+		Usage:       DynamicCodeFileOptionUsage,
+		Description: DynamicCodeFileOptionDescription,
 	})
 }

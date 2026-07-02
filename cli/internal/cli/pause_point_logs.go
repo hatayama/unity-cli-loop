@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
@@ -82,7 +83,7 @@ func fetchMatchingLogsFromUnity(
 	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
 	defer cancel()
 
-	result, err := unityipc.NewClient(connection, version).Send(
+	result, err := unityipc.NewClient(connection, clicore.Version).Send(
 		probeContext,
 		pausePointGetLogsCommandName,
 		map[string]any{

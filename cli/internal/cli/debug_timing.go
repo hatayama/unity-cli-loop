@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
@@ -39,7 +40,7 @@ func writeDebugTiming(writer io.Writer, command string, total time.Duration, out
 }
 
 func applyDebugTimingParams(command string, params map[string]any) {
-	if command != executeDynamicCodeCommandName || !isDebugTimingEnabled() {
+	if command != clicore.ExecuteDynamicCodeCommandName || !isDebugTimingEnabled() {
 		return
 	}
 
@@ -47,7 +48,7 @@ func applyDebugTimingParams(command string, params map[string]any) {
 }
 
 func stripDebugTimingResult(command string, result json.RawMessage) json.RawMessage {
-	if command != executeDynamicCodeCommandName || !isDebugTimingEnabled() {
+	if command != clicore.ExecuteDynamicCodeCommandName || !isDebugTimingEnabled() {
 		return result
 	}
 
@@ -66,7 +67,7 @@ func stripDebugTimingResult(command string, result json.RawMessage) json.RawMess
 }
 
 func extractUnityDebugTimings(command string, result json.RawMessage) []string {
-	if command != executeDynamicCodeCommandName {
+	if command != clicore.ExecuteDynamicCodeCommandName {
 		return nil
 	}
 

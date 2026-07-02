@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/project"
 	sharedupdate "github.com/hatayama/unity-cli-loop/cli/internal/update"
 	sharedversion "github.com/hatayama/unity-cli-loop/cli/internal/version"
@@ -48,9 +49,9 @@ func RunDispatcher(ctx context.Context, args []string, stdout io.Writer, stderr 
 		return code
 	}
 
-	remainingArgs, projectPath, err := parseGlobalProjectPath(args)
+	remainingArgs, projectPath, err := clicore.ParseGlobalProjectPath(args)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{})
 		return 1
 	}
 
@@ -60,19 +61,19 @@ func RunDispatcher(ctx context.Context, args []string, stdout io.Writer, stderr 
 
 	startPath, err := os.Getwd()
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{})
 		return 1
 	}
 
 	projectRoot, err := resolveDispatcherProjectRoot(startPath, projectPath, remainingArgs)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{})
 		return 1
 	}
 
 	pin, err := loadDispatcherPin(projectRoot)
 	if err != nil {
-		writeErrorEnvelope(stderr, dispatcherPinResolutionError(projectRoot, err))
+		clicore.WriteErrorEnvelope(stderr, dispatcherPinResolutionError(projectRoot, err))
 		return 1
 	}
 
@@ -82,7 +83,7 @@ func RunDispatcher(ctx context.Context, args []string, stdout io.Writer, stderr 
 
 	realCLIPath, err := resolveDispatcherRealCLI(ctx, pin, stderr)
 	if err != nil {
-		writeErrorEnvelope(stderr, dispatcherRealCLIResolutionError(projectRoot, pin, err))
+		clicore.WriteErrorEnvelope(stderr, dispatcherRealCLIResolutionError(projectRoot, pin, err))
 		return 1
 	}
 
@@ -109,7 +110,7 @@ func runDispatcherProcessCommand(
 
 	startPath, err := os.Getwd()
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: command})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: command})
 		return 1
 	}
 
@@ -128,26 +129,26 @@ func runDispatcherProcessCommand(
 
 	// Precondition violated: shouldRunInDispatcherProcess routed a command here
 	// that no dispatcher-process handler accepts. Fail fast instead of guessing.
-	writeErrorEnvelope(stderr, internalCLIError(
+	clicore.WriteErrorEnvelope(stderr, clicore.InternalCLIError(
 		"Dispatcher routing bug: no dispatcher-process handler accepted command: "+command,
-		errorContext{command: command},
+		clicore.ErrorContext{Command: command},
 	))
 	return 1
 }
 
 func shouldRunInDispatcherProcess(args []string) bool {
-	if len(args) == 0 || isHelpRequest(args) || containsHelpRequest(args) || isVersionRequest(args) || isVersionJSONRequest(args) {
+	if len(args) == 0 || clicore.IsHelpRequest(args) || clicore.ContainsHelpRequest(args) || clicore.IsVersionRequest(args) || clicore.IsVersionJSONRequest(args) {
 		return true
 	}
-	if isUnknownLeadingOption(args[0]) {
+	if clicore.IsUnknownLeadingOption(args[0]) {
 		return true
 	}
-	if shouldHandleCompletionRequest(args) {
+	if clicore.ShouldHandleCompletionRequest(args) {
 		return true
 	}
 
 	switch args[0] {
-	case launchCommandName, installCommandName, updateCommandName, uninstallCommandName, skillsCommandName:
+	case clicore.LaunchCommandName, clicore.InstallCommandName, clicore.UpdateCommandName, clicore.UninstallCommandName, clicore.SkillsCommandName:
 		return true
 	default:
 		return false
@@ -155,7 +156,7 @@ func shouldRunInDispatcherProcess(args []string) bool {
 }
 
 func resolveDispatcherProjectRoot(startPath string, explicitProjectPath string, args []string) (string, error) {
-	if len(args) > 0 && args[0] == launchCommandName {
+	if len(args) > 0 && args[0] == clicore.LaunchCommandName {
 		options, err := parseLaunchOptions(args[1:], explicitProjectPath)
 		if err != nil {
 			return "", err
@@ -210,7 +211,7 @@ func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr i
 
 	// Why: optional update failures should not retry and redraw installer progress on every command.
 	markDispatcherSelfUpdateChecked()
-	writeFormat(stderr, "warning: dispatcher self-update skipped: %v\n", err)
+	clicore.WriteFormat(stderr, "warning: dispatcher self-update skipped: %v\n", err)
 	return false, 0
 }
 
@@ -226,9 +227,9 @@ func writeDispatcherSelfUpdateRequiredError(stderr io.Writer, updatedVersion str
 	if nextVersion != "" {
 		details["UpdatedDispatcherVersion"] = nextVersion
 	}
-	writeErrorEnvelope(stderr, cliError{
-		ErrorCode:   errorCodeCLIUpdateRequired,
-		Phase:       errorPhaseExecution,
+	clicore.WriteErrorEnvelope(stderr, clicore.CLIError{
+		ErrorCode:   clicore.ErrorCodeCLIUpdateRequired,
+		Phase:       clicore.ErrorPhaseExecution,
 		Message:     message,
 		Retryable:   true,
 		SafeToRetry: true,
@@ -238,9 +239,9 @@ func writeDispatcherSelfUpdateRequiredError(stderr io.Writer, updatedVersion str
 }
 
 func writeDispatcherManualUpdateRequiredError(stderr io.Writer, minimumVersion string, reason string) {
-	writeErrorEnvelope(stderr, cliError{
-		ErrorCode:   errorCodeCLIUpdateRequired,
-		Phase:       errorPhaseExecution,
+	clicore.WriteErrorEnvelope(stderr, clicore.CLIError{
+		ErrorCode:   clicore.ErrorCodeCLIUpdateRequired,
+		Phase:       clicore.ErrorPhaseExecution,
 		Message:     "This project requires uloop dispatcher >= " + minimumVersion + ". " + reason,
 		Retryable:   true,
 		SafeToRetry: true,
@@ -313,9 +314,9 @@ func runRealCLICommand(ctx context.Context, realCLIPath string, args []string, s
 		if errors.As(err, &exitErr) {
 			return exitErr.ExitCode()
 		}
-		writeErrorEnvelope(stderr, cliError{
-			ErrorCode:   errorCodeInternalError,
-			Phase:       errorPhaseExecution,
+		clicore.WriteErrorEnvelope(stderr, clicore.CLIError{
+			ErrorCode:   clicore.ErrorCodeInternalError,
+			Phase:       clicore.ErrorPhaseExecution,
 			Message:     "Failed to run resolved uloop CLI: " + err.Error(),
 			Retryable:   true,
 			SafeToRetry: true,
@@ -329,10 +330,10 @@ func runRealCLICommand(ctx context.Context, realCLIPath string, args []string, s
 	return 0
 }
 
-func dispatcherPinResolutionError(projectRoot string, cause error) cliError {
-	return cliError{
-		ErrorCode:   errorCodeInternalError,
-		Phase:       errorPhaseProjectResolve,
+func dispatcherPinResolutionError(projectRoot string, cause error) clicore.CLIError {
+	return clicore.CLIError{
+		ErrorCode:   clicore.ErrorCodeInternalError,
+		Phase:       clicore.ErrorPhaseProjectResolve,
 		Message:     "Could not resolve the required uloop project runner for this Unity project.",
 		Retryable:   true,
 		SafeToRetry: true,
@@ -347,10 +348,10 @@ func dispatcherPinResolutionError(projectRoot string, cause error) cliError {
 	}
 }
 
-func dispatcherRealCLIResolutionError(projectRoot string, pin dispatcherPin, cause error) cliError {
-	return cliError{
-		ErrorCode:   errorCodeInternalError,
-		Phase:       errorPhaseExecution,
+func dispatcherRealCLIResolutionError(projectRoot string, pin dispatcherPin, cause error) clicore.CLIError {
+	return clicore.CLIError{
+		ErrorCode:   clicore.ErrorCodeInternalError,
+		Phase:       clicore.ErrorPhaseExecution,
 		Message:     "Could not prepare the pinned uloop project runner version.",
 		Retryable:   true,
 		SafeToRetry: true,

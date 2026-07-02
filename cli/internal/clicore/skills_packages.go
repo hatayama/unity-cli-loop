@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"encoding/json"
@@ -18,7 +18,7 @@ type manifestData struct {
 	Dependencies map[string]string `json:"dependencies"`
 }
 
-func findEditorFolders(basePath string, maxDepth int) []string {
+func FindEditorFolders(basePath string, maxDepth int) []string {
 	editorFolders := []string{}
 	var scan func(string, int)
 	scan = func(currentPath string, depth int) {
@@ -30,7 +30,7 @@ func findEditorFolders(basePath string, maxDepth int) []string {
 			return
 		}
 		for _, entry := range entries {
-			if !entry.IsDir() || excludedSkillSearchDirs[entry.Name()] {
+			if !entry.IsDir() || ExcludedSkillSearchDirs[entry.Name()] {
 				continue
 			}
 			fullPath := filepath.Join(currentPath, entry.Name())
@@ -123,7 +123,7 @@ func resolveDependencyPackageCacheRoots(projectRoot string) []string {
 	return packageRoots
 }
 
-func resolvePackageRoot(projectRoot string) string {
+func ResolvePackageRoot(projectRoot string) string {
 	candidates := []string{
 		filepath.Join(projectRoot, "Packages", "src"),
 		filepath.Join(projectRoot, "Packages", packageName),

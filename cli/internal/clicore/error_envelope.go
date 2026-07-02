@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"encoding/json"
@@ -10,40 +10,40 @@ import (
 )
 
 const (
-	errorCodeInvalidArgument                 = "INVALID_ARGUMENT"
+	ErrorCodeInvalidArgument                 = "INVALID_ARGUMENT"
 	errorCodeUnknownCommand                  = "UNKNOWN_COMMAND"
 	errorCodeProjectNotFound                 = "PROJECT_NOT_FOUND"
-	errorCodeUnityNotReachable               = "UNITY_NOT_REACHABLE"
-	errorCodeUnityStartupTimeout             = "UNITY_STARTUP_TIMEOUT"
-	errorCodeUnityProcessExitTimeout         = "UNITY_PROCESS_EXIT_TIMEOUT"
+	ErrorCodeUnityNotReachable               = "UNITY_NOT_REACHABLE"
+	ErrorCodeUnityStartupTimeout             = "UNITY_STARTUP_TIMEOUT"
+	ErrorCodeUnityProcessExitTimeout         = "UNITY_PROCESS_EXIT_TIMEOUT"
 	errorCodeUnityDisconnectedAfterDispatch  = "UNITY_DISCONNECTED_AFTER_DISPATCH"
 	errorCodeUnityDisconnectedAfterAccept    = "UNITY_DISCONNECTED_AFTER_ACCEPT"
 	errorCodeUnityResponseTimeoutAfterAccept = "UNITY_RESPONSE_TIMEOUT_AFTER_ACCEPT"
 	errorCodeUnityEditorUnresponsive         = "UNITY_EDITOR_UNRESPONSIVE"
 	errorCodeUnityRPCError                   = "UNITY_RPC_ERROR"
 	errorCodeUnityServerBusy                 = "UNITY_SERVER_BUSY"
-	errorCodeCLIUpdateRequired               = "CLI_UPDATE_REQUIRED"
-	errorCodeToolDisabled                    = "TOOL_DISABLED"
-	errorCodeCompileWaitTimeout              = "COMPILE_WAIT_TIMEOUT"
-	errorCodeControlPlayModeWaitTimeout      = "CONTROL_PLAY_MODE_WAIT_TIMEOUT"
-	errorCodeControlPlayModeCompileErrors    = "CONTROL_PLAY_MODE_COMPILE_ERRORS"
-	errorCodePausePointNotEnabled            = "PAUSE_POINT_NOT_ENABLED"
-	errorCodePausePointWaitTimeout           = "PAUSE_POINT_WAIT_TIMEOUT"
-	errorCodePausePointExpired               = "PAUSE_POINT_EXPIRED"
-	errorCodePausePointCleared               = "PAUSE_POINT_CLEARED"
-	errorCodeInternalError                   = "INTERNAL_ERROR"
+	ErrorCodeCLIUpdateRequired               = "CLI_UPDATE_REQUIRED"
+	ErrorCodeToolDisabled                    = "TOOL_DISABLED"
+	ErrorCodeCompileWaitTimeout              = "COMPILE_WAIT_TIMEOUT"
+	ErrorCodeControlPlayModeWaitTimeout      = "CONTROL_PLAY_MODE_WAIT_TIMEOUT"
+	ErrorCodeControlPlayModeCompileErrors    = "CONTROL_PLAY_MODE_COMPILE_ERRORS"
+	ErrorCodePausePointNotEnabled            = "PAUSE_POINT_NOT_ENABLED"
+	ErrorCodePausePointWaitTimeout           = "PAUSE_POINT_WAIT_TIMEOUT"
+	ErrorCodePausePointExpired               = "PAUSE_POINT_EXPIRED"
+	ErrorCodePausePointCleared               = "PAUSE_POINT_CLEARED"
+	ErrorCodeInternalError                   = "INTERNAL_ERROR"
 
-	errorPhaseArgumentParsing = "argument_parsing"
-	errorPhaseProjectResolve  = "project_resolution"
-	errorPhaseDispatch        = "dispatch"
-	errorPhaseConnection      = "connection"
-	errorPhaseResponseWaiting = "response_waiting"
+	ErrorPhaseArgumentParsing = "argument_parsing"
+	ErrorPhaseProjectResolve  = "project_resolution"
+	ErrorPhaseDispatch        = "dispatch"
+	ErrorPhaseConnection      = "connection"
+	ErrorPhaseResponseWaiting = "response_waiting"
 	errorPhaseUnityRPC        = "unity_rpc"
-	errorPhaseCompileWaiting  = "compile_waiting"
-	errorPhaseExecution       = "execution"
+	ErrorPhaseCompileWaiting  = "compile_waiting"
+	ErrorPhaseExecution       = "execution"
 )
 
-type cliError struct {
+type CLIError struct {
 	ErrorCode   string         `json:"ErrorCode"`
 	Phase       string         `json:"Phase"`
 	Message     string         `json:"Message"`
@@ -55,60 +55,60 @@ type cliError struct {
 	Details     map[string]any `json:"Details,omitempty"`
 }
 
-func (err cliError) Error() string {
+func (err CLIError) Error() string {
 	return err.Message
 }
 
-type cliErrorEnvelope struct {
+type CLIErrorEnvelope struct {
 	Success bool     `json:"Success"`
-	Error   cliError `json:"Error"`
+	Error   CLIError `json:"Error"`
 }
 
-type errorContext struct {
-	projectRoot string
-	command     string
+type ErrorContext struct {
+	ProjectRoot string
+	Command     string
 }
 
-func writeErrorEnvelope(writer io.Writer, err cliError) {
+func WriteErrorEnvelope(writer io.Writer, err CLIError) {
 	if err.ErrorCode == errorCodeUnityServerBusy {
 		writeBusyStatusEnvelope(writer, err.Message, serverBusyStatusDetailsFromError(err))
 		return
 	}
 	encoder := json.NewEncoder(writer)
 	encoder.SetIndent("", "  ")
-	_ = encoder.Encode(cliErrorEnvelope{
+	_ = encoder.Encode(CLIErrorEnvelope{
 		Success: false,
 		Error:   err,
 	})
 }
 
-func writeClassifiedError(writer io.Writer, err error, context errorContext) {
-	writeErrorEnvelope(writer, classifyError(err, context))
+func WriteClassifiedError(writer io.Writer, err error, context ErrorContext) {
+	WriteErrorEnvelope(writer, ClassifyError(err, context))
 }
 
-func writeToolFailure(writer io.Writer, err error, outcome unityipc.UnitySendOutcome, context errorContext) {
+func WriteToolFailure(writer io.Writer, err error, outcome unityipc.UnitySendOutcome, context ErrorContext) {
 	if err != nil {
 		if outcome.RequestAccepted && isResponseTimeoutError(err) {
-			writeErrorEnvelope(writer, responseTimeoutAfterAcceptError(err, context))
+			WriteErrorEnvelope(writer, responseTimeoutAfterAcceptError(err, context))
 			return
 		}
-		if isTransportDisconnectError(err) {
+		if IsTransportDisconnectError(err) {
 			if outcome.RequestAccepted {
-				writeErrorEnvelope(writer, disconnectedAfterAcceptError(err, context))
+				WriteErrorEnvelope(writer, disconnectedAfterAcceptError(err, context))
 				return
 			}
 			if outcome.RequestDispatched {
-				writeErrorEnvelope(writer, disconnectedAfterDispatchError(err, context))
+				WriteErrorEnvelope(writer, disconnectedAfterDispatchError(err, context))
 				return
 			}
 		}
-		var notRespondingErr unityServerNotRespondingError
+		var notRespondingErr UnityServerNotRespondingError
 		if outcome.RequestDispatched && !outcome.RequestAccepted && errors.As(err, &notRespondingErr) {
-			writeErrorEnvelope(writer, unityServerNotRespondingAfterDispatchError(notRespondingErr, context))
+			WriteErrorEnvelope(writer, unityServerNotRespondingAfterDispatchError(notRespondingErr, context))
 			return
 		}
 	}
-	writeClassifiedError(writer, err, context)
+	WriteClassifiedError(writer, err, context)
 }
 
 func isResponseTimeoutError(err error) bool {
@@ -119,15 +119,15 @@ func isResponseTimeoutError(err error) bool {
 	return false
 }
 
-func responseTimeoutAfterAcceptError(err error, context errorContext) cliError {
-	return cliError{
+func responseTimeoutAfterAcceptError(err error, context ErrorContext) CLIError {
+	return CLIError{
 		ErrorCode:   errorCodeUnityResponseTimeoutAfterAccept,
-		Phase:       errorPhaseResponseWaiting,
+		Phase:       ErrorPhaseResponseWaiting,
 		Message:     "Unity accepted the request but did not return a final response before the CLI response timeout.",
 		Retryable:   true,
-		SafeToRetry: isSafeRetryCommand(context.command),
-		ProjectRoot: context.projectRoot,
-		Command:     context.command,
+		SafeToRetry: isSafeRetryCommand(context.Command),
+		ProjectRoot: context.ProjectRoot,
+		Command:     context.Command,
 		NextActions: []string{
 			"Check Unity Console logs because Unity may still be running the accepted request.",
 			"Retry after Unity finishes the command, compiling, reloading scripts, or restarting the bridge.",
@@ -142,16 +142,16 @@ func unityServerBusyError(
 	rpcErr *unityipc.RPCError,
 	details map[string]any,
 	data map[string]any,
-	context errorContext,
-) cliError {
-	return cliError{
+	context ErrorContext,
+) CLIError {
+	return CLIError{
 		ErrorCode:   errorCodeUnityServerBusy,
-		Phase:       errorPhaseDispatch,
-		Message:     unityServerBusyMessage(rpcErr.Message, data, context.command),
+		Phase:       ErrorPhaseDispatch,
+		Message:     unityServerBusyMessage(rpcErr.Message, data, context.Command),
 		Retryable:   true,
 		SafeToRetry: true,
-		ProjectRoot: context.projectRoot,
-		Command:     context.command,
+		ProjectRoot: context.ProjectRoot,
+		Command:     context.Command,
 		NextActions: []string{
 			"Wait for the running Unity command to complete.",
 			"Retry the command after Unity reports it is no longer busy.",
@@ -160,15 +160,15 @@ func unityServerBusyError(
 	}
 }
 
-func cliUpdateRequiredError(rpcErr *unityipc.RPCError, details map[string]any, data map[string]any, context errorContext) cliError {
-	return cliError{
-		ErrorCode:   errorCodeCLIUpdateRequired,
+func cliUpdateRequiredError(rpcErr *unityipc.RPCError, details map[string]any, data map[string]any, context ErrorContext) CLIError {
+	return CLIError{
+		ErrorCode:   ErrorCodeCLIUpdateRequired,
 		Phase:       errorPhaseUnityRPC,
 		Message:     rpcErr.Message,
 		Retryable:   true,
 		SafeToRetry: true,
-		ProjectRoot: context.projectRoot,
-		Command:     context.command,
+		ProjectRoot: context.ProjectRoot,
+		Command:     context.Command,
 		NextActions: cliUpdateRequiredNextActions(data),
 		Details:     details,
 	}
@@ -199,15 +199,15 @@ func protocolVersionFromRPCData(data map[string]any, key string) (float64, bool)
 	return value, ok
 }
 
-func disconnectedAfterAcceptError(err error, context errorContext) cliError {
-	return cliError{
+func disconnectedAfterAcceptError(err error, context ErrorContext) CLIError {
+	return CLIError{
 		ErrorCode:   errorCodeUnityDisconnectedAfterAccept,
-		Phase:       errorPhaseResponseWaiting,
+		Phase:       ErrorPhaseResponseWaiting,
 		Message:     "Unity disconnected after accepting the request.",
 		Retryable:   true,
-		SafeToRetry: isSafeRetryCommand(context.command),
-		ProjectRoot: context.projectRoot,
-		Command:     context.command,
+		SafeToRetry: isSafeRetryCommand(context.Command),
+		ProjectRoot: context.ProjectRoot,
+		Command:     context.Command,
 		NextActions: []string{
 			"Check Unity Console logs because Unity had already accepted the request.",
 			"Retry after Unity finishes compiling, reloading scripts, or restarting the bridge.",
@@ -218,15 +218,15 @@ func disconnectedAfterAcceptError(err error, context errorContext) cliError {
 	}
 }
 
-func disconnectedAfterDispatchError(err error, context errorContext) cliError {
-	return cliError{
+func disconnectedAfterDispatchError(err error, context ErrorContext) CLIError {
+	return CLIError{
 		ErrorCode:   errorCodeUnityDisconnectedAfterDispatch,
-		Phase:       errorPhaseResponseWaiting,
+		Phase:       ErrorPhaseResponseWaiting,
 		Message:     "Unity disconnected after the CLI dispatched the request.",
 		Retryable:   true,
-		SafeToRetry: isSafeRetryCommand(context.command),
-		ProjectRoot: context.projectRoot,
-		Command:     context.command,
+		SafeToRetry: isSafeRetryCommand(context.Command),
+		ProjectRoot: context.ProjectRoot,
+		Command:     context.Command,
 		NextActions: []string{
 			"Check Unity Console logs if the command may have changed project or scene state.",
 			"Retry after Unity finishes compiling, reloading scripts, or restarting the bridge.",
@@ -237,35 +237,35 @@ func disconnectedAfterDispatchError(err error, context errorContext) cliError {
 	}
 }
 
-func unityServerNotRespondingAfterDispatchError(err unityServerNotRespondingError, context errorContext) cliError {
-	return cliError{
-		ErrorCode:   errorCodeUnityNotReachable,
-		Phase:       errorPhaseResponseWaiting,
+func unityServerNotRespondingAfterDispatchError(err UnityServerNotRespondingError, context ErrorContext) CLIError {
+	return CLIError{
+		ErrorCode:   ErrorCodeUnityNotReachable,
+		Phase:       ErrorPhaseResponseWaiting,
 		Message:     "Unity is running for this project, but the Unity CLI Loop server did not acknowledge the dispatched request.",
 		Retryable:   true,
 		SafeToRetry: false,
-		ProjectRoot: firstNonEmpty(context.projectRoot, err.projectRoot),
-		Command:     context.command,
+		ProjectRoot: FirstNonEmpty(context.ProjectRoot, err.ProjectRoot),
+		Command:     context.Command,
 		NextActions: []string{
 			"Check Unity Console logs and project state because Unity may have received the request.",
 			"Retry only after confirming the previous command did not run or has finished.",
 			"Run `uloop focus-window` if Unity appears stalled in the background.",
 		},
 		Details: map[string]any{
-			"Endpoint": err.endpoint,
+			"Endpoint": err.Endpoint,
 			"Cause":    err.causeText(),
 		},
 	}
 }
 
-func unknownCommandError(command string, cache toolsCache, context errorContext) cliError {
-	return cliError{
+func UnknownCommandError(command string, cache ToolsCache, context ErrorContext) CLIError {
+	return CLIError{
 		ErrorCode:   errorCodeUnknownCommand,
-		Phase:       errorPhaseDispatch,
+		Phase:       ErrorPhaseDispatch,
 		Message:     "Unknown command: " + command,
 		Retryable:   false,
 		SafeToRetry: false,
-		ProjectRoot: context.projectRoot,
+		ProjectRoot: context.ProjectRoot,
 		Command:     command,
 		NextActions: []string{
 			"Run `uloop list` to inspect available commands.",
@@ -277,10 +277,10 @@ func unknownCommandError(command string, cache toolsCache, context errorContext)
 	}
 }
 
-func availableCommandNames(cache toolsCache) []string {
+func availableCommandNames(cache ToolsCache) []string {
 	seen := map[string]bool{}
 	names := []string{}
-	for _, name := range nativeCommandNamesForCompletion() {
+	for _, name := range NativeCommandNamesForCompletion() {
 		seen[name] = true
 		names = append(names, name)
 	}
@@ -303,15 +303,15 @@ func isSafeRetryCommand(command string) bool {
 	}
 }
 
-func internalCLIError(message string, context errorContext) cliError {
-	return cliError{
-		ErrorCode:   errorCodeInternalError,
-		Phase:       errorPhaseExecution,
+func InternalCLIError(message string, context ErrorContext) CLIError {
+	return CLIError{
+		ErrorCode:   ErrorCodeInternalError,
+		Phase:       ErrorPhaseExecution,
 		Message:     message,
 		Retryable:   false,
 		SafeToRetry: false,
-		ProjectRoot: context.projectRoot,
-		Command:     context.command,
+		ProjectRoot: context.ProjectRoot,
+		Command:     context.Command,
 		NextActions: []string{
 			"Read the message and fix the local environment or command input before retrying.",
 		},

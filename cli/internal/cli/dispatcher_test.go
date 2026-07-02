@@ -17,6 +17,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 type dispatcherArchiveTestEntry struct {
@@ -34,8 +36,8 @@ func TestRunDispatcherUsesProjectPinAndCachedRealCLI(t *testing.T) {
 	// Verifies dispatcher reads the project pin and executes the cached real CLI.
 	projectRoot := createDispatcherUnityProject(t)
 	cacheRoot := t.TempDir()
-	writeDispatcherProjectPin(t, projectRoot, version)
-	expectedCLIPath := writeCachedDispatcherRealCLI(t, cacheRoot, version)
+	writeDispatcherProjectPin(t, projectRoot, clicore.Version)
+	expectedCLIPath := writeCachedDispatcherRealCLI(t, cacheRoot, clicore.Version)
 	t.Setenv(dispatcherCacheDirEnvName, cacheRoot)
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Chdir(projectRoot)
@@ -72,8 +74,8 @@ func TestRunDispatcherPreservesExplicitProjectPathForRealCLI(t *testing.T) {
 	// Verifies dispatcher accepts trailing --project-path and passes the original arguments onward.
 	projectRoot := createDispatcherUnityProject(t)
 	cacheRoot := t.TempDir()
-	writeDispatcherProjectPin(t, projectRoot, version)
-	writeCachedDispatcherRealCLI(t, cacheRoot, version)
+	writeDispatcherProjectPin(t, projectRoot, clicore.Version)
+	writeCachedDispatcherRealCLI(t, cacheRoot, clicore.Version)
 	t.Setenv(dispatcherCacheDirEnvName, cacheRoot)
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Chdir(t.TempDir())
@@ -136,7 +138,7 @@ func TestRunDispatcherLaunchQuitDoesNotRequireProjectPin(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	previousFinder := findRunningUnityProcessForLaunch
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
 	defer func() {
@@ -161,7 +163,7 @@ func TestRunDispatcherLaunchOptionsDoNotRequireProjectPin(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	previousFinder := findRunningUnityProcessForLaunch
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
 	defer func() {
@@ -224,7 +226,7 @@ func TestEnforceDispatcherFreshnessRequiresManualUpdateWhenSelfUpdateDisabled(t 
 	if !handled || code != 1 {
 		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
 	}
-	if !bytes.Contains(stderr.Bytes(), []byte(errorCodeCLIUpdateRequired)) {
+	if !bytes.Contains(stderr.Bytes(), []byte(clicore.ErrorCodeCLIUpdateRequired)) {
 		t.Fatalf("freshness output mismatch: %s", stderr.String())
 	}
 }

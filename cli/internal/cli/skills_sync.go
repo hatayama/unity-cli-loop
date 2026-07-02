@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 func syncSkillDirectory(sourceDir string, destinationDir string) error {
@@ -105,7 +107,7 @@ func getSkillStatusWithStat(
 	stat func(string) (os.FileInfo, error),
 ) (string, error) {
 	skillDir := getPreferredSkillDir(baseDir, skill.name, grouped)
-	if _, err := stat(filepath.Join(skillDir, skillFileName)); err != nil {
+	if _, err := stat(filepath.Join(skillDir, clicore.SkillFileName)); err != nil {
 		if os.IsNotExist(err) {
 			return "not_installed", nil
 		}
@@ -118,12 +120,12 @@ func getSkillStatusWithStat(
 }
 
 func isInstalledSkillOutdated(installedDir string, skill skillDefinition) bool {
-	installedContent, err := os.ReadFile(filepath.Join(installedDir, skillFileName))
+	installedContent, err := os.ReadFile(filepath.Join(installedDir, clicore.SkillFileName))
 	if err != nil {
 		return true
 	}
-	installedContent = normalizeSkillFileContent(skillFileName, installedContent)
-	expectedContent := normalizeSkillFileContent(skillFileName, skill.content)
+	installedContent = normalizeSkillFileContent(clicore.SkillFileName, installedContent)
+	expectedContent := normalizeSkillFileContent(clicore.SkillFileName, skill.content)
 	if !bytes.Equal(installedContent, expectedContent) {
 		return true
 	}
@@ -149,7 +151,7 @@ func collectComparableSkillFiles(root string) map[string][]byte {
 			return nil
 		}
 		relativePath, err := filepath.Rel(root, path)
-		if err != nil || relativePath == skillFileName {
+		if err != nil || relativePath == clicore.SkillFileName {
 			return nil
 		}
 		content, err := os.ReadFile(path)

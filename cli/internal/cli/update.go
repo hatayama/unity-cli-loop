@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"runtime"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/update"
 )
 
@@ -21,16 +22,16 @@ type updateOptions struct {
 }
 
 func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) (bool, int) {
-	if len(args) == 0 || args[0] != updateCommandName {
+	if len(args) == 0 || args[0] != clicore.UpdateCommandName {
 		return false, 0
 	}
-	if containsHelpRequest(args[1:]) {
+	if clicore.ContainsHelpRequest(args[1:]) {
 		printUpdateHelp(stdout)
 		return true, 0
 	}
 	options, err := parseUpdateOptions(args[1:])
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: updateCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: clicore.UpdateCommandName})
 		return true, 1
 	}
 
@@ -39,19 +40,19 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 		TargetVersion:  options.targetVersion,
 	})
 	if err != nil {
-		writeClassifiedError(stderr, wrapUnsupportedPlatformError(err), errorContext{command: updateCommandName})
+		clicore.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clicore.ErrorContext{Command: clicore.UpdateCommandName})
 		return true, 1
 	}
 
-	writeLine(stdout, "Updating global uloop launcher...")
+	clicore.WriteLine(stdout, "Updating global uloop launcher...")
 	if err := updateRunCommand(ctx, updateCommand, stdout, stderr); err != nil {
-		writeErrorEnvelope(stderr, cliError{
-			ErrorCode:   errorCodeInternalError,
-			Phase:       errorPhaseExecution,
+		clicore.WriteErrorEnvelope(stderr, clicore.CLIError{
+			ErrorCode:   clicore.ErrorCodeInternalError,
+			Phase:       clicore.ErrorPhaseExecution,
 			Message:     "Update failed: " + err.Error(),
 			Retryable:   true,
 			SafeToRetry: true,
-			Command:     updateCommandName,
+			Command:     clicore.UpdateCommandName,
 			NextActions: []string{"Retry `uloop update` after checking network access to GitHub."},
 			Details: map[string]any{
 				"Cause": err.Error(),
@@ -86,43 +87,43 @@ func runUpdateCommand(ctx context.Context, updateCommand update.Command, stdout 
 }
 
 func printUpdateHelp(stdout io.Writer) {
-	writeLine(stdout, "Usage:")
-	writeLine(stdout, "  uloop update [--to-version <version>]")
+	clicore.WriteLine(stdout, "Usage:")
+	clicore.WriteLine(stdout, "  uloop update [--to-version <version>]")
 }
 
 func parseUpdateOptions(args []string) (updateOptions, error) {
 	options := updateOptions{}
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
-		name, value, consumedNext, err := parseFlagValue(arg, args, index)
+		name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 		if err != nil {
 			return updateOptions{}, err
 		}
 		if name != updateToVersionFlagName {
-			return updateOptions{}, &argumentError{
-				message:     "Unknown update option: --" + name,
-				option:      "--" + name,
-				command:     "update",
-				nextActions: []string{"Run `uloop update` or `uloop update --to-version <version>`."},
+			return updateOptions{}, &clicore.ArgumentError{
+				Message:     "Unknown update option: --" + name,
+				Option:      "--" + name,
+				Command:     "update",
+				NextActions: []string{"Run `uloop update` or `uloop update --to-version <version>`."},
 			}
 		}
 		if options.targetVersion != "" {
-			return updateOptions{}, &argumentError{
-				message:     "Duplicate update option: --" + updateToVersionFlagName,
-				option:      "--" + updateToVersionFlagName,
-				command:     "update",
-				nextActions: []string{"Pass `--to-version` only once."},
+			return updateOptions{}, &clicore.ArgumentError{
+				Message:     "Duplicate update option: --" + updateToVersionFlagName,
+				Option:      "--" + updateToVersionFlagName,
+				Command:     "update",
+				NextActions: []string{"Pass `--to-version` only once."},
 			}
 		}
 		normalizedValue := update.NormalizeTargetVersion(value)
 		if !update.IsValidTargetVersion(normalizedValue) {
-			return updateOptions{}, &argumentError{
-				message:      "Invalid CLI version for --" + updateToVersionFlagName + ": " + value,
-				option:       "--" + updateToVersionFlagName,
-				received:     value,
-				expectedType: "semantic version",
-				command:      "update",
-				nextActions:  []string{"Pass a semantic version such as `3.0.0-beta.6`."},
+			return updateOptions{}, &clicore.ArgumentError{
+				Message:      "Invalid CLI version for --" + updateToVersionFlagName + ": " + value,
+				Option:       "--" + updateToVersionFlagName,
+				Received:     value,
+				ExpectedType: "semantic version",
+				Command:      "update",
+				NextActions:  []string{"Pass a semantic version such as `3.0.0-beta.6`."},
 			}
 		}
 		options.targetVersion = normalizedValue

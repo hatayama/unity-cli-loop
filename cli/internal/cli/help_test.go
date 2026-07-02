@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 // Tests that launcher help lists native commands and live-tool discovery guidance without baked-in tools.
@@ -62,10 +64,10 @@ func TestRunProjectLocalVersionJSONIncludesProtocolVersion(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatalf("version json output is not JSON: %v\n%s", err, stdout.String())
 	}
-	if payload["ProjectRunnerVersion"] != version {
+	if payload["ProjectRunnerVersion"] != clicore.Version {
 		t.Fatalf("projectRunnerVersion mismatch: %#v", payload)
 	}
-	if payload["ProtocolVersion"] != float64(protocolVersion) {
+	if payload["ProtocolVersion"] != float64(clicore.ProtocolVersion) {
 		t.Fatalf("protocolVersion mismatch: %#v", payload)
 	}
 }
@@ -259,7 +261,7 @@ func TestRunDispatcherExecuteDynamicCodeHelpDoesNotRequireUnityProject(t *testin
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunDispatcher(context.Background(), []string{executeDynamicCodeCommandName, "--help"}, &stdout, &stderr)
+	code := RunDispatcher(context.Background(), []string{clicore.ExecuteDynamicCodeCommandName, "--help"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("execute-dynamic-code help failed: code=%d stderr=%s", code, stderr.String())
@@ -269,7 +271,7 @@ func TestRunDispatcherExecuteDynamicCodeHelpDoesNotRequireUnityProject(t *testin
 		"Usage:",
 		"uloop execute-dynamic-code",
 		"--code <value>",
-		dynamicCodeFileOptionUsage,
+		clicore.DynamicCodeFileOptionUsage,
 		"--wait-for-domain-reload",
 		"Read C# code from a file",
 	} {

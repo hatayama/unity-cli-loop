@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/project"
 )
 
@@ -64,32 +65,32 @@ type skillDefinition struct {
 }
 
 func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath string, stdout io.Writer, stderr io.Writer) (bool, int) {
-	if len(args) == 0 || args[0] != skillsCommandName {
+	if len(args) == 0 || args[0] != clicore.SkillsCommandName {
 		return false, 0
 	}
-	if len(args) == 1 || isHelpRequest(args[1:]) {
+	if len(args) == 1 || clicore.IsHelpRequest(args[1:]) {
 		printSkillsHelp(stdout)
 		return true, 0
 	}
 
 	subcommand := args[1]
 	if !isKnownSkillsSubcommand(subcommand) {
-		writeErrorEnvelope(stderr, unknownSkillsSubcommandError(subcommand, errorContext{command: skillsCommandName}))
+		clicore.WriteErrorEnvelope(stderr, unknownSkillsSubcommandError(subcommand, clicore.ErrorContext{Command: clicore.SkillsCommandName}))
 		return true, 1
 	}
-	if containsHelpRequest(args[2:]) {
+	if clicore.ContainsHelpRequest(args[2:]) {
 		printSkillsSubcommandHelp(subcommand, stdout)
 		return true, 0
 	}
 	options, err := parseSkillsOptions(args[2:])
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: skillsCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: clicore.SkillsCommandName})
 		return true, 1
 	}
 
 	projectRoot, err := resolveSkillsProjectRoot(startPath, globalProjectPath, options.global)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: skillsCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: clicore.SkillsCommandName})
 		return true, 1
 	}
 
@@ -99,7 +100,7 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 
 	skills, err := collectSkillDefinitions(projectRoot)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 		return true, 1
 	}
 
@@ -123,11 +124,11 @@ func parseSkillsOptions(args []string) (skillCommandOptions, error) {
 			options.targets = append(options.targets, targetConfigs[targetID])
 			seenTargets[targetID] = true
 		default:
-			return skillCommandOptions{}, &argumentError{
-				message:     "Unknown skills option: " + arg,
-				option:      arg,
-				command:     skillsCommandName,
-				nextActions: []string{"Run `uloop skills --help` to inspect supported skills options."},
+			return skillCommandOptions{}, &clicore.ArgumentError{
+				Message:     "Unknown skills option: " + arg,
+				Option:      arg,
+				Command:     clicore.SkillsCommandName,
+				NextActions: []string{"Run `uloop skills --help` to inspect supported skills options."},
 			}
 		}
 	}
@@ -159,13 +160,13 @@ func groupManagedSkillsForOptions(options skillCommandOptions) bool {
 	return groupSkillsByDefault
 }
 
-func unknownSkillsSubcommandError(subcommand string, context errorContext) cliError {
-	return (&argumentError{
-		message:     "Unknown skills command: " + subcommand,
-		received:    subcommand,
-		command:     skillsCommandName,
-		nextActions: []string{"Use `uloop skills list`, `uloop skills install`, or `uloop skills uninstall`."},
-	}).toCLIError(context)
+func unknownSkillsSubcommandError(subcommand string, context clicore.ErrorContext) clicore.CLIError {
+	return (&clicore.ArgumentError{
+		Message:     "Unknown skills command: " + subcommand,
+		Received:    subcommand,
+		Command:     clicore.SkillsCommandName,
+		NextActions: []string{"Use `uloop skills list`, `uloop skills install`, or `uloop skills uninstall`."},
+	}).ToCLIError(context)
 }
 
 func resolveSkillsProjectRoot(startPath string, explicitProjectPath string, global bool) (string, error) {
@@ -193,89 +194,89 @@ func runSkillsList(projectRoot string, skills []skillDefinition, options skillCo
 		location = "Global"
 	}
 
-	writeLine(stdout, "")
-	writeLine(stdout, "uloop Skills Status:")
-	writeLine(stdout, "")
+	clicore.WriteLine(stdout, "")
+	clicore.WriteLine(stdout, "uloop Skills Status:")
+	clicore.WriteLine(stdout, "")
 	for _, target := range targets {
 		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
 		if err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
-		writeFormat(stdout, "%s (%s):\n", target.displayName, location)
-		writeFormat(stdout, "Location: %s\n", baseDir)
-		writeLine(stdout, strings.Repeat("=", 50))
+		clicore.WriteFormat(stdout, "%s (%s):\n", target.displayName, location)
+		clicore.WriteFormat(stdout, "Location: %s\n", baseDir)
+		clicore.WriteLine(stdout, strings.Repeat("=", 50))
 		for _, skill := range skills {
 			status, err := getSkillStatus(baseDir, skill, groupManagedSkillsForOptions(options))
 			if err != nil {
-				writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+				clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 				return 1
 			}
-			writeFormat(stdout, "  %s %s (%s)\n", statusIcon(status), skill.name, statusText(status))
+			clicore.WriteFormat(stdout, "  %s %s (%s)\n", statusIcon(status), skill.name, statusText(status))
 		}
-		writeLine(stdout, "")
+		clicore.WriteLine(stdout, "")
 	}
-	writeFormat(stdout, "Total: %d skills\n", len(skills))
+	clicore.WriteFormat(stdout, "Total: %d skills\n", len(skills))
 	return 0
 }
 
 func runSkillsInstall(projectRoot string, skills []skillDefinition, options skillCommandOptions, stdout io.Writer, stderr io.Writer) int {
-	writeLine(stdout, "")
-	writeFormat(stdout, "Installing uloop skills (%s)...\n", skillLocationName(options.global))
-	writeLine(stdout, "")
+	clicore.WriteLine(stdout, "")
+	clicore.WriteFormat(stdout, "Installing uloop skills (%s)...\n", skillLocationName(options.global))
+	clicore.WriteLine(stdout, "")
 	// Targets installed earlier but omitted from this invocation would keep stale
 	// skill copies that contradict the CLI, so refresh every detected install.
 	autoRefreshTargets, err := detectInstalledSkillTargets(projectRoot, skills, options)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 		return 1
 	}
 	for _, autoTarget := range autoRefreshTargets {
-		writeFormat(stdout, "Auto-refreshing %s: an existing uloop skill install was detected there.\n\n", autoTarget.displayName)
+		clicore.WriteFormat(stdout, "Auto-refreshing %s: an existing uloop skill install was detected there.\n\n", autoTarget.displayName)
 	}
 	for _, target := range append(append([]skillTarget{}, options.targets...), autoRefreshTargets...) {
 		result, err := installSkillsForTarget(projectRoot, target, skills, options.global, groupManagedSkillsForOptions(options))
 		if err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
-		writeFormat(stdout, "%s:\n", target.displayName)
-		writeFormat(stdout, "  Installed: %d\n", result.installed)
-		writeFormat(stdout, "  Updated: %d\n", result.updated)
-		writeFormat(stdout, "  Skipped: %d\n", result.skipped)
+		clicore.WriteFormat(stdout, "%s:\n", target.displayName)
+		clicore.WriteFormat(stdout, "  Installed: %d\n", result.installed)
+		clicore.WriteFormat(stdout, "  Updated: %d\n", result.updated)
+		clicore.WriteFormat(stdout, "  Skipped: %d\n", result.skipped)
 		if result.deprecatedRemoved > 0 {
-			writeFormat(stdout, "  Deprecated removed: %d\n", result.deprecatedRemoved)
+			clicore.WriteFormat(stdout, "  Deprecated removed: %d\n", result.deprecatedRemoved)
 		}
 		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
 		if err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
-		writeFormat(stdout, "  Location: %s\n\n", baseDir)
+		clicore.WriteFormat(stdout, "  Location: %s\n\n", baseDir)
 	}
 	return 0
 }
 
 func runSkillsUninstall(projectRoot string, skills []skillDefinition, options skillCommandOptions, stdout io.Writer, stderr io.Writer) int {
-	writeLine(stdout, "")
-	writeFormat(stdout, "Uninstalling uloop skills (%s)...\n", skillLocationName(options.global))
-	writeLine(stdout, "")
+	clicore.WriteLine(stdout, "")
+	clicore.WriteFormat(stdout, "Uninstalling uloop skills (%s)...\n", skillLocationName(options.global))
+	clicore.WriteLine(stdout, "")
 	for _, target := range options.targets {
 		grouped := groupManagedSkillsForOptions(options)
 		removed, notFound, err := uninstallSkillsForTarget(projectRoot, target, skills, options.global, grouped)
 		if err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
-		writeFormat(stdout, "%s:\n", target.displayName)
-		writeFormat(stdout, "  Removed: %d\n", removed)
-		writeFormat(stdout, "  Not found: %d\n", notFound)
+		clicore.WriteFormat(stdout, "%s:\n", target.displayName)
+		clicore.WriteFormat(stdout, "  Removed: %d\n", removed)
+		clicore.WriteFormat(stdout, "  Not found: %d\n", notFound)
 		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
 		if err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
-		writeFormat(stdout, "  Location: %s\n\n", baseDir)
+		clicore.WriteFormat(stdout, "  Location: %s\n\n", baseDir)
 	}
 	return 0
 }
@@ -313,7 +314,7 @@ func detectInstalledSkillTargets(projectRoot string, skills []skillDefinition, o
 func hasAnyInstalledSkill(baseDir string, skills []skillDefinition) (bool, error) {
 	for _, skill := range skills {
 		for _, grouped := range []bool{false, true} {
-			skillFile := filepath.Join(getPreferredSkillDir(baseDir, skill.name, grouped), skillFileName)
+			skillFile := filepath.Join(getPreferredSkillDir(baseDir, skill.name, grouped), clicore.SkillFileName)
 			if _, err := os.Stat(skillFile); err == nil {
 				return true, nil
 			} else if !os.IsNotExist(err) {
@@ -366,7 +367,7 @@ func loadDisabledToolsForSkillInstall(projectRoot string, global bool) []string 
 	if global {
 		return []string{}
 	}
-	return loadDisabledTools(projectRoot)
+	return clicore.LoadDisabledTools(projectRoot)
 }
 
 func installSkillForTarget(

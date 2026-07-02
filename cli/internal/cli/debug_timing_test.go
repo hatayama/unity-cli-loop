@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
@@ -63,7 +64,7 @@ func TestApplyDebugTimingParams_WhenEnabledForDynamicCode_ShouldRequestUnityTimi
 	t.Setenv(debugTimingEnvName, "1")
 	params := map[string]any{}
 
-	applyDebugTimingParams(executeDynamicCodeCommandName, params)
+	applyDebugTimingParams(clicore.ExecuteDynamicCodeCommandName, params)
 
 	if params[dynamicCodeIncludeTimingsParamName] != true {
 		t.Fatalf("IncludeTimings was not requested: %#v", params)
@@ -90,7 +91,7 @@ func TestWriteDebugTiming_WhenUnityTimingsExist_ShouldWriteUnityTimingLines(t *t
 		Result: []byte(`{"Success":true,"Timings":["[Perf] Build: 12.3ms","[Perf] Execution: 4.5ms"]}`),
 	}
 
-	writeDebugTiming(&stderr, executeDynamicCodeCommandName, time.Millisecond, outcome)
+	writeDebugTiming(&stderr, clicore.ExecuteDynamicCodeCommandName, time.Millisecond, outcome)
 
 	output := stderr.String()
 	for _, expected := range []string{
@@ -107,7 +108,7 @@ func TestWriteDebugTiming_WhenUnityTimingsExist_ShouldWriteUnityTimingLines(t *t
 func TestStripDebugTimingResult_WhenUnityTimingsExist_ShouldRemoveTimings(t *testing.T) {
 	t.Setenv(debugTimingEnvName, "1")
 	result := stripDebugTimingResult(
-		executeDynamicCodeCommandName,
+		clicore.ExecuteDynamicCodeCommandName,
 		[]byte(`{"Success":true,"Result":"ok","Timings":["[Perf] Build: 12.3ms"]}`),
 	)
 
@@ -124,7 +125,7 @@ func TestStripDebugTimingResult_WhenUnityTimingsExist_ShouldRemoveTimings(t *tes
 func TestStripDebugTimingResult_WhenLegacyLowerCamelUnityTimingsExist_ShouldRemoveTimings(t *testing.T) {
 	t.Setenv(debugTimingEnvName, "1")
 	result := stripDebugTimingResult(
-		executeDynamicCodeCommandName,
+		clicore.ExecuteDynamicCodeCommandName,
 		[]byte(`{"Success":true,"Result":"ok","timings":["[Perf] Build: 12.3ms"]}`),
 	)
 

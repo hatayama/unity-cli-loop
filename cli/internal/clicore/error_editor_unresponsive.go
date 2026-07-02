@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import "github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 
@@ -13,15 +13,15 @@ func connectionAttemptCause(err *unityipc.ConnectionAttemptError) string {
 	return cause.Error()
 }
 
-func unityEditorUnresponsiveError(err *unityipc.EditorUnresponsiveError, context errorContext) cliError {
-	return cliError{
+func unityEditorUnresponsiveError(err *unityipc.EditorUnresponsiveError, context ErrorContext) CLIError {
+	return CLIError{
 		ErrorCode:   errorCodeUnityEditorUnresponsive,
-		Phase:       errorPhaseResponseWaiting,
+		Phase:       ErrorPhaseResponseWaiting,
 		Message:     "Unity accepted the request, but the Editor main thread stopped responding.",
 		Retryable:   true,
-		SafeToRetry: isSafeRetryCommand(context.command),
-		ProjectRoot: context.projectRoot,
-		Command:     context.command,
+		SafeToRetry: isSafeRetryCommand(context.Command),
+		ProjectRoot: context.ProjectRoot,
+		Command:     context.Command,
 		NextActions: []string{
 			"Check Unity for a modal dialog or long editor operation that is blocking the Editor main thread.",
 			"Run `uloop focus-window` if Unity is hidden behind another window.",

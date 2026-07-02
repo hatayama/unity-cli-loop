@@ -3,6 +3,8 @@ package cli
 import (
 	"io"
 	"strings"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 func defaultSkillTargets() []skillTarget {
@@ -52,55 +54,55 @@ func statusText(status string) string {
 }
 
 func printSkillsHelp(stdout io.Writer) {
-	writeLine(stdout, "Usage:")
-	writeLine(stdout, "  uloop skills list [options]")
-	writeLine(stdout, "  uloop skills install [options]")
-	writeLine(stdout, "  uloop skills uninstall [options]")
-	writeLine(stdout, "  uloop skills install-v3-migration [options]")
-	writeLine(stdout, "  uloop skills uninstall-v3-migration [options]")
-	writeLine(stdout, "")
+	clicore.WriteLine(stdout, "Usage:")
+	clicore.WriteLine(stdout, "  uloop skills list [options]")
+	clicore.WriteLine(stdout, "  uloop skills install [options]")
+	clicore.WriteLine(stdout, "  uloop skills uninstall [options]")
+	clicore.WriteLine(stdout, "  uloop skills install-v3-migration [options]")
+	clicore.WriteLine(stdout, "  uloop skills uninstall-v3-migration [options]")
+	clicore.WriteLine(stdout, "")
 	printGlobalOptionsHelp(stdout)
 }
 
 func printSkillsSubcommandHelp(command string, stdout io.Writer) {
-	writeLine(stdout, "Usage:")
-	writeFormat(stdout, "  uloop skills %s [options]\n", command)
-	writeLine(stdout, "")
-	writeLine(stdout, "Options:")
-	writeLine(stdout, "  -g, --global")
-	writeLine(stdout, "      --flat")
-	writeLine(stdout, "      --claude")
-	writeLine(stdout, "      --codex")
-	writeLine(stdout, "      --cursor")
-	writeLine(stdout, "      --gemini")
-	writeLine(stdout, "      --agents")
-	writeLine(stdout, "      --windsurf")
-	writeLine(stdout, "      --antigravity")
-	writeLine(stdout, "")
+	clicore.WriteLine(stdout, "Usage:")
+	clicore.WriteFormat(stdout, "  uloop skills %s [options]\n", command)
+	clicore.WriteLine(stdout, "")
+	clicore.WriteLine(stdout, "Options:")
+	clicore.WriteLine(stdout, "  -g, --global")
+	clicore.WriteLine(stdout, "      --flat")
+	clicore.WriteLine(stdout, "      --claude")
+	clicore.WriteLine(stdout, "      --codex")
+	clicore.WriteLine(stdout, "      --cursor")
+	clicore.WriteLine(stdout, "      --gemini")
+	clicore.WriteLine(stdout, "      --agents")
+	clicore.WriteLine(stdout, "      --windsurf")
+	clicore.WriteLine(stdout, "      --antigravity")
+	clicore.WriteLine(stdout, "")
 	if command == "install" {
-		writeLine(stdout, "Targets that already contain uloop skills are refreshed automatically,")
-		writeLine(stdout, "even when their flag is omitted, so previously installed copies never go stale.")
-		writeLine(stdout, "")
+		clicore.WriteLine(stdout, "Targets that already contain uloop skills are refreshed automatically,")
+		clicore.WriteLine(stdout, "even when their flag is omitted, so previously installed copies never go stale.")
+		clicore.WriteLine(stdout, "")
 	}
 	if command == "install-v3-migration" {
-		writeLine(stdout, "Installs only the temporary V3 CLI invocation migration skill.")
-		writeLine(stdout, "")
+		clicore.WriteLine(stdout, "Installs only the temporary V3 CLI invocation migration skill.")
+		clicore.WriteLine(stdout, "")
 	}
 	if command == "uninstall-v3-migration" {
-		writeLine(stdout, "Removes only the temporary V3 CLI invocation migration skill.")
-		writeLine(stdout, "")
+		clicore.WriteLine(stdout, "Removes only the temporary V3 CLI invocation migration skill.")
+		clicore.WriteLine(stdout, "")
 	}
 	printGlobalOptionsHelp(stdout)
 }
 
 func printSkillsTargetGuidance(command string, stdout io.Writer) {
-	writeFormat(stdout, "\nPlease specify at least one target for '%s':\n\n", command)
-	writeLine(stdout, "Available targets:")
-	writeLine(stdout, "  --claude")
-	writeLine(stdout, "  --codex")
-	writeLine(stdout, "  --cursor")
-	writeLine(stdout, "  --gemini")
-	writeLine(stdout, "  --agents")
-	writeLine(stdout, "  --windsurf")
-	writeLine(stdout, "  --antigravity")
+	clicore.WriteFormat(stdout, "\nPlease specify at least one target for '%s':\n\n", command)
+	clicore.WriteLine(stdout, "Available targets:")
+	clicore.WriteLine(stdout, "  --claude")
+	clicore.WriteLine(stdout, "  --codex")
+	clicore.WriteLine(stdout, "  --cursor")
+	clicore.WriteLine(stdout, "  --gemini")
+	clicore.WriteLine(stdout, "  --agents")
+	clicore.WriteLine(stdout, "  --windsurf")
+	clicore.WriteLine(stdout, "  --antigravity")
 }

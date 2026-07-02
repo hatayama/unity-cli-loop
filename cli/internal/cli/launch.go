@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/project"
 )
 
@@ -29,14 +30,14 @@ const (
 )
 
 var (
-	findRunningUnityProcessForLaunch    = findRunningUnityProcess
-	focusUnityProcessForLaunch          = focusUnityProcess
+	findRunningUnityProcessForLaunch    = clicore.FindRunningUnityProcess
+	focusUnityProcessForLaunch          = clicore.FocusUnityProcess
 	killUnityProcessForLaunch           = killUnityProcess
 	resolveUnityExecutablePathForLaunch = resolveUnityExecutablePath
 	waitForUnityProcessExitForLaunch    = waitForUnityProcessExit
 	waitForUnityStartupMarkerForLaunch  = waitForUnityStartupMarkerOrTimeout
-	waitForToolReadinessForLaunch       = waitForToolReadinessWithTimeout
-	probeProjectIpcForLaunchFallback    = probeToolReadinessSequence
+	waitForToolReadinessForLaunch       = clicore.WaitForToolReadinessWithTimeout
+	probeProjectIpcForLaunchFallback    = clicore.ProbeToolReadinessSequence
 )
 
 var editorVersionPattern = regexp.MustCompile(`(?m)^m_EditorVersion:\s*(.+)$`)
@@ -59,17 +60,17 @@ func tryHandleLaunchRequest(
 	stdout io.Writer,
 	stderr io.Writer,
 ) (bool, int) {
-	if len(args) == 0 || args[0] != launchCommandName {
+	if len(args) == 0 || args[0] != clicore.LaunchCommandName {
 		return false, 0
 	}
-	if containsHelpRequest(args[1:]) {
+	if clicore.ContainsHelpRequest(args[1:]) {
 		printLaunchHelp(stdout)
 		return true, 0
 	}
 
 	options, err := parseLaunchOptions(args[1:], globalProjectPath)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: launchCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: clicore.LaunchCommandName})
 		return true, 1
 	}
 
@@ -99,7 +100,7 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 
 	projectRoot, err := resolveLaunchProjectRoot(startPath, options)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{command: launchCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: clicore.LaunchCommandName})
 		return 1
 	}
 
@@ -133,7 +134,7 @@ func writeLaunchProjectSearch(stdout io.Writer, options launchOptions, startPath
 	if options.maxDepth == -1 {
 		depthInfo = "unlimited"
 	}
-	writeFormat(stdout, "Searching for Unity project under %s (max-depth: %s)...\n\n", startPath, depthInfo)
+	clicore.WriteFormat(stdout, "Searching for Unity project under %s (max-depth: %s)...\n\n", startPath, depthInfo)
 }
 
 func deleteLaunchRecoveryIfRequested(options launchOptions, projectRoot string, stderr io.Writer) bool {
@@ -141,7 +142,7 @@ func deleteLaunchRecoveryIfRequested(options launchOptions, projectRoot string, 
 		return true
 	}
 	if err := os.RemoveAll(filepath.Join(projectRoot, recoveryDirectoryPath)); err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return false
 	}
 	return true
@@ -153,7 +154,7 @@ func findLaunchRunningProcess(
 	projectRoot string,
 	stdout io.Writer,
 	stderr io.Writer,
-) (*unityProcess, bool, int) {
+) (*clicore.UnityProcess, bool, int) {
 	runningProcess, err := findRunningUnityProcessForLaunch(ctx, projectRoot)
 	if err == nil {
 		return runningProcess, false, 0
@@ -164,7 +165,7 @@ func findLaunchRunningProcess(
 	if !options.restart && !options.quit && probeProjectIpcForLaunchFallback(ctx, projectRoot) == nil {
 		return nil, true, writeDetectionFallbackLaunchReadyResponse(stdout, stderr, projectRoot, err)
 	}
-	writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+	clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 	return nil, true, 1
 }
 
@@ -172,38 +173,38 @@ func handleExistingLaunchProcess(
 	ctx context.Context,
 	options launchOptions,
 	projectRoot string,
-	runningProcess *unityProcess,
+	runningProcess *clicore.UnityProcess,
 	stdout io.Writer,
 	stderr io.Writer,
 ) (bool, int) {
 	if !options.restart && !options.quit {
 		if options.editorVersion != "" {
-			writeClassifiedError(stderr, launchEditorVersionRequiresRestartError(options.editorVersion), errorContext{projectRoot: projectRoot, command: launchCommandName})
+			clicore.WriteClassifiedError(stderr, launchEditorVersionRequiresRestartError(options.editorVersion), clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 			return true, 1
 		}
-		return true, waitForExistingLaunchReadiness(ctx, projectRoot, runningProcess.pid, stdout, stderr)
+		return true, waitForExistingLaunchReadiness(ctx, projectRoot, runningProcess.Pid, stdout, stderr)
 	}
-	if err := killUnityProcessForLaunch(runningProcess.pid); err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+	if err := killUnityProcessForLaunch(runningProcess.Pid); err != nil {
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return true, 1
 	}
-	if err := waitForUnityProcessExitForLaunch(ctx, projectRoot, runningProcess.pid, launchProcessExitPoll, launchProcessExitTimeout); err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+	if err := waitForUnityProcessExitForLaunch(ctx, projectRoot, runningProcess.Pid, launchProcessExitPoll, launchProcessExitTimeout); err != nil {
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return true, 1
 	}
 	if options.quit {
-		return true, writeLaunchQuitResponse(stdout, stderr, projectRoot, &runningProcess.pid, launchStoppedMessage)
+		return true, writeLaunchQuitResponse(stdout, stderr, projectRoot, &runningProcess.Pid, launchStoppedMessage)
 	}
 	return false, 0
 }
 
 func launchEditorVersionRequiresRestartError(editorVersion string) error {
-	return &argumentError{
-		message:  "--editor-version requires --restart when Unity is already running for this project.",
-		option:   "--editor-version",
-		received: editorVersion,
-		command:  launchCommandName,
-		nextActions: []string{
+	return &clicore.ArgumentError{
+		Message:  "--editor-version requires --restart when Unity is already running for this project.",
+		Option:   "--editor-version",
+		Received: editorVersion,
+		Command:  clicore.LaunchCommandName,
+		NextActions: []string{
 			fmt.Sprintf("Run `uloop launch --restart --editor-version %s` to relaunch Unity with the requested Editor version.", editorVersion),
 		},
 	}
@@ -211,11 +212,11 @@ func launchEditorVersionRequiresRestartError(editorVersion string) error {
 
 func waitForExistingLaunchReadiness(ctx context.Context, projectRoot string, pid int, stdout io.Writer, stderr io.Writer) int {
 	logLaunchExistingFocus(ctx, projectRoot, pid)
-	spinner := newLaunchSpinner(stdout, stderr)
+	spinner := clicore.NewLaunchSpinner(stdout, stderr)
 	defer spinner.Stop()
 	writeLaunchReadinessWait(stdout, spinner)
 	if err := waitForLaunchReadiness(ctx, projectRoot); err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
 	spinner.Stop()
@@ -226,66 +227,66 @@ func startUnityAndWaitForReadiness(
 	ctx context.Context,
 	options launchOptions,
 	projectRoot string,
-	runningProcess *unityProcess,
+	runningProcess *clicore.UnityProcess,
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
 	removedStaleTemp, err := cleanStaleUnityTemp(projectRoot)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
 	if removedStaleTemp {
-		writeFormat(stdout, "UnityLockfile found without active Unity process: %s\n", unityLockfilePath(projectRoot))
-		writeLine(stdout, "Assuming previous crash. Cleaning Temp directory and continuing launch.")
-		writeLine(stdout, "Deleted Temp directory.")
-		writeLine(stdout, "Deleted UnityLockfile.")
-		writeLine(stdout, "")
+		clicore.WriteFormat(stdout, "UnityLockfile found without active Unity process: %s\n", unityLockfilePath(projectRoot))
+		clicore.WriteLine(stdout, "Assuming previous crash. Cleaning Temp directory and continuing launch.")
+		clicore.WriteLine(stdout, "Deleted Temp directory.")
+		clicore.WriteLine(stdout, "Deleted UnityLockfile.")
+		clicore.WriteLine(stdout, "")
 	}
 
 	unityVersion, err := resolveLaunchEditorVersion(projectRoot, options)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
 
 	unityPath, err := resolveUnityExecutablePathForLaunch(unityVersion)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
 
-	spinner := newLaunchSpinner(stdout, stderr)
+	spinner := clicore.NewLaunchSpinner(stdout, stderr)
 	defer spinner.Stop()
 
-	writeLine(stdout, "Opening Unity...")
-	writeFormat(stdout, "Project Path: %s\n", projectRoot)
-	writeFormat(stdout, "Detected Unity version: %s\n", unityVersion)
-	writeLine(stdout, "Unity Hub launch options: none")
+	clicore.WriteLine(stdout, "Opening Unity...")
+	clicore.WriteFormat(stdout, "Project Path: %s\n", projectRoot)
+	clicore.WriteFormat(stdout, "Detected Unity version: %s\n", unityVersion)
+	clicore.WriteLine(stdout, "Unity Hub launch options: none")
 
 	command := newUnityLaunchCommand(unityPath, buildUnityLaunchArgs(projectRoot, options))
 	if err := command.Start(); err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
 	currentPid := command.Process.Pid
 	if err := command.Process.Release(); err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
 	if err := waitForUnityStartupMarkerForLaunch(ctx, unityLockfilePath(projectRoot), launchLockfilePoll, launchLockfileTimeout); err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
 	writeLaunchReadinessWait(stdout, spinner)
 	if err := waitForLaunchReadiness(ctx, projectRoot); err != nil {
-		writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: launchCommandName})
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
 	spinner.Stop()
 	var previousPid *int
 	if runningProcess != nil {
-		previousPid = &runningProcess.pid
+		previousPid = &runningProcess.Pid
 	}
 	return writeLaunchedReadyResponse(stdout, stderr, projectRoot, previousPid, currentPid)
 }
@@ -343,7 +344,7 @@ func waitForUnityProcessExit(ctx context.Context, projectRoot string, pid int, p
 			}
 			return err
 		}
-		if runningProcess == nil || runningProcess.pid != pid {
+		if runningProcess == nil || runningProcess.Pid != pid {
 			return nil
 		}
 
@@ -467,19 +468,19 @@ func killUnityProcess(pid int) error {
 }
 
 func printLaunchHelp(stdout io.Writer) {
-	writeLine(stdout, "Usage:")
-	writeLine(stdout, "  uloop launch [options] [project-path]")
-	writeLine(stdout, "")
-	writeLine(stdout, "Options:")
-	writeLine(stdout, "  -r, --restart          Kill an existing Unity process for the project before launching")
-	writeLine(stdout, "  -q, --quit             Kill an existing Unity process for the project without launching")
-	writeLine(stdout, "  -d, --delete-recovery  Delete Assets/_Recovery before launch")
-	writeLine(stdout, "      --editor-version <version>")
-	writeLine(stdout, "                          Use this Unity Editor version instead of ProjectVersion.txt")
-	writeLine(stdout, "  -p, --platform <name>  Pass Unity -buildTarget when launching")
-	writeLine(stdout, "      --max-depth <n>    Accepted for compatibility when searching from the current directory")
-	writeLine(stdout, "")
-	writeLine(stdout, "Compiler errors are ignored by default during Unity startup.")
-	writeLine(stdout, "")
+	clicore.WriteLine(stdout, "Usage:")
+	clicore.WriteLine(stdout, "  uloop launch [options] [project-path]")
+	clicore.WriteLine(stdout, "")
+	clicore.WriteLine(stdout, "Options:")
+	clicore.WriteLine(stdout, "  -r, --restart          Kill an existing Unity process for the project before launching")
+	clicore.WriteLine(stdout, "  -q, --quit             Kill an existing Unity process for the project without launching")
+	clicore.WriteLine(stdout, "  -d, --delete-recovery  Delete Assets/_Recovery before launch")
+	clicore.WriteLine(stdout, "      --editor-version <version>")
+	clicore.WriteLine(stdout, "                          Use this Unity Editor version instead of ProjectVersion.txt")
+	clicore.WriteLine(stdout, "  -p, --platform <name>  Pass Unity -buildTarget when launching")
+	clicore.WriteLine(stdout, "      --max-depth <n>    Accepted for compatibility when searching from the current directory")
+	clicore.WriteLine(stdout, "")
+	clicore.WriteLine(stdout, "Compiler errors are ignored by default during Unity startup.")
+	clicore.WriteLine(stdout, "")
 	printGlobalOptionsHelp(stdout)
 }

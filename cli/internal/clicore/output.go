@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"encoding/json"
@@ -6,20 +6,20 @@ import (
 	"io"
 )
 
-func writeLine(writer io.Writer, values ...any) {
+func WriteLine(writer io.Writer, values ...any) {
 	// CLI status output failures are not recoverable after command outcome is decided.
 	_, _ = fmt.Fprintln(writer, values...)
 }
 
-func writeFormat(writer io.Writer, format string, values ...any) {
+func WriteFormat(writer io.Writer, format string, values ...any) {
 	// CLI status output failures are not recoverable after command outcome is decided.
 	_, _ = fmt.Fprintf(writer, format, values...)
 }
 
-func writeJSON(stdout io.Writer, result json.RawMessage) {
+func WriteJSON(stdout io.Writer, result json.RawMessage) {
 	var pretty any
 	if json.Unmarshal(result, &pretty) != nil {
-		writeLine(stdout, string(result))
+		WriteLine(stdout, string(result))
 		return
 	}
 	encoder := json.NewEncoder(stdout)

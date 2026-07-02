@@ -5,12 +5,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 // Verifies --code-file is extracted from execute-dynamic-code args in both flag forms.
 func TestExtractDynamicCodeFileFlagParsesBothForms(t *testing.T) {
 	remaining, path, err := extractDynamicCodeFileFlag(
-		executeDynamicCodeCommandName,
+		clicore.ExecuteDynamicCodeCommandName,
 		[]string{"--code-file", "/tmp/snippet.cs", "--timeout-seconds", "30"},
 	)
 	if err != nil {
@@ -24,7 +26,7 @@ func TestExtractDynamicCodeFileFlagParsesBothForms(t *testing.T) {
 	}
 
 	remaining, path, err = extractDynamicCodeFileFlag(
-		executeDynamicCodeCommandName,
+		clicore.ExecuteDynamicCodeCommandName,
 		[]string{"--code-file=/tmp/snippet.cs"},
 	)
 	if err != nil {

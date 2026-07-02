@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"encoding/json"
@@ -8,9 +8,9 @@ import (
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
-func classifyError(err error, context errorContext) cliError {
+func ClassifyError(err error, context ErrorContext) CLIError {
 	if err == nil {
-		return internalCLIError("unknown CLI error", context)
+		return InternalCLIError("unknown CLI error", context)
 	}
 
 	if classifiedError, ok := classifyTypedError(err, context); ok {
@@ -20,16 +20,16 @@ func classifyError(err error, context errorContext) cliError {
 	return classifyMessageError(err.Error(), context)
 }
 
-// classifiableCLIError lets an error type self-classify into a cliError envelope,
+// classifiableCLIError lets an error type self-classify into a CLIError envelope,
 // so classifyTypedError does not need a dedicated branch per error type.
 type classifiableCLIError interface {
-	toCLIError(context errorContext) cliError
+	ToCLIError(context ErrorContext) CLIError
 }
 
-func classifyTypedError(err error, context errorContext) (cliError, bool) {
+func classifyTypedError(err error, context ErrorContext) (CLIError, bool) {
 	var classifiable classifiableCLIError
 	if errors.As(err, &classifiable) {
-		return classifiable.toCLIError(context), true
+		return classifiable.ToCLIError(context), true
 	}
 
 	if classifiedError, ok := classifyUnityConnectionError(err, context); ok {
@@ -41,11 +41,11 @@ func classifyTypedError(err error, context errorContext) (cliError, bool) {
 		return classifyRPCError(rpcErr, context), true
 	}
 
-	return cliError{}, false
+	return CLIError{}, false
 }
 
-func classifyUnityConnectionError(err error, context errorContext) (cliError, bool) {
-	var notRespondingErr unityServerNotRespondingError
+func classifyUnityConnectionError(err error, context ErrorContext) (CLIError, bool) {
+	var notRespondingErr UnityServerNotRespondingError
 	if errors.As(err, &notRespondingErr) {
 		return unityServerNotRespondingCLIError(notRespondingErr, context), true
 	}
@@ -60,39 +60,39 @@ func classifyUnityConnectionError(err error, context errorContext) (cliError, bo
 		return connectionAttemptCLIError(connectionErr, context), true
 	}
 
-	return cliError{}, false
+	return CLIError{}, false
 }
 
-func unityServerNotRespondingCLIError(err unityServerNotRespondingError, context errorContext) cliError {
-	return cliError{
-		ErrorCode:   errorCodeUnityNotReachable,
-		Phase:       errorPhaseConnection,
+func unityServerNotRespondingCLIError(err UnityServerNotRespondingError, context ErrorContext) CLIError {
+	return CLIError{
+		ErrorCode:   ErrorCodeUnityNotReachable,
+		Phase:       ErrorPhaseConnection,
 		Message:     "Unity is running for this project, but the Unity CLI Loop server is not responding.",
 		Retryable:   true,
 		SafeToRetry: true,
-		ProjectRoot: firstNonEmpty(context.projectRoot, err.projectRoot),
-		Command:     context.command,
+		ProjectRoot: FirstNonEmpty(context.ProjectRoot, err.ProjectRoot),
+		Command:     context.Command,
 		NextActions: []string{
 			"Wait and retry; Unity may be starting, importing assets, compiling, or reloading scripts.",
 			"Run `uloop focus-window` if Unity appears stalled in the background.",
 			"Confirm that the command targets the intended Unity project and the Editor package is installed.",
 		},
 		Details: map[string]any{
-			"Endpoint": err.endpoint,
+			"Endpoint": err.Endpoint,
 			"Cause":    err.causeText(),
 		},
 	}
 }
 
-func connectionAttemptCLIError(err *unityipc.ConnectionAttemptError, context errorContext) cliError {
-	return cliError{
-		ErrorCode:   errorCodeUnityNotReachable,
-		Phase:       errorPhaseConnection,
+func connectionAttemptCLIError(err *unityipc.ConnectionAttemptError, context ErrorContext) CLIError {
+	return CLIError{
+		ErrorCode:   ErrorCodeUnityNotReachable,
+		Phase:       ErrorPhaseConnection,
 		Message:     "The Unity CLI Loop server is not reachable for this project.",
 		Retryable:   true,
 		SafeToRetry: true,
-		ProjectRoot: firstNonEmpty(context.projectRoot, err.ProjectRoot),
-		Command:     context.command,
+		ProjectRoot: FirstNonEmpty(context.ProjectRoot, err.ProjectRoot),
+		Command:     context.Command,
 		NextActions: []string{
 			"If Unity is closed, run `uloop launch`.",
 			"If Unity is starting, compiling, or reloading scripts, wait and retry.",
@@ -105,9 +105,9 @@ func connectionAttemptCLIError(err *unityipc.ConnectionAttemptError, context err
 	}
 }
 
-func classifyRPCError(rpcErr *unityipc.RPCError, context errorContext) cliError {
+func classifyRPCError(rpcErr *unityipc.RPCError, context ErrorContext) CLIError {
 	details, decodedData := rpcErrorDetails(rpcErr)
-	switch rpcDataType(decodedData) {
+	switch RPCDataType(decodedData) {
 	case "cli_update_required":
 		return cliUpdateRequiredError(rpcErr, details, decodedData, context)
 	case "server_busy":
@@ -137,15 +137,15 @@ func rpcErrorDetails(rpcErr *unityipc.RPCError) (map[string]any, map[string]any)
 	return details, decodedData
 }
 
-func genericRPCError(rpcErr *unityipc.RPCError, details map[string]any, context errorContext) cliError {
-	return cliError{
+func genericRPCError(rpcErr *unityipc.RPCError, details map[string]any, context ErrorContext) CLIError {
+	return CLIError{
 		ErrorCode:   errorCodeUnityRPCError,
 		Phase:       errorPhaseUnityRPC,
 		Message:     rpcErr.Message,
 		Retryable:   false,
 		SafeToRetry: false,
-		ProjectRoot: context.projectRoot,
-		Command:     context.command,
+		ProjectRoot: context.ProjectRoot,
+		Command:     context.Command,
 		NextActions: []string{
 			"Read the Unity error details and fix the request or project state before retrying.",
 		},
@@ -153,15 +153,15 @@ func genericRPCError(rpcErr *unityipc.RPCError, details map[string]any, context 
 	}
 }
 
-func classifyMessageError(message string, context errorContext) cliError {
+func classifyMessageError(message string, context ErrorContext) CLIError {
 	if isProjectNotFoundMessage(message) {
-		return cliError{
+		return CLIError{
 			ErrorCode:   errorCodeProjectNotFound,
-			Phase:       errorPhaseProjectResolve,
+			Phase:       ErrorPhaseProjectResolve,
 			Message:     message,
 			Retryable:   false,
 			SafeToRetry: false,
-			Command:     context.command,
+			Command:     context.Command,
 			NextActions: []string{
 				"Run the command from inside a Unity project.",
 				"Pass `--project-path <path>` when targeting another Unity project.",
@@ -169,7 +169,7 @@ func classifyMessageError(message string, context errorContext) cliError {
 		}
 	}
 
-	return internalCLIError(message, context)
+	return InternalCLIError(message, context)
 }
 
 func isProjectNotFoundMessage(message string) bool {
@@ -178,7 +178,7 @@ func isProjectNotFoundMessage(message string) bool {
 		strings.HasPrefix(message, "--project-path does not point to a Unity project:")
 }
 
-func rpcDataType(data map[string]any) string {
+func RPCDataType(data map[string]any) string {
 	if data == nil {
 		return ""
 	}

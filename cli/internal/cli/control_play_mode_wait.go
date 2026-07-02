@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
@@ -56,13 +57,13 @@ func runControlPlayModeWithStateWait(
 	action := controlPlayModeAction(params)
 	timeout, timeoutSeconds := controlPlayModeTimeout(params)
 	startedAt := time.Now()
-	spinner := newToolSpinner(stderr, controlPlayModeCommandName)
+	spinner := clicore.NewToolSpinner(stderr, controlPlayModeCommandName)
 	outcome, err := sendWithTransientConnectionRetry(
 		ctx,
 		connection,
 		controlPlayModeCommandName,
 		params,
-		newSpinnerProgressFunc(spinner, "Executing control-play-mode..."),
+		clicore.NewSpinnerProgressFunc(spinner, "Executing control-play-mode..."),
 	)
 
 	initialResponse := controlPlayModeResponse{}
@@ -72,9 +73,9 @@ func runControlPlayModeWithStateWait(
 		initialResponse, decodeErr = decodeControlPlayModeResponse(outcome.Result)
 		if decodeErr != nil {
 			spinner.Stop()
-			writeClassifiedError(stderr, decodeErr, errorContext{
-				projectRoot: connection.ProjectRoot,
-				command:     controlPlayModeCommandName,
+			clicore.WriteClassifiedError(stderr, decodeErr, clicore.ErrorContext{
+				ProjectRoot: connection.ProjectRoot,
+				Command:     controlPlayModeCommandName,
 			})
 			return 1
 		}
@@ -82,21 +83,21 @@ func runControlPlayModeWithStateWait(
 		if initialResponse.BlockedByCompileErrors {
 			spinner.Stop()
 			writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
-			writeErrorEnvelope(stderr, controlPlayModeCompileErrorsError(connection.ProjectRoot, action, initialResponse))
+			clicore.WriteErrorEnvelope(stderr, controlPlayModeCompileErrorsError(connection.ProjectRoot, action, initialResponse))
 			return 1
 		}
 		if controlPlayModeStateMatches(action, initialResponse) {
 			spinner.Stop()
-			writeJSON(stdout, outcome.Result)
+			clicore.WriteJSON(stdout, outcome.Result)
 			writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
 			return 0
 		}
 	} else if !shouldWaitForControlPlayModeDisconnect(err, outcome) {
 		spinner.Stop()
 		writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
-		writeToolFailure(stderr, err, outcome, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     controlPlayModeCommandName,
+		clicore.WriteToolFailure(stderr, err, outcome, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     controlPlayModeCommandName,
 		})
 		return 1
 	}
@@ -106,9 +107,9 @@ func runControlPlayModeWithStateWait(
 	spinner.Stop()
 	if waitErr != nil {
 		writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
-		writeClassifiedError(stderr, waitErr, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     controlPlayModeCommandName,
+		clicore.WriteClassifiedError(stderr, waitErr, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     controlPlayModeCommandName,
 		})
 		return 1
 	}
@@ -116,12 +117,12 @@ func runControlPlayModeWithStateWait(
 	if !completed {
 		if response.BlockedByCompileErrors {
 			writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
-			writeErrorEnvelope(stderr, controlPlayModeCompileErrorsError(connection.ProjectRoot, action, response))
+			clicore.WriteErrorEnvelope(stderr, controlPlayModeCompileErrorsError(connection.ProjectRoot, action, response))
 			return 1
 		}
 
 		writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
-		writeErrorEnvelope(stderr, controlPlayModeWaitTimeoutError(connection.ProjectRoot, action, timeoutSeconds, response))
+		clicore.WriteErrorEnvelope(stderr, controlPlayModeWaitTimeoutError(connection.ProjectRoot, action, timeoutSeconds, response))
 		return 1
 	}
 
@@ -132,13 +133,13 @@ func runControlPlayModeWithStateWait(
 	}
 	result, marshalErr := json.Marshal(response)
 	if marshalErr != nil {
-		writeClassifiedError(stderr, marshalErr, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     controlPlayModeCommandName,
+		clicore.WriteClassifiedError(stderr, marshalErr, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     controlPlayModeCommandName,
 		})
 		return 1
 	}
-	writeJSON(stdout, result)
+	clicore.WriteJSON(stdout, result)
 	writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
 	return 0
 }
@@ -197,7 +198,7 @@ func requestControlPlayModeStatus(
 	probeContext, cancel := context.WithTimeout(ctx, controlPlayModeStatusTimeout)
 	defer cancel()
 
-	result, err := unityipc.NewClient(connection, version).Send(
+	result, err := unityipc.NewClient(connection, clicore.Version).Send(
 		probeContext,
 		controlPlayModeCommandName,
 		map[string]any{
@@ -227,7 +228,7 @@ func shouldWaitForControlPlayModeDisconnect(err error, outcome unityipc.UnitySen
 	if !outcome.RequestDispatched {
 		return false
 	}
-	return isTransportDisconnectError(err)
+	return clicore.IsTransportDisconnectError(err)
 }
 
 func controlPlayModeAction(params map[string]any) string {
@@ -317,10 +318,10 @@ func controlPlayModeWaitTimeoutError(
 	action string,
 	timeoutSeconds int,
 	response controlPlayModeResponse,
-) cliError {
-	return cliError{
-		ErrorCode:   errorCodeControlPlayModeWaitTimeout,
-		Phase:       errorPhaseResponseWaiting,
+) clicore.CLIError {
+	return clicore.CLIError{
+		ErrorCode:   clicore.ErrorCodeControlPlayModeWaitTimeout,
+		Phase:       clicore.ErrorPhaseResponseWaiting,
 		Message:     fmt.Sprintf("%s requested but did not complete within %ds", requestedControlPlayModeMessage(action), timeoutSeconds),
 		Retryable:   true,
 		SafeToRetry: true,
@@ -343,15 +344,15 @@ func controlPlayModeCompileErrorsError(
 	projectRoot string,
 	action string,
 	response controlPlayModeResponse,
-) cliError {
+) clicore.CLIError {
 	compileErrorCount := response.CompileErrorCount
 	if compileErrorCount == 0 && len(response.CompileErrors) > 0 {
 		compileErrorCount = len(response.CompileErrors)
 	}
 
-	return cliError{
-		ErrorCode:   errorCodeControlPlayModeCompileErrors,
-		Phase:       errorPhaseExecution,
+	return clicore.CLIError{
+		ErrorCode:   clicore.ErrorCodeControlPlayModeCompileErrors,
+		Phase:       clicore.ErrorPhaseExecution,
 		Message:     "Play mode start was blocked because Unity has compiler errors.",
 		Retryable:   false,
 		SafeToRetry: true,

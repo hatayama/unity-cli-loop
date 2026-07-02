@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"encoding/json"
@@ -16,7 +16,7 @@ type toolSettingsData struct {
 	DisabledTools []string `json:"disabledTools"`
 }
 
-func loadDisabledTools(projectRoot string) []string {
+func LoadDisabledTools(projectRoot string) []string {
 	settingsPath := filepath.Join(projectRoot, uloopSettingsDir, toolSettingsFile)
 	content, err := os.ReadFile(settingsPath)
 	if err != nil || len(strings.TrimSpace(string(content))) == 0 {
@@ -33,7 +33,7 @@ func loadDisabledTools(projectRoot string) []string {
 	return settings.DisabledTools
 }
 
-func isToolDisabledByToolSettings(toolName string, disabledTools []string) bool {
+func IsToolDisabledByToolSettings(toolName string, disabledTools []string) bool {
 	if len(disabledTools) == 0 {
 		return false
 	}

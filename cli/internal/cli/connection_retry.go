@@ -8,12 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
 var (
-	findRunningUnityProcessForConnectionRetry = findRunningUnityProcess
-	focusUnityProcessForConnectionRetry       = focusUnityProcessWithRestore
+	findRunningUnityProcessForConnectionRetry = clicore.FindRunningUnityProcess
+	focusUnityProcessForConnectionRetry       = clicore.FocusUnityProcessWithRestore
 	serverConnectionRetryTimeout              = 10 * time.Second
 	serverConnectionRetryPoll                 = 1 * time.Second
 )
@@ -46,7 +47,7 @@ type connectionRetryFocusController struct {
 	connection   unityipc.Connection
 	method       string
 	attempted    bool
-	restoreFocus restoreFocusFunc
+	restoreFocus clicore.RestoreFocusFunc
 }
 
 func newConnectionRetryFocusController(connection unityipc.Connection, method string) *connectionRetryFocusController {
@@ -82,7 +83,7 @@ func (controller *connectionRetryFocusController) tryFocus(
 	if err != nil || runningProcess == nil {
 		return
 	}
-	controller.tryFocusProcess(ctx, runningProcess.pid, reason, cause)
+	controller.tryFocusProcess(ctx, runningProcess.Pid, reason, cause)
 }
 
 func (controller *connectionRetryFocusController) tryFocusProcess(
@@ -96,7 +97,7 @@ func (controller *connectionRetryFocusController) tryFocusProcess(
 	}
 	controller.attempted = true
 
-	correlationID := newCliVibeCorrelationID()
+	correlationID := clicore.NewCLIVibeCorrelationID()
 	logConnectionRetryFocusAttempt(controller.connection, controller.method, pid, reason, cause, correlationID)
 	restorer, focusErr := focusUnityProcessForConnectionRetry(ctx, pid)
 	if focusErr == nil {
@@ -210,7 +211,7 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 		}
 		focusController.tryFocusProcess(
 			retryContext,
-			runningProcess.pid,
+			runningProcess.Pid,
 			focusReasonUndispatchedConnectionFailure,
 			err,
 		)
@@ -247,7 +248,7 @@ func isUnityServerBusyRPCError(err error) bool {
 	if len(rpcErr.Data) > 0 {
 		_ = json.Unmarshal(rpcErr.Data, &decodedData)
 	}
-	return rpcDataType(decodedData) == "server_busy"
+	return clicore.RPCDataType(decodedData) == "server_busy"
 }
 
 func connectionRetryFocusReasonForError(
@@ -264,7 +265,7 @@ func connectionRetryFocusReasonForError(
 		return focusReasonMainThreadStall, true
 	}
 
-	if outcome.RequestDispatched && !outcome.RequestAccepted && isFinalResponseTimeoutError(err) {
+	if outcome.RequestDispatched && !outcome.RequestAccepted && clicore.IsFinalResponseTimeoutError(err) {
 		return focusReasonPreAcceptTimeout, true
 	}
 
@@ -274,7 +275,7 @@ func connectionRetryFocusReasonForError(
 	if responseTimeout > 0 {
 		return "", false
 	}
-	if !isFinalResponseTimeoutError(err) {
+	if !clicore.IsFinalResponseTimeoutError(err) {
 		return "", false
 	}
 	if strings.Contains(err.Error(), "heartbeat") {
@@ -300,7 +301,7 @@ func logConnectionRetryFocusAttempt(
 	retryCause error,
 	correlationID string,
 ) {
-	_ = writeCliVibeLog(connection.ProjectRoot, cliVibeLogEntry{
+	_ = clicore.WriteCLIVibeLog(connection.ProjectRoot, clicore.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_connection_retry_focus_attempt",
 		Message:   "Attempting to focus Unity while recovering a slow or unreachable request.",
@@ -309,7 +310,7 @@ func logConnectionRetryFocusAttempt(
 			"pid":      pid,
 			"endpoint": connection.Endpoint.Address,
 			"reason":   string(reason),
-			"cause":    errorMessage(retryCause),
+			"cause":    clicore.ErrorMessage(retryCause),
 		},
 		CorrelationID: correlationID,
 	})
@@ -323,7 +324,7 @@ func logConnectionRetryFocusSuccess(
 	retryCause error,
 	correlationID string,
 ) {
-	_ = writeCliVibeLog(connection.ProjectRoot, cliVibeLogEntry{
+	_ = clicore.WriteCLIVibeLog(connection.ProjectRoot, clicore.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_connection_retry_focus_success",
 		Message:   "Focused Unity while recovering a slow or unreachable request.",
@@ -332,7 +333,7 @@ func logConnectionRetryFocusSuccess(
 			"pid":      pid,
 			"endpoint": connection.Endpoint.Address,
 			"reason":   string(reason),
-			"cause":    errorMessage(retryCause),
+			"cause":    clicore.ErrorMessage(retryCause),
 		},
 		CorrelationID: correlationID,
 	})
@@ -347,7 +348,7 @@ func logConnectionRetryFocusFailure(
 	focusErr error,
 	correlationID string,
 ) {
-	_ = writeCliVibeLog(connection.ProjectRoot, cliVibeLogEntry{
+	_ = clicore.WriteCLIVibeLog(connection.ProjectRoot, clicore.CLIVibeLogEntry{
 		Level:     "WARNING",
 		Operation: "cli_connection_retry_focus_failed",
 		Message:   "Failed to focus Unity before retrying an undispatched request.",
@@ -356,8 +357,8 @@ func logConnectionRetryFocusFailure(
 			"pid":        pid,
 			"endpoint":   connection.Endpoint.Address,
 			"reason":     string(reason),
-			"cause":      errorMessage(retryCause),
-			"focusError": errorMessage(focusErr),
+			"cause":      clicore.ErrorMessage(retryCause),
+			"focusError": clicore.ErrorMessage(focusErr),
 		},
 		CorrelationID: correlationID,
 	})

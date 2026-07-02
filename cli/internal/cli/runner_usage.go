@@ -1,22 +1,26 @@
 package cli
 
-import "io"
+import (
+	"io"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+)
 
 // tryHandleRunnerInfoRequest answers the project runner's own identity
 // requests. Version output must stay here because the dispatcher forwards
 // project-scoped version queries to the pinned runner, while help output is
 // kept minimal: the full help UX is owned by the global uloop launcher.
 func tryHandleRunnerInfoRequest(args []string, stdout io.Writer) (bool, int) {
-	if len(args) == 0 || isHelpRequest(args) {
+	if len(args) == 0 || clicore.IsHelpRequest(args) {
 		printRunnerUsage(stdout)
 		return true, 0
 	}
-	if isVersionJSONRequest(args) {
-		writeVersionJSON(stdout)
+	if clicore.IsVersionJSONRequest(args) {
+		clicore.WriteVersionJSON(stdout)
 		return true, 0
 	}
-	if isVersionRequest(args) {
-		writeLine(stdout, version)
+	if clicore.IsVersionRequest(args) {
+		clicore.WriteLine(stdout, clicore.Version)
 		return true, 0
 	}
 	return false, 0
@@ -25,11 +29,11 @@ func tryHandleRunnerInfoRequest(args []string, stdout io.Writer) (bool, int) {
 // printRunnerUsage keeps direct runner help minimal so the help UX lives in
 // exactly one binary: interactive use always goes through the global launcher.
 func printRunnerUsage(stdout io.Writer) {
-	writeLine(stdout, "Usage:")
-	writeLine(stdout, "  uloop-project-runner <command> [options]")
-	writeLine(stdout, "")
-	writeLine(stdout, "This binary executes Unity project commands forwarded by the global `uloop` launcher.")
-	writeLine(stdout, "Run `uloop --help` for the full command list and command help.")
+	clicore.WriteLine(stdout, "Usage:")
+	clicore.WriteLine(stdout, "  uloop-project-runner <command> [options]")
+	clicore.WriteLine(stdout, "")
+	clicore.WriteLine(stdout, "This binary executes Unity project commands forwarded by the global `uloop` launcher.")
+	clicore.WriteLine(stdout, "Run `uloop --help` for the full command list and command help.")
 }
 
 // isDispatcherOwnedCommand reports whether a command belongs to the global
@@ -37,17 +41,17 @@ func printRunnerUsage(stdout io.Writer) {
 // of executing them so the two binaries keep disjoint responsibilities.
 func isDispatcherOwnedCommand(command string) bool {
 	switch command {
-	case launchCommandName, installCommandName, updateCommandName, uninstallCommandName, skillsCommandName:
+	case clicore.LaunchCommandName, clicore.InstallCommandName, clicore.UpdateCommandName, clicore.UninstallCommandName, clicore.SkillsCommandName:
 		return true
 	default:
 		return false
 	}
 }
 
-func dispatcherOwnedCommandError(command string) cliError {
-	return cliError{
-		ErrorCode:   errorCodeInvalidArgument,
-		Phase:       errorPhaseArgumentParsing,
+func dispatcherOwnedCommandError(command string) clicore.CLIError {
+	return clicore.CLIError{
+		ErrorCode:   clicore.ErrorCodeInvalidArgument,
+		Phase:       clicore.ErrorPhaseArgumentParsing,
 		Message:     "The `" + command + "` command is handled by the global uloop launcher, not by the project runner binary.",
 		Retryable:   false,
 		SafeToRetry: false,

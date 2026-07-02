@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	sharedupdate "github.com/hatayama/unity-cli-loop/cli/internal/update"
 )
 
@@ -45,7 +46,7 @@ func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin, stderr io.
 }
 
 func dispatcherSiblingRealCLIPath(pin dispatcherPin) (string, bool) {
-	if pin.ProjectRunnerVersion != version {
+	if pin.ProjectRunnerVersion != clicore.Version {
 		return "", false
 	}
 	executablePath, err := os.Executable()
@@ -153,7 +154,7 @@ func downloadDispatcherRealCLIForPin(ctx context.Context, cacheRoot string, pin 
 	archivePath := filepath.Join(tempDir, assetName)
 	checksumPath := archivePath + ".sha256"
 	assetURL := dispatcherReleaseAssetURL(pin.ProjectRunnerVersion, assetName)
-	writeFormat(stderr, "uloop: downloading pinned project runner %s for %s...\n", pin.ProjectRunnerVersion, dispatcherPlatformName(goos, goarch))
+	clicore.WriteFormat(stderr, "uloop: downloading pinned project runner %s for %s...\n", pin.ProjectRunnerVersion, dispatcherPlatformName(goos, goarch))
 	if err := downloadDispatcherFile(ctx, assetURL, archivePath); err != nil {
 		return "", err
 	}

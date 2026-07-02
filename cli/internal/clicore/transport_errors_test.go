@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"fmt"
@@ -50,7 +50,7 @@ func TestIsTransportDisconnectErrorMatchesTypedCauses(t *testing.T) {
 	}
 
 	for _, cause := range typedCauses {
-		if !isTransportDisconnectError(opaqueCauseError{cause: cause}) {
+		if !IsTransportDisconnectError(opaqueCauseError{cause: cause}) {
 			t.Fatalf("typed cause was not classified as disconnect: %v", cause)
 		}
 	}
@@ -64,7 +64,7 @@ func TestIsTransportDisconnectErrorRejectsUnrelatedErrors(t *testing.T) {
 	}
 
 	for _, err := range unrelated {
-		if isTransportDisconnectError(err) {
+		if IsTransportDisconnectError(err) {
 			t.Fatalf("unrelated error was classified as disconnect: %v", err)
 		}
 	}
@@ -78,7 +78,7 @@ func TestIsTransportDisconnectErrorKeepsStringFallback(t *testing.T) {
 	}
 
 	for _, err := range fallbackErrors {
-		if !isTransportDisconnectError(err) {
+		if !IsTransportDisconnectError(err) {
 			t.Fatalf("string fallback did not classify: %v", err)
 		}
 	}
@@ -87,13 +87,13 @@ func TestIsTransportDisconnectErrorKeepsStringFallback(t *testing.T) {
 // Verifies that final-response timeout classification matches typed deadline errors
 // and Timeout()-reporting errors instead of relying on the "i/o timeout" message.
 func TestIsFinalResponseTimeoutErrorMatchesTypedCauses(t *testing.T) {
-	if !isFinalResponseTimeoutError(opaqueCauseError{cause: os.ErrDeadlineExceeded}) {
+	if !IsFinalResponseTimeoutError(opaqueCauseError{cause: os.ErrDeadlineExceeded}) {
 		t.Fatal("wrapped deadline error was not classified as timeout")
 	}
-	if !isFinalResponseTimeoutError(timeoutOnlyError{}) {
+	if !IsFinalResponseTimeoutError(timeoutOnlyError{}) {
 		t.Fatal("Timeout()-reporting error was not classified as timeout")
 	}
-	if isFinalResponseTimeoutError(fmt.Errorf("unity error: busy")) {
+	if IsFinalResponseTimeoutError(fmt.Errorf("unity error: busy")) {
 		t.Fatal("unrelated error was classified as timeout")
 	}
 }
@@ -102,7 +102,7 @@ func TestIsFinalResponseTimeoutErrorMatchesTypedCauses(t *testing.T) {
 // is how go-winio's named pipe deadline error reaches the caller on Windows.
 func TestIsFinalResponseTimeoutErrorUnwrapsTimeoutCauses(t *testing.T) {
 	wrapped := opaqueCauseError{cause: timeoutOnlyError{}}
-	if !isFinalResponseTimeoutError(wrapped) {
+	if !IsFinalResponseTimeoutError(wrapped) {
 		t.Fatal("wrapped Timeout()-reporting error was not classified as timeout")
 	}
 }

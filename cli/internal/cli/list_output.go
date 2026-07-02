@@ -3,6 +3,8 @@ package cli
 import (
 	"encoding/json"
 	"sort"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 type listCatalog struct {
@@ -27,7 +29,7 @@ type listOption struct {
 }
 
 func formatToolListResult(result json.RawMessage) json.RawMessage {
-	var cache toolsCache
+	var cache clicore.ToolsCache
 	if err := json.Unmarshal(result, &cache); err != nil {
 		return result
 	}
@@ -39,7 +41,7 @@ func formatToolListResult(result json.RawMessage) json.RawMessage {
 	return content
 }
 
-func newListCatalog(cache toolsCache) listCatalog {
+func newListCatalog(cache clicore.ToolsCache) listCatalog {
 	tools := make([]listTool, 0, len(cache.Tools))
 	for _, tool := range cache.Tools {
 		tools = append(tools, newListTool(tool))
@@ -53,7 +55,7 @@ func newListCatalog(cache toolsCache) listCatalog {
 	}
 }
 
-func newListTool(tool toolDefinition) listTool {
+func newListTool(tool clicore.ToolDefinition) listTool {
 	return listTool{
 		Name:        tool.Name,
 		Description: tool.Description,
@@ -61,7 +63,7 @@ func newListTool(tool toolDefinition) listTool {
 	}
 }
 
-func listOptionsForTool(tool toolDefinition) []listOption {
+func listOptionsForTool(tool clicore.ToolDefinition) []listOption {
 	schema := tool.EffectiveInputSchema()
 	options := make([]listOption, 0, len(schema.Properties))
 	for propertyName, property := range schema.Properties {
@@ -78,18 +80,18 @@ func listOptionsForTool(tool toolDefinition) []listOption {
 	return options
 }
 
-func newListOption(tool toolDefinition, propertyName string, property toolProperty) listOption {
+func newListOption(tool clicore.ToolDefinition, propertyName string, property clicore.ToolProperty) listOption {
 	return listOption{
-		Name:        "--" + optionNameForProperty(tool.Name, propertyName, property),
+		Name:        "--" + clicore.OptionNameForProperty(tool.Name, propertyName, property),
 		Type:        property.Type,
-		Description: optionSummary(tool.Name, propertyName, property),
+		Description: clicore.OptionSummary(tool.Name, propertyName, property),
 		Default:     listOptionDefault(property),
 		Values:      property.Enum,
 	}
 }
 
-func listOptionDefault(property toolProperty) any {
-	if isNegatedBooleanProperty(property) {
+func listOptionDefault(property clicore.ToolProperty) any {
+	if clicore.IsNegatedBooleanProperty(property) {
 		return false
 	}
 	defaultValue := property.EffectiveDefault()
@@ -125,18 +127,18 @@ func enumValueAtIndex(index int, values []string) (string, bool) {
 	return values[index], true
 }
 
-func appendDynamicCodeFileListOption(tool toolDefinition, options []listOption) []listOption {
-	if tool.Name != executeDynamicCodeCommandName {
+func appendDynamicCodeFileListOption(tool clicore.ToolDefinition, options []listOption) []listOption {
+	if tool.Name != clicore.ExecuteDynamicCodeCommandName {
 		return options
 	}
 	for _, option := range options {
-		if option.Name == dynamicCodeFileOptionName {
+		if option.Name == clicore.DynamicCodeFileOptionName {
 			return options
 		}
 	}
 	return append(options, listOption{
-		Name:        dynamicCodeFileOptionName,
+		Name:        clicore.DynamicCodeFileOptionName,
 		Type:        "string",
-		Description: dynamicCodeFileOptionDescription,
+		Description: clicore.DynamicCodeFileOptionDescription,
 	})
 }

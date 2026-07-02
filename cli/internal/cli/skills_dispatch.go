@@ -1,6 +1,10 @@
 package cli
 
-import "io"
+import (
+	"io"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+)
 
 func runV3MigrationSkillsSubcommand(
 	subcommand string,
@@ -18,7 +22,7 @@ func runV3MigrationSkillsSubcommand(
 	case "install-v3-migration":
 		skills, err := collectV3MigrationSkillDefinition(projectRoot)
 		if err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
 		return runV3MigrationSkillInstall(projectRoot, skills, options, stdout, stderr)

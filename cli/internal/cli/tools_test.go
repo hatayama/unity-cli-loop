@@ -3,16 +3,17 @@ package cli
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 // Tests that tool arguments are converted according to their schema types.
 func TestBuildToolParamsConvertsSchemaTypes(t *testing.T) {
-	tool := toolDefinition{
+	tool := clicore.ToolDefinition{
 		Name: "sample-tool",
-		InputSchema: inputSchema{
-			Properties: map[string]toolProperty{
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
 				"Enabled": {Type: "boolean"},
 				"Count":   {Type: "integer"},
 				"Names":   {Type: "array"},
@@ -50,10 +51,10 @@ func TestBuildToolParamsConvertsSchemaTypes(t *testing.T) {
 
 func TestBuildToolParamsRejectsNullObjectValue(t *testing.T) {
 	// Tests that object schema arguments must parse to JSON objects rather than null.
-	tool := toolDefinition{
+	tool := clicore.ToolDefinition{
 		Name: "sample-tool",
-		InputSchema: inputSchema{
-			Properties: map[string]toolProperty{
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
 				"Payload": {Type: "object"},
 			},
 		},
@@ -68,10 +69,10 @@ func TestBuildToolParamsRejectsNullObjectValue(t *testing.T) {
 
 // Tests that default-enabled boolean tool arguments are disabled through --no-* flags.
 func TestBuildToolParamsConvertsDefaultTrueBooleanToNegatedFlag(t *testing.T) {
-	tool := toolDefinition{
+	tool := clicore.ToolDefinition{
 		Name: "sample-tool",
-		InputSchema: inputSchema{
-			Properties: map[string]toolProperty{
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
 				"IncludeComponents": {Type: "boolean", Default: true},
 			},
 		},
@@ -89,7 +90,7 @@ func TestBuildToolParamsConvertsDefaultTrueBooleanToNegatedFlag(t *testing.T) {
 
 // Tests that execute-dynamic-code accepts explicit reload waiting from embedded tools.
 func TestBuildToolParamsConvertsExecuteDynamicCodeWaitFlag(t *testing.T) {
-	tool, ok := findTool(loadDefaultTools(), executeDynamicCodeCommandName)
+	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), clicore.ExecuteDynamicCodeCommandName)
 	if !ok {
 		t.Fatal("execute-dynamic-code was not found in default tools")
 	}
@@ -106,7 +107,7 @@ func TestBuildToolParamsConvertsExecuteDynamicCodeWaitFlag(t *testing.T) {
 
 // Tests that execute-dynamic-code preserves multiline inline code as one argument.
 func TestBuildToolParamsPreservesExecuteDynamicCodeMultilineCode(t *testing.T) {
-	tool, ok := findTool(loadDefaultTools(), executeDynamicCodeCommandName)
+	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), clicore.ExecuteDynamicCodeCommandName)
 	if !ok {
 		t.Fatal("execute-dynamic-code was not found in default tools")
 	}
@@ -128,7 +129,7 @@ func TestBuildToolParamsPreservesExecuteDynamicCodeMultilineCode(t *testing.T) {
 
 // Tests that run-tests accepts --fail-on-unsaved-changes from embedded tools.
 func TestBuildToolParamsConvertsRunTestsFailOnUnsavedChangesFlag(t *testing.T) {
-	tool, ok := findTool(loadDefaultTools(), runTestsCommandName)
+	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), clicore.RunTestsCommandName)
 	if !ok {
 		t.Fatal("run-tests was not found in default tools")
 	}
@@ -145,7 +146,7 @@ func TestBuildToolParamsConvertsRunTestsFailOnUnsavedChangesFlag(t *testing.T) {
 
 // Tests that compile accepts --stop-on-external-scene-changes from embedded tools.
 func TestBuildToolParamsConvertsCompileStopOnExternalSceneChangesFlag(t *testing.T) {
-	tool, ok := findTool(loadDefaultTools(), compileCommandName)
+	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), clicore.CompileCommandName)
 	if !ok {
 		t.Fatal("compile was not found in default tools")
 	}
@@ -155,17 +156,17 @@ func TestBuildToolParamsConvertsCompileStopOnExternalSceneChangesFlag(t *testing
 		t.Fatalf("buildToolParams failed: %v", err)
 	}
 
-	if params[reloadExternalSceneChangesPropertyName] != false {
-		t.Fatalf("ReloadExternalSceneChanges mismatch: %#v", params[reloadExternalSceneChangesPropertyName])
+	if params[clicore.ReloadExternalSceneChangesPropertyName] != false {
+		t.Fatalf("ReloadExternalSceneChanges mismatch: %#v", params[clicore.ReloadExternalSceneChangesPropertyName])
 	}
 }
 
 // Tests that run-tests-specific aliases do not leak into unrelated tool schemas.
 func TestBuildToolParamsKeepsGenericSaveBeforeRunFlagForOtherTools(t *testing.T) {
-	tool := toolDefinition{
+	tool := clicore.ToolDefinition{
 		Name: "sample-tool",
-		InputSchema: inputSchema{
-			Properties: map[string]toolProperty{
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
 				"SaveBeforeRun": {Type: "boolean", Default: true},
 			},
 		},
@@ -187,11 +188,11 @@ func TestBuildToolParamsKeepsGenericSaveBeforeRunFlagForOtherTools(t *testing.T)
 
 // Tests that compile-specific aliases do not leak into unrelated tool schemas.
 func TestBuildToolParamsKeepsGenericReloadExternalSceneChangesFlagForOtherTools(t *testing.T) {
-	tool := toolDefinition{
+	tool := clicore.ToolDefinition{
 		Name: "sample-tool",
-		InputSchema: inputSchema{
-			Properties: map[string]toolProperty{
-				reloadExternalSceneChangesPropertyName: {Type: "boolean", Default: true},
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
+				clicore.ReloadExternalSceneChangesPropertyName: {Type: "boolean", Default: true},
 			},
 		},
 	}
@@ -200,8 +201,8 @@ func TestBuildToolParamsKeepsGenericReloadExternalSceneChangesFlagForOtherTools(
 	if err != nil {
 		t.Fatalf("buildToolParams failed: %v", err)
 	}
-	if params[reloadExternalSceneChangesPropertyName] != false {
-		t.Fatalf("ReloadExternalSceneChanges mismatch: %#v", params[reloadExternalSceneChangesPropertyName])
+	if params[clicore.ReloadExternalSceneChangesPropertyName] != false {
+		t.Fatalf("ReloadExternalSceneChanges mismatch: %#v", params[clicore.ReloadExternalSceneChangesPropertyName])
 	}
 
 	_, _, err = buildToolParams([]string{"--stop-on-external-scene-changes"}, tool)
@@ -210,33 +211,9 @@ func TestBuildToolParamsKeepsGenericReloadExternalSceneChangesFlagForOtherTools(
 	}
 }
 
-// Tests that run-tests-specific help text does not leak into unrelated tool schemas.
-func TestVisibleOptionHelpEntriesKeepsGenericSaveBeforeRunHelpForOtherTools(t *testing.T) {
-	tool := toolDefinition{
-		Name: "sample-tool",
-		InputSchema: inputSchema{
-			Properties: map[string]toolProperty{
-				"SaveBeforeRun": {Type: "boolean", Default: true},
-			},
-		},
-	}
-
-	entries := visibleOptionHelpEntriesForTool(tool)
-
-	if len(entries) != 1 {
-		t.Fatalf("entry count mismatch: %#v", entries)
-	}
-	if entries[0].name != "--no-save-before-run" {
-		t.Fatalf("option name mismatch: %#v", entries[0].name)
-	}
-	if entries[0].description != "Disable save before run; default: enabled" {
-		t.Fatalf("description mismatch: %#v", entries[0].description)
-	}
-}
-
 func TestBuildToolParamsRejectsCompileWaitForDomainReloadFlag(t *testing.T) {
 	// Verifies the removed positive domain-reload wait flag is not accepted by the public CLI parser.
-	tool, ok := findTool(loadDefaultTools(), compileCommandName)
+	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), clicore.CompileCommandName)
 	if !ok {
 		t.Fatal("compile was not found in default tools")
 	}
@@ -249,7 +226,7 @@ func TestBuildToolParamsRejectsCompileWaitForDomainReloadFlag(t *testing.T) {
 
 // Tests that hidden execute-dynamic-code options remain available for internal callers.
 func TestBuildToolParamsAcceptsHiddenExecuteDynamicCodeCompileOnlyFlag(t *testing.T) {
-	tool, ok := findTool(loadDefaultTools(), executeDynamicCodeCommandName)
+	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), clicore.ExecuteDynamicCodeCommandName)
 	if !ok {
 		t.Fatal("execute-dynamic-code was not found in default tools")
 	}
@@ -264,59 +241,12 @@ func TestBuildToolParamsAcceptsHiddenExecuteDynamicCodeCompileOnlyFlag(t *testin
 	}
 }
 
-// Tests that execute-dynamic-code lists CLI-side file input without exposing internal flags.
-func TestVisibleOptionNamesIncludesExecuteDynamicCodeCodeFile(t *testing.T) {
-	tool, ok := findTool(loadDefaultTools(), executeDynamicCodeCommandName)
-	if !ok {
-		t.Fatal("execute-dynamic-code was not found in default tools")
-	}
-
-	options := visibleOptionNamesForTool(tool)
-
-	if !containsString(options, "--code") {
-		t.Fatalf("execute-dynamic-code code option was not listed: %#v", options)
-	}
-	if !containsString(options, dynamicCodeFileOptionName) {
-		t.Fatalf("execute-dynamic-code code-file option was not listed: %#v", options)
-	}
-	if containsString(options, "--compile-only") {
-		t.Fatalf("execute-dynamic-code internal compile-only option should stay hidden: %#v", options)
-	}
-}
-
-// Tests that execute-dynamic-code help describes CLI-side file input.
-func TestVisibleOptionHelpEntriesIncludesExecuteDynamicCodeCodeFile(t *testing.T) {
-	tool, ok := findTool(loadDefaultTools(), executeDynamicCodeCommandName)
-	if !ok {
-		t.Fatal("execute-dynamic-code was not found in default tools")
-	}
-
-	entries := visibleOptionHelpEntriesForTool(tool)
-
-	found := false
-	for _, entry := range entries {
-		if entry.name != dynamicCodeFileOptionName {
-			continue
-		}
-		found = true
-		if entry.usage != dynamicCodeFileOptionUsage {
-			t.Fatalf("code-file usage mismatch: %#v", entry)
-		}
-		if !strings.Contains(entry.description, "Read C# code from a file") {
-			t.Fatalf("code-file description mismatch: %#v", entry)
-		}
-	}
-	if !found {
-		t.Fatalf("execute-dynamic-code code-file help was not listed: %#v", entries)
-	}
-}
-
 // Tests that boolean tool arguments reject the old explicit true/false value form.
 func TestBuildToolParamsRejectsExplicitBooleanValues(t *testing.T) {
-	tool := toolDefinition{
+	tool := clicore.ToolDefinition{
 		Name: "sample-tool",
-		InputSchema: inputSchema{
-			Properties: map[string]toolProperty{
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
 				"Enabled": {Type: "boolean"},
 			},
 		},
@@ -325,196 +255,6 @@ func TestBuildToolParamsRejectsExplicitBooleanValues(t *testing.T) {
 	_, _, err := buildToolParams([]string{"--enabled", "true"}, tool)
 	if err == nil {
 		t.Fatal("expected boolean value error")
-	}
-}
-
-// Tests that cached tool loading hides tools whose source skills are internal.
-func TestLoadToolsFiltersInternalSkillToolsFromCache(t *testing.T) {
-	projectRoot := t.TempDir()
-	writeTestSkill(t, projectRoot, "Assets/Editor/InternalTool/Skill", `---
-name: uloop-internal-tool
-internal: true
----
-
-# internal
-`)
-	writeToolCache(t, projectRoot, `{
-  "version": "test",
-  "tools": [
-    {
-      "name": "internal-tool",
-      "description": "internal",
-      "inputSchema": {"type": "object", "properties": {}}
-    },
-    {
-      "name": "public-tool",
-      "description": "public",
-      "inputSchema": {"type": "object", "properties": {}}
-    }
-  ]
-}`)
-
-	cache, err := loadTools(projectRoot)
-	if err != nil {
-		t.Fatalf("loadTools failed: %v", err)
-	}
-
-	if _, ok := findTool(cache, "internal-tool"); ok {
-		t.Fatalf("internal tool was not filtered: %#v", cache.Tools)
-	}
-	if _, ok := findTool(cache, "public-tool"); !ok {
-		t.Fatalf("public tool was filtered: %#v", cache.Tools)
-	}
-}
-
-func TestLoadToolsFiltersSingleQuotedInternalSkillToolsFromCache(t *testing.T) {
-	// Verifies YAML single quotes do not expose internal skill tools from cache-backed help.
-	projectRoot := t.TempDir()
-	writeTestSkill(t, projectRoot, "Assets/Editor/InternalTool/Skill", `---
-name: uloop-internal-tool
-internal: 'true'
----
-
-# internal
-`)
-	writeToolCache(t, projectRoot, `{
-  "version": "test",
-  "tools": [
-    {
-      "name": "internal-tool",
-      "description": "internal",
-      "inputSchema": {"type": "object", "properties": {}}
-    },
-    {
-      "name": "public-tool",
-      "description": "public",
-      "inputSchema": {"type": "object", "properties": {}}
-    }
-  ]
-}`)
-
-	cache, err := loadTools(projectRoot)
-	if err != nil {
-		t.Fatalf("loadTools failed: %v", err)
-	}
-
-	if _, ok := findTool(cache, "internal-tool"); ok {
-		t.Fatalf("single-quoted internal tool was not filtered: %#v", cache.Tools)
-	}
-	if _, ok := findTool(cache, "public-tool"); !ok {
-		t.Fatalf("public tool was filtered: %#v", cache.Tools)
-	}
-}
-
-func TestFindToolForCommandUsesEmbeddedExecuteDynamicCodeDefinition(t *testing.T) {
-	// Verifies that execute-dynamic-code avoids project tool-cache loading on the hot path.
-	projectRoot := t.TempDir()
-	writeToolCache(t, projectRoot, `{
-  "version": "test",
-  "tools": []
-}`)
-
-	tool, _, ok, err := findToolForCommand(projectRoot, executeDynamicCodeCommandName)
-	if err != nil {
-		t.Fatalf("findToolForCommand failed: %v", err)
-	}
-
-	if !ok {
-		t.Fatal("execute-dynamic-code was not loaded from embedded definitions")
-	}
-	if tool.Name != executeDynamicCodeCommandName {
-		t.Fatalf("tool name mismatch: %s", tool.Name)
-	}
-}
-
-func TestFindToolForCommandSkipsInternalSkillScanForExecuteDynamicCode(t *testing.T) {
-	// Verifies that execute-dynamic-code does not scan project skills before using the embedded hot-path definition.
-	collectorCalled := false
-
-	tool, _, ok, err := findToolForCommandWithInternalToolNames(
-		t.TempDir(),
-		executeDynamicCodeCommandName,
-		func(string) map[string]bool {
-			collectorCalled = true
-			return map[string]bool{}
-		})
-	if err != nil {
-		t.Fatalf("findToolForCommandWithInternalToolNames failed: %v", err)
-	}
-
-	if collectorCalled {
-		t.Fatal("execute-dynamic-code should not collect internal skill names")
-	}
-	if !ok {
-		t.Fatal("execute-dynamic-code was not loaded from embedded definitions")
-	}
-	if tool.Name != executeDynamicCodeCommandName {
-		t.Fatalf("tool name mismatch: %s", tool.Name)
-	}
-}
-
-func TestFindToolForCommandUsesProjectCacheForRegularTools(t *testing.T) {
-	// Verifies that non-hot-path tools still come from the project tool cache.
-	projectRoot := t.TempDir()
-	writeToolCache(t, projectRoot, `{
-  "version": "test",
-  "tools": [
-    {
-      "name": "cached-tool",
-      "description": "cached",
-      "inputSchema": {"type": "object", "properties": {}}
-    }
-  ]
-}`)
-
-	tool, _, ok, err := findToolForCommand(projectRoot, "cached-tool")
-	if err != nil {
-		t.Fatalf("findToolForCommand failed: %v", err)
-	}
-
-	if !ok {
-		t.Fatal("cached tool was not loaded")
-	}
-	if tool.Name != "cached-tool" {
-		t.Fatalf("tool name mismatch: %s", tool.Name)
-	}
-}
-
-// Tests that internal skills without frontmatter names are filtered by their directory-derived tool names.
-func TestLoadToolsFiltersDerivedInternalSkillToolNameFromCache(t *testing.T) {
-	projectRoot := t.TempDir()
-	writeTestSkill(t, projectRoot, "Assets/Editor/uloop-derived-internal/Skill", `---
-internal: true
----
-
-# internal
-`)
-	writeToolCache(t, projectRoot, `{
-  "version": "test",
-  "tools": [
-    {
-      "name": "derived-internal",
-      "description": "internal",
-      "inputSchema": {"type": "object", "properties": {}}
-    },
-    {
-      "name": "public-tool",
-      "description": "public",
-      "inputSchema": {"type": "object", "properties": {}}
-    }
-  ]
-}`)
-
-	cache, err := loadTools(projectRoot)
-	if err != nil {
-		t.Fatalf("loadTools failed: %v", err)
-	}
-
-	if _, ok := findTool(cache, "derived-internal"); ok {
-		t.Fatalf("derived internal tool was not filtered: %#v", cache.Tools)
-	}
-	if _, ok := findTool(cache, "public-tool"); !ok {
-		t.Fatalf("public tool was filtered: %#v", cache.Tools)
 	}
 }
 
@@ -550,11 +290,11 @@ func TestLoadToolsAcceptsEditorParameterSchemaCache(t *testing.T) {
   ]
 }`)
 
-	cache, err := loadTools(projectRoot)
+	cache, err := clicore.LoadTools(projectRoot)
 	if err != nil {
 		t.Fatalf("loadTools failed: %v", err)
 	}
-	tool, ok := findTool(cache, "get-logs")
+	tool, ok := clicore.FindTool(cache, "get-logs")
 	if !ok {
 		t.Fatalf("cached tool was not loaded: %#v", cache.Tools)
 	}
@@ -578,23 +318,12 @@ func TestLoadToolsAcceptsEditorParameterSchemaCache(t *testing.T) {
 	}
 }
 
-// Tests that embedded fallback tools do not expose internal-only commands.
-func TestLoadDefaultToolsDoesNotExposeInternalSkillTools(t *testing.T) {
-	cache := loadDefaultTools()
-
-	for _, toolName := range []string{"get-project-info", "get-version"} {
-		if _, ok := findTool(cache, toolName); ok {
-			t.Fatalf("internal tool %s was exposed by default tools", toolName)
-		}
-	}
-}
-
 // Tests that numeric tool arguments can be negative values instead of being parsed as flags.
 func TestBuildToolParamsAcceptsNegativeNumericValues(t *testing.T) {
-	tool := toolDefinition{
+	tool := clicore.ToolDefinition{
 		Name: "sample-tool",
-		InputSchema: inputSchema{
-			Properties: map[string]toolProperty{
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
 				"DeltaX": {Type: "number"},
 				"Count":  {Type: "integer"},
 			},
@@ -620,57 +349,9 @@ func TestBuildToolParamsAcceptsNegativeNumericValues(t *testing.T) {
 	}
 }
 
-// Tests that the global --project-path option is removed before command-specific parsing.
-func TestParseGlobalProjectPathAcceptsLeadingOption(t *testing.T) {
-	remaining, projectPath, err := parseGlobalProjectPath(
-		[]string{
-			"--project-path", "/tmp/project",
-			"compile",
-			"--force-recompile",
-		},
-	)
-	if err != nil {
-		t.Fatalf("parseGlobalProjectPath failed: %v", err)
-	}
-
-	if projectPath != "/tmp/project" {
-		t.Fatalf("project path mismatch: %s", projectPath)
-	}
-	expected := []string{"compile", "--force-recompile"}
-	if len(remaining) != len(expected) {
-		t.Fatalf("remaining length mismatch: %#v", remaining)
-	}
-	for index, value := range expected {
-		if remaining[index] != value {
-			t.Fatalf("remaining mismatch: %#v", remaining)
-		}
-	}
-}
-
-// Tests that similarly prefixed option names are not consumed as --project-path.
-func TestParseGlobalProjectPathRequiresExactFlagName(t *testing.T) {
-	remaining, projectPath, err := parseGlobalProjectPath([]string{"--project-pathology"})
-	if err != nil {
-		t.Fatalf("parseGlobalProjectPath failed: %v", err)
-	}
-
-	if projectPath != "" {
-		t.Fatalf("project path should be empty, got %q", projectPath)
-	}
-	expected := []string{"--project-pathology"}
-	if len(remaining) != len(expected) {
-		t.Fatalf("remaining length mismatch: %#v", remaining)
-	}
-	for index, value := range expected {
-		if remaining[index] != value {
-			t.Fatalf("remaining mismatch: %#v", remaining)
-		}
-	}
-}
-
 func writeToolCache(t *testing.T, projectRoot string, content string) {
 	t.Helper()
-	cachePath := filepath.Join(projectRoot, cacheDirectoryName, cacheFileName)
+	cachePath := filepath.Join(projectRoot, clicore.CacheDirectoryName, clicore.CacheFileName)
 	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
 		t.Fatalf("failed to create tool cache directory: %v", err)
 	}

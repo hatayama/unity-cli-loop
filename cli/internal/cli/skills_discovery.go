@@ -6,12 +6,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 func collectSkillDefinitions(projectRoot string) ([]skillDefinition, error) {
 	skills := []skillDefinition{}
 	seen := map[string]bool{}
-	for _, sourceRoot := range enumerateSkillSourceRoots(projectRoot) {
+	for _, sourceRoot := range clicore.EnumerateSkillSourceRoots(projectRoot) {
 		discovered, err := scanSkillSourceRoot(sourceRoot)
 		if err != nil {
 			return nil, err
@@ -31,7 +33,7 @@ func collectSkillDefinitions(projectRoot string) ([]skillDefinition, error) {
 }
 
 func collectV3MigrationSkillDefinition(projectRoot string) ([]skillDefinition, error) {
-	packageRoot := resolvePackageRoot(projectRoot)
+	packageRoot := clicore.ResolvePackageRoot(projectRoot)
 	if packageRoot == "" {
 		return nil, errors.New("unity CLI Loop package root was not found")
 	}
@@ -54,14 +56,14 @@ func collectV3MigrationSkillDefinition(projectRoot string) ([]skillDefinition, e
 	return []skillDefinition{skill}, nil
 }
 
-func scanSkillSourceRoot(sourceRoot skillSourceRoot) ([]skillDefinition, error) {
-	if _, err := os.Stat(sourceRoot.path); err != nil {
+func scanSkillSourceRoot(sourceRoot clicore.SkillSourceRoot) ([]skillDefinition, error) {
+	if _, err := os.Stat(sourceRoot.Path); err != nil {
 		return []skillDefinition{}, nil
 	}
 
-	scanRoots := []string{sourceRoot.path}
-	if !sourceRoot.cliOnly {
-		scanRoots = findEditorFolders(sourceRoot.path, skillSearchMaxDepth)
+	scanRoots := []string{sourceRoot.Path}
+	if !sourceRoot.CLIOnly {
+		scanRoots = clicore.FindEditorFolders(sourceRoot.Path, clicore.SkillSearchMaxDepth)
 	}
 
 	skills := []skillDefinition{}
@@ -82,7 +84,7 @@ func scanSkillDirectories(searchRoot string) ([]skillDefinition, error) {
 			return walkErr
 		}
 		if !entry.IsDir() {
-			if entry.Name() != skillFileName {
+			if entry.Name() != clicore.SkillFileName {
 				return nil
 			}
 			skill, ok, err := readSkillDefinition(filepath.Dir(path))
@@ -94,7 +96,7 @@ func scanSkillDirectories(searchRoot string) ([]skillDefinition, error) {
 			}
 			return nil
 		}
-		if excludedSkillSearchDirs[entry.Name()] && entry.Name() != "Skill" {
+		if clicore.ExcludedSkillSearchDirs[entry.Name()] && entry.Name() != "Skill" {
 			return filepath.SkipDir
 		}
 		if entry.Name() != "Skill" {
@@ -118,7 +120,7 @@ func scanSkillDirectories(searchRoot string) ([]skillDefinition, error) {
 }
 
 func readSkillDefinition(skillDirectory string) (skillDefinition, bool, error) {
-	skillPath := filepath.Join(skillDirectory, skillFileName)
+	skillPath := filepath.Join(skillDirectory, clicore.SkillFileName)
 	content, err := os.ReadFile(skillPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -126,14 +128,14 @@ func readSkillDefinition(skillDirectory string) (skillDefinition, bool, error) {
 		}
 		return skillDefinition{}, false, err
 	}
-	content = normalizeSkillFileContent(skillFileName, content)
-	frontmatter := parseSkillFrontmatter(string(content))
+	content = normalizeSkillFileContent(clicore.SkillFileName, content)
+	frontmatter := clicore.ParseSkillFrontmatter(string(content))
 	if strings.EqualFold(frontmatter["internal"], "true") {
 		return skillDefinition{}, false, nil
 	}
 	name := frontmatter["name"]
 	if name == "" {
-		name = fallbackSkillName(skillDirectory)
+		name = clicore.FallbackSkillName(skillDirectory)
 	}
 	if !isSafeSkillName(name) {
 		return skillDefinition{}, false, nil

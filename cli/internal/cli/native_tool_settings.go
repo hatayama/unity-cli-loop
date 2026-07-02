@@ -1,18 +1,20 @@
 package cli
 
+import "github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+
 func isSettingsManagedNativeToolCommand(command string) bool {
 	switch command {
-	case pausePointWaitCommandName, pausePointStatusUserCommandName:
+	case clicore.PausePointWaitCommandName, clicore.PausePointStatusUserCommandName:
 		return true
 	default:
 		return false
 	}
 }
 
-func nativeToolDisabledError(projectRoot string, command string) cliError {
-	return cliError{
-		ErrorCode:   errorCodeToolDisabled,
-		Phase:       errorPhaseDispatch,
+func nativeToolDisabledError(projectRoot string, command string) clicore.CLIError {
+	return clicore.CLIError{
+		ErrorCode:   clicore.ErrorCodeToolDisabled,
+		Phase:       clicore.ErrorPhaseDispatch,
 		Message:     "Tool is disabled in Unity CLI Loop settings: " + command,
 		Retryable:   false,
 		SafeToRetry: false,

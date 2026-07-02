@@ -1,18 +1,22 @@
 package cli
 
-import "fmt"
+import (
+	"fmt"
 
-func compileWaitTimeoutError(projectRoot string) cliError {
-	return cliError{
-		ErrorCode: errorCodeCompileWaitTimeout,
-		Phase:     errorPhaseCompileWaiting,
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+)
+
+func compileWaitTimeoutError(projectRoot string) clicore.CLIError {
+	return clicore.CLIError{
+		ErrorCode: clicore.ErrorCodeCompileWaitTimeout,
+		Phase:     clicore.ErrorPhaseCompileWaiting,
 		Message: fmt.Sprintf(
 			"Compile status wait timed out after %dms. This does not mean the Unity Editor is frozen; the compile may simply still be running.",
 			compileWaitTimeout.Milliseconds()),
 		Retryable:   true,
 		SafeToRetry: true,
 		ProjectRoot: projectRoot,
-		Command:     compileCommandName,
+		Command:     clicore.CompileCommandName,
 		// Agents have terminated whole sessions after misreading this timeout as a
 		// frozen Editor, so the guidance must walk them through a responsiveness check.
 		NextActions: []string{

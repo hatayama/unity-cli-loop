@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
@@ -49,7 +50,7 @@ func TestEnsureCompileRequestIDReplacesUnsafeValue(t *testing.T) {
 
 // Verifies that compile commands wait for domain reload even without an explicit flag.
 func TestShouldWaitForCompileDomainReloadDefaultsToCompileCommands(t *testing.T) {
-	if !shouldWaitForCompileDomainReload(compileCommandName, map[string]any{}) {
+	if !shouldWaitForCompileDomainReload(clicore.CompileCommandName, map[string]any{}) {
 		t.Fatal("compile should wait for domain reload by default")
 	}
 
@@ -62,14 +63,14 @@ func TestShouldWaitForCompileDomainReloadDefaultsToCompileCommands(t *testing.T)
 func TestShouldWaitForCompileDomainReloadRespectsExplicitFalse(t *testing.T) {
 	params := map[string]any{compileWaitParam: false}
 
-	if shouldWaitForCompileDomainReload(compileCommandName, params) {
+	if shouldWaitForCompileDomainReload(clicore.CompileCommandName, params) {
 		t.Fatal("compile wait should be disabled by an explicit false flag")
 	}
 }
 
 // Verifies that execute-dynamic-code keeps the default hot path free from reload waiting.
 func TestShouldWaitForExecuteDynamicCodeDomainReloadDefaultsToHotPath(t *testing.T) {
-	if shouldWaitForExecuteDynamicCodeDomainReload(executeDynamicCodeCommandName, map[string]any{}) {
+	if shouldWaitForExecuteDynamicCodeDomainReload(clicore.ExecuteDynamicCodeCommandName, map[string]any{}) {
 		t.Fatal("execute-dynamic-code should not wait for domain reload by default")
 	}
 
@@ -82,7 +83,7 @@ func TestShouldWaitForExecuteDynamicCodeDomainReloadDefaultsToHotPath(t *testing
 func TestShouldWaitForExecuteDynamicCodeDomainReloadRespectsExplicitTrue(t *testing.T) {
 	params := map[string]any{compileWaitParam: true}
 
-	if !shouldWaitForExecuteDynamicCodeDomainReload(executeDynamicCodeCommandName, params) {
+	if !shouldWaitForExecuteDynamicCodeDomainReload(clicore.ExecuteDynamicCodeCommandName, params) {
 		t.Fatal("execute-dynamic-code wait should be enabled by an explicit true flag")
 	}
 }
@@ -91,7 +92,7 @@ func TestShouldWaitForExecuteDynamicCodeDomainReloadRespectsExplicitTrue(t *test
 func TestShouldWaitForExecuteDynamicCodeDomainReloadSkipsCompileOnly(t *testing.T) {
 	params := map[string]any{"CompileOnly": true}
 
-	if shouldWaitForExecuteDynamicCodeDomainReload(executeDynamicCodeCommandName, params) {
+	if shouldWaitForExecuteDynamicCodeDomainReload(clicore.ExecuteDynamicCodeCommandName, params) {
 		t.Fatal("compile-only execute-dynamic-code should not wait for domain reload")
 	}
 }
@@ -461,8 +462,8 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 		ProjectRoot: projectRoot,
 	}
 	params := map[string]any{
-		compileForceParam:                      true,
-		reloadExternalSceneChangesPropertyName: false,
+		compileForceParam: true,
+		clicore.ReloadExternalSceneChangesPropertyName: false,
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

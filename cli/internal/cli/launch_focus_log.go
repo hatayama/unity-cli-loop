@@ -2,10 +2,12 @@ package cli
 
 import (
 	"context"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 func logLaunchExistingFocus(ctx context.Context, projectRoot string, pid int) {
-	correlationID := newCliVibeCorrelationID()
+	correlationID := clicore.NewCLIVibeCorrelationID()
 	logLaunchExistingFocusAttempt(projectRoot, pid, correlationID)
 	if err := focusUnityProcessForLaunch(ctx, pid); err != nil {
 		logLaunchExistingFocusFailure(projectRoot, pid, err, correlationID)
@@ -15,7 +17,7 @@ func logLaunchExistingFocus(ctx context.Context, projectRoot string, pid int) {
 }
 
 func logLaunchExistingFocusAttempt(projectRoot string, pid int, correlationID string) {
-	_ = writeCliVibeLog(projectRoot, cliVibeLogEntry{
+	_ = clicore.WriteCLIVibeLog(projectRoot, clicore.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_launch_existing_focus_attempt",
 		Message:   "Attempting to focus the already-running Unity process.",
@@ -28,7 +30,7 @@ func logLaunchExistingFocusAttempt(projectRoot string, pid int, correlationID st
 }
 
 func logLaunchExistingFocusSuccess(projectRoot string, pid int, correlationID string) {
-	_ = writeCliVibeLog(projectRoot, cliVibeLogEntry{
+	_ = clicore.WriteCLIVibeLog(projectRoot, clicore.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_launch_existing_focus_success",
 		Message:   "Focused the already-running Unity process.",
@@ -41,14 +43,14 @@ func logLaunchExistingFocusSuccess(projectRoot string, pid int, correlationID st
 }
 
 func logLaunchExistingFocusFailure(projectRoot string, pid int, focusErr error, correlationID string) {
-	_ = writeCliVibeLog(projectRoot, cliVibeLogEntry{
+	_ = clicore.WriteCLIVibeLog(projectRoot, clicore.CLIVibeLogEntry{
 		Level:     "WARNING",
 		Operation: "cli_launch_existing_focus_failed",
 		Message:   "Failed to focus the already-running Unity process.",
 		Context: map[string]any{
 			"command":    "launch",
 			"pid":        pid,
-			"focusError": errorMessage(focusErr),
+			"focusError": clicore.ErrorMessage(focusErr),
 		},
 		CorrelationID: correlationID,
 	})

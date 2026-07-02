@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/uninstall"
 )
 
@@ -19,26 +20,26 @@ const (
 )
 
 func tryHandleUninstallRequest(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) (bool, int) {
-	if len(args) == 0 || args[0] != uninstallCommandName {
+	if len(args) == 0 || args[0] != clicore.UninstallCommandName {
 		return false, 0
 	}
-	if containsHelpRequest(args[1:]) {
+	if clicore.ContainsHelpRequest(args[1:]) {
 		printUninstallHelp(stdout)
 		return true, 0
 	}
 	if len(args) > 1 {
-		writeClassifiedError(stderr, &argumentError{
-			message:     "Unknown uninstall option: " + args[1],
-			option:      args[1],
-			command:     uninstallCommandName,
-			nextActions: []string{"Run `uloop uninstall` without options."},
-		}, errorContext{command: uninstallCommandName})
+		clicore.WriteClassifiedError(stderr, &clicore.ArgumentError{
+			Message:     "Unknown uninstall option: " + args[1],
+			Option:      args[1],
+			Command:     clicore.UninstallCommandName,
+			NextActions: []string{"Run `uloop uninstall` without options."},
+		}, clicore.ErrorContext{Command: clicore.UninstallCommandName})
 		return true, 1
 	}
 
 	installDir, err := resolveUninstallInstallDir(runtime.GOOS)
 	if err != nil {
-		writeClassifiedError(stderr, wrapUnsupportedPlatformError(err), errorContext{command: uninstallCommandName})
+		clicore.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clicore.ErrorContext{Command: clicore.UninstallCommandName})
 		return true, 1
 	}
 	uninstallCommand, err := uninstall.CommandForOS(runtime.GOOS, uninstall.Options{
@@ -46,22 +47,22 @@ func tryHandleUninstallRequest(ctx context.Context, args []string, stdout io.Wri
 		CurrentPID: os.Getpid(),
 	})
 	if err != nil {
-		writeClassifiedError(stderr, wrapUnsupportedPlatformError(err), errorContext{command: uninstallCommandName})
+		clicore.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clicore.ErrorContext{Command: clicore.UninstallCommandName})
 		return true, 1
 	}
 
-	writeLine(stdout, "Uninstalling global uloop launcher...")
+	clicore.WriteLine(stdout, "Uninstalling global uloop launcher...")
 	command := exec.CommandContext(ctx, uninstallCommand.Name, uninstallCommand.Args...)
 	command.Stdout = stdout
 	command.Stderr = stderr
 	if err := command.Run(); err != nil {
-		writeErrorEnvelope(stderr, cliError{
-			ErrorCode:   errorCodeInternalError,
-			Phase:       errorPhaseExecution,
+		clicore.WriteErrorEnvelope(stderr, clicore.CLIError{
+			ErrorCode:   clicore.ErrorCodeInternalError,
+			Phase:       clicore.ErrorPhaseExecution,
 			Message:     "Uninstall failed: " + err.Error(),
 			Retryable:   true,
 			SafeToRetry: true,
-			Command:     uninstallCommandName,
+			Command:     clicore.UninstallCommandName,
 			NextActions: []string{"Retry `uloop uninstall` after checking file permissions."},
 			Details: map[string]any{
 				"Cause": err.Error(),
@@ -71,9 +72,9 @@ func tryHandleUninstallRequest(ctx context.Context, args []string, stdout io.Wri
 	}
 
 	if uninstallCommand.Deferred {
-		writeFormat(stdout, "Scheduled uloop launcher removal: %s\n", uninstallCommand.TargetPath)
+		clicore.WriteFormat(stdout, "Scheduled uloop launcher removal: %s\n", uninstallCommand.TargetPath)
 	} else {
-		writeFormat(stdout, "Removed uloop launcher: %s\n", uninstallCommand.TargetPath)
+		clicore.WriteFormat(stdout, "Removed uloop launcher: %s\n", uninstallCommand.TargetPath)
 	}
 	writeUninstallPathCompletion(stdout, runtime.GOOS)
 	return true, 0
@@ -81,21 +82,21 @@ func tryHandleUninstallRequest(ctx context.Context, args []string, stdout io.Wri
 
 func writeUninstallPathCompletion(stdout io.Writer, goos string) {
 	if goos == "windows" {
-		writeLine(stdout, "The package-owned User PATH entry will be removed after this process exits.")
+		clicore.WriteLine(stdout, "The package-owned User PATH entry will be removed after this process exits.")
 		return
 	}
 
-	writeLine(stdout, "PATH settings were not changed. Remove the install directory from PATH manually if it is no longer needed.")
+	clicore.WriteLine(stdout, "PATH settings were not changed. Remove the install directory from PATH manually if it is no longer needed.")
 }
 
 func printUninstallHelp(stdout io.Writer) {
-	writeLine(stdout, "Usage:")
-	writeLine(stdout, "  uloop uninstall")
-	writeLine(stdout, "")
-	writeLine(stdout, "Removes the global uloop launcher binary from the install directory.")
-	writeLine(stdout, "Set ULOOP_INSTALL_DIR to uninstall from a custom install directory.")
-	writeLine(stdout, "On Windows, also removes the package-owned install directory from User PATH.")
-	writeLine(stdout, "On macOS, PATH settings are not changed automatically.")
+	clicore.WriteLine(stdout, "Usage:")
+	clicore.WriteLine(stdout, "  uloop uninstall")
+	clicore.WriteLine(stdout, "")
+	clicore.WriteLine(stdout, "Removes the global uloop launcher binary from the install directory.")
+	clicore.WriteLine(stdout, "Set ULOOP_INSTALL_DIR to uninstall from a custom install directory.")
+	clicore.WriteLine(stdout, "On Windows, also removes the package-owned install directory from User PATH.")
+	clicore.WriteLine(stdout, "On macOS, PATH settings are not changed automatically.")
 }
 
 func resolveUninstallInstallDir(goos string) (string, error) {

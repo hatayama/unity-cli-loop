@@ -4,52 +4,54 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 func runV3MigrationSkillInstall(projectRoot string, skills []skillDefinition, options skillCommandOptions, stdout io.Writer, stderr io.Writer) int {
-	writeLine(stdout, "")
-	writeFormat(stdout, "Installing V3 CLI invocation migration skill (%s)...\n", skillLocationName(options.global))
-	writeLine(stdout, "")
+	clicore.WriteLine(stdout, "")
+	clicore.WriteFormat(stdout, "Installing V3 CLI invocation migration skill (%s)...\n", skillLocationName(options.global))
+	clicore.WriteLine(stdout, "")
 	for _, target := range options.targets {
 		result, err := installV3MigrationSkillForTarget(projectRoot, target, skills, options.global, groupManagedSkillsForOptions(options))
 		if err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
-		writeFormat(stdout, "%s:\n", target.displayName)
-		writeFormat(stdout, "  Installed: %d\n", result.installed)
-		writeFormat(stdout, "  Updated: %d\n", result.updated)
-		writeFormat(stdout, "  Skipped: %d\n", result.skipped)
+		clicore.WriteFormat(stdout, "%s:\n", target.displayName)
+		clicore.WriteFormat(stdout, "  Installed: %d\n", result.installed)
+		clicore.WriteFormat(stdout, "  Updated: %d\n", result.updated)
+		clicore.WriteFormat(stdout, "  Skipped: %d\n", result.skipped)
 		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
 		if err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
-		writeFormat(stdout, "  Location: %s\n\n", baseDir)
+		clicore.WriteFormat(stdout, "  Location: %s\n\n", baseDir)
 	}
 	return 0
 }
 
 func runV3MigrationSkillUninstall(projectRoot string, options skillCommandOptions, stdout io.Writer, stderr io.Writer) int {
-	writeLine(stdout, "")
-	writeFormat(stdout, "Uninstalling V3 CLI invocation migration skill (%s)...\n", skillLocationName(options.global))
-	writeLine(stdout, "")
+	clicore.WriteLine(stdout, "")
+	clicore.WriteFormat(stdout, "Uninstalling V3 CLI invocation migration skill (%s)...\n", skillLocationName(options.global))
+	clicore.WriteLine(stdout, "")
 	for _, target := range options.targets {
 		grouped := groupManagedSkillsForOptions(options)
 		removed, notFound, err := uninstallV3MigrationSkillForTarget(projectRoot, target, options.global, grouped)
 		if err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
-		writeFormat(stdout, "%s:\n", target.displayName)
-		writeFormat(stdout, "  Removed: %d\n", removed)
-		writeFormat(stdout, "  Not found: %d\n", notFound)
+		clicore.WriteFormat(stdout, "%s:\n", target.displayName)
+		clicore.WriteFormat(stdout, "  Removed: %d\n", removed)
+		clicore.WriteFormat(stdout, "  Not found: %d\n", notFound)
 		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
 		if err != nil {
-			writeClassifiedError(stderr, err, errorContext{projectRoot: projectRoot, command: skillsCommandName})
+			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
-		writeFormat(stdout, "  Location: %s\n\n", baseDir)
+		clicore.WriteFormat(stdout, "  Location: %s\n\n", baseDir)
 	}
 	return 0
 }

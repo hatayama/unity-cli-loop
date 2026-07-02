@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 func TestRunDispatcherInstallHelpDoesNotRequireUnityProject(t *testing.T) {
@@ -124,7 +126,7 @@ func TestInstallSetupFailureErrorIncludesInstallerStderr(t *testing.T) {
 	// Verifies installer stderr is preserved inside the JSON error envelope details.
 	cliErr := installSetupFailureError(context.Canceled, "warning before failure\n")
 
-	if cliErr.ErrorCode != errorCodeInternalError {
+	if cliErr.ErrorCode != clicore.ErrorCodeInternalError {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
 	if cliErr.Details["Cause"] != context.Canceled.Error() {

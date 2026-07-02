@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"context"
@@ -21,12 +21,12 @@ var (
 	macProcessLinePattern                 = regexp.MustCompile(`^\s*(\d+)\s+(.*)$`)
 	projectPathFlagPattern                = regexp.MustCompile(`(?i)-projectpath(?:=|\s+)(.+)$`)
 	nextUnityFlagPattern                  = regexp.MustCompile(`\s-[A-Za-z][A-Za-z0-9-]*(?:=|\s|$)`)
-	findRunningUnityProcessForFocusWindow = findRunningUnityProcess
-	focusUnityProcessForFocusWindow       = focusUnityProcess
+	findRunningUnityProcessForFocusWindow = FindRunningUnityProcess
+	focusUnityProcessForFocusWindow       = FocusUnityProcess
 )
 
-type unityProcess struct {
-	pid         int
+type UnityProcess struct {
+	Pid         int
 	projectPath string
 }
 
@@ -35,9 +35,9 @@ type focusResponse struct {
 	Message string `json:"Message"`
 }
 
-type restoreFocusFunc func(context.Context) error
+type RestoreFocusFunc func(context.Context) error
 
-func runFocusWindow(ctx context.Context, projectRoot string, stdout io.Writer, stderr io.Writer) int {
+func RunFocusWindow(ctx context.Context, projectRoot string, stdout io.Writer, stderr io.Writer) int {
 	runningProcess, err := findRunningUnityProcessForFocusWindow(ctx, projectRoot)
 	if err != nil {
 		writeFocusResponse(stderr, false, err.Error())
@@ -48,16 +48,16 @@ func runFocusWindow(ctx context.Context, projectRoot string, stdout io.Writer, s
 		return 1
 	}
 
-	correlationID := newCliVibeCorrelationID()
-	logFocusWindowFocusAttempt(projectRoot, runningProcess.pid, correlationID)
-	if err := focusUnityProcessForFocusWindow(ctx, runningProcess.pid); err != nil {
-		logFocusWindowFocusFailure(projectRoot, runningProcess.pid, err, correlationID)
+	correlationID := NewCLIVibeCorrelationID()
+	logFocusWindowFocusAttempt(projectRoot, runningProcess.Pid, correlationID)
+	if err := focusUnityProcessForFocusWindow(ctx, runningProcess.Pid); err != nil {
+		logFocusWindowFocusFailure(projectRoot, runningProcess.Pid, err, correlationID)
 		writeFocusResponse(stderr, false, fmt.Sprintf("Failed to focus Unity window: %s", err.Error()))
 		return 1
 	}
 
-	logFocusWindowFocusSuccess(projectRoot, runningProcess.pid, correlationID)
-	writeFocusResponse(stdout, true, fmt.Sprintf("Unity Editor window focused (PID: %d)", runningProcess.pid))
+	logFocusWindowFocusSuccess(projectRoot, runningProcess.Pid, correlationID)
+	writeFocusResponse(stdout, true, fmt.Sprintf("Unity Editor window focused (PID: %d)", runningProcess.Pid))
 	return 0
 }
 
@@ -72,7 +72,7 @@ func writeFocusResponse(writer io.Writer, success bool, message string) {
 }
 
 func logFocusWindowFocusAttempt(projectRoot string, pid int, correlationID string) {
-	_ = writeCliVibeLog(projectRoot, cliVibeLogEntry{
+	_ = WriteCLIVibeLog(projectRoot, CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_focus_window_focus_attempt",
 		Message:   "Attempting to focus Unity for the focus-window command.",
@@ -85,7 +85,7 @@ func logFocusWindowFocusAttempt(projectRoot string, pid int, correlationID strin
 }
 
 func logFocusWindowFocusSuccess(projectRoot string, pid int, correlationID string) {
-	_ = writeCliVibeLog(projectRoot, cliVibeLogEntry{
+	_ = WriteCLIVibeLog(projectRoot, CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_focus_window_focus_success",
 		Message:   "Focused Unity for the focus-window command.",
@@ -98,20 +98,20 @@ func logFocusWindowFocusSuccess(projectRoot string, pid int, correlationID strin
 }
 
 func logFocusWindowFocusFailure(projectRoot string, pid int, focusErr error, correlationID string) {
-	_ = writeCliVibeLog(projectRoot, cliVibeLogEntry{
+	_ = WriteCLIVibeLog(projectRoot, CLIVibeLogEntry{
 		Level:     "WARNING",
 		Operation: "cli_focus_window_focus_failed",
 		Message:   "Failed to focus Unity for the focus-window command.",
 		Context: map[string]any{
 			"command":    "focus-window",
 			"pid":        pid,
-			"focusError": errorMessage(focusErr),
+			"focusError": ErrorMessage(focusErr),
 		},
 		CorrelationID: correlationID,
 	})
 }
 
-func findRunningUnityProcess(ctx context.Context, projectRoot string) (*unityProcess, error) {
+func FindRunningUnityProcess(ctx context.Context, projectRoot string) (*UnityProcess, error) {
 	processes, err := listUnityProcesses(ctx)
 	if err != nil {
 		return nil, err
@@ -135,18 +135,18 @@ func findRunningUnityProcess(ctx context.Context, projectRoot string) (*unityPro
 	return nil, nil
 }
 
-func listUnityProcesses(ctx context.Context) ([]unityProcess, error) {
+func listUnityProcesses(ctx context.Context) ([]UnityProcess, error) {
 	switch runtime.GOOS {
 	case "darwin":
 		return listUnityProcessesMac(ctx)
 	case "windows":
 		return listUnityProcessesWindows(ctx)
 	default:
-		return []unityProcess{}, nil
+		return []UnityProcess{}, nil
 	}
 }
 
-func listUnityProcessesMac(ctx context.Context) ([]unityProcess, error) {
+func listUnityProcessesMac(ctx context.Context) ([]UnityProcess, error) {
 	output, err := exec.CommandContext(ctx, "ps", "-axo", "pid=,command=", "-ww").Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve Unity process list: %w", err)
@@ -154,7 +154,7 @@ func listUnityProcessesMac(ctx context.Context) ([]unityProcess, error) {
 	return parseMacUnityProcesses(string(output)), nil
 }
 
-func listUnityProcessesWindows(ctx context.Context) ([]unityProcess, error) {
+func listUnityProcessesWindows(ctx context.Context) ([]UnityProcess, error) {
 	scriptLines := []string{
 		"$ErrorActionPreference = 'Stop'",
 		"$processes = Get-CimInstance Win32_Process -Filter \"Name = 'Unity.exe'\" | Where-Object { $_.CommandLine }",
@@ -170,8 +170,8 @@ func listUnityProcessesWindows(ctx context.Context) ([]unityProcess, error) {
 	return parseWindowsUnityProcesses(string(output)), nil
 }
 
-func parseMacUnityProcesses(output string) []unityProcess {
-	processes := []unityProcess{}
+func parseMacUnityProcesses(output string) []UnityProcess {
+	processes := []UnityProcess{}
 	for _, line := range strings.Split(output, "\n") {
 		matches := macProcessLinePattern.FindStringSubmatch(line)
 		if len(matches) != 3 {
@@ -192,13 +192,13 @@ func parseMacUnityProcesses(output string) []unityProcess {
 			continue
 		}
 
-		processes = append(processes, unityProcess{pid: pid, projectPath: projectPath})
+		processes = append(processes, UnityProcess{Pid: pid, projectPath: projectPath})
 	}
 	return processes
 }
 
-func parseWindowsUnityProcesses(output string) []unityProcess {
-	processes := []unityProcess{}
+func parseWindowsUnityProcesses(output string) []UnityProcess {
+	processes := []UnityProcess{}
 	for _, line := range strings.Split(output, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
@@ -224,7 +224,7 @@ func parseWindowsUnityProcesses(output string) []unityProcess {
 			continue
 		}
 
-		processes = append(processes, unityProcess{pid: pid, projectPath: projectPath})
+		processes = append(processes, UnityProcess{Pid: pid, projectPath: projectPath})
 	}
 	return processes
 }
@@ -276,7 +276,7 @@ func normalizeComparablePath(path string) (string, error) {
 	return strings.ToLower(filepath.ToSlash(filepath.Clean(absolutePath))), nil
 }
 
-func focusUnityProcess(ctx context.Context, pid int) error {
+func FocusUnityProcess(ctx context.Context, pid int) error {
 	switch runtime.GOOS {
 	case "darwin":
 		return focusUnityProcessMac(ctx, pid)
@@ -287,7 +287,7 @@ func focusUnityProcess(ctx context.Context, pid int) error {
 	}
 }
 
-func focusUnityProcessWithRestore(ctx context.Context, pid int) (restoreFocusFunc, error) {
+func FocusUnityProcessWithRestore(ctx context.Context, pid int) (RestoreFocusFunc, error) {
 	switch runtime.GOOS {
 	case "darwin":
 		return focusUnityProcessMacWithRestore(ctx, pid)
@@ -302,7 +302,7 @@ func focusUnityProcessMac(ctx context.Context, pid int) error {
 	return setFrontmostProcessMac(ctx, pid)
 }
 
-func focusUnityProcessMacWithRestore(ctx context.Context, pid int) (restoreFocusFunc, error) {
+func focusUnityProcessMacWithRestore(ctx context.Context, pid int) (RestoreFocusFunc, error) {
 	previousPID := readFrontmostProcessIDMac(ctx)
 	if err := setFrontmostProcessMac(ctx, pid); err != nil {
 		return nil, err
@@ -337,7 +337,7 @@ func focusUnityProcessWindows(ctx context.Context, pid int) error {
 	return exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", script).Run()
 }
 
-func focusUnityProcessWindowsWithRestore(ctx context.Context, pid int) (restoreFocusFunc, error) {
+func focusUnityProcessWindowsWithRestore(ctx context.Context, pid int) (RestoreFocusFunc, error) {
 	script := buildFocusUnityProcessWindowsWithRestoreScript(pid)
 	output, err := exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", script).Output()
 	if err != nil {

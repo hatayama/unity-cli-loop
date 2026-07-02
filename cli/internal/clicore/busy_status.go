@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"encoding/json"
@@ -39,7 +39,7 @@ func writeBusyStatusEnvelope(writer io.Writer, message string, details serverBus
 	})
 }
 
-func serverBusyStatusDetailsFromError(err cliError) serverBusyStatusDetails {
+func serverBusyStatusDetailsFromError(err CLIError) serverBusyStatusDetails {
 	data, ok := serverBusyDetailsData(err.Details)
 	if !ok {
 		return serverBusyStatusDetails{
@@ -51,7 +51,7 @@ func serverBusyStatusDetailsFromError(err cliError) serverBusyStatusDetails {
 	isPaused, hasIsPaused := rpcBoolData(data, "isPaused")
 	return serverBusyStatusDetails{
 		runningToolName:   rpcStringData(data, "runningToolName"),
-		requestedToolName: firstNonEmpty(rpcStringData(data, "requestedToolName"), err.Command),
+		requestedToolName: FirstNonEmpty(rpcStringData(data, "requestedToolName"), err.Command),
 		isPlaying:         isPlaying,
 		hasIsPlaying:      hasIsPlaying,
 		isPaused:          isPaused,
@@ -77,7 +77,7 @@ func optionalBool(hasValue bool, value bool) *bool {
 
 func unityServerBusyMessage(fallback string, data map[string]any, requestedCommand string) string {
 	runningToolName := rpcStringData(data, "runningToolName")
-	requestedToolName := firstNonEmpty(rpcStringData(data, "requestedToolName"), requestedCommand)
+	requestedToolName := FirstNonEmpty(rpcStringData(data, "requestedToolName"), requestedCommand)
 	if runningToolName == "" || requestedToolName == "" {
 		return fallback
 	}

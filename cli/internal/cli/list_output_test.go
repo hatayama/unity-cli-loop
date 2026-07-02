@@ -3,6 +3,8 @@ package cli
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 // Tests that list output exposes the actual CLI option names instead of schema property names.
@@ -49,21 +51,21 @@ func TestFormatToolListResultUsesCliOptionNames(t *testing.T) {
 
 // Tests that list output uses command-specific option aliases.
 func TestNewListCatalogUsesSpecialOptionAliases(t *testing.T) {
-	cache := toolsCache{
-		Tools: []toolDefinition{
+	cache := clicore.ToolsCache{
+		Tools: []clicore.ToolDefinition{
 			{
-				Name: runTestsCommandName,
-				InputSchema: inputSchema{
-					Properties: map[string]toolProperty{
+				Name: clicore.RunTestsCommandName,
+				InputSchema: clicore.InputSchema{
+					Properties: map[string]clicore.ToolProperty{
 						"SaveBeforeRun": {Type: "boolean", Default: true},
 					},
 				},
 			},
 			{
-				Name: compileCommandName,
-				InputSchema: inputSchema{
-					Properties: map[string]toolProperty{
-						reloadExternalSceneChangesPropertyName: {Type: "boolean", Default: true},
+				Name: clicore.CompileCommandName,
+				InputSchema: clicore.InputSchema{
+					Properties: map[string]clicore.ToolProperty{
+						clicore.ReloadExternalSceneChangesPropertyName: {Type: "boolean", Default: true},
 					},
 				},
 			},
@@ -72,14 +74,14 @@ func TestNewListCatalogUsesSpecialOptionAliases(t *testing.T) {
 
 	catalog := newListCatalog(cache)
 
-	runTestsTool := findListTool(t, catalog, runTestsCommandName)
+	runTestsTool := findListTool(t, catalog, clicore.RunTestsCommandName)
 	failOnUnsavedChanges := findListOption(t, runTestsTool, "--fail-on-unsaved-changes")
 	if failOnUnsavedChanges.Default != false {
 		t.Fatalf("fail-on-unsaved-changes default mismatch: %#v", failOnUnsavedChanges)
 	}
 	assertListOptionMissing(t, runTestsTool, "--no-save-before-run")
 
-	compileTool := findListTool(t, catalog, compileCommandName)
+	compileTool := findListTool(t, catalog, clicore.CompileCommandName)
 	stopOnExternalSceneChanges := findListOption(t, compileTool, "--stop-on-external-scene-changes")
 	if stopOnExternalSceneChanges.Default != false {
 		t.Fatalf("stop-on-external-scene-changes default mismatch: %#v", stopOnExternalSceneChanges)
@@ -89,12 +91,12 @@ func TestNewListCatalogUsesSpecialOptionAliases(t *testing.T) {
 
 // Tests that list output renders numeric enum defaults as their public value names.
 func TestNewListCatalogUsesEnumNameForNumericDefault(t *testing.T) {
-	cache := toolsCache{
-		Tools: []toolDefinition{
+	cache := clicore.ToolsCache{
+		Tools: []clicore.ToolDefinition{
 			{
 				Name: "screenshot",
-				InputSchema: inputSchema{
-					Properties: map[string]toolProperty{
+				InputSchema: clicore.InputSchema{
+					Properties: map[string]clicore.ToolProperty{
 						"CaptureMode": {
 							Type:    "string",
 							Default: float64(0),
@@ -117,15 +119,15 @@ func TestNewListCatalogUsesEnumNameForNumericDefault(t *testing.T) {
 
 // Tests that list output includes CLI-side options that are not Unity schema properties.
 func TestNewListCatalogIncludesExecuteDynamicCodeCodeFile(t *testing.T) {
-	tool, ok := findTool(loadDefaultTools(), executeDynamicCodeCommandName)
+	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), clicore.ExecuteDynamicCodeCommandName)
 	if !ok {
 		t.Fatal("execute-dynamic-code was not found in default tools")
 	}
 
-	catalog := newListCatalog(toolsCache{Tools: []toolDefinition{tool}})
-	executeDynamicCode := findListTool(t, catalog, executeDynamicCodeCommandName)
+	catalog := newListCatalog(clicore.ToolsCache{Tools: []clicore.ToolDefinition{tool}})
+	executeDynamicCode := findListTool(t, catalog, clicore.ExecuteDynamicCodeCommandName)
 
-	findListOption(t, executeDynamicCode, dynamicCodeFileOptionName)
+	findListOption(t, executeDynamicCode, clicore.DynamicCodeFileOptionName)
 }
 
 func decodeListCatalog(t *testing.T, content []byte) listCatalog {

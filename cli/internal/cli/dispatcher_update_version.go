@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 var dispatcherReadInstalledVersion = readInstalledDispatcherVersion
@@ -67,7 +69,7 @@ func writeOptionalDispatcherUpdateCompletion(stderr io.Writer, fromVersion strin
 	if !changed {
 		return
 	}
-	writeFormat(
+	clicore.WriteFormat(
 		stderr,
 		"uloop: dispatcher updated from %s to %s. Future uloop commands will use the updated launcher.\n",
 		normalizedFromVersion,
@@ -76,13 +78,13 @@ func writeOptionalDispatcherUpdateCompletion(stderr io.Writer, fromVersion strin
 
 func writeManualDispatcherUpdateCompletion(stdout io.Writer, fromVersion string, toVersion string) {
 	if toVersion == "" {
-		writeLine(stdout, "uloop launcher update completed.")
+		clicore.WriteLine(stdout, "uloop launcher update completed.")
 		return
 	}
 	normalizedFromVersion, normalizedToVersion, changed := normalizedDispatcherUpdateVersions(fromVersion, toVersion)
 	if !changed {
-		writeLine(stdout, "uloop launcher is already up to date at "+normalizedToVersion+".")
+		clicore.WriteLine(stdout, "uloop launcher is already up to date at "+normalizedToVersion+".")
 		return
 	}
-	writeLine(stdout, "uloop launcher updated from "+normalizedFromVersion+" to "+normalizedToVersion+".")
+	clicore.WriteLine(stdout, "uloop launcher updated from "+normalizedFromVersion+" to "+normalizedToVersion+".")
 }

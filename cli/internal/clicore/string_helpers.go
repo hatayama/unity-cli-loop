@@ -1,8 +1,8 @@
-package cli
+package clicore
 
 import "strings"
 
-func firstHelpLine(description string) string {
+func FirstHelpLine(description string) string {
 	for _, line := range strings.Split(description, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed != "" {
@@ -12,7 +12,7 @@ func firstHelpLine(description string) string {
 	return ""
 }
 
-func firstNonEmpty(values ...string) string {
+func FirstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if value != "" {
 			return value
@@ -21,7 +21,7 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func errorMessage(err error) string {
+func ErrorMessage(err error) string {
 	if err == nil {
 		return ""
 	}

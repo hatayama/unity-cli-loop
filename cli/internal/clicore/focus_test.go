@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"bytes"
@@ -19,10 +19,10 @@ func TestParseMacUnityProcessesExtractsProjectPath(t *testing.T) {
 	if len(processes) != 2 {
 		t.Fatalf("process count mismatch: %#v", processes)
 	}
-	if processes[0].pid != 123 || processes[0].projectPath != "/Users/ExampleUser/My Project" {
+	if processes[0].Pid != 123 || processes[0].projectPath != "/Users/ExampleUser/My Project" {
 		t.Fatalf("first process mismatch: %#v", processes[0])
 	}
-	if processes[1].pid != 789 || processes[1].projectPath != "/Users/ExampleUser/Other" {
+	if processes[1].Pid != 789 || processes[1].projectPath != "/Users/ExampleUser/Other" {
 		t.Fatalf("second process mismatch: %#v", processes[1])
 	}
 }
@@ -37,7 +37,7 @@ func TestParseWindowsUnityProcessesExtractsProjectPath(t *testing.T) {
 	if len(processes) != 1 {
 		t.Fatalf("process count mismatch: %#v", processes)
 	}
-	if processes[0].pid != 123 || processes[0].projectPath != `C:\Users\ExampleUser\My Project` {
+	if processes[0].Pid != 123 || processes[0].projectPath != `C:\Users\ExampleUser\My Project` {
 		t.Fatalf("process mismatch: %#v", processes[0])
 	}
 }
@@ -155,8 +155,8 @@ func TestRunFocusWindowWritesFocusSuccessVibeLog(t *testing.T) {
 
 	originalFinder := findRunningUnityProcessForFocusWindow
 	originalFocus := focusUnityProcessForFocusWindow
-	findRunningUnityProcessForFocusWindow = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 321}, nil
+	findRunningUnityProcessForFocusWindow = func(context.Context, string) (*UnityProcess, error) {
+		return &UnityProcess{Pid: 321}, nil
 	}
 	focusUnityProcessForFocusWindow = func(context.Context, int) error {
 		return nil
@@ -170,7 +170,7 @@ func TestRunFocusWindowWritesFocusSuccessVibeLog(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := runFocusWindow(context.Background(), projectRoot, &stdout, &stderr)
+	code := RunFocusWindow(context.Background(), projectRoot, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
@@ -194,8 +194,8 @@ func TestRunFocusWindowWritesFocusFailureVibeLog(t *testing.T) {
 
 	originalFinder := findRunningUnityProcessForFocusWindow
 	originalFocus := focusUnityProcessForFocusWindow
-	findRunningUnityProcessForFocusWindow = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 654}, nil
+	findRunningUnityProcessForFocusWindow = func(context.Context, string) (*UnityProcess, error) {
+		return &UnityProcess{Pid: 654}, nil
 	}
 	focusUnityProcessForFocusWindow = func(context.Context, int) error {
 		return fmt.Errorf("window denied")
@@ -209,7 +209,7 @@ func TestRunFocusWindowWritesFocusFailureVibeLog(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := runFocusWindow(context.Background(), projectRoot, &stdout, &stderr)
+	code := RunFocusWindow(context.Background(), projectRoot, &stdout, &stderr)
 
 	if code != 1 {
 		t.Fatalf("exit code mismatch: %d stdout=%s", code, stdout.String())

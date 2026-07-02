@@ -3,6 +3,8 @@ package cli
 import (
 	"strconv"
 	"strings"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 func applyLaunchOption(options *launchOptions, args []string, index int) (int, error) {
@@ -45,20 +47,20 @@ func isUnsupportedLaunchHubLongOption(arg string, option string) bool {
 }
 
 func unsupportedLaunchHubOptionError(arg string) error {
-	return &argumentError{
-		message:     "Native launch does not support Unity Hub registration options.",
-		option:      arg,
-		command:     launchCommandName,
-		nextActions: []string{"Remove the Unity Hub registration option and retry `uloop launch`."},
+	return &clicore.ArgumentError{
+		Message:     "Native launch does not support Unity Hub registration options.",
+		Option:      arg,
+		Command:     clicore.LaunchCommandName,
+		NextActions: []string{"Remove the Unity Hub registration option and retry `uloop launch`."},
 	}
 }
 
 func unknownLaunchOptionError(arg string) error {
-	return &argumentError{
-		message:     "Unknown launch option: " + arg,
-		option:      arg,
-		command:     launchCommandName,
-		nextActions: []string{"Run `uloop launch --help` to inspect supported launch options."},
+	return &clicore.ArgumentError{
+		Message:     "Unknown launch option: " + arg,
+		Option:      arg,
+		Command:     clicore.LaunchCommandName,
+		NextActions: []string{"Run `uloop launch --help` to inspect supported launch options."},
 	}
 }
 
@@ -87,7 +89,7 @@ func applyLaunchMaxDepthOption(options *launchOptions, args []string, index int)
 	}
 	maxDepth, err := strconv.Atoi(value)
 	if err != nil || maxDepth < -1 {
-		return index, invalidValueArgumentError("--max-depth", value, "integer >= -1")
+		return index, clicore.InvalidValueArgumentError("--max-depth", value, "integer >= -1")
 	}
 	options.maxDepth = maxDepth
 	return nextLaunchOptionIndex(index, consumed), nil
@@ -95,11 +97,11 @@ func applyLaunchMaxDepthOption(options *launchOptions, args []string, index int)
 
 func applyLaunchProjectPathArgument(options *launchOptions, arg string, index int) (int, error) {
 	if options.projectPath != "" {
-		return index, &argumentError{
-			message:     "Unexpected extra launch argument: " + arg,
-			received:    arg,
-			command:     launchCommandName,
-			nextActions: []string{"Pass only one project path to `uloop launch`."},
+		return index, &clicore.ArgumentError{
+			Message:     "Unexpected extra launch argument: " + arg,
+			Received:    arg,
+			Command:     clicore.LaunchCommandName,
+			NextActions: []string{"Pass only one project path to `uloop launch`."},
 		}
 	}
 	options.projectPath = arg
@@ -117,19 +119,19 @@ func readLaunchOptionValue(option string, args []string, index int) (string, boo
 	if strings.Contains(option, "=") {
 		parts := strings.SplitN(option, "=", 2)
 		if parts[1] == "" {
-			return "", false, missingValueArgumentError(parts[0])
+			return "", false, clicore.MissingValueArgumentError(parts[0])
 		}
 		return parts[1], false, nil
 	}
 	if index+1 >= len(args) || isInvalidLaunchOptionValue(option, args[index+1]) {
-		return "", false, missingValueArgumentError(option)
+		return "", false, clicore.MissingValueArgumentError(option)
 	}
 	return args[index+1], true, nil
 }
 
 func isInvalidLaunchOptionValue(option string, value string) bool {
 	if option == "--max-depth" {
-		return isNextOptionToken(value)
+		return clicore.IsNextOptionToken(value)
 	}
 	return strings.HasPrefix(value, "-")
 }

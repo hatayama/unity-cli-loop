@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
@@ -117,7 +118,7 @@ func TestRunWaitForPausePointClearsEnabledMarkerAfterTimeout(t *testing.T) {
 	if clearedID != "jump" {
 		t.Fatalf("cleared id mismatch: %s", clearedID)
 	}
-	if !strings.Contains(stderr.String(), errorCodePausePointWaitTimeout) {
+	if !strings.Contains(stderr.String(), clicore.ErrorCodePausePointWaitTimeout) {
 		t.Fatalf("timeout error missing from stderr: %s", stderr.String())
 	}
 	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
@@ -345,7 +346,7 @@ func TestRunWaitForPausePointReportsNotEnabledError(t *testing.T) {
 		t.Fatalf("expected failure, got %d with stdout %s", code, stdout.String())
 	}
 	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
-	if envelope.Error.ErrorCode != errorCodePausePointNotEnabled {
+	if envelope.Error.ErrorCode != clicore.ErrorCodePausePointNotEnabled {
 		t.Fatalf("error code mismatch: %#v", envelope.Error)
 	}
 	if envelope.Error.Details["Status"] != pausePointStatusNotEnabled {
@@ -804,7 +805,7 @@ func TestPausePointExpiredErrorReportsNoRemainingTime(t *testing.T) {
 		timeoutSeconds: 1,
 	}, response, pausePointWaitStateExpired)
 
-	if cliErr.ErrorCode != errorCodePausePointExpired {
+	if cliErr.ErrorCode != clicore.ErrorCodePausePointExpired {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
 	if cliErr.Details["RemainingMilliseconds"] != int64(0) {
@@ -822,7 +823,7 @@ func TestRunProjectLocalWaitForPausePointRespectsToolSettings(t *testing.T) {
 	var stderr bytes.Buffer
 	code := RunProjectLocal(
 		context.Background(),
-		[]string{"--project-path", projectRoot, pausePointWaitCommandName, "--id", "jump"},
+		[]string{"--project-path", projectRoot, clicore.PausePointWaitCommandName, "--id", "jump"},
 		&stdout,
 		&stderr)
 
@@ -830,10 +831,10 @@ func TestRunProjectLocalWaitForPausePointRespectsToolSettings(t *testing.T) {
 		t.Fatalf("expected disabled command failure, got %d with stdout %s", code, stdout.String())
 	}
 	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
-	if envelope.Error.ErrorCode != errorCodeToolDisabled {
+	if envelope.Error.ErrorCode != clicore.ErrorCodeToolDisabled {
 		t.Fatalf("error code mismatch: %#v", envelope.Error)
 	}
-	if envelope.Error.Command != pausePointWaitCommandName {
+	if envelope.Error.Command != clicore.PausePointWaitCommandName {
 		t.Fatalf("command mismatch: %#v", envelope.Error)
 	}
 }
@@ -1003,10 +1004,10 @@ func TestParsePausePointStatusOptionsRequiresID(t *testing.T) {
 	}
 }
 
-func parsePausePointErrorEnvelope(t *testing.T, payload []byte) cliErrorEnvelope {
+func parsePausePointErrorEnvelope(t *testing.T, payload []byte) clicore.CLIErrorEnvelope {
 	t.Helper()
 
-	var envelope cliErrorEnvelope
+	var envelope clicore.CLIErrorEnvelope
 	if err := json.Unmarshal(payload, &envelope); err != nil {
 		t.Fatalf("stderr is not valid JSON: %v\n%s", err, string(payload))
 	}

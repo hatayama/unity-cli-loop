@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"bytes"
@@ -56,7 +56,7 @@ func TestSpinnerProgressFuncShowsStallMessageVerbatim(t *testing.T) {
 	// Verifies that heartbeat stall payloads reach the spinner verbatim.
 	var stderr bytes.Buffer
 	spinner := newSpinner(&stderr, true, "Connecting to Unity...")
-	progress := newSpinnerProgressFunc(spinner, "Executing get-logs...")
+	progress := NewSpinnerProgressFunc(spinner, "Executing get-logs...")
 
 	progress("unity editor main thread busy for 38s...")
 	spinner.Stop()
@@ -71,7 +71,7 @@ func TestSpinnerProgressFuncMapsConnectionEventsToExecutingMessage(t *testing.T)
 	// instead of the raw event token.
 	var stderr bytes.Buffer
 	spinner := newSpinner(&stderr, true, "Connecting to Unity...")
-	progress := newSpinnerProgressFunc(spinner, "Executing get-logs...")
+	progress := NewSpinnerProgressFunc(spinner, "Executing get-logs...")
 
 	progress(unityipc.ProgressEventConnected)
 	progress(unityipc.ProgressEventAccepted)
@@ -88,7 +88,7 @@ func TestSpinnerProgressFuncMapsConnectionEventsToExecutingMessage(t *testing.T)
 
 func TestToolFeedbackSkipsExecuteDynamicCode(t *testing.T) {
 	// Verifies that execute-dynamic-code keeps the CLI hot path quiet.
-	if shouldShowToolFeedback(executeDynamicCodeCommandName) {
+	if shouldShowToolFeedback(ExecuteDynamicCodeCommandName) {
 		t.Fatal("execute-dynamic-code should skip spinner feedback on the hot path")
 	}
 }

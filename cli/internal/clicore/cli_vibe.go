@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"crypto/sha256"
@@ -12,14 +12,14 @@ import (
 )
 
 const (
-	cliVibeLogDirectory = ".uloop/outputs/VibeLogs"
-	cliVibeLogPrefix    = "cli_vibe"
-	cliVibeLogEnvName   = "ULOOP_DEBUG"
+	CLIVibeLogDirectory = ".uloop/outputs/VibeLogs"
+	CLIVibeLogPrefix    = "cli_vibe"
+	CLIVibeLogEnvName   = "ULOOP_DEBUG"
 
 	cliProjectIdentityHashLength = 16
 )
 
-type cliVibeLogEntry struct {
+type CLIVibeLogEntry struct {
 	Timestamp     string         `json:"timestamp"`
 	Level         string         `json:"level"`
 	Operation     string         `json:"operation"`
@@ -33,12 +33,12 @@ type cliVibeLogEntry struct {
 	Environment   map[string]any `json:"environment"`
 }
 
-func newCliVibeCorrelationID() string {
+func NewCLIVibeCorrelationID() string {
 	return fmt.Sprintf("cli_%d_%d", time.Now().UnixNano(), os.Getpid())
 }
 
-func writeCliVibeLog(projectRoot string, entry cliVibeLogEntry) error {
-	if !isCliVibeLogEnabled() {
+func WriteCLIVibeLog(projectRoot string, entry CLIVibeLogEntry) error {
+	if !IsCLIVibeLogEnabled() {
 		return nil
 	}
 
@@ -50,18 +50,18 @@ func writeCliVibeLog(projectRoot string, entry cliVibeLogEntry) error {
 		entry.Timestamp = time.Now().Format("2006-01-02T15:04:05.000-07:00")
 	}
 	if entry.CorrelationID == "" {
-		entry.CorrelationID = newCliVibeCorrelationID()
+		entry.CorrelationID = NewCLIVibeCorrelationID()
 	}
 	if entry.Source == "" {
 		entry.Source = "CLI"
 	}
 
-	logDirectory := filepath.Join(projectRoot, cliVibeLogDirectory)
+	logDirectory := filepath.Join(projectRoot, CLIVibeLogDirectory)
 	if err := os.MkdirAll(logDirectory, 0o755); err != nil {
 		return err
 	}
 
-	logPath := filepath.Join(logDirectory, fmt.Sprintf("%s_%s.json", cliVibeLogPrefix, time.Now().UTC().Format("20060102")))
+	logPath := filepath.Join(logDirectory, fmt.Sprintf("%s_%s.json", CLIVibeLogPrefix, time.Now().UTC().Format("20060102")))
 	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
@@ -78,15 +78,15 @@ func writeCliVibeLog(projectRoot string, entry cliVibeLogEntry) error {
 	return err
 }
 
-func isCliVibeLogEnabled() bool {
-	value := strings.TrimSpace(os.Getenv(cliVibeLogEnvName))
+func IsCLIVibeLogEnabled() bool {
+	value := strings.TrimSpace(os.Getenv(CLIVibeLogEnvName))
 	if value == "" || value == "0" {
 		return false
 	}
 	return !strings.EqualFold(value, "false")
 }
 
-func projectIdentity(projectRoot string) string {
+func ProjectIdentity(projectRoot string) string {
 	if projectRoot == "" {
 		return ""
 	}

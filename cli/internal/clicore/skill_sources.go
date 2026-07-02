@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"os"
@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	skillFileName       = "SKILL.md"
-	skillSearchMaxDepth = 3
+	SkillFileName       = "SKILL.md"
+	SkillSearchMaxDepth = 3
 )
 
-var excludedSkillSearchDirs = map[string]bool{
+var ExcludedSkillSearchDirs = map[string]bool{
 	"node_modules": true,
 	".git":         true,
 	"Temp":         true,
@@ -24,16 +24,16 @@ var excludedSkillSearchDirs = map[string]bool{
 	"Skill":        true,
 }
 
-// skillSourceRoot is a directory tree that may contain skill definitions, plus whether
+// SkillSourceRoot is a directory tree that may contain skill definitions, plus whether
 // it should be scanned directly (CLI-only sources) or only under its Editor folders.
-type skillSourceRoot struct {
-	path    string
-	cliOnly bool
+type SkillSourceRoot struct {
+	Path    string
+	CLIOnly bool
 }
 
 func collectInternalSkillToolNames(projectRoot string) map[string]bool {
 	toolNames := map[string]bool{}
-	for _, sourceRoot := range enumerateSkillSourceRoots(projectRoot) {
+	for _, sourceRoot := range EnumerateSkillSourceRoots(projectRoot) {
 		for _, toolName := range scanInternalSkillToolNames(sourceRoot) {
 			toolNames[toolName] = true
 		}
@@ -41,8 +41,8 @@ func collectInternalSkillToolNames(projectRoot string) map[string]bool {
 	return toolNames
 }
 
-func enumerateSkillSourceRoots(projectRoot string) []skillSourceRoot {
-	sourceRoots := []skillSourceRoot{}
+func EnumerateSkillSourceRoots(projectRoot string) []SkillSourceRoot {
+	sourceRoots := []SkillSourceRoot{}
 	seen := map[string]bool{}
 	addSourceRoot := func(path string, cliOnly bool) {
 		if path == "" {
@@ -53,7 +53,7 @@ func enumerateSkillSourceRoots(projectRoot string) []skillSourceRoot {
 			return
 		}
 		seen[absolutePath] = true
-		sourceRoots = append(sourceRoots, skillSourceRoot{path: absolutePath, cliOnly: cliOnly})
+		sourceRoots = append(sourceRoots, SkillSourceRoot{Path: absolutePath, CLIOnly: cliOnly})
 	}
 
 	addSourceRoot(skills.CliOnlySourceRoot(projectRoot), true)
@@ -67,18 +67,18 @@ func enumerateSkillSourceRoots(projectRoot string) []skillSourceRoot {
 	for _, packageRoot := range resolveDependencyPackageCacheRoots(projectRoot) {
 		addSourceRoot(packageRoot, false)
 	}
-	addSourceRoot(resolvePackageRoot(projectRoot), false)
+	addSourceRoot(ResolvePackageRoot(projectRoot), false)
 	return sourceRoots
 }
 
-func scanInternalSkillToolNames(sourceRoot skillSourceRoot) []string {
-	if _, err := os.Stat(sourceRoot.path); err != nil {
+func scanInternalSkillToolNames(sourceRoot SkillSourceRoot) []string {
+	if _, err := os.Stat(sourceRoot.Path); err != nil {
 		return []string{}
 	}
 
-	scanRoots := []string{sourceRoot.path}
-	if !sourceRoot.cliOnly {
-		scanRoots = findEditorFolders(sourceRoot.path, skillSearchMaxDepth)
+	scanRoots := []string{sourceRoot.Path}
+	if !sourceRoot.CLIOnly {
+		scanRoots = FindEditorFolders(sourceRoot.Path, SkillSearchMaxDepth)
 	}
 
 	toolNames := []string{}
@@ -95,7 +95,7 @@ func scanInternalSkillDirectories(searchRoot string) []string {
 			return nil
 		}
 		if !entry.IsDir() {
-			if entry.Name() != skillFileName {
+			if entry.Name() != SkillFileName {
 				return nil
 			}
 			toolName, ok := readInternalSkillToolName(filepath.Dir(path))
@@ -104,7 +104,7 @@ func scanInternalSkillDirectories(searchRoot string) []string {
 			}
 			return nil
 		}
-		if excludedSkillSearchDirs[entry.Name()] && entry.Name() != "Skill" {
+		if ExcludedSkillSearchDirs[entry.Name()] && entry.Name() != "Skill" {
 			return filepath.SkipDir
 		}
 		if entry.Name() != "Skill" {
@@ -121,12 +121,12 @@ func scanInternalSkillDirectories(searchRoot string) []string {
 }
 
 func readInternalSkillToolName(skillDirectory string) (string, bool) {
-	skillPath := filepath.Join(skillDirectory, skillFileName)
+	skillPath := filepath.Join(skillDirectory, SkillFileName)
 	content, err := os.ReadFile(skillPath)
 	if err != nil {
 		return "", false
 	}
-	frontmatter := parseSkillFrontmatter(string(content))
+	frontmatter := ParseSkillFrontmatter(string(content))
 	if !strings.EqualFold(frontmatter["internal"], "true") {
 		return "", false
 	}
@@ -135,7 +135,7 @@ func readInternalSkillToolName(skillDirectory string) (string, bool) {
 	}
 	name := frontmatter["name"]
 	if name == "" {
-		name = fallbackSkillName(skillDirectory)
+		name = FallbackSkillName(skillDirectory)
 	}
 	if strings.HasPrefix(name, "uloop-") {
 		return strings.TrimPrefix(name, "uloop-"), true
@@ -143,14 +143,14 @@ func readInternalSkillToolName(skillDirectory string) (string, bool) {
 	return "", false
 }
 
-func fallbackSkillName(skillDirectory string) string {
+func FallbackSkillName(skillDirectory string) string {
 	if filepath.Base(skillDirectory) == "Skill" {
 		return filepath.Base(filepath.Dir(skillDirectory))
 	}
 	return filepath.Base(skillDirectory)
 }
 
-func parseSkillFrontmatter(content string) map[string]string {
+func ParseSkillFrontmatter(content string) map[string]string {
 	result := map[string]string{}
 	if !strings.HasPrefix(content, "---") {
 		return result

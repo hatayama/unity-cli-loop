@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 var userHomeDir = os.UserHomeDir
@@ -142,5 +144,5 @@ func isSkillDisabledByToolSettings(skill skillDefinition, disabledTools []string
 	if toolName == "" {
 		return false
 	}
-	return isToolDisabledByToolSettings(toolName, disabledTools)
+	return clicore.IsToolDisabledByToolSettings(toolName, disabledTools)
 }

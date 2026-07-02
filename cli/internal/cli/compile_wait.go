@@ -8,17 +8,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
 const (
 	compileStatusCommandName  = "get-compile-status"
 	compileRequestIDParam     = "RequestId"
-	compileWaitParam          = domainReloadWaitParam
+	compileWaitParam          = clicore.DomainReloadWaitParam
 	compileForceParam         = "ForceRecompile"
-	compileWaitTimeout        = toolReadinessTimeout
-	compileWaitPollInterval   = toolReadinessPoll
-	compileStatusProbeTimeout = toolReadinessProbeTimeout
+	compileWaitTimeout        = clicore.ToolReadinessTimeout
+	compileWaitPollInterval   = clicore.ToolReadinessPoll
+	compileStatusProbeTimeout = clicore.ToolReadinessProbeTimeout
 	compileResponseTimeout    = 2 * time.Second
 )
 
@@ -43,7 +44,7 @@ type compileStatusResponse struct {
 var queryCompileStatus = queryCompileStatusFromUnity
 
 func shouldWaitForCompileDomainReload(command string, params map[string]any) bool {
-	if command != compileCommandName {
+	if command != clicore.CompileCommandName {
 		return false
 	}
 	return domainReloadWaitEnabled(params, true)
@@ -149,7 +150,7 @@ func compileForceRecompileEnabled(params map[string]any) bool {
 }
 
 func compileReloadExternalSceneChangesEnabled(params map[string]any) bool {
-	value, ok := params[reloadExternalSceneChangesPropertyName].(bool)
+	value, ok := params[clicore.ReloadExternalSceneChangesPropertyName].(bool)
 	if !ok {
 		return true
 	}
@@ -160,7 +161,7 @@ func queryCompileStatusFromUnity(ctx context.Context, connection unityipc.Connec
 	probeContext, cancel := context.WithTimeout(ctx, compileStatusProbeTimeout)
 	defer cancel()
 
-	response, err := unityipc.NewClient(connection, version).Send(
+	response, err := unityipc.NewClient(connection, clicore.Version).Send(
 		probeContext,
 		compileStatusCommandName,
 		map[string]any{compileRequestIDParam: requestID},
@@ -183,18 +184,18 @@ func shouldWaitForCompileStatus(err error, outcome unityipc.UnitySendOutcome) bo
 	if !outcome.RequestDispatched {
 		return false
 	}
-	if isTransportDisconnectError(err) {
+	if clicore.IsTransportDisconnectError(err) {
 		return true
 	}
-	return outcome.RequestAccepted && isFinalResponseTimeoutError(err)
+	return outcome.RequestAccepted && clicore.IsFinalResponseTimeoutError(err)
 }
 
 func logCliDebugModeResolved(connection unityipc.Connection, command string) {
-	if !isCliVibeLogEnabled() {
+	if !clicore.IsCLIVibeLogEnabled() {
 		return
 	}
 
-	_ = writeCliVibeLog(connection.ProjectRoot, cliVibeLogEntry{
+	_ = clicore.WriteCLIVibeLog(connection.ProjectRoot, clicore.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_debug_mode_resolved",
 		Message:   "Resolved CLI debug mode for the command.",
@@ -202,8 +203,8 @@ func logCliDebugModeResolved(connection unityipc.Connection, command string) {
 			"command":          command,
 			"debug_enabled":    true,
 			"debug_source":     "env",
-			"project_identity": projectIdentity(connection.ProjectRoot),
-			"cli_version":      version,
+			"project_identity": clicore.ProjectIdentity(connection.ProjectRoot),
+			"cli_version":      clicore.Version,
 		},
 	})
 }
@@ -213,23 +214,23 @@ func logCompileRequestPrepared(
 	params map[string]any,
 	requestID string,
 ) {
-	if !isCliVibeLogEnabled() {
+	if !clicore.IsCLIVibeLogEnabled() {
 		return
 	}
 
 	reloadExternalSceneChanges := compileReloadExternalSceneChangesEnabled(params)
-	_ = writeCliVibeLog(connection.ProjectRoot, cliVibeLogEntry{
+	_ = clicore.WriteCLIVibeLog(connection.ProjectRoot, clicore.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_compile_request_prepared",
 		Message:   "Prepared compile request parameters before dispatch.",
 		Context: map[string]any{
-			"command":                        compileCommandName,
+			"command":                        clicore.CompileCommandName,
 			"request_id":                     requestID,
 			"wait_for_domain_reload":         true,
 			"force_recompile":                compileForceRecompileEnabled(params),
 			"reload_external_scene_changes":  reloadExternalSceneChanges,
 			"stop_on_external_scene_changes": !reloadExternalSceneChanges,
-			"project_identity":               projectIdentity(connection.ProjectRoot),
+			"project_identity":               clicore.ProjectIdentity(connection.ProjectRoot),
 			"endpoint":                       connection.Endpoint.Address,
 			"timeout_ms":                     compileWaitTimeout.Milliseconds(),
 			"poll_interval_ms":               compileWaitPollInterval.Milliseconds(),
@@ -246,25 +247,25 @@ func logCompileRequestSendResult(
 	err error,
 	startedAt time.Time,
 ) {
-	if !isCliVibeLogEnabled() {
+	if !clicore.IsCLIVibeLogEnabled() {
 		return
 	}
 
-	_ = writeCliVibeLog(connection.ProjectRoot, cliVibeLogEntry{
+	_ = clicore.WriteCLIVibeLog(connection.ProjectRoot, clicore.CLIVibeLogEntry{
 		Level:     compileRequestSendResultLogLevel(err),
 		Operation: "cli_compile_request_send_result",
 		Message:   "Recorded compile request dispatch outcome before status polling.",
 		Context: map[string]any{
-			"command":            compileCommandName,
+			"command":            clicore.CompileCommandName,
 			"request_id":         requestID,
 			"request_dispatched": outcome.RequestDispatched,
 			"request_accepted":   outcome.RequestAccepted,
 			"response_received":  err == nil && len(outcome.Result) > 0,
-			"response_timeout":   err != nil && isFinalResponseTimeoutError(err),
-			"transport_error":    errorMessage(err),
+			"response_timeout":   err != nil && clicore.IsFinalResponseTimeoutError(err),
+			"transport_error":    clicore.ErrorMessage(err),
 			"elapsed_ms":         time.Since(startedAt).Milliseconds(),
 			"endpoint":           connection.Endpoint.Address,
-			"project_identity":   projectIdentity(connection.ProjectRoot),
+			"project_identity":   clicore.ProjectIdentity(connection.ProjectRoot),
 			"outcome_total_ms":   outcome.Timing.Total.Milliseconds(),
 			"outcome_dial_ms":    outcome.Timing.Dial.Milliseconds(),
 			"outcome_write_ms":   outcome.Timing.Write.Milliseconds(),
@@ -287,18 +288,18 @@ func logCompileStatusPollStart(
 	startedAt time.Time,
 	deadline time.Time,
 ) {
-	if !isCliVibeLogEnabled() {
+	if !clicore.IsCLIVibeLogEnabled() {
 		return
 	}
 
-	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
+	_ = clicore.WriteCLIVibeLog(options.connection.ProjectRoot, clicore.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_compile_status_poll_start",
 		Message:   "Started polling Unity compile status.",
 		Context: compileWaitLogContext(options, startedAt, map[string]any{
 			"started_at":       startedAt.UTC().Format(time.RFC3339Nano),
 			"deadline_at":      deadline.UTC().Format(time.RFC3339Nano),
-			"project_identity": projectIdentity(options.connection.ProjectRoot),
+			"project_identity": clicore.ProjectIdentity(options.connection.ProjectRoot),
 		}),
 		CorrelationID: options.requestID,
 	})
@@ -312,7 +313,7 @@ func logCompileStatusPollObservedIfChanged(
 	err error,
 	lastObservationKey *string,
 ) {
-	if !isCliVibeLogEnabled() {
+	if !clicore.IsCLIVibeLogEnabled() {
 		return
 	}
 
@@ -322,7 +323,7 @@ func logCompileStatusPollObservedIfChanged(
 	}
 
 	*lastObservationKey = observationKey
-	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
+	_ = clicore.WriteCLIVibeLog(options.connection.ProjectRoot, clicore.CLIVibeLogEntry{
 		Level:     compileStatusPollObservedLogLevel(err),
 		Operation: "cli_compile_status_poll_observed",
 		Message:   "Observed Unity compile status while polling.",
@@ -334,7 +335,7 @@ func logCompileStatusPollObservedIfChanged(
 			"is_updating":                  status.IsUpdating,
 			"is_domain_reload_in_progress": status.IsDomainReloadInProgress,
 			"message":                      status.Message,
-			"transport_error":              errorMessage(err),
+			"transport_error":              clicore.ErrorMessage(err),
 		}),
 		CorrelationID: options.requestID,
 	})
@@ -356,7 +357,7 @@ func compileStatusObservationKey(status compileStatusResponse, err error) string
 		status.IsUpdating,
 		status.IsDomainReloadInProgress,
 		status.Message,
-		errorMessage(err),
+		clicore.ErrorMessage(err),
 	)
 }
 
@@ -366,12 +367,12 @@ func logCompileStatusPollComplete(
 	attempts int,
 	status compileStatusResponse,
 ) {
-	if !isCliVibeLogEnabled() {
+	if !clicore.IsCLIVibeLogEnabled() {
 		return
 	}
 
 	summary := compileResultLogSummary(status.Result)
-	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
+	_ = clicore.WriteCLIVibeLog(options.connection.ProjectRoot, clicore.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_compile_status_poll_complete",
 		Message:   "Unity compile status polling returned the stored result.",
@@ -392,19 +393,19 @@ func logCompileWaitTimedOut(
 	lastStatus compileStatusResponse,
 	lastErr error,
 ) {
-	if !isCliVibeLogEnabled() {
+	if !clicore.IsCLIVibeLogEnabled() {
 		return
 	}
 
-	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
+	_ = clicore.WriteCLIVibeLog(options.connection.ProjectRoot, clicore.CLIVibeLogEntry{
 		Level:     "WARNING",
 		Operation: "cli_compile_status_poll_timeout",
 		Message:   "Timed out while polling Unity compile status.",
 		Context: compileWaitLogContext(options, startedAt, map[string]any{
 			"poll_attempts":        attempts,
 			"last_status":          compileStatusLogContext(lastStatus),
-			"last_transport_error": errorMessage(lastErr),
-			"project_identity":     projectIdentity(options.connection.ProjectRoot),
+			"last_transport_error": clicore.ErrorMessage(lastErr),
+			"project_identity":     clicore.ProjectIdentity(options.connection.ProjectRoot),
 		}),
 		CorrelationID: options.requestID,
 	})
@@ -418,19 +419,19 @@ func logCompileWaitCancelled(
 	lastErr error,
 	cancelErr error,
 ) {
-	if !isCliVibeLogEnabled() {
+	if !clicore.IsCLIVibeLogEnabled() {
 		return
 	}
 
-	_ = writeCliVibeLog(options.connection.ProjectRoot, cliVibeLogEntry{
+	_ = clicore.WriteCLIVibeLog(options.connection.ProjectRoot, clicore.CLIVibeLogEntry{
 		Level:     "WARNING",
 		Operation: "cli_compile_status_poll_cancelled",
 		Message:   "Compile status polling was cancelled.",
 		Context: compileWaitLogContext(options, startedAt, map[string]any{
 			"poll_attempts":        attempts,
 			"last_status":          compileStatusLogContext(lastStatus),
-			"last_transport_error": errorMessage(lastErr),
-			"cancel_error":         errorMessage(cancelErr),
+			"last_transport_error": clicore.ErrorMessage(lastErr),
+			"cancel_error":         clicore.ErrorMessage(cancelErr),
 		}),
 		CorrelationID: options.requestID,
 	})
@@ -442,7 +443,7 @@ func compileWaitLogContext(
 	extra map[string]any,
 ) map[string]any {
 	context := map[string]any{
-		"command":          compileCommandName,
+		"command":          clicore.CompileCommandName,
 		"request_id":       options.requestID,
 		"force_recompile":  options.forceRecompile,
 		"endpoint":         options.connection.Endpoint.Address,

@@ -8,13 +8,15 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 func TestCompletionListCommandsIncludesNativeCommandsAndDefaultTools(t *testing.T) {
 	var stdout bytes.Buffer
 	handled, code := tryHandleCompletionRequest(
 		[]string{"--list-commands"},
-		loadDefaultTools(),
+		clicore.LoadDefaultTools(),
 		&stdout,
 		&bytes.Buffer{},
 	)
@@ -38,7 +40,7 @@ func TestCompletionListOptionsUsesToolSchema(t *testing.T) {
 	var stdout bytes.Buffer
 	handled, code := tryHandleCompletionRequest(
 		[]string{"--list-options", "compile"},
-		loadDefaultTools(),
+		clicore.LoadDefaultTools(),
 		&stdout,
 		&bytes.Buffer{},
 	)
@@ -61,13 +63,13 @@ func TestCompletionListOptionsUsesToolSchema(t *testing.T) {
 func TestCompletionListOptionsUsesEmbeddedFirstPartyToolSchema(t *testing.T) {
 	// Verifies stale project caches do not re-expose removed first-party options.
 	var stdout bytes.Buffer
-	cache := toolsCache{
-		Tools: []toolDefinition{
+	cache := clicore.ToolsCache{
+		Tools: []clicore.ToolDefinition{
 			{
 				Name: "compile",
-				InputSchema: inputSchema{
+				InputSchema: clicore.InputSchema{
 					Type: "object",
-					Properties: map[string]toolProperty{
+					Properties: map[string]clicore.ToolProperty{
 						"ForceRecompile":      {Type: "boolean"},
 						"WaitForDomainReload": {Type: "boolean", Default: false},
 					},
@@ -106,8 +108,8 @@ func TestCompletionListOptionsUsesExecuteDynamicCodeWaitFlag(t *testing.T) {
 	// Verifies shell completion exposes reload waiting as an explicit opt-in flag.
 	var stdout bytes.Buffer
 	handled, code := tryHandleCompletionRequest(
-		[]string{"--list-options", executeDynamicCodeCommandName},
-		loadDefaultTools(),
+		[]string{"--list-options", clicore.ExecuteDynamicCodeCommandName},
+		clicore.LoadDefaultTools(),
 		&stdout,
 		&bytes.Buffer{},
 	)
@@ -137,12 +139,12 @@ func TestCompletionListOptionsUsesExecuteDynamicCodeWaitFlag(t *testing.T) {
 func TestCompletionListOptionsUsesEmbeddedExecuteDynamicCodeDefinition(t *testing.T) {
 	// Verifies stale project caches do not hide hot-path execute-dynamic-code options.
 	var stdout bytes.Buffer
-	cache := toolsCache{
-		Tools: []toolDefinition{
+	cache := clicore.ToolsCache{
+		Tools: []clicore.ToolDefinition{
 			{
 				Name: "execute-dynamic-code",
-				InputSchema: inputSchema{
-					Properties: map[string]toolProperty{
+				InputSchema: clicore.InputSchema{
+					Properties: map[string]clicore.ToolProperty{
 						"Code": {Type: "string"},
 					},
 				},
@@ -151,7 +153,7 @@ func TestCompletionListOptionsUsesEmbeddedExecuteDynamicCodeDefinition(t *testin
 	}
 
 	handled, code := tryHandleCompletionRequest(
-		[]string{"--list-options", executeDynamicCodeCommandName},
+		[]string{"--list-options", clicore.ExecuteDynamicCodeCommandName},
 		cache,
 		&stdout,
 		&bytes.Buffer{},
@@ -174,8 +176,8 @@ func TestCompletionListOptionsUsesNativeLaunchOptions(t *testing.T) {
 	// Verifies shell completion still suggests native launch flags after CLI unification.
 	var stdout bytes.Buffer
 	handled, code := tryHandleCompletionRequest(
-		[]string{"--list-options", launchCommandName},
-		loadDefaultTools(),
+		[]string{"--list-options", clicore.LaunchCommandName},
+		clicore.LoadDefaultTools(),
 		&stdout,
 		&bytes.Buffer{},
 	)
@@ -205,8 +207,8 @@ func TestCompletionListOptionsUsesNativeUpdateOptions(t *testing.T) {
 	// Verifies shell completion suggests exact update target flags.
 	var stdout bytes.Buffer
 	handled, code := tryHandleCompletionRequest(
-		[]string{"--list-options", updateCommandName},
-		loadDefaultTools(),
+		[]string{"--list-options", clicore.UpdateCommandName},
+		clicore.LoadDefaultTools(),
 		&stdout,
 		&bytes.Buffer{},
 	)
@@ -226,8 +228,8 @@ func TestCompletionCommandListOptionsUsesNativeCompletionOptions(t *testing.T) {
 	// Verifies nested completion option probes preserve dispatcher-compatible behavior.
 	var stdout bytes.Buffer
 	handled, code := tryHandleCompletionRequest(
-		[]string{completionCommand, "--list-options", completionCommand},
-		loadDefaultTools(),
+		[]string{clicore.CompletionCommand, "--list-options", clicore.CompletionCommand},
+		clicore.LoadDefaultTools(),
 		&stdout,
 		&bytes.Buffer{},
 	)
@@ -251,8 +253,8 @@ func TestCompletionHelpDocumentsMachineReadableHelpers(t *testing.T) {
 	// Verifies completion-specific probes are documented outside the main help surface.
 	var stdout bytes.Buffer
 	handled, code := tryHandleCompletionRequest(
-		[]string{completionCommand, "--help"},
-		loadDefaultTools(),
+		[]string{clicore.CompletionCommand, "--help"},
+		clicore.LoadDefaultTools(),
 		&stdout,
 		&bytes.Buffer{},
 	)
@@ -275,13 +277,13 @@ func TestCompletionHelpDocumentsMachineReadableHelpers(t *testing.T) {
 func TestCompletionListOptionsIgnoresCachedToolSchemaForNativeCommand(t *testing.T) {
 	// Verifies native commands keep priority when a cached Unity tool has the same name.
 	var stdout bytes.Buffer
-	cache := toolsCache{
-		Tools: []toolDefinition{
+	cache := clicore.ToolsCache{
+		Tools: []clicore.ToolDefinition{
 			{
 				Name: "focus-window",
-				InputSchema: inputSchema{
+				InputSchema: clicore.InputSchema{
 					Type: "object",
-					Properties: map[string]toolProperty{
+					Properties: map[string]clicore.ToolProperty{
 						"ProjectPath": {Type: "string"},
 					},
 				},
@@ -312,7 +314,7 @@ func TestCompletionListOptionsUsesNegatedDefaultTrueBooleanFlags(t *testing.T) {
 	var stdout bytes.Buffer
 	handled, code := tryHandleCompletionRequest(
 		[]string{"--list-options", "get-hierarchy"},
-		loadDefaultTools(),
+		clicore.LoadDefaultTools(),
 		&stdout,
 		&bytes.Buffer{},
 	)
@@ -342,7 +344,7 @@ func TestCompletionPrintsShellScriptWithoutProject(t *testing.T) {
 	var stdout bytes.Buffer
 	handled, code := tryHandleCompletionRequest(
 		[]string{"completion", "--shell", "bash"},
-		loadDefaultTools(),
+		clicore.LoadDefaultTools(),
 		&stdout,
 		&bytes.Buffer{},
 	)
@@ -362,7 +364,7 @@ func TestCompletionPrintsShellScriptWithoutProject(t *testing.T) {
 
 func TestCompletionDetectionSkipsRegularToolCommands(t *testing.T) {
 	// Verifies that normal tool execution avoids completion cache loading.
-	if shouldHandleCompletionRequest([]string{executeDynamicCodeCommandName, "--code", "return 1;"}) {
+	if clicore.ShouldHandleCompletionRequest([]string{clicore.ExecuteDynamicCodeCommandName, "--code", "return 1;"}) {
 		t.Fatal("execute-dynamic-code should not enter completion handling")
 	}
 }
@@ -370,11 +372,11 @@ func TestCompletionDetectionSkipsRegularToolCommands(t *testing.T) {
 func TestCompletionDetectionHandlesCompletionCommands(t *testing.T) {
 	// Verifies that completion-specific commands still load completion metadata.
 	for _, args := range [][]string{
-		{completionCommand, "--shell", "bash"},
-		{listCommandsFlag},
-		{listOptionsFlag, "compile"},
+		{clicore.CompletionCommand, "--shell", "bash"},
+		{clicore.ListCommandsFlag},
+		{clicore.ListOptionsFlag, "compile"},
 	} {
-		if !shouldHandleCompletionRequest(args) {
+		if !clicore.ShouldHandleCompletionRequest(args) {
 			t.Fatalf("completion request was not detected: %#v", args)
 		}
 	}
@@ -439,7 +441,7 @@ func TestCompletionInstallReplacesExistingBlock(t *testing.T) {
 	var stdout bytes.Buffer
 	handled, code := tryHandleCompletionRequest(
 		[]string{"completion", "--shell", "zsh", "--install"},
-		loadDefaultTools(),
+		clicore.LoadDefaultTools(),
 		&stdout,
 		&bytes.Buffer{},
 	)

@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"sort"
@@ -6,23 +6,23 @@ import (
 )
 
 const (
-	projectPathFlagName                    = "project-path"
-	reloadExternalSceneChangesPropertyName = "ReloadExternalSceneChanges"
+	ProjectPathFlagName                    = "project-path"
+	ReloadExternalSceneChangesPropertyName = "ReloadExternalSceneChanges"
 )
 
-func findProperty(tool toolDefinition, kebabName string) (string, toolProperty, bool, bool) {
+func FindProperty(tool ToolDefinition, kebabName string) (string, ToolProperty, bool, bool) {
 	schema := tool.EffectiveInputSchema()
 	for propertyName, property := range schema.Properties {
-		if optionNameForProperty(tool.Name, propertyName, property) == kebabName {
-			return propertyName, property, isNegatedBooleanProperty(property), true
+		if OptionNameForProperty(tool.Name, propertyName, property) == kebabName {
+			return propertyName, property, IsNegatedBooleanProperty(property), true
 		}
 	}
-	return "", toolProperty{}, false, false
+	return "", ToolProperty{}, false, false
 }
 
-func optionNameForProperty(toolName string, propertyName string, property toolProperty) string {
+func OptionNameForProperty(toolName string, propertyName string, property ToolProperty) string {
 	kebabName := pascalToKebab(propertyName)
-	if isNegatedBooleanProperty(property) {
+	if IsNegatedBooleanProperty(property) {
 		if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
 			return "fail-on-unsaved-changes"
 		}
@@ -34,39 +34,39 @@ func optionNameForProperty(toolName string, propertyName string, property toolPr
 	return kebabName
 }
 
-func isRunTestsSaveBeforeRunOption(toolName string, propertyName string, property toolProperty) bool {
-	return toolName == runTestsCommandName &&
+func isRunTestsSaveBeforeRunOption(toolName string, propertyName string, property ToolProperty) bool {
+	return toolName == RunTestsCommandName &&
 		propertyName == "SaveBeforeRun" &&
-		isNegatedBooleanProperty(property)
+		IsNegatedBooleanProperty(property)
 }
 
-func isCompileReloadExternalSceneChangesOption(toolName string, propertyName string, property toolProperty) bool {
-	return toolName == compileCommandName &&
-		propertyName == reloadExternalSceneChangesPropertyName &&
-		isNegatedBooleanProperty(property)
+func isCompileReloadExternalSceneChangesOption(toolName string, propertyName string, property ToolProperty) bool {
+	return toolName == CompileCommandName &&
+		propertyName == ReloadExternalSceneChangesPropertyName &&
+		IsNegatedBooleanProperty(property)
 }
 
-func visibleOptionNamesForTool(tool toolDefinition) []string {
+func VisibleOptionNamesForTool(tool ToolDefinition) []string {
 	schema := tool.EffectiveInputSchema()
 	options := make([]string, 0, len(schema.Properties))
 	for propertyName, property := range schema.Properties {
 		if property.Hidden {
 			continue
 		}
-		options = append(options, "--"+optionNameForProperty(tool.Name, propertyName, property))
+		options = append(options, "--"+OptionNameForProperty(tool.Name, propertyName, property))
 	}
 	options = appendDynamicCodeFileOptionName(tool, options)
 	sort.Strings(options)
 	return options
 }
 
-func isBooleanProperty(property toolProperty) bool {
+func IsBooleanProperty(property ToolProperty) bool {
 	return strings.EqualFold(property.Type, "boolean")
 }
 
-func isNegatedBooleanProperty(property toolProperty) bool {
+func IsNegatedBooleanProperty(property ToolProperty) bool {
 	defaultValue, ok := property.EffectiveDefault().(bool)
-	return isBooleanProperty(property) && ok && defaultValue
+	return IsBooleanProperty(property) && ok && defaultValue
 }
 
 func pascalToKebab(value string) string {

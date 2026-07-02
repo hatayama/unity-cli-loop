@@ -1,10 +1,12 @@
 package cli
 
-// unsupportedPlatformError builds a cliError for bootstrap commands (install, update,
+import "github.com/hatayama/unity-cli-loop/cli/internal/clicore"
+
+// unsupportedPlatformError builds a clicore.CLIError for bootstrap commands (install, update,
 // uninstall) that fail because the current OS is not supported, matching on the
 // well-known platform-guard messages returned by the internal install/update/uninstall
 // packages.
-func unsupportedPlatformError(message string, context errorContext) (cliError, bool) {
+func unsupportedPlatformError(message string, context clicore.ErrorContext) (clicore.CLIError, bool) {
 	switch message {
 	case updateUnsupportedOSMessage:
 		return invalidArgumentExecutionError(
@@ -31,18 +33,18 @@ func unsupportedPlatformError(message string, context errorContext) (cliError, b
 				"Remove the uloop launcher binary manually on this platform.",
 			}), true
 	default:
-		return cliError{}, false
+		return clicore.CLIError{}, false
 	}
 }
 
-func invalidArgumentExecutionError(message string, context errorContext, nextActions []string) cliError {
-	return cliError{
-		ErrorCode:   errorCodeInvalidArgument,
-		Phase:       errorPhaseExecution,
+func invalidArgumentExecutionError(message string, context clicore.ErrorContext, nextActions []string) clicore.CLIError {
+	return clicore.CLIError{
+		ErrorCode:   clicore.ErrorCodeInvalidArgument,
+		Phase:       clicore.ErrorPhaseExecution,
 		Message:     message,
 		Retryable:   false,
 		SafeToRetry: false,
-		Command:     context.command,
+		Command:     context.Command,
 		NextActions: nextActions,
 	}
 }
@@ -59,7 +61,7 @@ func (err unsupportedPlatformCommandError) Error() string {
 	return err.message
 }
 
-func (err unsupportedPlatformCommandError) toCLIError(context errorContext) cliError {
+func (err unsupportedPlatformCommandError) ToCLIError(context clicore.ErrorContext) clicore.CLIError {
 	return invalidArgumentExecutionError(err.message, context, err.nextActions)
 }
 
@@ -70,7 +72,7 @@ func wrapUnsupportedPlatformError(err error) error {
 	if err == nil {
 		return err
 	}
-	cliErr, ok := unsupportedPlatformError(err.Error(), errorContext{})
+	cliErr, ok := unsupportedPlatformError(err.Error(), clicore.ErrorContext{})
 	if !ok {
 		return err
 	}

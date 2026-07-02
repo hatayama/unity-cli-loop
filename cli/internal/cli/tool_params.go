@@ -4,20 +4,22 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
-func buildToolParams(args []string, tool toolDefinition) (map[string]any, string, error) {
+func buildToolParams(args []string, tool clicore.ToolDefinition) (map[string]any, string, error) {
 	params := map[string]any{}
 	projectPath := ""
 
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
 		if !strings.HasPrefix(arg, "--") {
-			return nil, "", &argumentError{
-				message:     "Unexpected argument: " + arg,
-				received:    arg,
-				command:     tool.Name,
-				nextActions: []string{"Pass tool inputs as `--option value` pairs."},
+			return nil, "", &clicore.ArgumentError{
+				Message:     "Unexpected argument: " + arg,
+				Received:    arg,
+				Command:     tool.Name,
+				NextActions: []string{"Pass tool inputs as `--option value` pairs."},
 			}
 		}
 
@@ -26,7 +28,7 @@ func buildToolParams(args []string, tool toolDefinition) (map[string]any, string
 			return nil, "", err
 		}
 
-		if flag.name == projectPathFlagName {
+		if flag.name == clicore.ProjectPathFlagName {
 			value, consumedNext, err := flagValue(flag, args, index)
 			if err != nil {
 				return nil, "", err
@@ -38,22 +40,22 @@ func buildToolParams(args []string, tool toolDefinition) (map[string]any, string
 			continue
 		}
 
-		propertyName, property, negated, ok := findProperty(tool, flag.name)
+		propertyName, property, negated, ok := clicore.FindProperty(tool, flag.name)
 		if !ok {
-			return nil, "", &argumentError{
-				message:     "Unknown option for " + tool.Name + ": --" + flag.name,
-				option:      "--" + flag.name,
-				command:     tool.Name,
-				nextActions: []string{"Run `uloop --list-options " + tool.Name + "` to inspect supported options."},
+			return nil, "", &clicore.ArgumentError{
+				Message:     "Unknown option for " + tool.Name + ": --" + flag.name,
+				Option:      "--" + flag.name,
+				Command:     tool.Name,
+				NextActions: []string{"Run `uloop --list-options " + tool.Name + "` to inspect supported options."},
 			}
 		}
 
 		option := "--" + flag.name
-		if isBooleanProperty(property) {
+		if clicore.IsBooleanProperty(property) {
 			if flag.hasValue {
 				return nil, "", booleanValueArgumentError(option, flag.value)
 			}
-			if index+1 < len(args) && !isNextOptionToken(args[index+1]) {
+			if index+1 < len(args) && !clicore.IsNextOptionToken(args[index+1]) {
 				return nil, "", booleanValueArgumentError(option, args[index+1])
 			}
 			params[propertyName] = !negated
@@ -87,17 +89,17 @@ type parsedToolFlag struct {
 func parseToolFlag(arg string) (parsedToolFlag, error) {
 	trimmed := strings.TrimPrefix(arg, "--")
 	if trimmed == "" {
-		return parsedToolFlag{}, &argumentError{
-			message:     "Invalid option: " + arg,
-			option:      arg,
-			nextActions: []string{"Use `--option` for boolean flags or `--option value` for valued options."},
+		return parsedToolFlag{}, &clicore.ArgumentError{
+			Message:     "Invalid option: " + arg,
+			Option:      arg,
+			NextActions: []string{"Use `--option` for boolean flags or `--option value` for valued options."},
 		}
 	}
 
 	if strings.Contains(trimmed, "=") {
 		parts := strings.SplitN(trimmed, "=", 2)
 		if parts[1] == "" {
-			return parsedToolFlag{}, missingValueArgumentError("--" + parts[0])
+			return parsedToolFlag{}, clicore.MissingValueArgumentError("--" + parts[0])
 		}
 		return parsedToolFlag{name: parts[0], value: parts[1], hasValue: true}, nil
 	}
@@ -110,27 +112,27 @@ func flagValue(flag parsedToolFlag, args []string, index int) (string, bool, err
 		return flag.value, false, nil
 	}
 
-	if index+1 >= len(args) || isNextOptionToken(args[index+1]) {
-		return "", false, missingValueArgumentError("--" + flag.name)
+	if index+1 >= len(args) || clicore.IsNextOptionToken(args[index+1]) {
+		return "", false, clicore.MissingValueArgumentError("--" + flag.name)
 	}
 
 	return args[index+1], true, nil
 }
 
-func convertValue(value string, property toolProperty, option string) (any, error) {
+func convertValue(value string, property clicore.ToolProperty, option string) (any, error) {
 	switch strings.ToLower(property.Type) {
 	case "boolean":
 		return convertBooleanValue(value, option)
 	case "integer":
 		parsed, err := strconv.Atoi(value)
 		if err != nil {
-			return nil, invalidValueArgumentError(option, value, "integer")
+			return nil, clicore.InvalidValueArgumentError(option, value, "integer")
 		}
 		return parsed, nil
 	case "number":
 		parsed, err := strconv.ParseFloat(value, 64)
 		if err != nil {
-			return nil, invalidValueArgumentError(option, value, "number")
+			return nil, clicore.InvalidValueArgumentError(option, value, "number")
 		}
 		return parsed, nil
 	case "array":
@@ -149,7 +151,7 @@ func convertBooleanValue(value string, option string) (bool, error) {
 	case "false":
 		return false, nil
 	default:
-		return false, invalidValueArgumentError(option, value, "boolean")
+		return false, clicore.InvalidValueArgumentError(option, value, "boolean")
 	}
 }
 
@@ -157,7 +159,7 @@ func convertArrayValue(value string, option string) (any, error) {
 	if strings.HasPrefix(value, "[") {
 		var parsed []any
 		if err := json.Unmarshal([]byte(value), &parsed); err != nil {
-			return nil, invalidValueArgumentError(option, value, "array")
+			return nil, clicore.InvalidValueArgumentError(option, value, "array")
 		}
 		return parsed, nil
 	}
@@ -173,20 +175,20 @@ func convertArrayValue(value string, option string) (any, error) {
 func convertObjectValue(value string, option string) (map[string]any, error) {
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(value), &parsed); err != nil {
-		return nil, invalidValueArgumentError(option, value, "object")
+		return nil, clicore.InvalidValueArgumentError(option, value, "object")
 	}
 	if parsed == nil {
-		return nil, invalidValueArgumentError(option, value, "object")
+		return nil, clicore.InvalidValueArgumentError(option, value, "object")
 	}
 	return parsed, nil
 }
 
-func booleanValueArgumentError(option string, received string) *argumentError {
-	return &argumentError{
-		message:      "Boolean option does not accept a value: " + received,
-		option:       option,
-		received:     received,
-		expectedType: "flag",
-		nextActions:  []string{"Use `" + option + "` without a value."},
+func booleanValueArgumentError(option string, received string) *clicore.ArgumentError {
+	return &clicore.ArgumentError{
+		Message:      "Boolean option does not accept a value: " + received,
+		Option:       option,
+		Received:     received,
+		ExpectedType: "flag",
+		NextActions:  []string{"Use `" + option + "` without a value."},
 	}
 }

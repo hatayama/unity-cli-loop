@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
@@ -61,12 +62,12 @@ func TestParseLaunchOptionsRejectsRemovedIgnoreCompilerErrorsFlags(t *testing.T)
 			t.Fatalf("expected removed ignore compiler errors flag error for %s", arg)
 		}
 
-		var argErr *argumentError
+		var argErr *clicore.ArgumentError
 		if !errors.As(err, &argErr) {
 			t.Fatalf("expected argumentError for %s, got %T", arg, err)
 		}
-		if argErr.option != arg {
-			t.Fatalf("option mismatch for %s: %s", arg, argErr.option)
+		if argErr.Option != arg {
+			t.Fatalf("option mismatch for %s: %s", arg, argErr.Option)
 		}
 	}
 }
@@ -165,12 +166,12 @@ func TestParseLaunchOptionsRejectsUnityHubRegistrationEqualsValues(t *testing.T)
 			t.Fatalf("expected Unity Hub registration option error for %s", arg)
 		}
 
-		var argErr *argumentError
+		var argErr *clicore.ArgumentError
 		if !errors.As(err, &argErr) {
 			t.Fatalf("expected argumentError for %s, got %T", arg, err)
 		}
-		if argErr.message != "Native launch does not support Unity Hub registration options." {
-			t.Fatalf("message mismatch for %s: %s", arg, argErr.message)
+		if argErr.Message != "Native launch does not support Unity Hub registration options." {
+			t.Fatalf("message mismatch for %s: %s", arg, argErr.Message)
 		}
 	}
 }
@@ -183,12 +184,12 @@ func TestParseLaunchOptionsRejectsMaxDepthBelowUnlimitedSentinel(t *testing.T) {
 		t.Fatal("expected invalid max-depth error")
 	}
 
-	var argErr *argumentError
+	var argErr *clicore.ArgumentError
 	if !errors.As(err, &argErr) {
 		t.Fatalf("expected argumentError, got %T", err)
 	}
-	if argErr.expectedType != "integer >= -1" {
-		t.Fatalf("expectedType mismatch: %s", argErr.expectedType)
+	if argErr.ExpectedType != "integer >= -1" {
+		t.Fatalf("expectedType mismatch: %s", argErr.ExpectedType)
 	}
 }
 
@@ -260,7 +261,7 @@ func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 	originalResolver := resolveUnityExecutablePathForLaunch
 	originalStartupMarkerWait := waitForUnityStartupMarkerForLaunch
 	originalReadinessWait := waitForToolReadinessForLaunch
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
 	resolveUnityExecutablePathForLaunch = func(string) (string, error) {
@@ -333,10 +334,10 @@ func TestWaitForLaunchReadinessWrapsStartupTimeout(t *testing.T) {
 	// Verifies launch timeout errors receive the launch-specific startup classification.
 	originalReadinessWait := waitForToolReadinessForLaunch
 	waitForToolReadinessForLaunch = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
-		return unityServerNotRespondingError{
-			projectRoot: projectRoot,
-			endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
-			cause:       errors.New("timed out waiting for Unity tool readiness"),
+		return clicore.UnityServerNotRespondingError{
+			ProjectRoot: projectRoot,
+			Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
+			Cause:       errors.New("timed out waiting for Unity tool readiness"),
 		}
 	}
 	t.Cleanup(func() {
@@ -355,10 +356,10 @@ func TestWaitForLaunchReadinessWrapsInternalProbeDeadline(t *testing.T) {
 	// Verifies probe deadlines are classified as launch startup timeouts while the parent context is active.
 	originalReadinessWait := waitForToolReadinessForLaunch
 	waitForToolReadinessForLaunch = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
-		return unityServerNotRespondingError{
-			projectRoot: projectRoot,
-			endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
-			cause:       fmt.Errorf("probe deadline: %w", context.DeadlineExceeded),
+		return clicore.UnityServerNotRespondingError{
+			ProjectRoot: projectRoot,
+			Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
+			Cause:       fmt.Errorf("probe deadline: %w", context.DeadlineExceeded),
 		}
 	}
 	t.Cleanup(func() {
@@ -396,8 +397,8 @@ func TestWaitForLaunchReadinessPreservesNoProcessReachability(t *testing.T) {
 	if errors.As(err, &startupErr) {
 		t.Fatalf("exited launch should not be classified as startup timeout: %v", err)
 	}
-	cliErr := classifyError(err, errorContext{command: launchCommandName})
-	if cliErr.ErrorCode != errorCodeUnityNotReachable {
+	cliErr := clicore.ClassifyError(err, clicore.ErrorContext{Command: clicore.LaunchCommandName})
+	if cliErr.ErrorCode != clicore.ErrorCodeUnityNotReachable {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
 	if strings.Contains(cliErr.Message, "Unity is running") {
@@ -430,8 +431,8 @@ func TestRunLaunchWritesStructuredResponseForExistingUnityProcess(t *testing.T) 
 	originalFocus := focusUnityProcessForLaunch
 	originalReadinessWait := waitForToolReadinessForLaunch
 	readinessChecked := false
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 111}, nil
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 111}, nil
 	}
 	focusUnityProcessForLaunch = func(context.Context, int) error {
 		return nil
@@ -484,8 +485,8 @@ func TestRunLaunchRequiresRestartForEditorVersionWithExistingUnityProcess(t *tes
 	originalFinder := findRunningUnityProcessForLaunch
 	originalReadinessWait := waitForToolReadinessForLaunch
 	readinessChecked := false
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 222}, nil
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 222}, nil
 	}
 	waitForToolReadinessForLaunch = func(context.Context, string, time.Duration) error {
 		readinessChecked = true
@@ -529,8 +530,8 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 	originalReadinessWait := waitForToolReadinessForLaunch
 	killedPid := 0
 	waitedPid := 0
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 222}, nil
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 222}, nil
 	}
 	killUnityProcessForLaunch = func(pid int) error {
 		killedPid = pid
@@ -600,8 +601,8 @@ func TestRunLaunchQuitWaitsForKilledUnityProcess(t *testing.T) {
 	originalKiller := killUnityProcessForLaunch
 	originalExitWait := waitForUnityProcessExitForLaunch
 	waitedPid := 0
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 333}, nil
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 333}, nil
 	}
 	killUnityProcessForLaunch = func(pid int) error {
 		return nil
@@ -650,8 +651,8 @@ func TestRunLaunchRestartReportsProcessExitWaitFailure(t *testing.T) {
 	originalExitWait := waitForUnityProcessExitForLaunch
 	originalResolver := resolveUnityExecutablePathForLaunch
 	resolverCalled := false
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 444}, nil
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 444}, nil
 	}
 	killUnityProcessForLaunch = func(pid int) error {
 		return nil
@@ -700,8 +701,8 @@ func TestRunLaunchWritesExistingFocusSuccessVibeLog(t *testing.T) {
 	originalFinder := findRunningUnityProcessForLaunch
 	originalFocus := focusUnityProcessForLaunch
 	originalReadinessWait := waitForToolReadinessForLaunch
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 111}, nil
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 111}, nil
 	}
 	focusUnityProcessForLaunch = func(context.Context, int) error {
 		return nil
@@ -750,8 +751,8 @@ func TestRunLaunchWritesExistingFocusFailureVibeLog(t *testing.T) {
 	originalFinder := findRunningUnityProcessForLaunch
 	originalFocus := focusUnityProcessForLaunch
 	originalReadinessWait := waitForToolReadinessForLaunch
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 222}, nil
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 222}, nil
 	}
 	focusUnityProcessForLaunch = func(context.Context, int) error {
 		return fmt.Errorf("activation denied")
@@ -791,18 +792,6 @@ func TestRunLaunchWritesExistingFocusFailureVibeLog(t *testing.T) {
 		if !strings.Contains(logContent, expected) {
 			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
 		}
-	}
-}
-
-// Verifies that readiness probes exercise the same foreground warmup path as user executions.
-func TestExecuteDynamicCodeReadinessProbeParamsUseForegroundWarmup(t *testing.T) {
-	params := executeDynamicCodeReadinessProbeParams()
-
-	if params["YieldToForegroundRequests"] != false {
-		t.Fatalf("readiness probe should use foreground warmup: %#v", params["YieldToForegroundRequests"])
-	}
-	if params[domainReloadWaitParam] != false {
-		t.Fatalf("readiness probe should not wait for its own reload check: %#v", params[domainReloadWaitParam])
 	}
 }
 
@@ -876,7 +865,7 @@ func TestWaitForUnityStartupMarkerReturnsNilWhenLockfileDoesNotAppear(t *testing
 func TestWaitForUnityProcessExitBoundsProcessScan(t *testing.T) {
 	// Verifies exit waiting applies the exit timeout to each running-process scan.
 	originalFinder := findRunningUnityProcessForLaunch
-	findRunningUnityProcessForLaunch = func(ctx context.Context, projectRoot string) (*unityProcess, error) {
+	findRunningUnityProcessForLaunch = func(ctx context.Context, projectRoot string) (*clicore.UnityProcess, error) {
 		if _, ok := ctx.Deadline(); !ok {
 			return nil, errors.New("missing process scan deadline")
 		}
@@ -943,7 +932,7 @@ func decodeLaunchResponseFromOutput(t *testing.T, output string) launchReadyResp
 func TestRunLaunchFallsBackToIpcProbeWhenProcessScanFails(t *testing.T) {
 	originalFinder := findRunningUnityProcessForLaunch
 	originalProbe := probeProjectIpcForLaunchFallback
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, errors.New("failed to retrieve Unity process list: /bin/ps: operation not permitted")
 	}
 	probeProjectIpcForLaunchFallback = func(context.Context, string) error {
@@ -979,7 +968,7 @@ func TestRunLaunchFallsBackToIpcProbeWhenProcessScanFails(t *testing.T) {
 func TestRunLaunchReportsScanErrorWhenIpcProbeAlsoFails(t *testing.T) {
 	originalFinder := findRunningUnityProcessForLaunch
 	originalProbe := probeProjectIpcForLaunchFallback
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, errors.New("failed to retrieve Unity process list: /bin/ps: operation not permitted")
 	}
 	probeProjectIpcForLaunchFallback = func(context.Context, string) error {
@@ -1008,7 +997,7 @@ func TestRunLaunchReportsScanErrorWhenIpcProbeAlsoFails(t *testing.T) {
 func TestRunLaunchRestartDoesNotUseIpcProbeFallback(t *testing.T) {
 	originalFinder := findRunningUnityProcessForLaunch
 	originalProbe := probeProjectIpcForLaunchFallback
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*unityProcess, error) {
+	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, errors.New("failed to retrieve Unity process list: /bin/ps: operation not permitted")
 	}
 	probeProjectIpcForLaunchFallback = func(context.Context, string) error {

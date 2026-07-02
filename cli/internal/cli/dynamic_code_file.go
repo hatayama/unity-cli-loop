@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 const dynamicCodeCodePropertyName = "Code"
@@ -11,7 +13,7 @@ const dynamicCodeCodePropertyName = "Code"
 // extractDynamicCodeFileFlag pulls --code-file out of execute-dynamic-code args before
 // generic tool parsing, because the flag is CLI-side sugar and not part of the Unity schema.
 func extractDynamicCodeFileFlag(command string, args []string) ([]string, string, error) {
-	if command != executeDynamicCodeCommandName {
+	if command != clicore.ExecuteDynamicCodeCommandName {
 		return args, "", nil
 	}
 
@@ -19,16 +21,16 @@ func extractDynamicCodeFileFlag(command string, args []string) ([]string, string
 	path := ""
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
-		if arg != "--"+dynamicCodeFileFlagName && !strings.HasPrefix(arg, "--"+dynamicCodeFileFlagName+"=") {
+		if arg != "--"+clicore.DynamicCodeFileFlagName && !strings.HasPrefix(arg, "--"+clicore.DynamicCodeFileFlagName+"=") {
 			remaining = append(remaining, arg)
 			continue
 		}
 
-		name, value, consumedNext, err := parseFlagValue(arg, args, index)
+		name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 		if err != nil {
 			return nil, "", err
 		}
-		if name != dynamicCodeFileFlagName {
+		if name != clicore.DynamicCodeFileFlagName {
 			remaining = append(remaining, arg)
 			continue
 		}
@@ -49,17 +51,17 @@ func applyDynamicCodeFileParam(params map[string]any, path string) error {
 	}
 
 	if _, exists := params[dynamicCodeCodePropertyName]; exists {
-		return &argumentError{
-			message:     "--code and --code-file cannot be combined",
-			option:      "--" + dynamicCodeFileFlagName,
-			command:     executeDynamicCodeCommandName,
-			nextActions: []string{"Pass the C# source either inline with `--code` or from a file with `--code-file <path>`."},
+		return &clicore.ArgumentError{
+			Message:     "--code and --code-file cannot be combined",
+			Option:      "--" + clicore.DynamicCodeFileFlagName,
+			Command:     clicore.ExecuteDynamicCodeCommandName,
+			NextActions: []string{"Pass the C# source either inline with `--code` or from a file with `--code-file <path>`."},
 		}
 	}
 
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("failed to read --%s %s: %w", dynamicCodeFileFlagName, path, err)
+		return fmt.Errorf("failed to read --%s %s: %w", clicore.DynamicCodeFileFlagName, path, err)
 	}
 
 	params[dynamicCodeCodePropertyName] = string(content)

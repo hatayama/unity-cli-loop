@@ -3,35 +3,37 @@ package cli
 import (
 	"context"
 	"io"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 func tryHandleGlobalInfoRequest(args []string, projectPath string, stdout io.Writer) (bool, int) {
-	if len(args) == 0 || isHelpRequest(args) {
+	if len(args) == 0 || clicore.IsHelpRequest(args) {
 		printHelpForResolvedProject(stdout, projectPath)
 		return true, 0
 	}
-	if isVersionJSONRequest(args) {
-		writeVersionJSON(stdout)
+	if clicore.IsVersionJSONRequest(args) {
+		clicore.WriteVersionJSON(stdout)
 		return true, 0
 	}
-	if isVersionRequest(args) {
-		writeLine(stdout, version)
+	if clicore.IsVersionRequest(args) {
+		clicore.WriteLine(stdout, clicore.Version)
 		return true, 0
 	}
 	return false, 0
 }
 
 func tryHandleDispatcherInfoRequest(args []string, stdout io.Writer) (bool, int) {
-	if len(args) == 0 || isHelpRequest(args) {
+	if len(args) == 0 || clicore.IsHelpRequest(args) {
 		printLauncherHelp(stdout)
 		return true, 0
 	}
-	if isVersionJSONRequest(args) {
+	if clicore.IsVersionJSONRequest(args) {
 		writeDispatcherVersionJSON(stdout)
 		return true, 0
 	}
-	if isVersionRequest(args) {
-		writeLine(stdout, dispatcherVersion)
+	if clicore.IsVersionRequest(args) {
+		clicore.WriteLine(stdout, dispatcherVersion)
 		return true, 0
 	}
 	return false, 0
@@ -47,18 +49,18 @@ func tryHandlePreConnectionRequest(
 	stdout io.Writer,
 	stderr io.Writer,
 ) (bool, int) {
-	if shouldHandleCompletionRequest(remainingArgs) {
+	if clicore.ShouldHandleCompletionRequest(remainingArgs) {
 		completionTools := loadCompletionTools(startPath, projectPath)
 		if handled, code := tryHandleCompletionRequest(remainingArgs, completionTools, stdout, stderr); handled {
 			return true, code
 		}
 	}
-	if isUnknownLeadingOption(command) {
-		writeClassifiedError(stderr, &argumentError{
-			message:     "Unknown global option: " + command,
-			option:      command,
-			nextActions: []string{"Run `uloop --help` to inspect supported global options."},
-		}, errorContext{})
+	if clicore.IsUnknownLeadingOption(command) {
+		clicore.WriteClassifiedError(stderr, &clicore.ArgumentError{
+			Message:     "Unknown global option: " + command,
+			Option:      command,
+			NextActions: []string{"Run `uloop --help` to inspect supported global options."},
+		}, clicore.ErrorContext{})
 		return true, 1
 	}
 	if handled, code := tryHandleUpdateRequest(ctx, remainingArgs, stdout, stderr); handled {
@@ -76,7 +78,7 @@ func tryHandlePreConnectionRequest(
 	if handled, code := tryHandleSkillsRequest(remainingArgs, startPath, projectPath, stdout, stderr); handled {
 		return true, code
 	}
-	if containsHelpRequest(commandArgs) {
+	if clicore.ContainsHelpRequest(commandArgs) {
 		if handled, code := tryHandleCommandHelp(command, startPath, projectPath, stdout, stderr); handled {
 			return true, code
 		}

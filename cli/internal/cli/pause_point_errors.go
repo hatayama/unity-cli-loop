@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"time"
+
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 )
 
 func pausePointWaitError(
@@ -10,13 +12,13 @@ func pausePointWaitError(
 	options waitForPausePointOptions,
 	response pausePointStatusResponse,
 	state pausePointWaitState,
-) cliError {
+) clicore.CLIError {
 	response = normalizePausePointStatusResponse(response)
 
 	switch state {
 	case pausePointWaitStateNotEnabled:
 		return pausePointStateError(
-			errorCodePausePointNotEnabled,
+			clicore.ErrorCodePausePointNotEnabled,
 			"Pause point is not enabled.",
 			projectRoot,
 			options,
@@ -24,7 +26,7 @@ func pausePointWaitError(
 			false)
 	case pausePointWaitStateExpired:
 		expiredError := pausePointStateError(
-			errorCodePausePointExpired,
+			clicore.ErrorCodePausePointExpired,
 			"Pause point expired before it was hit.",
 			projectRoot,
 			options,
@@ -37,7 +39,7 @@ func pausePointWaitError(
 		return expiredError
 	case pausePointWaitStateCleared:
 		return pausePointStateError(
-			errorCodePausePointCleared,
+			clicore.ErrorCodePausePointCleared,
 			"Pause point was cleared before it was hit.",
 			projectRoot,
 			options,
@@ -45,7 +47,7 @@ func pausePointWaitError(
 			true)
 	default:
 		timeoutError := pausePointStateError(
-			errorCodePausePointWaitTimeout,
+			clicore.ErrorCodePausePointWaitTimeout,
 			fmt.Sprintf("Pause point was not hit within %ds.", options.timeoutSeconds),
 			projectRoot,
 			options,
@@ -102,15 +104,15 @@ func pausePointStateError(
 	options waitForPausePointOptions,
 	response pausePointStatusResponse,
 	retryable bool,
-) cliError {
-	return cliError{
+) clicore.CLIError {
+	return clicore.CLIError{
 		ErrorCode:   errorCode,
-		Phase:       errorPhaseResponseWaiting,
+		Phase:       clicore.ErrorPhaseResponseWaiting,
 		Message:     message,
 		Retryable:   retryable,
 		SafeToRetry: retryable,
 		ProjectRoot: projectRoot,
-		Command:     pausePointWaitCommandName,
+		Command:     clicore.PausePointWaitCommandName,
 		NextActions: []string{
 			"Run `uloop enable-pause-point --id <marker-id>` before waiting.",
 			"Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id.",

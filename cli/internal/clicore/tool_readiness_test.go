@@ -1,4 +1,4 @@
-package cli
+package clicore
 
 import (
 	"context"
@@ -19,7 +19,7 @@ func TestWaitForToolReadinessUsesDefaultTimeout(t *testing.T) {
 			t.Fatal("readiness probe context should have a deadline")
 		}
 		remaining := time.Until(deadline)
-		if remaining < toolReadinessTimeout-time.Second || remaining > toolReadinessTimeout {
+		if remaining < ToolReadinessTimeout-time.Second || remaining > ToolReadinessTimeout {
 			t.Fatalf("readiness timeout mismatch: %s", remaining)
 		}
 		return nil
@@ -28,7 +28,7 @@ func TestWaitForToolReadinessUsesDefaultTimeout(t *testing.T) {
 		probeToolReadinessSequenceForReadiness = originalProbe
 	})
 
-	if err := waitForToolReadiness(context.Background(), t.TempDir()); err != nil {
+	if err := WaitForToolReadiness(context.Background(), t.TempDir()); err != nil {
 		t.Fatalf("waitForToolReadiness failed: %v", err)
 	}
 }
@@ -48,7 +48,7 @@ func TestWaitForToolReadinessReturnsCliUpdateRequiredImmediately(t *testing.T) {
 		probeToolReadinessSequenceForReadiness = originalProbe
 	})
 
-	err := waitForToolReadinessWithTimeout(context.Background(), t.TempDir(), time.Hour)
+	err := WaitForToolReadinessWithTimeout(context.Background(), t.TempDir(), time.Hour)
 
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected cli update error, got %v", err)
@@ -70,7 +70,7 @@ func TestToolReadinessDoneErrorPropagatesParentCancellation(t *testing.T) {
 // Verifies that readiness timeout still uses the user-facing timeout message.
 func TestToolReadinessDoneErrorReportsTimeoutWhenParentIsActive(t *testing.T) {
 	originalFinder := findRunningUnityProcessForReadiness
-	findRunningUnityProcessForReadiness = func(context.Context, string) (*unityProcess, error) {
+	findRunningUnityProcessForReadiness = func(context.Context, string) (*UnityProcess, error) {
 		return nil, nil
 	}
 	t.Cleanup(func() {
@@ -87,8 +87,8 @@ func TestToolReadinessDoneErrorReportsTimeoutWhenParentIsActive(t *testing.T) {
 // Verifies that readiness timeout reports a live Unity process whose IPC server does not respond.
 func TestToolReadinessDoneErrorReportsServerNotRespondingWhenUnityRuns(t *testing.T) {
 	originalFinder := findRunningUnityProcessForReadiness
-	findRunningUnityProcessForReadiness = func(context.Context, string) (*unityProcess, error) {
-		return &unityProcess{pid: 123}, nil
+	findRunningUnityProcessForReadiness = func(context.Context, string) (*UnityProcess, error) {
+		return &UnityProcess{Pid: 123}, nil
 	}
 	t.Cleanup(func() {
 		findRunningUnityProcessForReadiness = originalFinder
@@ -96,8 +96,20 @@ func TestToolReadinessDoneErrorReportsServerNotRespondingWhenUnityRuns(t *testin
 
 	err := toolReadinessDoneError(context.Background(), t.TempDir(), errors.New("probe failed"))
 
-	var notRespondingErr unityServerNotRespondingError
+	var notRespondingErr UnityServerNotRespondingError
 	if !errors.As(err, &notRespondingErr) {
 		t.Fatalf("expected Unity server not responding error, got %v", err)
+	}
+}
+
+// Verifies that readiness probes exercise the same foreground warmup path as user executions.
+func TestExecuteDynamicCodeReadinessProbeParamsUseForegroundWarmup(t *testing.T) {
+	params := executeDynamicCodeReadinessProbeParams()
+
+	if params["YieldToForegroundRequests"] != false {
+		t.Fatalf("readiness probe should use foreground warmup: %#v", params["YieldToForegroundRequests"])
+	}
+	if params[DomainReloadWaitParam] != false {
+		t.Fatalf("readiness probe should not wait for its own reload check: %#v", params[DomainReloadWaitParam])
 	}
 }

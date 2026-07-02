@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 	"github.com/hatayama/unity-cli-loop/cli/internal/unityipc"
 )
 
@@ -112,9 +113,9 @@ func runWaitForPausePointCommand(
 ) int {
 	options, err := parseWaitForPausePointOptions(args)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     pausePointWaitCommandName,
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.PausePointWaitCommandName,
 		})
 		return 1
 	}
@@ -131,18 +132,18 @@ func runPausePointStatusCommand(
 ) int {
 	options, err := parsePausePointStatusOptions(args)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     pausePointStatusUserCommandName,
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.PausePointStatusUserCommandName,
 		})
 		return 1
 	}
 
 	response, err := queryPausePointStatus(ctx, connection, options.id)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     pausePointStatusUserCommandName,
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.PausePointStatusUserCommandName,
 		})
 		return 1
 	}
@@ -150,14 +151,14 @@ func runPausePointStatusCommand(
 
 	result, err := json.Marshal(response)
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     pausePointStatusUserCommandName,
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.PausePointStatusUserCommandName,
 		})
 		return 1
 	}
 
-	writeJSON(stdout, result)
+	clicore.WriteJSON(stdout, result)
 	return 0
 }
 
@@ -169,13 +170,13 @@ func runWaitForPausePoint(
 	stderr io.Writer,
 ) int {
 	startedAt := time.Now()
-	spinner := newToolSpinner(stderr, pausePointWaitCommandName)
+	spinner := clicore.NewToolSpinner(stderr, clicore.PausePointWaitCommandName)
 	response, state, err := waitForPausePoint(ctx, connection, options)
 	spinner.Stop()
 	if err != nil {
-		writeClassifiedError(stderr, err, errorContext{
-			projectRoot: connection.ProjectRoot,
-			command:     pausePointWaitCommandName,
+		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.PausePointWaitCommandName,
 		})
 		return 1
 	}
@@ -195,14 +196,14 @@ func runWaitForPausePoint(
 		}
 		result, marshalErr := json.Marshal(payload)
 		if marshalErr != nil {
-			writeClassifiedError(stderr, marshalErr, errorContext{
-				projectRoot: connection.ProjectRoot,
-				command:     pausePointWaitCommandName,
+			clicore.WriteClassifiedError(stderr, marshalErr, clicore.ErrorContext{
+				ProjectRoot: connection.ProjectRoot,
+				Command:     clicore.PausePointWaitCommandName,
 			})
 			return 1
 		}
-		writeJSON(stdout, result)
-		writeDebugTiming(stderr, pausePointWaitCommandName, time.Since(startedAt), unityipc.UnitySendOutcome{})
+		clicore.WriteJSON(stdout, result)
+		writeDebugTiming(stderr, clicore.PausePointWaitCommandName, time.Since(startedAt), unityipc.UnitySendOutcome{})
 		return 0
 	}
 
@@ -219,7 +220,7 @@ func runWaitForPausePoint(
 			waitErr.Details["EvidenceSummary"] = buildPausePointEvidenceSummary(response, logs)
 		}
 	}
-	writeErrorEnvelope(stderr, waitErr)
+	clicore.WriteErrorEnvelope(stderr, waitErr)
 	return 1
 }
 
@@ -232,34 +233,34 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
-		name, value, consumedNext, err := parseFlagValue(arg, args, index)
+		name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 		if err != nil {
 			return waitForPausePointOptions{}, err
 		}
 
 		switch name {
-		case pausePointIDFlagName:
+		case clicore.PausePointIDFlagName:
 			options.id = value
-		case pausePointTimeoutFlagName:
+		case clicore.PausePointTimeoutFlagName:
 			timeoutSeconds, parseErr := parsePausePointTimeoutSeconds(value)
 			if parseErr != nil {
 				return waitForPausePointOptions{}, parseErr
 			}
 			options.timeoutSeconds = timeoutSeconds
 			options.timeout = time.Duration(timeoutSeconds) * time.Second
-		case pausePointLogsMaxCountFlagName:
+		case clicore.PausePointLogsMaxCountFlagName:
 			maxCount, parseErr := strconv.Atoi(value)
 			if parseErr != nil || maxCount <= 0 {
-				return waitForPausePointOptions{}, invalidValueArgumentError(
-					"--"+pausePointLogsMaxCountFlagName, value, "positive integer")
+				return waitForPausePointOptions{}, clicore.InvalidValueArgumentError(
+					"--"+clicore.PausePointLogsMaxCountFlagName, value, "positive integer")
 			}
 			options.matchingLogsMaxCount = maxCount
 		default:
-			return waitForPausePointOptions{}, &argumentError{
-				message:     "Unknown option for wait-for-pause-point: --" + name,
-				option:      "--" + name,
-				command:     pausePointWaitCommandName,
-				nextActions: []string{"Run `uloop wait-for-pause-point --help` to inspect supported options."},
+			return waitForPausePointOptions{}, &clicore.ArgumentError{
+				Message:     "Unknown option for wait-for-pause-point: --" + name,
+				Option:      "--" + name,
+				Command:     clicore.PausePointWaitCommandName,
+				NextActions: []string{"Run `uloop wait-for-pause-point --help` to inspect supported options."},
 			}
 		}
 
@@ -269,12 +270,12 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 	}
 
 	if options.id == "" {
-		return waitForPausePointOptions{}, &argumentError{
-			message:      "Missing required option: --id",
-			option:       "--" + pausePointIDFlagName,
-			expectedType: "value",
-			command:      pausePointWaitCommandName,
-			nextActions:  []string{"Pass `--id <marker-id>` matching UloopPausePoint.Pause(\"<marker-id>\")."},
+		return waitForPausePointOptions{}, &clicore.ArgumentError{
+			Message:      "Missing required option: --id",
+			Option:       "--" + clicore.PausePointIDFlagName,
+			ExpectedType: "value",
+			Command:      clicore.PausePointWaitCommandName,
+			NextActions:  []string{"Pass `--id <marker-id>` matching UloopPausePoint.Pause(\"<marker-id>\")."},
 		}
 	}
 
@@ -286,20 +287,20 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
-		name, value, consumedNext, err := parseFlagValue(arg, args, index)
+		name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 		if err != nil {
 			return pausePointStatusOptions{}, err
 		}
 
 		switch name {
-		case pausePointIDFlagName:
+		case clicore.PausePointIDFlagName:
 			options.id = value
 		default:
-			return pausePointStatusOptions{}, &argumentError{
-				message:     "Unknown option for pause-point-status: --" + name,
-				option:      "--" + name,
-				command:     pausePointStatusUserCommandName,
-				nextActions: []string{"Run `uloop pause-point-status --help` to inspect supported options."},
+			return pausePointStatusOptions{}, &clicore.ArgumentError{
+				Message:     "Unknown option for pause-point-status: --" + name,
+				Option:      "--" + name,
+				Command:     clicore.PausePointStatusUserCommandName,
+				NextActions: []string{"Run `uloop pause-point-status --help` to inspect supported options."},
 			}
 		}
 
@@ -309,12 +310,12 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 	}
 
 	if options.id == "" {
-		return pausePointStatusOptions{}, &argumentError{
-			message:      "Missing required option: --id",
-			option:       "--" + pausePointIDFlagName,
-			expectedType: "value",
-			command:      pausePointStatusUserCommandName,
-			nextActions:  []string{"Pass `--id <marker-id>` matching UloopPausePoint.Pause(\"<marker-id>\")."},
+		return pausePointStatusOptions{}, &clicore.ArgumentError{
+			Message:      "Missing required option: --id",
+			Option:       "--" + clicore.PausePointIDFlagName,
+			ExpectedType: "value",
+			Command:      clicore.PausePointStatusUserCommandName,
+			NextActions:  []string{"Pass `--id <marker-id>` matching UloopPausePoint.Pause(\"<marker-id>\")."},
 		}
 	}
 
@@ -324,7 +325,7 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 func parsePausePointTimeoutSeconds(value string) (int, error) {
 	timeoutSeconds, err := strconv.Atoi(value)
 	if err != nil || timeoutSeconds <= 0 {
-		return 0, invalidValueArgumentError("--"+pausePointTimeoutFlagName, value, "positive integer")
+		return 0, clicore.InvalidValueArgumentError("--"+clicore.PausePointTimeoutFlagName, value, "positive integer")
 	}
 	return timeoutSeconds, nil
 }
@@ -423,7 +424,7 @@ func queryPausePointStatusFromUnity(
 	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
 	defer cancel()
 
-	result, err := unityipc.NewClient(connection, version).Send(
+	result, err := unityipc.NewClient(connection, clicore.Version).Send(
 		probeContext,
 		pausePointStatusCommandName,
 		map[string]any{"Id": id},
@@ -447,7 +448,7 @@ func clearPausePointStatusFromUnity(
 	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
 	defer cancel()
 
-	result, err := unityipc.NewClient(connection, version).Send(
+	result, err := unityipc.NewClient(connection, clicore.Version).Send(
 		probeContext,
 		pausePointClearStatusCommandName,
 		map[string]any{"Id": id},
