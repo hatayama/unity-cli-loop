@@ -41,28 +41,21 @@ type cliBinaryNames struct {
 	Windows string `json:"windows"`
 }
 
-// Tests that feature packages do not depend on the CLI orchestration layer (dispatcher, project runner, or shared CLI core).
+// Tests that every package outside the CLI orchestration layer (dispatcher,
+// project runner, shared CLI core) and cmd/ stays free of orchestration
+// imports. Skipping only known orchestration packages keeps future packages
+// covered by default instead of requiring a hand-maintained feature list.
 func TestCliFeaturePackagesDoNotImportOrchestrationLayer(t *testing.T) {
 	moduleRoot := findModuleRoot(t)
 	packages := listPackages(t, moduleRoot)
-	featurePackagePrefixes := []string{
-		cliModulePath + "/internal/install",
-		cliModulePath + "/internal/uninstall",
-		cliModulePath + "/internal/update",
-		cliModulePath + "/internal/project",
-		cliModulePath + "/internal/skills",
-		cliModulePath + "/internal/tools",
-		cliModulePath + "/internal/unityipc",
-		cliModulePath + "/internal/version",
-		cliModulePath + "/internal/automation",
-	}
 	orchestrationPackagePrefixes := []string{
 		cliModulePath + "/internal/dispatcher",
 		cliModulePath + "/internal/projectrunner",
 		cliModulePath + "/internal/clicore",
 	}
 	for _, goPackage := range packages {
-		if !hasAnyPackagePrefix(goPackage.ImportPath, featurePackagePrefixes) {
+		if hasAnyPackagePrefix(goPackage.ImportPath, orchestrationPackagePrefixes) ||
+			strings.HasPrefix(goPackage.ImportPath, cliModulePath+"/cmd/") {
 			continue
 		}
 		for _, importedPath := range goPackage.Imports {
