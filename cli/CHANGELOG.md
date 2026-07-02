@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.46](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.45...uloop-project-runner-v3.0.0-beta.46) (2026-07-02)
+
+
+### Bug Fixes
+
+* forward project-scoped --version to the pinned project runner ([#1460](https://github.com/hatayama/unity-cli-loop/issues/1460)) ([7394c6b](https://github.com/hatayama/unity-cli-loop/commit/7394c6bb34eb429b31817b505f49b8e3de509547))
+* Setup no longer reports optional npm cleanup failures ([#1452](https://github.com/hatayama/unity-cli-loop/issues/1452)) ([4aa729d](https://github.com/hatayama/unity-cli-loop/commit/4aa729dd29e98b608b906f542a46ed5e333533f6))
+
 ## [3.0.0-beta.45](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.44...uloop-project-runner-v3.0.0-beta.45) (2026-07-01)
 
 
