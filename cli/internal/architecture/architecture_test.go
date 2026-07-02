@@ -41,23 +41,47 @@ type cliBinaryNames struct {
 	Windows string `json:"windows"`
 }
 
-// Tests that feature packages do not depend on CLI input/output orchestration.
-func TestCliFeaturePackagesDoNotImportCli(t *testing.T) {
+// Tests that feature packages do not depend on the CLI orchestration layer (dispatcher, project runner, or shared CLI core).
+func TestCliFeaturePackagesDoNotImportOrchestrationLayer(t *testing.T) {
 	moduleRoot := findModuleRoot(t)
 	packages := listPackages(t, moduleRoot)
+	featurePackagePrefixes := []string{
+		cliModulePath + "/internal/install",
+		cliModulePath + "/internal/uninstall",
+		cliModulePath + "/internal/update",
+		cliModulePath + "/internal/project",
+		cliModulePath + "/internal/skills",
+		cliModulePath + "/internal/tools",
+		cliModulePath + "/internal/unityipc",
+		cliModulePath + "/internal/version",
+		cliModulePath + "/internal/automation",
+	}
+	orchestrationPackagePrefixes := []string{
+		cliModulePath + "/internal/dispatcher",
+		cliModulePath + "/internal/projectrunner",
+		cliModulePath + "/internal/clicore",
+	}
 	for _, goPackage := range packages {
-		if goPackage.ImportPath == cliModulePath+"/internal/cli" ||
-			goPackage.ImportPath == cliModulePath+"/internal/dispatcher" ||
-			goPackage.ImportPath == cliModulePath+"/internal/projectrunner" ||
-			strings.HasPrefix(goPackage.ImportPath, cliModulePath+"/cmd/") {
+		if !hasAnyPackagePrefix(goPackage.ImportPath, featurePackagePrefixes) {
 			continue
 		}
 		for _, importedPath := range goPackage.Imports {
-			if strings.HasPrefix(importedPath, cliModulePath+"/internal/cli") {
-				t.Fatalf("feature package %s must not import CLI package %s", goPackage.ImportPath, importedPath)
+			if hasAnyPackagePrefix(importedPath, orchestrationPackagePrefixes) {
+				t.Fatalf("feature package %s must not import CLI orchestration package %s", goPackage.ImportPath, importedPath)
 			}
 		}
 	}
+}
+
+// hasAnyPackagePrefix reports whether importPath is packagePrefix itself or a subpackage of it,
+// avoiding false positives such as "/internal/project" matching "/internal/projectrunner".
+func hasAnyPackagePrefix(importPath string, packagePrefixes []string) bool {
+	for _, packagePrefix := range packagePrefixes {
+		if importPath == packagePrefix || strings.HasPrefix(importPath, packagePrefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // Tests that CLI internal packages stay inside explicit runtime boundaries.
@@ -71,7 +95,7 @@ func TestCliInternalPackagesStayInsideExplicitBoundaries(t *testing.T) {
 		if goPackage.ImportPath == cliModulePath+"/internal/architecture" {
 			continue
 		}
-		for _, boundary := range []string{"/internal/automation", "/internal/cli", "/internal/clicore", "/internal/dispatcher", "/internal/install", "/internal/project", "/internal/projectrunner", "/internal/skills", "/internal/tools", "/internal/uninstall", "/internal/unityipc", "/internal/update", "/internal/version"} {
+		for _, boundary := range []string{"/internal/automation", "/internal/clicore", "/internal/dispatcher", "/internal/install", "/internal/project", "/internal/projectrunner", "/internal/skills", "/internal/tools", "/internal/uninstall", "/internal/unityipc", "/internal/update", "/internal/version"} {
 			if strings.Contains(goPackage.ImportPath, boundary) {
 				goto nextPackage
 			}
@@ -89,6 +113,32 @@ func TestDispatcherCommandOnlyDependsOnDispatcherEntrypoint(t *testing.T) {
 // Tests that the project runner command only enters the project runner package.
 func TestProjectRunnerCommandOnlyDependsOnProjectRunnerEntrypoint(t *testing.T) {
 	assertCommandOnlyDependsOnInternalEntrypoint(t, "./cmd/project-runner", cliModulePath+"/internal/projectrunner")
+}
+
+// Tests that the dispatcher binary does not transitively pull in the project runner package.
+func TestDispatcherBinaryDoesNotTransitivelyDependOnProjectRunner(t *testing.T) {
+	assertBinaryDoesNotTransitivelyDependOn(t, "./cmd/dispatcher", cliModulePath+"/internal/projectrunner")
+}
+
+// Tests that the project runner binary does not transitively pull in the dispatcher package.
+func TestProjectRunnerBinaryDoesNotTransitivelyDependOnDispatcher(t *testing.T) {
+	assertBinaryDoesNotTransitivelyDependOn(t, "./cmd/project-runner", cliModulePath+"/internal/dispatcher")
+}
+
+func assertBinaryDoesNotTransitivelyDependOn(t *testing.T, commandPath string, forbiddenPackage string) {
+	t.Helper()
+	moduleRoot := findModuleRoot(t)
+	command := exec.Command("go", "list", "-deps", commandPath)
+	command.Dir = moduleRoot
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("go list -deps failed: %v", err)
+	}
+	for _, dependency := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if dependency == forbiddenPackage {
+			t.Fatalf("%s must not transitively depend on %s", commandPath, forbiddenPackage)
+		}
+	}
 }
 
 func assertCommandOnlyDependsOnInternalEntrypoint(t *testing.T, commandPath string, expectedEntrypoint string) {
