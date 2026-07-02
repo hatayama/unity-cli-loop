@@ -302,6 +302,31 @@ create_release_repo() {
   printf '%s\n' "$work_dir"
 }
 
+create_key_rename_repo() {
+  name=$1
+  work_dir="$TMP_DIR/$name"
+  mkdir -p "$work_dir"
+
+  (
+    cd "$work_dir"
+    git init -q
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+
+    write_release_files 3.0.0-beta.6 "." "Packages/src/CHANGELOG.md"
+    git add .
+    git commit -q -m "chore: release v3-beta"
+    git tag uloop-project-runner-v3.0.0-beta.6
+    git rev-parse HEAD > "$work_dir/release-sha.txt"
+
+    write_release_files 3.0.0-beta.6
+    git add .
+    git commit -q -m "chore: move unity-package release root"
+  )
+
+  printf '%s\n' "$work_dir"
+}
+
 prepare_origin_branch() {
   work_dir=$1
   branch_name=$2
@@ -507,6 +532,17 @@ test_retries_until_cli_assets_are_ready() {
   assert_contains "$work_dir/github-output.txt" "ready=true"
 }
 
+# Verifies a manifest key rename at an unchanged version is not mistaken for the release-please release commit.
+test_key_rename_commit_is_not_treated_as_release_commit() {
+  work_dir=$(create_key_rename_repo key-rename-root)
+  release_sha=$(cat "$work_dir/release-sha.txt")
+
+  run_sync "$work_dir" v3.0.0-beta.6 false "$release_sha"
+
+  assert_contains "$work_dir/output.txt" "Release v3.0.0-beta.6 already exists."
+  assert_not_contains "$work_dir/stderr.txt" "points at"
+}
+
 # Verifies a root package release created by another workflow during creation is reused.
 test_concurrent_root_release_creation_is_reused() {
   work_dir=$(create_release_repo concurrent-root-create)
@@ -531,4 +567,5 @@ test_waits_for_cli_assets_before_creating_root_release
 test_waits_for_dispatcher_assets_before_creating_root_release
 test_waits_when_dispatcher_asset_list_fails
 test_retries_until_cli_assets_are_ready
+test_key_rename_commit_is_not_treated_as_release_commit
 test_concurrent_root_release_creation_is_reused
