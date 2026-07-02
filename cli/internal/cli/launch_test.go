@@ -913,6 +913,31 @@ func createLaunchTestProject(t *testing.T) string {
 	return projectRoot
 }
 
+// readOnlyCliVibeLog and enableCliVibeLog are duplicated from
+// internal/projectrunner's test helpers of the same name: test helpers
+// cannot be shared across packages, and both packages exercise CLI Vibe log
+// writes around launch and connection retry behavior.
+func readOnlyCliVibeLog(t *testing.T, projectRoot string) string {
+	t.Helper()
+	logFiles, err := filepath.Glob(filepath.Join(projectRoot, clicore.CLIVibeLogDirectory, clicore.CLIVibeLogPrefix+"_*.json"))
+	if err != nil {
+		t.Fatalf("failed to glob CLI Vibe logs: %v", err)
+	}
+	if len(logFiles) != 1 {
+		t.Fatalf("expected one CLI Vibe log, got %d: %#v", len(logFiles), logFiles)
+	}
+	content, err := os.ReadFile(logFiles[0])
+	if err != nil {
+		t.Fatalf("failed to read CLI Vibe log: %v", err)
+	}
+	return string(content)
+}
+
+func enableCliVibeLog(t *testing.T) {
+	t.Helper()
+	t.Setenv(clicore.CLIVibeLogEnvName, "1")
+}
+
 func decodeLaunchResponseFromOutput(t *testing.T, output string) launchReadyResponse {
 	t.Helper()
 

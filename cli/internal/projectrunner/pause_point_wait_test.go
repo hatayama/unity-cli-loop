@@ -1,9 +1,10 @@
-package cli
+package projectrunner
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1012,4 +1013,31 @@ func parsePausePointErrorEnvelope(t *testing.T, payload []byte) clicore.CLIError
 		t.Fatalf("stderr is not valid JSON: %v\n%s", err, string(payload))
 	}
 	return envelope
+}
+
+// createLaunchTestProject and writeToolSettings are duplicated from
+// internal/cli's test helpers of the same name: test helpers cannot be
+// shared across packages, and both packages need a minimal Unity project
+// fixture with tool settings for their command-gating tests.
+func createLaunchTestProject(t *testing.T) string {
+	t.Helper()
+
+	projectRoot := t.TempDir()
+	for _, directory := range []string{"Assets", "ProjectSettings"} {
+		if err := os.MkdirAll(filepath.Join(projectRoot, directory), 0o755); err != nil {
+			t.Fatalf("failed to create %s: %v", directory, err)
+		}
+	}
+	return projectRoot
+}
+
+func writeToolSettings(t *testing.T, projectRoot string, content string) {
+	t.Helper()
+	settingsDir := filepath.Join(projectRoot, ".uloop")
+	if err := os.MkdirAll(settingsDir, 0o755); err != nil {
+		t.Fatalf("failed to create settings dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(settingsDir, "settings.tools.json"), []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write tool settings: %v", err)
+	}
 }

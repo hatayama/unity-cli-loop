@@ -3,7 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -47,28 +48,6 @@ func TestPrintLauncherHelpListsNativeCommandsAndLiveToolGuidance(t *testing.T) {
 		if strings.Contains(output, unexpected) {
 			t.Fatalf("help output should not include baked-in Unity tool %q:\n%s", unexpected, output)
 		}
-	}
-}
-
-func TestRunProjectLocalVersionJSONIncludesProtocolVersion(t *testing.T) {
-	// Verifies Unity setup can inspect protocol compatibility without parsing human help text.
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	code := RunProjectLocal(context.Background(), []string{"--version", "--json"}, &stdout, &stderr)
-
-	if code != 0 {
-		t.Fatalf("version json command failed with code %d: %s", code, stderr.String())
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
-		t.Fatalf("version json output is not JSON: %v\n%s", err, stdout.String())
-	}
-	if payload["ProjectRunnerVersion"] != clicore.Version {
-		t.Fatalf("projectRunnerVersion mismatch: %#v", payload)
-	}
-	if payload["ProtocolVersion"] != float64(clicore.ProtocolVersion) {
-		t.Fatalf("protocolVersion mismatch: %#v", payload)
 	}
 }
 
@@ -307,22 +286,6 @@ func TestRunDispatcherCompileHelpWinsAfterOtherOptions(t *testing.T) {
 	}
 }
 
-// Tests that unknown leading options are reported as global option errors.
-func TestRunProjectLocalRejectsUnknownGlobalOption(t *testing.T) {
-	t.Chdir(t.TempDir())
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	code := RunProjectLocal(context.Background(), []string{"--project-pathology"}, &stdout, &stderr)
-
-	if code != 1 {
-		t.Fatalf("exit code mismatch: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
-	}
-	if !strings.Contains(stderr.String(), "Unknown global option: --project-pathology") {
-		t.Fatalf("stderr missing unknown option error:\n%s", stderr.String())
-	}
-}
-
 // Tests that first-party test help lists options without contacting Unity.
 func TestRunDispatcherRunTestsHelpDoesNotRequireUnityProject(t *testing.T) {
 	t.Chdir(t.TempDir())
@@ -386,5 +349,19 @@ func TestRunDispatcherSkillsSubcommandHelpDoesNotRequireUnityProject(t *testing.
 		if !strings.Contains(output, expected) {
 			t.Fatalf("skills install help missing %q:\n%s", expected, output)
 		}
+	}
+}
+
+// writeToolCache is duplicated from internal/projectrunner's test helper of
+// the same name: test helpers cannot be shared across packages, and both
+// packages need a project tool cache fixture for their help/dispatch tests.
+func writeToolCache(t *testing.T, projectRoot string, content string) {
+	t.Helper()
+	cachePath := filepath.Join(projectRoot, clicore.CacheDirectoryName, clicore.CacheFileName)
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+		t.Fatalf("failed to create tool cache directory: %v", err)
+	}
+	if err := os.WriteFile(cachePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write tool cache: %v", err)
 	}
 }

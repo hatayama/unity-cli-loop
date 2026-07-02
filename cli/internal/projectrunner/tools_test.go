@@ -1,6 +1,7 @@
-package cli
+package projectrunner
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -255,6 +256,35 @@ func TestBuildToolParamsRejectsExplicitBooleanValues(t *testing.T) {
 	_, _, err := buildToolParams([]string{"--enabled", "true"}, tool)
 	if err == nil {
 		t.Fatal("expected boolean value error")
+	}
+}
+
+// Tests that explicit boolean values are returned as structured CLI errors.
+func TestBuildToolParamsReturnsStructuredBooleanValueError(t *testing.T) {
+	tool := clicore.ToolDefinition{
+		Name: "sample-tool",
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
+				"Enabled": {Type: "boolean"},
+			},
+		},
+	}
+
+	_, _, err := buildToolParams([]string{"--enabled", "true"}, tool)
+	if err == nil {
+		t.Fatal("expected argument error")
+	}
+
+	var argumentErr *clicore.ArgumentError
+	if !errors.As(err, &argumentErr) {
+		t.Fatalf("expected argumentError, got %T", err)
+	}
+	cliErr := argumentErr.ToCLIError(clicore.ErrorContext{ProjectRoot: "/tmp/MyProject", Command: "sample-tool"})
+	if cliErr.ErrorCode != clicore.ErrorCodeInvalidArgument {
+		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+	if cliErr.Details["ExpectedType"] != "flag" {
+		t.Fatalf("details mismatch: %#v", cliErr.Details)
 	}
 }
 

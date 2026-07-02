@@ -1,4 +1,4 @@
-package cli
+package projectrunner
 
 import "github.com/hatayama/unity-cli-loop/cli/internal/clicore"
 
