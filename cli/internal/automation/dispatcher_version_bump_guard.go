@@ -29,6 +29,7 @@ var dispatcherReleaseInputPatterns = []string{
 	"cli/internal/cli/tools.go",
 	"cli/internal/cli/uninstall.go",
 	"cli/internal/cli/update.go",
+	"cli/internal/dispatcher/*.go",
 	"cli/internal/install/*.go",
 	"cli/internal/uninstall/*.go",
 	"cli/internal/update/*.go",
