@@ -9,8 +9,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/install"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/install"
 )
 
 const (

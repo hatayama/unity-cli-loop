@@ -1,7 +1,7 @@
-// Package clicontract holds the dispatcher-side release contract. The runner-side contract
-// has moved to common/clicontract; the dispatcher contract itself temporarily remains here at
-// the cli module root and moves into the dispatcher module in a later step.
-package clicontract
+// Package dispatchercontract holds the dispatcher-side release contract. The runner-side
+// contract lives separately in common/clicontract; this package owns the dispatcher release
+// contract at the dispatcher module root.
+package dispatchercontract
 
 import (
 	"embed"

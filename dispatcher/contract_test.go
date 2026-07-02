@@ -1,4 +1,4 @@
-package clicontract
+package dispatchercontract
 
 import (
 	"encoding/json"

@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/dispatcher"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/dispatcher"
 )
 
 func main() {

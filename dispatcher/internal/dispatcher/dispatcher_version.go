@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"io"
 
-	clicontract "github.com/hatayama/unity-cli-loop/cli"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	dispatchercontract "github.com/hatayama/unity-cli-loop/dispatcher"
 )
 
 var (
-	dispatcherVersion         = clicontract.DispatcherCurrent.DispatcherVersion
-	dispatcherContractVersion = clicontract.DispatcherCurrent.DispatcherContractVersion
+	dispatcherVersion         = dispatchercontract.DispatcherCurrent.DispatcherVersion
+	dispatcherContractVersion = dispatchercontract.DispatcherCurrent.DispatcherContractVersion
 )
 
 func writeDispatcherVersionJSON(stdout io.Writer) {

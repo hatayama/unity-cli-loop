@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	sharedupdate "github.com/hatayama/unity-cli-loop/cli/internal/update"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	sharedupdate "github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
 var dispatcherHTTPClient = &http.Client{Timeout: 2 * time.Minute}

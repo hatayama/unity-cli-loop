@@ -141,7 +141,7 @@ assert_json_value '.packages["cli"].["changelog-path"]' 'CHANGELOG.md'
 # cli/dispatcher-contract.json cannot be listed here: release-please matches
 # exclude-paths as directory prefixes only, so a plain-file entry is a silent
 # no-op (see the directory check below).
-assert_json_value '.packages["cli"].["exclude-paths"] | sort | join(",")' 'cli/cmd/dispatch-release-please-pr-checks,cli/cmd/dispatcher,cli/internal/automation,cli/internal/dispatcher'
+assert_json_value '.packages["cli"].["exclude-paths"] | sort | join(",")' 'cli/cmd/dispatch-release-please-pr-checks,cli/internal/automation'
 assert_json_value '.packages["cli"].["extra-files"] | length' '4'
 assert_json_value '.packages["cli"].["extra-files"][0].path' '/common/tools/default-tools.json'
 assert_json_value '.packages["cli"].["extra-files"][1].path' '/common/clicontract/contract.json'

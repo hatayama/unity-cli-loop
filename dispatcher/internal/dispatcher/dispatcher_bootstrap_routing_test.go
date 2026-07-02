@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hatayama/unity-cli-loop/cli/internal/update"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
 // These tests lock the dispatcher-process routing of bootstrap commands across

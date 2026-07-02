@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	clicontract "github.com/hatayama/unity-cli-loop/cli"
-	"github.com/hatayama/unity-cli-loop/cli/internal/update"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	dispatchercontract "github.com/hatayama/unity-cli-loop/dispatcher"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
 func TestUpdateCommandForDarwinUsesDirectInstaller(t *testing.T) {
@@ -24,8 +24,8 @@ func TestUpdateCommandForDarwinUsesDirectInstaller(t *testing.T) {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
-	expectedScriptURL := update.ScriptURL(clicontract.DispatcherCurrent.DispatcherVersion, update.PosixScriptName)
-	expectedReleaseTag := update.UpdateSelectorForVersion(clicontract.DispatcherCurrent.DispatcherVersion)
+	expectedScriptURL := update.ScriptURL(dispatchercontract.DispatcherCurrent.DispatcherVersion, update.PosixScriptName)
+	expectedReleaseTag := update.UpdateSelectorForVersion(dispatchercontract.DispatcherCurrent.DispatcherVersion)
 	if !strings.Contains(joinedArgs, expectedScriptURL) {
 		t.Fatalf("installer URL missing: %s", joinedArgs)
 	}
@@ -51,8 +51,8 @@ func TestUpdateCommandForWindowsUsesPowerShellInstaller(t *testing.T) {
 		t.Fatalf("command mismatch: %s", commandName)
 	}
 	joinedArgs := strings.Join(args, " ")
-	expectedScriptURL := update.ScriptURL(clicontract.DispatcherCurrent.DispatcherVersion, update.WindowsScriptName)
-	expectedReleaseTag := update.UpdateSelectorForVersion(clicontract.DispatcherCurrent.DispatcherVersion)
+	expectedScriptURL := update.ScriptURL(dispatchercontract.DispatcherCurrent.DispatcherVersion, update.WindowsScriptName)
+	expectedReleaseTag := update.UpdateSelectorForVersion(dispatchercontract.DispatcherCurrent.DispatcherVersion)
 	if !strings.Contains(joinedArgs, expectedScriptURL) {
 		t.Fatalf("installer URL missing: %s", joinedArgs)
 	}

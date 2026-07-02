@@ -38,9 +38,7 @@
       "include-component-in-tag": true,
       "exclude-paths": [
         "cli/cmd/dispatch-release-please-pr-checks",
-        "cli/cmd/dispatcher",
-        "cli/internal/automation",
-        "cli/internal/dispatcher"
+        "cli/internal/automation"
       ],
       "changelog-path": "CHANGELOG.md",
       "extra-files": [

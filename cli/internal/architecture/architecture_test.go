@@ -13,6 +13,7 @@ import (
 
 const (
 	cliModulePath          = "github.com/hatayama/unity-cli-loop/cli"
+	dispatcherModulePath   = "github.com/hatayama/unity-cli-loop/dispatcher"
 	maxProductionFileLines = 500
 )
 
@@ -98,31 +99,32 @@ func TestCliInternalPackagesStayInsideExplicitBoundaries(t *testing.T) {
 	}
 }
 
-// Tests that the dispatcher command only enters the dispatcher package.
+// Tests that the dispatcher command, now in its own module, only enters the dispatcher package.
 func TestDispatcherCommandOnlyDependsOnDispatcherEntrypoint(t *testing.T) {
-	assertCommandOnlyDependsOnInternalEntrypoint(t, "./cmd/dispatcher", cliModulePath+"/internal/dispatcher")
+	dispatcherModuleDir := filepath.Join(findRepositoryRoot(t, findModuleRoot(t)), "dispatcher")
+	assertCommandOnlyDependsOnInternalEntrypoint(t, dispatcherModuleDir, dispatcherModulePath, "./cmd/dispatcher", dispatcherModulePath+"/internal/dispatcher")
 }
 
 // Tests that the project runner command only enters the project runner package.
 func TestProjectRunnerCommandOnlyDependsOnProjectRunnerEntrypoint(t *testing.T) {
-	assertCommandOnlyDependsOnInternalEntrypoint(t, "./cmd/project-runner", cliModulePath+"/internal/projectrunner")
+	assertCommandOnlyDependsOnInternalEntrypoint(t, findModuleRoot(t), cliModulePath, "./cmd/project-runner", cliModulePath+"/internal/projectrunner")
 }
 
-// Tests that the dispatcher binary does not transitively pull in the project runner package.
+// Tests that the dispatcher binary, now in its own module, does not transitively pull in the CLI module's project runner package.
 func TestDispatcherBinaryDoesNotTransitivelyDependOnProjectRunner(t *testing.T) {
-	assertBinaryDoesNotTransitivelyDependOn(t, "./cmd/dispatcher", cliModulePath+"/internal/projectrunner")
+	dispatcherModuleDir := filepath.Join(findRepositoryRoot(t, findModuleRoot(t)), "dispatcher")
+	assertBinaryDoesNotTransitivelyDependOn(t, dispatcherModuleDir, "./cmd/dispatcher", cliModulePath+"/internal/projectrunner")
 }
 
-// Tests that the project runner binary does not transitively pull in the dispatcher package.
+// Tests that the project runner binary does not transitively pull in the dispatcher module's dispatcher package.
 func TestProjectRunnerBinaryDoesNotTransitivelyDependOnDispatcher(t *testing.T) {
-	assertBinaryDoesNotTransitivelyDependOn(t, "./cmd/project-runner", cliModulePath+"/internal/dispatcher")
+	assertBinaryDoesNotTransitivelyDependOn(t, findModuleRoot(t), "./cmd/project-runner", dispatcherModulePath+"/internal/dispatcher")
 }
 
-func assertBinaryDoesNotTransitivelyDependOn(t *testing.T, commandPath string, forbiddenPackage string) {
+func assertBinaryDoesNotTransitivelyDependOn(t *testing.T, moduleDir string, commandPath string, forbiddenPackage string) {
 	t.Helper()
-	moduleRoot := findModuleRoot(t)
 	command := exec.Command("go", "list", "-deps", commandPath)
-	command.Dir = moduleRoot
+	command.Dir = moduleDir
 	output, err := command.Output()
 	if err != nil {
 		t.Fatalf("go list -deps failed: %v", err)
@@ -134,11 +136,10 @@ func assertBinaryDoesNotTransitivelyDependOn(t *testing.T, commandPath string, f
 	}
 }
 
-func assertCommandOnlyDependsOnInternalEntrypoint(t *testing.T, commandPath string, expectedEntrypoint string) {
+func assertCommandOnlyDependsOnInternalEntrypoint(t *testing.T, moduleDir string, modulePath string, commandPath string, expectedEntrypoint string) {
 	t.Helper()
-	moduleRoot := findModuleRoot(t)
 	command := exec.Command("go", "list", "-json", commandPath)
-	command.Dir = moduleRoot
+	command.Dir = moduleDir
 	output, err := command.Output()
 	if err != nil {
 		t.Fatalf("go list failed: %v", err)
@@ -154,7 +155,7 @@ func assertCommandOnlyDependsOnInternalEntrypoint(t *testing.T, commandPath stri
 				t.Fatalf("CLI command must not depend on removed split module package %s", dependency)
 			}
 		}
-		if !strings.HasPrefix(dependency, cliModulePath+"/internal/") {
+		if !strings.HasPrefix(dependency, modulePath+"/internal/") {
 			continue
 		}
 		if dependency != expectedEntrypoint {

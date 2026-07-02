@@ -36,4 +36,5 @@ run_module_checks() {
 }
 
 run_module_checks "$ROOT_DIR/common"
+run_module_checks "$ROOT_DIR/dispatcher"
 run_module_checks "$CLI_DIR"
