@@ -46,6 +46,10 @@ func printNativeSingleCommandHelp(command string, stdout io.Writer) {
 	if options, ok := nativeCommandOptions[command]; ok && len(options) > 0 {
 		clicore.WriteLine(stdout, " [options]")
 		clicore.WriteLine(stdout, "")
+		if description, ok := nativeCommandDescription(command); ok {
+			clicore.WriteLine(stdout, description)
+			clicore.WriteLine(stdout, "")
+		}
 		clicore.WriteLine(stdout, "Options:")
 		for _, option := range sortedStrings(options) {
 			clicore.WriteFormat(stdout, "  %s\n", option)

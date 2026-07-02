@@ -352,6 +352,32 @@ func TestRunDispatcherSkillsSubcommandHelpDoesNotRequireUnityProject(t *testing.
 	}
 }
 
+// Tests that native command help keeps the command description visible even
+// when the command has registered options.
+func TestRunDispatcherPausePointWaitHelpShowsDescriptionAndOptions(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunDispatcher(context.Background(), []string{clicore.PausePointWaitCommandName, "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("pause-point-wait help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, expected := range []string{
+		"Usage:",
+		"uloop " + clicore.PausePointWaitCommandName + " [options]",
+		"Wait until a named UloopPausePoint.Pause marker pauses Unity",
+		"Options:",
+		"--" + clicore.PausePointIDFlagName,
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("pause-point-wait help missing %q:\n%s", expected, output)
+		}
+	}
+}
+
 // writeToolCache is duplicated from internal/projectrunner's test helper of
 // the same name: test helpers cannot be shared across packages, and both
 // packages need a project tool cache fixture for their help/dispatch tests.
