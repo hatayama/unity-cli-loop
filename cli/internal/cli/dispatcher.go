@@ -55,7 +55,7 @@ func RunDispatcher(ctx context.Context, args []string, stdout io.Writer, stderr 
 	}
 
 	if shouldRunInDispatcherProcess(remainingArgs) {
-		return RunProjectLocal(ctx, args, stdout, stderr)
+		return runDispatcherProcessCommand(ctx, remainingArgs, projectPath, stdout, stderr)
 	}
 
 	startPath, err := os.Getwd()
@@ -87,6 +87,52 @@ func RunDispatcher(ctx context.Context, args []string, stdout io.Writer, stderr 
 	}
 
 	return dispatcherRunRealCLI(ctx, realCLIPath, args, stdout, stderr)
+}
+
+// runDispatcherProcessCommand executes dispatcher-owned commands without
+// delegating to the shared runner entrypoint. The dispatcher binary is being
+// slimmed down to the forwarding machinery plus bootstrap commands, so its
+// execution path must not run through RunProjectLocal.
+func runDispatcherProcessCommand(
+	ctx context.Context,
+	remainingArgs []string,
+	projectPath string,
+	stdout io.Writer,
+	stderr io.Writer,
+) int {
+	if handled, code := tryHandleGlobalInfoRequest(remainingArgs, projectPath, stdout); handled {
+		return code
+	}
+
+	command := remainingArgs[0]
+	commandArgs := remainingArgs[1:]
+
+	startPath, err := os.Getwd()
+	if err != nil {
+		writeClassifiedError(stderr, err, errorContext{command: command})
+		return 1
+	}
+
+	if handled, code := tryHandlePreConnectionRequest(
+		ctx,
+		remainingArgs,
+		command,
+		commandArgs,
+		startPath,
+		projectPath,
+		stdout,
+		stderr,
+	); handled {
+		return code
+	}
+
+	// Precondition violated: shouldRunInDispatcherProcess routed a command here
+	// that no dispatcher-process handler accepts. Fail fast instead of guessing.
+	writeErrorEnvelope(stderr, internalCLIError(
+		"Dispatcher routing bug: no dispatcher-process handler accepted command: "+command,
+		errorContext{command: command},
+	))
+	return 1
 }
 
 func shouldRunInDispatcherProcess(args []string) bool {
