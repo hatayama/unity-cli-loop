@@ -65,10 +65,15 @@ jobs:
         working-directory: tools/release-automation
         run: go run ./cmd/check-dispatcher-minimum-version
 
-      - name: Check dispatcher version bump
+      - name: Check release triggers
         if: github.event_name == 'pull_request'
         working-directory: tools/release-automation
-        run: go run ./cmd/check-dispatcher-version-bump --base "origin/${{ github.base_ref }}" --head HEAD
+        run: go run ./cmd/check-release-triggers --base "origin/${{ github.base_ref }}" --head HEAD
+
+      - name: Check dispatcher contract
+        if: github.event_name == 'pull_request'
+        working-directory: tools/release-automation
+        run: go run ./cmd/check-dispatcher-contract --base "origin/${{ github.base_ref }}" --head HEAD
 
       - name: Install golangci-lint
         run: |
