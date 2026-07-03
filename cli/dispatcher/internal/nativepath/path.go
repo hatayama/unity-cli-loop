@@ -127,11 +127,11 @@ func Join(goos string, elements ...string) string {
 
 func joinWindows(elements ...string) string {
 	normalizedElements := make([]string, 0, len(elements))
-	for index, element := range elements {
+	for _, element := range elements {
 		if element == "" {
 			continue
 		}
-		if index == 0 {
+		if len(normalizedElements) == 0 {
 			normalizedElements = append(normalizedElements, trimWindowsPathSuffix(element))
 			continue
 		}

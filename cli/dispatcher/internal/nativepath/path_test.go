@@ -202,6 +202,15 @@ func TestCommandPathTrimsInstallDirectorySeparators(t *testing.T) {
 	}
 }
 
+func TestJoinForWindowsPreservesFirstNonEmptyRoot(t *testing.T) {
+	// Verifies empty leading elements do not make an absolute Windows path relative.
+	joinedPath := Join("windows", "", `\Server\Share\`, "uloop")
+
+	if joinedPath != `\Server\Share\uloop` {
+		t.Fatalf("joined path mismatch: %s", joinedPath)
+	}
+}
+
 func TestCommandPathPreservesPosixRootDirectory(t *testing.T) {
 	// Verifies trimming a POSIX install directory does not turn the filesystem root into an empty path.
 	targetPath := CommandPath("darwin", "/", "uloop", "uloop.exe")
