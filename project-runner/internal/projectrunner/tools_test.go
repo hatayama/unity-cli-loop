@@ -2,11 +2,11 @@ package projectrunner
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/clitest"
 )
 
 // Tests that tool arguments are converted according to their schema types.
@@ -291,7 +291,7 @@ func TestBuildToolParamsReturnsStructuredBooleanValueError(t *testing.T) {
 // Tests that cached tools written by the Unity Editor remain usable by the native CLI.
 func TestLoadToolsAcceptsEditorParameterSchemaCache(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeToolCache(t, projectRoot, `{
+	clitest.WriteProjectFile(t, projectRoot, filepath.Join(clicore.CacheDirectoryName, clicore.CacheFileName), `{
   "tools": [
     {
       "name": "get-logs",
@@ -376,16 +376,5 @@ func TestBuildToolParamsAcceptsNegativeNumericValues(t *testing.T) {
 	}
 	if params["Count"] != -2 {
 		t.Fatalf("Count mismatch: %#v", params["Count"])
-	}
-}
-
-func writeToolCache(t *testing.T, projectRoot string, content string) {
-	t.Helper()
-	cachePath := filepath.Join(projectRoot, clicore.CacheDirectoryName, clicore.CacheFileName)
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
-		t.Fatalf("failed to create tool cache directory: %v", err)
-	}
-	if err := os.WriteFile(cachePath, []byte(content), 0o644); err != nil {
-		t.Fatalf("failed to write tool cache: %v", err)
 	}
 }

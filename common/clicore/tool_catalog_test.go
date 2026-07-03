@@ -1,10 +1,12 @@
 package clicore
 
 import (
-	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/common/clitest"
 )
 
 // Tests that run-tests-specific help text does not leak into unrelated tool schemas.
@@ -40,13 +42,13 @@ func TestVisibleOptionNamesIncludesExecuteDynamicCodeCodeFile(t *testing.T) {
 
 	options := VisibleOptionNamesForTool(tool)
 
-	if !containsString(options, "--code") {
+	if !slices.Contains(options, "--code") {
 		t.Fatalf("execute-dynamic-code code option was not listed: %#v", options)
 	}
-	if !containsString(options, DynamicCodeFileOptionName) {
+	if !slices.Contains(options, DynamicCodeFileOptionName) {
 		t.Fatalf("execute-dynamic-code code-file option was not listed: %#v", options)
 	}
-	if containsString(options, "--compile-only") {
+	if slices.Contains(options, "--compile-only") {
 		t.Fatalf("execute-dynamic-code internal compile-only option should stay hidden: %#v", options)
 	}
 }
@@ -327,37 +329,18 @@ func TestParseGlobalProjectPathRequiresExactFlagName(t *testing.T) {
 	}
 }
 
+// writeToolCache seeds the project tool cache fixture used by several tests in
+// this file.
 func writeToolCache(t *testing.T, projectRoot string, content string) {
 	t.Helper()
-	cachePath := filepath.Join(projectRoot, CacheDirectoryName, CacheFileName)
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
-		t.Fatalf("failed to create tool cache directory: %v", err)
-	}
-	if err := os.WriteFile(cachePath, []byte(content), 0o644); err != nil {
-		t.Fatalf("failed to write tool cache: %v", err)
-	}
+	clitest.WriteProjectFile(t, projectRoot, filepath.Join(CacheDirectoryName, CacheFileName), content)
 }
 
-// writeTestSkill and containsString are duplicated from internal/cli's test
-// helpers of the same name: test helpers cannot be shared across packages,
-// and both packages exercise skill-derived tool filtering.
+// writeTestSkill seeds a SKILL.md fixture at projectRoot/relativeDir. It
+// normalizes CRLF so Windows checkouts of Go source with core.autocrlf do not
+// change the frontmatter parser input.
 func writeTestSkill(t *testing.T, projectRoot string, relativeDir string, content string) {
 	t.Helper()
-	skillDir := filepath.Join(projectRoot, filepath.FromSlash(relativeDir))
-	if err := os.MkdirAll(skillDir, 0o755); err != nil {
-		t.Fatalf("failed to create skill dir: %v", err)
-	}
 	normalizedContent := strings.ReplaceAll(content, "\r\n", "\n")
-	if err := os.WriteFile(filepath.Join(skillDir, SkillFileName), []byte(normalizedContent), 0o644); err != nil {
-		t.Fatalf("failed to write skill file: %v", err)
-	}
-}
-
-func containsString(values []string, expected string) bool {
-	for _, value := range values {
-		if value == expected {
-			return true
-		}
-	}
-	return false
+	clitest.WriteProjectFile(t, projectRoot, filepath.Join(relativeDir, SkillFileName), normalizedContent)
 }

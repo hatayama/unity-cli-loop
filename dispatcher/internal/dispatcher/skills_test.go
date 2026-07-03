@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/common/clitest"
 )
 
 // Tests that CLI-only skill discovery excludes skills marked as internal.
@@ -1091,9 +1093,13 @@ func TestRunV3MigrationSkillUninstallRemovesAlternateLayout(t *testing.T) {
 	}
 }
 
+// writeTestSkill seeds a SKILL.md fixture at projectRoot/relativeDir. It
+// normalizes CRLF so Windows checkouts of Go source with core.autocrlf do not
+// change the frontmatter parser input.
 func writeTestSkill(t *testing.T, projectRoot string, relativeDir string, content string) {
 	t.Helper()
-	writeSkillFile(t, filepath.Join(projectRoot, filepath.FromSlash(relativeDir)), content)
+	normalizedContent := strings.ReplaceAll(content, "\r\n", "\n")
+	clitest.WriteProjectFile(t, projectRoot, filepath.Join(relativeDir, "SKILL.md"), normalizedContent)
 }
 
 func writeManifest(t *testing.T, projectRoot string, content string) {
