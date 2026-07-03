@@ -114,6 +114,36 @@ func TestDispatcherContractGuardPropagatesMissingBaseRef(t *testing.T) {
 	}
 }
 
+// Verifies that when the existence probe used to classify a base read
+// failure itself fails with a non-ExitError, the original read error text is
+// still present in the returned error so operators see the real failure.
+func TestDispatcherContractGuardPreservesReadErrWhenProbeFailsWithNonExitError(t *testing.T) {
+	workDir := t.TempDir()
+	emptyBin := filepath.Join(workDir, "empty-bin")
+	if err := os.MkdirAll(emptyBin, 0o755); err != nil {
+		t.Fatalf("failed to create empty bin: %v", err)
+	}
+	// Shadow PATH with a directory that has no git so exec.LookPath fails
+	// at command startup, producing a non-ExitError from the probe.
+	t.Setenv("PATH", emptyBin)
+
+	readErr := errors.New("fatal: original show failure sentinel")
+
+	_, err := parseDispatcherContractBaseValues(
+		context.Background(),
+		workDir,
+		"origin/main",
+		"",
+		readErr)
+
+	if err == nil {
+		t.Fatal("expected an error when the classifier probe itself fails")
+	}
+	if !strings.Contains(err.Error(), "fatal: original show failure sentinel") {
+		t.Fatalf("expected original read error text to be preserved, got: %v", err)
+	}
+}
+
 type dispatcherContractGuardMockState struct {
 	refExists     bool
 	primaryExists bool

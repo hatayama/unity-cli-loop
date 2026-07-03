@@ -109,7 +109,10 @@ func parseDispatcherContractBaseValues(
 	if readErr != nil {
 		missing, guardErr := isMissingDispatcherContractAtRefError(ctx, repoRoot, baseRef)
 		if guardErr != nil {
-			return DispatcherContractValues{}, fmt.Errorf("failed to classify base %s read failure: %w", dispatcherContractFile, guardErr)
+			// Preserve the original read failure so operators see the show
+			// failure that started the classification rather than only the
+			// probe failure that made the classification impossible.
+			return DispatcherContractValues{}, fmt.Errorf("failed to classify base %s read failure: %w (original read error: %v)", dispatcherContractFile, guardErr, readErr)
 		}
 		if missing {
 			return DispatcherContractValues{}, nil

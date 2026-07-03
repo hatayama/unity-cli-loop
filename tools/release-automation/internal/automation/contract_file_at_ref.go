@@ -43,7 +43,10 @@ func contractFileAtRefWithLegacyFallback(
 	// reason (permissions, corruption, ...). Never silently fall back.
 	primaryExists, existsErr := fileExistsAtRef(ctx, repoRoot, ref, primaryFile)
 	if existsErr != nil {
-		return "", showErr
+		// The probe failure prevents us from classifying the show failure,
+		// but the original show error is still the useful signal. Surface
+		// both so operators do not lose the real failure text.
+		return "", fmt.Errorf("failed to check %s at %s: %w (original show error: %v)", primaryFile, ref, existsErr, showErr)
 	}
 	if primaryExists {
 		return "", showErr
@@ -53,7 +56,9 @@ func contractFileAtRefWithLegacyFallback(
 	// error so callers surface the real failure.
 	refExists, refErr := refExistsAtRef(ctx, repoRoot, ref)
 	if refErr != nil {
-		return "", showErr
+		// See the fileExistsAtRef branch above: the probe failed, but the
+		// show error is still the useful signal. Surface both.
+		return "", fmt.Errorf("failed to check ref %s: %w (original show error: %v)", ref, refErr, showErr)
 	}
 	if !refExists {
 		return "", showErr

@@ -103,6 +103,37 @@ func TestContractFileAtRefWithLegacyFallback_WhenRefMissing_PropagatesShowError(
 	}
 }
 
+// Verifies a non-ExitError from the presence probe after a show failure
+// preserves the original show error text alongside the classification
+// failure so operators see both signals.
+func TestContractFileAtRefWithLegacyFallback_WhenProbeFailsWithNonExitError_PreservesShowError(t *testing.T) {
+	workDir := t.TempDir()
+	emptyBin := filepath.Join(workDir, "empty-bin")
+	if err := os.MkdirAll(emptyBin, 0o755); err != nil {
+		t.Fatalf("failed to create empty bin: %v", err)
+	}
+	// Shadow PATH with a directory that has no git so both the show call and
+	// the follow-up presence probe fail with a non-ExitError startup failure.
+	t.Setenv("PATH", emptyBin)
+
+	_, err := contractFileAtRefWithLegacyFallback(
+		context.Background(),
+		workDir,
+		"some-ref",
+		"common/clicontract/contract.json",
+		"cli/contract.json")
+
+	if err == nil {
+		t.Fatal("expected an error when both show and probe fail")
+	}
+	if !strings.Contains(err.Error(), "show some-ref:common/clicontract/contract.json") {
+		t.Fatalf("expected the original show error text to be preserved, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "cat-file") {
+		t.Fatalf("expected the classification failure detail to be included, got: %v", err)
+	}
+}
+
 type contractFileAtRefFixture struct {
 	refExists           bool
 	primaryExists       bool
