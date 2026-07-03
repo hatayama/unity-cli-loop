@@ -42,6 +42,15 @@ const (
 	minimumDispatcherVersionDescription = "minimumDispatcherVersion"
 )
 
+// Each side's contract path chain, newest generation first. Every consumer
+// (fallback reads, existence probes, operator-facing messages) derives from
+// these slices so the next directory move adds its generation in exactly one
+// place per side instead of at every call site.
+var (
+	runnerContractPathChain     = []string{cliContractFile, rootModulesRunnerContractFile, legacyRunnerContractFile}
+	dispatcherContractPathChain = []string{dispatcherContractFile, rootModulesDispatcherContractFile, legacyDispatcherContractFile}
+)
+
 var minimumDispatcherVersionPattern = regexp.MustCompile(`MINIMUM_REQUIRED_DISPATCHER_VERSION\s*=\s*"([^"]+)"`)
 
 type dispatcherMinimumVersionValues struct {
@@ -288,11 +297,9 @@ func verifyDispatcherMinimumVersionAtRef(
 	contractContent, err := dispatcherContractFileAtRef(ctx, repoRoot, releaseTag)
 	if err != nil {
 		return fmt.Errorf(
-			"dispatcher release %s does not provide %s, %s, or %s",
+			"dispatcher release %s does not provide %s",
 			releaseTag,
-			dispatcherContractFile,
-			rootModulesDispatcherContractFile,
-			legacyDispatcherContractFile)
+			strings.Join(dispatcherContractPathChain, " or "))
 	}
 	return verifyMinimumCliReleaseDispatcherContract(values, []byte(contractContent))
 }
@@ -305,9 +312,8 @@ func dispatcherContractFileAtRef(ctx context.Context, repoRoot string, ref strin
 		ctx,
 		repoRoot,
 		ref,
-		dispatcherContractFile,
-		rootModulesDispatcherContractFile,
-		legacyDispatcherContractFile)
+		dispatcherContractPathChain[0],
+		dispatcherContractPathChain[1:]...)
 }
 
 func verifyCurrentDispatcherMinimumVersion(values dispatcherMinimumVersionValues) error {

@@ -17,11 +17,7 @@ import (
 const releaseContractMissingSentinel = "release contract missing"
 
 func runnerContractMissingAtReleaseMessage(releaseTag string) string {
-	return formatReleaseContractMissingMessage(
-		releaseTag,
-		cliContractFile,
-		rootModulesRunnerContractFile,
-		legacyRunnerContractFile)
+	return formatReleaseContractMissingMessage(releaseTag, runnerContractPathChain...)
 }
 
 // formatReleaseContractMissingMessage builds the "no contract found" error
@@ -43,9 +39,8 @@ func runnerContractFileAtRef(ctx context.Context, repoRoot string, ref string) (
 		ctx,
 		repoRoot,
 		ref,
-		cliContractFile,
-		rootModulesRunnerContractFile,
-		legacyRunnerContractFile)
+		runnerContractPathChain[0],
+		runnerContractPathChain[1:]...)
 }
 
 // contractFileAtRefWithLegacyFallback reads a release contract at a git ref.

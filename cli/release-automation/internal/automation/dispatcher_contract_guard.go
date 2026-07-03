@@ -143,11 +143,7 @@ func isMissingDispatcherContractAtRefError(
 	if !refExists {
 		return false, nil
 	}
-	anyExists, err := anyOfFilesExistsAtRef(ctx, repoRoot, baseRef, []string{
-		dispatcherContractFile,
-		rootModulesDispatcherContractFile,
-		legacyDispatcherContractFile,
-	})
+	anyExists, err := anyOfFilesExistsAtRef(ctx, repoRoot, baseRef, dispatcherContractPathChain)
 	if err != nil {
 		return false, err
 	}

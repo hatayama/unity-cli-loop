@@ -465,21 +465,16 @@ func setupContractFileAtRefMockGit(t *testing.T, fixture contractFileAtRefFixtur
 				showContent: "primary-body",
 				showStderr:  fixture.primaryShowStderr,
 			},
-			// This fixture is only used through the two-argument variant of
-			// contractFileAtRefWithLegacyFallback, so the middle-generation
-			// (root-modules) probe is never issued. Modeling it as absent keeps
-			// the mock safe against future callers of the three-generation
-			// wrappers without changing the behaviour of the existing tests.
-			rootModulesRunnerContractFile: {exists: false},
+			// Only the paths these tests actually probe are registered; the
+			// mock fails loudly on any other path, so a future caller that
+			// probes an unregistered generation surfaces as a test failure
+			// instead of a silent "absent" result.
 			legacyRunnerContractFile: {
 				exists:          fixture.legacyShowSucceeds,
 				showOK:          fixture.legacyShowSucceeds,
 				showContentPath: legacyPath,
 				showStderr:      "fatal: legacy show failed",
 			},
-			dispatcherContractFile:            {exists: false},
-			rootModulesDispatcherContractFile: {exists: false},
-			legacyDispatcherContractFile:      {exists: false},
 		},
 	})
 
