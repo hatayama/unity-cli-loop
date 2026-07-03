@@ -17,17 +17,19 @@ list_shared_common_inputs() {
   git ls-files -- \
     cli/common/go.mod \
     cli/common/go.sum \
-    'cli/common/clicontract/*.go' \
-    'cli/common/clicore/*.go' \
-    'cli/common/project/*.go' \
-    'cli/common/skills/*.go' \
-    'cli/common/tools/*.go' \
-    'cli/common/unityipc/*.go' |
+    'cli/common/clicontract/' \
+    'cli/common/clicore/' \
+    'cli/common/project/' \
+    'cli/common/skills/' \
+    'cli/common/tools/' \
+    'cli/common/unityipc/' |
+    grep -E '\.go$|/go\.mod$|/go\.sum$' |
     grep -v '_test\.go$' || true
 }
 
 list_dispatcher_only_common_inputs() {
-  git ls-files -- 'cli/common/version/*.go' |
+  git ls-files -- 'cli/common/version/' |
+    grep '\.go$' |
     grep -v '_test\.go$' || true
 }
 

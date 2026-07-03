@@ -1,6 +1,10 @@
 package automation
 
 import (
+	"context"
+	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -120,6 +124,27 @@ func TestReleaseTriggerGuardAcceptsDispatcherOnlyCommonChangesWithDispatcherTrig
 	}
 }
 
+// Verifies common package trigger whitelists match the packages imported by release binaries.
+func TestReleaseTriggerGuardCommonPackageWhitelistsMatchGoDependencies(t *testing.T) {
+	repoRoot, err := gitRepoRoot(context.Background())
+	if err != nil {
+		t.Fatalf("failed to resolve repository root: %v", err)
+	}
+
+	dispatcherCommonRoots := commonPackageRootsImportedByModule(t, filepath.Join(repoRoot, "cli", "dispatcher"))
+	projectRunnerCommonRoots := commonPackageRootsImportedByModule(t, filepath.Join(repoRoot, "cli", "project-runner"))
+
+	expectedSharedRoots := intersectSortedStrings(dispatcherCommonRoots, projectRunnerCommonRoots)
+	expectedDispatcherOnlyRoots := subtractSortedStrings(dispatcherCommonRoots, projectRunnerCommonRoots)
+	projectRunnerOnlyRoots := subtractSortedStrings(projectRunnerCommonRoots, dispatcherCommonRoots)
+
+	assertStringSlicesEqual(t, sharedCommonPackageRoots, expectedSharedRoots, "shared common package roots")
+	assertStringSlicesEqual(t, dispatcherOnlyCommonPackageRoots, expectedDispatcherOnlyRoots, "dispatcher-only common package roots")
+	if len(projectRunnerOnlyRoots) != 0 {
+		t.Fatalf("project-runner-only common package roots need a release trigger rule: %v", projectRunnerOnlyRoots)
+	}
+}
+
 // Verifies installer script changes require a dispatcher release trigger only.
 func TestReleaseTriggerGuardRequiresDispatcherTriggerForInstallerChanges(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{"scripts/install.sh"})
@@ -130,6 +155,70 @@ func TestReleaseTriggerGuardRequiresDispatcherTriggerForInstallerChanges(t *test
 	violation := result.Violations[0]
 	if len(violation.MissingTriggerRoots) != 1 || violation.MissingTriggerRoots[0] != "cli/dispatcher/" {
 		t.Fatalf("expected only cli/dispatcher/ to be missing, got %v", violation.MissingTriggerRoots)
+	}
+}
+
+func commonPackageRootsImportedByModule(t *testing.T, moduleDir string) []string {
+	t.Helper()
+	command := exec.Command("go", "list", "-deps", "./...")
+	command.Dir = moduleDir
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("go list -deps failed in %s: %v", moduleDir, err)
+	}
+
+	rootsByPath := map[string]struct{}{}
+	for _, dependency := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if !strings.HasPrefix(dependency, "github.com/hatayama/unity-cli-loop/common/") {
+			continue
+		}
+		commonPackage := strings.TrimPrefix(dependency, "github.com/hatayama/unity-cli-loop/common/")
+		commonRoot, _, _ := strings.Cut(commonPackage, "/")
+		rootsByPath["cli/common/"+commonRoot+"/"] = struct{}{}
+	}
+
+	roots := []string{}
+	for root := range rootsByPath {
+		roots = append(roots, root)
+	}
+	sort.Strings(roots)
+	return roots
+}
+
+func intersectSortedStrings(left []string, right []string) []string {
+	values := []string{}
+	for _, leftValue := range left {
+		if sortedStringsContain(right, leftValue) {
+			values = append(values, leftValue)
+		}
+	}
+	return values
+}
+
+func subtractSortedStrings(left []string, right []string) []string {
+	values := []string{}
+	for _, leftValue := range left {
+		if !sortedStringsContain(right, leftValue) {
+			values = append(values, leftValue)
+		}
+	}
+	return values
+}
+
+func sortedStringsContain(values []string, target string) bool {
+	index := sort.SearchStrings(values, target)
+	return index < len(values) && values[index] == target
+}
+
+func assertStringSlicesEqual(t *testing.T, actual []string, expected []string, label string) {
+	t.Helper()
+	if len(actual) != len(expected) {
+		t.Fatalf("expected %s %v, got %v", label, expected, actual)
+	}
+	for index, expectedValue := range expected {
+		if actual[index] != expectedValue {
+			t.Fatalf("expected %s %v, got %v", label, expected, actual)
+		}
 	}
 }
 
