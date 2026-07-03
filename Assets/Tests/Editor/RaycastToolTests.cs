@@ -83,6 +83,45 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteAsync_WhenCameraIsMissing_ShouldReturnConversionMetadata()
+        {
+            RetagExistingMainCameras();
+            Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
+            Vector2 inputPosition = new Vector2(gameViewSize.x / 2f, gameViewSize.y / 2f);
+
+            RaycastResponse response = await ExecuteRaycast(inputPosition);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("Camera.main"));
+            Assert.That(response.InputPositionX, Is.EqualTo(inputPosition.x));
+            Assert.That(response.InputPositionY, Is.EqualTo(inputPosition.y));
+            Assert.That(response.InjectedUnityPositionX, Is.EqualTo(inputPosition.x));
+            Assert.That(response.InjectedUnityPositionY, Is.EqualTo(gameViewSize.y - inputPosition.y));
+            Assert.That(response.CoordinateConversionFormula, Is.EqualTo(McpConstants.COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenColliderLayerIsHiddenByCamera_ShouldReturnNoHit()
+        {
+            CreateRaycastScene();
+            if (_cameraObject == null)
+            {
+                Assert.Fail("Camera should be created.");
+                return;
+            }
+
+            Camera camera = _cameraObject.GetComponent<Camera>();
+            camera.cullingMask = 0;
+            Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
+            Vector2 inputPosition = new Vector2(gameViewSize.x / 2f, gameViewSize.y / 2f);
+
+            RaycastResponse response = await ExecuteRaycast(inputPosition);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Hit, Is.False);
+        }
+
+        [Test]
         public async Task ExecuteAsync_WhenAutoSyncTransformsIsDisabled_ShouldRaycastAgainstLatestTransform()
         {
             Physics.autoSyncTransforms = false;

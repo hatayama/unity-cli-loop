@@ -30,15 +30,15 @@ namespace io.github.hatayama.uLoopMCP
             GameViewRaycastResult raycastResult = GameViewRaycastUtility.RaycastFromInputPosition(
                 inputPosition,
                 parameters.MaxDistance,
-                parameters.LayerMask);
+                parameters.LayerMask,
+                true);
 
             if (!raycastResult.CameraFound)
             {
-                return Task.FromResult(new RaycastResponse
-                {
-                    Success = false,
-                    Message = "Camera.main was not found. Add an active camera tagged MainCamera before using raycast."
-                });
+                RaycastResponse noCameraResponse = CreateBaseResponse(raycastResult.Conversion);
+                noCameraResponse.Success = false;
+                noCameraResponse.Message = "Camera.main was not found. Add an active camera tagged MainCamera before using raycast.";
+                return Task.FromResult(noCameraResponse);
             }
 
             if (raycastResult.Hits.Length == 0)

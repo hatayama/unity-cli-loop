@@ -217,7 +217,7 @@ All tools automatically include the following property:
 ---
 
 ### 11. simulate-mouse-ui
-- **Description**: Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem screen coordinates. Uses EventSystem and ExecuteEvents to dispatch pointer events directly — works independently of both old and new Input System. For game logic that reads Input System (e.g. `Mouse.current.leftButton.wasPressedThisFrame`), use `simulate-mouse-input` instead
+- **Description**: Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem using top-left Game View coordinates. Uses EventSystem and ExecuteEvents to dispatch pointer events directly — works independently of both old and new Input System. For game logic that reads Input System (e.g. `Mouse.current.leftButton.wasPressedThisFrame`), use `simulate-mouse-input` instead
 - **Parameters**:
   - `Action` (enum): Mouse action - "Click", "Drag", "DragStart", "DragMove", "DragEnd", "LongPress" (default: "Click")
     - `Click`: Click at (X, Y). Fires PointerDown → PointerUp → PointerClick
@@ -226,10 +226,10 @@ All tools automatically include the following property:
     - `DragStart`: Begin drag at (X, Y) and hold
     - `DragMove`: Animate from current position to (X, Y) at the specified speed
     - `DragEnd`: Animate to (X, Y), then release drag
-  - `X` (number): Target X position in top-left Game View pixels (default: 0)
-  - `Y` (number): Target Y position in top-left Game View pixels (default: 0)
-  - `FromX` (number): Start X position for Drag action (default: 0)
-  - `FromY` (number): Start Y position for Drag action (default: 0)
+  - `X` (number): Target X position in top-left Game View pixels. Used by Click, LongPress, DragStart, DragMove, and DragEnd; for Drag, this is the destination (default: 0)
+  - `Y` (number): Target Y position in top-left Game View pixels. Used by Click, LongPress, DragStart, DragMove, and DragEnd; for Drag, this is the destination (default: 0)
+  - `FromX` (number): Start X position in top-left Game View pixels for Drag action (default: 0)
+  - `FromY` (number): Start Y position in top-left Game View pixels for Drag action (default: 0)
   - `DragSpeed` (number): Drag speed in pixels per second, 0 for instant (default: 2000)
   - `Duration` (number): Hold duration in seconds for LongPress action (default: 0.5)
   - `Button` (enum): Mouse button - "Left", "Right", "Middle" (default: "Left")

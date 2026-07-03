@@ -19,6 +19,8 @@ namespace io.github.hatayama.uLoopMCP
         {
             List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>();
             int labelIndex = 1;
+            // Sync once for the whole grid; each candidate raycast then reads the same current physics state.
+            Physics.SyncTransforms();
 
             for (int row = 1; row <= GRID_ROWS; row++)
             {
@@ -32,7 +34,8 @@ namespace io.github.hatayama.uLoopMCP
                     GameViewRaycastResult raycastResult = GameViewRaycastUtility.RaycastFromInputPosition(
                         inputPosition,
                         McpConstants.RAYCAST_DEFAULT_MAX_DISTANCE,
-                        Physics.DefaultRaycastLayers);
+                        Physics.DefaultRaycastLayers,
+                        false);
 
                     points.Add(CreatePointInfo($"R{labelIndex}", inputPosition, raycastResult));
                     labelIndex++;

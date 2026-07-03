@@ -11,7 +11,8 @@ namespace io.github.hatayama.uLoopMCP
         internal static GameViewRaycastResult RaycastFromInputPosition(
             Vector2 inputPosition,
             float maxDistance,
-            int layerMask)
+            int layerMask,
+            bool syncTransforms)
         {
             Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
             GameViewCoordinateConversion conversion =
@@ -24,9 +25,14 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             Ray ray = mainCamera.ScreenPointToRay(conversion.InjectedUnityPosition);
-            // Transform changes can be visible before the physics scene updates, so sync before screenshot-based queries.
-            Physics.SyncTransforms();
-            RaycastHit[] hits = Physics.RaycastAll(ray, maxDistance, layerMask);
+            if (syncTransforms)
+            {
+                // Transform changes can be visible before the physics scene updates, so sync before screenshot-based queries.
+                Physics.SyncTransforms();
+            }
+
+            int visibleLayerMask = layerMask & mainCamera.cullingMask;
+            RaycastHit[] hits = Physics.RaycastAll(ray, maxDistance, visibleLayerMask);
             System.Array.Sort(hits, CompareHitsByDistance);
 
             return new GameViewRaycastResult(true, conversion, hits);

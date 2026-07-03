@@ -363,7 +363,7 @@
     },
     {
       "name": "simulate-mouse-ui",
-      "description": "Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem screen coordinates",
+      "description": "Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem using top-left Game View coordinates",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -382,12 +382,12 @@
           },
           "X": {
             "type": "number",
-            "description": "Target X position in Game View pixels (origin: top-left). For Drag action, this is the destination.",
+            "description": "Target X position in Game View pixels (origin: top-left). Used by Click, LongPress, DragStart, DragMove, and DragEnd; for Drag, this is the destination.",
             "default": 0
           },
           "Y": {
             "type": "number",
-            "description": "Target Y position in Game View pixels (origin: top-left). For Drag action, this is the destination.",
+            "description": "Target Y position in Game View pixels (origin: top-left). Used by Click, LongPress, DragStart, DragMove, and DragEnd; for Drag, this is the destination.",
             "default": 0
           },
           "FromX": {

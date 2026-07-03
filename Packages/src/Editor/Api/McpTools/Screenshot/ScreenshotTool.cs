@@ -59,6 +59,7 @@ namespace io.github.hatayama.uLoopMCP
             Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
             List<RaycastGridPointInfo> raycastGridPoints = new List<RaycastGridPointInfo>();
             List<UIElementInfo> raycastGridOverlayElements = new List<UIElementInfo>();
+            GameRenderingImageInfo? raycastGridRenderingInfo = null;
 
             if (parameters.AnnotateElements)
             {
@@ -68,11 +69,13 @@ namespace io.github.hatayama.uLoopMCP
 
             if (parameters.AnnotateRaycastGrid)
             {
-                (Vector2 renderingImageSize, int initialImageToInputOffsetY) =
-                    await EditorWindowCaptureUtility.GetGameRenderingImageInfoAsync(gameViewSize, ct);
+                GameRenderingImageInfo renderingImageInfo =
+                    await EditorWindowCaptureUtility.GetGameRenderingImageInfoAsync(ct);
+                raycastGridRenderingInfo = renderingImageInfo;
+                gameViewSize = renderingImageInfo.GameViewSize;
                 raycastGridPoints = RaycastGridAnnotator.CollectRaycastGridPoints(
-                    renderingImageSize,
-                    initialImageToInputOffsetY);
+                    renderingImageInfo.RenderingImageSize,
+                    renderingImageInfo.ImageToInputOffsetY);
                 raycastGridOverlayElements = RaycastGridAnnotator.CreateOverlayElements(raycastGridPoints);
             }
 
@@ -81,7 +84,8 @@ namespace io.github.hatayama.uLoopMCP
                 UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, Mathf.RoundToInt(gameViewSize.y));
                 ScreenshotInfo elementsOnlyInfo = new ScreenshotInfo();
                 elementsOnlyInfo.ResolutionScale = parameters.ResolutionScale;
-                ApplyRenderingCoordinateMetadata(elementsOnlyInfo, gameViewSize);
+                int imageToInputOffsetY = raycastGridRenderingInfo?.ImageToInputOffsetY ?? 0;
+                ApplyRenderingCoordinateMetadata(elementsOnlyInfo, gameViewSize, imageToInputOffsetY);
                 elementsOnlyInfo.AnnotatedElements = annotatedElements;
                 elementsOnlyInfo.RaycastGridPoints = raycastGridPoints;
                 return new ScreenshotResponse(new List<ScreenshotInfo> { elementsOnlyInfo });
@@ -89,7 +93,7 @@ namespace io.github.hatayama.uLoopMCP
 
             GameObject annotationOverlay = null;
             Texture2D texture;
-            int imageToInputOffsetY = 0;
+            GameRenderingImageInfo captureRenderingInfo;
             try
             {
                 if (parameters.AnnotateElements || parameters.AnnotateRaycastGrid)
@@ -104,8 +108,10 @@ namespace io.github.hatayama.uLoopMCP
                     await EditorDelay.DelayFrame(ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES, ct);
                 }
 
-                (texture, imageToInputOffsetY) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
-                    parameters.ResolutionScale, ct);
+                (texture, captureRenderingInfo) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
+                    parameters.ResolutionScale,
+                    raycastGridRenderingInfo,
+                    ct);
             }
             finally
             {
@@ -140,7 +146,10 @@ namespace io.github.hatayama.uLoopMCP
                 ScreenshotInfo info = new ScreenshotInfo(
                     savedPath, savedFileInfo.Length, width, height,
                     McpConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW, parameters.ResolutionScale);
-                ApplyRenderingCoordinateMetadata(info, gameViewSize, imageToInputOffsetY);
+                ApplyRenderingCoordinateMetadata(
+                    info,
+                    captureRenderingInfo.GameViewSize,
+                    captureRenderingInfo.ImageToInputOffsetY);
                 info.AnnotatedElements = annotatedElements;
                 info.RaycastGridPoints = raycastGridPoints;
                 screenshots.Add(info);
@@ -218,7 +227,13 @@ namespace io.github.hatayama.uLoopMCP
                     SaveTextureAsPng(texture, savedPath);
 
                     FileInfo savedFileInfo = new FileInfo(savedPath);
-                    ScreenshotInfo info = new ScreenshotInfo(savedPath, savedFileInfo.Length, width, height);
+                    ScreenshotInfo info = new ScreenshotInfo(
+                        savedPath,
+                        savedFileInfo.Length,
+                        width,
+                        height,
+                        McpConstants.COORDINATE_SYSTEM_TOP_LEFT_WINDOW,
+                        parameters.ResolutionScale);
                     ApplyWindowCoordinateMetadata(info);
                     screenshots.Add(info);
                 }

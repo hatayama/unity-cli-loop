@@ -7,10 +7,10 @@ namespace io.github.hatayama.uLoopMCP
         [Description("Mouse action: Click(0) - click with selected Button, Drag(1) - one-shot drag, DragStart(2) - begin drag and hold, DragMove(3) - move while holding drag, DragEnd(4) - release drag, LongPress(5) - press and hold for Duration seconds")]
         public MouseAction Action { get; set; } = MouseAction.Click;
 
-        [Description("Target X position in Game View pixels (origin: top-left). For Drag action, this is the destination.")]
+        [Description("Target X position in Game View pixels (origin: top-left). Used by Click, LongPress, DragStart, DragMove, and DragEnd; for Drag, this is the destination.")]
         public float X { get; set; } = 0f;
 
-        [Description("Target Y position in Game View pixels (origin: top-left). For Drag action, this is the destination.")]
+        [Description("Target Y position in Game View pixels (origin: top-left). Used by Click, LongPress, DragStart, DragMove, and DragEnd; for Drag, this is the destination.")]
         public float Y { get; set; } = 0f;
 
         [Description("Start X position in Game View pixels for Drag action (origin: top-left). Drag starts here and moves to X,Y.")]
