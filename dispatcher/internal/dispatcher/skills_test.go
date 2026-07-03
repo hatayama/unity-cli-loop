@@ -835,6 +835,18 @@ func TestAllSkillTargetIDsMatchesTargetConfigs(t *testing.T) {
 	}
 }
 
+// Tests that defaultSkillTargetIDs resolves to the exact expected targets in
+// display order, so an accidental edit to allSkillTargetIDs or
+// nonDefaultSkillTargetIDs cannot silently change which targets install by
+// default.
+func TestDefaultSkillTargetIDsDerivedFromAllSkillTargetIDs(t *testing.T) {
+	expected := []string{"claude", "codex", "cursor", "gemini", "agents", "antigravity"}
+
+	if !reflect.DeepEqual(defaultSkillTargetIDs, expected) {
+		t.Fatalf("defaultSkillTargetIDs mismatch: got=%v want=%v", defaultSkillTargetIDs, expected)
+	}
+}
+
 // Tests that skills subcommand help lists every target flag from
 // allSkillTargetIDs so no target can be added without appearing in help.
 func TestPrintSkillsSubcommandHelpListsAllTargets(t *testing.T) {

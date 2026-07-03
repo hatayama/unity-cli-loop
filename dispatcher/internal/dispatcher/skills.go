@@ -34,14 +34,33 @@ var targetConfigs = map[string]skillTarget{
 	"antigravity": {id: "antigravity", displayName: "Antigravity", projectDir: ".agent"},
 }
 
-var defaultSkillTargetIDs = []string{"claude", "codex", "cursor", "gemini", "agents", "antigravity"}
-
 // allSkillTargetIDs enumerates every target id in the display order used by
 // help output and flag parsing. targetConfigs is an unordered map, so this
 // slice is the single source of truth for iteration order and for the set of
 // accepted --<id> flags; help lines and parseSkillsOptions must both derive
 // from it to avoid drift.
 var allSkillTargetIDs = []string{"claude", "codex", "cursor", "gemini", "agents", "windsurf", "antigravity"}
+
+// nonDefaultSkillTargetIDs lists targets that are excluded from the default
+// target set and are only installed when explicitly requested via their
+// --<id> flag.
+var nonDefaultSkillTargetIDs = map[string]bool{"windsurf": true}
+
+// defaultSkillTargetIDs is derived from allSkillTargetIDs so its order matches
+// help output and so any new target added to allSkillTargetIDs is included by
+// default unless it is explicitly listed in nonDefaultSkillTargetIDs.
+var defaultSkillTargetIDs = buildDefaultSkillTargetIDs()
+
+func buildDefaultSkillTargetIDs() []string {
+	ids := make([]string, 0, len(allSkillTargetIDs))
+	for _, id := range allSkillTargetIDs {
+		if nonDefaultSkillTargetIDs[id] {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids
+}
 
 var deprecatedSkillNames = []string{
 	"uloop-capture-window",
