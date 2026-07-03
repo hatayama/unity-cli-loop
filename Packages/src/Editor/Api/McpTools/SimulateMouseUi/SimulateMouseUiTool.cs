@@ -219,7 +219,7 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             InputSystem.QueueDeltaStateEvent(mouse.position, screenPos);
-            InputSystem.Update();
+            InputSystemUpdateHelper.RunExplicitUpdate(InputUpdateTypeResolver.Resolve());
 #endif
         }
 
