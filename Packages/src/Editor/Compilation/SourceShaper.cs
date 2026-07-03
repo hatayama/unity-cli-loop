@@ -26,15 +26,10 @@ namespace io.github.hatayama.uLoopMCP
 
                 if (braceDepth == 0)
                 {
-                    if (TryMatchLineComment(source, pos, out int afterComment))
+                    (bool Matched, int NextPosition) commentMatch = TryMatchComment(source, pos);
+                    if (commentMatch.Matched)
                     {
-                        pos = afterComment;
-                        continue;
-                    }
-
-                    if (TryMatchBlockComment(source, pos, out int afterBlock))
-                    {
-                        pos = afterBlock;
+                        pos = commentMatch.NextPosition;
                         continue;
                     }
 
@@ -42,7 +37,7 @@ namespace io.github.hatayama.uLoopMCP
                     {
                         int segmentStart = pos;
                         int afterUsing = pos + 5;
-                        afterUsing = SkipWhitespace(source, afterUsing);
+                        afterUsing = SkipWhitespaceAndComments(source, afterUsing);
 
                         if (StartsWithKeyword(source, afterUsing, "static"))
                         {
@@ -274,20 +269,18 @@ namespace io.github.hatayama.uLoopMCP
         private static int SkipWhitespaceAndComments(string source, int position)
         {
             int currentPosition = SkipWhitespace(source, position);
-            while (IsCommentStart(source, currentPosition))
+            while (true)
             {
-                int nextPosition = AdvanceOneToken(source, currentPosition);
-                currentPosition = SkipWhitespace(source, nextPosition);
+                (bool Matched, int NextPosition) commentMatch = TryMatchComment(source, currentPosition);
+                if (!commentMatch.Matched)
+                {
+                    break;
+                }
+
+                currentPosition = SkipWhitespace(source, commentMatch.NextPosition);
             }
 
             return currentPosition;
-        }
-
-        private static bool IsCommentStart(string source, int position)
-        {
-            return position + 1 < source.Length &&
-                   source[position] == '/' &&
-                   (source[position + 1] == '/' || source[position + 1] == '*');
         }
 
         private static bool IsTypeDeclarationKeyword(string s, int pos)
@@ -322,31 +315,29 @@ namespace io.github.hatayama.uLoopMCP
             return pos;
         }
 
-        private static bool TryMatchLineComment(string s, int pos, out int afterComment)
+        private static (bool Matched, int NextPosition) TryMatchComment(string s, int pos)
         {
-            afterComment = pos;
-            if (pos + 1 < s.Length && s[pos] == '/' && s[pos + 1] == '/')
+            if (pos + 1 >= s.Length || s[pos] != '/')
+            {
+                return (false, pos);
+            }
+
+            if (s[pos + 1] == '/')
             {
                 int end = pos + 2;
                 while (end < s.Length && s[end] != '\n') end++;
                 if (end < s.Length) end++; // skip \n
-                afterComment = end;
-                return true;
+                return (true, end);
             }
-            return false;
-        }
 
-        private static bool TryMatchBlockComment(string s, int pos, out int afterBlock)
-        {
-            afterBlock = pos;
-            if (pos + 1 < s.Length && s[pos] == '/' && s[pos + 1] == '*')
+            if (s[pos + 1] == '*')
             {
                 int end = pos + 2;
                 while (end + 1 < s.Length && !(s[end] == '*' && s[end + 1] == '/')) end++;
-                afterBlock = end + 2 < s.Length ? end + 2 : s.Length;
-                return true;
+                return (true, end + 2 < s.Length ? end + 2 : s.Length);
             }
-            return false;
+
+            return (false, pos);
         }
 
         private static int FindSemicolon(string s, int pos)
@@ -433,20 +424,10 @@ namespace io.github.hatayama.uLoopMCP
             if (pos >= s.Length) return s.Length;
             char c = s[pos];
 
-            // Line comment
-            if (c == '/' && pos + 1 < s.Length && s[pos + 1] == '/')
+            (bool Matched, int NextPosition) commentMatch = TryMatchComment(s, pos);
+            if (commentMatch.Matched)
             {
-                int end = pos + 2;
-                while (end < s.Length && s[end] != '\n') end++;
-                return end < s.Length ? end + 1 : s.Length;
-            }
-
-            // Block comment
-            if (c == '/' && pos + 1 < s.Length && s[pos + 1] == '*')
-            {
-                int end = pos + 2;
-                while (end + 1 < s.Length && !(s[end] == '*' && s[end + 1] == '/')) end++;
-                return end + 2 < s.Length ? end + 2 : s.Length;
+                return commentMatch.NextPosition;
             }
 
             // Verbatim string (@"...")
@@ -706,5 +687,4 @@ namespace io.github.hatayama.uLoopMCP
         public bool HasTopLevelStatements { get; set; }
         public StringBuilder TopLevelBodyBuilder { get; } = new StringBuilder();
     }
-
 }

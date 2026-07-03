@@ -60,5 +60,14 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
 
             Assert.That(result.AliasedNames, Does.Contain("Random"));
         }
+
+        [Test]
+        public void Analyze_WhenUsingAliasHasComments_ShouldRecordAliasName()
+        {
+            SourceShapeResult result = SourceShaper.Analyze(
+                "using /* comment */ Object /* comment */ = UnityEngine.Object;\nreturn null;");
+
+            Assert.That(result.AliasedNames, Does.Contain("Object"));
+        }
     }
 }

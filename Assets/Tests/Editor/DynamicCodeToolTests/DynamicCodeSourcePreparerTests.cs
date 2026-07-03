@@ -304,6 +304,5 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             Assert.AreEqual(0, prepared.HoistedLiteralBindings.Count);
             StringAssert.Contains("return 3000000000;", prepared.PreparedSource);
         }
-
     }
 }

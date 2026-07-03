@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Text;
 
 namespace io.github.hatayama.uLoopMCP
@@ -25,8 +27,8 @@ namespace io.github.hatayama.uLoopMCP
             string body,
             IReadOnlyList<string> preambleLines = null)
         {
-            System.Diagnostics.Debug.Assert(usingDirectives != null, "usingDirectives must not be null");
-            System.Diagnostics.Debug.Assert(aliasedNames != null, "aliasedNames must not be null");
+            Debug.Assert(usingDirectives != null, "usingDirectives must not be null");
+            Debug.Assert(aliasedNames != null, "aliasedNames must not be null");
 
             StringBuilder sb = new StringBuilder();
 
@@ -93,28 +95,13 @@ namespace io.github.hatayama.uLoopMCP
             for (int index = 0; index < DefaultUsingAliases.Length; index++)
             {
                 DefaultUsingAlias alias = DefaultUsingAliases[index];
-                if (ContainsAliasName(aliasedNames, alias.Name))
+                if (aliasedNames.Contains(alias.Name))
                 {
                     continue;
                 }
 
                 sb.AppendLine($"using {alias.Name} = {alias.TargetTypeName};");
             }
-        }
-
-        private static bool ContainsAliasName(
-            IReadOnlyCollection<string> aliasedNames,
-            string aliasName)
-        {
-            foreach (string existingAliasName in aliasedNames)
-            {
-                if (existingAliasName == aliasName)
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private sealed class DefaultUsingAlias
