@@ -5,6 +5,9 @@ using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.EventSystems;
+#if ULOOPMCP_HAS_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 namespace io.github.hatayama.uLoopMCP
 {
@@ -205,6 +208,21 @@ namespace io.github.hatayama.uLoopMCP
             return new Vector2(screenPos.x, targetHeight - screenPos.y);
         }
 
+        // UI handlers can read Mouse.current alongside PointerEventData, so both paths must observe one position.
+        private static void SyncMousePosition(Vector2 screenPos)
+        {
+#if ULOOPMCP_HAS_INPUT_SYSTEM
+            Mouse? mouse = Mouse.current;
+            if (mouse == null)
+            {
+                return;
+            }
+
+            InputSystem.QueueDeltaStateEvent(mouse.position, screenPos);
+            InputSystemUpdateHelper.RunExplicitUpdate(InputUpdateTypeResolver.Resolve());
+#endif
+        }
+
         private async Task<SimulateMouseUiResponse> ExecuteClick(
             SimulateMouseUiSchema parameters, EventSystem eventSystem, CancellationToken ct)
         {
@@ -219,6 +237,7 @@ namespace io.github.hatayama.uLoopMCP
                 pressPosition = screenPos,
                 button = inputButton
             };
+            SyncMousePosition(screenPos);
 
             GameObject? target = null;
             GameObject? pressTarget = null;
@@ -345,6 +364,7 @@ namespace io.github.hatayama.uLoopMCP
                 pressPosition = screenPos,
                 button = inputButton
             };
+            SyncMousePosition(screenPos);
 
             GameObject? target = null;
             GameObject? rawTarget = null;
@@ -471,6 +491,7 @@ namespace io.github.hatayama.uLoopMCP
                 pointerDrag = dragTarget,
                 rawPointerPress = raycastResult.gameObject
             };
+            SyncMousePosition(screenPos);
 
             // Slider.OnPointerDown initializes m_Offset for handle positioning
             GameObject? pressTarget = ExecuteEvents.ExecuteHierarchy(
@@ -645,6 +666,7 @@ namespace io.github.hatayama.uLoopMCP
                 Vector2 previousPosition = pointerData.position;
                 pointerData.position = endPos;
                 pointerData.delta = endPos - previousPosition;
+                SyncMousePosition(endPos);
                 ExecuteEvents.Execute(target, pointerData, ExecuteEvents.dragHandler);
 
                 SimulateMouseUiOverlayState.UpdatePosition(ScreenToInput(endPos));
@@ -666,6 +688,7 @@ namespace io.github.hatayama.uLoopMCP
                     pointerData.position = currentPosition;
                     pointerData.delta = currentPosition - previousPosition;
 
+                    SyncMousePosition(currentPosition);
                     ExecuteEvents.Execute(target, pointerData, ExecuteEvents.dragHandler);
 
                     SimulateMouseUiOverlayState.UpdatePosition(ScreenToInput(currentPosition));
