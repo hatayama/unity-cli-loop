@@ -74,7 +74,7 @@ func AnalyzeDispatcherContractGuardForRefs(
 	// the legacy cli/ path, or predate the contract entirely. Both cases are an
 	// initial introduction, not a regression.
 	baseContent, baseContentErr := dispatcherContractFileAtRef(ctx, repoRoot, config.BaseRef)
-	baseValues, err := parseDispatcherContractBaseValues(baseContent, baseContentErr)
+	baseValues, err := parseDispatcherContractBaseValues(ctx, repoRoot, config.BaseRef, baseContent, baseContentErr)
 	if err != nil {
 		return DispatcherContractGuardResult{}, err
 	}
@@ -100,11 +100,18 @@ func dispatcherContractGuardNeedsAction(result DispatcherContractGuardResult) bo
 }
 
 func parseDispatcherContractBaseValues(
+	ctx context.Context,
+	repoRoot string,
+	baseRef string,
 	content string,
 	readErr error,
 ) (DispatcherContractValues, error) {
 	if readErr != nil {
-		if isMissingDispatcherContractAtRefError(readErr) {
+		missing, guardErr := isMissingDispatcherContractAtRefError(ctx, repoRoot, baseRef)
+		if guardErr != nil {
+			return DispatcherContractValues{}, fmt.Errorf("failed to classify base %s read failure: %w", dispatcherContractFile, guardErr)
+		}
+		if missing {
 			return DispatcherContractValues{}, nil
 		}
 		return DispatcherContractValues{}, fmt.Errorf("failed to read base %s: %w", dispatcherContractFile, readErr)
@@ -117,11 +124,35 @@ func parseDispatcherContractBaseValues(
 	return values, nil
 }
 
-func isMissingDispatcherContractAtRefError(err error) bool {
-	// dispatcherContractFileAtRef falls back to the legacy path, so a base ref
-	// without any dispatcher contract surfaces as the legacy file missing.
-	return isMissingFileAtRefError(err, dispatcherContractFile) ||
-		isMissingFileAtRefError(err, legacyDispatcherContractFile)
+// isMissingDispatcherContractAtRefError reports whether the base ref exists yet
+// carries neither the current dispatcher contract path nor its legacy
+// counterpart. Only that combination is an initial introduction; a missing
+// ref, or any git execution failure, must propagate instead of being silently
+// treated as "no contract".
+func isMissingDispatcherContractAtRefError(
+	ctx context.Context,
+	repoRoot string,
+	baseRef string,
+) (bool, error) {
+	refExists, err := refExistsAtRef(ctx, repoRoot, baseRef)
+	if err != nil {
+		return false, err
+	}
+	if !refExists {
+		return false, nil
+	}
+	primaryExists, err := fileExistsAtRef(ctx, repoRoot, baseRef, dispatcherContractFile)
+	if err != nil {
+		return false, err
+	}
+	if primaryExists {
+		return false, nil
+	}
+	legacyExists, err := fileExistsAtRef(ctx, repoRoot, baseRef, legacyDispatcherContractFile)
+	if err != nil {
+		return false, err
+	}
+	return !legacyExists, nil
 }
 
 // ParseDispatcherContractValues extracts only what the guard compares.

@@ -1,7 +1,10 @@
 package automation
 
 import (
+	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -45,11 +48,22 @@ func TestDispatcherContractGuardAcceptsInitialContract(t *testing.T) {
 	}
 }
 
-// Verifies a base ref without the contract at the split or legacy path is treated as initial introduction.
+// Verifies a base ref without the contract at either the split or legacy path
+// is treated as an initial introduction (zero values, no error).
 func TestDispatcherContractGuardTreatsMissingBaseContractAsInitial(t *testing.T) {
-	missingErr := errors.New("fatal: path 'cli/dispatcher-contract.json' does not exist in 'origin/main'")
+	repoRoot := setupDispatcherContractGuardMockGit(t, dispatcherContractGuardMockState{
+		refExists:     true,
+		primaryExists: false,
+		legacyExists:  false,
+	})
+	readErr := errors.New("fatal: dispatcher/dispatcher-contract.json missing at origin/main")
 
-	values, err := parseDispatcherContractBaseValues("", missingErr)
+	values, err := parseDispatcherContractBaseValues(
+		context.Background(),
+		repoRoot,
+		"origin/main",
+		"",
+		readErr)
 	if err != nil {
 		t.Fatalf("expected a missing base contract to be tolerated, got %v", err)
 	}
@@ -58,14 +72,123 @@ func TestDispatcherContractGuardTreatsMissingBaseContractAsInitial(t *testing.T)
 	}
 }
 
-// Verifies base contract read failures other than missing files do not get silently ignored.
+// Verifies base contract read failures other than "both paths missing at an
+// existing ref" propagate; a real read failure must not be silently ignored.
 func TestDispatcherContractGuardRejectsUnexpectedBaseReadError(t *testing.T) {
-	readErr := errors.New("fatal: not a git repository")
+	repoRoot := setupDispatcherContractGuardMockGit(t, dispatcherContractGuardMockState{
+		refExists:     true,
+		primaryExists: true,
+		legacyExists:  false,
+	})
+	readErr := errors.New("fatal: unable to read tree")
 
-	_, err := parseDispatcherContractBaseValues("", readErr)
+	_, err := parseDispatcherContractBaseValues(
+		context.Background(),
+		repoRoot,
+		"origin/main",
+		"",
+		readErr)
 
 	if err == nil {
 		t.Fatal("expected an unexpected read error to propagate")
+	}
+}
+
+// Verifies a base ref that is not resolvable is not silently treated as
+// initial; the read error propagates instead.
+func TestDispatcherContractGuardPropagatesMissingBaseRef(t *testing.T) {
+	repoRoot := setupDispatcherContractGuardMockGit(t, dispatcherContractGuardMockState{
+		refExists: false,
+	})
+	readErr := errors.New("fatal: bad revision 'no-such-ref'")
+
+	_, err := parseDispatcherContractBaseValues(
+		context.Background(),
+		repoRoot,
+		"no-such-ref",
+		"",
+		readErr)
+
+	if err == nil {
+		t.Fatal("expected a missing ref to propagate the read error")
+	}
+}
+
+type dispatcherContractGuardMockState struct {
+	refExists     bool
+	primaryExists bool
+	legacyExists  bool
+}
+
+func setupDispatcherContractGuardMockGit(t *testing.T, state dispatcherContractGuardMockState) string {
+	t.Helper()
+
+	workDir := t.TempDir()
+	mockBin := filepath.Join(workDir, "bin")
+	if err := os.MkdirAll(mockBin, 0o755); err != nil {
+		t.Fatalf("failed to create mock bin: %v", err)
+	}
+
+	setBool := func(name string, value bool) {
+		if value {
+			t.Setenv(name, "1")
+		} else {
+			t.Setenv(name, "")
+		}
+	}
+	setBool("MOCK_REF_EXISTS", state.refExists)
+	setBool("MOCK_PRIMARY_EXISTS", state.primaryExists)
+	setBool("MOCK_LEGACY_EXISTS", state.legacyExists)
+
+	writeDispatcherContractGuardMockGit(t, filepath.Join(mockBin, "git"))
+	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return workDir
+}
+
+func writeDispatcherContractGuardMockGit(t *testing.T, path string) {
+	t.Helper()
+
+	content := `#!/bin/sh
+set -eu
+
+if [ "$1" = "-C" ]; then
+  shift 2
+fi
+
+case "$1" in
+  cat-file)
+    case "$3" in
+      *:dispatcher/dispatcher-contract.json)
+        [ -n "${MOCK_PRIMARY_EXISTS:-}" ] && exit 0
+        exit 1
+        ;;
+      *:cli/dispatcher-contract.json)
+        [ -n "${MOCK_LEGACY_EXISTS:-}" ] && exit 0
+        exit 1
+        ;;
+      *)
+        echo "unexpected cat-file target: $3" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  rev-parse)
+    if [ "$2" = "--verify" ]; then
+      [ -n "${MOCK_REF_EXISTS:-}" ] && exit 0
+      exit 1
+    fi
+    echo "unexpected rev-parse: $*" >&2
+    exit 1
+    ;;
+  *)
+    echo "unexpected git command: $*" >&2
+    exit 1
+    ;;
+esac
+`
+	writeFile(t, path, content)
+	if err := os.Chmod(path, 0o755); err != nil {
+		t.Fatalf("failed to chmod mock git: %v", err)
 	}
 }
 
