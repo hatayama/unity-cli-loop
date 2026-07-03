@@ -225,27 +225,31 @@ namespace io.github.hatayama.uLoopMCP
         [UnityTest]
         public IEnumerator CollectInteractiveElements_WhenCanvasIsDisabled_ShouldSkipButton()
         {
-            GameObject canvas = CreateCanvas("DisabledCanvas", 0, false);
+            GameObject canvas = CreateCanvas("DisabledCanvas", false);
             CreateButton("HiddenButton", canvas.transform, Vector2.zero);
             Canvas.ForceUpdateCanvases();
             yield return null;
 
             List<UIElementInfo> elements = UIElementAnnotator.CollectInteractiveElements();
 
-            Assert.That(ContainsPath(elements, "DisabledCanvas/HiddenButton"), Is.False);
+            Assert.That(
+                elements.Exists((UIElementInfo element) => element.Path == "DisabledCanvas/HiddenButton"),
+                Is.False);
         }
 
         [UnityTest]
         public IEnumerator CollectInteractiveElements_WhenButtonIsVisible_ShouldIncludeButton()
         {
-            GameObject canvas = CreateCanvas("VisibleCanvas", 0, true);
+            GameObject canvas = CreateCanvas("VisibleCanvas", true);
             CreateButton("VisibleButton", canvas.transform, Vector2.zero);
             Canvas.ForceUpdateCanvases();
             yield return null;
 
             List<UIElementInfo> elements = UIElementAnnotator.CollectInteractiveElements();
 
-            Assert.That(ContainsPath(elements, "VisibleCanvas/VisibleButton"), Is.True);
+            Assert.That(
+                elements.Exists((UIElementInfo element) => element.Path == "VisibleCanvas/VisibleButton"),
+                Is.True);
         }
 
         [Test]
@@ -300,12 +304,11 @@ namespace io.github.hatayama.uLoopMCP
             return $"{color.r:F3}:{color.g:F3}:{color.b:F3}:{color.a:F3}";
         }
 
-        private GameObject CreateCanvas(string name, int sortingOrder, bool enabled)
+        private GameObject CreateCanvas(string name, bool enabled)
         {
             GameObject canvasGo = CreateGameObject(name);
             Canvas canvas = canvasGo.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = sortingOrder;
             canvas.enabled = enabled;
             canvasGo.AddComponent<GraphicRaycaster>();
             return canvasGo;
@@ -330,19 +333,6 @@ namespace io.github.hatayama.uLoopMCP
             GameObject go = new GameObject(name);
             _createdObjects.Add(go);
             return go;
-        }
-
-        private static bool ContainsPath(List<UIElementInfo> elements, string path)
-        {
-            foreach (UIElementInfo element in elements)
-            {
-                if (element.Path == path)
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
     }
 }

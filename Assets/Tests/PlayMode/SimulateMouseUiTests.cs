@@ -350,7 +350,7 @@ namespace Tests.PlayMode
             List<UIElementInfo> elements = UIElementAnnotator.CollectInteractiveElements();
 
             Assert.IsFalse(
-                ContainsAnnotatedPath(elements, "TestCanvas/CoveredAnnotationButton"),
+                elements.Exists((UIElementInfo element) => element.Path == "TestCanvas/CoveredAnnotationButton"),
                 "Covered UI should not be advertised as directly clickable");
         }
 
@@ -792,19 +792,6 @@ namespace Tests.PlayMode
         }
 
         #endregion
-
-        private static bool ContainsAnnotatedPath(List<UIElementInfo> elements, string path)
-        {
-            foreach (UIElementInfo element in elements)
-            {
-                if (element.Path == path)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
 
         #region Helpers
 
