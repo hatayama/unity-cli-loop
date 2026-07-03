@@ -22,7 +22,6 @@ namespace Tests.PlayMode
         private GameObject eventSystemGo = null!;
         private SimulateMouseUiTool tool = null!;
         private SimulateMouseUiResponse lastResponse = null!;
-        private Mouse mouse = null!;
 
         public override void Setup()
         {
@@ -39,7 +38,7 @@ namespace Tests.PlayMode
             eventSystemGo.AddComponent<StandaloneInputModule>();
 
             tool = new SimulateMouseUiTool();
-            mouse = InputSystem.AddDevice<Mouse>();
+            InputSystem.AddDevice<Mouse>();
         }
 
         public override void TearDown()
@@ -116,7 +115,9 @@ namespace Tests.PlayMode
 
         private void SetMousePosition(Vector2 position)
         {
-            Set(mouse.position, position);
+            Mouse? currentMouse = Mouse.current;
+            Assert.IsNotNull(currentMouse, "Mouse.current should exist after adding a Mouse device.");
+            Set(currentMouse!.position, position);
         }
 
         private void AssertPositionEquals(Vector2 expected, Vector2 actual, string message)
