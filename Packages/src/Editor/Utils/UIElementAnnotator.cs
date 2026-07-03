@@ -116,7 +116,12 @@ namespace io.github.hatayama.uLoopMCP
 
             foreach (UIElementInfo element in elements)
             {
-                CreateAnnotationForElement(root.transform, element, font, borderMetrics);
+                CreateAnnotationBorderForElement(root.transform, element, borderMetrics);
+            }
+
+            foreach (UIElementInfo element in elements)
+            {
+                CreateAnnotationLabelForElement(root.transform, element, font, borderMetrics);
             }
 
             return root;
@@ -357,10 +362,9 @@ namespace io.github.hatayama.uLoopMCP
             return true;
         }
 
-        private static void CreateAnnotationForElement(
+        private static void CreateAnnotationBorderForElement(
             Transform parent,
             UIElementInfo element,
-            Font font,
             AnnotationBorderMetrics borderMetrics)
         {
             float screenMinX = element.BoundsMinX;
@@ -369,7 +373,6 @@ namespace io.github.hatayama.uLoopMCP
             float screenMaxY = element.BoundsMaxY;
 
             Color color = GetAnnotationColorForElement(element);
-            Color contrastColor = GetContrastingTextColor(color);
             AnnotationBorderColors borderColors = GetAnnotationBorderColors(color);
 
             CreateBorder(
@@ -391,6 +394,18 @@ namespace io.github.hatayama.uLoopMCP
                 borderMetrics.ColorThickness,
                 borderColors.Middle);
             CreateBorder(parent, "DarkInner", screenMinX, screenMinY, screenMaxX, screenMaxY, borderMetrics.NeutralThickness, borderColors.Inner);
+        }
+
+        private static void CreateAnnotationLabelForElement(
+            Transform parent,
+            UIElementInfo element,
+            Font font,
+            AnnotationBorderMetrics borderMetrics)
+        {
+            float screenMinX = element.BoundsMinX;
+            float screenMaxY = element.BoundsMaxY;
+            Color color = GetAnnotationColorForElement(element);
+            Color contrastColor = GetContrastingTextColor(color);
 
             string labelText = CreateDisplayLabel(element);
             CreateLabel(

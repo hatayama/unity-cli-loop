@@ -185,6 +185,61 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
+        public void CreateAnnotationOverlay_WhenMultipleElementsAreAnnotated_ShouldDrawLabelsAboveAllBorders()
+        {
+            List<UIElementInfo> elements = new List<UIElementInfo>
+            {
+                new UIElementInfo
+                {
+                    Label = "A",
+                    Type = "Button",
+                    Interaction = "Click",
+                    BoundsMinX = 10f,
+                    BoundsMinY = 20f,
+                    BoundsMaxX = 110f,
+                    BoundsMaxY = 70f
+                },
+                new UIElementInfo
+                {
+                    Label = "B",
+                    Type = "Slider",
+                    Interaction = "Drag",
+                    BoundsMinX = 80f,
+                    BoundsMinY = 90f,
+                    BoundsMaxX = 210f,
+                    BoundsMaxY = 130f
+                }
+            };
+            GameObject overlay = UIElementAnnotator.CreateAnnotationOverlay(elements, 1f);
+
+            try
+            {
+                int lastBorderSiblingIndex = -1;
+                int firstLabelSiblingIndex = int.MaxValue;
+
+                for (int i = 0; i < overlay.transform.childCount; i++)
+                {
+                    Transform child = overlay.transform.GetChild(i);
+                    if (child.name.StartsWith("Border_"))
+                    {
+                        lastBorderSiblingIndex = i;
+                    }
+
+                    if (child.name == "LabelBg" && firstLabelSiblingIndex == int.MaxValue)
+                    {
+                        firstLabelSiblingIndex = i;
+                    }
+                }
+
+                Assert.That(firstLabelSiblingIndex, Is.GreaterThan(lastBorderSiblingIndex));
+            }
+            finally
+            {
+                UIElementAnnotator.DestroyAnnotationOverlay(overlay);
+            }
+        }
+
+        [Test]
         public void CreateAnnotationOverlay_WhenResolutionScaleIsHalf_ShouldCompensateBorderThickness()
         {
             List<UIElementInfo> elements = new List<UIElementInfo>
