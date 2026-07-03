@@ -81,6 +81,14 @@ func fileExistsAtRef(ctx context.Context, repoRoot string, ref string, file stri
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
+		// A probe killed by context cancellation also surfaces as an
+		// ExitError (signal: killed), so classify it as an execution failure
+		// rather than absence; misreading it as "missing" could make the
+		// dispatcher guard skip validation as if the base were an initial
+		// contract.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return false, fmt.Errorf("git cat-file -e %s:%s interrupted: %w", ref, file, ctxErr)
+		}
 		return false, nil
 	}
 	return false, fmt.Errorf("git cat-file -e %s:%s failed: %w", ref, file, err)
@@ -99,6 +107,11 @@ func refExistsAtRef(ctx context.Context, repoRoot string, ref string) (bool, err
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
+		// See fileExistsAtRef: a cancellation kill is an ExitError too and
+		// must not be classified as a missing ref.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return false, fmt.Errorf("git rev-parse --verify %s interrupted: %w", ref, ctxErr)
+		}
 		return false, nil
 	}
 	return false, fmt.Errorf("git rev-parse --verify %s failed: %w", ref, err)

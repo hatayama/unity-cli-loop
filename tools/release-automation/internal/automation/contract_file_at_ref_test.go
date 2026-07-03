@@ -2,10 +2,12 @@ package automation
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Verifies the legacy fallback runs when the primary path is absent at an
@@ -131,6 +133,57 @@ func TestContractFileAtRefWithLegacyFallback_WhenProbeFailsWithNonExitError_Pres
 	}
 	if !strings.Contains(err.Error(), "cat-file") {
 		t.Fatalf("expected the classification failure detail to be included, got: %v", err)
+	}
+}
+
+// Verifies a probe killed by context cancellation reports an error instead of
+// classifying the killed git process as "file absent": the kill produces an
+// *exec.ExitError just like a genuine non-zero exit, and misreading it as
+// absence would let the dispatcher guard treat a base as an initial contract.
+func TestFileExistsAtRef_WhenContextCanceledMidProbe_ReturnsErrorInsteadOfAbsence(t *testing.T) {
+	_, binDir := setupMockGitBin(t)
+	writeSleepingMockGit(t, binDir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	exists, err := fileExistsAtRef(ctx, t.TempDir(), "some-ref", "common/clicontract/contract.json")
+	if err == nil {
+		t.Fatalf("expected an error for an interrupted probe, got exists=%v", exists)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected the context error to be wrapped, got: %v", err)
+	}
+}
+
+// Verifies the ref-existence probe applies the same cancellation handling as
+// the file-existence probe, so a canceled rev-parse cannot masquerade as a
+// missing ref.
+func TestRefExistsAtRef_WhenContextCanceledMidProbe_ReturnsErrorInsteadOfAbsence(t *testing.T) {
+	_, binDir := setupMockGitBin(t)
+	writeSleepingMockGit(t, binDir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	exists, err := refExistsAtRef(ctx, t.TempDir(), "some-ref")
+	if err == nil {
+		t.Fatalf("expected an error for an interrupted probe, got exists=%v", exists)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected the context error to be wrapped, got: %v", err)
+	}
+}
+
+// writeSleepingMockGit installs a git mock that blocks far longer than the
+// test timeouts so context cancellation reliably kills it mid-run.
+func writeSleepingMockGit(t *testing.T, binDir string) {
+	t.Helper()
+
+	path := filepath.Join(binDir, "git")
+	writeFile(t, path, "#!/bin/sh\nsleep 10\n")
+	if err := os.Chmod(path, 0o755); err != nil {
+		t.Fatalf("failed to chmod mock git: %v", err)
 	}
 }
 
