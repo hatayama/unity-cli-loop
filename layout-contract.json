@@ -2,10 +2,10 @@
   "schemaVersion": 2,
   "layout": {
     "modules": {
-      "common": "common",
-      "dispatcher": "dispatcher",
-      "projectRunner": "project-runner",
-      "releaseAutomation": "tools/release-automation"
+      "common": "cli/common",
+      "dispatcher": "cli/dispatcher",
+      "projectRunner": "cli/project-runner",
+      "releaseAutomation": "cli/release-automation"
     },
     "distDir": "dist"
   },

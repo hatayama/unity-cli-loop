@@ -10,12 +10,12 @@ import (
 )
 
 // unityProtocolConstantPath is the C# source that declares the protocol generation the
-// Unity package accepts. It is relative to this package directory (common/clicontract).
+// Unity package accepts. It is relative to this package directory (cli/common/clicontract).
 const (
-	unityProtocolConstantPath = "../../Packages/src/Editor/Domain/CliConstants.cs"
-	unityPackageManifestPath  = "../../Packages/src/package.json"
-	unityPackageCliPinPath    = "../../Packages/src/project-runner-pin.json"
-	unityProjectCliPinPath    = "../../.uloop/project-runner-pin.json"
+	unityProtocolConstantPath = "../../../Packages/src/Editor/Domain/CliConstants.cs"
+	unityPackageManifestPath  = "../../../Packages/src/package.json"
+	unityPackageCliPinPath    = "../../../Packages/src/project-runner-pin.json"
+	unityProjectCliPinPath    = "../../../.uloop/project-runner-pin.json"
 )
 
 var (

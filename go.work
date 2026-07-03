@@ -1,8 +1,0 @@
-go 1.26
-
-use (
-	./project-runner
-	./common
-	./dispatcher
-	./tools/release-automation
-)

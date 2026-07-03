@@ -26,8 +26,8 @@ func TestContractFileAtRefWithLegacyFallback_WhenPrimaryMissingAtExistingRef_Fal
 		context.Background(),
 		fixture.repoRoot,
 		"missing-primary-ref",
-		"common/clicontract/contract.json",
-		"cli/contract.json")
+		cliContractFile,
+		legacyRunnerContractFile)
 	if err != nil {
 		t.Fatalf("expected legacy fallback to succeed, got err: %v", err)
 	}
@@ -53,8 +53,8 @@ func TestContractFileAtRefWithLegacyFallback_WhenPrimaryExistsButShowFails_Retur
 		context.Background(),
 		fixture.repoRoot,
 		"broken-primary-ref",
-		"common/clicontract/contract.json",
-		"cli/contract.json")
+		cliContractFile,
+		legacyRunnerContractFile)
 
 	if err == nil {
 		t.Fatalf("expected show error to propagate, got content %q", content)
@@ -82,8 +82,8 @@ func TestContractFileAtRefWithLegacyFallback_WhenRefMissing_PropagatesShowError(
 		context.Background(),
 		fixture.repoRoot,
 		"no-such-ref",
-		"common/clicontract/contract.json",
-		"cli/contract.json")
+		cliContractFile,
+		legacyRunnerContractFile)
 
 	if err == nil {
 		t.Fatalf("expected missing-ref error to propagate, got content %q", content)
@@ -122,13 +122,13 @@ func TestContractFileAtRefWithLegacyFallback_WhenProbeFailsWithNonExitError_Pres
 		context.Background(),
 		workDir,
 		"some-ref",
-		"common/clicontract/contract.json",
-		"cli/contract.json")
+		cliContractFile,
+		legacyRunnerContractFile)
 
 	if err == nil {
 		t.Fatal("expected an error when both show and probe fail")
 	}
-	if !strings.Contains(err.Error(), "show some-ref:common/clicontract/contract.json") {
+	if !strings.Contains(err.Error(), "show some-ref:"+cliContractFile) {
 		t.Fatalf("expected the original show error text to be preserved, got: %v", err)
 	}
 	if !strings.Contains(err.Error(), "cat-file") {
@@ -147,7 +147,7 @@ func TestFileExistsAtRef_WhenContextCanceledMidProbe_ReturnsErrorInsteadOfAbsenc
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	exists, err := fileExistsAtRef(ctx, t.TempDir(), "some-ref", "common/clicontract/contract.json")
+	exists, err := fileExistsAtRef(ctx, t.TempDir(), "some-ref", cliContractFile)
 	if err == nil {
 		t.Fatalf("expected an error for an interrupted probe, got exists=%v", exists)
 	}
@@ -465,13 +465,21 @@ func setupContractFileAtRefMockGit(t *testing.T, fixture contractFileAtRefFixtur
 				showContent: "primary-body",
 				showStderr:  fixture.primaryShowStderr,
 			},
+			// This fixture is only used through the two-argument variant of
+			// contractFileAtRefWithLegacyFallback, so the middle-generation
+			// (root-modules) probe is never issued. Modeling it as absent keeps
+			// the mock safe against future callers of the three-generation
+			// wrappers without changing the behaviour of the existing tests.
+			rootModulesRunnerContractFile: {exists: false},
 			legacyRunnerContractFile: {
 				exists:          fixture.legacyShowSucceeds,
 				showOK:          fixture.legacyShowSucceeds,
 				showContentPath: legacyPath,
 				showStderr:      "fatal: legacy show failed",
 			},
-			dispatcherContractFile: {exists: false},
+			dispatcherContractFile:            {exists: false},
+			rootModulesDispatcherContractFile: {exists: false},
+			legacyDispatcherContractFile:      {exists: false},
 		},
 	})
 

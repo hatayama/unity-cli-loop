@@ -12,11 +12,29 @@ import (
 	"strings"
 )
 
+// Contract file paths are read from historical tags as well as HEAD, and each
+// directory move creates a new generation of paths that must all continue to
+// resolve. Three generations are currently live for release-tag reads:
+//
+//  1. Current layout (this move): the Go modules live under `cli/` at the repo
+//     root, so contract files are at `cli/common/...` and `cli/dispatcher/...`.
+//     These are the primary paths.
+//  2. Root-modules layout: contract files sat at `common/...` and
+//     `dispatcher/...` at the repo root. Tags published between PR #1461 (v2->v3
+//     module split) and this move still resolve their contract at these paths.
+//  3. Pre-split single-module layout (v2): all files lived under a top-level
+//     `cli/` module with flat filenames. These are the oldest paths.
 const (
-	cliContractFile                     = "common/clicontract/contract.json"
-	legacyRunnerContractFile            = "cli/contract.json"
-	dispatcherContractFile              = "dispatcher/dispatcher-contract.json"
-	legacyDispatcherContractFile        = "cli/dispatcher-contract.json"
+	// Primary paths (current layout, after moving Go modules under `cli/`).
+	cliContractFile        = "cli/common/clicontract/contract.json"
+	dispatcherContractFile = "cli/dispatcher/dispatcher-contract.json"
+	// Middle-generation paths (root-modules layout, between PR #1461 and this move).
+	rootModulesRunnerContractFile     = "common/clicontract/contract.json"
+	rootModulesDispatcherContractFile = "dispatcher/dispatcher-contract.json"
+	// Oldest paths (pre-split v2 single-module `cli/` era).
+	legacyRunnerContractFile     = "cli/contract.json"
+	legacyDispatcherContractFile = "cli/dispatcher-contract.json"
+
 	dispatcherReleaseTagPrefix          = "dispatcher-v"
 	unityPackageCliPinFile              = "Packages/src/project-runner-pin.json"
 	unityProjectCliPinFile              = ".uloop/project-runner-pin.json"
@@ -269,14 +287,27 @@ func verifyDispatcherMinimumVersionAtRef(
 	releaseTag := dispatcherReleaseTagPrefix + values.MinimumDispatcherVersion
 	contractContent, err := dispatcherContractFileAtRef(ctx, repoRoot, releaseTag)
 	if err != nil {
-		return fmt.Errorf("dispatcher release %s does not provide %s or %s", releaseTag, dispatcherContractFile, legacyDispatcherContractFile)
+		return fmt.Errorf(
+			"dispatcher release %s does not provide %s, %s, or %s",
+			releaseTag,
+			dispatcherContractFile,
+			rootModulesDispatcherContractFile,
+			legacyDispatcherContractFile)
 	}
 	return verifyMinimumCliReleaseDispatcherContract(values, []byte(contractContent))
 }
 
 // dispatcherContractFileAtRef reads the dispatcher release contract at a git ref.
+// The fallback chain (primary -> root-modules -> pre-split) covers every generation
+// of dispatcher release tags currently live in the repository.
 func dispatcherContractFileAtRef(ctx context.Context, repoRoot string, ref string) (string, error) {
-	return contractFileAtRefWithLegacyFallback(ctx, repoRoot, ref, dispatcherContractFile, legacyDispatcherContractFile)
+	return contractFileAtRefWithLegacyFallback(
+		ctx,
+		repoRoot,
+		ref,
+		dispatcherContractFile,
+		rootModulesDispatcherContractFile,
+		legacyDispatcherContractFile)
 }
 
 func verifyCurrentDispatcherMinimumVersion(values dispatcherMinimumVersionValues) error {

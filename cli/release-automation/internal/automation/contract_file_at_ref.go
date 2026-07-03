@@ -17,7 +17,11 @@ import (
 const releaseContractMissingSentinel = "release contract missing"
 
 func runnerContractMissingAtReleaseMessage(releaseTag string) string {
-	return formatReleaseContractMissingMessage(releaseTag, cliContractFile, legacyRunnerContractFile)
+	return formatReleaseContractMissingMessage(
+		releaseTag,
+		cliContractFile,
+		rootModulesRunnerContractFile,
+		legacyRunnerContractFile)
 }
 
 // formatReleaseContractMissingMessage builds the "no contract found" error
@@ -32,8 +36,16 @@ func formatReleaseContractMissingMessage(releaseTag string, checkedPaths ...stri
 }
 
 // runnerContractFileAtRef reads the CLI/runner IPC contract file at a git ref.
+// The fallback chain (primary -> root-modules -> pre-split) covers every generation
+// of project runner release tags currently live in the repository.
 func runnerContractFileAtRef(ctx context.Context, repoRoot string, ref string) (string, error) {
-	return contractFileAtRefWithLegacyFallback(ctx, repoRoot, ref, cliContractFile, legacyRunnerContractFile)
+	return contractFileAtRefWithLegacyFallback(
+		ctx,
+		repoRoot,
+		ref,
+		cliContractFile,
+		rootModulesRunnerContractFile,
+		legacyRunnerContractFile)
 }
 
 // contractFileAtRefWithLegacyFallback reads a release contract at a git ref.

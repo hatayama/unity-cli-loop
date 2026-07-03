@@ -74,13 +74,13 @@ MOCK_GH
 
 write_contract() {
   version=$1
-  mkdir -p dispatcher
+  mkdir -p cli/dispatcher
   printf '%s\n' \
     '{' \
     '  "schemaVersion": 1,' \
     '  "dispatcherVersion": "'"$version"'",' \
     '  "dispatcherContractVersion": 1' \
-    '}' > dispatcher/dispatcher-contract.json
+    '}' > cli/dispatcher/dispatcher-contract.json
 }
 
 run_case() {

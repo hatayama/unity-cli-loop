@@ -23,8 +23,8 @@ set -eu
 emit_cli_release_diff() {
   version=$1
   printf '%s\n' 'diff --git a/.release-please-manifest.json b/.release-please-manifest.json'
-  printf '+  "project-runner": "%s"\n' "$version"
-  printf '%s\n' 'diff --git a/project-runner/CHANGELOG.md b/project-runner/CHANGELOG.md'
+  printf '+  "cli/project-runner": "%s"\n' "$version"
+  printf '%s\n' 'diff --git a/cli/project-runner/CHANGELOG.md b/cli/project-runner/CHANGELOG.md'
   printf '+## [%s]\n' "$version"
 }
 
@@ -142,7 +142,7 @@ write_manifest() {
   version=$1
   cat > .release-please-manifest.json <<EOF_MANIFEST
 {
-  "project-runner": "$version"
+  "cli/project-runner": "$version"
 }
 EOF_MANIFEST
 }
@@ -410,7 +410,7 @@ test_invalid_release_tag_empty_prerelease_identifier_fails() {
   run_failure_case invalid-release-tag-empty-prerelease 3.0.0-beta.3 push v3-beta "Invalid release tag: uloop-project-runner-v3.0.0-alpha..1" missing uloop-project-runner-v3.0.0-alpha..1
 }
 
-assert_script_contains "project-runner/go.mod"
+assert_script_contains "cli/project-runner/go.mod"
 test_complete_current_release_skips
 test_package_version_change_without_cli_change_skips
 test_cli_change_publishes

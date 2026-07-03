@@ -16,7 +16,11 @@ updates:
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "gomod"
-    directory: "/cli"
+    directories:
+      - "/cli/common"
+      - "/cli/dispatcher"
+      - "/cli/project-runner"
+      - "/cli/release-automation"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
