@@ -42,5 +42,23 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
 
             Assert.IsTrue(hasReturn);
         }
+
+        [Test]
+        public void Analyze_WhenVerbatimUsingAlias_ShouldRecordNormalizedAliasName()
+        {
+            SourceShapeResult result = SourceShaper.Analyze(
+                "using @Object = System.Object;\nreturn new @Object();");
+
+            Assert.That(result.AliasedNames, Does.Contain("Object"));
+        }
+
+        [Test]
+        public void Analyze_WhenGlobalUsingAliasHasComments_ShouldRecordAliasName()
+        {
+            SourceShapeResult result = SourceShaper.Analyze(
+                "global /* comment */ using /* comment */ Random /* comment */ = UnityEngine.Random;\nreturn Random.Range(0, 1);");
+
+            Assert.That(result.AliasedNames, Does.Contain("Random"));
+        }
     }
 }

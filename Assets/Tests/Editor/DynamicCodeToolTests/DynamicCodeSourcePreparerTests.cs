@@ -62,7 +62,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             Assert.IsNotNull(prepared.PreparedSource);
             Assert.AreEqual(
                 1,
-                CountSubstring(prepared.PreparedSource, "using Object = UnityEngine.Object;"));
+                DynamicCodeTestStringUtility.CountSubstring(prepared.PreparedSource, "using Object = UnityEngine.Object;"));
         }
 
         [Test]
@@ -76,7 +76,33 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             Assert.IsNotNull(prepared.PreparedSource);
             Assert.AreEqual(
                 1,
-                CountSubstring(prepared.PreparedSource, "using Object = "));
+                DynamicCodeTestStringUtility.CountSubstring(prepared.PreparedSource, "using Object = "));
+        }
+
+        [Test]
+        public void Prepare_WhenVerbatimObjectAliasAlreadyExists_ShouldRespectUserAlias()
+        {
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
+                "using @Object = System.Object;\nreturn new @Object();",
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            Assert.IsNotNull(prepared.PreparedSource);
+            Assert.AreEqual(
+                0,
+                DynamicCodeTestStringUtility.CountSubstring(prepared.PreparedSource, "using Object = UnityEngine.Object;"));
+        }
+
+        [Test]
+        public void Prepare_WhenScriptUsesBareUnityRandom_ShouldAddRandomAlias()
+        {
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
+                "int value = Random.Range(0, 10);\nreturn value;",
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            Assert.IsNotNull(prepared.PreparedSource);
+            StringAssert.Contains("using Random = UnityEngine.Random;", prepared.PreparedSource);
         }
 
         [Test]
@@ -270,17 +296,5 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             StringAssert.Contains("return 3000000000;", prepared.PreparedSource);
         }
 
-        private static int CountSubstring(string source, string target)
-        {
-            int count = 0;
-            int index = 0;
-            while ((index = source.IndexOf(target, index, System.StringComparison.Ordinal)) >= 0)
-            {
-                count++;
-                index += target.Length;
-            }
-
-            return count;
-        }
     }
 }

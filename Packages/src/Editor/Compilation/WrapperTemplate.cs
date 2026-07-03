@@ -11,14 +11,23 @@ namespace io.github.hatayama.uLoopMCP
     {
         internal const string UserCodeStartMarker = "#line 1 \"user-snippet.cs\"";
         internal const string UserCodeEndMarker = "#line default";
+        private static readonly DefaultUsingAlias[] DefaultUsingAliases =
+        {
+            new DefaultUsingAlias("Object", "UnityEngine.Object"),
+            new DefaultUsingAlias("Random", "UnityEngine.Random")
+        };
 
         public static string Build(
             IReadOnlyList<string> usingDirectives,
+            IReadOnlyCollection<string> aliasedNames,
             string namespaceName,
             string className,
             string body,
             IReadOnlyList<string> preambleLines = null)
         {
+            System.Diagnostics.Debug.Assert(usingDirectives != null, "usingDirectives must not be null");
+            System.Diagnostics.Debug.Assert(aliasedNames != null, "aliasedNames must not be null");
+
             StringBuilder sb = new StringBuilder();
 
             sb.AppendLine("#pragma warning disable CS0162");
@@ -30,10 +39,7 @@ namespace io.github.hatayama.uLoopMCP
             sb.AppendLine("using System.Threading.Tasks;");
             sb.AppendLine("using UnityEngine;");
             sb.AppendLine("using UnityEditor;");
-            if (!HasObjectAlias(usingDirectives))
-            {
-                sb.AppendLine("using Object = UnityEngine.Object;");
-            }
+            AppendDefaultUsingAliases(sb, aliasedNames);
 
             foreach (string directive in usingDirectives)
             {
@@ -80,22 +86,29 @@ namespace io.github.hatayama.uLoopMCP
             return sb.ToString();
         }
 
-        private static bool HasObjectAlias(IReadOnlyList<string> usingDirectives)
+        private static void AppendDefaultUsingAliases(
+            StringBuilder sb,
+            IReadOnlyCollection<string> aliasedNames)
         {
-            if (usingDirectives == null)
+            for (int index = 0; index < DefaultUsingAliases.Length; index++)
             {
-                return false;
-            }
-
-            for (int index = 0; index < usingDirectives.Count; index++)
-            {
-                string directive = usingDirectives[index]?.TrimStart();
-                if (string.IsNullOrEmpty(directive))
+                DefaultUsingAlias alias = DefaultUsingAliases[index];
+                if (ContainsAliasName(aliasedNames, alias.Name))
                 {
                     continue;
                 }
 
-                if (IsObjectAliasDirective(directive))
+                sb.AppendLine($"using {alias.Name} = {alias.TargetTypeName};");
+            }
+        }
+
+        private static bool ContainsAliasName(
+            IReadOnlyCollection<string> aliasedNames,
+            string aliasName)
+        {
+            foreach (string existingAliasName in aliasedNames)
+            {
+                if (existingAliasName == aliasName)
                 {
                     return true;
                 }
@@ -104,46 +117,17 @@ namespace io.github.hatayama.uLoopMCP
             return false;
         }
 
-        private static bool IsObjectAliasDirective(string directive)
+        private sealed class DefaultUsingAlias
         {
-            int usingPosition = 0;
-            if (SourceShaper.StartsWithKeyword(directive, usingPosition, "global"))
+            public string Name { get; }
+
+            public string TargetTypeName { get; }
+
+            public DefaultUsingAlias(string name, string targetTypeName)
             {
-                usingPosition = SkipWhitespaceAndComments(directive, usingPosition + "global".Length);
+                Name = name;
+                TargetTypeName = targetTypeName;
             }
-
-            if (!SourceShaper.StartsWithKeyword(directive, usingPosition, "using"))
-            {
-                return false;
-            }
-
-            int aliasStart = SkipWhitespaceAndComments(directive, usingPosition + "using".Length);
-            if (!SourceShaper.StartsWithKeyword(directive, aliasStart, "Object"))
-            {
-                return false;
-            }
-
-            int equalsPosition = SkipWhitespaceAndComments(directive, aliasStart + "Object".Length);
-            return equalsPosition < directive.Length && directive[equalsPosition] == '=';
-        }
-
-        private static int SkipWhitespaceAndComments(string source, int position)
-        {
-            int currentPosition = SourceShaper.SkipWhitespace(source, position);
-            while (IsCommentStart(source, currentPosition))
-            {
-                int nextPosition = SourceShaper.AdvanceOneTokenPublic(source, currentPosition);
-                currentPosition = SourceShaper.SkipWhitespace(source, nextPosition);
-            }
-
-            return currentPosition;
-        }
-
-        private static bool IsCommentStart(string source, int position)
-        {
-            return position + 1 < source.Length &&
-                   source[position] == '/' &&
-                   (source[position + 1] == '/' || source[position + 1] == '*');
         }
     }
 }

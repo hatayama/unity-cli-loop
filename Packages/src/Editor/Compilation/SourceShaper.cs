@@ -47,7 +47,7 @@ namespace io.github.hatayama.uLoopMCP
                         if (StartsWithKeyword(source, afterUsing, "static"))
                         {
                             int end = FindSemicolon(source, segmentStart);
-                            result.UsingDirectives.Add(source.Substring(segmentStart, end - segmentStart + 1).TrimEnd());
+                            RegisterUsingDirective(result, source, segmentStart, end);
                             pos = end + 1;
                             continue;
                         }
@@ -63,7 +63,7 @@ namespace io.github.hatayama.uLoopMCP
                         }
 
                         int semiEnd = FindSemicolon(source, segmentStart);
-                        result.UsingDirectives.Add(source.Substring(segmentStart, semiEnd - segmentStart + 1).TrimEnd());
+                        RegisterUsingDirective(result, source, segmentStart, semiEnd);
                         pos = semiEnd + 1;
                         continue;
                     }
@@ -82,11 +82,12 @@ namespace io.github.hatayama.uLoopMCP
                         continue;
                     }
 
-                    if (StartsWithKeyword(source, pos, "global") && StartsWithKeyword(source, SkipWhitespace(source, pos + 6), "using"))
+                    if (StartsWithKeyword(source, pos, "global") &&
+                        StartsWithKeyword(source, SkipWhitespaceAndComments(source, pos + "global".Length), "using"))
                     {
                         int segmentStart = pos;
                         int semiEnd = FindSemicolon(source, segmentStart);
-                        result.UsingDirectives.Add(source.Substring(segmentStart, semiEnd - segmentStart + 1).TrimEnd());
+                        RegisterUsingDirective(result, source, segmentStart, semiEnd);
                         pos = semiEnd + 1;
                         continue;
                     }
@@ -156,7 +157,7 @@ namespace io.github.hatayama.uLoopMCP
                     : body + "\nreturn null;";
             }
 
-            return WrapperTemplate.Build(shape.UsingDirectives, namespaceName, className, body);
+            return WrapperTemplate.Build(shape.UsingDirectives, shape.AliasedNames, namespaceName, className, body);
         }
 
         internal static int SkipWhitespace(string s, int pos)
@@ -184,6 +185,109 @@ namespace io.github.hatayama.uLoopMCP
                 return false;
             }
             return true;
+        }
+
+        private static void RegisterUsingDirective(
+            SourceShapeResult result,
+            string source,
+            int segmentStart,
+            int semiEnd)
+        {
+            result.UsingDirectives.Add(source.Substring(segmentStart, semiEnd - segmentStart + 1).TrimEnd());
+
+            string aliasName = ExtractUsingAliasName(source, segmentStart, semiEnd);
+            if (!string.IsNullOrEmpty(aliasName))
+            {
+                result.AliasedNames.Add(aliasName);
+            }
+        }
+
+        private static string ExtractUsingAliasName(string source, int segmentStart, int semiEnd)
+        {
+            int position = segmentStart;
+            if (StartsWithKeyword(source, position, "global"))
+            {
+                position = SkipWhitespaceAndComments(source, position + "global".Length);
+            }
+
+            if (!StartsWithKeyword(source, position, "using"))
+            {
+                return null;
+            }
+
+            position = SkipWhitespaceAndComments(source, position + "using".Length);
+            if (StartsWithKeyword(source, position, "static"))
+            {
+                return null;
+            }
+
+            AliasNameParseResult aliasName = ReadAliasName(source, position, semiEnd);
+            if (aliasName.Name == null)
+            {
+                return null;
+            }
+
+            int equalsPosition = SkipWhitespaceAndComments(source, aliasName.EndPosition);
+            if (equalsPosition > semiEnd || source[equalsPosition] != '=')
+            {
+                return null;
+            }
+
+            return aliasName.Name;
+        }
+
+        private static AliasNameParseResult ReadAliasName(string source, int position, int semiEnd)
+        {
+            int currentPosition = position;
+            if (currentPosition <= semiEnd && source[currentPosition] == '@')
+            {
+                currentPosition++;
+            }
+
+            if (currentPosition > semiEnd || !IsIdentifierStart(source[currentPosition]))
+            {
+                return new AliasNameParseResult(null, position);
+            }
+
+            int nameStart = currentPosition;
+            currentPosition++;
+            while (currentPosition <= semiEnd && IsIdentifierPart(source[currentPosition]))
+            {
+                currentPosition++;
+            }
+
+            return new AliasNameParseResult(
+                source.Substring(nameStart, currentPosition - nameStart),
+                currentPosition);
+        }
+
+        private static bool IsIdentifierStart(char value)
+        {
+            return char.IsLetter(value) || value == '_';
+        }
+
+        private static bool IsIdentifierPart(char value)
+        {
+            return char.IsLetterOrDigit(value) || value == '_';
+        }
+
+        private static int SkipWhitespaceAndComments(string source, int position)
+        {
+            int currentPosition = SkipWhitespace(source, position);
+            while (IsCommentStart(source, currentPosition))
+            {
+                int nextPosition = AdvanceOneToken(source, currentPosition);
+                currentPosition = SkipWhitespace(source, nextPosition);
+            }
+
+            return currentPosition;
+        }
+
+        private static bool IsCommentStart(string source, int position)
+        {
+            return position + 1 < source.Length &&
+                   source[position] == '/' &&
+                   (source[position + 1] == '/' || source[position + 1] == '*');
         }
 
         private static bool IsTypeDeclarationKeyword(string s, int pos)
@@ -578,14 +682,29 @@ namespace io.github.hatayama.uLoopMCP
 
             return end < s.Length ? end + 1 : s.Length;
         }
+
+        private sealed class AliasNameParseResult
+        {
+            public string Name { get; }
+
+            public int EndPosition { get; }
+
+            public AliasNameParseResult(string name, int endPosition)
+            {
+                Name = name;
+                EndPosition = endPosition;
+            }
+        }
     }
 
     internal sealed class SourceShapeResult
     {
         public List<string> UsingDirectives { get; } = new List<string>();
+        public HashSet<string> AliasedNames { get; } = new HashSet<string>(System.StringComparer.Ordinal);
         public bool HasNamespaceDeclaration { get; set; }
         public bool HasTypeDeclaration { get; set; }
         public bool HasTopLevelStatements { get; set; }
         public StringBuilder TopLevelBodyBuilder { get; } = new StringBuilder();
     }
+
 }
