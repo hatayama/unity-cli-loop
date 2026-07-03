@@ -38,7 +38,7 @@ func ResolveInstallDir(goos string, explicitInstallDir string, environment Envir
 	if explicitInstallDir != "" {
 		return explicitInstallDir, nil
 	}
-	if installDir := getEnvironmentValue(environment, InstallDirEnvName); installDir != "" {
+	if installDir := strings.TrimSpace(getEnvironmentValue(environment, InstallDirEnvName)); installDir != "" {
 		return installDir, nil
 	}
 	return DefaultInstallDir(goos, environment)

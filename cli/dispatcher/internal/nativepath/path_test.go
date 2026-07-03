@@ -18,6 +18,47 @@ func TestResolveInstallDirUsesExplicitDirectory(t *testing.T) {
 	}
 }
 
+func TestResolveInstallDirUsesEnvironmentDirectory(t *testing.T) {
+	// Verifies environment install directories take precedence over operating system defaults.
+	installDir, err := ResolveInstallDir("darwin", "", Environment{
+		Getenv: func(name string) string {
+			if name == InstallDirEnvName {
+				return "/custom/bin"
+			}
+			return ""
+		},
+		UserHomeDir: func() (string, error) {
+			return "", errors.New("home should not be read when install dir env is set")
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResolveInstallDir failed: %v", err)
+	}
+
+	if installDir != "/custom/bin" {
+		t.Fatalf("install dir mismatch: %s", installDir)
+	}
+}
+
+func TestResolveInstallDirTrimsEnvironmentDirectory(t *testing.T) {
+	// Verifies environment install directories are normalized like explicit cache roots.
+	installDir, err := ResolveInstallDir("darwin", "", Environment{
+		Getenv: func(name string) string {
+			if name == InstallDirEnvName {
+				return " /custom/bin "
+			}
+			return ""
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResolveInstallDir failed: %v", err)
+	}
+
+	if installDir != "/custom/bin" {
+		t.Fatalf("install dir mismatch: %s", installDir)
+	}
+}
+
 func TestDefaultInstallDirForWindowsUsesLocalAppData(t *testing.T) {
 	// Verifies Windows install and uninstall commands share the same package-owned default directory.
 	installDir, err := DefaultInstallDir("windows", Environment{
