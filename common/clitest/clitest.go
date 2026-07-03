@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/version"
@@ -30,6 +31,19 @@ func WriteProjectFile(t *testing.T, projectRoot string, relativePath string, con
 	if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write %s: %v", relativePath, err)
 	}
+}
+
+// WriteSkillFile seeds a skill file at projectRoot/relativeDir/fileName after
+// normalizing CRLF line endings in content. The normalization exists so
+// Windows checkouts with core.autocrlf do not change the frontmatter parser
+// input that the skill loaders see at runtime. fileName is a parameter because
+// clitest cannot import common/clicore (that would create an import cycle),
+// so each caller supplies its own skill-file-name constant.
+func WriteSkillFile(t *testing.T, projectRoot string, relativeDir string, fileName string, content string) {
+	t.Helper()
+
+	normalizedContent := strings.ReplaceAll(content, "\r\n", "\n")
+	WriteProjectFile(t, projectRoot, filepath.Join(relativeDir, fileName), normalizedContent)
 }
 
 // RunVersionJSON invokes a CLI entrypoint with the shared "--version --json"

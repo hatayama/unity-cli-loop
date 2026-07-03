@@ -336,11 +336,9 @@ func writeToolCache(t *testing.T, projectRoot string, content string) {
 	clitest.WriteProjectFile(t, projectRoot, filepath.Join(CacheDirectoryName, CacheFileName), content)
 }
 
-// writeTestSkill seeds a SKILL.md fixture at projectRoot/relativeDir. It
-// normalizes CRLF so Windows checkouts of Go source with core.autocrlf do not
-// change the frontmatter parser input.
+// writeTestSkill seeds a SKILL.md fixture at projectRoot/relativeDir via the
+// shared clitest.WriteSkillFile helper, which owns the CRLF normalization.
 func writeTestSkill(t *testing.T, projectRoot string, relativeDir string, content string) {
 	t.Helper()
-	normalizedContent := strings.ReplaceAll(content, "\r\n", "\n")
-	clitest.WriteProjectFile(t, projectRoot, filepath.Join(relativeDir, SkillFileName), normalizedContent)
+	clitest.WriteSkillFile(t, projectRoot, relativeDir, SkillFileName, content)
 }
