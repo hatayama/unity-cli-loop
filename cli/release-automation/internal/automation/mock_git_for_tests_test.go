@@ -27,6 +27,10 @@ type mockGitPathBehavior struct {
 	showContentPath string
 	// showStderr is echoed on stderr when showOK is false.
 	showStderr string
+	// probeSleeps makes `cat-file -e` for this path block on `sleep 10` so a
+	// caller with a short context timeout can force a probe execution failure
+	// mid-chain. Other paths on the same fixture stay deterministic.
+	probeSleeps bool
 }
 
 // mockGitExistenceFixture drives the shared existence-probe mock git script.
@@ -90,7 +94,13 @@ func buildExistenceMockGitScript(fixture mockGitExistenceFixture) string {
 		catFileCases.WriteString("    *:")
 		catFileCases.WriteString(key)
 		catFileCases.WriteString(")\n")
-		if behavior.exists {
+		if behavior.probeSleeps {
+			// A long sleep lets a caller with a short context timeout kill
+			// this specific probe, exercising the mid-chain wrap branch
+			// without affecting other paths on the same fixture.
+			catFileCases.WriteString("      sleep 10\n")
+			catFileCases.WriteString("      exit 0\n")
+		} else if behavior.exists {
 			catFileCases.WriteString("      exit 0\n")
 		} else {
 			catFileCases.WriteString("      exit 1\n")

@@ -32,12 +32,12 @@ var releaseTriggerRules = []releaseTriggerRule{
 	{
 		inputDescription: "common module sources",
 		matchesInput:     isCommonModuleSource,
-		triggerRoots:     []string{"dispatcher/", "project-runner/"},
+		triggerRoots:     []string{"cli/dispatcher/", "cli/project-runner/"},
 	},
 	{
 		inputDescription: "installer scripts shipped as dispatcher release assets",
 		matchesInput:     isDispatcherInstallerScript,
-		triggerRoots:     []string{"dispatcher/"},
+		triggerRoots:     []string{"cli/dispatcher/"},
 	},
 }
 
@@ -144,10 +144,10 @@ func AnalyzeReleaseTriggerGuard(changedFiles []string) ReleaseTriggerGuardResult
 }
 
 func isCommonModuleSource(file string) bool {
-	if !strings.HasPrefix(file, "common/") {
+	if !strings.HasPrefix(file, "cli/common/") {
 		return false
 	}
-	if file == "common/go.mod" || file == "common/go.sum" {
+	if file == "cli/common/go.mod" || file == "cli/common/go.sum" {
 		return true
 	}
 	// JSON files under common (contract.json, default-tools.json) are

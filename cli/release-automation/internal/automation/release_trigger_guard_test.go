@@ -8,8 +8,8 @@ import (
 // Verifies changes outside the shared release inputs do not require triggers.
 func TestReleaseTriggerGuardPassesWithoutSharedInputChanges(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{
-		"dispatcher/internal/dispatcher/launch.go",
-		"project-runner/internal/projectrunner/run.go",
+		"cli/dispatcher/internal/dispatcher/launch.go",
+		"cli/project-runner/internal/projectrunner/run.go",
 		"scripts/check-go-cli.sh",
 	})
 
@@ -20,16 +20,16 @@ func TestReleaseTriggerGuardPassesWithoutSharedInputChanges(t *testing.T) {
 
 // Verifies common source changes require triggers in both release package roots.
 func TestReleaseTriggerGuardRequiresBothTriggersForCommonChanges(t *testing.T) {
-	result := AnalyzeReleaseTriggerGuard([]string{"common/clicore/output.go"})
+	result := AnalyzeReleaseTriggerGuard([]string{"cli/common/clicore/output.go"})
 
 	if len(result.Violations) != 1 {
 		t.Fatalf("expected one violation, got %v", result.Violations)
 	}
 	violation := result.Violations[0]
-	if len(violation.ChangedInputs) != 1 || violation.ChangedInputs[0] != "common/clicore/output.go" {
+	if len(violation.ChangedInputs) != 1 || violation.ChangedInputs[0] != "cli/common/clicore/output.go" {
 		t.Fatalf("expected the changed common source to be listed, got %v", violation.ChangedInputs)
 	}
-	expectedRoots := []string{"dispatcher/", "project-runner/"}
+	expectedRoots := []string{"cli/dispatcher/", "cli/project-runner/"}
 	if len(violation.MissingTriggerRoots) != len(expectedRoots) {
 		t.Fatalf("expected missing roots %v, got %v", expectedRoots, violation.MissingTriggerRoots)
 	}
@@ -43,25 +43,25 @@ func TestReleaseTriggerGuardRequiresBothTriggersForCommonChanges(t *testing.T) {
 // Verifies a partial trigger still fails for the missing package root.
 func TestReleaseTriggerGuardDetectsMissingDispatcherTrigger(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{
-		"common/clicore/output.go",
-		"project-runner/shared-inputs-stamp.json",
+		"cli/common/clicore/output.go",
+		"cli/project-runner/shared-inputs-stamp.json",
 	})
 
 	if len(result.Violations) != 1 {
 		t.Fatalf("expected one violation, got %v", result.Violations)
 	}
 	violation := result.Violations[0]
-	if len(violation.MissingTriggerRoots) != 1 || violation.MissingTriggerRoots[0] != "dispatcher/" {
-		t.Fatalf("expected only dispatcher/ to be missing, got %v", violation.MissingTriggerRoots)
+	if len(violation.MissingTriggerRoots) != 1 || violation.MissingTriggerRoots[0] != "cli/dispatcher/" {
+		t.Fatalf("expected only cli/dispatcher/ to be missing, got %v", violation.MissingTriggerRoots)
 	}
 }
 
 // Verifies common changes pass once both release package roots are touched.
 func TestReleaseTriggerGuardAcceptsCommonChangesWithBothTriggers(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{
-		"common/clicore/output.go",
-		"dispatcher/shared-inputs-stamp.json",
-		"project-runner/shared-inputs-stamp.json",
+		"cli/common/clicore/output.go",
+		"cli/dispatcher/shared-inputs-stamp.json",
+		"cli/project-runner/shared-inputs-stamp.json",
 	})
 
 	if len(result.Violations) != 0 {
@@ -72,9 +72,9 @@ func TestReleaseTriggerGuardAcceptsCommonChangesWithBothTriggers(t *testing.T) {
 // Verifies release-please stamp targets and test-only files under common are not release inputs.
 func TestReleaseTriggerGuardIgnoresNonBinaryCommonChanges(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{
-		"common/clicore/output_test.go",
-		"common/clicontract/contract.json",
-		"common/tools/default-tools.json",
+		"cli/common/clicore/output_test.go",
+		"cli/common/clicontract/contract.json",
+		"cli/common/tools/default-tools.json",
 	})
 
 	if len(result.Violations) != 0 {
@@ -84,7 +84,7 @@ func TestReleaseTriggerGuardIgnoresNonBinaryCommonChanges(t *testing.T) {
 
 // Verifies common go.mod and go.sum changes count as shared release inputs.
 func TestReleaseTriggerGuardCoversCommonModuleFiles(t *testing.T) {
-	result := AnalyzeReleaseTriggerGuard([]string{"common/go.mod", "common/go.sum"})
+	result := AnalyzeReleaseTriggerGuard([]string{"cli/common/go.mod", "cli/common/go.sum"})
 
 	if len(result.Violations) != 1 {
 		t.Fatalf("expected one violation, got %v", result.Violations)
@@ -102,8 +102,8 @@ func TestReleaseTriggerGuardRequiresDispatcherTriggerForInstallerChanges(t *test
 		t.Fatalf("expected one violation, got %v", result.Violations)
 	}
 	violation := result.Violations[0]
-	if len(violation.MissingTriggerRoots) != 1 || violation.MissingTriggerRoots[0] != "dispatcher/" {
-		t.Fatalf("expected only dispatcher/ to be missing, got %v", violation.MissingTriggerRoots)
+	if len(violation.MissingTriggerRoots) != 1 || violation.MissingTriggerRoots[0] != "cli/dispatcher/" {
+		t.Fatalf("expected only cli/dispatcher/ to be missing, got %v", violation.MissingTriggerRoots)
 	}
 }
 
@@ -111,7 +111,7 @@ func TestReleaseTriggerGuardRequiresDispatcherTriggerForInstallerChanges(t *test
 func TestReleaseTriggerGuardAcceptsInstallerChangesWithDispatcherTrigger(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{
 		"scripts/install.ps1",
-		"dispatcher/shared-inputs-stamp.json",
+		"cli/dispatcher/shared-inputs-stamp.json",
 	})
 
 	if len(result.Violations) != 0 {
@@ -122,9 +122,9 @@ func TestReleaseTriggerGuardAcceptsInstallerChangesWithDispatcherTrigger(t *test
 // Verifies backslash-separated changed paths are normalized before matching.
 func TestReleaseTriggerGuardNormalizesWindowsPaths(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{
-		`common\clicore\output.go`,
-		`dispatcher\shared-inputs-stamp.json`,
-		`project-runner\shared-inputs-stamp.json`,
+		`cli\common\clicore\output.go`,
+		`cli\dispatcher\shared-inputs-stamp.json`,
+		`cli\project-runner\shared-inputs-stamp.json`,
 	})
 
 	if len(result.Violations) != 0 {
@@ -134,15 +134,15 @@ func TestReleaseTriggerGuardNormalizesWindowsPaths(t *testing.T) {
 
 // Verifies the warning lists the changed inputs, missing roots, and the stamp command.
 func TestFormatReleaseTriggerWarningNamesStampCommand(t *testing.T) {
-	result := AnalyzeReleaseTriggerGuard([]string{"common/clicore/output.go"})
+	result := AnalyzeReleaseTriggerGuard([]string{"cli/common/clicore/output.go"})
 
 	warning := FormatReleaseTriggerWarning(result)
 
 	for _, expected := range []string{
 		"common module sources",
-		"`common/clicore/output.go`",
-		"`dispatcher/`",
-		"`project-runner/`",
+		"`cli/common/clicore/output.go`",
+		"`cli/dispatcher/`",
+		"`cli/project-runner/`",
 		"scripts/stamp-release-inputs.sh",
 	} {
 		if !strings.Contains(warning, expected) {

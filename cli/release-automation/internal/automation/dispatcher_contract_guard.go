@@ -128,10 +128,9 @@ func parseDispatcherContractBaseValues(
 }
 
 // isMissingDispatcherContractAtRefError reports whether the base ref exists yet
-// carries neither the current dispatcher contract path nor its legacy
-// counterpart. Only that combination is an initial introduction; a missing
-// ref, or any git execution failure, must propagate instead of being silently
-// treated as "no contract".
+// carries no dispatcher contract at any known generation. Only that
+// combination is an initial introduction; a missing ref, or any git execution
+// failure, must propagate instead of being silently treated as "no contract".
 func isMissingDispatcherContractAtRefError(
 	ctx context.Context,
 	repoRoot string,
@@ -144,18 +143,11 @@ func isMissingDispatcherContractAtRefError(
 	if !refExists {
 		return false, nil
 	}
-	primaryExists, err := fileExistsAtRef(ctx, repoRoot, baseRef, dispatcherContractFile)
+	anyExists, err := anyOfFilesExistsAtRef(ctx, repoRoot, baseRef, dispatcherContractPathChain)
 	if err != nil {
 		return false, err
 	}
-	if primaryExists {
-		return false, nil
-	}
-	legacyExists, err := fileExistsAtRef(ctx, repoRoot, baseRef, legacyDispatcherContractFile)
-	if err != nil {
-		return false, err
-	}
-	return !legacyExists, nil
+	return !anyExists, nil
 }
 
 // ParseDispatcherContractValues extracts only what the guard compares.

@@ -35,9 +35,9 @@ reviews:
   path_instructions:
     - path: "**/*"
       instructions: |
-        For changes that touch the Unity package/native CLI IPC contract, explicitly check whether the integer protocol generation must be bumped. Relevant IPC surfaces include JSON-RPC method names, request/response shapes, request metadata under `uloop`, readiness/dispatch/heartbeat handshakes, tool catalog schema, `common/unityipc/**`, `Packages/src/Editor/Infrastructure/Api/**`, `common/clicontract/contract.json`, and `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION`.
+        For changes that touch the Unity package/native CLI IPC contract, explicitly check whether the integer protocol generation must be bumped. Relevant IPC surfaces include JSON-RPC method names, request/response shapes, request metadata under `uloop`, readiness/dispatch/heartbeat handshakes, tool catalog schema, `cli/common/unityipc/**`, `Packages/src/Editor/Infrastructure/Api/**`, `cli/common/clicontract/contract.json`, and `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION`.
 
-        The compatibility gate is an exact protocol match, not a release-semver range. If a change makes a CLI/package from the previous protocol generation unable to interoperate, require both `common/clicontract/contract.json` `protocolVersion` and `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION` to be incremented in the same PR.
+        The compatibility gate is an exact protocol match, not a release-semver range. If a change makes a CLI/package from the previous protocol generation unable to interoperate, require both `cli/common/clicontract/contract.json` `protocolVersion` and `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION` to be incremented in the same PR.
 
         Do not request a protocol bump for ordinary CLI features, bug fixes, UI changes, documentation, or additive wire-format changes that older counterparts can safely ignore. `projectRunnerVersion` and `default-tools.json` `version` are release-please managed release metadata. If a PR bumps `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION`, require a matching update to `CliConstants.MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION` after the corresponding published project runner release tag is available, because setup must install a project runner release that advertises the required protocol.
 chat:

@@ -10,11 +10,11 @@ ROOT_DIR=${ULOOP_REPO_ROOT:-$(CDPATH= cd "$(dirname "$0")/.." && pwd)}
 cd "$ROOT_DIR"
 
 # Input selection mirrors the release trigger guard
-# (tools/release-automation/internal/automation/release_trigger_guard.go):
+# (cli/release-automation/internal/automation/release_trigger_guard.go):
 # non-test Go sources and module files count; release-please stamp targets
 # such as contract.json and default-tools.json do not.
 list_common_inputs() {
-  git ls-files -- 'common/*.go' common/go.mod common/go.sum |
+  git ls-files -- 'cli/common/*.go' cli/common/go.mod cli/common/go.sum |
     grep -v '_test\.go$' || true
 }
 
@@ -53,5 +53,5 @@ write_stamp() {
 common_hash=$(list_common_inputs | hash_input_list)
 dispatcher_hash=$({ list_common_inputs; list_installer_inputs; } | hash_input_list)
 
-write_stamp project-runner/shared-inputs-stamp.json "$common_hash"
-write_stamp dispatcher/shared-inputs-stamp.json "$dispatcher_hash"
+write_stamp cli/project-runner/shared-inputs-stamp.json "$common_hash"
+write_stamp cli/dispatcher/shared-inputs-stamp.json "$dispatcher_hash"

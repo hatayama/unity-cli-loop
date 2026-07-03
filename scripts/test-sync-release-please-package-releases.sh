@@ -168,7 +168,7 @@ write_release_files() {
   unity_package_key=${2:-Packages/src}
   unity_changelog_path=${3:-CHANGELOG.md}
 
-  mkdir -p Packages/src dispatcher project-runner scripts tools/release-automation
+  mkdir -p Packages/src cli/dispatcher cli/project-runner scripts cli/release-automation
   cat > release-please-config.json <<EOF_CONFIG
 {
   "packages": {
@@ -179,14 +179,14 @@ write_release_files() {
       "include-component-in-tag": false,
       "changelog-path": "$unity_changelog_path"
     },
-    "dispatcher": {
+    "cli/dispatcher": {
       "component": "dispatcher",
       "release-type": "go",
       "include-v-in-tag": true,
       "include-component-in-tag": true,
       "changelog-path": "CHANGELOG.md"
     },
-    "project-runner": {
+    "cli/project-runner": {
       "component": "uloop-project-runner",
       "release-type": "go",
       "include-v-in-tag": true,
@@ -200,8 +200,8 @@ EOF_CONFIG
   cat > .release-please-manifest.json <<EOF_MANIFEST
 {
   "$unity_package_key": "$version",
-  "dispatcher": "$version",
-  "project-runner": "$version"
+  "cli/dispatcher": "$version",
+  "cli/project-runner": "$version"
 }
 EOF_MANIFEST
 
@@ -226,7 +226,7 @@ EOF_PIN
 * keep the root package release baseline available
 EOF_CHANGELOG
 
-  cat > project-runner/CHANGELOG.md <<EOF_CLI_CHANGELOG
+  cat > cli/project-runner/CHANGELOG.md <<EOF_CLI_CHANGELOG
 # Changelog
 
 ## [$version](https://example.test/compare/cli-old...cli-new)
@@ -236,7 +236,7 @@ EOF_CHANGELOG
 * keep the Project runner release baseline available
 EOF_CLI_CHANGELOG
 
-  cat > dispatcher/CHANGELOG.md <<EOF_DISPATCHER_CHANGELOG
+  cat > cli/dispatcher/CHANGELOG.md <<EOF_DISPATCHER_CHANGELOG
 # Changelog
 
 ## [$version](https://example.test/compare/dispatcher-old...dispatcher-new)

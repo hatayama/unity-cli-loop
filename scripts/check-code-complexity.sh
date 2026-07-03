@@ -4,7 +4,7 @@ set -eu
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 MAX_COMPLEXITY=${CODE_COMPLEXITY_MAX_COMPLEXITY:-15}
 FAIL_ON_EXCEEDED=$(printf '%s' "${CODE_COMPLEXITY_FAIL_ON_EXCEEDED:-false}" | tr '[:upper:]' '[:lower:]')
-GO_CONFIG="$ROOT_DIR/.golangci-complexity.yml"
+GO_CONFIG="$ROOT_DIR/cli/.golangci-complexity.yml"
 TEMP_GO_CONFIG=
 
 GO_STATUS=0
@@ -19,7 +19,7 @@ cleanup() {
 trap cleanup 0 1 2 15
 
 if [ "$MAX_COMPLEXITY" != "15" ]; then
-  TEMP_GO_CONFIG="$ROOT_DIR/.golangci-complexity.$$.yml"
+  TEMP_GO_CONFIG="$ROOT_DIR/cli/.golangci-complexity.$$.yml"
   awk -v max_complexity="$MAX_COMPLEXITY" '
     $1 == "max-complexity:" {
       print "      max-complexity: " max_complexity
@@ -33,7 +33,7 @@ if [ "$MAX_COMPLEXITY" != "15" ]; then
 fi
 
 echo "=== Go complexity (cyclop, max ${MAX_COMPLEXITY}) ==="
-for module_dir in common dispatcher project-runner tools/release-automation; do
+for module_dir in cli/common cli/dispatcher cli/project-runner cli/release-automation; do
   (
     cd "$ROOT_DIR/$module_dir"
     golangci-lint run --config "$GO_CONFIG" ./...
