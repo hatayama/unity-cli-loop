@@ -10,8 +10,25 @@ import (
 	"strings"
 )
 
+// releaseContractMissingSentinel is a fixed prefix by which the missing-
+// contract classifier identifies this error. Classification stays independent
+// of the checked-path list so contractFileAtRefWithLegacyFallback can grow
+// more generations without touching the classifier.
+const releaseContractMissingSentinel = "release contract missing"
+
 func runnerContractMissingAtReleaseMessage(releaseTag string) string {
-	return fmt.Sprintf("project runner release %s does not provide %s or %s", releaseTag, cliContractFile, legacyRunnerContractFile)
+	return formatReleaseContractMissingMessage(releaseTag, cliContractFile, legacyRunnerContractFile)
+}
+
+// formatReleaseContractMissingMessage builds the "no contract found" error
+// text. The path list is included for operator context only; the sentinel
+// prefix is what protocolMinimumVersionReleaseContractIsMissing keys off.
+func formatReleaseContractMissingMessage(releaseTag string, checkedPaths ...string) string {
+	return fmt.Sprintf(
+		"%s: project runner release %s does not provide %s",
+		releaseContractMissingSentinel,
+		releaseTag,
+		strings.Join(checkedPaths, " or "))
 }
 
 // runnerContractFileAtRef reads the CLI/runner IPC contract file at a git ref.
@@ -20,19 +37,23 @@ func runnerContractFileAtRef(ctx context.Context, repoRoot string, ref string) (
 }
 
 // contractFileAtRefWithLegacyFallback reads a release contract at a git ref.
-// Release tags published before the cli/ directory split still provide their
-// contracts at the pre-split paths, so this falls back to the legacy path when
-// the primary path is genuinely absent at the given ref.
+// Release tags published before a directory move still provide their contracts
+// at earlier paths, so this walks each legacyFiles entry in order when the
+// primary path is genuinely absent at the given ref. Accepting the legacy
+// list as a variadic prepares for future generations without adding another
+// probe branch.
 //
 // Absence is classified by exit-code-based existence checks against git rather
 // than by matching git's stderr strings, which vary across git versions and
-// locales.
+// locales. When the ref exists but every path is absent, the original primary
+// show error is returned so a probe race between generations cannot obscure
+// the initial failure that started the fallback.
 func contractFileAtRefWithLegacyFallback(
 	ctx context.Context,
 	repoRoot string,
 	ref string,
 	primaryFile string,
-	legacyFile string,
+	legacyFiles ...string,
 ) (string, error) {
 	content, showErr := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, primaryFile)
 	if showErr == nil {
@@ -64,7 +85,33 @@ func contractFileAtRefWithLegacyFallback(
 		return "", showErr
 	}
 
-	return protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, legacyFile)
+	for _, legacyFile := range legacyFiles {
+		legacyExists, legacyErr := fileExistsAtRef(ctx, repoRoot, ref, legacyFile)
+		if legacyErr != nil {
+			return "", fmt.Errorf("failed to check %s at %s: %w (original show error: %v)", legacyFile, ref, legacyErr, showErr)
+		}
+		if legacyExists {
+			return protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, legacyFile)
+		}
+	}
+
+	return "", showErr
+}
+
+// anyOfFilesExistsAtRef reports whether any of files is tracked at ref.
+// Extending to a new path generation means appending to the slice at the call
+// site rather than adding another inline probe branch.
+func anyOfFilesExistsAtRef(ctx context.Context, repoRoot string, ref string, files []string) (bool, error) {
+	for _, file := range files {
+		exists, err := fileExistsAtRef(ctx, repoRoot, ref, file)
+		if err != nil {
+			return false, err
+		}
+		if exists {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // fileExistsAtRef reports whether file is tracked at ref by running
