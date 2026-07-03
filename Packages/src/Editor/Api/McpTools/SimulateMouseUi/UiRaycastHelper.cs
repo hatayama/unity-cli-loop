@@ -17,6 +17,7 @@ namespace io.github.hatayama.uLoopMCP
 
         // Reuses EventSystem and Canvas-space raycast buffers for callers that test
         // many positions in one frame, such as screenshot annotation collection.
+        // Keep this scoped to one frame because it snapshots Canvas and Graphic state.
         internal sealed class RaycastContext
         {
             private readonly EventSystem _eventSystem;
