@@ -11,10 +11,25 @@ cd "$ROOT_DIR"
 
 # Input selection mirrors the release trigger guard
 # (cli/release-automation/internal/automation/release_trigger_guard.go):
-# non-test Go sources and module files count; release-please stamp targets
-# such as contract.json and default-tools.json do not.
-list_common_inputs() {
-  git ls-files -- 'cli/common/*.go' cli/common/go.mod cli/common/go.sum |
+# only package roots imported by shipped binaries count; release-please stamp
+# targets such as contract.json and default-tools.json do not.
+list_shared_common_inputs() {
+  git ls-files -- \
+    cli/common/go.mod \
+    cli/common/go.sum \
+    'cli/common/clicontract/' \
+    'cli/common/clicore/' \
+    'cli/common/project/' \
+    'cli/common/skills/' \
+    'cli/common/tools/' \
+    'cli/common/unityipc/' |
+    grep -E '\.go$|/go\.mod$|/go\.sum$' |
+    grep -v '_test\.go$' || true
+}
+
+list_dispatcher_only_common_inputs() {
+  git ls-files -- 'cli/common/version/' |
+    grep '\.go$' |
     grep -v '_test\.go$' || true
 }
 
@@ -50,8 +65,8 @@ write_stamp() {
   echo "Stamped $stamp_path"
 }
 
-common_hash=$(list_common_inputs | hash_input_list)
-dispatcher_hash=$({ list_common_inputs; list_installer_inputs; } | hash_input_list)
+common_hash=$(list_shared_common_inputs | hash_input_list)
+dispatcher_hash=$({ list_shared_common_inputs; list_dispatcher_only_common_inputs; list_installer_inputs; } | hash_input_list)
 
 write_stamp cli/project-runner/shared-inputs-stamp.json "$common_hash"
 write_stamp cli/dispatcher/shared-inputs-stamp.json "$dispatcher_hash"

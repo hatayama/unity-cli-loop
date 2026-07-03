@@ -1,6 +1,10 @@
 package automation
 
 import (
+	"context"
+	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -18,8 +22,8 @@ func TestReleaseTriggerGuardPassesWithoutSharedInputChanges(t *testing.T) {
 	}
 }
 
-// Verifies common source changes require triggers in both release package roots.
-func TestReleaseTriggerGuardRequiresBothTriggersForCommonChanges(t *testing.T) {
+// Verifies shared common source changes require triggers in both release package roots.
+func TestReleaseTriggerGuardRequiresBothTriggersForSharedCommonChanges(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{"cli/common/clicore/output.go"})
 
 	if len(result.Violations) != 1 {
@@ -40,7 +44,7 @@ func TestReleaseTriggerGuardRequiresBothTriggersForCommonChanges(t *testing.T) {
 	}
 }
 
-// Verifies a partial trigger still fails for the missing package root.
+// Verifies a partial trigger for shared common changes still fails for the missing package root.
 func TestReleaseTriggerGuardDetectsMissingDispatcherTrigger(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{
 		"cli/common/clicore/output.go",
@@ -56,8 +60,8 @@ func TestReleaseTriggerGuardDetectsMissingDispatcherTrigger(t *testing.T) {
 	}
 }
 
-// Verifies common changes pass once both release package roots are touched.
-func TestReleaseTriggerGuardAcceptsCommonChangesWithBothTriggers(t *testing.T) {
+// Verifies shared common changes pass once both release package roots are touched.
+func TestReleaseTriggerGuardAcceptsSharedCommonChangesWithBothTriggers(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{
 		"cli/common/clicore/output.go",
 		"cli/dispatcher/shared-inputs-stamp.json",
@@ -69,10 +73,11 @@ func TestReleaseTriggerGuardAcceptsCommonChangesWithBothTriggers(t *testing.T) {
 	}
 }
 
-// Verifies release-please stamp targets and test-only files under common are not release inputs.
+// Verifies release-please stamp targets, test-only files, and test helper packages under common are not release inputs.
 func TestReleaseTriggerGuardIgnoresNonBinaryCommonChanges(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{
 		"cli/common/clicore/output_test.go",
+		"cli/common/clitest/clitest.go",
 		"cli/common/clicontract/contract.json",
 		"cli/common/tools/default-tools.json",
 	})
@@ -82,7 +87,7 @@ func TestReleaseTriggerGuardIgnoresNonBinaryCommonChanges(t *testing.T) {
 	}
 }
 
-// Verifies common go.mod and go.sum changes count as shared release inputs.
+// Verifies common go.mod and go.sum changes count as shared release inputs for both binaries.
 func TestReleaseTriggerGuardCoversCommonModuleFiles(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{"cli/common/go.mod", "cli/common/go.sum"})
 
@@ -91,6 +96,52 @@ func TestReleaseTriggerGuardCoversCommonModuleFiles(t *testing.T) {
 	}
 	if len(result.Violations[0].ChangedInputs) != 2 {
 		t.Fatalf("expected both module files to be listed, got %v", result.Violations[0].ChangedInputs)
+	}
+}
+
+// Verifies dispatcher-only common package changes require only a dispatcher trigger.
+func TestReleaseTriggerGuardRequiresDispatcherTriggerForDispatcherOnlyCommonChanges(t *testing.T) {
+	result := AnalyzeReleaseTriggerGuard([]string{"cli/common/version/compare.go"})
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected one violation, got %v", result.Violations)
+	}
+	violation := result.Violations[0]
+	if len(violation.MissingTriggerRoots) != 1 || violation.MissingTriggerRoots[0] != "cli/dispatcher/" {
+		t.Fatalf("expected only cli/dispatcher/ to be missing, got %v", violation.MissingTriggerRoots)
+	}
+}
+
+// Verifies dispatcher-only common changes pass once the dispatcher package root is touched.
+func TestReleaseTriggerGuardAcceptsDispatcherOnlyCommonChangesWithDispatcherTrigger(t *testing.T) {
+	result := AnalyzeReleaseTriggerGuard([]string{
+		"cli/common/version/compare.go",
+		"cli/dispatcher/shared-inputs-stamp.json",
+	})
+
+	if len(result.Violations) != 0 {
+		t.Fatalf("expected no violations, got %v", result.Violations)
+	}
+}
+
+// Verifies common package trigger whitelists match the packages imported by release binaries.
+func TestReleaseTriggerGuardCommonPackageWhitelistsMatchGoDependencies(t *testing.T) {
+	repoRoot, err := gitRepoRoot(context.Background())
+	if err != nil {
+		t.Fatalf("failed to resolve repository root: %v", err)
+	}
+
+	dispatcherCommonRoots := commonPackageRootsImportedByModule(t, filepath.Join(repoRoot, "cli", "dispatcher"))
+	projectRunnerCommonRoots := commonPackageRootsImportedByModule(t, filepath.Join(repoRoot, "cli", "project-runner"))
+
+	expectedSharedRoots := intersectSortedStrings(dispatcherCommonRoots, projectRunnerCommonRoots)
+	expectedDispatcherOnlyRoots := subtractSortedStrings(dispatcherCommonRoots, projectRunnerCommonRoots)
+	projectRunnerOnlyRoots := subtractSortedStrings(projectRunnerCommonRoots, dispatcherCommonRoots)
+
+	assertStringSlicesEqual(t, sharedCommonPackageRoots, expectedSharedRoots, "shared common package roots")
+	assertStringSlicesEqual(t, dispatcherOnlyCommonPackageRoots, expectedDispatcherOnlyRoots, "dispatcher-only common package roots")
+	if len(projectRunnerOnlyRoots) != 0 {
+		t.Fatalf("project-runner-only common package roots need a release trigger rule: %v", projectRunnerOnlyRoots)
 	}
 }
 
@@ -104,6 +155,70 @@ func TestReleaseTriggerGuardRequiresDispatcherTriggerForInstallerChanges(t *test
 	violation := result.Violations[0]
 	if len(violation.MissingTriggerRoots) != 1 || violation.MissingTriggerRoots[0] != "cli/dispatcher/" {
 		t.Fatalf("expected only cli/dispatcher/ to be missing, got %v", violation.MissingTriggerRoots)
+	}
+}
+
+func commonPackageRootsImportedByModule(t *testing.T, moduleDir string) []string {
+	t.Helper()
+	command := exec.Command("go", "list", "-deps", "./...")
+	command.Dir = moduleDir
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("go list -deps failed in %s: %v", moduleDir, err)
+	}
+
+	rootsByPath := map[string]struct{}{}
+	for _, dependency := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if !strings.HasPrefix(dependency, "github.com/hatayama/unity-cli-loop/common/") {
+			continue
+		}
+		commonPackage := strings.TrimPrefix(dependency, "github.com/hatayama/unity-cli-loop/common/")
+		commonRoot, _, _ := strings.Cut(commonPackage, "/")
+		rootsByPath["cli/common/"+commonRoot+"/"] = struct{}{}
+	}
+
+	roots := []string{}
+	for root := range rootsByPath {
+		roots = append(roots, root)
+	}
+	sort.Strings(roots)
+	return roots
+}
+
+func intersectSortedStrings(left []string, right []string) []string {
+	values := []string{}
+	for _, leftValue := range left {
+		if sortedStringsContain(right, leftValue) {
+			values = append(values, leftValue)
+		}
+	}
+	return values
+}
+
+func subtractSortedStrings(left []string, right []string) []string {
+	values := []string{}
+	for _, leftValue := range left {
+		if !sortedStringsContain(right, leftValue) {
+			values = append(values, leftValue)
+		}
+	}
+	return values
+}
+
+func sortedStringsContain(values []string, target string) bool {
+	index := sort.SearchStrings(values, target)
+	return index < len(values) && values[index] == target
+}
+
+func assertStringSlicesEqual(t *testing.T, actual []string, expected []string, label string) {
+	t.Helper()
+	if len(actual) != len(expected) {
+		t.Fatalf("expected %s %v, got %v", label, expected, actual)
+	}
+	for index, expectedValue := range expected {
+		if actual[index] != expectedValue {
+			t.Fatalf("expected %s %v, got %v", label, expected, actual)
+		}
 	}
 }
 
