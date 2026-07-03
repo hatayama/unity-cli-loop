@@ -153,7 +153,7 @@ namespace io.github.hatayama.uLoopMCP
             {
                 Debug.LogWarning("[EditorWindowCaptureUtility] GameView RenderTexture is not available");
                 GameRenderingImageInfo unavailableInfo = renderingImageInfo ??
-                    CreateGameRenderingImageInfo(Handles.GetMainGameViewSize(), 0, 0);
+                    CreateUnavailableGameRenderingImageInfo(Handles.GetMainGameViewSize());
                 return (null, unavailableInfo);
             }
 
@@ -202,10 +202,15 @@ namespace io.github.hatayama.uLoopMCP
             RenderTexture rt = GameViewBridge.GetRenderTexture();
             if (rt == null)
             {
-                return new GameRenderingImageInfo(gameViewSize, gameViewSize, 0);
+                return CreateUnavailableGameRenderingImageInfo(gameViewSize);
             }
 
             return CreateGameRenderingImageInfo(gameViewSize, rt.width, rt.height);
+        }
+
+        internal static GameRenderingImageInfo CreateUnavailableGameRenderingImageInfo(Vector2 gameViewSize)
+        {
+            return new GameRenderingImageInfo(gameViewSize, gameViewSize, 0);
         }
 
         private static GameRenderingImageInfo CreateGameRenderingImageInfo(

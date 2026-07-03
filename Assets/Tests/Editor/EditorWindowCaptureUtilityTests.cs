@@ -24,5 +24,18 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
 
             Assert.That(offsetY, Is.EqualTo(0));
         }
+
+        [Test]
+        public void CreateUnavailableGameRenderingImageInfo_WhenRenderTextureIsMissing_ShouldUseGameViewSizeAndZeroOffset()
+        {
+            Vector2 gameViewSize = new Vector2(1768f, 1383f);
+
+            GameRenderingImageInfo renderingImageInfo =
+                EditorWindowCaptureUtility.CreateUnavailableGameRenderingImageInfo(gameViewSize);
+
+            Assert.That(renderingImageInfo.GameViewSize, Is.EqualTo(gameViewSize));
+            Assert.That(renderingImageInfo.RenderingImageSize, Is.EqualTo(gameViewSize));
+            Assert.That(renderingImageInfo.ImageToInputOffsetY, Is.EqualTo(0));
+        }
     }
 }
