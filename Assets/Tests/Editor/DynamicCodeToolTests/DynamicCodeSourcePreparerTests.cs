@@ -40,6 +40,81 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         }
 
         [Test]
+        public void Prepare_WhenScriptUsesBareUnityObject_ShouldAddObjectAlias()
+        {
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
+                "GameObject go = new GameObject(\"source\");\nObject.Instantiate(go);\nreturn null;",
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            Assert.IsNotNull(prepared.PreparedSource);
+            StringAssert.Contains("using Object = UnityEngine.Object;", prepared.PreparedSource);
+        }
+
+        [Test]
+        public void Prepare_WhenObjectAliasAlreadyExists_ShouldNotAddDuplicateAlias()
+        {
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
+                "using Object = UnityEngine.Object;\nObject.Instantiate(new GameObject(\"source\"));\nreturn null;",
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            Assert.IsNotNull(prepared.PreparedSource);
+            Assert.AreEqual(
+                1,
+                DynamicCodeTestStringUtility.CountSubstring(prepared.PreparedSource, "using Object = UnityEngine.Object;"));
+        }
+
+        [Test]
+        public void Prepare_WhenCustomObjectAliasAlreadyExists_ShouldRespectUserAlias()
+        {
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
+                "using Object = System.Object;\nreturn new Object();",
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            Assert.IsNotNull(prepared.PreparedSource);
+            Assert.AreEqual(
+                1,
+                DynamicCodeTestStringUtility.CountSubstring(prepared.PreparedSource, "using Object = "));
+        }
+
+        [Test]
+        public void Prepare_WhenVerbatimObjectAliasAlreadyExists_ShouldRespectUserAlias()
+        {
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
+                "using @Object = System.Object;\nreturn new @Object();",
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            Assert.IsNotNull(prepared.PreparedSource);
+            StringAssert.Contains("using @Object = System.Object;", prepared.PreparedSource);
+            Assert.AreEqual(
+                0,
+                DynamicCodeTestStringUtility.CountSubstring(prepared.PreparedSource, "using Object = UnityEngine.Object;"));
+        }
+
+        [Test]
+        public void Prepare_WhenScriptUsesBareUnityRandom_ShouldAddRandomAlias()
+        {
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
+                "int value = Random.Range(0, 10);\nreturn value;",
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            Assert.IsNotNull(prepared.PreparedSource);
+            StringAssert.Contains("using Random = UnityEngine.Random;", prepared.PreparedSource);
+        }
+
+        [Test]
+        public void CountSubstring_WhenTargetIsEmpty_ShouldReturnZero()
+        {
+            int count = DynamicCodeTestStringUtility.CountSubstring("source", "");
+
+            Assert.AreEqual(0, count);
+        }
+
+        [Test]
         public void Prepare_WhenInterpolatedStringExists_ShouldSkipLiteralHoisting()
         {
             PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(

@@ -26,15 +26,10 @@ namespace io.github.hatayama.uLoopMCP
 
                 if (braceDepth == 0)
                 {
-                    if (TryMatchLineComment(source, pos, out int afterComment))
+                    (bool Matched, int NextPosition) commentMatch = TryMatchComment(source, pos);
+                    if (commentMatch.Matched)
                     {
-                        pos = afterComment;
-                        continue;
-                    }
-
-                    if (TryMatchBlockComment(source, pos, out int afterBlock))
-                    {
-                        pos = afterBlock;
+                        pos = commentMatch.NextPosition;
                         continue;
                     }
 
@@ -42,12 +37,12 @@ namespace io.github.hatayama.uLoopMCP
                     {
                         int segmentStart = pos;
                         int afterUsing = pos + 5;
-                        afterUsing = SkipWhitespace(source, afterUsing);
+                        afterUsing = SkipWhitespaceAndComments(source, afterUsing);
 
                         if (StartsWithKeyword(source, afterUsing, "static"))
                         {
                             int end = FindSemicolon(source, segmentStart);
-                            result.UsingDirectives.Add(source.Substring(segmentStart, end - segmentStart + 1).TrimEnd());
+                            RegisterUsingDirective(result, source, segmentStart, end);
                             pos = end + 1;
                             continue;
                         }
@@ -63,7 +58,7 @@ namespace io.github.hatayama.uLoopMCP
                         }
 
                         int semiEnd = FindSemicolon(source, segmentStart);
-                        result.UsingDirectives.Add(source.Substring(segmentStart, semiEnd - segmentStart + 1).TrimEnd());
+                        RegisterUsingDirective(result, source, segmentStart, semiEnd);
                         pos = semiEnd + 1;
                         continue;
                     }
@@ -82,11 +77,12 @@ namespace io.github.hatayama.uLoopMCP
                         continue;
                     }
 
-                    if (StartsWithKeyword(source, pos, "global") && StartsWithKeyword(source, SkipWhitespace(source, pos + 6), "using"))
+                    if (StartsWithKeyword(source, pos, "global") &&
+                        StartsWithKeyword(source, SkipWhitespaceAndComments(source, pos + "global".Length), "using"))
                     {
                         int segmentStart = pos;
                         int semiEnd = FindSemicolon(source, segmentStart);
-                        result.UsingDirectives.Add(source.Substring(segmentStart, semiEnd - segmentStart + 1).TrimEnd());
+                        RegisterUsingDirective(result, source, segmentStart, semiEnd);
                         pos = semiEnd + 1;
                         continue;
                     }
@@ -156,7 +152,7 @@ namespace io.github.hatayama.uLoopMCP
                     : body + "\nreturn null;";
             }
 
-            return WrapperTemplate.Build(shape.UsingDirectives, namespaceName, className, body);
+            return WrapperTemplate.Build(shape.UsingDirectives, shape.AliasedNames, namespaceName, className, body);
         }
 
         internal static int SkipWhitespace(string s, int pos)
@@ -184,6 +180,107 @@ namespace io.github.hatayama.uLoopMCP
                 return false;
             }
             return true;
+        }
+
+        private static void RegisterUsingDirective(
+            SourceShapeResult result,
+            string source,
+            int segmentStart,
+            int semiEnd)
+        {
+            result.UsingDirectives.Add(source.Substring(segmentStart, semiEnd - segmentStart + 1).TrimEnd());
+
+            string aliasName = ExtractUsingAliasName(source, segmentStart, semiEnd);
+            if (!string.IsNullOrEmpty(aliasName))
+            {
+                result.AliasedNames.Add(aliasName);
+            }
+        }
+
+        private static string ExtractUsingAliasName(string source, int segmentStart, int semiEnd)
+        {
+            int position = segmentStart;
+            if (StartsWithKeyword(source, position, "global"))
+            {
+                position = SkipWhitespaceAndComments(source, position + "global".Length);
+            }
+
+            if (!StartsWithKeyword(source, position, "using"))
+            {
+                return null;
+            }
+
+            position = SkipWhitespaceAndComments(source, position + "using".Length);
+            if (StartsWithKeyword(source, position, "static"))
+            {
+                return null;
+            }
+
+            AliasNameParseResult aliasName = ReadAliasName(source, position, semiEnd);
+            if (aliasName.Name == null)
+            {
+                return null;
+            }
+
+            int equalsPosition = SkipWhitespaceAndComments(source, aliasName.EndPosition);
+            if (equalsPosition > semiEnd || source[equalsPosition] != '=')
+            {
+                return null;
+            }
+
+            return aliasName.Name;
+        }
+
+        private static AliasNameParseResult ReadAliasName(string source, int position, int semiEnd)
+        {
+            int currentPosition = position;
+            if (currentPosition <= semiEnd && source[currentPosition] == '@')
+            {
+                currentPosition++;
+            }
+
+            if (currentPosition > semiEnd || !IsIdentifierStart(source[currentPosition]))
+            {
+                return new AliasNameParseResult(null, position);
+            }
+
+            int nameStart = currentPosition;
+            currentPosition++;
+            while (currentPosition <= semiEnd && IsIdentifierPart(source[currentPosition]))
+            {
+                currentPosition++;
+            }
+
+            return new AliasNameParseResult(
+                source.Substring(nameStart, currentPosition - nameStart),
+                currentPosition);
+        }
+
+        private static bool IsIdentifierStart(char value)
+        {
+            return char.IsLetter(value) || value == '_';
+        }
+
+        private static bool IsIdentifierPart(char value)
+        {
+            return char.IsLetterOrDigit(value) || value == '_';
+        }
+
+        private static int SkipWhitespaceAndComments(string source, int position)
+        {
+            int currentPosition = SkipWhitespace(source, position);
+            while (true)
+            {
+                (bool Matched, int NextPosition) commentMatch = TryMatchComment(source, currentPosition);
+                if (!commentMatch.Matched)
+                {
+                    break;
+                }
+
+                currentPosition = SkipWhitespace(source, commentMatch.NextPosition);
+            }
+
+            return currentPosition;
         }
 
         private static bool IsTypeDeclarationKeyword(string s, int pos)
@@ -218,31 +315,29 @@ namespace io.github.hatayama.uLoopMCP
             return pos;
         }
 
-        private static bool TryMatchLineComment(string s, int pos, out int afterComment)
+        private static (bool Matched, int NextPosition) TryMatchComment(string s, int pos)
         {
-            afterComment = pos;
-            if (pos + 1 < s.Length && s[pos] == '/' && s[pos + 1] == '/')
+            if (pos + 1 >= s.Length || s[pos] != '/')
+            {
+                return (false, pos);
+            }
+
+            if (s[pos + 1] == '/')
             {
                 int end = pos + 2;
                 while (end < s.Length && s[end] != '\n') end++;
                 if (end < s.Length) end++; // skip \n
-                afterComment = end;
-                return true;
+                return (true, end);
             }
-            return false;
-        }
 
-        private static bool TryMatchBlockComment(string s, int pos, out int afterBlock)
-        {
-            afterBlock = pos;
-            if (pos + 1 < s.Length && s[pos] == '/' && s[pos + 1] == '*')
+            if (s[pos + 1] == '*')
             {
                 int end = pos + 2;
                 while (end + 1 < s.Length && !(s[end] == '*' && s[end + 1] == '/')) end++;
-                afterBlock = end + 2 < s.Length ? end + 2 : s.Length;
-                return true;
+                return (true, end + 2 < s.Length ? end + 2 : s.Length);
             }
-            return false;
+
+            return (false, pos);
         }
 
         private static int FindSemicolon(string s, int pos)
@@ -329,20 +424,10 @@ namespace io.github.hatayama.uLoopMCP
             if (pos >= s.Length) return s.Length;
             char c = s[pos];
 
-            // Line comment
-            if (c == '/' && pos + 1 < s.Length && s[pos + 1] == '/')
+            (bool Matched, int NextPosition) commentMatch = TryMatchComment(s, pos);
+            if (commentMatch.Matched)
             {
-                int end = pos + 2;
-                while (end < s.Length && s[end] != '\n') end++;
-                return end < s.Length ? end + 1 : s.Length;
-            }
-
-            // Block comment
-            if (c == '/' && pos + 1 < s.Length && s[pos + 1] == '*')
-            {
-                int end = pos + 2;
-                while (end + 1 < s.Length && !(s[end] == '*' && s[end + 1] == '/')) end++;
-                return end + 2 < s.Length ? end + 2 : s.Length;
+                return commentMatch.NextPosition;
             }
 
             // Verbatim string (@"...")
@@ -578,11 +663,25 @@ namespace io.github.hatayama.uLoopMCP
 
             return end < s.Length ? end + 1 : s.Length;
         }
+
+        private sealed class AliasNameParseResult
+        {
+            public string Name { get; }
+
+            public int EndPosition { get; }
+
+            public AliasNameParseResult(string name, int endPosition)
+            {
+                Name = name;
+                EndPosition = endPosition;
+            }
+        }
     }
 
     internal sealed class SourceShapeResult
     {
         public List<string> UsingDirectives { get; } = new List<string>();
+        public HashSet<string> AliasedNames { get; } = new HashSet<string>(System.StringComparer.Ordinal);
         public bool HasNamespaceDeclaration { get; set; }
         public bool HasTypeDeclaration { get; set; }
         public bool HasTopLevelStatements { get; set; }

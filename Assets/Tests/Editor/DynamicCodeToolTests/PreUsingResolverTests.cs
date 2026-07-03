@@ -165,7 +165,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         {
             string body = "StringBuilder builder = new StringBuilder();\nreturn builder.ToString();";
             string wrappedSource = WrapperTemplate.Build(
-                new List<string>(), "TestNs", "TestClass", body);
+                new List<string>(), System.Array.Empty<string>(), "TestNs", "TestClass", body);
 
             PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
 
@@ -178,7 +178,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         {
             string body = "StringBuilder builder = new StringBuilder();\nreturn builder.ToString();";
             string wrappedSource = WrapperTemplate.Build(
-                new List<string>(), "TestNs", "TestClass", body);
+                new List<string>(), System.Array.Empty<string>(), "TestNs", "TestClass", body);
 
             PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
 
@@ -190,11 +190,11 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         {
             List<string> usings = new List<string> { "using System.Text;" };
             string body = "StringBuilder builder = new StringBuilder();\nreturn builder.ToString();";
-            string wrappedSource = WrapperTemplate.Build(usings, "TestNs", "TestClass", body);
+            string wrappedSource = WrapperTemplate.Build(usings, System.Array.Empty<string>(), "TestNs", "TestClass", body);
 
             PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
 
-            int occurrences = CountSubstring(result.UpdatedSource, "using System.Text;");
+            int occurrences = DynamicCodeTestStringUtility.CountSubstring(result.UpdatedSource, "using System.Text;");
             Assert.AreEqual(1, occurrences, "Should not add duplicate using System.Text");
         }
 
@@ -203,23 +203,11 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         {
             string body = "int x = 42;\nreturn x;";
             string wrappedSource = WrapperTemplate.Build(
-                new List<string>(), "TestNs", "TestClass", body);
+                new List<string>(), System.Array.Empty<string>(), "TestNs", "TestClass", body);
 
             PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
 
             Assert.That(result.UpdatedSource, Does.Not.Contain("using System.Text;"));
-        }
-
-        private static int CountSubstring(string source, string target)
-        {
-            int count = 0;
-            int index = 0;
-            while ((index = source.IndexOf(target, index, System.StringComparison.Ordinal)) >= 0)
-            {
-                count++;
-                index += target.Length;
-            }
-            return count;
         }
 
         [Test]
@@ -227,7 +215,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         {
             string body = "StringBuilder sb = new StringBuilder();\nRegex r = new Regex(\"x\");\nreturn sb.ToString();";
             string wrappedSource = WrapperTemplate.Build(
-                new List<string>(), "TestNs", "TestClass", body);
+                new List<string>(), System.Array.Empty<string>(), "TestNs", "TestClass", body);
 
             PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
 
@@ -240,7 +228,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         {
             string body = "System.Text.StringBuilder builder = new System.Text.StringBuilder();\nreturn builder.ToString();";
             string wrappedSource = WrapperTemplate.Build(
-                new List<string>(), "TestNs", "TestClass", body);
+                new List<string>(), System.Array.Empty<string>(), "TestNs", "TestClass", body);
 
             PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
 

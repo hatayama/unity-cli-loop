@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Text;
 
 namespace io.github.hatayama.uLoopMCP
@@ -11,14 +13,23 @@ namespace io.github.hatayama.uLoopMCP
     {
         internal const string UserCodeStartMarker = "#line 1 \"user-snippet.cs\"";
         internal const string UserCodeEndMarker = "#line default";
+        private static readonly DefaultUsingAlias[] DefaultUsingAliases =
+        {
+            new DefaultUsingAlias("Object", "UnityEngine.Object"),
+            new DefaultUsingAlias("Random", "UnityEngine.Random")
+        };
 
         public static string Build(
             IReadOnlyList<string> usingDirectives,
+            IReadOnlyCollection<string> aliasedNames,
             string namespaceName,
             string className,
             string body,
             IReadOnlyList<string> preambleLines = null)
         {
+            Debug.Assert(usingDirectives != null, "usingDirectives must not be null");
+            Debug.Assert(aliasedNames != null, "aliasedNames must not be null");
+
             StringBuilder sb = new StringBuilder();
 
             sb.AppendLine("#pragma warning disable CS0162");
@@ -30,6 +41,7 @@ namespace io.github.hatayama.uLoopMCP
             sb.AppendLine("using System.Threading.Tasks;");
             sb.AppendLine("using UnityEngine;");
             sb.AppendLine("using UnityEditor;");
+            AppendDefaultUsingAliases(sb, aliasedNames);
 
             foreach (string directive in usingDirectives)
             {
@@ -74,6 +86,35 @@ namespace io.github.hatayama.uLoopMCP
             sb.AppendLine("}");
 
             return sb.ToString();
+        }
+
+        private static void AppendDefaultUsingAliases(
+            StringBuilder sb,
+            IReadOnlyCollection<string> aliasedNames)
+        {
+            for (int index = 0; index < DefaultUsingAliases.Length; index++)
+            {
+                DefaultUsingAlias alias = DefaultUsingAliases[index];
+                if (aliasedNames.Contains(alias.Name))
+                {
+                    continue;
+                }
+
+                sb.AppendLine($"using {alias.Name} = {alias.TargetTypeName};");
+            }
+        }
+
+        private sealed class DefaultUsingAlias
+        {
+            public string Name { get; }
+
+            public string TargetTypeName { get; }
+
+            public DefaultUsingAlias(string name, string targetTypeName)
+            {
+                Name = name;
+                TargetTypeName = targetTypeName;
+            }
         }
     }
 }
