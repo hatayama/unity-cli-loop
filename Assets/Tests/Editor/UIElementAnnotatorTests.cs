@@ -11,10 +11,20 @@ namespace io.github.hatayama.uLoopMCP
     public class UIElementAnnotatorTests
     {
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
+        private EventSystem _previousEventSystem;
+        private bool _previousEventSystemEnabled;
 
         [SetUp]
         public void SetUp()
         {
+            _previousEventSystem = EventSystem.current;
+            if (_previousEventSystem != null)
+            {
+                _previousEventSystemEnabled = _previousEventSystem.enabled;
+                // EditMode EventSystems are not reliably registered, so clear stale scene state instead.
+                _previousEventSystem.enabled = false;
+            }
+
             GameObject eventSystem = CreateGameObject("UIElementAnnotatorTestsEventSystem");
             eventSystem.AddComponent<EventSystem>();
             eventSystem.AddComponent<StandaloneInputModule>();
@@ -23,6 +33,14 @@ namespace io.github.hatayama.uLoopMCP
         [TearDown]
         public void TearDown()
         {
+            if (_previousEventSystem != null)
+            {
+                _previousEventSystem.enabled = _previousEventSystemEnabled;
+            }
+
+            _previousEventSystem = null;
+            _previousEventSystemEnabled = false;
+
             for (int i = _createdObjects.Count - 1; i >= 0; i--)
             {
                 Object.DestroyImmediate(_createdObjects[i]);
