@@ -35,7 +35,7 @@ func collectSkillDefinitions(projectRoot string) ([]skillDefinition, error) {
 func collectV3MigrationSkillDefinition(projectRoot string) ([]skillDefinition, error) {
 	packageRoot := clicore.ResolvePackageRoot(projectRoot)
 	if packageRoot == "" {
-		return nil, errors.New("unity CLI Loop package root was not found")
+		return nil, errors.New("the Unity CLI Loop package root was not found")
 	}
 
 	skillDirectory := filepath.Join(

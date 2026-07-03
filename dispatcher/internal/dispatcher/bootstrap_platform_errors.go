@@ -21,7 +21,7 @@ func unsupportedPlatformError(message string, context clicore.ErrorContext) (cli
 			message,
 			context,
 			[]string{
-				"Run `uloop install` on Windows.",
+				"Run `uloop install` on macOS or Windows.",
 				"Use the platform-specific installer for this system.",
 			}), true
 	case uninstallUnsupportedOSMessage:
