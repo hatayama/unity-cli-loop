@@ -34,7 +34,7 @@ compatible must not bump it.
 Do not touch the protocol version to "keep up with releases":
 
 - `cli/common/clicontract/contract.json` `projectRunnerVersion`, `cli/common/tools/default-tools.json`
-  `version`, and `cli/dispatcher/dispatcher-contract.json` `dispatcherVersion` are stamped by
+  `version`, and `cli/dispatcher/dispatchercontract/dispatcher-contract.json` `dispatcherVersion` are stamped by
   release-please only. Never edit them by hand in a feature PR.
 - `CliConstants.MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION` is the release that setup installs. It
   must always point at a published project runner release.
@@ -58,7 +58,7 @@ Shell scripts are acceptable only as thin wrappers or simple command sequences.
 ## Shared Release Inputs and Triggers
 
 The dispatcher is released through release-please like the project runner and the Unity
-package: `cli/dispatcher/dispatcher-contract.json` `dispatcherVersion` and `cli/dispatcher/CHANGELOG.md`
+package: `cli/dispatcher/dispatchercontract/dispatcher-contract.json` `dispatcherVersion` and `cli/dispatcher/CHANGELOG.md`
 are stamped by release-please release PRs. Never bump `dispatcherVersion` by hand.
 
 release-please attributes a commit to a component only when the commit touches that package

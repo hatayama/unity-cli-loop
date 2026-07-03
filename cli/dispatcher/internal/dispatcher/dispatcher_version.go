@@ -5,7 +5,7 @@ import (
 	"io"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
-	dispatchercontract "github.com/hatayama/unity-cli-loop/dispatcher"
+	"github.com/hatayama/unity-cli-loop/dispatcher/dispatchercontract"
 )
 
 var (

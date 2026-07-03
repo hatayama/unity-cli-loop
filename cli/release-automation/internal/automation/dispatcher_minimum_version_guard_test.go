@@ -43,6 +43,26 @@ func TestRunDispatcherMinimumVersionCheck_WhenMinimumIsCurrentRelease_Passes(t *
 	assertDispatcherMinimumVersionLogDoesNotContain(t, result.gitLog, "dispatcher-v1.0.0:"+dispatcherContractFile)
 }
 
+// Verifies dispatcher releases published after the cli/ grouping move but
+// before dispatchercontract existed fall back to the previous cli/dispatcher path.
+func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleaseIsPreviousCliGeneration_FallsBackToCliDispatcherRootPath(t *testing.T) {
+	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
+		currentProjectRunnerVersion:      "3.0.0-beta.40",
+		currentDispatcherVersion:         "1.0.1",
+		currentDispatcherContractVersion: 1,
+		minimumDispatcherVersion:         "1.0.0",
+		previousReleaseContract:          `{"schemaVersion":1,"dispatcherVersion":"1.0.0","dispatcherContractVersion":1}`,
+	})
+
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
+	}
+	assertDispatcherMinimumVersionLogContains(t, result.stdout, "Dispatcher minimum version guard passed.")
+	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:"+dispatcherContractFile)
+	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:"+cliDispatcherRootContractFile)
+	assertDispatcherMinimumVersionLogDoesNotContain(t, result.gitLog, "dispatcher-v1.0.0:"+rootModulesDispatcherContractFile)
+}
+
 // Verifies dispatcher releases published between the v3 module split and the
 // later cli/ grouping move fall back to the middle-generation dispatcher path.
 func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleaseIsMiddleGeneration_FallsBackToRootModulesPath(t *testing.T) {
@@ -59,6 +79,7 @@ func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleaseIsMiddleGeneration_F
 	}
 	assertDispatcherMinimumVersionLogContains(t, result.stdout, "Dispatcher minimum version guard passed.")
 	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:"+dispatcherContractFile)
+	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:"+cliDispatcherRootContractFile)
 	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:"+rootModulesDispatcherContractFile)
 }
 
@@ -78,6 +99,7 @@ func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleasePredatesDirectorySpl
 	}
 	assertDispatcherMinimumVersionLogContains(t, result.stdout, "Dispatcher minimum version guard passed.")
 	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:"+dispatcherContractFile)
+	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:"+cliDispatcherRootContractFile)
 	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:"+rootModulesDispatcherContractFile)
 	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:"+legacyDispatcherContractFile)
 }
@@ -120,6 +142,7 @@ type dispatcherMinimumVersionCase struct {
 	minimumDispatcherVersion           string
 	projectPinMinimumDispatcherVersion string
 	releaseContract                    string
+	previousReleaseContract            string
 	middleReleaseContract              string
 	legacyReleaseContract              string
 }
@@ -152,6 +175,11 @@ func runDispatcherMinimumVersionCheckCase(t *testing.T, testCase dispatcherMinim
 		releaseContractPath := filepath.Join(workDir, "release-contract.json")
 		writeFile(t, releaseContractPath, testCase.releaseContract)
 		t.Setenv("GIT_RELEASE_CONTRACT", releaseContractPath)
+	}
+	if testCase.previousReleaseContract != "" {
+		previousReleaseContractPath := filepath.Join(workDir, "previous-release-contract.json")
+		writeFile(t, previousReleaseContractPath, testCase.previousReleaseContract)
+		t.Setenv("GIT_PREVIOUS_RELEASE_CONTRACT", previousReleaseContractPath)
 	}
 	if testCase.middleReleaseContract != "" {
 		middleReleaseContractPath := filepath.Join(workDir, "middle-release-contract.json")
@@ -267,11 +295,19 @@ fi
 
 if [ "$1" = "show" ]; then
   case "$2" in
-    dispatcher-v*:cli/dispatcher/dispatcher-contract.json)
+    dispatcher-v*:cli/dispatcher/dispatchercontract/dispatcher-contract.json)
       if [ -n "${GIT_RELEASE_CONTRACT:-}" ]; then
         cat "$GIT_RELEASE_CONTRACT"
       else
-        echo "fatal: path 'cli/dispatcher/dispatcher-contract.json' exists on disk, but not in '$2'" >&2
+        echo "fatal: path 'cli/dispatcher/dispatchercontract/dispatcher-contract.json' exists on disk, but not in '$2'" >&2
+        exit 1
+      fi
+      ;;
+    dispatcher-v*:cli/dispatcher/dispatcher-contract.json)
+      if [ -n "${GIT_PREVIOUS_RELEASE_CONTRACT:-}" ]; then
+        cat "$GIT_PREVIOUS_RELEASE_CONTRACT"
+      else
+        echo "previous release not found" >&2
         exit 1
       fi
       ;;
@@ -298,8 +334,12 @@ fi
 
 if [ "$1" = "cat-file" ] && [ "$2" = "-e" ]; then
   case "$3" in
-    dispatcher-v*:cli/dispatcher/dispatcher-contract.json)
+    dispatcher-v*:cli/dispatcher/dispatchercontract/dispatcher-contract.json)
       [ -n "${GIT_RELEASE_CONTRACT:-}" ] && exit 0
+      exit 1
+      ;;
+    dispatcher-v*:cli/dispatcher/dispatcher-contract.json)
+      [ -n "${GIT_PREVIOUS_RELEASE_CONTRACT:-}" ] && exit 0
       exit 1
       ;;
     dispatcher-v*:dispatcher/dispatcher-contract.json)

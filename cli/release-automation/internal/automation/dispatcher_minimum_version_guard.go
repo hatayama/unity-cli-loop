@@ -14,20 +14,23 @@ import (
 
 // Contract file paths are read from historical tags as well as HEAD, and each
 // directory move creates a new generation of paths that must all continue to
-// resolve. Three generations are currently live for release-tag reads:
+// resolve. Four generations are currently live for release-tag reads:
 //
-//  1. Current layout (this move): the Go modules live under `cli/` at the repo
-//     root, so contract files are at `cli/common/...` and `cli/dispatcher/...`.
-//     These are the primary paths.
-//  2. Root-modules layout: contract files sat at `common/...` and
+//  1. Current layout: the dispatcher contract package lives under
+//     `cli/dispatcher/dispatchercontract/`, matching `common/clicontract`.
+//  2. Initial `cli/` module layout: Go modules lived under `cli/`, but the
+//     dispatcher contract file still sat at the dispatcher module root.
+//  3. Root-modules layout: contract files sat at `common/...` and
 //     `dispatcher/...` at the repo root. Tags published between PR #1461 (v2->v3
 //     module split) and this move still resolve their contract at these paths.
-//  3. Pre-split single-module layout (v2): all files lived under a top-level
+//  4. Pre-split single-module layout (v2): all files lived under a top-level
 //     `cli/` module with flat filenames. These are the oldest paths.
 const (
 	// Primary paths (current layout, after moving Go modules under `cli/`).
 	cliContractFile        = "cli/common/clicontract/contract.json"
-	dispatcherContractFile = "cli/dispatcher/dispatcher-contract.json"
+	dispatcherContractFile = "cli/dispatcher/dispatchercontract/dispatcher-contract.json"
+	// Previous cli/dispatcher layout.
+	cliDispatcherRootContractFile = "cli/dispatcher/dispatcher-contract.json"
 	// Middle-generation paths (root-modules layout, between PR #1461 and this move).
 	rootModulesRunnerContractFile     = "common/clicontract/contract.json"
 	rootModulesDispatcherContractFile = "dispatcher/dispatcher-contract.json"
@@ -48,7 +51,7 @@ const (
 // place per side instead of at every call site.
 var (
 	runnerContractPathChain     = []string{cliContractFile, rootModulesRunnerContractFile, legacyRunnerContractFile}
-	dispatcherContractPathChain = []string{dispatcherContractFile, rootModulesDispatcherContractFile, legacyDispatcherContractFile}
+	dispatcherContractPathChain = []string{dispatcherContractFile, cliDispatcherRootContractFile, rootModulesDispatcherContractFile, legacyDispatcherContractFile}
 )
 
 var minimumDispatcherVersionPattern = regexp.MustCompile(`MINIMUM_REQUIRED_DISPATCHER_VERSION\s*=\s*"([^"]+)"`)

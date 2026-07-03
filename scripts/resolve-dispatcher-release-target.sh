@@ -123,9 +123,11 @@ dispatcher_release_is_prerelease() {
   [ "$ref_name" = "v3-beta" ]
 }
 
-VERSION=$(jq -r '.dispatcherVersion' cli/dispatcher/dispatcher-contract.json)
+DISPATCHER_CONTRACT_PATH=cli/dispatcher/dispatchercontract/dispatcher-contract.json
+
+VERSION=$(jq -r '.dispatcherVersion' "$DISPATCHER_CONTRACT_PATH")
 if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
-  echo "Could not resolve dispatcherVersion from cli/dispatcher/dispatcher-contract.json." >&2
+  echo "Could not resolve dispatcherVersion from $DISPATCHER_CONTRACT_PATH." >&2
   exit 1
 fi
 

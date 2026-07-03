@@ -145,10 +145,11 @@ func TestDispatcherContractGuardPreservesReadErrWhenProbeFailsWithNonExitError(t
 }
 
 type dispatcherContractGuardMockState struct {
-	refExists     bool
-	primaryExists bool
-	// middleExists mirrors the second-generation (root-modules) contract path.
-	// Tests that predate the middle generation leave it zero-valued, meaning
+	refExists      bool
+	primaryExists  bool
+	previousExists bool
+	// middleExists mirrors the root-modules contract path. Tests that predate
+	// the middle generation leave it zero-valued, meaning
 	// "absent", which matches historic two-generation behavior.
 	middleExists bool
 	legacyExists bool
@@ -162,6 +163,7 @@ func setupDispatcherContractGuardMockGit(t *testing.T, state dispatcherContractG
 		refResolves: state.refExists,
 		paths: map[string]mockGitPathBehavior{
 			dispatcherContractFile:            {exists: state.primaryExists},
+			cliDispatcherRootContractFile:     {exists: state.previousExists},
 			rootModulesDispatcherContractFile: {exists: state.middleExists},
 			legacyDispatcherContractFile:      {exists: state.legacyExists},
 		},

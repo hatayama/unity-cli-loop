@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
-	dispatchercontract "github.com/hatayama/unity-cli-loop/dispatcher"
+	"github.com/hatayama/unity-cli-loop/dispatcher/dispatchercontract"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
