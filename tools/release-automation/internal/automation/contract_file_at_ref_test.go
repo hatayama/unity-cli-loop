@@ -150,110 +150,32 @@ type contractFileAtRefFixtureRun struct {
 func setupContractFileAtRefMockGit(t *testing.T, fixture contractFileAtRefFixture) contractFileAtRefFixtureRun {
 	t.Helper()
 
-	workDir := t.TempDir()
-	mockBin := filepath.Join(workDir, "bin")
-	if err := os.MkdirAll(mockBin, 0o755); err != nil {
-		t.Fatalf("failed to create mock bin: %v", err)
-	}
+	workDir, binDir := setupMockGitBin(t)
 
 	legacyPath := filepath.Join(workDir, "legacy.txt")
 	writeFile(t, legacyPath, fixture.legacyContent)
 
-	// The mock script inspects env vars to decide exit codes so tests can
-	// assemble each failure mode without editing shell logic per test.
-	setBool := func(name string, value bool) {
-		if value {
-			t.Setenv(name, "1")
-		} else {
-			t.Setenv(name, "")
-		}
-	}
-	setBool("MOCK_REF_EXISTS", fixture.refExists)
-	setBool("MOCK_PRIMARY_EXISTS", fixture.primaryExists)
-	setBool("MOCK_PRIMARY_SHOW_OK", fixture.primaryShowSucceeds)
-	setBool("MOCK_LEGACY_SHOW_OK", fixture.legacyShowSucceeds)
-	t.Setenv("MOCK_PRIMARY_SHOW_STDERR", fixture.primaryShowStderr)
-	t.Setenv("MOCK_LEGACY_CONTENT_PATH", legacyPath)
-
-	writeContractFileAtRefMockGit(t, filepath.Join(mockBin, "git"))
-	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// The legacy path is treated as absent by cat-file unless a legacy show
+	// is set up, preserving the pre-refactor mock behavior where the legacy
+	// existence and show signals were tied together via MOCK_LEGACY_SHOW_OK.
+	writeExistenceMockGit(t, binDir, mockGitExistenceFixture{
+		refResolves: fixture.refExists,
+		paths: map[string]mockGitPathBehavior{
+			cliContractFile: {
+				exists:      fixture.primaryExists,
+				showOK:      fixture.primaryShowSucceeds,
+				showContent: "primary-body",
+				showStderr:  fixture.primaryShowStderr,
+			},
+			legacyRunnerContractFile: {
+				exists:          fixture.legacyShowSucceeds,
+				showOK:          fixture.legacyShowSucceeds,
+				showContentPath: legacyPath,
+				showStderr:      "fatal: legacy show failed",
+			},
+			dispatcherContractFile: {exists: false},
+		},
+	})
 
 	return contractFileAtRefFixtureRun{repoRoot: workDir}
-}
-
-func writeContractFileAtRefMockGit(t *testing.T, path string) {
-	t.Helper()
-
-	content := `#!/bin/sh
-set -eu
-
-if [ "$1" = "-C" ]; then
-  shift 2
-fi
-
-case "$1" in
-  show)
-    case "$2" in
-      *:common/clicontract/contract.json)
-        if [ -n "${MOCK_PRIMARY_SHOW_OK:-}" ]; then
-          echo "primary-body"
-          exit 0
-        fi
-        [ -n "${MOCK_PRIMARY_SHOW_STDERR:-}" ] && echo "$MOCK_PRIMARY_SHOW_STDERR" >&2
-        exit 1
-        ;;
-      *:cli/contract.json)
-        if [ -n "${MOCK_LEGACY_SHOW_OK:-}" ]; then
-          cat "$MOCK_LEGACY_CONTENT_PATH"
-          exit 0
-        fi
-        echo "fatal: legacy show failed" >&2
-        exit 1
-        ;;
-      *)
-        echo "unexpected git show ref: $2" >&2
-        exit 1
-        ;;
-    esac
-    ;;
-  cat-file)
-    # cat-file -e <ref>:<file>
-    case "$3" in
-      *:common/clicontract/contract.json)
-        [ -n "${MOCK_PRIMARY_EXISTS:-}" ] && exit 0
-        exit 1
-        ;;
-      *:cli/contract.json)
-        # legacy path is treated as absent unless a legacy show is set up
-        [ -n "${MOCK_LEGACY_SHOW_OK:-}" ] && exit 0
-        exit 1
-        ;;
-      *:dispatcher/dispatcher-contract.json)
-        exit 1
-        ;;
-      *)
-        echo "unexpected cat-file target: $3" >&2
-        exit 1
-        ;;
-    esac
-    ;;
-  rev-parse)
-    # rev-parse --verify --quiet <ref>^{commit}
-    if [ "$2" = "--verify" ]; then
-      [ -n "${MOCK_REF_EXISTS:-}" ] && exit 0
-      exit 1
-    fi
-    echo "unexpected rev-parse: $*" >&2
-    exit 1
-    ;;
-  *)
-    echo "unexpected git command: $*" >&2
-    exit 1
-    ;;
-esac
-`
-	writeFile(t, path, content)
-	if err := os.Chmod(path, 0o755); err != nil {
-		t.Fatalf("failed to chmod mock git: %v", err)
-	}
 }

@@ -153,73 +153,15 @@ type dispatcherContractGuardMockState struct {
 func setupDispatcherContractGuardMockGit(t *testing.T, state dispatcherContractGuardMockState) string {
 	t.Helper()
 
-	workDir := t.TempDir()
-	mockBin := filepath.Join(workDir, "bin")
-	if err := os.MkdirAll(mockBin, 0o755); err != nil {
-		t.Fatalf("failed to create mock bin: %v", err)
-	}
-
-	setBool := func(name string, value bool) {
-		if value {
-			t.Setenv(name, "1")
-		} else {
-			t.Setenv(name, "")
-		}
-	}
-	setBool("MOCK_REF_EXISTS", state.refExists)
-	setBool("MOCK_PRIMARY_EXISTS", state.primaryExists)
-	setBool("MOCK_LEGACY_EXISTS", state.legacyExists)
-
-	writeDispatcherContractGuardMockGit(t, filepath.Join(mockBin, "git"))
-	t.Setenv("PATH", mockBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	workDir, binDir := setupMockGitBin(t)
+	writeExistenceMockGit(t, binDir, mockGitExistenceFixture{
+		refResolves: state.refExists,
+		paths: map[string]mockGitPathBehavior{
+			dispatcherContractFile:       {exists: state.primaryExists},
+			legacyDispatcherContractFile: {exists: state.legacyExists},
+		},
+	})
 	return workDir
-}
-
-func writeDispatcherContractGuardMockGit(t *testing.T, path string) {
-	t.Helper()
-
-	content := `#!/bin/sh
-set -eu
-
-if [ "$1" = "-C" ]; then
-  shift 2
-fi
-
-case "$1" in
-  cat-file)
-    case "$3" in
-      *:dispatcher/dispatcher-contract.json)
-        [ -n "${MOCK_PRIMARY_EXISTS:-}" ] && exit 0
-        exit 1
-        ;;
-      *:cli/dispatcher-contract.json)
-        [ -n "${MOCK_LEGACY_EXISTS:-}" ] && exit 0
-        exit 1
-        ;;
-      *)
-        echo "unexpected cat-file target: $3" >&2
-        exit 1
-        ;;
-    esac
-    ;;
-  rev-parse)
-    if [ "$2" = "--verify" ]; then
-      [ -n "${MOCK_REF_EXISTS:-}" ] && exit 0
-      exit 1
-    fi
-    echo "unexpected rev-parse: $*" >&2
-    exit 1
-    ;;
-  *)
-    echo "unexpected git command: $*" >&2
-    exit 1
-    ;;
-esac
-`
-	writeFile(t, path, content)
-	if err := os.Chmod(path, 0o755); err != nil {
-		t.Fatalf("failed to chmod mock git: %v", err)
-	}
 }
 
 // Verifies the head contract must parse as a valid dispatcher contract.
