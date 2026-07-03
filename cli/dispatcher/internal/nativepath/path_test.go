@@ -38,6 +38,26 @@ func TestDefaultInstallDirForWindowsUsesLocalAppData(t *testing.T) {
 	}
 }
 
+func TestDefaultInstallDirForWindowsTrimsLocalAppDataSeparator(t *testing.T) {
+	// Verifies Windows defaults do not duplicate separators when environment paths end with a slash.
+	installDir, err := DefaultInstallDir("windows", Environment{
+		Getenv: func(name string) string {
+			if name == LocalAppDataEnvName {
+				return `C:\Users\<USER_NAME>\AppData\Local\`
+			}
+			return ""
+		},
+	})
+	if err != nil {
+		t.Fatalf("DefaultInstallDir failed: %v", err)
+	}
+
+	expected := `C:\Users\<USER_NAME>\AppData\Local\Programs\uloop\bin`
+	if installDir != expected {
+		t.Fatalf("install dir mismatch: %s", installDir)
+	}
+}
+
 func TestDefaultInstallDirForDarwinUsesHome(t *testing.T) {
 	// Verifies macOS install and uninstall commands share the same user-local default directory.
 	installDir, err := DefaultInstallDir("darwin", Environment{
@@ -89,6 +109,26 @@ func TestCacheRootUsesExplicitDirectory(t *testing.T) {
 	}
 
 	if cacheRoot != "/tmp/uloop-cache" {
+		t.Fatalf("cache root mismatch: %s", cacheRoot)
+	}
+}
+
+func TestCacheRootForWindowsTrimsLocalAppDataSeparator(t *testing.T) {
+	// Verifies Windows cache roots do not duplicate separators when LOCALAPPDATA ends with a slash.
+	cacheRoot, err := CacheRoot("windows", Environment{
+		Getenv: func(name string) string {
+			if name == LocalAppDataEnvName {
+				return `C:\Users\<USER_NAME>\AppData\Local\`
+			}
+			return ""
+		},
+	})
+	if err != nil {
+		t.Fatalf("CacheRoot failed: %v", err)
+	}
+
+	expected := `C:\Users\<USER_NAME>\AppData\Local\uloop`
+	if cacheRoot != expected {
 		t.Fatalf("cache root mismatch: %s", cacheRoot)
 	}
 }

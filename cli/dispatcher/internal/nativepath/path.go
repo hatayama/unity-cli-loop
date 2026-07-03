@@ -120,9 +120,35 @@ func TrimInstallDir(goos string, installDir string) string {
 // Join combines path elements with the separator conventions of the target OS.
 func Join(goos string, elements ...string) string {
 	if goos == "windows" {
-		return strings.Join(elements, `\`)
+		return joinWindows(elements...)
 	}
 	return path.Join(elements...)
+}
+
+func joinWindows(elements ...string) string {
+	normalizedElements := make([]string, 0, len(elements))
+	for index, element := range elements {
+		if element == "" {
+			continue
+		}
+		if index == 0 {
+			normalizedElements = append(normalizedElements, trimWindowsPathSuffix(element))
+			continue
+		}
+		normalizedElement := strings.Trim(element, `\/`)
+		if normalizedElement != "" {
+			normalizedElements = append(normalizedElements, normalizedElement)
+		}
+	}
+	return strings.Join(normalizedElements, `\`)
+}
+
+func trimWindowsPathSuffix(element string) string {
+	trimmedElement := strings.TrimRight(element, `\/`)
+	if trimmedElement != "" {
+		return trimmedElement
+	}
+	return strings.TrimRight(element, `/`)
 }
 
 func getEnvironmentValue(environment Environment, name string) string {
