@@ -28,7 +28,7 @@
         }
       ]
     },
-    "cli": {
+    "project-runner": {
       "component": "uloop-project-runner",
       "release-type": "go",
       "versioning": "prerelease",
@@ -36,22 +36,16 @@
       "prerelease-type": "beta",
       "include-v-in-tag": true,
       "include-component-in-tag": true,
-      "exclude-paths": [
-        "cli/cmd/dispatch-release-please-pr-checks",
-        "cli/cmd/dispatcher",
-        "cli/internal/automation",
-        "cli/internal/dispatcher"
-      ],
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
         {
           "type": "json",
-          "path": "internal/tools/default-tools.json",
+          "path": "/common/tools/default-tools.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "contract.json",
+          "path": "/common/clicontract/contract.json",
           "jsonpath": "$.projectRunnerVersion"
         },
         {

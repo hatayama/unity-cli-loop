@@ -27,7 +27,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
-          go-version-file: cli/.go-version
+          go-version-file: .go-version
           cache: false
 
       - name: Test release automation shell helpers
@@ -50,24 +50,24 @@ jobs:
 
       - name: Check IPC protocol reminder
         if: github.event_name == 'pull_request'
-        working-directory: cli
+        working-directory: tools/release-automation
         run: go run ./cmd/check-ipc-protocol-reminder --base "origin/${{ github.base_ref }}" --head HEAD
 
       - name: Check protocol minimum version bump
         if: github.event_name == 'pull_request' && !(startsWith(github.head_ref, 'release-please--branches--') && (github.event.pull_request.user.login == 'github-actions[bot]' || github.event.pull_request.user.login == 'release-please[bot]'))
-        working-directory: cli
+        working-directory: tools/release-automation
         env:
           GH_TOKEN: ${{ github.token }}
         run: go run ./cmd/check-protocol-minimum-version --base "origin/${{ github.base_ref }}" --head HEAD
 
       - name: Check dispatcher minimum version
         if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-        working-directory: cli
+        working-directory: tools/release-automation
         run: go run ./cmd/check-dispatcher-minimum-version
 
       - name: Check dispatcher version bump
         if: github.event_name == 'pull_request'
-        working-directory: cli
+        working-directory: tools/release-automation
         run: go run ./cmd/check-dispatcher-version-bump --base "origin/${{ github.base_ref }}" --head HEAD
 
       - name: Install golangci-lint
@@ -91,7 +91,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
-          go-version-file: cli/.go-version
+          go-version-file: .go-version
           cache: false
 
       # Windows-only code paths (named pipe transport, winio deadlines, typed error
@@ -100,7 +100,7 @@ jobs:
       # separators, missing .exe suffixes, TCP-only fixtures) that predate this job.
       - name: Test native Go CLI transport on Windows
         shell: bash
-        run: cd cli && go test ./internal/unityipc/
+        run: cd common && go test ./unityipc/
 
       - name: Test install release filter in Git Bash
         shell: bash
@@ -133,10 +133,10 @@ jobs:
           test -d "Packages/src/Editor" || exit 1
           test ! -d "Packages/src/Cli~" || exit 1
           test -d "Packages/src/Editor/CliOnlyTools~" || exit 1
-          test -d "cli" || exit 1
-          test -f "cli/go.mod" || exit 1
-          test -d "cli/cmd" || exit 1
-          test -d "cli/internal" || exit 1
+          test -d "project-runner" || exit 1
+          test -f "project-runner/go.mod" || exit 1
+          test -d "project-runner/cmd" || exit 1
+          test -d "project-runner/internal" || exit 1
 
           echo "✅ Unity Package structure is valid"
 

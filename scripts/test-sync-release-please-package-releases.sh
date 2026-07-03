@@ -168,7 +168,7 @@ write_release_files() {
   unity_package_key=${2:-Packages/src}
   unity_changelog_path=${3:-CHANGELOG.md}
 
-  mkdir -p Packages/src cli scripts
+  mkdir -p Packages/src project-runner scripts tools/release-automation
   cat > release-please-config.json <<EOF_CONFIG
 {
   "packages": {
@@ -179,7 +179,7 @@ write_release_files() {
       "include-component-in-tag": false,
       "changelog-path": "$unity_changelog_path"
     },
-    "cli": {
+    "project-runner": {
       "component": "uloop-project-runner",
       "release-type": "go",
       "include-v-in-tag": true,
@@ -193,7 +193,7 @@ EOF_CONFIG
   cat > .release-please-manifest.json <<EOF_MANIFEST
 {
   "$unity_package_key": "$version",
-  "cli": "$version"
+  "project-runner": "$version"
 }
 EOF_MANIFEST
 
@@ -218,7 +218,7 @@ EOF_PIN
 * keep the root package release baseline available
 EOF_CHANGELOG
 
-  cat > cli/CHANGELOG.md <<EOF_CLI_CHANGELOG
+  cat > project-runner/CHANGELOG.md <<EOF_CLI_CHANGELOG
 # Changelog
 
 ## [$version](https://example.test/compare/cli-old...cli-new)
@@ -320,6 +320,37 @@ create_key_rename_repo() {
     git rev-parse HEAD > "$work_dir/release-sha.txt"
 
     write_release_files 3.0.0-beta.6
+    git add .
+    git commit -q -m "chore: move unity-package release root"
+  )
+
+  printf '%s\n' "$work_dir"
+}
+
+create_changelog_move_repo() {
+  name=$1
+  work_dir="$TMP_DIR/$name"
+  mkdir -p "$work_dir"
+
+  (
+    cd "$work_dir"
+    git init -q
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    # A pathspec-limited diff hides the rename source, so a moved changelog
+    # always reappears as fully added lines. Rename detection is additionally
+    # disabled to keep that behavior deterministic across git versions.
+    git config diff.renames false
+
+    write_release_files 3.0.0-beta.6 "." "CHANGELOG.md"
+    mv Packages/src/CHANGELOG.md CHANGELOG.md
+    git add .
+    git commit -q -m "chore: release v3-beta"
+    git tag uloop-project-runner-v3.0.0-beta.6
+    git rev-parse HEAD > "$work_dir/release-sha.txt"
+
+    write_release_files 3.0.0-beta.6
+    git rm -q CHANGELOG.md
     git add .
     git commit -q -m "chore: move unity-package release root"
   )
@@ -543,6 +574,17 @@ test_key_rename_commit_is_not_treated_as_release_commit() {
   assert_not_contains "$work_dir/stderr.txt" "points at"
 }
 
+# Verifies a package-root move that relocates the changelog file is not mistaken for the release-please release commit even when git rename detection is unavailable.
+test_changelog_move_commit_is_not_treated_as_release_commit() {
+  work_dir=$(create_changelog_move_repo changelog-move-root)
+  release_sha=$(cat "$work_dir/release-sha.txt")
+
+  run_sync "$work_dir" v3.0.0-beta.6 false "$release_sha"
+
+  assert_contains "$work_dir/output.txt" "Release v3.0.0-beta.6 already exists."
+  assert_not_contains "$work_dir/stderr.txt" "points at"
+}
+
 # Verifies a root package release created by another workflow during creation is reused.
 test_concurrent_root_release_creation_is_reused() {
   work_dir=$(create_release_repo concurrent-root-create)
@@ -568,4 +610,5 @@ test_waits_for_dispatcher_assets_before_creating_root_release
 test_waits_when_dispatcher_asset_list_fails
 test_retries_until_cli_assets_are_ready
 test_key_rename_commit_is_not_treated_as_release_commit
+test_changelog_move_commit_is_not_treated_as_release_commit
 test_concurrent_root_release_creation_is_reused

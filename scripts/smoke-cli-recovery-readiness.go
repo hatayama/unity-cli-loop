@@ -128,9 +128,9 @@ func defaultUloopPath() (string, error) {
 		if runtime.GOARCH == "arm64" {
 			arch = "darwin-arm64"
 		}
-		return filepath.Join(repoRoot, "cli", "dist", arch, "uloop"), nil
+		return filepath.Join(repoRoot, "dist", arch, "uloop"), nil
 	case "windows":
-		return filepath.Join(repoRoot, "cli", "dist", "windows-amd64", "uloop.exe"), nil
+		return filepath.Join(repoRoot, "dist", "windows-amd64", "uloop.exe"), nil
 	default:
 		return "", nil
 	}

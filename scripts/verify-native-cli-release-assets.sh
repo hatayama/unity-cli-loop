@@ -16,7 +16,7 @@ if [ "${1:-}" = "--list" ]; then
   exit 0
 fi
 
-RELEASE_DIR="${1:-$ROOT_DIR/cli/dist/release}"
+RELEASE_DIR="${1:-$ROOT_DIR/dist/release}"
 
 fail() {
   echo "$1" >&2
