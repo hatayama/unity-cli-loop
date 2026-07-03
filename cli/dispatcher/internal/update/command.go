@@ -2,7 +2,6 @@ package update
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 
 	sharedversion "github.com/hatayama/unity-cli-loop/common/version"
@@ -18,8 +17,12 @@ type Options struct {
 }
 
 type Command struct {
-	Name string
-	Args []string
+	Name                 string
+	Args                 []string
+	Env                  []string
+	InstallerName        string
+	InstallerURL         string
+	InstallerChecksumURL string
 }
 
 func CommandForOS(goos string, options Options) (Command, error) {
@@ -27,20 +30,22 @@ func CommandForOS(goos string, options Options) (Command, error) {
 	updateSelector := Selector(options)
 	switch goos {
 	case "darwin":
-		scriptURL := ScriptURL(version, PosixScriptName)
-		script := fmt.Sprintf(`tmp=$(mktemp) && curl -fSL %s -o "$tmp" && ULOOP_VERSION=%s sh "$tmp"; ec=$?; rm -f "$tmp"; exit $ec`, shellQuote(scriptURL), shellQuote(updateSelector))
-		return Command{Name: "sh", Args: []string{"-c", script}}, nil
+		return commandForScript("sh", PosixScriptName, version, updateSelector), nil
 	case "windows":
-		scriptURL := ScriptURL(version, WindowsScriptName)
-		return Command{Name: "powershell", Args: []string{
-			"-NoProfile",
-			"-ExecutionPolicy",
-			"Bypass",
-			"-Command",
-			fmt.Sprintf("$ProgressPreference='SilentlyContinue'; $env:ULOOP_VERSION=%s; irm %s | iex", shellQuote(updateSelector), shellQuote(scriptURL)),
-		}}, nil
+		return commandForScript("powershell", WindowsScriptName, version, updateSelector), nil
 	default:
 		return Command{}, errors.New(UnsupportedOSMessage)
+	}
+}
+
+func commandForScript(name string, scriptName string, version string, updateSelector string) Command {
+	installerURL := ScriptAssetURL(version, scriptName)
+	return Command{
+		Name:                 name,
+		Env:                  []string{"ULOOP_VERSION=" + updateSelector},
+		InstallerName:        scriptName,
+		InstallerURL:         installerURL,
+		InstallerChecksumURL: installerURL + ".sha256",
 	}
 }
 
@@ -76,8 +81,4 @@ func Selector(options Options) string {
 		return DispatcherReleaseTag(NormalizeTargetVersion(options.TargetVersion))
 	}
 	return UpdateSelectorForVersion(options.CurrentVersion)
-}
-
-func shellQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }

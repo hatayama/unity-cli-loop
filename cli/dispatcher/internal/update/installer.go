@@ -9,6 +9,7 @@ const (
 	LatestBeta        = "latest-beta"
 
 	repositoryRawBaseURL          = "https://raw.githubusercontent.com/hatayama/unity-cli-loop"
+	repositoryReleaseBaseURL      = "https://github.com/hatayama/unity-cli-loop/releases/download"
 	projectRunnerReleaseTagPrefix = "uloop-project-runner-v"
 	dispatcherTagPrefix           = "dispatcher-v"
 	betaVersionMarker             = "-beta."
@@ -16,6 +17,10 @@ const (
 
 func ScriptURL(version string, scriptName string) string {
 	return repositoryRawBaseURL + "/" + DispatcherReleaseTag(version) + "/scripts/" + scriptName
+}
+
+func ScriptAssetURL(version string, scriptName string) string {
+	return repositoryReleaseBaseURL + "/" + DispatcherReleaseTag(version) + "/" + scriptName
 }
 
 func ProjectRunnerReleaseTag(version string) string {

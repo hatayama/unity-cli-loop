@@ -59,6 +59,6 @@ package_unix darwin-amd64
 package_windows
 package_installers
 
-for asset_path in "$RELEASE_DIR"/*.tar.gz "$RELEASE_DIR"/*.zip; do
+for asset_path in "$RELEASE_DIR"/install.sh "$RELEASE_DIR"/install.ps1 "$RELEASE_DIR"/*.tar.gz "$RELEASE_DIR"/*.zip; do
   create_checksum "$asset_path"
 done
