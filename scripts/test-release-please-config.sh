@@ -161,7 +161,7 @@ assert_json_value '.packages["cli/dispatcher"].["prerelease-type"]' 'beta'
 assert_json_value '.packages["cli/dispatcher"].["changelog-path"]' 'CHANGELOG.md'
 assert_json_value '.packages["cli/dispatcher"] | has("exclude-paths")' 'false'
 assert_json_value '.packages["cli/dispatcher"].["extra-files"] | length' '1'
-assert_json_value '.packages["cli/dispatcher"].["extra-files"][0].path' 'dispatcher-contract.json'
+assert_json_value '.packages["cli/dispatcher"].["extra-files"][0].path' 'dispatchercontract/dispatcher-contract.json'
 assert_json_value '.packages["cli/dispatcher"].["extra-files"][0].jsonpath' '$.dispatcherVersion'
 
 assert_file_contains "$RELEASE_WORKFLOW" 'id: package_release_sync'
