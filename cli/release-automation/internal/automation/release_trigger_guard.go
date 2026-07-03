@@ -23,16 +23,19 @@ type releaseTriggerRule struct {
 // consuming package root or the change never reaches a release.
 //
 // These rules are re-encoded as shell in scripts/stamp-release-inputs.sh
-// (list_common_inputs / list_installer_inputs); update both together.
-// TODO: When a third rule lands here, add an equivalence test that verifies
-// scripts/stamp-release-inputs.sh enumerates the same input set — with two
-// rules, the cross-references and scripts/test-stamp-release-inputs.sh keep
-// the implementations aligned.
+// (list_shared_common_inputs / list_dispatcher_only_common_inputs /
+// list_installer_inputs); update both together. scripts/test-stamp-release-inputs.sh
+// covers the same shared, dispatcher-only, installer, and ignored input cases.
 var releaseTriggerRules = []releaseTriggerRule{
 	{
-		inputDescription: "common module sources",
-		matchesInput:     isCommonModuleSource,
+		inputDescription: "common module sources shared by dispatcher and project runner",
+		matchesInput:     isSharedCommonModuleInput,
 		triggerRoots:     []string{"cli/dispatcher/", "cli/project-runner/"},
+	},
+	{
+		inputDescription: "common module sources used only by dispatcher",
+		matchesInput:     isDispatcherOnlyCommonModuleInput,
+		triggerRoots:     []string{"cli/dispatcher/"},
 	},
 	{
 		inputDescription: "installer scripts shipped as dispatcher release assets",
@@ -143,12 +146,38 @@ func AnalyzeReleaseTriggerGuard(changedFiles []string) ReleaseTriggerGuardResult
 	return ReleaseTriggerGuardResult{Violations: violations}
 }
 
-func isCommonModuleSource(file string) bool {
-	if !strings.HasPrefix(file, "cli/common/") {
-		return false
-	}
+var sharedCommonPackageRoots = []string{
+	// Keep this whitelist aligned with `go list -deps ./...` for the dispatcher
+	// and project-runner modules. Test helpers such as cli/common/clitest are
+	// intentionally excluded because they never ship in release binaries.
+	"cli/common/clicontract/",
+	"cli/common/clicore/",
+	"cli/common/project/",
+	"cli/common/skills/",
+	"cli/common/tools/",
+	"cli/common/unityipc/",
+}
+
+var dispatcherOnlyCommonPackageRoots = []string{
+	// This package is imported by the dispatcher update path, not by the
+	// project runner.
+	"cli/common/version/",
+}
+
+func isSharedCommonModuleInput(file string) bool {
 	if file == "cli/common/go.mod" || file == "cli/common/go.sum" {
 		return true
+	}
+	return isCommonGoSourceUnderPackageRoots(file, sharedCommonPackageRoots)
+}
+
+func isDispatcherOnlyCommonModuleInput(file string) bool {
+	return isCommonGoSourceUnderPackageRoots(file, dispatcherOnlyCommonPackageRoots)
+}
+
+func isCommonGoSourceUnderPackageRoots(file string, packageRoots []string) bool {
+	if !strings.HasPrefix(file, "cli/common/") {
+		return false
 	}
 	// JSON files under common (contract.json, default-tools.json) are
 	// release-please stamp targets rather than binary inputs, and test files
@@ -156,7 +185,12 @@ func isCommonModuleSource(file string) bool {
 	if !strings.HasSuffix(file, ".go") || strings.HasSuffix(file, "_test.go") {
 		return false
 	}
-	return true
+	for _, packageRoot := range packageRoots {
+		if strings.HasPrefix(file, packageRoot) {
+			return true
+		}
+	}
+	return false
 }
 
 func isDispatcherInstallerScript(file string) bool {
