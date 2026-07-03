@@ -18,14 +18,14 @@ Read this when using `uloop screenshot --capture-mode rendering --annotate-eleme
 
 ## Coordinate Conversion
 
-When `ImageCoordinateSystem` is `"top-left-game-view"` and `ResolutionScale` is `1.0`, image pixel coordinates from `screenshot --capture-mode rendering` are already mouse-input coordinates:
+When `ImageCoordinateSystem` is `"top-left-game-view"`, convert raw image pixel coordinates from `screenshot --capture-mode rendering` with the formula returned in `ScreenshotToInputFormula`:
 
 ```text
-input_x = image_x
-input_y = image_y
+input_x = image_x / resolutionScale
+input_y = image_y / resolutionScale + imageToInputOffsetY
 ```
 
-When `ResolutionScale` is not `1.0`, use the formula returned in `ScreenshotToInputFormula`.
+When `ResolutionScale` is `1.0` and `ImageToInputOffsetY` is `0`, raw image pixel coordinates already match mouse-input coordinates. `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` are always returned as mouse-input coordinates, so pass those values directly.
 
 The mouse input tools convert internally to Unity Input System coordinates:
 

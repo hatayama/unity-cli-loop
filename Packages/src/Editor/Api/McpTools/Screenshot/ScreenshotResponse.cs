@@ -12,6 +12,7 @@ namespace io.github.hatayama.uLoopMCP
         public int Height { get; set; }
         public string ImageCoordinateSystem { get; set; } = McpConstants.COORDINATE_SYSTEM_TOP_LEFT_WINDOW;
         public float ResolutionScale { get; set; } = 1.0f;
+        public int ImageToInputOffsetY { get; set; }
         public float GameViewWidth { get; set; }
         public float GameViewHeight { get; set; }
         public string ScreenshotToInputFormula { get; set; } = McpConstants.SCREENSHOT_WINDOW_TO_INPUT_FORMULA_UNAVAILABLE;

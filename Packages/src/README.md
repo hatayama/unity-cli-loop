@@ -379,7 +379,7 @@ Great for keeping visual feedback in sync after other apps steal focus. (Linux i
 Take a screenshot of any EditorWindow as a PNG. Specify the window name (the text displayed in the title bar/tab) to capture.
 When multiple windows of the same type are open (e.g., 3 Inspector windows), all windows are saved with numbered filenames.
 Supports three matching modes: `exact` (default), `prefix`, and `contains` - all case-insensitive.
-Use `CaptureMode: rendering` at the default resolution scale when you need coordinates for `simulate-mouse-input`, `simulate-mouse-ui`, or `raycast`; those screenshots use top-left Game View coordinates that can be passed directly to those tools.
+Use `CaptureMode: rendering` when you need coordinates for `simulate-mouse-input`, `simulate-mouse-ui`, or `raycast`; convert raw image pixels with `ScreenshotToInputFormula`, or pass annotated `SimX/SimY` and raycast-grid `InputX/InputY` values directly.
 ```text
 → screenshot (WindowName: "Console")
 → screenshot (CaptureMode: rendering, AnnotateRaycastGrid: true)

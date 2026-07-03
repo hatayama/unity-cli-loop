@@ -8,7 +8,7 @@ namespace io.github.hatayama.uLoopMCP
     /// <summary>
     /// Checks what a screenshot-compatible Game View coordinate hits in 3D physics.
     /// </summary>
-    [McpTool(Description = "Raycast from Camera.main through a Game View coordinate. X/Y use the same top-left coordinates as screenshot --capture-mode rendering and simulate-mouse-input.")]
+    [McpTool(Description = "Raycast from Camera.main through a top-left Game View coordinate. Use annotated SimX/SimY, raycast-grid InputX/InputY, or raw screenshot image pixels converted with ScreenshotToInputFormula.")]
     public class RaycastTool : AbstractUnityTool<RaycastSchema, RaycastResponse>
     {
         public override string ToolName => "raycast";

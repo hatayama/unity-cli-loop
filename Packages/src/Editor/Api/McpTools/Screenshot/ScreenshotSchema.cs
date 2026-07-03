@@ -43,7 +43,7 @@ namespace io.github.hatayama.uLoopMCP
         [Description("Output directory path for saving screenshots. When empty, uses default path (.uloop/outputs/Screenshots/). Accepts absolute paths.")]
         public string OutputDirectory { get; set; } = "";
 
-        [Description("Capture mode: window(0)=capture EditorWindow including toolbar, rendering(1)=capture game rendering only (PlayMode required, coordinates match simulate-mouse)")]
+        [Description("Capture mode: window(0)=capture EditorWindow including toolbar, rendering(1)=capture game rendering only (PlayMode required, returns ScreenshotToInputFormula for raw image pixels)")]
         public CaptureMode CaptureMode { get; set; } = CaptureMode.window;
 
         [Description("Annotate interactive UI elements with names and simulate-mouse coordinates on the screenshot. Only works with CaptureMode=rendering in PlayMode.")]

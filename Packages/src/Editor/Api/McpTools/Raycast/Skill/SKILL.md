@@ -17,14 +17,16 @@ uloop raycast --x <x> --y <y> [--layer-mask <mask>] [--max-distance <distance>]
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--x` | number | `0` | Target X position in Game View pixels (origin: top-left). Use coordinates directly from `screenshot --capture-mode rendering`. |
-| `--y` | number | `0` | Target Y position in Game View pixels (origin: top-left). Use coordinates directly from `screenshot --capture-mode rendering`. |
+| `--x` | number | `0` | Target X position in Game View pixels (origin: top-left). Use `AnnotatedElements[].SimX`, `RaycastGridPoints[].InputX`, or raw image pixels converted with `ScreenshotToInputFormula`. |
+| `--y` | number | `0` | Target Y position in Game View pixels (origin: top-left). Use `AnnotatedElements[].SimY`, `RaycastGridPoints[].InputY`, or raw image pixels converted with `ScreenshotToInputFormula`. |
 | `--layer-mask` | number | Unity default raycast layers | Physics layer mask used by the raycast. |
 | `--max-distance` | number | `1000` | Maximum raycast distance in world units. |
 
 ## Coordinate System
 
-- `--x` / `--y` use the same top-left Game View coordinates as `screenshot --capture-mode rendering` and `simulate-mouse-input`.
+- `--x` / `--y` use the same top-left Game View input coordinates as `simulate-mouse-input`.
+- Raw image pixels from `uloop screenshot --capture-mode rendering` must be converted with `ScreenshotToInputFormula`.
+- `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` can be passed directly to this tool.
 - Do not flip Y in the caller. The tool converts internally:
 
 ```text

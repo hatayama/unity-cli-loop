@@ -24,6 +24,8 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             Ray ray = mainCamera.ScreenPointToRay(conversion.InjectedUnityPosition);
+            // Transform changes can be visible before the physics scene updates, so sync before screenshot-based queries.
+            Physics.SyncTransforms();
             RaycastHit[] hits = Physics.RaycastAll(ray, maxDistance, layerMask);
             System.Array.Sort(hits, CompareHitsByDistance);
 

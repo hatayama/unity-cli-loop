@@ -13,7 +13,9 @@ namespace io.github.hatayama.uLoopMCP
         private const int GRID_ROWS = 5;
         private const float MARKER_SIZE = 18f;
 
-        internal static List<RaycastGridPointInfo> CollectRaycastGridPoints(Vector2 gameViewSize)
+        internal static List<RaycastGridPointInfo> CollectRaycastGridPoints(
+            Vector2 renderingImageSize,
+            int imageToInputOffsetY)
         {
             List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>();
             int labelIndex = 1;
@@ -22,9 +24,11 @@ namespace io.github.hatayama.uLoopMCP
             {
                 for (int column = 1; column <= GRID_COLUMNS; column++)
                 {
-                    Vector2 inputPosition = new Vector2(
-                        gameViewSize.x * column / (GRID_COLUMNS + 1f),
-                        gameViewSize.y * row / (GRID_ROWS + 1f));
+                    Vector2 inputPosition = CalculateGridInputPosition(
+                        renderingImageSize,
+                        imageToInputOffsetY,
+                        row,
+                        column);
                     GameViewRaycastResult raycastResult = GameViewRaycastUtility.RaycastFromInputPosition(
                         inputPosition,
                         McpConstants.RAYCAST_DEFAULT_MAX_DISTANCE,
@@ -36,6 +40,23 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             return points;
+        }
+
+        internal static Vector2 CalculateGridInputPosition(
+            Vector2 renderingImageSize,
+            int imageToInputOffsetY,
+            int row,
+            int column)
+        {
+            Debug.Assert(renderingImageSize.x >= 0f, "Rendering image width must not be negative.");
+            Debug.Assert(renderingImageSize.y >= 0f, "Rendering image height must not be negative.");
+            Debug.Assert(row >= 1 && row <= GRID_ROWS, "Grid row must be within the configured grid.");
+            Debug.Assert(column >= 1 && column <= GRID_COLUMNS, "Grid column must be within the configured grid.");
+
+            // Grid points must be visible in the captured PNG, so sample image space before adding the input Y offset.
+            return new Vector2(
+                renderingImageSize.x * column / (GRID_COLUMNS + 1f),
+                imageToInputOffsetY + renderingImageSize.y * row / (GRID_ROWS + 1f));
         }
 
         internal static List<UIElementInfo> CreateOverlayElements(List<RaycastGridPointInfo> points)

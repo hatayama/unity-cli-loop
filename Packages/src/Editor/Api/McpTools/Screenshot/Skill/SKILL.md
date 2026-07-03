@@ -86,6 +86,7 @@ Returns JSON with:
   - `Height`: Captured image height in pixels
   - `ImageCoordinateSystem`: `"top-left-game-view"` for `--capture-mode rendering`, or `"top-left-window"` for window captures
   - `ResolutionScale`: Resolution scale used for capture
+  - `ImageToInputOffsetY`: Y offset added after unscaling image pixels to get mouse-input coordinates
   - `GameViewWidth` / `GameViewHeight`: Game View size used by mouse input tools
   - `ScreenshotToInputFormula`: Formula for turning image coordinates into mouse-input coordinates
   - `UnityInputFormula`: Formula used internally by mouse input tools to inject `Mouse.current.position`
@@ -102,5 +103,5 @@ When multiple windows match (e.g., multiple Inspector windows or when using `con
 - Target window must be open in Unity Editor
 - Window name matching is always case-insensitive
 - Use `--capture-mode rendering` for coordinates that should be passed to `simulate-mouse-input`, `simulate-mouse-ui`, or `raycast`.
-- Keep `--resolution-scale 1.0` when you want to pass image pixel coordinates directly to mouse tools.
+- Use `ScreenshotToInputFormula` before passing raw image pixels to mouse tools. `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` are already mouse-input coordinates.
 - Do not use `window` captures as mouse-input coordinates because they include Unity Editor chrome.

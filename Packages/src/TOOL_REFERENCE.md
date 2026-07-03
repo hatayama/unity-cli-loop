@@ -184,7 +184,7 @@ All tools automatically include the following property:
     - `prefix`: Window name must start with the input
     - `contains`: Window name must contain the input anywhere
   - `OutputDirectory` (string): Output directory path for saving screenshots. When empty, uses default path (.uloop/outputs/Screenshots/). Accepts absolute paths (default: "")
-  - `CaptureMode` (enum): "window" captures Editor chrome, "rendering" captures Game View rendering with top-left Game View coordinates. With the default ResolutionScale 1.0, image pixels can be passed directly to input tools (default: "window")
+  - `CaptureMode` (enum): "window" captures Editor chrome, "rendering" captures Game View rendering with top-left Game View coordinates. Use `ScreenshotToInputFormula` before passing raw image pixels to input tools (default: "window")
   - `AnnotateElements` (boolean): Annotate interactive UI elements in rendering screenshots (default: false)
   - `AnnotateRaycastGrid` (boolean): Annotate 3D physics raycast candidate points in rendering screenshots (default: false)
   - `ElementsOnly` (boolean): Return annotation JSON without writing an image file (default: false)
@@ -196,6 +196,7 @@ All tools automatically include the following property:
     - `Width` (number): Captured image width in pixels
     - `Height` (number): Captured image height in pixels
     - `ImageCoordinateSystem` (string): "top-left-game-view" for rendering captures, "top-left-window" for window captures
+    - `ImageToInputOffsetY` (number): Y offset added after unscaling raw image pixels to get input coordinates
     - `GameViewWidth` / `GameViewHeight` (number): Game View size used by input tools
     - `ScreenshotToInputFormula` (string): How to use screenshot coordinates with input tools
     - `UnityInputFormula` (string): Internal conversion to `Mouse.current.position`
@@ -251,8 +252,8 @@ All tools automatically include the following property:
     - `MoveDelta`: Inject mouse delta one-shot (for FPS camera/look control)
     - `SmoothDelta`: Inject mouse delta smoothly over Duration seconds (human-like camera pan)
     - `Scroll`: Inject scroll wheel (for hotbar switching, zoom, etc.)
-  - `X` (number): Target X position in top-left Game View pixels. Use coordinates directly from `screenshot --capture-mode rendering` (default: 0)
-  - `Y` (number): Target Y position in top-left Game View pixels. Use coordinates directly from `screenshot --capture-mode rendering` (default: 0)
+  - `X` (number): Target X position in top-left Game View pixels. Use `AnnotatedElements[].SimX`, `RaycastGridPoints[].InputX`, or raw image pixels converted with `ScreenshotToInputFormula` (default: 0)
+  - `Y` (number): Target Y position in top-left Game View pixels. Use `AnnotatedElements[].SimY`, `RaycastGridPoints[].InputY`, or raw image pixels converted with `ScreenshotToInputFormula` (default: 0)
   - `Button` (enum): Mouse button - "Left", "Right", "Middle" (default: "Left"). Used by Click and LongPress
   - `Duration` (number): Hold duration for LongPress, or minimum hold time for Click. 0 = one-shot tap (default: 0)
   - `DeltaX` (number): Delta X in pixels for MoveDelta. Positive = right (default: 0)
@@ -272,10 +273,10 @@ All tools automatically include the following property:
   - `CoordinateConversionFormula` (string): `unity_x = input_x; unity_y = gameViewHeight - input_y`
 
 ### 13. raycast
-- **Description**: Raycast from `Camera.main` through a top-left Game View coordinate. Use this to check what a rendering screenshot coordinate hits in 3D physics before clicking with `simulate-mouse-input`
+- **Description**: Raycast from `Camera.main` through a top-left Game View coordinate. Use this to check what a converted rendering screenshot coordinate hits in 3D physics before clicking with `simulate-mouse-input`
 - **Parameters**:
-  - `X` (number): Target X position in top-left Game View pixels (default: 0)
-  - `Y` (number): Target Y position in top-left Game View pixels (default: 0)
+  - `X` (number): Target X position in top-left Game View pixels. Use `AnnotatedElements[].SimX`, `RaycastGridPoints[].InputX`, or raw image pixels converted with `ScreenshotToInputFormula` (default: 0)
+  - `Y` (number): Target Y position in top-left Game View pixels. Use `AnnotatedElements[].SimY`, `RaycastGridPoints[].InputY`, or raw image pixels converted with `ScreenshotToInputFormula` (default: 0)
   - `LayerMask` (number): Physics layer mask used by the raycast (default: Unity default raycast layers)
   - `MaxDistance` (number): Maximum raycast distance in world units (default: 1000)
 - **Response**:

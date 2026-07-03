@@ -234,6 +234,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
+        "com.unity.modules.physics": "1.0.0",
         "com.unity.ugui": "1.0.0",
         "com.unity.nuget.newtonsoft-json": "3.2.1"
       }
@@ -285,7 +286,7 @@
     },
     "com.unity.modules.physics": {
       "version": "1.0.0",
-      "depth": 2,
+      "depth": 1,
       "source": "builtin",
       "dependencies": {}
     },

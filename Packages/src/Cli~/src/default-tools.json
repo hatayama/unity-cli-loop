@@ -247,7 +247,7 @@
           },
           "CaptureMode": {
             "type": "string",
-            "description": "Capture mode: window=capture EditorWindow including toolbar, rendering=capture game rendering only (PlayMode required). Rendering screenshots at ResolutionScale=1.0 use top-left Game View coordinates that can be passed directly to simulate-mouse-input and raycast.",
+            "description": "Capture mode: window=capture EditorWindow including toolbar, rendering=capture game rendering only (PlayMode required). Rendering screenshots return ScreenshotToInputFormula for converting raw image pixels before calling simulate-mouse-input or raycast.",
             "enum": [
               "window",
               "rendering"
@@ -274,18 +274,18 @@
     },
     {
       "name": "raycast",
-      "description": "Raycast from Camera.main through a Game View coordinate. X/Y use the same top-left coordinates as screenshot --capture-mode rendering and simulate-mouse-input.",
+      "description": "Raycast from Camera.main through a top-left Game View coordinate. Use annotated SimX/SimY, raycast-grid InputX/InputY, or raw screenshot image pixels converted with ScreenshotToInputFormula.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "X": {
             "type": "number",
-            "description": "Target X position in Game View pixels (origin: top-left). Use coordinates directly from screenshot --capture-mode rendering.",
+            "description": "Target X position in Game View pixels (origin: top-left). Use AnnotatedElements[].SimX, RaycastGridPoints[].InputX, or raw image pixels converted with ScreenshotToInputFormula.",
             "default": 0
           },
           "Y": {
             "type": "number",
-            "description": "Target Y position in Game View pixels (origin: top-left). Use coordinates directly from screenshot --capture-mode rendering.",
+            "description": "Target Y position in Game View pixels (origin: top-left). Use AnnotatedElements[].SimY, RaycastGridPoints[].InputY, or raw image pixels converted with ScreenshotToInputFormula.",
             "default": 0
           },
           "LayerMask": {
@@ -458,12 +458,12 @@
           },
           "X": {
             "type": "number",
-            "description": "Target X position in Game View pixels (origin: top-left). Use coordinates directly from screenshot --capture-mode rendering.",
+            "description": "Target X position in Game View pixels (origin: top-left). Use AnnotatedElements[].SimX, RaycastGridPoints[].InputX, or raw image pixels converted with ScreenshotToInputFormula.",
             "default": 0
           },
           "Y": {
             "type": "number",
-            "description": "Target Y position in Game View pixels (origin: top-left). Use coordinates directly from screenshot --capture-mode rendering.",
+            "description": "Target Y position in Game View pixels (origin: top-left). Use AnnotatedElements[].SimY, RaycastGridPoints[].InputY, or raw image pixels converted with ScreenshotToInputFormula.",
             "default": 0
           },
           "Button": {

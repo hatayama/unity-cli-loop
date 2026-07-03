@@ -68,7 +68,11 @@ namespace io.github.hatayama.uLoopMCP
 
             if (parameters.AnnotateRaycastGrid)
             {
-                raycastGridPoints = RaycastGridAnnotator.CollectRaycastGridPoints(gameViewSize);
+                (Vector2 renderingImageSize, int initialImageToInputOffsetY) =
+                    await EditorWindowCaptureUtility.GetGameRenderingImageInfoAsync(gameViewSize, ct);
+                raycastGridPoints = RaycastGridAnnotator.CollectRaycastGridPoints(
+                    renderingImageSize,
+                    initialImageToInputOffsetY);
                 raycastGridOverlayElements = RaycastGridAnnotator.CreateOverlayElements(raycastGridPoints);
             }
 
@@ -85,6 +89,7 @@ namespace io.github.hatayama.uLoopMCP
 
             GameObject annotationOverlay = null;
             Texture2D texture;
+            int imageToInputOffsetY = 0;
             try
             {
                 if (parameters.AnnotateElements || parameters.AnnotateRaycastGrid)
@@ -99,7 +104,7 @@ namespace io.github.hatayama.uLoopMCP
                     await EditorDelay.DelayFrame(ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES, ct);
                 }
 
-                texture = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
+                (texture, imageToInputOffsetY) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
                     parameters.ResolutionScale, ct);
             }
             finally
@@ -135,7 +140,7 @@ namespace io.github.hatayama.uLoopMCP
                 ScreenshotInfo info = new ScreenshotInfo(
                     savedPath, savedFileInfo.Length, width, height,
                     McpConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW, parameters.ResolutionScale);
-                ApplyRenderingCoordinateMetadata(info, gameViewSize);
+                ApplyRenderingCoordinateMetadata(info, gameViewSize, imageToInputOffsetY);
                 info.AnnotatedElements = annotatedElements;
                 info.RaycastGridPoints = raycastGridPoints;
                 screenshots.Add(info);
@@ -242,14 +247,16 @@ namespace io.github.hatayama.uLoopMCP
             return new ScreenshotResponse(screenshots);
         }
 
-        private static void ApplyRenderingCoordinateMetadata(ScreenshotInfo info, Vector2 gameViewSize)
+        private static void ApplyRenderingCoordinateMetadata(
+            ScreenshotInfo info,
+            Vector2 gameViewSize,
+            int imageToInputOffsetY = 0)
         {
             info.ImageCoordinateSystem = McpConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW;
             info.GameViewWidth = gameViewSize.x;
             info.GameViewHeight = gameViewSize.y;
-            info.ScreenshotToInputFormula = Mathf.Approximately(info.ResolutionScale, 1.0f)
-                ? McpConstants.SCREENSHOT_RENDERING_TO_INPUT_FORMULA
-                : McpConstants.SCREENSHOT_RENDERING_TO_INPUT_FORMULA_SCALED;
+            info.ImageToInputOffsetY = imageToInputOffsetY;
+            info.ScreenshotToInputFormula = McpConstants.SCREENSHOT_RENDERING_TO_INPUT_FORMULA;
             info.UnityInputFormula = McpConstants.COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY;
         }
 

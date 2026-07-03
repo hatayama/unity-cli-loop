@@ -138,7 +138,7 @@ namespace io.github.hatayama.uLoopMCP
 
         // Captures game rendering by reading GameView's composited RenderTexture (PlayMode only).
         // Contains all cameras + Screen Space Overlay Canvas, without tab bar or borders.
-        public static async Task<Texture2D?> CaptureGameRenderingAsync(float resolutionScale, CancellationToken ct)
+        public static async Task<(Texture2D? texture, int imageToInputOffsetY)> CaptureGameRenderingAsync(float resolutionScale, CancellationToken ct)
         {
             Debug.Assert(UnityEditor.EditorApplication.isPlaying, "CaptureGameRenderingAsync requires PlayMode");
 
@@ -149,10 +149,13 @@ namespace io.github.hatayama.uLoopMCP
             if (rt == null)
             {
                 Debug.LogWarning("[EditorWindowCaptureUtility] GameView RenderTexture is not available");
-                return null;
+                return (null, 0);
             }
 
-            // RenderTexture uses bottom-left origin; flip vertically for standard top-left image format
+            // GameView RenderTexture can be shorter than the full input area, so raw image Y needs this offset.
+            int imageToInputOffsetY = CalculateImageToInputOffsetY(Handles.GetMainGameViewSize(), rt.height);
+
+            // RenderTexture uses bottom-left origin; flip vertically for standard top-left image format.
             RenderTextureDescriptor flipDescriptor = new RenderTextureDescriptor(rt.width, rt.height, rt.format, 0);
             if (QualitySettings.activeColorSpace == ColorSpace.Linear)
             {
@@ -176,7 +179,41 @@ namespace io.github.hatayama.uLoopMCP
                 texture = ApplyResolutionScaling(texture, resolutionScale);
             }
 
-            return texture;
+            return (texture, imageToInputOffsetY);
+        }
+
+        /// <summary>
+        /// Gets rendering image dimensions after waiting for Game View rendering to settle.
+        /// </summary>
+        internal static async Task<(Vector2 renderingImageSize, int imageToInputOffsetY)> GetGameRenderingImageInfoAsync(
+            Vector2 gameViewSize,
+            CancellationToken ct)
+        {
+            Debug.Assert(UnityEditor.EditorApplication.isPlaying, "GetGameRenderingImageInfoAsync requires PlayMode");
+
+            // Raycast-grid annotations must use the same settled RenderTexture geometry as the PNG capture path.
+            await EditorDelay.DelayFrame(2, ct);
+
+            RenderTexture rt = GameViewBridge.GetRenderTexture();
+            if (rt == null)
+            {
+                return (gameViewSize, 0);
+            }
+
+            Vector2 renderingImageSize = new Vector2(rt.width, rt.height);
+            int imageToInputOffsetY = CalculateImageToInputOffsetY(gameViewSize, rt.height);
+            return (renderingImageSize, imageToInputOffsetY);
+        }
+
+        /// <summary>
+        /// Calculates the Y offset from rendering screenshot image space to Game View input space.
+        /// </summary>
+        internal static int CalculateImageToInputOffsetY(Vector2 gameViewSize, int renderTextureHeight)
+        {
+            Debug.Assert(gameViewSize.y >= 0f, "Game View height must not be negative.");
+            Debug.Assert(renderTextureHeight >= 0, "RenderTexture height must not be negative.");
+
+            return Mathf.RoundToInt(gameViewSize.y) - renderTextureHeight;
         }
 
         private static Texture2D ApplyResolutionScaling(Texture2D originalTexture, float scale)

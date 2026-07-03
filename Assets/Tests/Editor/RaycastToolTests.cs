@@ -11,11 +11,20 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
     {
         private GameObject? _cameraObject;
         private GameObject? _cubeObject;
+        private bool _originalAutoSyncTransforms;
         private readonly List<GameObject> _retaggedMainCameraObjects = new List<GameObject>();
+
+        [SetUp]
+        public void SetUp()
+        {
+            _originalAutoSyncTransforms = Physics.autoSyncTransforms;
+        }
 
         [TearDown]
         public void TearDown()
         {
+            Physics.autoSyncTransforms = _originalAutoSyncTransforms;
+
             if (_cubeObject != null)
             {
                 Object.DestroyImmediate(_cubeObject);
@@ -71,6 +80,27 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             Assert.That(response.Success, Is.True);
             Assert.That(response.Hit, Is.False);
             Assert.That(response.HitGameObjectName, Is.Null);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenAutoSyncTransformsIsDisabled_ShouldRaycastAgainstLatestTransform()
+        {
+            Physics.autoSyncTransforms = false;
+            CreateRaycastScene();
+            if (_cubeObject == null)
+            {
+                Assert.Fail("Cube should be created.");
+                return;
+            }
+
+            _cubeObject.transform.position = new Vector3(100f, 0f, 0f);
+            Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
+            Vector2 inputPosition = new Vector2(gameViewSize.x / 2f, gameViewSize.y / 2f);
+
+            RaycastResponse response = await ExecuteRaycast(inputPosition);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Hit, Is.False);
         }
 
         private void CreateRaycastScene()

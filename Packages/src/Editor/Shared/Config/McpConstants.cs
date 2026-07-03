@@ -174,9 +174,7 @@ namespace io.github.hatayama.uLoopMCP
         public const string COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY =
             "unity_x = input_x; unity_y = gameViewHeight - input_y";
         public const string SCREENSHOT_RENDERING_TO_INPUT_FORMULA =
-            "simulate_mouse_x = image_x; simulate_mouse_y = image_y";
-        public const string SCREENSHOT_RENDERING_TO_INPUT_FORMULA_SCALED =
-            "simulate_mouse_x = image_x / resolutionScale; simulate_mouse_y = image_y / resolutionScale";
+            "simulate_mouse_x = image_x / resolutionScale; simulate_mouse_y = image_y / resolutionScale + imageToInputOffsetY";
         public const string SCREENSHOT_WINDOW_TO_INPUT_FORMULA_UNAVAILABLE =
             "unavailable: window screenshots include Unity Editor chrome; use capture-mode rendering for mouse input coordinates";
         public const float RAYCAST_DEFAULT_MAX_DISTANCE = 1000f;
