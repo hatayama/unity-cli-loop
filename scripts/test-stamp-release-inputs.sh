@@ -21,9 +21,11 @@ create_fixture_repo() {
     git config user.email "test@example.com"
     git config user.name "Test User"
 
-    mkdir -p cli/common/clicore cli/dispatcher cli/project-runner scripts
+    mkdir -p cli/common/clicore cli/common/clitest cli/common/version cli/dispatcher cli/project-runner scripts
     printf 'package clicore\n' > cli/common/clicore/core.go
     printf 'package clicore\n\n// test-only content\n' > cli/common/clicore/core_test.go
+    printf 'package clitest\n' > cli/common/clitest/clitest.go
+    printf 'package version\n' > cli/common/version/compare.go
     printf 'module example.test/common\n' > cli/common/go.mod
     printf '{"projectRunnerVersion": "1.0.0"}\n' > cli/common/contract.json
     printf 'echo install\n' > scripts/install.sh
@@ -149,11 +151,27 @@ if [ "$(stamp_hash "$work_dir" cli/dispatcher/shared-inputs-stamp.json)" = "$dis
   exit 1
 fi
 
-# Verifies test-only and stamp-target changes under common move neither stamp.
+# Verifies a dispatcher-only common package change moves only the dispatcher stamp.
 commit_fixture_change "$work_dir" "windows installer change"
+runner_hash_before_dispatcher_only=$(stamp_hash "$work_dir" cli/project-runner/shared-inputs-stamp.json)
+dispatcher_hash_before_dispatcher_only=$(stamp_hash "$work_dir" cli/dispatcher/shared-inputs-stamp.json)
+printf 'package version\n\nconst changed = true\n' > "$work_dir/cli/common/version/compare.go"
+run_stamp "$work_dir"
+if [ "$(stamp_hash "$work_dir" cli/project-runner/shared-inputs-stamp.json)" != "$runner_hash_before_dispatcher_only" ]; then
+  echo "Expected a dispatcher-only common package change to keep the project-runner stamp." >&2
+  exit 1
+fi
+if [ "$(stamp_hash "$work_dir" cli/dispatcher/shared-inputs-stamp.json)" = "$dispatcher_hash_before_dispatcher_only" ]; then
+  echo "Expected a dispatcher-only common package change to move the dispatcher stamp." >&2
+  exit 1
+fi
+
+# Verifies test-only and stamp-target changes under common move neither stamp.
+commit_fixture_change "$work_dir" "dispatcher-only common change"
 runner_hash_before_test_only=$(stamp_hash "$work_dir" cli/project-runner/shared-inputs-stamp.json)
 dispatcher_hash_before_test_only=$(stamp_hash "$work_dir" cli/dispatcher/shared-inputs-stamp.json)
 printf 'package clicore\n\n// updated test-only content\n' > "$work_dir/cli/common/clicore/core_test.go"
+printf 'package clitest\n\nconst helper = true\n' > "$work_dir/cli/common/clitest/clitest.go"
 printf '{"projectRunnerVersion": "1.0.1"}\n' > "$work_dir/cli/common/contract.json"
 run_stamp "$work_dir"
 if [ "$(stamp_hash "$work_dir" cli/project-runner/shared-inputs-stamp.json)" != "$runner_hash_before_test_only" ] ||

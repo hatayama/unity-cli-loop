@@ -18,8 +18,8 @@ func TestReleaseTriggerGuardPassesWithoutSharedInputChanges(t *testing.T) {
 	}
 }
 
-// Verifies common source changes require triggers in both release package roots.
-func TestReleaseTriggerGuardRequiresBothTriggersForCommonChanges(t *testing.T) {
+// Verifies shared common source changes require triggers in both release package roots.
+func TestReleaseTriggerGuardRequiresBothTriggersForSharedCommonChanges(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{"cli/common/clicore/output.go"})
 
 	if len(result.Violations) != 1 {
@@ -40,7 +40,7 @@ func TestReleaseTriggerGuardRequiresBothTriggersForCommonChanges(t *testing.T) {
 	}
 }
 
-// Verifies a partial trigger still fails for the missing package root.
+// Verifies a partial trigger for shared common changes still fails for the missing package root.
 func TestReleaseTriggerGuardDetectsMissingDispatcherTrigger(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{
 		"cli/common/clicore/output.go",
@@ -56,8 +56,8 @@ func TestReleaseTriggerGuardDetectsMissingDispatcherTrigger(t *testing.T) {
 	}
 }
 
-// Verifies common changes pass once both release package roots are touched.
-func TestReleaseTriggerGuardAcceptsCommonChangesWithBothTriggers(t *testing.T) {
+// Verifies shared common changes pass once both release package roots are touched.
+func TestReleaseTriggerGuardAcceptsSharedCommonChangesWithBothTriggers(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{
 		"cli/common/clicore/output.go",
 		"cli/dispatcher/shared-inputs-stamp.json",
@@ -69,10 +69,11 @@ func TestReleaseTriggerGuardAcceptsCommonChangesWithBothTriggers(t *testing.T) {
 	}
 }
 
-// Verifies release-please stamp targets and test-only files under common are not release inputs.
+// Verifies release-please stamp targets, test-only files, and test helper packages under common are not release inputs.
 func TestReleaseTriggerGuardIgnoresNonBinaryCommonChanges(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{
 		"cli/common/clicore/output_test.go",
+		"cli/common/clitest/clitest.go",
 		"cli/common/clicontract/contract.json",
 		"cli/common/tools/default-tools.json",
 	})
@@ -82,7 +83,7 @@ func TestReleaseTriggerGuardIgnoresNonBinaryCommonChanges(t *testing.T) {
 	}
 }
 
-// Verifies common go.mod and go.sum changes count as shared release inputs.
+// Verifies common go.mod and go.sum changes count as shared release inputs for both binaries.
 func TestReleaseTriggerGuardCoversCommonModuleFiles(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{"cli/common/go.mod", "cli/common/go.sum"})
 
@@ -91,6 +92,31 @@ func TestReleaseTriggerGuardCoversCommonModuleFiles(t *testing.T) {
 	}
 	if len(result.Violations[0].ChangedInputs) != 2 {
 		t.Fatalf("expected both module files to be listed, got %v", result.Violations[0].ChangedInputs)
+	}
+}
+
+// Verifies dispatcher-only common package changes require only a dispatcher trigger.
+func TestReleaseTriggerGuardRequiresDispatcherTriggerForDispatcherOnlyCommonChanges(t *testing.T) {
+	result := AnalyzeReleaseTriggerGuard([]string{"cli/common/version/compare.go"})
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected one violation, got %v", result.Violations)
+	}
+	violation := result.Violations[0]
+	if len(violation.MissingTriggerRoots) != 1 || violation.MissingTriggerRoots[0] != "cli/dispatcher/" {
+		t.Fatalf("expected only cli/dispatcher/ to be missing, got %v", violation.MissingTriggerRoots)
+	}
+}
+
+// Verifies dispatcher-only common changes pass once the dispatcher package root is touched.
+func TestReleaseTriggerGuardAcceptsDispatcherOnlyCommonChangesWithDispatcherTrigger(t *testing.T) {
+	result := AnalyzeReleaseTriggerGuard([]string{
+		"cli/common/version/compare.go",
+		"cli/dispatcher/shared-inputs-stamp.json",
+	})
+
+	if len(result.Violations) != 0 {
+		t.Fatalf("expected no violations, got %v", result.Violations)
 	}
 }
 
