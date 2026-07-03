@@ -13,11 +13,11 @@ func main() {
 	headRef := flag.String("head", "HEAD", "head git ref to compare to")
 	flag.Parse()
 
-	os.Exit(automation.RunDispatcherVersionBumpGuard(
+	os.Exit(automation.RunDispatcherContractGuard(
 		context.Background(),
 		os.Stdout,
 		os.Stderr,
-		automation.DispatcherVersionBumpGuardConfig{
+		automation.DispatcherContractGuardConfig{
 			BaseRef: *baseRef,
 			HeadRef: *headRef,
 		}))
