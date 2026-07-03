@@ -50,7 +50,6 @@ func TestDispatcherContractGuardTreatsMissingBaseContractAsInitial(t *testing.T)
 	missingErr := errors.New("fatal: path 'cli/dispatcher-contract.json' does not exist in 'origin/main'")
 
 	values, err := parseDispatcherContractBaseValues("", missingErr)
-
 	if err != nil {
 		t.Fatalf("expected a missing base contract to be tolerated, got %v", err)
 	}
@@ -93,7 +92,6 @@ func TestParseDispatcherContractValuesValidation(t *testing.T) {
 // Verifies a valid contract parses into its version values.
 func TestParseDispatcherContractValuesReadsContract(t *testing.T) {
 	values, err := ParseDispatcherContractValues([]byte(`{"dispatcherVersion": "3.0.1-beta.11", "dispatcherContractVersion": 1}`))
-
 	if err != nil {
 		t.Fatalf("expected a valid contract to parse, got %v", err)
 	}
