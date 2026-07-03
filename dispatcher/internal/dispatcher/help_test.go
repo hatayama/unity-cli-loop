@@ -3,12 +3,12 @@ package dispatcher
 import (
 	"bytes"
 	"context"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/clitest"
 )
 
 // Tests that launcher help lists native commands and live-tool discovery guidance without baked-in tools.
@@ -378,16 +378,8 @@ func TestRunDispatcherPausePointWaitHelpShowsDescriptionAndOptions(t *testing.T)
 	}
 }
 
-// writeToolCache is duplicated from internal/projectrunner's test helper of
-// the same name: test helpers cannot be shared across packages, and both
-// packages need a project tool cache fixture for their help/dispatch tests.
+// writeToolCache seeds the project tool cache fixture used by help/dispatch tests.
 func writeToolCache(t *testing.T, projectRoot string, content string) {
 	t.Helper()
-	cachePath := filepath.Join(projectRoot, clicore.CacheDirectoryName, clicore.CacheFileName)
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
-		t.Fatalf("failed to create tool cache directory: %v", err)
-	}
-	if err := os.WriteFile(cachePath, []byte(content), 0o644); err != nil {
-		t.Fatalf("failed to write tool cache: %v", err)
-	}
+	clitest.WriteProjectFile(t, projectRoot, filepath.Join(clicore.CacheDirectoryName, clicore.CacheFileName), content)
 }

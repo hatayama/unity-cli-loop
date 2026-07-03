@@ -3,11 +3,11 @@ package dispatcher
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"strings"
 	"testing"
 
+	"github.com/hatayama/unity-cli-loop/common/clitest"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
@@ -20,22 +20,13 @@ import (
 func TestRunDispatcherVersionJSONReportsDispatcherIdentity(t *testing.T) {
 	t.Chdir(t.TempDir())
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	code := RunDispatcher(context.Background(), []string{"--version", "--json"}, &stdout, &stderr)
+	payload := clitest.RunVersionJSON(t, RunDispatcher)
 
-	if code != 0 {
-		t.Fatalf("dispatcher version json failed: code=%d stderr=%s", code, stderr.String())
-	}
-	payload := map[string]any{}
-	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
-		t.Fatalf("dispatcher version json is invalid: %v output=%s", err, stdout.String())
-	}
 	if payload["DispatcherVersion"] != dispatcherVersion {
 		t.Fatalf("DispatcherVersion mismatch: %v", payload["DispatcherVersion"])
 	}
 	if _, ok := payload["DispatcherContractVersion"]; !ok {
-		t.Fatalf("DispatcherContractVersion missing: %s", stdout.String())
+		t.Fatalf("DispatcherContractVersion missing: %#v", payload)
 	}
 }
 

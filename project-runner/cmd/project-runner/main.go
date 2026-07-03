@@ -8,5 +8,5 @@ import (
 )
 
 func main() {
-	os.Exit(projectrunner.Run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(projectrunner.RunProjectLocal(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
 }
