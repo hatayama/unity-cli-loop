@@ -40,7 +40,14 @@ create_fixture_repo() {
 run_stamp() {
   work_dir=$1
 
-  ULOOP_REPO_ROOT="$work_dir" "$SCRIPT" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+  # Surface the captured logs on failure; the temp files vanish with the trap
+  # cleanup, so a silent redirect would leave CI failures undiagnosable.
+  if ULOOP_REPO_ROOT="$work_dir" "$SCRIPT" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"; then
+    return 0
+  fi
+  echo "stamp-release-inputs.sh failed; captured output follows." >&2
+  cat "$work_dir/output.txt" "$work_dir/stderr.txt" >&2
+  exit 1
 }
 
 stamp_hash() {
@@ -127,8 +134,23 @@ if [ "$(stamp_hash "$work_dir" dispatcher/shared-inputs-stamp.json)" = "$dispatc
   exit 1
 fi
 
+# Verifies a Windows installer-only change also moves only the dispatcher stamp.
+commit_fixture_change "$work_dir" "posix installer change"
+runner_hash_after_installer=$(stamp_hash "$work_dir" project-runner/shared-inputs-stamp.json)
+dispatcher_hash_after_installer=$(stamp_hash "$work_dir" dispatcher/shared-inputs-stamp.json)
+printf 'Write-Host install v2\n' > "$work_dir/scripts/install.ps1"
+run_stamp "$work_dir"
+if [ "$(stamp_hash "$work_dir" project-runner/shared-inputs-stamp.json)" != "$runner_hash_after_installer" ]; then
+  echo "Expected a Windows installer-only change to keep the project-runner stamp." >&2
+  exit 1
+fi
+if [ "$(stamp_hash "$work_dir" dispatcher/shared-inputs-stamp.json)" = "$dispatcher_hash_after_installer" ]; then
+  echo "Expected a Windows installer-only change to move the dispatcher stamp." >&2
+  exit 1
+fi
+
 # Verifies test-only and stamp-target changes under common move neither stamp.
-commit_fixture_change "$work_dir" "installer change"
+commit_fixture_change "$work_dir" "windows installer change"
 runner_hash_before_test_only=$(stamp_hash "$work_dir" project-runner/shared-inputs-stamp.json)
 dispatcher_hash_before_test_only=$(stamp_hash "$work_dir" dispatcher/shared-inputs-stamp.json)
 printf 'package clicore\n\n// updated test-only content\n' > "$work_dir/common/clicore/core_test.go"
