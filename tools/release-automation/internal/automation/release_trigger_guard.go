@@ -21,6 +21,13 @@ type releaseTriggerRule struct {
 // touches that package root, so inputs living outside every package root
 // (the common module, installer assets) need a companion change inside each
 // consuming package root or the change never reaches a release.
+//
+// These rules are re-encoded as shell in scripts/stamp-release-inputs.sh
+// (list_common_inputs / list_installer_inputs); update both together.
+// TODO: When a third rule lands here, add an equivalence test that verifies
+// scripts/stamp-release-inputs.sh enumerates the same input set — with two
+// rules, the cross-references and scripts/test-stamp-release-inputs.sh keep
+// the implementations aligned.
 var releaseTriggerRules = []releaseTriggerRule{
 	{
 		inputDescription: "common module sources",
