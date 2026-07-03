@@ -262,6 +262,26 @@ if [ "$1" = "show" ]; then
   exit 0
 fi
 
+if [ "$1" = "cat-file" ] && [ "$2" = "-e" ]; then
+  case "$3" in
+    dispatcher-v*:dispatcher/dispatcher-contract.json)
+      [ -n "${GIT_RELEASE_CONTRACT:-}" ] && exit 0
+      exit 1
+      ;;
+    dispatcher-v*:cli/dispatcher-contract.json)
+      [ -n "${GIT_LEGACY_RELEASE_CONTRACT:-}" ] && exit 0
+      exit 1
+      ;;
+    *) echo "unexpected cat-file target: $3" >&2; exit 1 ;;
+  esac
+fi
+
+if [ "$1" = "rev-parse" ] && [ "$2" = "--verify" ]; then
+  # Dispatcher release refs used in these tests are always considered
+  # resolvable; the release publishing tests set up the associated fixtures.
+  exit 0
+fi
+
 echo "unexpected git command: $*" >&2
 exit 1
 `

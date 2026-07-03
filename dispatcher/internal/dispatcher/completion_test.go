@@ -329,12 +329,12 @@ func TestCompletionListOptionsUsesNegatedDefaultTrueBooleanFlags(t *testing.T) {
 	output := stdout.String()
 	options := strings.Split(strings.TrimSpace(output), "\n")
 	for _, option := range []string{"--no-include-components", "--no-include-inactive"} {
-		if !containsString(options, option) {
+		if !slices.Contains(options, option) {
 			t.Fatalf("option %s was not listed: %s", option, output)
 		}
 	}
 	for _, option := range []string{"--include-components", "--include-inactive"} {
-		if containsString(options, option) {
+		if slices.Contains(options, option) {
 			t.Fatalf("default-enabled option %s should not be listed: %s", option, output)
 		}
 	}
@@ -417,15 +417,6 @@ func TestDetectShellOnWindowsPowerShellDefaultsToPowerShell(t *testing.T) {
 	if shellName != "powershell" {
 		t.Fatalf("windows default shell mismatch: %s", shellName)
 	}
-}
-
-func containsString(values []string, expected string) bool {
-	for _, value := range values {
-		if value == expected {
-			return true
-		}
-	}
-	return false
 }
 
 func TestCompletionInstallReplacesExistingBlock(t *testing.T) {

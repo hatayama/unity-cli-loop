@@ -1,7 +1,10 @@
 package automation
 
 import (
+	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -45,11 +48,22 @@ func TestDispatcherContractGuardAcceptsInitialContract(t *testing.T) {
 	}
 }
 
-// Verifies a base ref without the contract at the split or legacy path is treated as initial introduction.
+// Verifies a base ref without the contract at either the split or legacy path
+// is treated as an initial introduction (zero values, no error).
 func TestDispatcherContractGuardTreatsMissingBaseContractAsInitial(t *testing.T) {
-	missingErr := errors.New("fatal: path 'cli/dispatcher-contract.json' does not exist in 'origin/main'")
+	repoRoot := setupDispatcherContractGuardMockGit(t, dispatcherContractGuardMockState{
+		refExists:     true,
+		primaryExists: false,
+		legacyExists:  false,
+	})
+	readErr := errors.New("fatal: dispatcher/dispatcher-contract.json missing at origin/main")
 
-	values, err := parseDispatcherContractBaseValues("", missingErr)
+	values, err := parseDispatcherContractBaseValues(
+		context.Background(),
+		repoRoot,
+		"origin/main",
+		"",
+		readErr)
 	if err != nil {
 		t.Fatalf("expected a missing base contract to be tolerated, got %v", err)
 	}
@@ -58,15 +72,96 @@ func TestDispatcherContractGuardTreatsMissingBaseContractAsInitial(t *testing.T)
 	}
 }
 
-// Verifies base contract read failures other than missing files do not get silently ignored.
+// Verifies base contract read failures other than "both paths missing at an
+// existing ref" propagate; a real read failure must not be silently ignored.
 func TestDispatcherContractGuardRejectsUnexpectedBaseReadError(t *testing.T) {
-	readErr := errors.New("fatal: not a git repository")
+	repoRoot := setupDispatcherContractGuardMockGit(t, dispatcherContractGuardMockState{
+		refExists:     true,
+		primaryExists: true,
+		legacyExists:  false,
+	})
+	readErr := errors.New("fatal: unable to read tree")
 
-	_, err := parseDispatcherContractBaseValues("", readErr)
+	_, err := parseDispatcherContractBaseValues(
+		context.Background(),
+		repoRoot,
+		"origin/main",
+		"",
+		readErr)
 
 	if err == nil {
 		t.Fatal("expected an unexpected read error to propagate")
 	}
+}
+
+// Verifies a base ref that is not resolvable is not silently treated as
+// initial; the read error propagates instead.
+func TestDispatcherContractGuardPropagatesMissingBaseRef(t *testing.T) {
+	repoRoot := setupDispatcherContractGuardMockGit(t, dispatcherContractGuardMockState{
+		refExists: false,
+	})
+	readErr := errors.New("fatal: bad revision 'no-such-ref'")
+
+	_, err := parseDispatcherContractBaseValues(
+		context.Background(),
+		repoRoot,
+		"no-such-ref",
+		"",
+		readErr)
+
+	if err == nil {
+		t.Fatal("expected a missing ref to propagate the read error")
+	}
+}
+
+// Verifies that when the existence probe used to classify a base read
+// failure itself fails with a non-ExitError, the original read error text is
+// still present in the returned error so operators see the real failure.
+func TestDispatcherContractGuardPreservesReadErrWhenProbeFailsWithNonExitError(t *testing.T) {
+	workDir := t.TempDir()
+	emptyBin := filepath.Join(workDir, "empty-bin")
+	if err := os.MkdirAll(emptyBin, 0o755); err != nil {
+		t.Fatalf("failed to create empty bin: %v", err)
+	}
+	// Shadow PATH with a directory that has no git so exec.LookPath fails
+	// at command startup, producing a non-ExitError from the probe.
+	t.Setenv("PATH", emptyBin)
+
+	readErr := errors.New("fatal: original show failure sentinel")
+
+	_, err := parseDispatcherContractBaseValues(
+		context.Background(),
+		workDir,
+		"origin/main",
+		"",
+		readErr)
+
+	if err == nil {
+		t.Fatal("expected an error when the classifier probe itself fails")
+	}
+	if !strings.Contains(err.Error(), "fatal: original show failure sentinel") {
+		t.Fatalf("expected original read error text to be preserved, got: %v", err)
+	}
+}
+
+type dispatcherContractGuardMockState struct {
+	refExists     bool
+	primaryExists bool
+	legacyExists  bool
+}
+
+func setupDispatcherContractGuardMockGit(t *testing.T, state dispatcherContractGuardMockState) string {
+	t.Helper()
+
+	workDir, binDir := setupMockGitBin(t)
+	writeExistenceMockGit(t, binDir, mockGitExistenceFixture{
+		refResolves: state.refExists,
+		paths: map[string]mockGitPathBehavior{
+			dispatcherContractFile:       {exists: state.primaryExists},
+			legacyDispatcherContractFile: {exists: state.legacyExists},
+		},
+	})
+	return workDir
 }
 
 // Verifies the head contract must parse as a valid dispatcher contract.

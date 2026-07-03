@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/common/clitest"
 )
 
 // Tests that CLI-only skill discovery excludes skills marked as internal.
@@ -816,6 +818,63 @@ func TestParseSkillsOptionsDeduplicatesTargets(t *testing.T) {
 	}
 }
 
+// Tests that allSkillTargetIDs and targetConfigs stay in sync so help output,
+// flag parsing, and default selection cannot silently drift apart.
+func TestAllSkillTargetIDsMatchesTargetConfigs(t *testing.T) {
+	idsFromSlice := append([]string{}, allSkillTargetIDs...)
+	sort.Strings(idsFromSlice)
+
+	idsFromMap := []string{}
+	for id := range targetConfigs {
+		idsFromMap = append(idsFromMap, id)
+	}
+	sort.Strings(idsFromMap)
+
+	if !reflect.DeepEqual(idsFromSlice, idsFromMap) {
+		t.Fatalf("allSkillTargetIDs and targetConfigs must have identical keys: slice=%v map=%v", idsFromSlice, idsFromMap)
+	}
+}
+
+// Tests that defaultSkillTargetIDs resolves to the exact expected targets in
+// display order, so an accidental edit to allSkillTargetIDs or
+// nonDefaultSkillTargetIDs cannot silently change which targets install by
+// default.
+func TestDefaultSkillTargetIDsDerivedFromAllSkillTargetIDs(t *testing.T) {
+	expected := []string{"claude", "codex", "cursor", "gemini", "agents", "antigravity"}
+
+	if !reflect.DeepEqual(defaultSkillTargetIDs, expected) {
+		t.Fatalf("defaultSkillTargetIDs mismatch: got=%v want=%v", defaultSkillTargetIDs, expected)
+	}
+}
+
+// Tests that skills subcommand help lists every target flag from
+// allSkillTargetIDs so no target can be added without appearing in help.
+func TestPrintSkillsSubcommandHelpListsAllTargets(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	printSkillsSubcommandHelp("install", stdout)
+	output := stdout.String()
+	for _, id := range allSkillTargetIDs {
+		flag := "--" + id
+		if !strings.Contains(output, flag) {
+			t.Fatalf("subcommand help missing %s:\n%s", flag, output)
+		}
+	}
+}
+
+// Tests that target guidance printed on missing-target invocations lists every
+// target flag from allSkillTargetIDs.
+func TestPrintSkillsTargetGuidanceListsAllTargets(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	printSkillsTargetGuidance("install", stdout)
+	output := stdout.String()
+	for _, id := range allSkillTargetIDs {
+		flag := "--" + id
+		if !strings.Contains(output, flag) {
+			t.Fatalf("target guidance missing %s:\n%s", flag, output)
+		}
+	}
+}
+
 // Tests that unknown skills subcommands are rejected before project resolution.
 func TestTryHandleSkillsRequestRejectsUnknownSubcommandWithoutProject(t *testing.T) {
 	stdout := &bytes.Buffer{}
@@ -1046,9 +1105,11 @@ func TestRunV3MigrationSkillUninstallRemovesAlternateLayout(t *testing.T) {
 	}
 }
 
+// writeTestSkill seeds a SKILL.md fixture at projectRoot/relativeDir via the
+// shared clitest.WriteSkillFile helper, which owns the CRLF normalization.
 func writeTestSkill(t *testing.T, projectRoot string, relativeDir string, content string) {
 	t.Helper()
-	writeSkillFile(t, filepath.Join(projectRoot, filepath.FromSlash(relativeDir)), content)
+	clitest.WriteSkillFile(t, projectRoot, relativeDir, "SKILL.md", content)
 }
 
 func writeManifest(t *testing.T, projectRoot string, content string) {

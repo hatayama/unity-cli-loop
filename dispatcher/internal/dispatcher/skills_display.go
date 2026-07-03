@@ -71,13 +71,7 @@ func printSkillsSubcommandHelp(command string, stdout io.Writer) {
 	clicore.WriteLine(stdout, "Options:")
 	clicore.WriteLine(stdout, "  -g, --global")
 	clicore.WriteLine(stdout, "      --flat")
-	clicore.WriteLine(stdout, "      --claude")
-	clicore.WriteLine(stdout, "      --codex")
-	clicore.WriteLine(stdout, "      --cursor")
-	clicore.WriteLine(stdout, "      --gemini")
-	clicore.WriteLine(stdout, "      --agents")
-	clicore.WriteLine(stdout, "      --windsurf")
-	clicore.WriteLine(stdout, "      --antigravity")
+	printSkillTargetFlagLines(stdout, "      ")
 	clicore.WriteLine(stdout, "")
 	if command == "install" {
 		clicore.WriteLine(stdout, "Targets that already contain uloop skills are refreshed automatically,")
@@ -98,11 +92,14 @@ func printSkillsSubcommandHelp(command string, stdout io.Writer) {
 func printSkillsTargetGuidance(command string, stdout io.Writer) {
 	clicore.WriteFormat(stdout, "\nPlease specify at least one target for '%s':\n\n", command)
 	clicore.WriteLine(stdout, "Available targets:")
-	clicore.WriteLine(stdout, "  --claude")
-	clicore.WriteLine(stdout, "  --codex")
-	clicore.WriteLine(stdout, "  --cursor")
-	clicore.WriteLine(stdout, "  --gemini")
-	clicore.WriteLine(stdout, "  --agents")
-	clicore.WriteLine(stdout, "  --windsurf")
-	clicore.WriteLine(stdout, "  --antigravity")
+	printSkillTargetFlagLines(stdout, "  ")
+}
+
+// printSkillTargetFlagLines prints one --<id> line per target in the shared
+// order defined by allSkillTargetIDs, so help output and guidance stay aligned
+// with the set of accepted flags.
+func printSkillTargetFlagLines(stdout io.Writer, indent string) {
+	for _, id := range allSkillTargetIDs {
+		clicore.WriteFormat(stdout, "%s--%s\n", indent, id)
+	}
 }
