@@ -478,7 +478,7 @@ func printLaunchHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "      --editor-version <version>")
 	clicore.WriteLine(stdout, "                          Use this Unity Editor version instead of ProjectVersion.txt")
 	clicore.WriteLine(stdout, "  -p, --platform <name>  Pass Unity -buildTarget when launching")
-	clicore.WriteLine(stdout, "      --max-depth <n>    Accepted for compatibility when searching from the current directory")
+	clicore.WriteLine(stdout, "      --max-depth <n>    Max directory depth when auto-searching for the project (default: 3, -1 = unlimited)")
 	clicore.WriteLine(stdout, "")
 	clicore.WriteLine(stdout, "Compiler errors are ignored by default during Unity startup.")
 	clicore.WriteLine(stdout, "")
