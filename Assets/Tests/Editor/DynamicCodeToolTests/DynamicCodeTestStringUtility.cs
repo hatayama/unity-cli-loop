@@ -4,6 +4,11 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
     {
         public static int CountSubstring(string source, string target)
         {
+            if (string.IsNullOrEmpty(target))
+            {
+                return 0;
+            }
+
             int count = 0;
             int index = 0;
             while ((index = source.IndexOf(target, index, System.StringComparison.Ordinal)) >= 0)

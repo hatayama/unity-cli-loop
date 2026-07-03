@@ -88,6 +88,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
                 DynamicCodeConstants.DEFAULT_CLASS_NAME);
 
             Assert.IsNotNull(prepared.PreparedSource);
+            StringAssert.Contains("using @Object = System.Object;", prepared.PreparedSource);
             Assert.AreEqual(
                 0,
                 DynamicCodeTestStringUtility.CountSubstring(prepared.PreparedSource, "using Object = UnityEngine.Object;"));
@@ -103,6 +104,14 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
 
             Assert.IsNotNull(prepared.PreparedSource);
             StringAssert.Contains("using Random = UnityEngine.Random;", prepared.PreparedSource);
+        }
+
+        [Test]
+        public void CountSubstring_WhenTargetIsEmpty_ShouldReturnZero()
+        {
+            int count = DynamicCodeTestStringUtility.CountSubstring("source", "");
+
+            Assert.AreEqual(0, count);
         }
 
         [Test]
