@@ -30,6 +30,10 @@ namespace io.github.hatayama.uLoopMCP
             sb.AppendLine("using System.Threading.Tasks;");
             sb.AppendLine("using UnityEngine;");
             sb.AppendLine("using UnityEditor;");
+            if (!HasObjectAlias(usingDirectives))
+            {
+                sb.AppendLine("using Object = UnityEngine.Object;");
+            }
 
             foreach (string directive in usingDirectives)
             {
@@ -74,6 +78,72 @@ namespace io.github.hatayama.uLoopMCP
             sb.AppendLine("}");
 
             return sb.ToString();
+        }
+
+        private static bool HasObjectAlias(IReadOnlyList<string> usingDirectives)
+        {
+            if (usingDirectives == null)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < usingDirectives.Count; index++)
+            {
+                string directive = usingDirectives[index]?.TrimStart();
+                if (string.IsNullOrEmpty(directive))
+                {
+                    continue;
+                }
+
+                if (IsObjectAliasDirective(directive))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsObjectAliasDirective(string directive)
+        {
+            int usingPosition = 0;
+            if (SourceShaper.StartsWithKeyword(directive, usingPosition, "global"))
+            {
+                usingPosition = SkipWhitespaceAndComments(directive, usingPosition + "global".Length);
+            }
+
+            if (!SourceShaper.StartsWithKeyword(directive, usingPosition, "using"))
+            {
+                return false;
+            }
+
+            int aliasStart = SkipWhitespaceAndComments(directive, usingPosition + "using".Length);
+            if (!SourceShaper.StartsWithKeyword(directive, aliasStart, "Object"))
+            {
+                return false;
+            }
+
+            int equalsPosition = SkipWhitespaceAndComments(directive, aliasStart + "Object".Length);
+            return equalsPosition < directive.Length && directive[equalsPosition] == '=';
+        }
+
+        private static int SkipWhitespaceAndComments(string source, int position)
+        {
+            int currentPosition = SourceShaper.SkipWhitespace(source, position);
+            while (IsCommentStart(source, currentPosition))
+            {
+                int nextPosition = SourceShaper.AdvanceOneTokenPublic(source, currentPosition);
+                currentPosition = SourceShaper.SkipWhitespace(source, nextPosition);
+            }
+
+            return currentPosition;
+        }
+
+        private static bool IsCommentStart(string source, int position)
+        {
+            return position + 1 < source.Length &&
+                   source[position] == '/' &&
+                   (source[position + 1] == '/' || source[position + 1] == '*');
         }
     }
 }

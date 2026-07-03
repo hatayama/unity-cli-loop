@@ -40,6 +40,46 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         }
 
         [Test]
+        public void Prepare_WhenScriptUsesBareUnityObject_ShouldAddObjectAlias()
+        {
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
+                "GameObject go = new GameObject(\"source\");\nObject.Instantiate(go);\nreturn null;",
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            Assert.IsNotNull(prepared.PreparedSource);
+            StringAssert.Contains("using Object = UnityEngine.Object;", prepared.PreparedSource);
+        }
+
+        [Test]
+        public void Prepare_WhenObjectAliasAlreadyExists_ShouldNotAddDuplicateAlias()
+        {
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
+                "using Object = UnityEngine.Object;\nObject.Instantiate(new GameObject(\"source\"));\nreturn null;",
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            Assert.IsNotNull(prepared.PreparedSource);
+            Assert.AreEqual(
+                1,
+                CountSubstring(prepared.PreparedSource, "using Object = UnityEngine.Object;"));
+        }
+
+        [Test]
+        public void Prepare_WhenCustomObjectAliasAlreadyExists_ShouldRespectUserAlias()
+        {
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
+                "using Object = System.Object;\nreturn new Object();",
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            Assert.IsNotNull(prepared.PreparedSource);
+            Assert.AreEqual(
+                1,
+                CountSubstring(prepared.PreparedSource, "using Object = "));
+        }
+
+        [Test]
         public void Prepare_WhenInterpolatedStringExists_ShouldSkipLiteralHoisting()
         {
             PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
@@ -228,6 +268,19 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             Assert.IsNotNull(prepared.PreparedSource);
             Assert.AreEqual(0, prepared.HoistedLiteralBindings.Count);
             StringAssert.Contains("return 3000000000;", prepared.PreparedSource);
+        }
+
+        private static int CountSubstring(string source, string target)
+        {
+            int count = 0;
+            int index = 0;
+            while ((index = source.IndexOf(target, index, System.StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += target.Length;
+            }
+
+            return count;
         }
     }
 }
