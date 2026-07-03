@@ -14,7 +14,12 @@ import (
 )
 
 const (
-	defaultReleasePRCheckWorkflow              = "build-and-test.yml"
+	// GITHUB_TOKEN-created release PRs never trigger pull_request workflows on
+	// their own, so every workflow that produces a required status check must be
+	// dispatched here: build-cli, test-unity-package, and test-windows-installers
+	// come from build-and-test.yml, while Compile Check (Linux) comes from
+	// unity-compile-check-and-test-runner.yml.
+	defaultReleasePRCheckWorkflows             = "build-and-test.yml,unity-compile-check-and-test-runner.yml"
 	defaultReleasePRCheckLookupAttempts        = 30
 	defaultReleasePRCheckLookupIntervalSeconds = 10
 	defaultReleasePRCheckWatchIntervalSeconds  = 10
@@ -38,7 +43,7 @@ var (
 type releasePRCheckConfig struct {
 	repository            string
 	targetBranch          string
-	workflow              string
+	workflows             []string
 	lookupAttempts        int
 	lookupIntervalSeconds int
 	watchIntervalSeconds  int
@@ -54,12 +59,6 @@ type releasePullRequest struct {
 
 type releasePullRequestBody struct {
 	Body string `json:"body"`
-}
-
-type releaseWorkflowRun struct {
-	DatabaseID int64  `json:"databaseId"`
-	HeadSHA    string `json:"headSha"`
-	CreatedAt  string `json:"createdAt"`
 }
 
 func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.Writer) int {
@@ -96,27 +95,48 @@ func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.W
 	writeReleasePRCheckLine(stdout, fmt.Sprintf("Marked release PR #%d as draft while checks run.", releasePR.Number))
 
 	dispatchedAt := releasePRCheckNow().UTC().Truncate(time.Second)
-	writeReleasePRCheckLine(stdout, fmt.Sprintf("Dispatching %s for release PR #%d: %s", config.workflow, releasePR.Number, releasePR.URL))
-	err = dispatchReleasePRCheckWorkflow(ctx, config, releasePR)
-	if err != nil {
-		writeReleasePRCheckLine(stderr, err)
-		return 1
+	for _, workflow := range config.workflows {
+		writeReleasePRCheckLine(stdout, fmt.Sprintf("Dispatching %s for release PR #%d: %s", workflow, releasePR.Number, releasePR.URL))
+		err = dispatchReleasePRCheckWorkflow(ctx, config, workflow, releasePR)
+		if err != nil {
+			writeReleasePRCheckLine(stderr, err)
+			return 1
+		}
 	}
 
-	run, err := findDispatchedReleasePRCheckRun(ctx, config, releasePR, dispatchedAt)
-	if err != nil {
-		writeReleasePRCheckLine(stderr, err)
-		return 1
+	checkedHeadSHA := ""
+	checkedHeadWorkflow := ""
+	for _, workflow := range config.workflows {
+		run, err := findDispatchedReleasePRCheckRun(ctx, config, workflow, releasePR, dispatchedAt)
+		if err != nil {
+			writeReleasePRCheckLine(stderr, err)
+			return 1
+		}
+
+		writeReleasePRCheckLine(stdout, fmt.Sprintf("Watching %s run %d for release PR #%d.", workflow, run.DatabaseID, releasePR.Number))
+		err = watchReleasePRCheckRun(ctx, config, run.DatabaseID)
+		if err != nil {
+			writeReleasePRCheckLine(stderr, err)
+			return 1
+		}
+
+		// A release-please force-push between two dispatches would let each
+		// workflow validate a different commit, so a mixed set of green runs
+		// must not mark the PR ready.
+		if checkedHeadSHA == "" {
+			checkedHeadSHA = run.HeadSHA
+			checkedHeadWorkflow = workflow
+			continue
+		}
+		if run.HeadSHA != checkedHeadSHA {
+			writeReleasePRCheckLine(stderr, fmt.Errorf(
+				"release PR #%d checks ran on different heads: %s checked %s but %s checked %s",
+				releasePR.Number, checkedHeadWorkflow, checkedHeadSHA, workflow, run.HeadSHA))
+			return 1
+		}
 	}
 
-	writeReleasePRCheckLine(stdout, fmt.Sprintf("Watching %s run %d for release PR #%d.", config.workflow, run.DatabaseID, releasePR.Number))
-	err = watchReleasePRCheckRun(ctx, config, run.DatabaseID)
-	if err != nil {
-		writeReleasePRCheckLine(stderr, err)
-		return 1
-	}
-
-	err = verifyReleasePRCheckHeadMatchesRun(ctx, config, releasePR, run.HeadSHA)
+	err = verifyReleasePRCheckHeadMatchesRun(ctx, config, releasePR, checkedHeadSHA)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1
@@ -141,9 +161,9 @@ func releasePRCheckConfigFromEnvironment() (releasePRCheckConfig, error) {
 		return releasePRCheckConfig{}, fmt.Errorf("TARGET_BRANCH is required")
 	}
 
-	workflow := os.Getenv("RELEASE_PR_CHECK_WORKFLOW")
-	if workflow == "" {
-		workflow = defaultReleasePRCheckWorkflow
+	workflows, err := releasePRCheckWorkflowsFromEnvironment()
+	if err != nil {
+		return releasePRCheckConfig{}, err
 	}
 
 	lookupAttempts, err := releasePRCheckPositiveIntFromEnvironment("RELEASE_PR_CHECK_LOOKUP_ATTEMPTS", defaultReleasePRCheckLookupAttempts)
@@ -162,11 +182,31 @@ func releasePRCheckConfigFromEnvironment() (releasePRCheckConfig, error) {
 	return releasePRCheckConfig{
 		repository:            repository,
 		targetBranch:          targetBranch,
-		workflow:              workflow,
+		workflows:             workflows,
 		lookupAttempts:        lookupAttempts,
 		lookupIntervalSeconds: lookupIntervalSeconds,
 		watchIntervalSeconds:  watchIntervalSeconds,
 	}, nil
+}
+
+func releasePRCheckWorkflowsFromEnvironment() ([]string, error) {
+	value := os.Getenv("RELEASE_PR_CHECK_WORKFLOWS")
+	if value == "" {
+		value = defaultReleasePRCheckWorkflows
+	}
+
+	workflows := []string{}
+	for _, workflow := range strings.Split(value, ",") {
+		workflow = strings.TrimSpace(workflow)
+		if workflow == "" {
+			continue
+		}
+		workflows = append(workflows, workflow)
+	}
+	if len(workflows) == 0 {
+		return nil, fmt.Errorf("RELEASE_PR_CHECK_WORKFLOWS must list at least one workflow")
+	}
+	return workflows, nil
 }
 
 func releasePRCheckPositiveIntFromEnvironment(name string, defaultValue int) (int, error) {
@@ -276,11 +316,6 @@ func markReleasePRCheckReady(ctx context.Context, config releasePRCheckConfig, r
 	return err
 }
 
-func dispatchReleasePRCheckWorkflow(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest) error {
-	_, err := runReleasePRCheckOutput(ctx, "gh", "workflow", "run", config.workflow, "--repo", config.repository, "--ref", releasePR.HeadRefName)
-	return err
-}
-
 func clarifyReleasePRCheckBody(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest) (bool, error) {
 	output, err := runReleasePRCheckOutput(ctx, "gh", "pr", "view", strconv.Itoa(releasePR.Number), "--repo", config.repository, "--json", "body")
 	if err != nil {
@@ -329,104 +364,6 @@ func writeReleasePRCheckBodyFile(body string) (string, func(), error) {
 		return "", func() {}, fmt.Errorf("failed to close release PR body file: %w", closeErr)
 	}
 	return bodyFile.Name(), cleanup, nil
-}
-
-func findDispatchedReleasePRCheckRun(
-	ctx context.Context,
-	config releasePRCheckConfig,
-	releasePR releasePullRequest,
-	dispatchedAt time.Time,
-) (releaseWorkflowRun, error) {
-	for attempt := 0; attempt < config.lookupAttempts; attempt++ {
-		run, found, err := latestReleasePRCheckRun(ctx, config, releasePR, dispatchedAt)
-		if err != nil {
-			return releaseWorkflowRun{}, err
-		}
-		if found {
-			return run, nil
-		}
-		if attempt+1 < config.lookupAttempts {
-			err = releasePRCheckSleep(ctx, time.Duration(config.lookupIntervalSeconds)*time.Second)
-			if err != nil {
-				return releaseWorkflowRun{}, err
-			}
-		}
-	}
-	return releaseWorkflowRun{}, fmt.Errorf("could not find dispatched %s workflow run for %s", config.workflow, releasePR.HeadRefOID)
-}
-
-func latestReleasePRCheckRun(
-	ctx context.Context,
-	config releasePRCheckConfig,
-	releasePR releasePullRequest,
-	dispatchedAt time.Time,
-) (releaseWorkflowRun, bool, error) {
-	output, err := runReleasePRCheckOutput(
-		ctx,
-		"gh",
-		"run",
-		"list",
-		"--repo",
-		config.repository,
-		"--workflow",
-		config.workflow,
-		"--branch",
-		releasePR.HeadRefName,
-		"--event",
-		"workflow_dispatch",
-		"--json",
-		"databaseId,status,conclusion,headSha,createdAt,url",
-		"--limit",
-		"20",
-	)
-	if err != nil {
-		return releaseWorkflowRun{}, false, err
-	}
-
-	runs := []releaseWorkflowRun{}
-	err = json.Unmarshal([]byte(output), &runs)
-	if err != nil {
-		return releaseWorkflowRun{}, false, fmt.Errorf("failed to parse workflow runs: %w", err)
-	}
-
-	var latestRun releaseWorkflowRun
-	var latestCreatedAt time.Time
-	found := false
-	for _, run := range runs {
-		createdAt, err := time.Parse(time.RFC3339, run.CreatedAt)
-		if err != nil {
-			return releaseWorkflowRun{}, false, fmt.Errorf("failed to parse workflow run createdAt %q: %w", run.CreatedAt, err)
-		}
-		if createdAt.Before(dispatchedAt) {
-			continue
-		}
-		if !found || createdAt.After(latestCreatedAt) {
-			latestRun = run
-			latestCreatedAt = createdAt
-			found = true
-		}
-	}
-	if !found {
-		return releaseWorkflowRun{}, false, nil
-	}
-	return latestRun, true, nil
-}
-
-func watchReleasePRCheckRun(ctx context.Context, config releasePRCheckConfig, runID int64) error {
-	_, err := runReleasePRCheckOutput(
-		ctx,
-		"gh",
-		"run",
-		"watch",
-		strconv.FormatInt(runID, 10),
-		"--repo",
-		config.repository,
-		"--exit-status",
-		"--compact",
-		"--interval",
-		strconv.Itoa(config.watchIntervalSeconds),
-	)
-	return err
 }
 
 func verifyReleasePRCheckHeadMatchesRun(

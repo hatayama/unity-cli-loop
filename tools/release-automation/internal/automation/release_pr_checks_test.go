@@ -94,12 +94,13 @@ func TestReleasePRChecksSkipWhenNoReleasePRExists(t *testing.T) {
 	assertReleasePRCheckLogDoesNotContain(t, result.ghLog, "pr ready")
 }
 
-// Verifies that the matching release PR is drafted, dispatched, watched, and marked ready.
+// Verifies that the matching release PR is drafted, dispatched to every check workflow, watched, and marked ready.
 func TestReleasePRChecksDispatchAndMarkReady(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
-		prListJSON:     `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore(v3-beta): release 3.0.0-beta.5","url":"https://example.test/pr/1043"}]`,
-		runListJSON:    `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
-		runWatchStatus: "0",
+		prListJSON:              `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore(v3-beta): release 3.0.0-beta.5","url":"https://example.test/pr/1043"}]`,
+		runListJSON:             `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
+		compileCheckRunListJSON: `[{"databaseId":5353,"headSha":"abc123","createdAt":"2026-05-30T01:00:02Z","status":"queued","conclusion":"","url":"https://example.test/run/5353"}]`,
+		runWatchStatus:          "0",
 	})
 
 	if result.exitCode != 0 {
@@ -107,13 +108,67 @@ func TestReleasePRChecksDispatchAndMarkReady(t *testing.T) {
 	}
 	assertReleasePRCheckLogContains(t, result.stdout, "Marked release PR #1043 as draft while checks run.")
 	assertReleasePRCheckLogContains(t, result.stdout, "Dispatching build-and-test.yml for release PR #1043: https://example.test/pr/1043")
+	assertReleasePRCheckLogContains(t, result.stdout, "Dispatching unity-compile-check-and-test-runner.yml for release PR #1043: https://example.test/pr/1043")
 	assertReleasePRCheckLogContains(t, result.stdout, "Watching build-and-test.yml run 4242 for release PR #1043.")
+	assertReleasePRCheckLogContains(t, result.stdout, "Watching unity-compile-check-and-test-runner.yml run 5353 for release PR #1043.")
 	assertReleasePRCheckLogContains(t, result.stdout, "Marked release PR #1043 as ready after checks passed.")
 	assertReleasePRCheckLogContains(t, result.ghLog, "pr ready 1043 --repo owner/repository --undo")
 	assertReleasePRCheckLogContains(t, result.ghLog, "workflow run build-and-test.yml --repo owner/repository --ref release-please--branches--v3-beta")
+	assertReleasePRCheckLogContains(t, result.ghLog, "workflow run unity-compile-check-and-test-runner.yml --repo owner/repository --ref release-please--branches--v3-beta")
 	assertReleasePRCheckLogContains(t, result.ghLog, "run list --repo owner/repository --workflow build-and-test.yml --branch release-please--branches--v3-beta --event workflow_dispatch --json databaseId,status,conclusion,headSha,createdAt,url --limit 20")
+	assertReleasePRCheckLogContains(t, result.ghLog, "run list --repo owner/repository --workflow unity-compile-check-and-test-runner.yml --branch release-please--branches--v3-beta --event workflow_dispatch --json databaseId,status,conclusion,headSha,createdAt,url --limit 20")
 	assertReleasePRCheckLogContains(t, result.ghLog, "run watch 4242 --repo owner/repository --exit-status --compact --interval 1")
+	assertReleasePRCheckLogContains(t, result.ghLog, "run watch 5353 --repo owner/repository --exit-status --compact --interval 1")
 	assertReleasePRCheckLogContainsLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
+}
+
+// Verifies that the RELEASE_PR_CHECK_WORKFLOWS environment override replaces the default workflow list.
+func TestReleasePRChecksDispatchOnlyOverriddenWorkflows(t *testing.T) {
+	result := runReleasePRCheckCase(t, releasePRCheckCase{
+		prListJSON:     `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		runListJSON:    `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
+		runWatchStatus: "0",
+		workflows:      "override-checks.yml",
+	})
+
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
+	}
+	assertReleasePRCheckLogContains(t, result.ghLog, "workflow run override-checks.yml --repo owner/repository --ref release-please--branches--v3-beta")
+	assertReleasePRCheckLogDoesNotContain(t, result.ghLog, "workflow run build-and-test.yml")
+	assertReleasePRCheckLogDoesNotContain(t, result.ghLog, "workflow run unity-compile-check-and-test-runner.yml")
+}
+
+// Verifies that a blank workflow list override fails instead of silently dispatching nothing.
+func TestReleasePRChecksFailWhenWorkflowListIsBlank(t *testing.T) {
+	result := runReleasePRCheckCase(t, releasePRCheckCase{
+		prListJSON:     `[]`,
+		runListJSON:    `[]`,
+		runWatchStatus: "0",
+		workflows:      " , ",
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", result.exitCode)
+	}
+	assertReleasePRCheckLogContains(t, result.stderr, "RELEASE_PR_CHECK_WORKFLOWS must list at least one workflow")
+}
+
+// Verifies that check runs watching different branch heads fail while leaving the PR drafted.
+func TestReleasePRChecksFailWhenRunsCheckDifferentHeads(t *testing.T) {
+	result := runReleasePRCheckCase(t, releasePRCheckCase{
+		prListJSON:              `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		runListJSON:             `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
+		compileCheckRunListJSON: `[{"databaseId":5353,"headSha":"def456","createdAt":"2026-05-30T01:00:02Z","status":"queued","conclusion":"","url":"https://example.test/run/5353"}]`,
+		runWatchStatus:          "0",
+	})
+
+	if result.exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", result.exitCode)
+	}
+	assertReleasePRCheckLogContains(t, result.stderr, "release PR #1043 checks ran on different heads: build-and-test.yml checked abc123 but unity-compile-check-and-test-runner.yml checked def456")
+	assertReleasePRCheckLogContains(t, result.ghLog, "pr ready 1043 --repo owner/repository --undo")
+	assertReleasePRCheckLogDoesNotContainLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
 }
 
 // Verifies that matching release PRs are updated when the body has a plain Unity package summary.
@@ -274,14 +329,16 @@ func TestReleasePRChecksFailWhenHeadChangesBeforeReady(t *testing.T) {
 }
 
 type releasePRCheckCase struct {
-	ctx                  context.Context
-	prListJSON           string
-	prListJSONAfterWatch string
-	prViewJSON           string
-	runListJSON          string
-	runWatchStatus       string
-	lookupAttempts       string
-	now                  time.Time
+	ctx                     context.Context
+	prListJSON              string
+	prListJSONAfterWatch    string
+	prViewJSON              string
+	runListJSON             string
+	compileCheckRunListJSON string
+	runWatchStatus          string
+	lookupAttempts          string
+	workflows               string
+	now                     time.Time
 }
 
 func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRCheckRunResult {
@@ -325,7 +382,11 @@ func runReleasePRCheckCase(t *testing.T, testCase releasePRCheckCase) releasePRC
 	t.Setenv("GH_PR_LIST_COUNT_PATH", prListCountPath)
 	t.Setenv("GH_PR_VIEW_JSON", prViewJSON)
 	t.Setenv("GH_RUN_LIST_JSON", testCase.runListJSON)
+	t.Setenv("GH_RUN_LIST_JSON_COMPILE_CHECK", testCase.compileCheckRunListJSON)
 	t.Setenv("GH_RUN_WATCH_STATUS", testCase.runWatchStatus)
+	if testCase.workflows != "" {
+		t.Setenv("RELEASE_PR_CHECK_WORKFLOWS", testCase.workflows)
+	}
 	t.Setenv("GH_LOG", ghLogPath)
 	t.Setenv("GIT_LOG", gitLogPath)
 
@@ -417,6 +478,14 @@ if [ "$1" = "workflow" ] && [ "$2" = "run" ]; then
 fi
 
 if [ "$1" = "run" ] && [ "$2" = "list" ]; then
+  case "$*" in
+    *unity-compile-check-and-test-runner.yml*)
+      if [ -n "${GH_RUN_LIST_JSON_COMPILE_CHECK:-}" ]; then
+        printf '%s\n' "$GH_RUN_LIST_JSON_COMPILE_CHECK"
+        exit 0
+      fi
+      ;;
+  esac
   printf '%s\n' "$GH_RUN_LIST_JSON"
   exit 0
 fi
@@ -536,6 +605,11 @@ if "%~1"=="pr" if "%~2"=="edit" exit /b 0
 if "%~1"=="workflow" if "%~2"=="run" exit /b 0
 
 if "%~1"=="run" if "%~2"=="list" (
+  echo %* | findstr /c:"unity-compile-check-and-test-runner.yml" >nul
+  if not errorlevel 1 if not "%GH_RUN_LIST_JSON_COMPILE_CHECK%"=="" (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::Out.WriteLine($env:GH_RUN_LIST_JSON_COMPILE_CHECK)"
+    exit /b 0
+  )
   powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::Out.WriteLine($env:GH_RUN_LIST_JSON)"
   exit /b 0
 )
