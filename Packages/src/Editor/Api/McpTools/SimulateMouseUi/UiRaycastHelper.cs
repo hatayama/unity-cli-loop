@@ -11,14 +11,8 @@ namespace io.github.hatayama.uLoopMCP
     {
         public static RaycastResult? RaycastUI(Vector2 screenPosition, EventSystem eventSystem)
         {
-            RaycastContext context = CreateRaycastContext(eventSystem);
+            RaycastContext context = new RaycastContext(eventSystem);
             return context.Raycast(screenPosition);
-        }
-
-        internal static RaycastContext CreateRaycastContext(EventSystem eventSystem)
-        {
-            Debug.Assert(eventSystem != null, "EventSystem is required for UI raycasting.");
-            return new RaycastContext(eventSystem!);
         }
 
         // Reuses EventSystem and Canvas-space raycast buffers for callers that test
@@ -63,14 +57,6 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        // Bypass EventSystem's Screen-bounds clipping by directly testing Graphic rects in Canvas space.
-        // Only supports ScreenSpaceOverlay canvases where world positions equal Canvas-space positions.
-        public static RaycastResult? RaycastCanvasSpace(Vector2 canvasPosition)
-        {
-            List<CanvasRaycastSource> canvasRaycastSources = CollectCanvasRaycastSources();
-            return RaycastCanvasSpaceFromSources(canvasPosition, canvasRaycastSources);
-        }
-
         private static List<CanvasRaycastSource> CollectCanvasRaycastSources()
         {
             Canvas[] canvases = Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None);
@@ -109,11 +95,6 @@ namespace io.github.hatayama.uLoopMCP
 
             foreach (CanvasRaycastSource source in canvasRaycastSources)
             {
-                if (!source.Canvas.isActiveAndEnabled || !source.Raycaster.isActiveAndEnabled)
-                {
-                    continue;
-                }
-
                 foreach (Graphic graphic in source.Graphics)
                 {
                     if (!IsRaycastCandidate(graphic, canvasPosition))

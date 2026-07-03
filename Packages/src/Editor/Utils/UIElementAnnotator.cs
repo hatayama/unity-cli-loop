@@ -113,15 +113,21 @@ namespace io.github.hatayama.uLoopMCP
             canvas.sortingOrder = OVERLAY_SORT_ORDER;
 
             Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            List<AnnotationDrawInfo> drawInfos = new List<AnnotationDrawInfo>(elements.Count);
 
             foreach (UIElementInfo element in elements)
             {
-                CreateAnnotationBorderForElement(root.transform, element, borderMetrics);
+                drawInfos.Add(CreateAnnotationDrawInfo(element));
             }
 
-            foreach (UIElementInfo element in elements)
+            foreach (AnnotationDrawInfo drawInfo in drawInfos)
             {
-                CreateAnnotationLabelForElement(root.transform, element, font, borderMetrics);
+                CreateAnnotationBorderForElement(root.transform, drawInfo, borderMetrics);
+            }
+
+            foreach (AnnotationDrawInfo drawInfo in drawInfos)
+            {
+                CreateAnnotationLabelForElement(root.transform, drawInfo, font, borderMetrics);
             }
 
             return root;
@@ -312,7 +318,7 @@ namespace io.github.hatayama.uLoopMCP
                 return null;
             }
 
-            return UiRaycastHelper.CreateRaycastContext(eventSystem);
+            return new UiRaycastHelper.RaycastContext(eventSystem);
         }
 
         // Writes 4 corners into SharedScreenCorners in screen pixel coordinates (bottom-left origin).
@@ -364,59 +370,71 @@ namespace io.github.hatayama.uLoopMCP
 
         private static void CreateAnnotationBorderForElement(
             Transform parent,
-            UIElementInfo element,
+            AnnotationDrawInfo drawInfo,
             AnnotationBorderMetrics borderMetrics)
         {
-            float screenMinX = element.BoundsMinX;
-            float screenMaxX = element.BoundsMaxX;
-            float screenMinY = element.BoundsMinY;
-            float screenMaxY = element.BoundsMaxY;
-
-            Color color = GetAnnotationColorForElement(element);
-            AnnotationBorderColors borderColors = GetAnnotationBorderColors(color);
-
             CreateBorder(
                 parent,
                 "LightOuter",
-                screenMinX - borderMetrics.OuterOffset,
-                screenMinY - borderMetrics.OuterOffset,
-                screenMaxX + borderMetrics.OuterOffset,
-                screenMaxY + borderMetrics.OuterOffset,
+                drawInfo.ScreenMinX - borderMetrics.OuterOffset,
+                drawInfo.ScreenMinY - borderMetrics.OuterOffset,
+                drawInfo.ScreenMaxX + borderMetrics.OuterOffset,
+                drawInfo.ScreenMaxY + borderMetrics.OuterOffset,
                 borderMetrics.NeutralThickness,
-                borderColors.Outer);
+                drawInfo.BorderColors.Outer);
             CreateBorder(
                 parent,
                 "ColorMiddle",
-                screenMinX - borderMetrics.ColorOffset,
-                screenMinY - borderMetrics.ColorOffset,
-                screenMaxX + borderMetrics.ColorOffset,
-                screenMaxY + borderMetrics.ColorOffset,
+                drawInfo.ScreenMinX - borderMetrics.ColorOffset,
+                drawInfo.ScreenMinY - borderMetrics.ColorOffset,
+                drawInfo.ScreenMaxX + borderMetrics.ColorOffset,
+                drawInfo.ScreenMaxY + borderMetrics.ColorOffset,
                 borderMetrics.ColorThickness,
-                borderColors.Middle);
-            CreateBorder(parent, "DarkInner", screenMinX, screenMinY, screenMaxX, screenMaxY, borderMetrics.NeutralThickness, borderColors.Inner);
+                drawInfo.BorderColors.Middle);
+            CreateBorder(
+                parent,
+                "DarkInner",
+                drawInfo.ScreenMinX,
+                drawInfo.ScreenMinY,
+                drawInfo.ScreenMaxX,
+                drawInfo.ScreenMaxY,
+                borderMetrics.NeutralThickness,
+                drawInfo.BorderColors.Inner);
         }
 
         private static void CreateAnnotationLabelForElement(
             Transform parent,
-            UIElementInfo element,
+            AnnotationDrawInfo drawInfo,
             Font font,
             AnnotationBorderMetrics borderMetrics)
         {
-            float screenMinX = element.BoundsMinX;
-            float screenMaxY = element.BoundsMaxY;
-            Color color = GetAnnotationColorForElement(element);
-            Color contrastColor = GetContrastingTextColor(color);
-
-            string labelText = CreateDisplayLabel(element);
             CreateLabel(
                 parent,
-                labelText,
-                screenMinX,
-                screenMaxY + borderMetrics.OuterOffset + borderMetrics.LabelOutlineDistance + borderMetrics.LabelToBorderGap,
-                color,
-                contrastColor,
+                drawInfo.DisplayLabel,
+                drawInfo.ScreenMinX,
+                drawInfo.ScreenMaxY + borderMetrics.OuterOffset + borderMetrics.LabelOutlineDistance + borderMetrics.LabelToBorderGap,
+                drawInfo.Color,
+                drawInfo.ContrastColor,
                 font,
                 borderMetrics.LabelOutlineDistance);
+        }
+
+        private static AnnotationDrawInfo CreateAnnotationDrawInfo(UIElementInfo element)
+        {
+            Color color = GetAnnotationColorForElement(element);
+            Color contrastColor = GetContrastingTextColor(color);
+            AnnotationBorderColors borderColors = GetAnnotationBorderColors(color);
+            string displayLabel = CreateDisplayLabel(element);
+
+            return new AnnotationDrawInfo(
+                element.BoundsMinX,
+                element.BoundsMinY,
+                element.BoundsMaxX,
+                element.BoundsMaxY,
+                color,
+                contrastColor,
+                borderColors,
+                displayLabel);
         }
 
         private static void CreateBorder(
@@ -670,6 +688,38 @@ namespace io.github.hatayama.uLoopMCP
                 Inner = inner;
                 Middle = middle;
                 Outer = outer;
+            }
+        }
+
+        private readonly struct AnnotationDrawInfo
+        {
+            public readonly float ScreenMinX;
+            public readonly float ScreenMinY;
+            public readonly float ScreenMaxX;
+            public readonly float ScreenMaxY;
+            public readonly Color Color;
+            public readonly Color ContrastColor;
+            public readonly AnnotationBorderColors BorderColors;
+            public readonly string DisplayLabel;
+
+            public AnnotationDrawInfo(
+                float screenMinX,
+                float screenMinY,
+                float screenMaxX,
+                float screenMaxY,
+                Color color,
+                Color contrastColor,
+                AnnotationBorderColors borderColors,
+                string displayLabel)
+            {
+                ScreenMinX = screenMinX;
+                ScreenMinY = screenMinY;
+                ScreenMaxX = screenMaxX;
+                ScreenMaxY = screenMaxY;
+                Color = color;
+                ContrastColor = contrastColor;
+                BorderColors = borderColors;
+                DisplayLabel = displayLabel;
             }
         }
 
