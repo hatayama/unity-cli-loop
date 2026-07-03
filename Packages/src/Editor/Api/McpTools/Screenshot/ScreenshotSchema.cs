@@ -43,7 +43,7 @@ namespace io.github.hatayama.uLoopMCP
         [Description("Output directory path for saving screenshots. When empty, uses default path (.uloop/outputs/Screenshots/). Accepts absolute paths.")]
         public string OutputDirectory { get; set; } = "";
 
-        [Description("Capture mode: window(0)=capture EditorWindow including toolbar, rendering(1)=capture game rendering only (PlayMode required, coordinates match simulate-mouse)")]
+        [Description("Capture mode: window(0)=capture EditorWindow including toolbar, rendering(1)=capture game rendering only (PlayMode required, returns ScreenshotToInputFormula for raw image pixels)")]
         public CaptureMode CaptureMode { get; set; } = CaptureMode.window;
 
         [Description("Annotate interactive UI elements with names and simulate-mouse coordinates on the screenshot. Only works with CaptureMode=rendering in PlayMode.")]
@@ -51,5 +51,8 @@ namespace io.github.hatayama.uLoopMCP
 
         [Description("Return only annotated element JSON without capturing a screenshot image. Requires AnnotateElements=true and CaptureMode=rendering in PlayMode.")]
         public bool ElementsOnly { get; set; } = false;
+
+        [Description("Annotate 3D physics raycast candidate points on rendering screenshots. Uses Camera.main and the same top-left Game View coordinates as simulate-mouse-input.")]
+        public bool AnnotateRaycastGrid { get; set; } = false;
     }
 }

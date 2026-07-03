@@ -184,6 +184,10 @@ All tools automatically include the following property:
     - `prefix`: Window name must start with the input
     - `contains`: Window name must contain the input anywhere
   - `OutputDirectory` (string): Output directory path for saving screenshots. When empty, uses default path (.uloop/outputs/Screenshots/). Accepts absolute paths (default: "")
+  - `CaptureMode` (enum): "window" captures Editor chrome, "rendering" captures Game View rendering with top-left Game View coordinates. Use `ScreenshotToInputFormula` before passing raw image pixels to input tools (default: "window")
+  - `AnnotateElements` (boolean): Annotate interactive UI elements in rendering screenshots (default: false)
+  - `AnnotateRaycastGrid` (boolean): Annotate 3D physics raycast candidate points in rendering screenshots (default: false)
+  - `ElementsOnly` (boolean): Return annotation JSON without writing an image file (default: false)
 - **Response**:
   - `ScreenshotCount` (number): Number of windows captured
   - `Screenshots` (array): Array of screenshot info
@@ -191,6 +195,12 @@ All tools automatically include the following property:
     - `FileSizeBytes` (number): Size of the saved file in bytes
     - `Width` (number): Captured image width in pixels
     - `Height` (number): Captured image height in pixels
+    - `ImageCoordinateSystem` (string): "top-left-game-view" for rendering captures, "top-left-window" for window captures
+    - `ImageToInputOffsetY` (number): Y offset added after unscaling raw image pixels to get input coordinates
+    - `GameViewWidth` / `GameViewHeight` (number): Game View size used by input tools
+    - `ScreenshotToInputFormula` (string): How to use screenshot coordinates with input tools
+    - `UnityInputFormula` (string): Internal conversion to `Mouse.current.position`
+    - `RaycastGridPoints` (array): 3D raycast candidate metadata when requested
 
 ### 10. control-play-mode
 - **Description**: Control Unity Editor play mode (play/stop/pause)
@@ -207,7 +217,7 @@ All tools automatically include the following property:
 ---
 
 ### 11. simulate-mouse-ui
-- **Description**: Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem screen coordinates. Uses EventSystem and ExecuteEvents to dispatch pointer events directly — works independently of both old and new Input System. For game logic that reads Input System (e.g. `Mouse.current.leftButton.wasPressedThisFrame`), use `simulate-mouse-input` instead
+- **Description**: Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem using top-left Game View coordinates. Uses EventSystem and ExecuteEvents to dispatch pointer events directly — works independently of both old and new Input System. For game logic that reads Input System (e.g. `Mouse.current.leftButton.wasPressedThisFrame`), use `simulate-mouse-input` instead
 - **Parameters**:
   - `Action` (enum): Mouse action - "Click", "Drag", "DragStart", "DragMove", "DragEnd", "LongPress" (default: "Click")
     - `Click`: Click at (X, Y). Fires PointerDown → PointerUp → PointerClick
@@ -216,10 +226,10 @@ All tools automatically include the following property:
     - `DragStart`: Begin drag at (X, Y) and hold
     - `DragMove`: Animate from current position to (X, Y) at the specified speed
     - `DragEnd`: Animate to (X, Y), then release drag
-  - `X` (number): Target X position in screen pixels, origin: top-left (default: 0)
-  - `Y` (number): Target Y position in screen pixels, origin: top-left (default: 0)
-  - `FromX` (number): Start X position for Drag action (default: 0)
-  - `FromY` (number): Start Y position for Drag action (default: 0)
+  - `X` (number): Target X position in top-left Game View pixels. Used by Click, LongPress, DragStart, DragMove, and DragEnd; for Drag, this is the destination (default: 0)
+  - `Y` (number): Target Y position in top-left Game View pixels. Used by Click, LongPress, DragStart, DragMove, and DragEnd; for Drag, this is the destination (default: 0)
+  - `FromX` (number): Start X position in top-left Game View pixels for Drag action (default: 0)
+  - `FromY` (number): Start Y position in top-left Game View pixels for Drag action (default: 0)
   - `DragSpeed` (number): Drag speed in pixels per second, 0 for instant (default: 2000)
   - `Duration` (number): Hold duration in seconds for LongPress action (default: 0.5)
   - `Button` (enum): Mouse button - "Left", "Right", "Middle" (default: "Left")
@@ -242,8 +252,8 @@ All tools automatically include the following property:
     - `MoveDelta`: Inject mouse delta one-shot (for FPS camera/look control)
     - `SmoothDelta`: Inject mouse delta smoothly over Duration seconds (human-like camera pan)
     - `Scroll`: Inject scroll wheel (for hotbar switching, zoom, etc.)
-  - `X` (number): Target X position in screen pixels, origin: top-left. Used by Click and LongPress (default: 0)
-  - `Y` (number): Target Y position in screen pixels, origin: top-left. Used by Click and LongPress (default: 0)
+  - `X` (number): Target X position in top-left Game View pixels. Use `AnnotatedElements[].SimX`, `RaycastGridPoints[].InputX`, or raw image pixels converted with `ScreenshotToInputFormula` (default: 0)
+  - `Y` (number): Target Y position in top-left Game View pixels. Use `AnnotatedElements[].SimY`, `RaycastGridPoints[].InputY`, or raw image pixels converted with `ScreenshotToInputFormula` (default: 0)
   - `Button` (enum): Mouse button - "Left", "Right", "Middle" (default: "Left"). Used by Click and LongPress
   - `Duration` (number): Hold duration for LongPress, or minimum hold time for Click. 0 = one-shot tap (default: 0)
   - `DeltaX` (number): Delta X in pixels for MoveDelta. Positive = right (default: 0)
@@ -257,8 +267,26 @@ All tools automatically include the following property:
   - `Button` (string): The button used (for Click/LongPress)
   - `PositionX` (number, nullable): X position used (null for non-positional actions)
   - `PositionY` (number, nullable): Y position used (null for non-positional actions)
+  - `InputCoordinateSystem` / `UnityCoordinateSystem` (string): Public and injected coordinate systems
+  - `GameViewWidth` / `GameViewHeight` (number): Game View size used for conversion
+  - `InputPositionX/Y` and `InjectedUnityPositionX/Y` (number, nullable): Received and injected coordinates
+  - `CoordinateConversionFormula` (string): `unity_x = input_x; unity_y = gameViewHeight - input_y`
 
-### 13. simulate-keyboard
+### 13. raycast
+- **Description**: Raycast from `Camera.main` through a top-left Game View coordinate. Use this to check what a converted rendering screenshot coordinate hits in 3D physics before clicking with `simulate-mouse-input`
+- **Parameters**:
+  - `X` (number): Target X position in top-left Game View pixels. Use `AnnotatedElements[].SimX`, `RaycastGridPoints[].InputX`, or raw image pixels converted with `ScreenshotToInputFormula` (default: 0)
+  - `Y` (number): Target Y position in top-left Game View pixels. Use `AnnotatedElements[].SimY`, `RaycastGridPoints[].InputY`, or raw image pixels converted with `ScreenshotToInputFormula` (default: 0)
+  - `LayerMask` (number): Physics layer mask used by the raycast (default: Unity default raycast layers)
+  - `MaxDistance` (number): Maximum raycast distance in world units (default: 1000)
+- **Response**:
+  - `Success` (boolean): Whether the command completed
+  - `Hit` (boolean): Whether physics hit anything
+  - `HitGameObjectName` / `HitGameObjectPath` (string): Hit object identity when `Hit` is true
+  - `Distance`, `HitPointX/Y/Z`, `HitNormalX/Y/Z` (number): Hit details when `Hit` is true
+  - `InputCoordinateSystem`, `UnityCoordinateSystem`, `GameViewWidth/Height`, `InputPositionX/Y`, `InjectedUnityPositionX/Y`, `CoordinateConversionFormula`: Coordinate conversion details
+
+### 14. simulate-keyboard
 - **Description**: Simulate keyboard key input in PlayMode via Input System. Supports single key taps, sustained holds, and multi-key combinations. Requires the Input System package, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings. Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`
 - **Parameters**:
   - `Action` (enum): Keyboard action - "Press", "KeyDown", "KeyUp" (default: "Press")

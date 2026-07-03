@@ -247,7 +247,7 @@
           },
           "CaptureMode": {
             "type": "string",
-            "description": "Capture mode: window=capture EditorWindow including toolbar, rendering=capture game rendering only (PlayMode required). Response includes CoordinateSystem ('gameView' or 'window'), ResolutionScale, and YOffset. For gameView: sim_x = image_x / ResolutionScale, sim_y = image_y / ResolutionScale + YOffset.",
+            "description": "Capture mode: window=capture EditorWindow including toolbar, rendering=capture game rendering only (PlayMode required). Rendering screenshots return ScreenshotToInputFormula for converting raw image pixels before calling simulate-mouse-input or raycast.",
             "enum": [
               "window",
               "rendering"
@@ -263,6 +263,40 @@
             "type": "boolean",
             "description": "Return only annotated element JSON without capturing a screenshot image. Requires AnnotateElements=true and CaptureMode=rendering in PlayMode.",
             "default": false
+          },
+          "AnnotateRaycastGrid": {
+            "type": "boolean",
+            "description": "Annotate 3D physics raycast candidate points on rendering screenshots. Uses Camera.main and the same top-left Game View coordinates as simulate-mouse-input.",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "raycast",
+      "description": "Raycast from Camera.main through a top-left Game View coordinate. Use annotated SimX/SimY, raycast-grid InputX/InputY, or raw screenshot image pixels converted with ScreenshotToInputFormula.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "X": {
+            "type": "number",
+            "description": "Target X position in Game View pixels (origin: top-left). Use AnnotatedElements[].SimX, RaycastGridPoints[].InputX, or raw image pixels converted with ScreenshotToInputFormula.",
+            "default": 0
+          },
+          "Y": {
+            "type": "number",
+            "description": "Target Y position in Game View pixels (origin: top-left). Use AnnotatedElements[].SimY, RaycastGridPoints[].InputY, or raw image pixels converted with ScreenshotToInputFormula.",
+            "default": 0
+          },
+          "LayerMask": {
+            "type": "number",
+            "description": "Physics layer mask used by the raycast.",
+            "default": -5
+          },
+          "MaxDistance": {
+            "type": "number",
+            "description": "Maximum raycast distance in world units.",
+            "default": 1000
           }
         }
       }
@@ -329,7 +363,7 @@
     },
     {
       "name": "simulate-mouse-ui",
-      "description": "Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem screen coordinates",
+      "description": "Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem using top-left Game View coordinates",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -348,22 +382,22 @@
           },
           "X": {
             "type": "number",
-            "description": "Target X position in screen pixels (origin: top-left). For Drag action, this is the destination.",
+            "description": "Target X position in Game View pixels (origin: top-left). Used by Click, LongPress, DragStart, DragMove, and DragEnd; for Drag, this is the destination.",
             "default": 0
           },
           "Y": {
             "type": "number",
-            "description": "Target Y position in screen pixels (origin: top-left). For Drag action, this is the destination.",
+            "description": "Target Y position in Game View pixels (origin: top-left). Used by Click, LongPress, DragStart, DragMove, and DragEnd; for Drag, this is the destination.",
             "default": 0
           },
           "FromX": {
             "type": "number",
-            "description": "Start X position for Drag action (origin: top-left). Drag starts here and moves to X,Y.",
+            "description": "Start X position in Game View pixels for Drag action (origin: top-left). Drag starts here and moves to X,Y.",
             "default": 0
           },
           "FromY": {
             "type": "number",
-            "description": "Start Y position for Drag action (origin: top-left). Drag starts here and moves to X,Y.",
+            "description": "Start Y position in Game View pixels for Drag action (origin: top-left). Drag starts here and moves to X,Y.",
             "default": 0
           },
           "DragSpeed": {
@@ -424,12 +458,12 @@
           },
           "X": {
             "type": "number",
-            "description": "Target X position in screen pixels (origin: top-left). Used by Click and LongPress.",
+            "description": "Target X position in Game View pixels (origin: top-left). Use AnnotatedElements[].SimX, RaycastGridPoints[].InputX, or raw image pixels converted with ScreenshotToInputFormula.",
             "default": 0
           },
           "Y": {
             "type": "number",
-            "description": "Target Y position in screen pixels (origin: top-left). Used by Click and LongPress.",
+            "description": "Target Y position in Game View pixels (origin: top-left). Use AnnotatedElements[].SimY, RaycastGridPoints[].InputY, or raw image pixels converted with ScreenshotToInputFormula.",
             "default": 0
           },
           "Button": {

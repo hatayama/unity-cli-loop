@@ -12,6 +12,7 @@
     "url": "https://github.com/hatayama/uLoopMCP"
   },
   "dependencies": {
+    "com.unity.modules.physics": "1.0.0",
     "com.unity.ugui": "1.0.0",
     "com.unity.nuget.newtonsoft-json": "3.2.1"
   },

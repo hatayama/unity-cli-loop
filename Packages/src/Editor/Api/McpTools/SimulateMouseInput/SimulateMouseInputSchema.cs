@@ -7,10 +7,10 @@ namespace io.github.hatayama.uLoopMCP
         [Description("Mouse input action: Click(0) - inject left/right/middle button press+release, LongPress(1) - inject button hold for Duration seconds, MoveDelta(2) - inject mouse delta for camera/look (one-shot), Scroll(3) - inject scroll wheel, SmoothDelta(4) - inject mouse delta smoothly over Duration seconds")]
         public MouseInputAction Action { get; set; } = MouseInputAction.Click;
 
-        [Description("Target X position in screen pixels (origin: top-left). Used by Click and LongPress to set Mouse.current.position.")]
+        [Description("Target X position in Game View pixels (origin: top-left). Used by Click and LongPress. Use AnnotatedElements[].SimX, RaycastGridPoints[].InputX, or raw screenshot image pixels converted with ScreenshotToInputFormula.")]
         public float X { get; set; } = 0f;
 
-        [Description("Target Y position in screen pixels (origin: top-left). Used by Click and LongPress to set Mouse.current.position.")]
+        [Description("Target Y position in Game View pixels (origin: top-left). Used by Click and LongPress. Use AnnotatedElements[].SimY, RaycastGridPoints[].InputY, or raw screenshot image pixels converted with ScreenshotToInputFormula.")]
         public float Y { get; set; } = 0f;
 
         [Description("Mouse button: Left(0, default), Right(1), Middle(2). Used by Click and LongPress.")]

@@ -11,7 +11,7 @@ using UnityEngine.InputSystem;
 
 namespace io.github.hatayama.uLoopMCP
 {
-    [McpTool(Description = "Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem screen coordinates")]
+    [McpTool(Description = "Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem using top-left Game View coordinates")]
     public class SimulateMouseUiTool : AbstractUnityTool<SimulateMouseUiSchema, SimulateMouseUiResponse>
     {
         public override string ToolName => "simulate-mouse-ui";

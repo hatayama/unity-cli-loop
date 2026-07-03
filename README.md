@@ -143,7 +143,7 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 
 
 <details>
-<summary>All 16 Bundled Skills</summary>
+<summary>All 17 Bundled Skills</summary>
 
 - `/uloop-launch` - Launch Unity with correct version
 - `/uloop-compile` - Execute compilation
@@ -154,6 +154,7 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 - `/uloop-get-hierarchy` - Get scene hierarchy
 - `/uloop-find-game-objects` - Find GameObjects
 - `/uloop-screenshot` - Capture EditorWindow
+- `/uloop-raycast` - Check what a Game View coordinate hits in 3D physics
 - `/uloop-simulate-mouse-ui` - Simulate mouse click, long-press, and drag on PlayMode UI elements
 - `/uloop-simulate-mouse-input` - Simulate mouse input in PlayMode via Input System
 - `/uloop-simulate-keyboard` - Simulate keyboard input in PlayMode via Input System
@@ -378,8 +379,10 @@ Great for keeping visual feedback in sync after other apps steal focus. (Linux i
 Take a screenshot of any EditorWindow as a PNG. Specify the window name (the text displayed in the title bar/tab) to capture.
 When multiple windows of the same type are open (e.g., 3 Inspector windows), all windows are saved with numbered filenames.
 Supports three matching modes: `exact` (default), `prefix`, and `contains` - all case-insensitive.
+Use `CaptureMode: rendering` when you need coordinates for `simulate-mouse-input`, `simulate-mouse-ui`, or `raycast`; convert raw image pixels with `ScreenshotToInputFormula`, or pass annotated `SimX/SimY` and raycast-grid `InputX/InputY` values directly.
 ```text
 → screenshot (WindowName: "Console")
+→ screenshot (CaptureMode: rendering, AnnotateRaycastGrid: true)
 → Save Console window state as PNG
 → Provide visual feedback to AI
 ```
@@ -469,6 +472,8 @@ https://github.com/user-attachments/assets/c7ee9103-c282-4f90-8b01-64bb17400f3e
 ### 12. simulate-mouse-input - Simulate Mouse Input in PlayMode via Input System
 Simulate mouse input in PlayMode via Input System. Injects button clicks, mouse delta, and scroll wheel directly into `Mouse.current` for game logic that reads Input System. Unlike `simulate-mouse-ui` which fires EventSystem pointer events for uGUI, this tool targets game logic that reads `Mouse.current` directly. This tool is available only when the Input System package is installed, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings.
 
+Click and LongPress coordinates use the same top-left Game View coordinates as `screenshot --capture-mode rendering`; do not flip Y before calling the tool.
+
 Supports 5 actions: Click, LongPress, MoveDelta, SmoothDelta, Scroll.
 
 ```text
@@ -480,7 +485,16 @@ Supports 5 actions: Click, LongPress, MoveDelta, SmoothDelta, Scroll.
 → simulate-mouse-input (Action: SmoothDelta, DeltaX: 300, DeltaY: 0, Duration: 0.5)
 ```
 
-### 13. simulate-keyboard - Simulate Keyboard Input in PlayMode
+### 13. raycast - Check a 3D Physics Hit at a Game View Coordinate
+Raycast from `Camera.main` through a top-left Game View coordinate. Use this before gameplay clicks when you need to confirm which 3D object a screenshot coordinate will hit.
+
+```text
+→ screenshot (CaptureMode: rendering, AnnotateRaycastGrid: true)
+→ raycast (X: 960, Y: 540)
+→ simulate-mouse-input (Action: Click, X: 960, Y: 540)
+```
+
+### 14. simulate-keyboard - Simulate Keyboard Input in PlayMode
 Simulate keyboard key input in PlayMode via Input System. Supports single key taps, sustained holds, and multi-key combinations (e.g. Shift+W for sprinting). This tool is available only when the Input System package is installed, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings. Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`.
 
 Supports 3 actions: Press (one-shot tap or timed hold), KeyDown (hold key down), KeyUp (release held key).
@@ -495,7 +509,7 @@ Supports 3 actions: Press (one-shot tap or timed hold), KeyDown (hold key down),
 → simulate-keyboard (Action: KeyUp, Key: LeftShift)
 ```
 
-### 14. record-input - Record Input During PlayMode
+### 15. record-input - Record Input During PlayMode
 Record keyboard and mouse input during PlayMode frame-by-frame into a JSON file. Captures key presses, mouse movement, clicks, and scroll events via Input System device state diffing. This tool is available only when the Input System package is installed.
 
 ```text

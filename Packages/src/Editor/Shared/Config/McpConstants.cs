@@ -168,6 +168,16 @@ namespace io.github.hatayama.uLoopMCP
         // Screenshot coordinate system values
         public const string COORDINATE_SYSTEM_GAME_VIEW = "gameView";
         public const string COORDINATE_SYSTEM_WINDOW = "window";
+        public const string COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW = "top-left-game-view";
+        public const string COORDINATE_SYSTEM_BOTTOM_LEFT_GAME_VIEW = "bottom-left-game-view";
+        public const string COORDINATE_SYSTEM_TOP_LEFT_WINDOW = "top-left-window";
+        public const string COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY =
+            "unity_x = input_x; unity_y = gameViewHeight - input_y";
+        public const string SCREENSHOT_RENDERING_TO_INPUT_FORMULA =
+            "simulate_mouse_x = image_x / resolutionScale; simulate_mouse_y = image_y / resolutionScale + imageToInputOffsetY";
+        public const string SCREENSHOT_WINDOW_TO_INPUT_FORMULA_UNAVAILABLE =
+            "unavailable: window screenshots include Unity Editor chrome; use capture-mode rendering for mouse input coordinates";
+        public const float RAYCAST_DEFAULT_MAX_DISTANCE = 1000f;
 
         // SimulateMouseUi constants
         public const float SIMULATE_MOUSE_UI_DEFAULT_DRAG_SPEED = 2000f;

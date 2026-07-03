@@ -11,7 +11,7 @@ Simulate mouse input via Input System in Unity PlayMode: $ARGUMENTS
 ## Workflow
 
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
-2. For Click/LongPress: determine the target screen position (use `uloop screenshot` to find coordinates)
+2. For Click/LongPress: determine the target Game View input position from annotated `SimX`/`SimY`, raycast-grid `InputX`/`InputY`, or raw image pixels converted with `ScreenshotToInputFormula`
 3. Execute the appropriate `uloop simulate-mouse-input` command
 4. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering`
 5. Report what happened
@@ -27,8 +27,8 @@ uloop simulate-mouse-input --action <action> [options]
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--action` | enum | `Click` | `Click`, `LongPress`, `MoveDelta`, `SmoothDelta`, `Scroll` |
-| `--x` | number | `0` | Target X position (origin: top-left). Used by Click and LongPress. |
-| `--y` | number | `0` | Target Y position (origin: top-left). Used by Click and LongPress. |
+| `--x` | number | `0` | Target X position in Game View pixels (origin: top-left). Used by Click and LongPress. Use `AnnotatedElements[].SimX`, `RaycastGridPoints[].InputX`, or raw image pixels converted with `ScreenshotToInputFormula`. |
+| `--y` | number | `0` | Target Y position in Game View pixels (origin: top-left). Used by Click and LongPress. Use `AnnotatedElements[].SimY`, `RaycastGridPoints[].InputY`, or raw image pixels converted with `ScreenshotToInputFormula`. |
 | `--button` | enum | `Left` | Mouse button: `Left`, `Right`, `Middle`. Used by Click and LongPress. |
 | `--duration` | number | `0` | Hold duration for LongPress, or interpolation duration for SmoothDelta (seconds). For Click, 0 = one-shot tap. |
 | `--delta-x` | number | `0` | Delta X in pixels for MoveDelta/SmoothDelta. Positive = right. |
@@ -67,7 +67,7 @@ uloop simulate-mouse-input --action <action> [options]
 ## Examples
 
 ```bash
-# Left-click at screen center (for game logic)
+# Left-click at the Game View center (for game logic)
 uloop simulate-mouse-input --action Click --x 400 --y 300
 
 # Right-click at screen center (e.g. place block)
@@ -89,6 +89,20 @@ uloop simulate-mouse-input --action Scroll --scroll-y -120
 uloop simulate-mouse-input --action SmoothDelta --delta-x 300 --delta-y 0 --duration 0.5
 ```
 
+## Coordinate System
+
+- `--x` / `--y` use **top-left Game View coordinates**.
+- Raw image pixels from `uloop screenshot --capture-mode rendering` must be converted with `ScreenshotToInputFormula`.
+- `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` can be passed directly to this tool.
+- Do not flip Y in the caller. The tool converts internally for Unity Input System:
+
+```text
+unity_x = input_x
+unity_y = gameViewHeight - input_y
+```
+
+- `Mouse.current.position` uses bottom-left Unity coordinates, so the value read inside Unity may show the converted Y.
+
 ## Prerequisites
 
 - Unity must be in **PlayMode**
@@ -103,7 +117,12 @@ Returns JSON with:
 - `Message`: Status message
 - `Action`: Echoes which action was executed (`Click`, `LongPress`, `MoveDelta`, `SmoothDelta`, or `Scroll`)
 - `Button`: Which button was used (nullable string; populated for `Click` / `LongPress`, null otherwise)
-- `PositionX`: Target X coordinate (nullable float; populated for `Click` / `LongPress`)
-- `PositionY`: Target Y coordinate (nullable float; populated for `Click` / `LongPress`)
+- `PositionX` / `PositionY`: Target top-left Game View coordinates (nullable float; populated for `Click` / `LongPress`)
+- `InputCoordinateSystem`: `"top-left-game-view"` for click/long-press coordinates
+- `UnityCoordinateSystem`: `"bottom-left-game-view"` for the injected `Mouse.current.position`
+- `GameViewWidth` / `GameViewHeight`: Game View size used for conversion
+- `InputPositionX` / `InputPositionY`: Coordinates received from the caller
+- `InjectedUnityPositionX` / `InjectedUnityPositionY`: Coordinates injected into `Mouse.current.position`
+- `CoordinateConversionFormula`: Conversion formula used by the tool
 
-These are the only six fields. There is no `DeltaX`, `DeltaY`, `ScrollX`, `ScrollY`, `Duration`, or hit-element field in the response — only the issued action, button, and target position are echoed back. Verify visual outcome with a follow-up screenshot.
+Verify visual outcome with a follow-up screenshot.

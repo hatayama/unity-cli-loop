@@ -56,6 +56,10 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             List<UIElementInfo> annotatedElements = new List<UIElementInfo>();
+            Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
+            List<RaycastGridPointInfo> raycastGridPoints = new List<RaycastGridPointInfo>();
+            List<UIElementInfo> raycastGridOverlayElements = new List<UIElementInfo>();
+            GameRenderingImageInfo? raycastGridRenderingInfo = null;
 
             if (parameters.AnnotateElements)
             {
@@ -63,39 +67,58 @@ namespace io.github.hatayama.uLoopMCP
                 UIElementAnnotator.AssignLabels(annotatedElements);
             }
 
+            if (parameters.AnnotateRaycastGrid)
+            {
+                GameRenderingImageInfo renderingImageInfo =
+                    await EditorWindowCaptureUtility.GetGameRenderingImageInfoAsync(ct);
+                raycastGridRenderingInfo = renderingImageInfo;
+                gameViewSize = renderingImageInfo.GameViewSize;
+                raycastGridPoints = RaycastGridAnnotator.CollectRaycastGridPoints(
+                    renderingImageInfo.RenderingImageSize,
+                    renderingImageInfo.ImageToInputOffsetY);
+                raycastGridOverlayElements = RaycastGridAnnotator.CreateOverlayElements(raycastGridPoints);
+            }
+
             if (parameters.ElementsOnly)
             {
-                UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, (int)Handles.GetMainGameViewSize().y);
+                UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, Mathf.RoundToInt(gameViewSize.y));
                 ScreenshotInfo elementsOnlyInfo = new ScreenshotInfo();
-                elementsOnlyInfo.CoordinateSystem = McpConstants.COORDINATE_SYSTEM_GAME_VIEW;
+                elementsOnlyInfo.ResolutionScale = parameters.ResolutionScale;
+                int imageToInputOffsetY = raycastGridRenderingInfo?.ImageToInputOffsetY ?? 0;
+                ApplyRenderingCoordinateMetadata(elementsOnlyInfo, gameViewSize, imageToInputOffsetY);
                 elementsOnlyInfo.AnnotatedElements = annotatedElements;
+                elementsOnlyInfo.RaycastGridPoints = raycastGridPoints;
                 return new ScreenshotResponse(new List<ScreenshotInfo> { elementsOnlyInfo });
             }
 
             GameObject annotationOverlay = null;
             Texture2D texture;
-            int yOffset;
+            GameRenderingImageInfo captureRenderingInfo;
             try
             {
-                if (parameters.AnnotateElements)
+                if (parameters.AnnotateElements || parameters.AnnotateRaycastGrid)
                 {
+                    List<UIElementInfo> overlayElements = new List<UIElementInfo>(annotatedElements);
+                    overlayElements.AddRange(raycastGridOverlayElements);
                     annotationOverlay = UIElementAnnotator.CreateAnnotationOverlay(
-                        annotatedElements,
+                        overlayElements,
                         parameters.ResolutionScale);
                     Canvas.ForceUpdateCanvases();
                     // Chained CLI calls can read the previous GameView RT before overlay rendering catches up.
                     await EditorDelay.DelayFrame(ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES, ct);
                 }
 
-                (texture, yOffset) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
-                    parameters.ResolutionScale, ct);
+                (texture, captureRenderingInfo) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
+                    parameters.ResolutionScale,
+                    raycastGridRenderingInfo,
+                    ct);
             }
             finally
             {
                 UIElementAnnotator.DestroyAnnotationOverlay(annotationOverlay);
             }
 
-            UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, (int)Handles.GetMainGameViewSize().y);
+            UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, Mathf.RoundToInt(gameViewSize.y));
 
             if (texture == null)
             {
@@ -122,8 +145,13 @@ namespace io.github.hatayama.uLoopMCP
                 FileInfo savedFileInfo = new FileInfo(savedPath);
                 ScreenshotInfo info = new ScreenshotInfo(
                     savedPath, savedFileInfo.Length, width, height,
-                    McpConstants.COORDINATE_SYSTEM_GAME_VIEW, parameters.ResolutionScale, yOffset);
+                    McpConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW, parameters.ResolutionScale);
+                ApplyRenderingCoordinateMetadata(
+                    info,
+                    captureRenderingInfo.GameViewSize,
+                    captureRenderingInfo.ImageToInputOffsetY);
                 info.AnnotatedElements = annotatedElements;
+                info.RaycastGridPoints = raycastGridPoints;
                 screenshots.Add(info);
             }
             catch (Exception ex)
@@ -199,7 +227,15 @@ namespace io.github.hatayama.uLoopMCP
                     SaveTextureAsPng(texture, savedPath);
 
                     FileInfo savedFileInfo = new FileInfo(savedPath);
-                    screenshots.Add(new ScreenshotInfo(savedPath, savedFileInfo.Length, width, height));
+                    ScreenshotInfo info = new ScreenshotInfo(
+                        savedPath,
+                        savedFileInfo.Length,
+                        width,
+                        height,
+                        McpConstants.COORDINATE_SYSTEM_TOP_LEFT_WINDOW,
+                        parameters.ResolutionScale);
+                    ApplyWindowCoordinateMetadata(info);
+                    screenshots.Add(info);
                 }
                 catch (Exception ex)
                 {
@@ -224,6 +260,26 @@ namespace io.github.hatayama.uLoopMCP
             );
 
             return new ScreenshotResponse(screenshots);
+        }
+
+        private static void ApplyRenderingCoordinateMetadata(
+            ScreenshotInfo info,
+            Vector2 gameViewSize,
+            int imageToInputOffsetY = 0)
+        {
+            info.ImageCoordinateSystem = McpConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW;
+            info.GameViewWidth = gameViewSize.x;
+            info.GameViewHeight = gameViewSize.y;
+            info.ImageToInputOffsetY = imageToInputOffsetY;
+            info.ScreenshotToInputFormula = McpConstants.SCREENSHOT_RENDERING_TO_INPUT_FORMULA;
+            info.UnityInputFormula = McpConstants.COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY;
+        }
+
+        private static void ApplyWindowCoordinateMetadata(ScreenshotInfo info)
+        {
+            info.ImageCoordinateSystem = McpConstants.COORDINATE_SYSTEM_TOP_LEFT_WINDOW;
+            info.ScreenshotToInputFormula = McpConstants.SCREENSHOT_WINDOW_TO_INPUT_FORMULA_UNAVAILABLE;
+            info.UnityInputFormula = "";
         }
 
         private void ValidateParameters(ScreenshotSchema parameters)
@@ -251,6 +307,11 @@ namespace io.github.hatayama.uLoopMCP
                 if (parameters.ElementsOnly)
                 {
                     throw new ParameterValidationException("ElementsOnly is only supported when CaptureMode=rendering");
+                }
+
+                if (parameters.AnnotateRaycastGrid)
+                {
+                    throw new ParameterValidationException("AnnotateRaycastGrid is only supported when CaptureMode=rendering");
                 }
             }
 
