@@ -1,12 +1,36 @@
+using System.Collections;
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.TestTools;
 using UnityEngine.UI;
 
 namespace io.github.hatayama.uLoopMCP
 {
     public class UIElementAnnotatorTests
     {
+        private readonly List<GameObject> _createdObjects = new List<GameObject>();
+
+        [SetUp]
+        public void SetUp()
+        {
+            GameObject eventSystem = CreateGameObject("UIElementAnnotatorTestsEventSystem");
+            eventSystem.AddComponent<EventSystem>();
+            eventSystem.AddComponent<StandaloneInputModule>();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            for (int i = _createdObjects.Count - 1; i >= 0; i--)
+            {
+                Object.DestroyImmediate(_createdObjects[i]);
+            }
+
+            _createdObjects.Clear();
+        }
+
         [Test]
         public void GetAnnotationColorForElement_WhenLabelsAreDifferent_ShouldReturnDifferentColors()
         {
@@ -198,6 +222,32 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
+        [UnityTest]
+        public IEnumerator CollectInteractiveElements_WhenCanvasIsDisabled_ShouldSkipButton()
+        {
+            GameObject canvas = CreateCanvas("DisabledCanvas", 0, false);
+            CreateButton("HiddenButton", canvas.transform, Vector2.zero);
+            Canvas.ForceUpdateCanvases();
+            yield return null;
+
+            List<UIElementInfo> elements = UIElementAnnotator.CollectInteractiveElements();
+
+            Assert.That(ContainsPath(elements, "DisabledCanvas/HiddenButton"), Is.False);
+        }
+
+        [UnityTest]
+        public IEnumerator CollectInteractiveElements_WhenButtonIsVisible_ShouldIncludeButton()
+        {
+            GameObject canvas = CreateCanvas("VisibleCanvas", 0, true);
+            CreateButton("VisibleButton", canvas.transform, Vector2.zero);
+            Canvas.ForceUpdateCanvases();
+            yield return null;
+
+            List<UIElementInfo> elements = UIElementAnnotator.CollectInteractiveElements();
+
+            Assert.That(ContainsPath(elements, "VisibleCanvas/VisibleButton"), Is.True);
+        }
+
         [Test]
         public void GetInteractionForType_WhenTypeIsButton_ShouldReturnClick()
         {
@@ -248,6 +298,51 @@ namespace io.github.hatayama.uLoopMCP
         private static string CreateColorKey(Color color)
         {
             return $"{color.r:F3}:{color.g:F3}:{color.b:F3}:{color.a:F3}";
+        }
+
+        private GameObject CreateCanvas(string name, int sortingOrder, bool enabled)
+        {
+            GameObject canvasGo = CreateGameObject(name);
+            Canvas canvas = canvasGo.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = sortingOrder;
+            canvas.enabled = enabled;
+            canvasGo.AddComponent<GraphicRaycaster>();
+            return canvasGo;
+        }
+
+        private Button CreateButton(string name, Transform parent, Vector2 anchoredPosition)
+        {
+            GameObject buttonGo = CreateGameObject(name);
+            buttonGo.transform.SetParent(parent, false);
+            RectTransform rectTransform = buttonGo.AddComponent<RectTransform>();
+            rectTransform.anchoredPosition = anchoredPosition;
+            rectTransform.sizeDelta = new Vector2(120f, 80f);
+            Image image = buttonGo.AddComponent<Image>();
+            image.raycastTarget = true;
+            Button button = buttonGo.AddComponent<Button>();
+            button.targetGraphic = image;
+            return button;
+        }
+
+        private GameObject CreateGameObject(string name)
+        {
+            GameObject go = new GameObject(name);
+            _createdObjects.Add(go);
+            return go;
+        }
+
+        private static bool ContainsPath(List<UIElementInfo> elements, string path)
+        {
+            foreach (UIElementInfo element in elements)
+            {
+                if (element.Path == path)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

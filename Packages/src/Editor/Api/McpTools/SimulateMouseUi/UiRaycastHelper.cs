@@ -45,7 +45,7 @@ namespace io.github.hatayama.uLoopMCP
 
             foreach (Canvas canvas in canvases)
             {
-                if (!canvas.gameObject.activeInHierarchy)
+                if (!canvas.isActiveAndEnabled)
                 {
                     continue;
                 }
@@ -56,7 +56,7 @@ namespace io.github.hatayama.uLoopMCP
                 }
 
                 GraphicRaycaster? raycaster = canvas.GetComponent<GraphicRaycaster>();
-                if (raycaster == null || !raycaster.enabled)
+                if (raycaster == null || !raycaster.isActiveAndEnabled)
                 {
                     continue;
                 }
