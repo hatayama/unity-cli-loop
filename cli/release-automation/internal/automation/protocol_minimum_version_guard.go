@@ -380,7 +380,7 @@ func protocolMinimumVersionBootstrapAllowsUnpublishedProjectRunner(
 }
 
 func protocolMinimumVersionReleaseContractIsMissing(err error) bool {
-	return strings.Contains(err.Error(), fmt.Sprintf("does not provide %s or %s", cliContractFile, legacyRunnerContractFile))
+	return strings.Contains(err.Error(), releaseContractMissingSentinel)
 }
 
 func protocolMinimumVersionValueLabel(values ProtocolMinimumVersionValues) string {

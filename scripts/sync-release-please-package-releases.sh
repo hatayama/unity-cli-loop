@@ -7,11 +7,11 @@ ROOT_DIR=${ULOOP_REPO_ROOT:-$(CDPATH= cd "$(dirname "$0")/.." && pwd)}
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 CONFIG="$ROOT_DIR/release-please-config.json"
 MANIFEST="$ROOT_DIR/.release-please-manifest.json"
-CLI_PACKAGE_PATH="project-runner"
+CLI_PACKAGE_PATH="cli/project-runner"
 # dispatcher-publish owns the dispatcher tag/draft/assets/publish flow. Creating
 # the release here would publish it before its assets are uploaded, so the sync
 # must skip the dispatcher package entirely.
-DISPATCHER_PACKAGE_PATH="dispatcher"
+DISPATCHER_PACKAGE_PATH="cli/dispatcher"
 UNITY_PACKAGE_CLI_PIN_FILE="Packages/src/project-runner-pin.json"
 REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-cli-loop}
 TMP_DIR=$(mktemp -d)
@@ -455,7 +455,7 @@ verify_minimum_cli_release_protocol() {
   release_ref=$1
 
   (
-    cd "$ROOT_DIR/tools/release-automation"
+    cd "$ROOT_DIR/cli/release-automation"
     go run ./cmd/check-protocol-minimum-version --verify-release --ref "$release_ref"
   )
 }

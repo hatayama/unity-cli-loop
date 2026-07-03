@@ -2,8 +2,8 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
-RUNNER_DIR="$ROOT_DIR/project-runner"
-DISPATCHER_DIR="$ROOT_DIR/dispatcher"
+RUNNER_DIR="$ROOT_DIR/cli/project-runner"
+DISPATCHER_DIR="$ROOT_DIR/cli/dispatcher"
 
 . "$ROOT_DIR/scripts/go-cli-toolchain.sh"
 require_go_cli_toolchain "$ROOT_DIR"

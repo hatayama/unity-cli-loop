@@ -80,15 +80,6 @@ type binaryNames struct {
 	Windows string `json:"windows"`
 }
 
-// Tests that the pre-split top-level `cli/` directory no longer exists at the repo root.
-func TestNoTopLevelCliDirectory(t *testing.T) {
-	repositoryRoot := findRepositoryRoot(t)
-	cliPath := filepath.Join(repositoryRoot, "cli")
-	if _, err := os.Stat(cliPath); err == nil {
-		t.Fatalf("pre-split top-level directory must not exist: %s", cliPath)
-	}
-}
-
 // Tests that every module's require directives respect the repo's dependency direction:
 // common depends on nothing else in the repo; the other three modules only depend on common.
 func TestModuleDependencyDirections(t *testing.T) {
@@ -126,7 +117,7 @@ func TestGoToolchainSingleSourceOfTruth(t *testing.T) {
 	repositoryRoot := findRepositoryRoot(t)
 	contract := readLayoutContract(t, filepath.Join(repositoryRoot, "layout-contract.json"))
 
-	workDirective := readGoWorkEdit(t, repositoryRoot).Go
+	workDirective := readGoWorkEdit(t, filepath.Join(repositoryRoot, "cli")).Go
 	if workDirective == "" {
 		t.Fatalf("go.work must declare a go directive")
 	}
@@ -138,7 +129,7 @@ func TestGoToolchainSingleSourceOfTruth(t *testing.T) {
 		}
 	}
 
-	goVersionRaw, err := os.ReadFile(filepath.Join(repositoryRoot, ".go-version"))
+	goVersionRaw, err := os.ReadFile(filepath.Join(repositoryRoot, "cli", ".go-version"))
 	if err != nil {
 		t.Fatalf("failed to read .go-version: %v", err)
 	}
@@ -339,10 +330,18 @@ func TestModuleEnumerationConsistency(t *testing.T) {
 	}
 	sort.Strings(contractModuleDirs)
 
-	workEdit := readGoWorkEdit(t, repositoryRoot)
+	workDir := filepath.Join(repositoryRoot, "cli")
+	workEdit := readGoWorkEdit(t, workDir)
 	workModuleDirs := []string{}
 	for _, use := range workEdit.Use {
-		workModuleDirs = append(workModuleDirs, normalizeWorkDiskPath(use.DiskPath))
+		// Rebase workfile-relative use entries onto the repository root so they match the
+		// layout contract, which records module dirs relative to the repository root.
+		absoluteModuleDir := filepath.Join(workDir, use.DiskPath)
+		relativeModuleDir, err := filepath.Rel(repositoryRoot, absoluteModuleDir)
+		if err != nil {
+			t.Fatalf("failed to rebase go.work use entry %q: %v", use.DiskPath, err)
+		}
+		workModuleDirs = append(workModuleDirs, filepath.ToSlash(relativeModuleDir))
 	}
 	sort.Strings(workModuleDirs)
 
@@ -466,11 +465,11 @@ func readGoModEdit(t *testing.T, moduleDir string) goModEditJSON {
 	return result
 }
 
-// readGoWorkEdit runs `go work edit -json` inside the repository root and decodes the result.
-func readGoWorkEdit(t *testing.T, repositoryRoot string) goWorkEditJSON {
+// readGoWorkEdit runs `go work edit -json` inside the go.work directory and decodes the result.
+func readGoWorkEdit(t *testing.T, workDir string) goWorkEditJSON {
 	t.Helper()
 	command := exec.Command("go", "work", "edit", "-json")
-	command.Dir = repositoryRoot
+	command.Dir = workDir
 	output, err := command.Output()
 	if err != nil {
 		t.Fatalf("go work edit -json failed: %v", err)
@@ -480,11 +479,6 @@ func readGoWorkEdit(t *testing.T, repositoryRoot string) goWorkEditJSON {
 		t.Fatalf("failed to decode go work edit output: %v", err)
 	}
 	return result
-}
-
-// normalizeWorkDiskPath strips the leading "./" that `go work` emits so paths compare against layout contract values.
-func normalizeWorkDiskPath(diskPath string) string {
-	return strings.TrimPrefix(diskPath, "./")
 }
 
 // stringSlicesEqual reports whether two sorted string slices are element-wise equal.

@@ -15,7 +15,7 @@ Every test method must have a short comment that states what behavior the test v
 Runtime compatibility between the Unity package and the native CLI is gated on an integer
 protocol version, not on release numbers. Two declarations must always stay equal:
 
-- Go side: `protocolVersion` in `common/clicontract/contract.json` (the generation the CLI advertises over IPC).
+- Go side: `protocolVersion` in `cli/common/clicontract/contract.json` (the generation the CLI advertises over IPC).
 - C# side: `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION` (the exact generation the package accepts).
 
 `TestProtocolVersionMatchesUnityPackage` fails the build if they diverge, so never bump one alone.
@@ -33,8 +33,8 @@ compatible must not bump it.
 
 Do not touch the protocol version to "keep up with releases":
 
-- `common/clicontract/contract.json` `projectRunnerVersion`, `common/tools/default-tools.json`
-  `version`, and `dispatcher/dispatcher-contract.json` `dispatcherVersion` are stamped by
+- `cli/common/clicontract/contract.json` `projectRunnerVersion`, `cli/common/tools/default-tools.json`
+  `version`, and `cli/dispatcher/dispatcher-contract.json` `dispatcherVersion` are stamped by
   release-please only. Never edit them by hand in a feature PR.
 - `CliConstants.MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION` is the release that setup installs. It
   must always point at a published project runner release.
@@ -58,22 +58,22 @@ Shell scripts are acceptable only as thin wrappers or simple command sequences.
 ## Shared Release Inputs and Triggers
 
 The dispatcher is released through release-please like the project runner and the Unity
-package: `dispatcher/dispatcher-contract.json` `dispatcherVersion` and `dispatcher/CHANGELOG.md`
+package: `cli/dispatcher/dispatcher-contract.json` `dispatcherVersion` and `cli/dispatcher/CHANGELOG.md`
 are stamped by release-please release PRs. Never bump `dispatcherVersion` by hand.
 
 release-please attributes a commit to a component only when the commit touches that package
-root (`Packages/src/`, `dispatcher/`, `project-runner/`). Shared release inputs living outside
+root (`Packages/src/`, `cli/dispatcher/`, `cli/project-runner/`). Shared release inputs living outside
 those roots therefore need explicit trigger updates in the same PR:
 
-- Common module sources (non-test `common/**/*.go`, `common/go.mod`, `common/go.sum`) must be
-  accompanied by changes under both `project-runner/` and `dispatcher/`.
+- Common module sources (non-test `cli/common/**/*.go`, `cli/common/go.mod`, `cli/common/go.sum`) must be
+  accompanied by changes under both `cli/project-runner/` and `cli/dispatcher/`.
 - Installer scripts (`scripts/install.sh`, `scripts/install.ps1`) must be accompanied by a
-  change under `dispatcher/`, because installers ship as dispatcher release assets.
+  change under `cli/dispatcher/`, because installers ship as dispatcher release assets.
 
-Run `scripts/stamp-release-inputs.sh` to refresh `project-runner/shared-inputs-stamp.json` and
-`dispatcher/shared-inputs-stamp.json`, and commit the stamp updates with the change. Pull
+Run `scripts/stamp-release-inputs.sh` to refresh `cli/project-runner/shared-inputs-stamp.json` and
+`cli/dispatcher/shared-inputs-stamp.json`, and commit the stamp updates with the change. Pull
 request CI runs `check-release-triggers` (authoritative rules: `releaseTriggerRules` in
-`tools/release-automation/internal/automation/release_trigger_guard.go`) and fails when shared
+`cli/release-automation/internal/automation/release_trigger_guard.go`) and fails when shared
 release inputs changed without the matching triggers. CI also runs `check-dispatcher-contract`,
 which fails when `dispatcherContractVersion` moves backwards.
 
@@ -133,7 +133,7 @@ dist/darwin-arm64/uloop compile --project-path <UNITY_PROJECT_ROOT>
 
 If CLI source changes affect the command behavior you are validating, rebuild the development binary before running it.
 
-When changing Go source files under any of the Go modules (`common`, `dispatcher`, `project-runner`, `tools/release-automation`), run `scripts/check-go-cli.sh`.
+When changing Go source files under any of the Go modules (`cli/common`, `cli/dispatcher`, `cli/project-runner`, `cli/release-automation`), run `scripts/check-go-cli.sh`.
 Use `scripts/build-go-cli.sh` when you need to refresh local development binaries under `dist`; generated binaries are ignored and must not be committed.
 This script is the local equivalent of the Go CLI CI validation: it runs formatting checks, vet, lint, tests, rebuilds the built native binaries, and verifies that required platform binaries exist.
 

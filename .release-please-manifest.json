@@ -1,5 +1,5 @@
 {
   "Packages/src": "3.0.0-beta.48",
-  "dispatcher": "3.0.1-beta.12",
-  "project-runner": "3.0.0-beta.46"
+  "cli/dispatcher": "3.0.1-beta.12",
+  "cli/project-runner": "3.0.0-beta.46"
 }

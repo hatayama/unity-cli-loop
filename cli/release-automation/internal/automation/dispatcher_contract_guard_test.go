@@ -147,7 +147,11 @@ func TestDispatcherContractGuardPreservesReadErrWhenProbeFailsWithNonExitError(t
 type dispatcherContractGuardMockState struct {
 	refExists     bool
 	primaryExists bool
-	legacyExists  bool
+	// middleExists mirrors the second-generation (root-modules) contract path.
+	// Tests that predate the middle generation leave it zero-valued, meaning
+	// "absent", which matches historic two-generation behavior.
+	middleExists bool
+	legacyExists bool
 }
 
 func setupDispatcherContractGuardMockGit(t *testing.T, state dispatcherContractGuardMockState) string {
@@ -157,11 +161,37 @@ func setupDispatcherContractGuardMockGit(t *testing.T, state dispatcherContractG
 	writeExistenceMockGit(t, binDir, mockGitExistenceFixture{
 		refResolves: state.refExists,
 		paths: map[string]mockGitPathBehavior{
-			dispatcherContractFile:       {exists: state.primaryExists},
-			legacyDispatcherContractFile: {exists: state.legacyExists},
+			dispatcherContractFile:            {exists: state.primaryExists},
+			rootModulesDispatcherContractFile: {exists: state.middleExists},
+			legacyDispatcherContractFile:      {exists: state.legacyExists},
 		},
 	})
 	return workDir
+}
+
+// Verifies a base ref that only carries the middle-generation dispatcher
+// contract path is NOT misclassified as "initial": the guard must probe every
+// generation so a tag published between the v3 module split and the cli/ group
+// move still counts as an existing base contract.
+func TestDispatcherContractGuardDetectsMiddleGenerationBaseContract(t *testing.T) {
+	repoRoot := setupDispatcherContractGuardMockGit(t, dispatcherContractGuardMockState{
+		refExists:     true,
+		primaryExists: false,
+		middleExists:  true,
+		legacyExists:  false,
+	})
+	readErr := errors.New("fatal: cli/dispatcher/dispatcher-contract.json missing at origin/main")
+
+	_, err := parseDispatcherContractBaseValues(
+		context.Background(),
+		repoRoot,
+		"origin/main",
+		"",
+		readErr)
+
+	if err == nil {
+		t.Fatal("expected a middle-generation base contract to not be silently treated as initial")
+	}
 }
 
 // Verifies the head contract must parse as a valid dispatcher contract.

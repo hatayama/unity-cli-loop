@@ -28,7 +28,7 @@
         }
       ]
     },
-    "dispatcher": {
+    "cli/dispatcher": {
       "component": "dispatcher",
       "release-type": "go",
       "versioning": "prerelease",
@@ -45,7 +45,7 @@
         }
       ]
     },
-    "project-runner": {
+    "cli/project-runner": {
       "component": "uloop-project-runner",
       "release-type": "go",
       "versioning": "prerelease",
@@ -57,12 +57,12 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "/common/tools/default-tools.json",
+          "path": "/cli/common/tools/default-tools.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "/common/clicontract/contract.json",
+          "path": "/cli/common/clicontract/contract.json",
           "jsonpath": "$.projectRunnerVersion"
         },
         {
