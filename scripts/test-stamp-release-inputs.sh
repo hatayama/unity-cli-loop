@@ -162,4 +162,11 @@ if [ "$(stamp_hash "$work_dir" project-runner/shared-inputs-stamp.json)" != "$ru
   exit 1
 fi
 
+# Verifies stamping fails instead of writing a partial hash when an input cannot be hashed.
+rm "$work_dir/common/go.mod"
+if ULOOP_REPO_ROOT="$work_dir" "$SCRIPT" > /dev/null 2>&1; then
+  echo "Expected stamping to fail when a tracked input cannot be hashed." >&2
+  exit 1
+fi
+
 echo "stamp-release-inputs tests passed."

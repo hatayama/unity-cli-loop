@@ -26,11 +26,20 @@ list_installer_inputs() {
 # files are hashed; the release trigger guard in PR CI remains the safety net
 # for files that were not yet added when the stamp ran.
 hash_input_list() {
-  LC_ALL=C sort | while IFS= read -r input_file; do
+  # The manifest goes through a command substitution instead of a direct pipe
+  # into `git hash-object --stdin`: POSIX pipelines report only the last
+  # command's status, which would let a mid-list hash failure produce a
+  # plausible-looking stamp over a truncated manifest.
+  input_manifest=$(LC_ALL=C sort | while IFS= read -r input_file; do
     [ -n "$input_file" ] || continue
-    printf '%s ' "$input_file"
-    git hash-object "$input_file"
-  done | git hash-object --stdin
+    object_hash=$(git hash-object "$input_file") || exit 1
+    printf '%s %s\n' "$input_file" "$object_hash"
+  done) || {
+    echo "Failed to hash a shared release input." >&2
+    exit 1
+  }
+
+  printf '%s\n' "$input_manifest" | git hash-object --stdin
 }
 
 write_stamp() {
