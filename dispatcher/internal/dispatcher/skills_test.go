@@ -816,6 +816,51 @@ func TestParseSkillsOptionsDeduplicatesTargets(t *testing.T) {
 	}
 }
 
+// Tests that allSkillTargetIDs and targetConfigs stay in sync so help output,
+// flag parsing, and default selection cannot silently drift apart.
+func TestAllSkillTargetIDsMatchesTargetConfigs(t *testing.T) {
+	idsFromSlice := append([]string{}, allSkillTargetIDs...)
+	sort.Strings(idsFromSlice)
+
+	idsFromMap := []string{}
+	for id := range targetConfigs {
+		idsFromMap = append(idsFromMap, id)
+	}
+	sort.Strings(idsFromMap)
+
+	if !reflect.DeepEqual(idsFromSlice, idsFromMap) {
+		t.Fatalf("allSkillTargetIDs and targetConfigs must have identical keys: slice=%v map=%v", idsFromSlice, idsFromMap)
+	}
+}
+
+// Tests that skills subcommand help lists every target flag from
+// allSkillTargetIDs so no target can be added without appearing in help.
+func TestPrintSkillsSubcommandHelpListsAllTargets(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	printSkillsSubcommandHelp("install", stdout)
+	output := stdout.String()
+	for _, id := range allSkillTargetIDs {
+		flag := "--" + id
+		if !strings.Contains(output, flag) {
+			t.Fatalf("subcommand help missing %s:\n%s", flag, output)
+		}
+	}
+}
+
+// Tests that target guidance printed on missing-target invocations lists every
+// target flag from allSkillTargetIDs.
+func TestPrintSkillsTargetGuidanceListsAllTargets(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	printSkillsTargetGuidance("install", stdout)
+	output := stdout.String()
+	for _, id := range allSkillTargetIDs {
+		flag := "--" + id
+		if !strings.Contains(output, flag) {
+			t.Fatalf("target guidance missing %s:\n%s", flag, output)
+		}
+	}
+}
+
 // Tests that unknown skills subcommands are rejected before project resolution.
 func TestTryHandleSkillsRequestRejectsUnknownSubcommandWithoutProject(t *testing.T) {
 	stdout := &bytes.Buffer{}
