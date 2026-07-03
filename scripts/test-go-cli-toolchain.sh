@@ -38,8 +38,8 @@ EOF_GO
 create_repo() {
   version=$1
   repo_dir="$TMP_DIR/repo-$version"
-  mkdir -p "$repo_dir/cli"
-  printf '%s\n' "$version" > "$repo_dir/cli/.go-version"
+  mkdir -p "$repo_dir"
+  printf '%s\n' "$version" > "$repo_dir/.go-version"
   printf '%s\n' "$repo_dir"
 }
 

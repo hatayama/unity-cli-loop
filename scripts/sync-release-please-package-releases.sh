@@ -2,9 +2,12 @@
 set -eu
 
 ROOT_DIR=${ULOOP_REPO_ROOT:-$(CDPATH= cd "$(dirname "$0")/.." && pwd)}
+# SCRIPT_DIR must resolve from $0, not ROOT_DIR: ULOOP_REPO_ROOT may point at a
+# repository that does not contain the helper scripts this script calls.
+SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 CONFIG="$ROOT_DIR/release-please-config.json"
 MANIFEST="$ROOT_DIR/.release-please-manifest.json"
-CLI_PACKAGE_PATH="cli"
+CLI_PACKAGE_PATH="project-runner"
 UNITY_PACKAGE_CLI_PIN_FILE="Packages/src/project-runner-pin.json"
 REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-cli-loop}
 TMP_DIR=$(mktemp -d)
@@ -69,8 +72,15 @@ release_commit_sha_for_package() {
   version=$2
   changelog_path=$3
 
-  git log --format=%H HEAD |
-  while IFS= read -r commit_sha; do
+  # Only release-please release commits may qualify. Content matching alone is
+  # not enough: a commit that moves a package changelog re-adds every changelog
+  # line in the pathspec-limited diff (the rename source is outside the
+  # pathspec), so it would otherwise impersonate the release commit.
+  git log --format='%H%x09%s' HEAD |
+  while IFS='	' read -r commit_sha commit_subject; do
+    if ! "$SCRIPT_DIR/is-release-please-release-commit.sh" "$commit_subject"; then
+      continue
+    fi
     if release_commit_updates_package_version "$commit_sha" "$package_path" "$version" "$changelog_path"; then
       printf '%s\n' "$commit_sha"
       break
@@ -441,7 +451,7 @@ verify_minimum_cli_release_protocol() {
   release_ref=$1
 
   (
-    cd "$ROOT_DIR/cli"
+    cd "$ROOT_DIR/tools/release-automation"
     go run ./cmd/check-protocol-minimum-version --verify-release --ref "$release_ref"
   )
 }

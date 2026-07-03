@@ -31,9 +31,9 @@ if [ ! -L "$BIN_DIR/uloop" ]; then
   exit 1
 fi
 
-expected_target="$ROOT_DIR/cli/dist/darwin-arm64/uloop"
+expected_target="$ROOT_DIR/dist/darwin-arm64/uloop"
 if [ "$(uname -m)" = "x86_64" ] || [ "$(uname -m)" = "amd64" ]; then
-  expected_target="$ROOT_DIR/cli/dist/darwin-amd64/uloop"
+  expected_target="$ROOT_DIR/dist/darwin-amd64/uloop"
 fi
 
 actual_target=$(readlink "$BIN_DIR/uloop")

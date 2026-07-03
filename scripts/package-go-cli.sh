@@ -2,8 +2,7 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
-CLI_DIR="$ROOT_DIR/cli"
-DIST_DIR="$CLI_DIR/dist"
+DIST_DIR="$ROOT_DIR/dist"
 RELEASE_DIR="$DIST_DIR/release"
 
 rm -rf "$RELEASE_DIR"

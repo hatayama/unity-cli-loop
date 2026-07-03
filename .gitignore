@@ -112,12 +112,7 @@ yarn-error.log*
 **/[Oo]bj/
 
 # Native Go CLI build and release outputs
-/cli/dist/
-!cli/Core~/dist/darwin-arm64/uloop-core
-!cli/Core~/dist/darwin-amd64/uloop-core
-!cli/Core~/dist/windows-amd64/uloop-core.exe
-cli/Dispatcher~/dist/
-cli/Dispatcher~/release/
+/dist/
 
 # Environment configuration files
 .env

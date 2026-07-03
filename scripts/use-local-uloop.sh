@@ -20,10 +20,10 @@ select_local_uloop() {
 
   case "$os_name:$arch_name" in
     Darwin:arm64|Darwin:aarch64)
-      local_uloop="$ROOT_DIR/cli/dist/darwin-arm64/uloop"
+      local_uloop="$ROOT_DIR/dist/darwin-arm64/uloop"
       ;;
     Darwin:x86_64|Darwin:amd64)
-      local_uloop="$ROOT_DIR/cli/dist/darwin-amd64/uloop"
+      local_uloop="$ROOT_DIR/dist/darwin-amd64/uloop"
       ;;
     *)
       echo "No built local uloop binary for $os_name $arch_name." >&2

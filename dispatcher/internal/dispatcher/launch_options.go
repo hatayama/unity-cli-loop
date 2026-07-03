@@ -1,0 +1,137 @@
+package dispatcher
+
+import (
+	"strconv"
+	"strings"
+
+	"github.com/hatayama/unity-cli-loop/common/clicore"
+)
+
+func applyLaunchOption(options *launchOptions, args []string, index int) (int, error) {
+	arg := args[index]
+	switch {
+	case arg == "-r" || arg == "--restart":
+		options.restart = true
+		return index, nil
+	case arg == "-q" || arg == "--quit":
+		options.quit = true
+		return index, nil
+	case arg == "-d" || arg == "--delete-recovery":
+		options.deleteRecovery = true
+		return index, nil
+	case arg == "--editor-version" || strings.HasPrefix(arg, "--editor-version="):
+		return applyLaunchEditorVersionOption(options, args, index)
+	case isUnsupportedLaunchHubOption(arg):
+		return index, unsupportedLaunchHubOptionError(arg)
+	case arg == "-p" || arg == "--platform" || strings.HasPrefix(arg, "--platform="):
+		return applyLaunchPlatformOption(options, args, index)
+	case arg == "--max-depth" || strings.HasPrefix(arg, "--max-depth="):
+		return applyLaunchMaxDepthOption(options, args, index)
+	case strings.HasPrefix(arg, "-"):
+		return index, unknownLaunchOptionError(arg)
+	default:
+		return applyLaunchProjectPathArgument(options, arg, index)
+	}
+}
+
+func isUnsupportedLaunchHubOption(arg string) bool {
+	return arg == "-a" ||
+		arg == "-f" ||
+		isUnsupportedLaunchHubLongOption(arg, "--add-unity-hub") ||
+		isUnsupportedLaunchHubLongOption(arg, "--favorite") ||
+		isUnsupportedLaunchHubLongOption(arg, "--unity-hub-entry")
+}
+
+func isUnsupportedLaunchHubLongOption(arg string, option string) bool {
+	return arg == option || strings.HasPrefix(arg, option+"=")
+}
+
+func unsupportedLaunchHubOptionError(arg string) error {
+	return &clicore.ArgumentError{
+		Message:     "Native launch does not support Unity Hub registration options.",
+		Option:      arg,
+		Command:     clicore.LaunchCommandName,
+		NextActions: []string{"Remove the Unity Hub registration option and retry `uloop launch`."},
+	}
+}
+
+func unknownLaunchOptionError(arg string) error {
+	return &clicore.ArgumentError{
+		Message:     "Unknown launch option: " + arg,
+		Option:      arg,
+		Command:     clicore.LaunchCommandName,
+		NextActions: []string{"Run `uloop launch --help` to inspect supported launch options."},
+	}
+}
+
+func applyLaunchPlatformOption(options *launchOptions, args []string, index int) (int, error) {
+	value, consumed, err := readLaunchOptionValue(args[index], args, index)
+	if err != nil {
+		return index, err
+	}
+	options.platform = value
+	return nextLaunchOptionIndex(index, consumed), nil
+}
+
+func applyLaunchEditorVersionOption(options *launchOptions, args []string, index int) (int, error) {
+	value, consumed, err := readLaunchOptionValue(args[index], args, index)
+	if err != nil {
+		return index, err
+	}
+	options.editorVersion = value
+	return nextLaunchOptionIndex(index, consumed), nil
+}
+
+func applyLaunchMaxDepthOption(options *launchOptions, args []string, index int) (int, error) {
+	value, consumed, err := readLaunchOptionValue(args[index], args, index)
+	if err != nil {
+		return index, err
+	}
+	maxDepth, err := strconv.Atoi(value)
+	if err != nil || maxDepth < -1 {
+		return index, clicore.InvalidValueArgumentError("--max-depth", value, "integer >= -1")
+	}
+	options.maxDepth = maxDepth
+	return nextLaunchOptionIndex(index, consumed), nil
+}
+
+func applyLaunchProjectPathArgument(options *launchOptions, arg string, index int) (int, error) {
+	if options.projectPath != "" {
+		return index, &clicore.ArgumentError{
+			Message:     "Unexpected extra launch argument: " + arg,
+			Received:    arg,
+			Command:     clicore.LaunchCommandName,
+			NextActions: []string{"Pass only one project path to `uloop launch`."},
+		}
+	}
+	options.projectPath = arg
+	return index, nil
+}
+
+func nextLaunchOptionIndex(index int, consumed bool) int {
+	if consumed {
+		return index + 1
+	}
+	return index
+}
+
+func readLaunchOptionValue(option string, args []string, index int) (string, bool, error) {
+	if strings.Contains(option, "=") {
+		parts := strings.SplitN(option, "=", 2)
+		if parts[1] == "" {
+			return "", false, clicore.MissingValueArgumentError(parts[0])
+		}
+		return parts[1], false, nil
+	}
+	if index+1 >= len(args) || isInvalidLaunchOptionValue(option, args[index+1]) {
+		return "", false, clicore.MissingValueArgumentError(option)
+	}
+	return args[index+1], true, nil
+}
+
+func isInvalidLaunchOptionValue(option string, value string) bool {
+	if option == "--max-depth" {
+		return clicore.IsNextOptionToken(value)
+	}
+	return strings.HasPrefix(value, "-")
+}

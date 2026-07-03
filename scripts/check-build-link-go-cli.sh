@@ -77,13 +77,13 @@ arch=$(uname -m)
 
 case "$os:$arch" in
   Darwin:arm64 | Darwin:aarch64)
-    cli_path="$ROOT_DIR/cli/dist/darwin-arm64/uloop"
+    cli_path="$ROOT_DIR/dist/darwin-arm64/uloop"
     ;;
   Darwin:x86_64 | Darwin:amd64)
-    cli_path="$ROOT_DIR/cli/dist/darwin-amd64/uloop"
+    cli_path="$ROOT_DIR/dist/darwin-amd64/uloop"
     ;;
   MINGW*:x86_64 | MINGW*:amd64 | MSYS*:x86_64 | MSYS*:amd64 | CYGWIN*:x86_64 | CYGWIN*:amd64 | Windows_NT:x86_64 | Windows_NT:amd64)
-    cli_path="$ROOT_DIR/cli/dist/windows-amd64/uloop.exe"
+    cli_path="$ROOT_DIR/dist/windows-amd64/uloop.exe"
     global_command_name="uloop.exe"
     ;;
 esac

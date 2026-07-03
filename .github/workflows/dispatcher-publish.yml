@@ -70,8 +70,8 @@ jobs:
         if: steps.release.outputs.publish == 'true' || steps.release.outputs.release == 'true'
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
-          go-version-file: cli/.go-version
-          cache-dependency-path: cli/**/go.sum
+          go-version-file: .go-version
+          cache-dependency-path: '**/go.sum'
 
       - name: Install golangci-lint
         if: steps.release.outputs.publish == 'true'
@@ -95,7 +95,7 @@ jobs:
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
         with:
-          subject-path: cli/dist/dispatcher-release/*
+          subject-path: dist/dispatcher-release/*
 
       - name: Verify dispatcher asset attestations
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
@@ -106,7 +106,7 @@ jobs:
         run: |
           set -eu
 
-          for asset_path in cli/dist/dispatcher-release/*; do
+          for asset_path in dist/dispatcher-release/*; do
             gh attestation verify "${asset_path}" \
               --repo "${GITHUB_REPOSITORY}" \
               --signer-workflow "${SIGNER_WORKFLOW}"
@@ -117,7 +117,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: dispatcher-release-assets-${{ steps.release.outputs.tag }}
-          path: cli/dist/dispatcher-release/*
+          path: dist/dispatcher-release/*
           if-no-files-found: error
 
       - name: Create or reuse draft dispatcher release
@@ -194,7 +194,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          gh release upload "${RELEASE_TAG}" cli/dist/dispatcher-release/* --clobber
+          gh release upload "${RELEASE_TAG}" dist/dispatcher-release/* --clobber
 
       - name: Verify remote dispatcher release assets
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
@@ -246,4 +246,4 @@ jobs:
       - name: Dry run summary
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run == 'true'
         run: |
-          ls -lh cli/dist/dispatcher-release
+          ls -lh dist/dispatcher-release

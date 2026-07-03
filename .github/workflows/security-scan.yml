@@ -6,21 +6,27 @@ on:
     paths:
       - 'Packages/src/**/*.cs'
       - 'Assets/**/*.cs'
-      - 'cli/**/*.go'
-      - 'cli/.golangci.yml'
-      - 'cli/.go-version'
-      - 'cli/**/go.mod'
-      - 'cli/**/go.sum'
+      - 'common/**/*.go'
+      - 'dispatcher/**/*.go'
+      - 'project-runner/**/*.go'
+      - 'tools/release-automation/**/*.go'
+      - '.golangci.yml'
+      - '.go-version'
+      - '**/go.mod'
+      - '**/go.sum'
   pull_request:
     branches: [ main, v3-beta ]
     paths:
       - 'Packages/src/**/*.cs'
       - 'Assets/**/*.cs'
-      - 'cli/**/*.go'
-      - 'cli/.golangci.yml'
-      - 'cli/.go-version'
-      - 'cli/**/go.mod'
-      - 'cli/**/go.sum'
+      - 'common/**/*.go'
+      - 'dispatcher/**/*.go'
+      - 'project-runner/**/*.go'
+      - 'tools/release-automation/**/*.go'
+      - '.golangci.yml'
+      - '.go-version'
+      - '**/go.mod'
+      - '**/go.sum'
   workflow_dispatch:
 
 jobs:
@@ -114,7 +120,7 @@ jobs:
     - name: Setup Go
       uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
       with:
-        go-version-file: cli/.go-version
+        go-version-file: .go-version
         cache: false
 
     - name: Install golangci-lint
@@ -132,4 +138,6 @@ jobs:
 
     - name: Run govulncheck
       run: |
-        (cd cli && govulncheck ./...)
+        for module_dir in common dispatcher project-runner tools/release-automation; do
+          (cd "$module_dir" && govulncheck ./...)
+        done

@@ -239,10 +239,10 @@ uloop_binary_for_root() {
             if [ "$(uname -m)" = "x86_64" ] || [ "$(uname -m)" = "amd64" ]; then
                 arch=amd64
             fi
-            printf '%s\n' "$candidate/cli/dist/darwin-$arch/uloop"
+            printf '%s\n' "$candidate/dist/darwin-$arch/uloop"
             ;;
         windows|wsl)
-            printf '%s\n' "$candidate/cli/dist/windows-amd64/uloop.exe"
+            printf '%s\n' "$candidate/dist/windows-amd64/uloop.exe"
             ;;
         *)
             fail "unsupported host OS for local uloop binary: $host_os"
