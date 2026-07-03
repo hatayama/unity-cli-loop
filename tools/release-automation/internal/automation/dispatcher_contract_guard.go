@@ -7,8 +7,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-
-	sharedversion "github.com/hatayama/unity-cli-loop/common/version"
 )
 
 type DispatcherContractGuardConfig struct {
@@ -18,7 +16,6 @@ type DispatcherContractGuardConfig struct {
 
 type DispatcherContractValues struct {
 	HasContract               bool
-	DispatcherVersion         string
 	DispatcherContractVersion int
 }
 
@@ -29,8 +26,7 @@ type DispatcherContractGuardResult struct {
 }
 
 type dispatcherContractDocument struct {
-	DispatcherVersion         string `json:"dispatcherVersion"`
-	DispatcherContractVersion int    `json:"dispatcherContractVersion"`
+	DispatcherContractVersion int `json:"dispatcherContractVersion"`
 }
 
 func RunDispatcherContractGuard(
@@ -128,19 +124,16 @@ func isMissingDispatcherContractAtRefError(err error) bool {
 		isMissingFileAtRefError(err, legacyDispatcherContractFile)
 }
 
+// ParseDispatcherContractValues extracts only what the guard compares.
+// dispatcherVersion is intentionally not read or validated here: the guard
+// never consumes it, and the dispatcher module's own contract tests pin its
+// semver format on every PR.
 func ParseDispatcherContractValues(content []byte) (DispatcherContractValues, error) {
 	contract := dispatcherContractDocument{}
 	if err := json.Unmarshal(content, &contract); err != nil {
 		return DispatcherContractValues{}, fmt.Errorf("%s is invalid JSON: %w", dispatcherContractFile, err)
 	}
 
-	dispatcherVersion := strings.TrimSpace(contract.DispatcherVersion)
-	if dispatcherVersion == "" {
-		return DispatcherContractValues{}, fmt.Errorf("%s does not define dispatcherVersion", dispatcherContractFile)
-	}
-	if _, ok := sharedversion.Compare(dispatcherVersion, dispatcherVersion); !ok {
-		return DispatcherContractValues{}, fmt.Errorf("%s dispatcherVersion must be semver, got %q", dispatcherContractFile, dispatcherVersion)
-	}
 	if contract.DispatcherContractVersion < 1 {
 		return DispatcherContractValues{}, fmt.Errorf(
 			"%s dispatcherContractVersion must be at least 1, got %s",
@@ -150,7 +143,6 @@ func ParseDispatcherContractValues(content []byte) (DispatcherContractValues, er
 
 	return DispatcherContractValues{
 		HasContract:               true,
-		DispatcherVersion:         dispatcherVersion,
 		DispatcherContractVersion: contract.DispatcherContractVersion,
 	}, nil
 }

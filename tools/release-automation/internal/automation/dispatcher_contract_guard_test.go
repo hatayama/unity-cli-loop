@@ -9,8 +9,8 @@ import (
 // Verifies dispatcher contract generations cannot move backwards.
 func TestDispatcherContractGuardRejectsContractVersionDecrease(t *testing.T) {
 	result := AnalyzeDispatcherContractGuard(
-		DispatcherContractValues{HasContract: true, DispatcherVersion: "3.0.1", DispatcherContractVersion: 2},
-		DispatcherContractValues{HasContract: true, DispatcherVersion: "3.0.2", DispatcherContractVersion: 1},
+		DispatcherContractValues{HasContract: true, DispatcherContractVersion: 2},
+		DispatcherContractValues{HasContract: true, DispatcherContractVersion: 1},
 	)
 
 	if !result.DispatcherContractVersionDecreased {
@@ -23,9 +23,9 @@ func TestDispatcherContractGuardRejectsContractVersionDecrease(t *testing.T) {
 
 // Verifies unchanged and increased contract versions pass the guard.
 func TestDispatcherContractGuardAcceptsSameAndIncreasedContractVersions(t *testing.T) {
-	base := DispatcherContractValues{HasContract: true, DispatcherVersion: "3.0.1", DispatcherContractVersion: 1}
+	base := DispatcherContractValues{HasContract: true, DispatcherContractVersion: 1}
 	for _, headContractVersion := range []int{1, 2} {
-		head := DispatcherContractValues{HasContract: true, DispatcherVersion: "3.0.2", DispatcherContractVersion: headContractVersion}
+		head := DispatcherContractValues{HasContract: true, DispatcherContractVersion: headContractVersion}
 		result := AnalyzeDispatcherContractGuard(base, head)
 		if dispatcherContractGuardNeedsAction(result) {
 			t.Fatalf("expected head contract version %d to pass", headContractVersion)
@@ -37,7 +37,7 @@ func TestDispatcherContractGuardAcceptsSameAndIncreasedContractVersions(t *testi
 func TestDispatcherContractGuardAcceptsInitialContract(t *testing.T) {
 	result := AnalyzeDispatcherContractGuard(
 		DispatcherContractValues{},
-		DispatcherContractValues{HasContract: true, DispatcherVersion: "3.0.1", DispatcherContractVersion: 1},
+		DispatcherContractValues{HasContract: true, DispatcherContractVersion: 1},
 	)
 
 	if dispatcherContractGuardNeedsAction(result) {
@@ -70,14 +70,15 @@ func TestDispatcherContractGuardRejectsUnexpectedBaseReadError(t *testing.T) {
 }
 
 // Verifies the head contract must parse as a valid dispatcher contract.
+// dispatcherVersion format is not validated here: this guard never consumes
+// it, and TestDispatcherContractProvidesRuntimeVersion in the dispatcher
+// module already pins the semver format on every PR.
 func TestParseDispatcherContractValuesValidation(t *testing.T) {
 	cases := []struct {
 		name    string
 		content string
 	}{
 		{name: "invalid JSON", content: "{"},
-		{name: "missing dispatcherVersion", content: `{"dispatcherContractVersion": 1}`},
-		{name: "non-semver dispatcherVersion", content: `{"dispatcherVersion": "next", "dispatcherContractVersion": 1}`},
 		{name: "contract version below 1", content: `{"dispatcherVersion": "3.0.1", "dispatcherContractVersion": 0}`},
 	}
 
@@ -95,7 +96,7 @@ func TestParseDispatcherContractValuesReadsContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected a valid contract to parse, got %v", err)
 	}
-	if !values.HasContract || values.DispatcherVersion != "3.0.1-beta.11" || values.DispatcherContractVersion != 1 {
+	if !values.HasContract || values.DispatcherContractVersion != 1 {
 		t.Fatalf("unexpected parsed values: %+v", values)
 	}
 }
@@ -103,8 +104,8 @@ func TestParseDispatcherContractValuesReadsContract(t *testing.T) {
 // Verifies the warning explains that the contract generation moved backwards.
 func TestFormatDispatcherContractWarningExplainsDecrease(t *testing.T) {
 	result := AnalyzeDispatcherContractGuard(
-		DispatcherContractValues{HasContract: true, DispatcherVersion: "3.0.1", DispatcherContractVersion: 2},
-		DispatcherContractValues{HasContract: true, DispatcherVersion: "3.0.2", DispatcherContractVersion: 1},
+		DispatcherContractValues{HasContract: true, DispatcherContractVersion: 2},
+		DispatcherContractValues{HasContract: true, DispatcherContractVersion: 1},
 	)
 
 	warning := FormatDispatcherContractWarning(result)
