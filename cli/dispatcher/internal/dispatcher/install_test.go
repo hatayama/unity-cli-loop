@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 )
 
 func TestRunDispatcherInstallHelpDoesNotRequireUnityProject(t *testing.T) {
@@ -42,53 +43,15 @@ func TestParseInstallOptionsAcceptsDirAlias(t *testing.T) {
 
 func TestResolveNativeInstallDirForWindowsUsesLocalAppData(t *testing.T) {
 	// Verifies the native install command resolves the same default Windows install directory as the installer.
-	previousGetenv := getenv
-	defer func() {
-		getenv = previousGetenv
-	}()
-	getenv = func(name string) string {
-		switch name {
-		case nativeInstallDirEnvName:
-			return ""
-		case nativeLocalAppDataEnvName:
-			return `C:\Users\ExampleUser\AppData\Local`
-		default:
-			return ""
-		}
-	}
+	t.Setenv(nativepath.InstallDirEnvName, "")
+	t.Setenv(nativepath.LocalAppDataEnvName, `C:\Users\<USER_NAME>\AppData\Local`)
 
 	installDir, err := resolveNativeInstallDir("windows", "")
 	if err != nil {
 		t.Fatalf("resolveNativeInstallDir failed: %v", err)
 	}
 
-	expected := `C:\Users\ExampleUser\AppData\Local\Programs\uloop\bin`
-	if installDir != expected {
-		t.Fatalf("install dir mismatch: %s", installDir)
-	}
-}
-
-func TestResolveNativeInstallDirForMacUsesHome(t *testing.T) {
-	// Verifies the native install command resolves the same default macOS install directory as the installer.
-	previousGetenv := getenv
-	previousNativeUserHomeDir := nativeUserHomeDir
-	defer func() {
-		getenv = previousGetenv
-		nativeUserHomeDir = previousNativeUserHomeDir
-	}()
-	getenv = func(name string) string {
-		return ""
-	}
-	nativeUserHomeDir = func() (string, error) {
-		return "/Users/ExampleUser", nil
-	}
-
-	installDir, err := resolveNativeInstallDir("darwin", "")
-	if err != nil {
-		t.Fatalf("resolveNativeInstallDir failed: %v", err)
-	}
-
-	expected := "/Users/ExampleUser/.local/bin"
+	expected := `C:\Users\<USER_NAME>\AppData\Local\Programs\uloop\bin`
 	if installDir != expected {
 		t.Fatalf("install dir mismatch: %s", installDir)
 	}

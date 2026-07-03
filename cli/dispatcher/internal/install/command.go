@@ -4,9 +4,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"path"
 	"strings"
 	"unicode/utf16"
+
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 )
 
 const (
@@ -35,8 +36,8 @@ func CommandForOS(goos string, options Options) (Command, error) {
 
 	switch goos {
 	case "darwin":
-		installDir := trimPosixInstallDir(options.InstallDir)
-		targetPath := path.Join(installDir, PosixCommandName)
+		installDir := nativepath.TrimInstallDir(goos, options.InstallDir)
+		targetPath := nativepath.CommandPath(goos, installDir, PosixCommandName, WindowsCommandName)
 		return Command{
 			Name:         "sh",
 			Args:         posixInstallArgs(installDir, targetPath),
@@ -46,8 +47,8 @@ func CommandForOS(goos string, options Options) (Command, error) {
 			CleansLegacy: true,
 		}, nil
 	case "windows":
-		installDir := strings.TrimRight(options.InstallDir, `\/`)
-		targetPath := installDir + `\` + WindowsCommandName
+		installDir := nativepath.TrimInstallDir(goos, options.InstallDir)
+		targetPath := nativepath.CommandPath(goos, installDir, PosixCommandName, WindowsCommandName)
 		return Command{
 			Name:         "powershell",
 			Args:         windowsInstallArgs(installDir, targetPath),
@@ -59,14 +60,6 @@ func CommandForOS(goos string, options Options) (Command, error) {
 	default:
 		return Command{}, errors.New(UnsupportedOSMessage)
 	}
-}
-
-func trimPosixInstallDir(installDir string) string {
-	trimmedInstallDir := strings.TrimRight(installDir, `/`)
-	if trimmedInstallDir == "" {
-		return `/`
-	}
-	return trimmedInstallDir
 }
 
 func windowsInstallArgs(installDir string, targetPath string) []string {

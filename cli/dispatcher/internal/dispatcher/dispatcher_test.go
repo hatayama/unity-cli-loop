@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 )
 
 type dispatcherArchiveTestEntry struct {
@@ -38,7 +39,7 @@ func TestRunDispatcherUsesProjectPinAndCachedRealCLI(t *testing.T) {
 	cacheRoot := t.TempDir()
 	writeDispatcherProjectPin(t, projectRoot, clicore.Version)
 	expectedCLIPath := writeCachedDispatcherRealCLI(t, cacheRoot, clicore.Version)
-	t.Setenv(dispatcherCacheDirEnvName, cacheRoot)
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Chdir(projectRoot)
 
@@ -76,7 +77,7 @@ func TestRunDispatcherPreservesExplicitProjectPathForRealCLI(t *testing.T) {
 	cacheRoot := t.TempDir()
 	writeDispatcherProjectPin(t, projectRoot, clicore.Version)
 	writeCachedDispatcherRealCLI(t, cacheRoot, clicore.Version)
-	t.Setenv(dispatcherCacheDirEnvName, cacheRoot)
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Chdir(t.TempDir())
 
@@ -106,7 +107,7 @@ func TestRunDispatcherForwardsProjectScopedVersionToPinnedRunner(t *testing.T) {
 	cacheRoot := t.TempDir()
 	writeDispatcherProjectPin(t, projectRoot, clicore.Version)
 	writeCachedDispatcherRealCLI(t, cacheRoot, clicore.Version)
-	t.Setenv(dispatcherCacheDirEnvName, cacheRoot)
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Chdir(t.TempDir())
 
@@ -139,7 +140,7 @@ func TestRunDispatcherForwardsProjectScopedVersionJSONToPinnedRunner(t *testing.
 	cacheRoot := t.TempDir()
 	writeDispatcherProjectPin(t, projectRoot, clicore.Version)
 	writeCachedDispatcherRealCLI(t, cacheRoot, clicore.Version)
-	t.Setenv(dispatcherCacheDirEnvName, cacheRoot)
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Chdir(t.TempDir())
 
@@ -270,7 +271,7 @@ func TestRunDispatcherVersionUsesDispatcherVersion(t *testing.T) {
 
 func TestResolveDispatcherRealCLIRejectsInvalidProjectRunnerVersion(t *testing.T) {
 	// Verifies project pins cannot escape the dispatcher cache through projectRunnerVersion path segments.
-	t.Setenv(dispatcherCacheDirEnvName, t.TempDir())
+	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
 
 	_, err := resolveDispatcherRealCLI(context.Background(), dispatcherPin{ProjectRunnerVersion: "../../../../payload"}, io.Discard)
 
@@ -300,7 +301,7 @@ func TestEnforceDispatcherFreshnessRequiresManualUpdateWhenSelfUpdateDisabled(t 
 func TestEnforceDispatcherFreshnessMarksFailedOptionalUpdateChecked(t *testing.T) {
 	// Verifies transient optional update failures are throttled until the next check interval.
 	cacheRoot := t.TempDir()
-	t.Setenv(dispatcherCacheDirEnvName, cacheRoot)
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
 
 	previousRunner := dispatcherRunUpdate
 	defer func() {
@@ -348,7 +349,7 @@ func TestEnforceDispatcherFreshnessMarksFailedOptionalUpdateChecked(t *testing.T
 
 func TestEnforceDispatcherFreshnessReportsOptionalUpdateVersionChange(t *testing.T) {
 	// Verifies optional dispatcher self-updates tell users which launcher version will run next.
-	t.Setenv(dispatcherCacheDirEnvName, t.TempDir())
+	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
 	restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, "9.9.9")
 	defer restoreDispatcherUpdateHooks()
 
@@ -369,7 +370,7 @@ func TestEnforceDispatcherFreshnessReportsOptionalUpdateVersionChange(t *testing
 
 func TestEnforceDispatcherFreshnessSkipsOptionalUpdateMessageWhenVersionDidNotChange(t *testing.T) {
 	// Verifies no-op optional dispatcher self-updates do not add noise before the real command output.
-	t.Setenv(dispatcherCacheDirEnvName, t.TempDir())
+	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
 	restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, dispatcherVersion)
 	defer restoreDispatcherUpdateHooks()
 
@@ -389,7 +390,7 @@ func TestEnforceDispatcherFreshnessSkipsOptionalUpdateMessageWhenVersionDidNotCh
 
 func TestEnforceDispatcherFreshnessReportsRequiredUpdateVersionChange(t *testing.T) {
 	// Verifies required dispatcher self-updates include the version change before asking for a retry.
-	t.Setenv(dispatcherCacheDirEnvName, t.TempDir())
+	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
 	restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, "999.0.0")
 	defer restoreDispatcherUpdateHooks()
 

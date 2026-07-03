@@ -4,9 +4,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"path"
 	"strings"
 	"unicode/utf16"
+
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 )
 
 const (
@@ -34,7 +35,7 @@ func CommandForOS(goos string, options Options) (Command, error) {
 
 	switch goos {
 	case "darwin":
-		targetPath := path.Join(options.InstallDir, PosixCommandName)
+		targetPath := nativepath.CommandPath(goos, options.InstallDir, PosixCommandName, WindowsCommandName)
 		script := "rm -f " + shellQuote(targetPath)
 		return Command{
 			Name:       "sh",
@@ -45,7 +46,7 @@ func CommandForOS(goos string, options Options) (Command, error) {
 		if options.CurrentPID <= 0 {
 			return Command{}, errors.New("current process id is required")
 		}
-		targetPath := windowsTargetPath(options.InstallDir)
+		targetPath := nativepath.CommandPath(goos, options.InstallDir, PosixCommandName, WindowsCommandName)
 		return Command{
 			Name:       "powershell",
 			Args:       windowsUninstallArgs(targetPath, options.CurrentPID),
@@ -117,11 +118,6 @@ func encodePowerShellCommand(script string) string {
 
 func powerShellSingleQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
-}
-
-func windowsTargetPath(installDir string) string {
-	trimmed := strings.TrimRight(installDir, `\/`)
-	return trimmed + `\` + WindowsCommandName
 }
 
 func shellQuote(value string) string {

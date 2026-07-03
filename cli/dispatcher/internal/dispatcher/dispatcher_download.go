@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 	sharedupdate "github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
@@ -64,32 +65,7 @@ func dispatcherSiblingRealCLIPath(pin dispatcherPin) (string, bool) {
 }
 
 func dispatcherCacheRoot(goos string) (string, error) {
-	if explicitCacheRoot := strings.TrimSpace(os.Getenv(dispatcherCacheDirEnvName)); explicitCacheRoot != "" {
-		return explicitCacheRoot, nil
-	}
-	switch goos {
-	case "darwin":
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(home, "Library", "Caches", dispatcherCacheDirectoryName), nil
-	case "windows":
-		localAppData := os.Getenv(nativeLocalAppDataEnvName)
-		if localAppData == "" {
-			return "", errors.New("LOCALAPPDATA is required to resolve the uloop cache directory")
-		}
-		return filepath.Join(localAppData, dispatcherCacheDirectoryName), nil
-	default:
-		if xdgCacheHome := strings.TrimSpace(os.Getenv("XDG_CACHE_HOME")); xdgCacheHome != "" {
-			return filepath.Join(xdgCacheHome, dispatcherCacheDirectoryName), nil
-		}
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(home, ".cache", dispatcherCacheDirectoryName), nil
-	}
+	return nativepath.CacheRoot(goos, nativepath.DefaultEnvironment())
 }
 
 func dispatcherCachedRealCLIPath(cacheRoot string, projectRunnerVersion string, goos string, goarch string) string {

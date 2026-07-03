@@ -6,16 +6,14 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/uninstall"
 )
 
 const (
-	uninstallInstallDirEnvName    = "ULOOP_INSTALL_DIR"
-	uninstallLocalAppDataEnvName  = "LOCALAPPDATA"
 	uninstallUnsupportedOSMessage = uninstall.UnsupportedOSMessage
 )
 
@@ -100,24 +98,9 @@ func printUninstallHelp(stdout io.Writer) {
 }
 
 func resolveUninstallInstallDir(goos string) (string, error) {
-	if installDir := os.Getenv(uninstallInstallDirEnvName); installDir != "" {
-		return installDir, nil
-	}
-
-	switch goos {
-	case "darwin":
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(home, ".local", "bin"), nil
-	case "windows":
-		localAppData := os.Getenv(uninstallLocalAppDataEnvName)
-		if localAppData == "" {
-			return "", errors.New("LOCALAPPDATA is required to resolve the uloop install directory")
-		}
-		return filepath.Join(localAppData, "Programs", "uloop", "bin"), nil
-	default:
+	installDir, err := nativepath.ResolveInstallDir(goos, "", nativepath.DefaultEnvironment())
+	if errors.Is(err, nativepath.ErrUnsupportedOS) {
 		return "", errors.New(uninstallUnsupportedOSMessage)
 	}
+	return installDir, err
 }
