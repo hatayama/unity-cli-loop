@@ -1,12 +1,54 @@
+using System.Collections;
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.TestTools;
 using UnityEngine.UI;
 
 namespace io.github.hatayama.uLoopMCP
 {
     public class UIElementAnnotatorTests
     {
+        private readonly List<GameObject> _createdObjects = new List<GameObject>();
+        private EventSystem _previousEventSystem;
+        private bool _previousEventSystemEnabled;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _previousEventSystem = EventSystem.current;
+            if (_previousEventSystem != null)
+            {
+                _previousEventSystemEnabled = _previousEventSystem.enabled;
+                // EditMode EventSystems are not reliably registered, so clear stale scene state instead.
+                _previousEventSystem.enabled = false;
+            }
+
+            GameObject eventSystem = CreateGameObject("UIElementAnnotatorTestsEventSystem");
+            eventSystem.AddComponent<EventSystem>();
+            eventSystem.AddComponent<StandaloneInputModule>();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (_previousEventSystem != null)
+            {
+                _previousEventSystem.enabled = _previousEventSystemEnabled;
+            }
+
+            _previousEventSystem = null;
+            _previousEventSystemEnabled = false;
+
+            for (int i = _createdObjects.Count - 1; i >= 0; i--)
+            {
+                Object.DestroyImmediate(_createdObjects[i]);
+            }
+
+            _createdObjects.Clear();
+        }
+
         [Test]
         public void GetAnnotationColorForElement_WhenLabelsAreDifferent_ShouldReturnDifferentColors()
         {
@@ -161,6 +203,61 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
+        public void CreateAnnotationOverlay_WhenMultipleElementsAreAnnotated_ShouldDrawLabelsAboveAllBorders()
+        {
+            List<UIElementInfo> elements = new List<UIElementInfo>
+            {
+                new UIElementInfo
+                {
+                    Label = "A",
+                    Type = "Button",
+                    Interaction = "Click",
+                    BoundsMinX = 10f,
+                    BoundsMinY = 20f,
+                    BoundsMaxX = 110f,
+                    BoundsMaxY = 70f
+                },
+                new UIElementInfo
+                {
+                    Label = "B",
+                    Type = "Slider",
+                    Interaction = "Drag",
+                    BoundsMinX = 80f,
+                    BoundsMinY = 90f,
+                    BoundsMaxX = 210f,
+                    BoundsMaxY = 130f
+                }
+            };
+            GameObject overlay = UIElementAnnotator.CreateAnnotationOverlay(elements, 1f);
+
+            try
+            {
+                int lastBorderSiblingIndex = -1;
+                int firstLabelSiblingIndex = int.MaxValue;
+
+                for (int i = 0; i < overlay.transform.childCount; i++)
+                {
+                    Transform child = overlay.transform.GetChild(i);
+                    if (child.name.StartsWith("Border_"))
+                    {
+                        lastBorderSiblingIndex = i;
+                    }
+
+                    if (child.name == "LabelBg" && firstLabelSiblingIndex == int.MaxValue)
+                    {
+                        firstLabelSiblingIndex = i;
+                    }
+                }
+
+                Assert.That(firstLabelSiblingIndex, Is.GreaterThan(lastBorderSiblingIndex));
+            }
+            finally
+            {
+                UIElementAnnotator.DestroyAnnotationOverlay(overlay);
+            }
+        }
+
+        [Test]
         public void CreateAnnotationOverlay_WhenResolutionScaleIsHalf_ShouldCompensateBorderThickness()
         {
             List<UIElementInfo> elements = new List<UIElementInfo>
@@ -196,6 +293,36 @@ namespace io.github.hatayama.uLoopMCP
             {
                 UIElementAnnotator.DestroyAnnotationOverlay(overlay);
             }
+        }
+
+        [UnityTest]
+        public IEnumerator CollectInteractiveElements_WhenCanvasIsDisabled_ShouldSkipButton()
+        {
+            GameObject canvas = CreateCanvas("DisabledCanvas", false);
+            CreateButton("HiddenButton", canvas.transform, Vector2.zero);
+            Canvas.ForceUpdateCanvases();
+            yield return null;
+
+            List<UIElementInfo> elements = UIElementAnnotator.CollectInteractiveElements();
+
+            Assert.That(
+                elements.Exists((UIElementInfo element) => element.Path == "DisabledCanvas/HiddenButton"),
+                Is.False);
+        }
+
+        [UnityTest]
+        public IEnumerator CollectInteractiveElements_WhenButtonIsVisible_ShouldIncludeButton()
+        {
+            GameObject canvas = CreateCanvas("VisibleCanvas", true);
+            CreateButton("VisibleButton", canvas.transform, Vector2.zero);
+            Canvas.ForceUpdateCanvases();
+            yield return null;
+
+            List<UIElementInfo> elements = UIElementAnnotator.CollectInteractiveElements();
+
+            Assert.That(
+                elements.Exists((UIElementInfo element) => element.Path == "VisibleCanvas/VisibleButton"),
+                Is.True);
         }
 
         [Test]
@@ -248,6 +375,37 @@ namespace io.github.hatayama.uLoopMCP
         private static string CreateColorKey(Color color)
         {
             return $"{color.r:F3}:{color.g:F3}:{color.b:F3}:{color.a:F3}";
+        }
+
+        private GameObject CreateCanvas(string name, bool enabled)
+        {
+            GameObject canvasGo = CreateGameObject(name);
+            Canvas canvas = canvasGo.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.enabled = enabled;
+            canvasGo.AddComponent<GraphicRaycaster>();
+            return canvasGo;
+        }
+
+        private Button CreateButton(string name, Transform parent, Vector2 anchoredPosition)
+        {
+            GameObject buttonGo = CreateGameObject(name);
+            buttonGo.transform.SetParent(parent, false);
+            RectTransform rectTransform = buttonGo.AddComponent<RectTransform>();
+            rectTransform.anchoredPosition = anchoredPosition;
+            rectTransform.sizeDelta = new Vector2(120f, 80f);
+            Image image = buttonGo.AddComponent<Image>();
+            image.raycastTarget = true;
+            Button button = buttonGo.AddComponent<Button>();
+            button.targetGraphic = image;
+            return button;
+        }
+
+        private GameObject CreateGameObject(string name)
+        {
+            GameObject go = new GameObject(name);
+            _createdObjects.Add(go);
+            return go;
         }
     }
 }

@@ -300,6 +300,61 @@ namespace Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator Click_Should_IgnoreDisabledCanvasSpaceOverlay()
+        {
+            GameObject disabledCanvasGo = new GameObject("DisabledOverlayCanvas");
+
+            try
+            {
+                Canvas disabledCanvas = disabledCanvasGo.AddComponent<Canvas>();
+                disabledCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                disabledCanvas.sortingOrder = 100;
+                disabledCanvas.enabled = false;
+                disabledCanvasGo.AddComponent<GraphicRaycaster>();
+
+                ClickTracker hiddenTracker = CreateChildClickableElement(
+                    "HiddenOverlayButton", disabledCanvasGo.transform, Vector2.zero, new Vector2(240f, 140f));
+                ClickTracker visibleTracker = CreateClickableElement(
+                    "VisibleButton", Vector2.zero, new Vector2(200f, 100f));
+                yield return null;
+
+                Vector2 screenPos = GetScreenPosition(visibleTracker.gameObject);
+
+                yield return RunTool(new JObject
+                {
+                    ["action"] = MouseAction.Click.ToString(),
+                    ["x"] = screenPos.x,
+                    ["y"] = screenPos.y
+                });
+
+                Assert.IsTrue(lastResponse.Success);
+                Assert.IsTrue(visibleTracker.PointerClickCalled, "Visible button should receive the click");
+                Assert.IsFalse(hiddenTracker.PointerClickCalled, "Disabled Canvas content should not receive the click");
+                Assert.AreEqual("VisibleButton", lastResponse.HitGameObjectName);
+            }
+            finally
+            {
+                Object.Destroy(disabledCanvasGo);
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator CollectInteractiveElements_Should_SkipButtonCoveredByFrontGraphic()
+        {
+            CreateClickableElement("CoveredAnnotationButton", Vector2.zero, new Vector2(200f, 100f));
+            GameObject blocker = CreateUIElement("AnnotationBlocker", Vector2.zero, new Vector2(240f, 140f));
+            blocker.AddComponent<Image>();
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+
+            List<UIElementInfo> elements = UIElementAnnotator.CollectInteractiveElements();
+
+            Assert.IsFalse(
+                elements.Exists((UIElementInfo element) => element.Path == "TestCanvas/CoveredAnnotationButton"),
+                "Covered UI should not be advertised as directly clickable");
+        }
+
+        [UnityTest]
         public IEnumerator Click_WithBypassRaycast_Should_UseTargetPathWhenNamesDuplicate()
         {
             GameObject firstPanel = CreateUIElement("FirstPanel", new Vector2(-120f, 0f), new Vector2(240f, 160f));
