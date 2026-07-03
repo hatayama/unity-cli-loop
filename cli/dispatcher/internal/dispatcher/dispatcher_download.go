@@ -123,16 +123,6 @@ func isExecutableFile(filePath string) bool {
 	return info.Mode()&0o111 != 0
 }
 
-func downloadDispatcherRealCLI(ctx context.Context, cacheRoot string, projectRunnerVersion string, goos string, goarch string, stderr io.Writer) (string, error) {
-	return downloadDispatcherRealCLIForPin(
-		ctx,
-		cacheRoot,
-		dispatcherPin{ProjectRunnerVersion: projectRunnerVersion},
-		goos,
-		goarch,
-		stderr)
-}
-
 func downloadDispatcherRealCLIForPin(ctx context.Context, cacheRoot string, pin dispatcherPin, goos string, goarch string, stderr io.Writer) (string, error) {
 	assetName, err := dispatcherReleaseAssetName(goos, goarch)
 	if err != nil {

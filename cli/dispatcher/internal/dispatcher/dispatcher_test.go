@@ -505,15 +505,15 @@ func TestDownloadDispatcherRealCLIWritesDownloadStatus(t *testing.T) {
 	}
 
 	var stderr bytes.Buffer
-	realCLIPath, err := downloadDispatcherRealCLI(
+	realCLIPath, err := downloadDispatcherRealCLIForPin(
 		context.Background(),
 		t.TempDir(),
-		"3.0.0-beta.88",
+		dispatcherPin{ProjectRunnerVersion: "3.0.0-beta.88"},
 		"darwin",
 		"arm64",
 		&stderr)
 	if err != nil {
-		t.Fatalf("downloadDispatcherRealCLI failed: %v", err)
+		t.Fatalf("downloadDispatcherRealCLIForPin failed: %v", err)
 	}
 	expectedStatus := "uloop: downloading pinned project runner 3.0.0-beta.88 for darwin-arm64...\n"
 	if stderr.String() != expectedStatus {

@@ -40,7 +40,7 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "dispatcher-contract.json",
+          "path": "dispatchercontract/dispatcher-contract.json",
           "jsonpath": "$.dispatcherVersion"
         }
       ]
