@@ -72,7 +72,7 @@ func TestClassifyInstallUnsupportedOS(t *testing.T) {
 	if cliErr.Phase != clicore.ErrorPhaseExecution {
 		t.Fatalf("phase mismatch: %#v", cliErr)
 	}
-	expectedAction := "Run `uloop install` on Windows."
+	expectedAction := "Run `uloop install` on macOS or Windows."
 	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != expectedAction {
 		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
 	}
