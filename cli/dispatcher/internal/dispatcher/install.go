@@ -11,6 +11,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/install"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 )
 
 const (
@@ -157,32 +158,9 @@ func printInstallHelp(stdout io.Writer) {
 }
 
 func resolveNativeInstallDir(goos string, explicitInstallDir string) (string, error) {
-	if explicitInstallDir != "" {
-		return explicitInstallDir, nil
-	}
-	if installDir := getenv(nativeInstallDirEnvName); installDir != "" {
-		return installDir, nil
-	}
-
-	switch goos {
-	case "darwin":
-		home, err := nativeUserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		return joinNativeInstallPath(goos, home, ".local", "bin"), nil
-	case "windows":
-		localAppData := getenv(nativeLocalAppDataEnvName)
-		if localAppData == "" {
-			return "", errors.New("LOCALAPPDATA is required to resolve the uloop install directory")
-		}
-		return joinNativeInstallPath(
-			goos,
-			localAppData,
-			nativeWindowsProgramsDir,
-			nativeInstallDirectoryName,
-			nativeInstallBinDirName), nil
-	default:
+	installDir, err := nativepath.ResolveInstallDir(goos, explicitInstallDir, nativepath.DefaultEnvironment())
+	if errors.Is(err, nativepath.ErrUnsupportedOS) {
 		return "", errors.New(installUnsupportedOSMessage)
 	}
+	return installDir, err
 }

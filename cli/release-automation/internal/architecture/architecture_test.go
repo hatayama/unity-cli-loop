@@ -253,7 +253,7 @@ func TestInternalBoundariesPerModule(t *testing.T) {
 		{
 			moduleDir:  filepath.Join(repositoryRoot, contract.Layout.Modules.Dispatcher),
 			modulePath: dispatcherModulePath,
-			allowed:    []string{"dispatcher", "install", "uninstall", "update"},
+			allowed:    []string{"dispatcher", "install", "nativepath", "uninstall", "update"},
 		},
 		{
 			moduleDir:  filepath.Join(repositoryRoot, contract.Layout.Modules.ReleaseAutomation),

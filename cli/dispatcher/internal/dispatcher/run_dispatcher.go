@@ -19,9 +19,7 @@ import (
 )
 
 const (
-	dispatcherCacheDirEnvName          = "ULOOP_CACHE_DIR"
 	dispatcherDisableSelfUpdateEnvName = "ULOOP_DISABLE_SELF_UPDATE"
-	dispatcherCacheDirectoryName       = "uloop"
 	dispatcherVersionsDirectoryName    = "versions"
 	dispatcherUpdateStateFileName      = "dispatcher-update.json"
 	dispatcherProjectPinRelativePath   = ".uloop/project-runner-pin.json"
