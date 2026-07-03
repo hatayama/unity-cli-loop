@@ -11,26 +11,30 @@ Read this when using `uloop screenshot --capture-mode rendering --annotate-eleme
 - `Path`: Hierarchy path from the scene root, for example `Canvas/Panel/Button`. Use this as `simulate-mouse-ui --target-path` when bypassing raycast blockers.
 - `Type`: Element type (`Button`, `Toggle`, `Slider`, `Dropdown`, `InputField`, `Scrollbar`, `Draggable`, `DropTarget`, `Selectable`)
 - `Interaction`: Derived interaction category (`Click`, `Drag`, `Drop`, `Text`). Use this to choose between `simulate-mouse-ui --action Click` and drag actions.
-- `SimX`, `SimY`: Center position in simulate-mouse coordinates. Use these directly with `--x` and `--y`.
+- `SimX`, `SimY`: Center position in top-left Game View coordinates. Use these directly with `simulate-mouse-ui --x/--y`, `simulate-mouse-input --x/--y`, or `raycast --x/--y`.
 - `BoundsMinX`, `BoundsMinY`, `BoundsMaxX`, `BoundsMaxY`: Bounding box in simulate-mouse coordinates
 - `SortingOrder`: Canvas sorting order. Higher values are in front.
 - `SiblingIndex`: Transform sibling index under the element's direct parent. Do not use it as a reliable z-order signal across nested UI hierarchies.
 
 ## Coordinate Conversion
 
-When `CoordinateSystem` is `"gameView"`, convert image pixel coordinates to simulate-mouse coordinates:
+When `ImageCoordinateSystem` is `"top-left-game-view"` and `ResolutionScale` is `1.0`, image pixel coordinates from `screenshot --capture-mode rendering` are already mouse-input coordinates:
 
 ```text
-sim_x = image_x / ResolutionScale
-sim_y = image_y / ResolutionScale + YOffset
+input_x = image_x
+input_y = image_y
 ```
 
-When `ResolutionScale` is `1.0`, this simplifies to:
+When `ResolutionScale` is not `1.0`, use the formula returned in `ScreenshotToInputFormula`.
+
+The mouse input tools convert internally to Unity Input System coordinates:
 
 ```text
-sim_x = image_x
-sim_y = image_y + YOffset
+unity_x = input_x
+unity_y = gameViewHeight - input_y
 ```
+
+Do not flip Y in the caller.
 
 ## Annotation Readability
 

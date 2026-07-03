@@ -143,12 +143,12 @@ namespace io.github.hatayama.uLoopMCP
             OverlayCanvasFactory.EnsureExists();
         }
 
-        // Input coordinates use top-left origin; Unity Screen space uses bottom-left origin.
-        // Uses Screen.height (runtime resolution) because Mouse.current.position is in
-        // runtime screen space, not the editor Game view target resolution.
-        private static Vector2 InputToScreen(Vector2 inputPos)
+        // Public mouse-input coordinates match rendering screenshots. Unity input stays bottom-left,
+        // so conversion belongs inside the tool instead of in the caller's prompt or skill text.
+        private static GameViewCoordinateConversion ConvertInputToUnity(Vector2 inputPos)
         {
-            return new Vector2(inputPos.x, Screen.height - inputPos.y);
+            Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
+            return GameViewCoordinateUtility.ConvertInputToUnity(inputPos, gameViewSize);
         }
 
         private async Task<SimulateMouseInputResponse> ExecuteClick(
@@ -165,13 +165,13 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             Vector2 inputPos = new Vector2(parameters.X, parameters.Y);
-            Vector2 screenPos = InputToScreen(inputPos);
+            GameViewCoordinateConversion conversion = ConvertInputToUnity(inputPos);
             MouseButton button = parameters.Button;
             string buttonName = button.ToString();
 
             // Set mouse position before clicking
             await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                () => MouseInputState.SetPositionState(mouse, screenPos), ct);
+                () => MouseInputState.SetPositionState(mouse, conversion.InjectedUnityPosition), ct);
 
             // Press button
             MouseInputState.SetButtonDown(button);
@@ -207,7 +207,16 @@ namespace io.github.hatayama.uLoopMCP
                 Action = MouseInputAction.Click.ToString(),
                 Button = buttonName,
                 PositionX = inputPos.x,
-                PositionY = inputPos.y
+                PositionY = inputPos.y,
+                InputCoordinateSystem = McpConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW,
+                UnityCoordinateSystem = McpConstants.COORDINATE_SYSTEM_BOTTOM_LEFT_GAME_VIEW,
+                GameViewWidth = conversion.GameViewSize.x,
+                GameViewHeight = conversion.GameViewSize.y,
+                InputPositionX = conversion.InputPosition.x,
+                InputPositionY = conversion.InputPosition.y,
+                InjectedUnityPositionX = conversion.InjectedUnityPosition.x,
+                InjectedUnityPositionY = conversion.InjectedUnityPosition.y,
+                CoordinateConversionFormula = McpConstants.COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY
             };
         }
 
@@ -225,13 +234,13 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             Vector2 inputPos = new Vector2(parameters.X, parameters.Y);
-            Vector2 screenPos = InputToScreen(inputPos);
+            GameViewCoordinateConversion conversion = ConvertInputToUnity(inputPos);
             MouseButton button = parameters.Button;
             string buttonName = button.ToString();
 
             // Set mouse position before pressing
             await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                () => MouseInputState.SetPositionState(mouse, screenPos), ct);
+                () => MouseInputState.SetPositionState(mouse, conversion.InjectedUnityPosition), ct);
 
             // Press button
             MouseInputState.SetButtonDown(button);
@@ -265,7 +274,16 @@ namespace io.github.hatayama.uLoopMCP
                 Action = MouseInputAction.LongPress.ToString(),
                 Button = buttonName,
                 PositionX = inputPos.x,
-                PositionY = inputPos.y
+                PositionY = inputPos.y,
+                InputCoordinateSystem = McpConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW,
+                UnityCoordinateSystem = McpConstants.COORDINATE_SYSTEM_BOTTOM_LEFT_GAME_VIEW,
+                GameViewWidth = conversion.GameViewSize.x,
+                GameViewHeight = conversion.GameViewSize.y,
+                InputPositionX = conversion.InputPosition.x,
+                InputPositionY = conversion.InputPosition.y,
+                InjectedUnityPositionX = conversion.InjectedUnityPosition.x,
+                InjectedUnityPositionY = conversion.InjectedUnityPosition.y,
+                CoordinateConversionFormula = McpConstants.COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY
             };
         }
 

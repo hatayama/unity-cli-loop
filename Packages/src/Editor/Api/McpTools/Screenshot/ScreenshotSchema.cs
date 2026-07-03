@@ -51,5 +51,8 @@ namespace io.github.hatayama.uLoopMCP
 
         [Description("Return only annotated element JSON without capturing a screenshot image. Requires AnnotateElements=true and CaptureMode=rendering in PlayMode.")]
         public bool ElementsOnly { get; set; } = false;
+
+        [Description("Annotate 3D physics raycast candidate points on rendering screenshots. Uses Camera.main and the same top-left Game View coordinates as simulate-mouse-input.")]
+        public bool AnnotateRaycastGrid { get; set; } = false;
     }
 }

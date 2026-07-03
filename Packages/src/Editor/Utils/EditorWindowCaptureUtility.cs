@@ -138,10 +138,7 @@ namespace io.github.hatayama.uLoopMCP
 
         // Captures game rendering by reading GameView's composited RenderTexture (PlayMode only).
         // Contains all cameras + Screen Space Overlay Canvas, without tab bar or borders.
-        // Coordinate mapping to simulate-mouse:
-        //   sim_x = image_x / resolutionScale, sim_y = image_y / resolutionScale + YOffset
-        // where YOffset = Screen.height - RenderTexture.height (returned in the tuple).
-        public static async Task<(Texture2D? texture, int yOffset)> CaptureGameRenderingAsync(float resolutionScale, CancellationToken ct)
+        public static async Task<Texture2D?> CaptureGameRenderingAsync(float resolutionScale, CancellationToken ct)
         {
             Debug.Assert(UnityEditor.EditorApplication.isPlaying, "CaptureGameRenderingAsync requires PlayMode");
 
@@ -152,10 +149,8 @@ namespace io.github.hatayama.uLoopMCP
             if (rt == null)
             {
                 Debug.LogWarning("[EditorWindowCaptureUtility] GameView RenderTexture is not available");
-                return (null, 0);
+                return null;
             }
-
-            int yOffset = (int)Handles.GetMainGameViewSize().y - rt.height;
 
             // RenderTexture uses bottom-left origin; flip vertically for standard top-left image format
             RenderTextureDescriptor flipDescriptor = new RenderTextureDescriptor(rt.width, rt.height, rt.format, 0);
@@ -181,7 +176,7 @@ namespace io.github.hatayama.uLoopMCP
                 texture = ApplyResolutionScaling(texture, resolutionScale);
             }
 
-            return (texture, yOffset);
+            return texture;
         }
 
         private static Texture2D ApplyResolutionScaling(Texture2D originalTexture, float scale)
@@ -206,4 +201,3 @@ namespace io.github.hatayama.uLoopMCP
         }
     }
 }
-
