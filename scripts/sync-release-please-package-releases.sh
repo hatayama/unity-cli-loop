@@ -8,6 +8,10 @@ SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 CONFIG="$ROOT_DIR/release-please-config.json"
 MANIFEST="$ROOT_DIR/.release-please-manifest.json"
 CLI_PACKAGE_PATH="project-runner"
+# dispatcher-publish owns the dispatcher tag/draft/assets/publish flow. Creating
+# the release here would publish it before its assets are uploaded, so the sync
+# must skip the dispatcher package entirely.
+DISPATCHER_PACKAGE_PATH="dispatcher"
 UNITY_PACKAGE_CLI_PIN_FILE="Packages/src/project-runner-pin.json"
 REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-cli-loop}
 TMP_DIR=$(mktemp -d)
@@ -504,10 +508,10 @@ if [ -n "$minimum_dispatcher_version" ]; then
   fi
 fi
 
-jq -r --arg skip "$CLI_PACKAGE_PATH" '
+jq -r --arg cli_skip "$CLI_PACKAGE_PATH" --arg dispatcher_skip "$DISPATCHER_PACKAGE_PATH" '
   .packages
   | to_entries[]
-  | select(.key != $skip)
+  | select(.key != $cli_skip and .key != $dispatcher_skip)
   | [
       .key,
       (.value["changelog-path"] // ""),

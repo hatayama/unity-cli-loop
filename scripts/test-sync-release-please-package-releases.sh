@@ -168,7 +168,7 @@ write_release_files() {
   unity_package_key=${2:-Packages/src}
   unity_changelog_path=${3:-CHANGELOG.md}
 
-  mkdir -p Packages/src project-runner scripts tools/release-automation
+  mkdir -p Packages/src dispatcher project-runner scripts tools/release-automation
   cat > release-please-config.json <<EOF_CONFIG
 {
   "packages": {
@@ -178,6 +178,13 @@ write_release_files() {
       "include-v-in-tag": true,
       "include-component-in-tag": false,
       "changelog-path": "$unity_changelog_path"
+    },
+    "dispatcher": {
+      "component": "dispatcher",
+      "release-type": "go",
+      "include-v-in-tag": true,
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
     },
     "project-runner": {
       "component": "uloop-project-runner",
@@ -193,6 +200,7 @@ EOF_CONFIG
   cat > .release-please-manifest.json <<EOF_MANIFEST
 {
   "$unity_package_key": "$version",
+  "dispatcher": "$version",
   "project-runner": "$version"
 }
 EOF_MANIFEST
@@ -227,6 +235,16 @@ EOF_CHANGELOG
 
 * keep the Project runner release baseline available
 EOF_CLI_CHANGELOG
+
+  cat > dispatcher/CHANGELOG.md <<EOF_DISPATCHER_CHANGELOG
+# Changelog
+
+## [$version](https://example.test/compare/dispatcher-old...dispatcher-new)
+
+### Bug Fixes
+
+* keep the dispatcher release baseline available
+EOF_DISPATCHER_CHANGELOG
 
   cat > scripts/verify-native-cli-release-assets.sh <<'EOF_VERIFY'
 #!/bin/sh
@@ -585,6 +603,19 @@ test_changelog_move_commit_is_not_treated_as_release_commit() {
   assert_not_contains "$work_dir/stderr.txt" "points at"
 }
 
+# Verifies the sync never creates dispatcher releases: dispatcher-publish owns the
+# tag/draft/assets/publish flow, and a sync-created release would go public before
+# its assets are uploaded.
+test_dispatcher_package_release_is_left_to_dispatcher_publish() {
+  work_dir=$(create_release_repo dispatcher-left-to-publish)
+
+  run_sync "$work_dir" "" false ""
+
+  assert_not_contains "$work_dir/gh.log" "release view dispatcher-v3.0.0-beta.6"
+  assert_not_contains "$work_dir/gh.log" "release create dispatcher-v"
+  assert_contains "$work_dir/github-output.txt" "ready=true"
+}
+
 # Verifies a root package release created by another workflow during creation is reused.
 test_concurrent_root_release_creation_is_reused() {
   work_dir=$(create_release_repo concurrent-root-create)
@@ -611,4 +642,5 @@ test_waits_when_dispatcher_asset_list_fails
 test_retries_until_cli_assets_are_ready
 test_key_rename_commit_is_not_treated_as_release_commit
 test_changelog_move_commit_is_not_treated_as_release_commit
+test_dispatcher_package_release_is_left_to_dispatcher_publish
 test_concurrent_root_release_creation_is_reused

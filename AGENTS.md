@@ -33,8 +33,9 @@ compatible must not bump it.
 
 Do not touch the protocol version to "keep up with releases":
 
-- `common/clicontract/contract.json` `projectRunnerVersion` and `common/tools/default-tools.json`
-  `version` are stamped by release-please only. Never edit them by hand in a feature PR.
+- `common/clicontract/contract.json` `projectRunnerVersion`, `common/tools/default-tools.json`
+  `version`, and `dispatcher/dispatcher-contract.json` `dispatcherVersion` are stamped by
+  release-please only. Never edit them by hand in a feature PR.
 - `CliConstants.MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION` is the release that setup installs. It
   must always point at a published project runner release.
 - When a protocol bump changes `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION`, prepare the matching
@@ -54,23 +55,27 @@ These files are generated copies. Update the source skill definitions instead, t
 Write GitHub Actions and release automation logic in Go when it needs JSON parsing, workflow polling, state transitions, or non-trivial branching.
 Shell scripts are acceptable only as thin wrappers or simple command sequences.
 
-## Dispatcher Release Inputs
+## Shared Release Inputs and Triggers
 
-The global dispatcher has its own release version in `dispatcher/dispatcher-contract.json`.
-When changing dispatcher release inputs, update `dispatcherVersion` in the same PR.
-Pull request CI runs `check-dispatcher-version-bump` and fails if dispatcher inputs changed
-without a dispatcher version increase.
+The dispatcher is released through release-please like the project runner and the Unity
+package: `dispatcher/dispatcher-contract.json` `dispatcherVersion` and `dispatcher/CHANGELOG.md`
+are stamped by release-please release PRs. Never bump `dispatcherVersion` by hand.
 
-The authoritative dispatcher release input list is `dispatcherReleaseInputPatterns` in
-`tools/release-automation/internal/automation/dispatcher_version_bump_guard.go`.
-Dispatcher release inputs include these non-exhaustive examples:
+release-please attributes a commit to a component only when the commit touches that package
+root (`Packages/src/`, `dispatcher/`, `project-runner/`). Shared release inputs living outside
+those roots therefore need explicit trigger updates in the same PR:
 
-- `dispatcher/cmd/dispatcher/main.go`
-- `dispatcher/dispatcher-contract.json`
-- `dispatcher/internal/dispatcher/*.go`
-- `common/clicore/*.go`
-- `dispatcher/internal/update/*.go`
-- `scripts/install.ps1`
+- Common module sources (non-test `common/**/*.go`, `common/go.mod`, `common/go.sum`) must be
+  accompanied by changes under both `project-runner/` and `dispatcher/`.
+- Installer scripts (`scripts/install.sh`, `scripts/install.ps1`) must be accompanied by a
+  change under `dispatcher/`, because installers ship as dispatcher release assets.
+
+Run `scripts/stamp-release-inputs.sh` to refresh `project-runner/shared-inputs-stamp.json` and
+`dispatcher/shared-inputs-stamp.json`, and commit the stamp updates with the change. Pull
+request CI runs `check-release-triggers` (authoritative rules: `releaseTriggerRules` in
+`tools/release-automation/internal/automation/release_trigger_guard.go`) and fails when shared
+release inputs changed without the matching triggers. CI also runs `check-dispatcher-contract`,
+which fails when `dispatcherContractVersion` moves backwards.
 
 Do not bump `dispatcherContractVersion` unless the dispatcher contract itself changes.
 Do not raise Unity package `MINIMUM_REQUIRED_DISPATCHER_VERSION` or pin-file
