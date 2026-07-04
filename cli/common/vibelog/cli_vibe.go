@@ -1,4 +1,4 @@
-package clicore
+package vibelog
 
 import (
 	"crypto/sha256"
