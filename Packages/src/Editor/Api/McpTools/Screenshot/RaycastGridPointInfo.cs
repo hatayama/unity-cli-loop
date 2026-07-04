@@ -12,6 +12,8 @@ namespace io.github.hatayama.uLoopMCP
         public float InjectedUnityPositionY { get; set; }
         public string? HitGameObjectName { get; set; }
         public string? HitGameObjectPath { get; set; }
+        public string? HitLayer { get; set; }
+        public int? HitLayerIndex { get; set; }
         public float? Distance { get; set; }
     }
 }

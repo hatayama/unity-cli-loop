@@ -298,6 +298,92 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             }
         }
 
+        [Test]
+        public void CreateLayerSummaries_ShouldCountHitsByLayerAndSortByHitCount()
+        {
+            List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>
+            {
+                CreateLayerHitPoint("Default", 0, "CubeA"),
+                CreateLayerHitPoint("Clickable", 8, "Button"),
+                CreateLayerHitPoint("Clickable", 8, "Button"),
+                CreateLayerHitPoint("Default", 0, "CubeB"),
+                CreateLayerHitPoint("Clickable", 8, "Button")
+            };
+
+            List<RaycastLayerSummaryInfo> summaries = RaycastGridAnnotator.CreateLayerSummaries(points);
+
+            Assert.That(summaries.Count, Is.EqualTo(2));
+            Assert.That(summaries[0].Layer, Is.EqualTo("Clickable"));
+            Assert.That(summaries[0].LayerIndex, Is.EqualTo(8));
+            Assert.That(summaries[0].HitCount, Is.EqualTo(3));
+            Assert.That(summaries[0].RepresentativeObjectPath, Is.EqualTo("Button"));
+            Assert.That(summaries[1].Layer, Is.EqualTo("Default"));
+            Assert.That(summaries[1].LayerIndex, Is.EqualTo(0));
+            Assert.That(summaries[1].HitCount, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void CreateLayerSummaries_WhenLayerCountsTie_ShouldSortByLayerIndex()
+        {
+            List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>
+            {
+                CreateLayerHitPoint("Clickable", 8, "Button"),
+                CreateLayerHitPoint("Default", 0, "Cube")
+            };
+
+            List<RaycastLayerSummaryInfo> summaries = RaycastGridAnnotator.CreateLayerSummaries(points);
+
+            Assert.That(summaries[0].LayerIndex, Is.EqualTo(0));
+            Assert.That(summaries[1].LayerIndex, Is.EqualTo(8));
+        }
+
+        [Test]
+        public void CreateLayerSummaries_ShouldUseMostFrequentObjectPathAsRepresentative()
+        {
+            List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>
+            {
+                CreateLayerHitPoint("Default", 0, "CubeA"),
+                CreateLayerHitPoint("Default", 0, "CubeB"),
+                CreateLayerHitPoint("Default", 0, "CubeB"),
+                CreateLayerHitPoint("Default", 0, "CubeA"),
+                CreateLayerHitPoint("Default", 0, "CubeA")
+            };
+
+            List<RaycastLayerSummaryInfo> summaries = RaycastGridAnnotator.CreateLayerSummaries(points);
+
+            Assert.That(summaries[0].RepresentativeObjectPath, Is.EqualTo("CubeA"));
+        }
+
+        [Test]
+        public void CreateLayerSummaries_WhenObjectCountsTie_ShouldUseAlphabeticalPath()
+        {
+            List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>
+            {
+                CreateLayerHitPoint("Default", 0, "CubeB"),
+                CreateLayerHitPoint("Default", 0, "CubeA")
+            };
+
+            List<RaycastLayerSummaryInfo> summaries = RaycastGridAnnotator.CreateLayerSummaries(points);
+
+            Assert.That(summaries[0].RepresentativeObjectPath, Is.EqualTo("CubeA"));
+        }
+
+        [Test]
+        public void CreateLayerSummaries_WhenNoHits_ShouldReturnEmptyList()
+        {
+            List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>
+            {
+                new RaycastGridPointInfo
+                {
+                    Hit = false
+                }
+            };
+
+            List<RaycastLayerSummaryInfo> summaries = RaycastGridAnnotator.CreateLayerSummaries(points);
+
+            Assert.That(summaries, Is.Empty);
+        }
+
         private static RaycastClusterSample CreateSample(int clusterKey, float inputX, float inputY)
         {
             return new RaycastClusterSample
@@ -305,6 +391,20 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
                 ClusterKey = clusterKey,
                 InputX = inputX,
                 InputY = inputY
+            };
+        }
+
+        private static RaycastGridPointInfo CreateLayerHitPoint(
+            string layer,
+            int layerIndex,
+            string objectPath)
+        {
+            return new RaycastGridPointInfo
+            {
+                Hit = true,
+                HitLayer = layer,
+                HitLayerIndex = layerIndex,
+                HitGameObjectPath = objectPath
             };
         }
     }

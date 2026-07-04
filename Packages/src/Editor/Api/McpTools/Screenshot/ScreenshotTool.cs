@@ -59,6 +59,7 @@ namespace io.github.hatayama.uLoopMCP
             List<UIElementInfo> physicsColliderElements = new List<UIElementInfo>();
             Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
             List<RaycastGridPointInfo> raycastGridPoints = new List<RaycastGridPointInfo>();
+            List<RaycastLayerSummaryInfo> raycastLayerSummaries = new List<RaycastLayerSummaryInfo>();
             List<UIElementInfo> raycastGridOverlayElements = new List<UIElementInfo>();
             GameRenderingImageInfo? raycastGridRenderingInfo = null;
 
@@ -89,6 +90,9 @@ namespace io.github.hatayama.uLoopMCP
                     raycastGridPoints = RaycastGridAnnotator.CollectRaycastGridPoints(
                         renderingImageInfo.RenderingImageSize,
                         renderingImageInfo.ImageToInputOffsetY);
+                    raycastLayerSummaries = RaycastGridAnnotator.CollectRaycastLayerSummaries(
+                        renderingImageInfo.RenderingImageSize,
+                        renderingImageInfo.ImageToInputOffsetY);
                     raycastGridOverlayElements = RaycastGridAnnotator.CreateOverlayElements(raycastGridPoints);
                 }
             }
@@ -104,6 +108,7 @@ namespace io.github.hatayama.uLoopMCP
                 ApplyRenderingCoordinateMetadata(elementsOnlyInfo, gameViewSize, imageToInputOffsetY);
                 elementsOnlyInfo.AnnotatedElements = elementsOnlyAnnotatedElements;
                 elementsOnlyInfo.RaycastGridPoints = raycastGridPoints;
+                elementsOnlyInfo.RaycastLayerSummaries = raycastLayerSummaries;
                 return new ScreenshotResponse(new List<ScreenshotInfo> { elementsOnlyInfo });
             }
 
@@ -171,6 +176,7 @@ namespace io.github.hatayama.uLoopMCP
                     captureRenderingInfo.ImageToInputOffsetY);
                 info.AnnotatedElements = responseAnnotatedElements;
                 info.RaycastGridPoints = raycastGridPoints;
+                info.RaycastLayerSummaries = raycastLayerSummaries;
                 screenshots.Add(info);
             }
             catch (Exception ex)
