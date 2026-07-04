@@ -20,6 +20,7 @@ list_shared_common_inputs() {
     'cli/common/clicontract/' \
     'cli/common/clicore/' \
     'cli/common/errors/' \
+    'cli/common/progress/' \
     'cli/common/project/' \
     'cli/common/skillscan/' \
     'cli/common/tooldocs/' \

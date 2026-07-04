@@ -12,6 +12,7 @@ import (
 	"time"
 
 	clicontract "github.com/hatayama/unity-cli-loop/common/clicontract"
+	cliprogress "github.com/hatayama/unity-cli-loop/common/progress"
 )
 
 const (
@@ -44,15 +45,7 @@ type Client struct {
 	options       ClientOptions
 }
 
-type ProgressFunc = func(message string)
-
-// Connection-stage progress events. Consumers map these tokens to their own
-// contextual message; any other progress payload is display-ready text such
-// as the main-thread stall notice.
-const (
-	ProgressEventConnected = "connected"
-	ProgressEventAccepted  = "accepted"
-)
+type ProgressFunc = cliprogress.Func
 
 type rpcRequest struct {
 	JSONRPC string            `json:"jsonrpc"`
@@ -189,7 +182,7 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 	}()
 
 	if progress != nil {
-		progress(ProgressEventConnected)
+		progress(cliprogress.Event{Stage: cliprogress.StageConnected})
 	}
 
 	requestID := client.nextRequestID()
@@ -235,7 +228,7 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 	if response.ULoop.Phase == rpcResponsePhaseAccepted {
 		outcome.RequestAccepted = true
 		if progress != nil {
-			progress(ProgressEventAccepted)
+			progress(cliprogress.Event{Stage: cliprogress.StageAccepted})
 		}
 
 		return client.readAcceptedResponse(
@@ -359,9 +352,12 @@ func (client *Client) reportMainThreadStall(stallSeconds float64, progress Progr
 		client.options.mainThreadStallHandler(stallSeconds)
 	}
 	if progress != nil {
-		progress(fmt.Sprintf(
-			"Unity main thread stuck %.0fs; check modal/long operation...",
-			stallSeconds))
+		progress(cliprogress.Event{
+			Stage: cliprogress.StageMessage,
+			Message: fmt.Sprintf(
+				"Unity main thread stuck %.0fs; check modal/long operation...",
+				stallSeconds),
+		})
 	}
 }
 

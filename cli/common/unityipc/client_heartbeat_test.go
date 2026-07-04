@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hatayama/unity-cli-loop/common/progress"
 )
 
 // Test support server that acks with heartbeat negotiation and then runs the given
@@ -187,8 +189,8 @@ func TestSendReportsMainThreadStallProgressWithModalHint(t *testing.T) {
 		context.Background(),
 		"run-tests",
 		map[string]any{},
-		func(message string) {
-			progressMessages = append(progressMessages, message)
+		func(event progress.Event) {
+			progressMessages = append(progressMessages, event.Message)
 		},
 	)
 	if err != nil {
