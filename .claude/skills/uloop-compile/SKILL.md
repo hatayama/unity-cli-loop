@@ -10,15 +10,15 @@ Execute Unity project compilation.
 ## Usage
 
 ```bash
-uloop compile [--force-recompile] [--wait-for-domain-reload]
+uloop compile [--force-recompile <true|false>] [--wait-for-domain-reload <true|false>]
 ```
 
 ## Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--force-recompile` | boolean | `false` | Force full recompilation (triggers Domain Reload) |
-| `--wait-for-domain-reload` | boolean | `false` | Wait until Domain Reload completes before returning |
+| `--force-recompile` | boolean value | `false` | Force full recompilation (triggers Domain Reload). Pass `true` or `false`; bare flags are not accepted. |
+| `--wait-for-domain-reload` | boolean value | `false` | Wait until Domain Reload completes before returning. Pass `true` or `false`; bare flags are not accepted. |
 
 ## Global Options
 
@@ -33,7 +33,7 @@ uloop compile [--force-recompile] [--wait-for-domain-reload]
 uloop compile
 
 # Force full recompilation
-uloop compile --force-recompile
+uloop compile --force-recompile true
 
 # Force recompilation and wait for Domain Reload completion
 uloop compile --force-recompile true --wait-for-domain-reload true

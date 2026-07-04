@@ -70,9 +70,6 @@ uloop screenshot --capture-mode rendering --annotate-raycast-grid true --raycast
 # Get UI element coordinates without capturing an image (fastest)
 uloop screenshot --capture-mode rendering --annotate-elements true --elements-only true
 
-# Get clustered 3D collider coordinates without capturing an image
-uloop screenshot --capture-mode rendering --annotate-raycast-grid true --raycast-layer-mask Default --elements-only true
-
 # Take a screenshot of Scene View
 uloop screenshot --window-name Scene
 
