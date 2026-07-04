@@ -1,4 +1,4 @@
-package skills
+package skillscan
 
 import "path/filepath"
 
