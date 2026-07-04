@@ -297,10 +297,7 @@ func runDispatcherUpdateCommand(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	updateCommand := exec.CommandContext(ctx, command.Name, command.Args...)
-	updateCommand.Stdout = io.Discard
-	updateCommand.Stderr = io.Discard
-	return updateCommand.Run()
+	return runUpdateCommand(ctx, command, io.Discard, io.Discard)
 }
 
 func runRealCLICommand(ctx context.Context, realCLIPath string, args []string, stdout io.Writer, stderr io.Writer) int {

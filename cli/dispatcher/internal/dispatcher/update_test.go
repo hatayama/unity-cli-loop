@@ -3,7 +3,11 @@ package dispatcher
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
+	"net/http"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -14,143 +18,142 @@ import (
 )
 
 func TestUpdateCommandForDarwinUsesDirectInstaller(t *testing.T) {
-	// Verifies dispatcher update downloads the shared installer before running it on the matching channel.
-	commandName, args, err := updateCommandForOS("darwin")
+	// Verifies dispatcher update downloads and verifies the release installer before running it on the matching channel.
+	command, err := update.CommandForOS("darwin", update.Options{
+		CurrentVersion: dispatcherVersion,
+	})
 	if err != nil {
 		t.Fatalf("updateCommandForOS failed: %v", err)
 	}
 
-	if commandName != "sh" {
-		t.Fatalf("command mismatch: %s", commandName)
+	if command.Name != "sh" {
+		t.Fatalf("command mismatch: %s", command.Name)
 	}
-	joinedArgs := strings.Join(args, " ")
-	expectedScriptURL := update.ScriptURL(dispatchercontract.DispatcherCurrent.DispatcherVersion, update.PosixScriptName)
+	expectedScriptURL := update.ScriptAssetURL(dispatchercontract.DispatcherCurrent.DispatcherVersion, update.PosixScriptName)
 	expectedReleaseTag := update.UpdateSelectorForVersion(dispatchercontract.DispatcherCurrent.DispatcherVersion)
-	if !strings.Contains(joinedArgs, expectedScriptURL) {
-		t.Fatalf("installer URL missing: %s", joinedArgs)
+	if command.InstallerURL != expectedScriptURL {
+		t.Fatalf("installer URL mismatch: %s", command.InstallerURL)
 	}
-	if !strings.Contains(joinedArgs, "ULOOP_VERSION='"+expectedReleaseTag+"'") {
-		t.Fatalf("installer version missing: %s", joinedArgs)
+	if command.InstallerChecksumURL != expectedScriptURL+".sha256" {
+		t.Fatalf("installer checksum URL mismatch: %s", command.InstallerChecksumURL)
 	}
-	if !strings.Contains(joinedArgs, "curl -fSL") || !strings.Contains(joinedArgs, "-o \"$tmp\"") {
-		t.Fatalf("update command should download before executing: %s", joinedArgs)
+	if !stringSliceContains(command.Env, "ULOOP_VERSION="+expectedReleaseTag) {
+		t.Fatalf("installer version missing: %v", command.Env)
 	}
-	if strings.Contains(joinedArgs, "npm") {
-		t.Fatalf("update command still references npm: %s", joinedArgs)
+	if command.InstallerName != update.PosixScriptName {
+		t.Fatalf("installer name mismatch: %s", command.InstallerName)
 	}
 }
 
 func TestUpdateCommandForWindowsUsesPowerShellInstaller(t *testing.T) {
-	// Verifies dispatcher update calls the Windows installer script quietly on the matching channel.
-	commandName, args, err := updateCommandForOS("windows")
+	// Verifies dispatcher update downloads and verifies the Windows release installer on the matching channel.
+	command, err := update.CommandForOS("windows", update.Options{
+		CurrentVersion: dispatcherVersion,
+	})
 	if err != nil {
 		t.Fatalf("updateCommandForOS failed: %v", err)
 	}
 
-	if commandName != "powershell" {
-		t.Fatalf("command mismatch: %s", commandName)
+	if command.Name != "powershell" {
+		t.Fatalf("command mismatch: %s", command.Name)
 	}
-	joinedArgs := strings.Join(args, " ")
-	expectedScriptURL := update.ScriptURL(dispatchercontract.DispatcherCurrent.DispatcherVersion, update.WindowsScriptName)
+	expectedScriptURL := update.ScriptAssetURL(dispatchercontract.DispatcherCurrent.DispatcherVersion, update.WindowsScriptName)
 	expectedReleaseTag := update.UpdateSelectorForVersion(dispatchercontract.DispatcherCurrent.DispatcherVersion)
-	if !strings.Contains(joinedArgs, expectedScriptURL) {
-		t.Fatalf("installer URL missing: %s", joinedArgs)
+	if command.InstallerURL != expectedScriptURL {
+		t.Fatalf("installer URL mismatch: %s", command.InstallerURL)
 	}
-	if !strings.Contains(joinedArgs, "$env:ULOOP_VERSION='"+expectedReleaseTag+"'") {
-		t.Fatalf("installer version missing: %s", joinedArgs)
+	if command.InstallerChecksumURL != expectedScriptURL+".sha256" {
+		t.Fatalf("installer checksum URL mismatch: %s", command.InstallerChecksumURL)
 	}
-	if !strings.Contains(joinedArgs, "$ProgressPreference='SilentlyContinue'") {
-		t.Fatalf("installer progress suppression missing: %s", joinedArgs)
+	if !stringSliceContains(command.Env, "ULOOP_VERSION="+expectedReleaseTag) {
+		t.Fatalf("installer version missing: %v", command.Env)
 	}
-	if strings.Contains(joinedArgs, "npm") {
-		t.Fatalf("update command still references npm: %s", joinedArgs)
+	if command.InstallerName != update.WindowsScriptName {
+		t.Fatalf("installer name mismatch: %s", command.InstallerName)
 	}
 }
 
 func TestUpdateCommandForDarwinUsesRequestedVersion(t *testing.T) {
 	// Verifies dispatcher update can target the minimum release version requested by Unity.
-	commandName, args, err := updateCommandForOSWithOptions("darwin", updateOptions{
-		targetVersion: "3.0.0-beta.6",
+	command, err := update.CommandForOS("darwin", update.Options{
+		CurrentVersion: dispatcherVersion,
+		TargetVersion:  "3.0.0-beta.6",
 	})
 	if err != nil {
 		t.Fatalf("updateCommandForOSWithOptions failed: %v", err)
 	}
 
-	if commandName != "sh" {
-		t.Fatalf("command mismatch: %s", commandName)
+	if command.Name != "sh" {
+		t.Fatalf("command mismatch: %s", command.Name)
 	}
-	joinedArgs := strings.Join(args, " ")
-	if !strings.Contains(joinedArgs, "dispatcher-v3.0.0-beta.6/scripts/install.sh") {
-		t.Fatalf("installer URL mismatch: %s", joinedArgs)
+	if !strings.Contains(command.InstallerURL, "dispatcher-v3.0.0-beta.6/install.sh") {
+		t.Fatalf("installer URL mismatch: %s", command.InstallerURL)
 	}
-	if !strings.Contains(joinedArgs, "ULOOP_VERSION='dispatcher-v3.0.0-beta.6'") {
-		t.Fatalf("installer version missing: %s", joinedArgs)
+	if !stringSliceContains(command.Env, "ULOOP_VERSION=dispatcher-v3.0.0-beta.6") {
+		t.Fatalf("installer version missing: %v", command.Env)
 	}
 }
 
 func TestUpdateCommandForDarwinNormalizesRequestedVersionPrefix(t *testing.T) {
 	// Verifies accepted v-prefixed semantic versions still resolve to valid dispatcher release tags.
-	commandName, args, err := updateCommandForOSWithOptions("darwin", updateOptions{
-		targetVersion: "v3.0.0-beta.6",
+	command, err := update.CommandForOS("darwin", update.Options{
+		CurrentVersion: dispatcherVersion,
+		TargetVersion:  "v3.0.0-beta.6",
 	})
 	if err != nil {
 		t.Fatalf("updateCommandForOSWithOptions failed: %v", err)
 	}
 
-	if commandName != "sh" {
-		t.Fatalf("command mismatch: %s", commandName)
+	if command.Name != "sh" {
+		t.Fatalf("command mismatch: %s", command.Name)
 	}
-	joinedArgs := strings.Join(args, " ")
-	if !strings.Contains(joinedArgs, "ULOOP_VERSION='dispatcher-v3.0.0-beta.6'") {
-		t.Fatalf("installer version should not contain a doubled v prefix: %s", joinedArgs)
+	if !stringSliceContains(command.Env, "ULOOP_VERSION=dispatcher-v3.0.0-beta.6") {
+		t.Fatalf("installer version should not contain a doubled v prefix: %v", command.Env)
 	}
-	if strings.Contains(joinedArgs, "dispatcher-vv3.0.0-beta.6") {
-		t.Fatalf("installer version contains doubled v prefix: %s", joinedArgs)
+	if strings.Contains(command.InstallerURL, "dispatcher-vv3.0.0-beta.6") {
+		t.Fatalf("installer URL contains doubled v prefix: %s", command.InstallerURL)
 	}
 }
 
 func TestUpdateCommandForDarwinNormalizesProjectRunnerReleaseTag(t *testing.T) {
 	// Verifies project runner release tags resolve to the matching dispatcher release.
-	commandName, args, err := updateCommandForOSWithOptions("darwin", updateOptions{
-		targetVersion: "uloop-project-runner-v3.0.0-beta.6",
+	command, err := update.CommandForOS("darwin", update.Options{
+		CurrentVersion: dispatcherVersion,
+		TargetVersion:  "uloop-project-runner-v3.0.0-beta.6",
 	})
 	if err != nil {
 		t.Fatalf("updateCommandForOSWithOptions failed: %v", err)
 	}
 
-	if commandName != "sh" {
-		t.Fatalf("command mismatch: %s", commandName)
+	if command.Name != "sh" {
+		t.Fatalf("command mismatch: %s", command.Name)
 	}
-	joinedArgs := strings.Join(args, " ")
-	if !strings.Contains(joinedArgs, "dispatcher-v3.0.0-beta.6/scripts/install.sh") {
-		t.Fatalf("installer URL mismatch: %s", joinedArgs)
+	if !strings.Contains(command.InstallerURL, "dispatcher-v3.0.0-beta.6/install.sh") {
+		t.Fatalf("installer URL mismatch: %s", command.InstallerURL)
 	}
-	if strings.Contains(joinedArgs, "dispatcher-vuloop-project-runner-v3.0.0-beta.6") {
-		t.Fatalf("installer version contains project runner prefix: %s", joinedArgs)
+	if strings.Contains(command.InstallerURL, "dispatcher-vuloop-project-runner-v3.0.0-beta.6") {
+		t.Fatalf("installer URL contains project runner prefix: %s", command.InstallerURL)
 	}
 }
 
 func TestUpdateCommandForWindowsUsesRequestedVersion(t *testing.T) {
 	// Verifies Windows dispatcher update can quietly target the minimum release version requested by Unity.
-	commandName, args, err := updateCommandForOSWithOptions("windows", updateOptions{
-		targetVersion: "3.0.0",
+	command, err := update.CommandForOS("windows", update.Options{
+		CurrentVersion: dispatcherVersion,
+		TargetVersion:  "3.0.0",
 	})
 	if err != nil {
 		t.Fatalf("updateCommandForOSWithOptions failed: %v", err)
 	}
 
-	if commandName != "powershell" {
-		t.Fatalf("command mismatch: %s", commandName)
+	if command.Name != "powershell" {
+		t.Fatalf("command mismatch: %s", command.Name)
 	}
-	joinedArgs := strings.Join(args, " ")
-	if !strings.Contains(joinedArgs, "dispatcher-v3.0.0/scripts/install.ps1") {
-		t.Fatalf("installer URL mismatch: %s", joinedArgs)
+	if !strings.Contains(command.InstallerURL, "dispatcher-v3.0.0/install.ps1") {
+		t.Fatalf("installer URL mismatch: %s", command.InstallerURL)
 	}
-	if !strings.Contains(joinedArgs, "$env:ULOOP_VERSION='dispatcher-v3.0.0'") {
-		t.Fatalf("installer version missing: %s", joinedArgs)
-	}
-	if !strings.Contains(joinedArgs, "$ProgressPreference='SilentlyContinue'") {
-		t.Fatalf("installer progress suppression missing: %s", joinedArgs)
+	if !stringSliceContains(command.Env, "ULOOP_VERSION=dispatcher-v3.0.0") {
+		t.Fatalf("installer version missing: %v", command.Env)
 	}
 }
 
@@ -195,6 +198,59 @@ func TestParseUpdateOptionsRejectsInvalidVersion(t *testing.T) {
 	_, err := parseUpdateOptions([]string{"--to-version", "not-a-version"})
 	if err == nil {
 		t.Fatal("expected invalid version error")
+	}
+}
+
+func TestDownloadVerifiedUpdateInstallerRejectsChecksumMismatch(t *testing.T) {
+	// Verifies update installers are not executable unless the downloaded checksum matches.
+	restoreHTTPClient := stubUpdateInstallerHTTPClient([]byte("echo install\n"), []byte("bad  install.sh\n"))
+	defer restoreHTTPClient()
+
+	_, err := downloadVerifiedUpdateInstaller(context.Background(), update.Command{
+		InstallerName:        update.PosixScriptName,
+		InstallerURL:         "https://example.test/install.sh",
+		InstallerChecksumURL: "https://example.test/install.sh.sha256",
+	}, t.TempDir())
+
+	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("expected checksum mismatch, got %v", err)
+	}
+}
+
+func TestDownloadVerifiedUpdateInstallerReturnsVerifiedFile(t *testing.T) {
+	// Verifies update installers are written to disk only after checksum verification succeeds.
+	installerContent := []byte("echo install\n")
+	checksum := sha256.Sum256(installerContent)
+	checksumContent := []byte(hex.EncodeToString(checksum[:]) + "  install.sh\n")
+	restoreHTTPClient := stubUpdateInstallerHTTPClient(installerContent, checksumContent)
+	defer restoreHTTPClient()
+
+	installerPath, err := downloadVerifiedUpdateInstaller(context.Background(), update.Command{
+		InstallerName:        update.PosixScriptName,
+		InstallerURL:         "https://example.test/install.sh",
+		InstallerChecksumURL: "https://example.test/install.sh.sha256",
+	}, t.TempDir())
+	if err != nil {
+		t.Fatalf("downloadVerifiedUpdateInstaller failed: %v", err)
+	}
+
+	assertFileContent(t, installerPath, string(installerContent))
+	if filepath.Base(installerPath) != update.PosixScriptName {
+		t.Fatalf("installer path mismatch: %s", installerPath)
+	}
+}
+
+func TestUpdateExecutionArgsRunsDownloadedInstallerFile(t *testing.T) {
+	// Verifies update execution runs the verified installer path directly.
+	posixArgs := updateExecutionArgs(update.Command{Name: "sh"}, "/tmp/install.sh")
+	if len(posixArgs) != 1 || posixArgs[0] != "/tmp/install.sh" {
+		t.Fatalf("posix update args mismatch: %v", posixArgs)
+	}
+
+	windowsArgs := updateExecutionArgs(update.Command{Name: "powershell"}, `C:\Temp\install.ps1`)
+	expected := []string{"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", `C:\Temp\install.ps1`}
+	if !stringSlicesEqual(windowsArgs, expected) {
+		t.Fatalf("windows update args mismatch: %v", windowsArgs)
 	}
 }
 
@@ -283,4 +339,51 @@ func stubManualUpdateHooks(t *testing.T, updatedVersion string) func() {
 		updateRunCommand = previousRunner
 		dispatcherReadInstalledVersion = previousReader
 	}
+}
+
+func stubUpdateInstallerHTTPClient(installerContent []byte, checksumContent []byte) func() {
+	previousHTTPClient := dispatcherHTTPClient
+	dispatcherHTTPClient = &http.Client{
+		Transport: dispatcherRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+			content := []byte{}
+			statusCode := http.StatusNotFound
+			if strings.HasSuffix(request.URL.Path, ".sha256") {
+				content = checksumContent
+				statusCode = http.StatusOK
+			}
+			if strings.HasSuffix(request.URL.Path, ".sh") || strings.HasSuffix(request.URL.Path, ".ps1") {
+				content = installerContent
+				statusCode = http.StatusOK
+			}
+			return &http.Response{
+				StatusCode: statusCode,
+				Status:     http.StatusText(statusCode),
+				Body:       io.NopCloser(bytes.NewReader(content)),
+			}, nil
+		}),
+	}
+	return func() {
+		dispatcherHTTPClient = previousHTTPClient
+	}
+}
+
+func stringSliceContains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func stringSlicesEqual(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }

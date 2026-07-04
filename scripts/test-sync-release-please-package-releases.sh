@@ -40,7 +40,7 @@ asset_json() {
 dispatcher_asset_json() {
   case "${DISPATCHER_RELEASE_ASSETS:-complete}" in
     complete)
-      printf '[{"name":"install.sh","size":1},{"name":"install.ps1","size":1},{"name":"uloop-dispatcher-darwin-amd64.tar.gz","size":1},{"name":"uloop-dispatcher-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-dispatcher-darwin-arm64.tar.gz","size":1},{"name":"uloop-dispatcher-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-dispatcher-windows-amd64.zip","size":1},{"name":"uloop-dispatcher-windows-amd64.zip.sha256","size":1}]'
+      printf '[{"name":"install.sh","size":1},{"name":"install.sh.sha256","size":1},{"name":"install.ps1","size":1},{"name":"install.ps1.sha256","size":1},{"name":"uloop-dispatcher-darwin-amd64.tar.gz","size":1},{"name":"uloop-dispatcher-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-dispatcher-darwin-arm64.tar.gz","size":1},{"name":"uloop-dispatcher-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-dispatcher-windows-amd64.zip","size":1},{"name":"uloop-dispatcher-windows-amd64.zip.sha256","size":1}]'
       ;;
     missing)
       printf '[]'
@@ -276,7 +276,9 @@ fi
 if [ "${1:-}" = "--list" ]; then
   printf '%s\n' \
     install.sh \
+    install.sh.sha256 \
     install.ps1 \
+    install.ps1.sha256 \
     uloop-dispatcher-darwin-amd64.tar.gz \
     uloop-dispatcher-darwin-amd64.tar.gz.sha256 \
     uloop-dispatcher-darwin-arm64.tar.gz \

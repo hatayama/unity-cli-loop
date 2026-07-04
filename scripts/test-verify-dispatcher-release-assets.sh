@@ -38,6 +38,8 @@ write_checksum() {
 
 write_executable "$RELEASE_DIR/install.sh" "install"
 printf '%s\n' "install" > "$RELEASE_DIR/install.ps1"
+write_checksum "install.sh"
+write_checksum "install.ps1"
 write_executable "$PAYLOAD_DIR/uloop" "dispatcher"
 
 tar -czf "$RELEASE_DIR/uloop-dispatcher-darwin-amd64.tar.gz" -C "$PAYLOAD_DIR" ./uloop
