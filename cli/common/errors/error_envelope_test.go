@@ -449,12 +449,39 @@ func (timeoutTestError) Temporary() bool {
 
 func TestClassifyProjectNotFound(t *testing.T) {
 	cliErr := ClassifyError(
-		errors.New("unity project not found. Use --project-path option to specify the target"),
+		ProjectNotFoundError{},
 		ErrorContext{Command: "compile"},
 	)
 
 	if cliErr.ErrorCode != errorCodeProjectNotFound {
 		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+}
+
+func TestClassifyPlainProjectNotFoundTextAsInternalError(t *testing.T) {
+	// Verifies project resolution classification depends on typed errors, not copied text.
+	cliErr := ClassifyError(
+		errors.New("unity project not found. Use --project-path option to specify the target"),
+		ErrorContext{Command: "compile"},
+	)
+
+	if cliErr.ErrorCode != ErrorCodeInternalError {
+		t.Fatalf("plain text error should not classify as project not found: %#v", cliErr)
+	}
+}
+
+func TestClassifyNotUnityProjectError(t *testing.T) {
+	// Verifies explicit non-Unity project paths are classified by error type.
+	cliErr := ClassifyError(
+		NotUnityProjectError{ProjectRoot: "/tmp/not-unity"},
+		ErrorContext{Command: "compile"},
+	)
+
+	if cliErr.ErrorCode != errorCodeProjectNotFound {
+		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+	if cliErr.Message != "not a Unity project: /tmp/not-unity" {
+		t.Fatalf("message mismatch: %#v", cliErr)
 	}
 }
 
