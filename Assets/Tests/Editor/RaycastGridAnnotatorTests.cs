@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace io.github.hatayama.uLoopMCP.Tests.Editor
 {
@@ -176,6 +178,48 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
+        public void SelectReachableRepresentativeSample_WhenNearestSampleIsOccluded_ShouldPromoteNextNearestSample()
+        {
+            RaycastClusterSample leftSample = CreateSample(1, 0f, 0f);
+            RaycastClusterSample nearestSample = CreateSample(1, 5f, 0f);
+            RaycastClusterSample farSample = CreateSample(1, 20f, 0f);
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
+            {
+                leftSample,
+                nearestSample,
+                farSample
+            };
+            HashSet<RaycastClusterSample> occludedSamples = new HashSet<RaycastClusterSample>
+            {
+                nearestSample
+            };
+
+            RaycastClusterSample representative = RaycastHitClusterer.SelectReachableRepresentativeSample(
+                samples,
+                (RaycastClusterSample sample) => occludedSamples.Contains(sample));
+
+            Assert.That(representative, Is.SameAs(leftSample));
+        }
+
+        [Test]
+        public void SelectReachableRepresentativeSample_WhenAllSamplesAreOccluded_ShouldReturnNull()
+        {
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
+            {
+                CreateSample(1, 0f, 0f),
+                CreateSample(1, 5f, 0f),
+                CreateSample(1, 20f, 0f)
+            };
+            HashSet<RaycastClusterSample> occludedSamples = new HashSet<RaycastClusterSample>(samples);
+
+            RaycastClusterSample representative = RaycastHitClusterer.SelectReachableRepresentativeSample(
+                samples,
+                (RaycastClusterSample sample) => occludedSamples.Contains(sample));
+
+            Assert.That(representative, Is.Null);
+        }
+
+        [Test]
         public void CreatePhysicsColliderElement_ShouldKeepBoundsInTopLeftInputSpace()
         {
             RaycastClusterInfo cluster = new RaycastClusterInfo
@@ -207,6 +251,51 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             Assert.That(element.BoundsMaxY, Is.EqualTo(209f));
             Assert.That(element.SimX, Is.InRange(element.BoundsMinX, element.BoundsMaxX));
             Assert.That(element.SimY, Is.InRange(element.BoundsMinY, element.BoundsMaxY));
+        }
+
+        [Test]
+        public void IsUiOcclusionRaycastResult_WhenGraphicRaycasterHit_ShouldReturnTrue()
+        {
+            GameObject canvasObject = new GameObject("GraphicRaycasterOcclusionTest");
+            try
+            {
+                GraphicRaycaster graphicRaycaster = canvasObject.AddComponent<GraphicRaycaster>();
+                RaycastResult raycastResult = new RaycastResult
+                {
+                    module = graphicRaycaster
+                };
+
+                bool isOccluded = RaycastGridAnnotator.IsUiOcclusionRaycastResult(raycastResult);
+
+                Assert.That(isOccluded, Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(canvasObject);
+            }
+        }
+
+        [Test]
+        public void IsUiOcclusionRaycastResult_WhenPhysicsRaycasterHit_ShouldReturnFalse()
+        {
+            GameObject cameraObject = new GameObject("PhysicsRaycasterOcclusionTest");
+            try
+            {
+                cameraObject.AddComponent<Camera>();
+                PhysicsRaycaster physicsRaycaster = cameraObject.AddComponent<PhysicsRaycaster>();
+                RaycastResult raycastResult = new RaycastResult
+                {
+                    module = physicsRaycaster
+                };
+
+                bool isOccluded = RaycastGridAnnotator.IsUiOcclusionRaycastResult(raycastResult);
+
+                Assert.That(isOccluded, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(cameraObject);
+            }
         }
 
         private static RaycastClusterSample CreateSample(int clusterKey, float inputX, float inputY)

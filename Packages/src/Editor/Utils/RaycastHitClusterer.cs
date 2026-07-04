@@ -35,7 +35,8 @@ namespace io.github.hatayama.uLoopMCP
                 clusters.Add(new RaycastClusterInfo
                 {
                     Representative = SelectRepresentativeSample(clusterSamples),
-                    SampleCount = clusterSamples.Count
+                    SampleCount = clusterSamples.Count,
+                    Samples = new List<RaycastClusterSample>(clusterSamples)
                 });
             }
 
@@ -68,6 +69,30 @@ namespace io.github.hatayama.uLoopMCP
             return representative;
         }
 
+        internal static RaycastClusterSample? SelectReachableRepresentativeSample(
+            List<RaycastClusterSample> samples,
+            RaycastClusterSampleOcclusionCheck isOccluded)
+        {
+            System.Diagnostics.Debug.Assert(samples != null, "Raycast samples must not be null.");
+            System.Diagnostics.Debug.Assert(isOccluded != null, "Raycast sample occlusion check must not be null.");
+            List<RaycastClusterSample> validSamples = samples!;
+            RaycastClusterSampleOcclusionCheck validIsOccluded = isOccluded!;
+            System.Diagnostics.Debug.Assert(validSamples.Count > 0, "At least one raycast sample is required.");
+
+            List<RaycastClusterSample> candidates = CreateSamplesOrderedByCentroidDistance(validSamples);
+            foreach (RaycastClusterSample candidate in candidates)
+            {
+                if (validIsOccluded(candidate))
+                {
+                    continue;
+                }
+
+                return candidate;
+            }
+
+            return null;
+        }
+
         private static Vector2Like CalculateCentroid(List<RaycastClusterSample> samples)
         {
             float sumX = 0f;
@@ -90,6 +115,51 @@ namespace io.github.hatayama.uLoopMCP
             float deltaX = sample.InputX - point.X;
             float deltaY = sample.InputY - point.Y;
             return deltaX * deltaX + deltaY * deltaY;
+        }
+
+        private static List<RaycastClusterSample> CreateSamplesOrderedByCentroidDistance(
+            List<RaycastClusterSample> samples)
+        {
+            Vector2Like centroid = CalculateCentroid(samples);
+            List<RankedRaycastClusterSample> rankedSamples = new List<RankedRaycastClusterSample>();
+            for (int i = 0; i < samples.Count; i++)
+            {
+                RaycastClusterSample sample = samples[i];
+                rankedSamples.Add(new RankedRaycastClusterSample
+                {
+                    Sample = sample,
+                    OriginalIndex = i,
+                    SquaredDistance = CalculateSquaredDistance(sample, centroid)
+                });
+            }
+
+            rankedSamples.Sort(CompareRankedSamples);
+
+            List<RaycastClusterSample> orderedSamples = new List<RaycastClusterSample>();
+            foreach (RankedRaycastClusterSample rankedSample in rankedSamples)
+            {
+                orderedSamples.Add(rankedSample.Sample);
+            }
+
+            return orderedSamples;
+        }
+
+        private static int CompareRankedSamples(RankedRaycastClusterSample left, RankedRaycastClusterSample right)
+        {
+            int distanceComparison = left.SquaredDistance.CompareTo(right.SquaredDistance);
+            if (distanceComparison != 0)
+            {
+                return distanceComparison;
+            }
+
+            return left.OriginalIndex.CompareTo(right.OriginalIndex);
+        }
+
+        private struct RankedRaycastClusterSample
+        {
+            public RaycastClusterSample Sample { get; set; }
+            public int OriginalIndex { get; set; }
+            public float SquaredDistance { get; set; }
         }
 
         private struct Vector2Like
@@ -116,7 +186,13 @@ namespace io.github.hatayama.uLoopMCP
     {
         public RaycastClusterSample Representative { get; set; } = new RaycastClusterSample();
         public int SampleCount { get; set; }
+        public List<RaycastClusterSample> Samples { get; set; } = new List<RaycastClusterSample>();
     }
+
+    /// <summary>
+    /// Reports whether a raycast sample cannot be used as a click target.
+    /// </summary>
+    internal delegate bool RaycastClusterSampleOcclusionCheck(RaycastClusterSample sample);
 
     /// <summary>
     /// Carries GameObject metadata for one clustered collider.

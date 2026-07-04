@@ -33,6 +33,8 @@ For `PhysicsCollider` entries, `SimX/SimY` is a real sampled raycast hit nearest
 
 `--raycast-layer-mask` filters by the requested physics layers and Camera.main.cullingMask. A layer that is requested but hidden from the active camera is treated as not visible and will not produce `PhysicsCollider` entries.
 
+For clustered `PhysicsCollider` entries, points where the frontmost EventSystem hit comes from a `GraphicRaycaster` UI element are treated as covered by UI. This includes world-space Canvas UI. PhysicsRaycaster and other non-uGUI hits are not treated as UI occlusion. When the centroid-nearest sample is covered, the annotator promotes the nearest uncovered sampled hit; if every sampled hit in that collider cluster is covered, the collider is omitted from `AnnotatedElements`.
+
 The mouse input tools convert internally to Unity Input System coordinates:
 
 ```text

@@ -1,6 +1,8 @@
 #nullable enable
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace io.github.hatayama.uLoopMCP
 {
@@ -94,12 +96,24 @@ namespace io.github.hatayama.uLoopMCP
                 layerMask);
             List<RaycastClusterInfo> clusters = RaycastHitClusterer.CreateClusters(clusterCollection.Samples);
             List<UIElementInfo> elements = new List<UIElementInfo>();
+            UiRaycastHelper.RaycastContext? uiRaycastContext = CreateUiRaycastContext();
+            Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
 
             for (int i = 0; i < clusters.Count; i++)
             {
+                RaycastClusterSample? representative = SelectUnoccludedRepresentative(
+                    clusters[i],
+                    uiRaycastContext,
+                    gameViewSize);
+                if (representative == null)
+                {
+                    continue;
+                }
+
+                clusters[i].Representative = representative;
                 RaycastColliderMetadata metadata =
-                    clusterCollection.MetadataByClusterKey[clusters[i].Representative.ClusterKey];
-                elements.Add(CreatePhysicsColliderElement($"R{i + 1}", clusters[i], metadata));
+                    clusterCollection.MetadataByClusterKey[representative.ClusterKey];
+                elements.Add(CreatePhysicsColliderElement($"R{elements.Count + 1}", clusters[i], metadata));
             }
 
             return elements;
@@ -271,6 +285,48 @@ namespace io.github.hatayama.uLoopMCP
                 element.SimY <= element.BoundsMaxY,
                 "Physics collider bounds must use the same top-left input coordinate space as SimX/SimY.");
             return element;
+        }
+
+        private static UiRaycastHelper.RaycastContext? CreateUiRaycastContext()
+        {
+            EventSystem currentEventSystem = EventSystem.current;
+            if (currentEventSystem == null || !currentEventSystem.isActiveAndEnabled)
+            {
+                return null;
+            }
+
+            return new UiRaycastHelper.RaycastContext(currentEventSystem);
+        }
+
+        private static RaycastClusterSample? SelectUnoccludedRepresentative(
+            RaycastClusterInfo cluster,
+            UiRaycastHelper.RaycastContext? uiRaycastContext,
+            Vector2 gameViewSize)
+        {
+            if (uiRaycastContext == null)
+            {
+                return cluster.Representative;
+            }
+
+            return RaycastHitClusterer.SelectReachableRepresentativeSample(
+                cluster.Samples,
+                (RaycastClusterSample sample) => IsSampleOccludedByUi(sample, uiRaycastContext, gameViewSize));
+        }
+
+        private static bool IsSampleOccludedByUi(
+            RaycastClusterSample sample,
+            UiRaycastHelper.RaycastContext uiRaycastContext,
+            Vector2 gameViewSize)
+        {
+            Vector2 inputPosition = new Vector2(sample.InputX, sample.InputY);
+            GameViewCoordinateConversion conversion =
+                GameViewCoordinateUtility.ConvertInputToUnity(inputPosition, gameViewSize);
+            return IsUiOcclusionRaycastResult(uiRaycastContext.Raycast(conversion.InjectedUnityPosition));
+        }
+
+        internal static bool IsUiOcclusionRaycastResult(RaycastResult? raycastResult)
+        {
+            return raycastResult != null && raycastResult.Value.module is GraphicRaycaster;
         }
 
         private static List<string> GetRelevantComponentTypeNames(GameObject hitObject)

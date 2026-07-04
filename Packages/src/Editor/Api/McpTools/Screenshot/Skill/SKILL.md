@@ -24,7 +24,7 @@ uloop screenshot [--window-name <name>] [--resolution-scale <scale>] [--match-mo
 | `--output-directory` | string | `""` | Output directory path for saving screenshots. When empty, uses default path (.uloop/outputs/Screenshots/). Accepts absolute paths. |
 | `--annotate-elements` | boolean | `false` | Annotate interactive UI elements with index labels and interaction hints (A / CLICK, B / DRAG, ...). Only works with `--capture-mode rendering` in PlayMode. |
 | `--annotate-raycast-grid` | boolean | `false` | Annotate 3D physics raycast candidate points (R1, R2, ...). Only works with `--capture-mode rendering`; uses Camera.main and its culling mask. |
-| `--raycast-layer-mask` | string | `""` | Comma-separated physics layer names for `--annotate-raycast-grid`. Hits are limited to layers also visible to Camera.main.cullingMask. When set, dense raycast samples are clustered by collider and returned as `Type="PhysicsCollider"` entries in `AnnotatedElements`. |
+| `--raycast-layer-mask` | string | `""` | Comma-separated physics layer names for `--annotate-raycast-grid`. Hits are limited to layers also visible to Camera.main.cullingMask. When set, dense raycast samples are clustered by collider and returned as `Type="PhysicsCollider"` entries in `AnnotatedElements`; samples blocked by EventSystem `GraphicRaycaster` UI hits are skipped. |
 | `--elements-only` | boolean | `false` | Return only annotation JSON without capturing a screenshot image. Requires `--annotate-elements` or `--annotate-raycast-grid`, and `--capture-mode rendering` in PlayMode. |
 
 ## Match Modes
@@ -112,4 +112,5 @@ When multiple windows match (e.g., multiple Inspector windows or when using `con
 - Use `--capture-mode rendering` for coordinates that should be passed to `simulate-mouse-input`, `simulate-mouse-ui`, or `raycast`.
 - Use `ScreenshotToInputFormula` before passing raw image pixels to mouse tools. `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` are already mouse-input coordinates.
 - Use `--raycast-layer-mask` with layer names from `find-game-objects` or project code when the game input code raycasts only specific layers. Layers hidden by Camera.main.cullingMask are not reported because they are not visible to the screenshot camera.
+- Clustered `PhysicsCollider` entries avoid points where the frontmost EventSystem hit comes from a `GraphicRaycaster` UI element, including world-space Canvas UI. PhysicsRaycaster and other non-uGUI hits are not treated as UI occlusion. If the centroid-nearest sample is covered, the nearest uncovered sampled hit is used; if every sampled hit in the cluster is covered, that collider is omitted.
 - Do not use `window` captures as mouse-input coordinates because they include Unity Editor chrome.
