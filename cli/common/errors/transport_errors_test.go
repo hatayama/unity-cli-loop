@@ -1,4 +1,4 @@
-package clicore
+package clierrors
 
 import (
 	"fmt"

@@ -1,4 +1,4 @@
-package clicore
+package clierrors
 
 import (
 	"bytes"
@@ -417,7 +417,7 @@ func TestWriteToolFailureClassifiesAcceptedResponseTimeout(t *testing.T) {
 func TestUnknownCommandErrorIncludesAvailableCommands(t *testing.T) {
 	cliErr := UnknownCommandError(
 		"missing",
-		ToolsCache{Tools: []ToolDefinition{{Name: "compile"}}},
+		[]string{"launch", "compile"},
 		ErrorContext{ProjectRoot: "/tmp/MyProject"},
 	)
 
@@ -467,16 +467,6 @@ func TestClassifyConnectionAttemptUsesContextProjectRootFallback(t *testing.T) {
 	cliErr := ClassifyError(err, ErrorContext{ProjectRoot: "/tmp/ContextProject", Command: "compile"})
 	if cliErr.ProjectRoot != "/tmp/ContextProject" {
 		t.Fatalf("project root mismatch: %#v", cliErr)
-	}
-}
-
-func TestAvailableCommandNamesIncludesBuiltIns(t *testing.T) {
-	names := availableCommandNames(ToolsCache{})
-	expectedBuiltIns := []string{"launch", "list", "sync", "focus-window", "wait-for-pause-point", "pause-point-status", "skills", "completion", "install", "update"}
-	for index, expected := range expectedBuiltIns {
-		if names[index] != expected {
-			t.Fatalf("built-in command mismatch: %#v", names)
-		}
 	}
 }
 

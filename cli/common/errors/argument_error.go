@@ -1,4 +1,4 @@
-package clicore
+package clierrors
 
 import "fmt"
 
@@ -16,7 +16,7 @@ func (err *ArgumentError) Error() string {
 }
 
 func (err *ArgumentError) ToCLIError(context ErrorContext) CLIError {
-	command := FirstNonEmpty(err.Command, context.Command)
+	command := firstNonEmpty(err.Command, context.Command)
 	details := map[string]any{}
 	if err.Option != "" {
 		details["Option"] = err.Option
