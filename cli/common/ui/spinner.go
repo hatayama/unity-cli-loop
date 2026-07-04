@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/progress"
 )
 
 const (
@@ -42,13 +42,13 @@ func NewLaunchSpinner(stdout io.Writer, stderr io.Writer) *TerminalSpinner {
 // and passes display-ready payloads (such as the heartbeat main-thread stall
 // notice) through to the spinner verbatim. Without this mapping the stall
 // diagnosis built by the IPC client would never reach the user.
-func NewSpinnerProgressFunc(spinner *TerminalSpinner, executingMessage string) unityipc.ProgressFunc {
-	return func(message string) {
-		if message == unityipc.ProgressEventConnected || message == unityipc.ProgressEventAccepted {
+func NewSpinnerProgressFunc(spinner *TerminalSpinner, executingMessage string) progress.Func {
+	return func(event progress.Event) {
+		if event.Stage == progress.StageConnected || event.Stage == progress.StageAccepted {
 			spinner.Update(executingMessage)
 			return
 		}
-		spinner.Update(message)
+		spinner.Update(event.Message)
 	}
 }
 

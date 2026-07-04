@@ -3,8 +3,8 @@ package clicore
 import (
 	"io"
 
+	"github.com/hatayama/unity-cli-loop/common/progress"
 	"github.com/hatayama/unity-cli-loop/common/ui"
-	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
 type TerminalSpinner = ui.TerminalSpinner
@@ -17,7 +17,7 @@ func NewLaunchSpinner(stdout io.Writer, stderr io.Writer) *TerminalSpinner {
 	return ui.NewLaunchSpinner(stdout, stderr)
 }
 
-func NewSpinnerProgressFunc(spinner *TerminalSpinner, executingMessage string) unityipc.ProgressFunc {
+func NewSpinnerProgressFunc(spinner *TerminalSpinner, executingMessage string) progress.Func {
 	return ui.NewSpinnerProgressFunc(spinner, executingMessage)
 }
 
