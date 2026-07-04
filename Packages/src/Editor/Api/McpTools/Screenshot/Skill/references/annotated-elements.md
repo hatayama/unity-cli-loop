@@ -1,10 +1,10 @@
 # Annotated Elements and Coordinates
 
-Read this when using `uloop screenshot --capture-mode rendering --annotate-elements` or clustered `--annotate-raycast-grid --raycast-layer-mask <layers>` output to find coordinates for `simulate-mouse-ui` or `simulate-mouse-input`.
+Read this when using `uloop screenshot --capture-mode rendering --annotate-elements true` or clustered `--annotate-raycast-grid true --raycast-layer-mask <layers>` output to find coordinates for `simulate-mouse-ui` or `simulate-mouse-input`.
 
 ## AnnotatedElements Fields
 
-`AnnotatedElements` is empty unless `--annotate-elements` is used, or unless `--annotate-raycast-grid --raycast-layer-mask <layers>` adds clustered 3D collider candidates. UI entries are sorted by z-order, frontmost first. Each item contains:
+`AnnotatedElements` is empty unless `--annotate-elements true` is used, or unless `--annotate-raycast-grid true --raycast-layer-mask <layers>` adds clustered 3D collider candidates. UI entries are sorted by z-order, frontmost first. Each item contains:
 
 - `Label`: Index label in JSON (`A` = frontmost, `B` = next, ...). Screenshot labels also include the interaction hint, such as `A / CLICK` or `B / DRAG`.
 - `Name`: Element name
@@ -20,7 +20,7 @@ Read this when using `uloop screenshot --capture-mode rendering --annotate-eleme
 
 ## RaycastLayerSummaries Fields
 
-`RaycastLayerSummaries` is populated when `--annotate-raycast-grid` is used without `--raycast-layer-mask`. It is built from dense raycast samples, while `RaycastGridPoints` remains the coarse 5x5 annotated grid.
+`RaycastLayerSummaries` is populated when `--annotate-raycast-grid true` is used without `--raycast-layer-mask`. It is built from dense raycast samples, while `RaycastGridPoints` remains the coarse 5x5 annotated grid.
 
 - `Layer`: Physics layer name to pass to `--raycast-layer-mask`
 - `LayerIndex`: Unity physics layer index
