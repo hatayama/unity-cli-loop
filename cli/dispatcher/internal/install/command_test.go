@@ -100,6 +100,7 @@ func TestCommandForMacConfiguresShellPathAndLegacyCleanup(t *testing.T) {
 		"# >>> uloop PATH >>>",
 		"# <<< uloop PATH <<<",
 		"fish_add_path --move",
+		`tmp_path=$(mktemp "$profile_dir/.uloop_path.XXXXXX" 2>/dev/null || true)`,
 		"npm uninstall -g --prefix",
 		"npm uninstall -g uloop-cli",
 		"report_path_shadowing",
@@ -468,8 +469,8 @@ func TestPosixInstallScriptFailsWhenSymlinkProfileTargetCannotBeWritten(t *testi
 	}
 }
 
-func TestPosixInstallScriptFailsWhenShellProfileIsUnknown(t *testing.T) {
-	// Verifies macOS shell setup reports manual PATH setup when no profile can be updated.
+func TestPosixInstallScriptSucceedsWhenShellProfileIsUnknown(t *testing.T) {
+	// Verifies macOS shell setup treats manual PATH guidance as non-fatal.
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell setup is not available on Windows")
 	}
@@ -490,12 +491,12 @@ func TestPosixInstallScriptFailsWhenShellProfileIsUnknown(t *testing.T) {
 		"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
 	}
 	output, err := process.CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected POSIX setup failure:\n%s", output)
+	if err != nil {
+		t.Fatalf("expected POSIX setup success:\n%s", output)
 	}
 	outputText := string(output)
 	if !strings.Contains(outputText, "Add this directory to PATH in your shell profile:") {
-		t.Fatalf("setup failure should include manual PATH guidance:\n%s", outputText)
+		t.Fatalf("setup output should include manual PATH guidance:\n%s", outputText)
 	}
 	if !strings.Contains(outputText, installDir) {
 		t.Fatalf("manual PATH guidance should include install dir:\n%s", outputText)

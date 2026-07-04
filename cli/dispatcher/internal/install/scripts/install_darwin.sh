@@ -108,19 +108,27 @@ write_path_block() {
     profile_path=$1
     path_line=$2
     profile_write_path=$(resolve_profile_write_path "$profile_path")
-    profile_dir=${profile_write_path%/*}
-    tmp_path=$(mktemp)
+    case "$profile_write_path" in
+        */*)
+            profile_dir=${profile_write_path%/*}
+            [ -n "$profile_dir" ] || profile_dir=/
+            ;;
+        *)
+            profile_dir=.
+            ;;
+    esac
+
+    if [ "$profile_dir" != "." ] && [ "$profile_dir" != "/" ]; then
+        if ! mkdir -p "$profile_dir"; then
+            echo "Could not create shell profile directory: $profile_dir" >&2
+            return 1
+        fi
+    fi
+
+    tmp_path=$(mktemp "$profile_dir/.uloop_path.XXXXXX" 2>/dev/null || true)
     if [ -z "$tmp_path" ]; then
         echo "Could not create a temporary file for PATH setup." >&2
         return 1
-    fi
-
-    if [ -n "$profile_dir" ] && [ "$profile_dir" != "$profile_write_path" ]; then
-        if ! mkdir -p "$profile_dir"; then
-            echo "Could not create shell profile directory: $profile_dir" >&2
-            rm -f "$tmp_path"
-            return 1
-        fi
     fi
 
     if [ -f "$profile_write_path" ]; then
@@ -173,7 +181,7 @@ configure_shell_path() {
         *)
             echo "Add this directory to PATH in your shell profile:"
             echo "  $InstallDir"
-            return 1
+            return 0
             ;;
     esac
 }
