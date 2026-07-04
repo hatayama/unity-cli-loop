@@ -1,8 +1,10 @@
 package uninstall
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
+	"unicode/utf16"
 )
 
 func TestCommandForDarwinRemovesUloopFromInstallDirectory(t *testing.T) {
@@ -88,7 +90,8 @@ func TestWindowsUninstallScriptsReplaceTemplateValues(t *testing.T) {
 	// Verifies Windows uninstall templates cannot ship with unresolved placeholders.
 	targetPath := `C:\Temp\uloop's bin\uloop.exe`
 	deletionScript := windowsDeletionScript(targetPath, 5678)
-	launchScript := windowsLaunchScript(encodePowerShellCommand(deletionScript))
+	encodedDeletionScript := encodePowerShellCommand(deletionScript)
+	launchScript := windowsLaunchScript(encodedDeletionScript)
 
 	for _, script := range []string{deletionScript, launchScript} {
 		if strings.Contains(script, "{{") {
@@ -104,6 +107,28 @@ func TestWindowsUninstallScriptsReplaceTemplateValues(t *testing.T) {
 	if !strings.Contains(launchScript, "$EncodedDeletion = '") {
 		t.Fatalf("launch script does not assign encoded deletion command: %s", launchScript)
 	}
+	decodedDeletionScript := decodePowerShellCommandForTest(t, encodedDeletionScript)
+	if !strings.Contains(decodedDeletionScript, `$Target = 'C:\Temp\uloop''s bin\uloop.exe'`) {
+		t.Fatalf("encoded deletion script does not contain replaced target path: %s", decodedDeletionScript)
+	}
+}
+
+func decodePowerShellCommandForTest(t *testing.T, encodedCommand string) string {
+	t.Helper()
+
+	encodedBytes, err := base64.StdEncoding.DecodeString(encodedCommand)
+	if err != nil {
+		t.Fatalf("failed to decode PowerShell command: %v", err)
+	}
+	if len(encodedBytes)%2 != 0 {
+		t.Fatalf("encoded PowerShell command byte length must be even: %d", len(encodedBytes))
+	}
+
+	utf16Values := make([]uint16, 0, len(encodedBytes)/2)
+	for index := 0; index < len(encodedBytes); index += 2 {
+		utf16Values = append(utf16Values, uint16(encodedBytes[index])|uint16(encodedBytes[index+1])<<8)
+	}
+	return string(utf16.Decode(utf16Values))
 }
 
 func TestCommandForWindowsRemovesUserPathBeforeDeletingLauncher(t *testing.T) {
