@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace io.github.hatayama.uLoopMCP.Tests.Editor
 {
@@ -249,6 +251,51 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             Assert.That(element.BoundsMaxY, Is.EqualTo(209f));
             Assert.That(element.SimX, Is.InRange(element.BoundsMinX, element.BoundsMaxX));
             Assert.That(element.SimY, Is.InRange(element.BoundsMinY, element.BoundsMaxY));
+        }
+
+        [Test]
+        public void IsUiOcclusionRaycastResult_WhenGraphicRaycasterHit_ShouldReturnTrue()
+        {
+            GameObject canvasObject = new GameObject("GraphicRaycasterOcclusionTest");
+            try
+            {
+                GraphicRaycaster graphicRaycaster = canvasObject.AddComponent<GraphicRaycaster>();
+                RaycastResult raycastResult = new RaycastResult
+                {
+                    module = graphicRaycaster
+                };
+
+                bool isOccluded = RaycastGridAnnotator.IsUiOcclusionRaycastResult(raycastResult);
+
+                Assert.That(isOccluded, Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(canvasObject);
+            }
+        }
+
+        [Test]
+        public void IsUiOcclusionRaycastResult_WhenPhysicsRaycasterHit_ShouldReturnFalse()
+        {
+            GameObject cameraObject = new GameObject("PhysicsRaycasterOcclusionTest");
+            try
+            {
+                cameraObject.AddComponent<Camera>();
+                PhysicsRaycaster physicsRaycaster = cameraObject.AddComponent<PhysicsRaycaster>();
+                RaycastResult raycastResult = new RaycastResult
+                {
+                    module = physicsRaycaster
+                };
+
+                bool isOccluded = RaycastGridAnnotator.IsUiOcclusionRaycastResult(raycastResult);
+
+                Assert.That(isOccluded, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(cameraObject);
+            }
         }
 
         private static RaycastClusterSample CreateSample(int clusterKey, float inputX, float inputY)

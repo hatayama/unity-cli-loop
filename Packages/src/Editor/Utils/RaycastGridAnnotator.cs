@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace io.github.hatayama.uLoopMCP
 {
@@ -320,7 +321,12 @@ namespace io.github.hatayama.uLoopMCP
             Vector2 inputPosition = new Vector2(sample.InputX, sample.InputY);
             GameViewCoordinateConversion conversion =
                 GameViewCoordinateUtility.ConvertInputToUnity(inputPosition, gameViewSize);
-            return uiRaycastContext.Raycast(conversion.InjectedUnityPosition) != null;
+            return IsUiOcclusionRaycastResult(uiRaycastContext.Raycast(conversion.InjectedUnityPosition));
+        }
+
+        internal static bool IsUiOcclusionRaycastResult(RaycastResult? raycastResult)
+        {
+            return raycastResult != null && raycastResult.Value.module is GraphicRaycaster;
         }
 
         private static List<string> GetRelevantComponentTypeNames(GameObject hitObject)
