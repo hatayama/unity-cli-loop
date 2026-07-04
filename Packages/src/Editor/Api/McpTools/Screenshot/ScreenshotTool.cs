@@ -56,6 +56,7 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             List<UIElementInfo> annotatedElements = new List<UIElementInfo>();
+            List<UIElementInfo> physicsColliderElements = new List<UIElementInfo>();
             Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
             List<RaycastGridPointInfo> raycastGridPoints = new List<RaycastGridPointInfo>();
             List<UIElementInfo> raycastGridOverlayElements = new List<UIElementInfo>();
@@ -73,20 +74,35 @@ namespace io.github.hatayama.uLoopMCP
                     await EditorWindowCaptureUtility.GetGameRenderingImageInfoAsync(ct);
                 raycastGridRenderingInfo = renderingImageInfo;
                 gameViewSize = renderingImageInfo.GameViewSize;
-                raycastGridPoints = RaycastGridAnnotator.CollectRaycastGridPoints(
-                    renderingImageInfo.RenderingImageSize,
-                    renderingImageInfo.ImageToInputOffsetY);
-                raycastGridOverlayElements = RaycastGridAnnotator.CreateOverlayElements(raycastGridPoints);
+                RaycastLayerMaskResolution raycastLayerMaskResolution =
+                    ResolveRaycastLayerMask(parameters);
+
+                if (raycastLayerMaskResolution.HasLayerNames)
+                {
+                    physicsColliderElements = RaycastGridAnnotator.CollectPhysicsColliderElements(
+                        renderingImageInfo.RenderingImageSize,
+                        renderingImageInfo.ImageToInputOffsetY,
+                        raycastLayerMaskResolution.Mask);
+                }
+                else
+                {
+                    raycastGridPoints = RaycastGridAnnotator.CollectRaycastGridPoints(
+                        renderingImageInfo.RenderingImageSize,
+                        renderingImageInfo.ImageToInputOffsetY);
+                    raycastGridOverlayElements = RaycastGridAnnotator.CreateOverlayElements(raycastGridPoints);
+                }
             }
 
             if (parameters.ElementsOnly)
             {
                 UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, Mathf.RoundToInt(gameViewSize.y));
+                List<UIElementInfo> elementsOnlyAnnotatedElements =
+                    CreateResponseAnnotatedElements(annotatedElements, physicsColliderElements);
                 ScreenshotInfo elementsOnlyInfo = new ScreenshotInfo();
                 elementsOnlyInfo.ResolutionScale = parameters.ResolutionScale;
                 int imageToInputOffsetY = raycastGridRenderingInfo?.ImageToInputOffsetY ?? 0;
                 ApplyRenderingCoordinateMetadata(elementsOnlyInfo, gameViewSize, imageToInputOffsetY);
-                elementsOnlyInfo.AnnotatedElements = annotatedElements;
+                elementsOnlyInfo.AnnotatedElements = elementsOnlyAnnotatedElements;
                 elementsOnlyInfo.RaycastGridPoints = raycastGridPoints;
                 return new ScreenshotResponse(new List<ScreenshotInfo> { elementsOnlyInfo });
             }
@@ -100,6 +116,7 @@ namespace io.github.hatayama.uLoopMCP
                 {
                     List<UIElementInfo> overlayElements = new List<UIElementInfo>(annotatedElements);
                     overlayElements.AddRange(raycastGridOverlayElements);
+                    overlayElements.AddRange(physicsColliderElements);
                     annotationOverlay = UIElementAnnotator.CreateAnnotationOverlay(
                         overlayElements,
                         parameters.ResolutionScale);
@@ -119,6 +136,8 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, Mathf.RoundToInt(gameViewSize.y));
+            List<UIElementInfo> responseAnnotatedElements =
+                CreateResponseAnnotatedElements(annotatedElements, physicsColliderElements);
 
             if (texture == null)
             {
@@ -150,7 +169,7 @@ namespace io.github.hatayama.uLoopMCP
                     info,
                     captureRenderingInfo.GameViewSize,
                     captureRenderingInfo.ImageToInputOffsetY);
-                info.AnnotatedElements = annotatedElements;
+                info.AnnotatedElements = responseAnnotatedElements;
                 info.RaycastGridPoints = raycastGridPoints;
                 screenshots.Add(info);
             }
@@ -282,6 +301,15 @@ namespace io.github.hatayama.uLoopMCP
             info.UnityInputFormula = "";
         }
 
+        private static List<UIElementInfo> CreateResponseAnnotatedElements(
+            List<UIElementInfo> uiElements,
+            List<UIElementInfo> physicsColliderElements)
+        {
+            List<UIElementInfo> responseElements = new List<UIElementInfo>(uiElements);
+            responseElements.AddRange(physicsColliderElements);
+            return responseElements;
+        }
+
         private void ValidateParameters(ScreenshotSchema parameters)
         {
             if (parameters.CaptureMode != CaptureMode.rendering &&
@@ -315,10 +343,69 @@ namespace io.github.hatayama.uLoopMCP
                 }
             }
 
-            if (parameters.ElementsOnly && !parameters.AnnotateElements)
+            if (parameters.ElementsOnly &&
+                !parameters.AnnotateElements &&
+                !parameters.AnnotateRaycastGrid)
             {
-                throw new ParameterValidationException("ElementsOnly requires AnnotateElements=true");
+                throw new ParameterValidationException(
+                    "ElementsOnly requires AnnotateElements=true or AnnotateRaycastGrid=true");
             }
+
+            RaycastLayerMaskResolution raycastLayerMaskResolution =
+                ResolveRaycastLayerMask(parameters);
+            if (raycastLayerMaskResolution.HasLayerNames && !parameters.AnnotateRaycastGrid)
+            {
+                throw new ParameterValidationException(
+                    "RaycastLayerMask requires AnnotateRaycastGrid=true");
+            }
+
+            if (!raycastLayerMaskResolution.IsValid)
+            {
+                throw new ParameterValidationException(
+                    CreateInvalidRaycastLayerMaskMessage(raycastLayerMaskResolution));
+            }
+        }
+
+        private static RaycastLayerMaskResolution ResolveRaycastLayerMask(ScreenshotSchema parameters)
+        {
+            string raycastLayerMask = parameters.RaycastLayerMask ?? "";
+            return RaycastLayerMaskResolver.Resolve(
+                raycastLayerMask,
+                GetAvailableLayerDefinitions());
+        }
+
+        private static List<RaycastLayerDefinition> GetAvailableLayerDefinitions()
+        {
+            List<RaycastLayerDefinition> layerDefinitions = new List<RaycastLayerDefinition>();
+            for (int layerIndex = 0; layerIndex <= 31; layerIndex++)
+            {
+                string layerName = LayerMask.LayerToName(layerIndex);
+                if (string.IsNullOrEmpty(layerName))
+                {
+                    continue;
+                }
+
+                layerDefinitions.Add(new RaycastLayerDefinition
+                {
+                    Name = layerName,
+                    Index = layerIndex
+                });
+            }
+
+            return layerDefinitions;
+        }
+
+        private static string CreateInvalidRaycastLayerMaskMessage(
+            RaycastLayerMaskResolution raycastLayerMaskResolution)
+        {
+            string invalidLayerNames = string.Join(", ", raycastLayerMaskResolution.InvalidLayerNames);
+            string validLayerNames = string.Join(", ", raycastLayerMaskResolution.ValidLayerNames);
+            if (string.IsNullOrEmpty(validLayerNames))
+            {
+                validLayerNames = "(none)";
+            }
+
+            return $"RaycastLayerMask contains unknown layer name(s): {invalidLayerNames}. Valid layers: {validLayerNames}";
         }
 
         private string EnsureOutputDirectoryExists(string outputDirectory)
