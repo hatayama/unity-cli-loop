@@ -152,6 +152,7 @@ var sharedCommonPackageRoots = []string{
 	// intentionally excluded because they never ship in release binaries.
 	"cli/common/clicontract/",
 	"cli/common/clicore/",
+	"cli/common/errors/",
 	"cli/common/project/",
 	"cli/common/skills/",
 	"cli/common/tools/",

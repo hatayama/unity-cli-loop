@@ -1,4 +1,4 @@
-package clicore
+package clierrors
 
 import (
 	"encoding/json"
@@ -70,7 +70,7 @@ func unityServerNotRespondingCLIError(err UnityServerNotRespondingError, context
 		Message:     "Unity is running for this project, but the Unity CLI Loop server is not responding.",
 		Retryable:   true,
 		SafeToRetry: true,
-		ProjectRoot: FirstNonEmpty(context.ProjectRoot, err.ProjectRoot),
+		ProjectRoot: firstNonEmpty(context.ProjectRoot, err.ProjectRoot),
 		Command:     context.Command,
 		NextActions: []string{
 			"Wait and retry; Unity may be starting, importing assets, compiling, or reloading scripts.",
@@ -91,7 +91,7 @@ func connectionAttemptCLIError(err *unityipc.ConnectionAttemptError, context Err
 		Message:     "The Unity CLI Loop server is not reachable for this project.",
 		Retryable:   true,
 		SafeToRetry: true,
-		ProjectRoot: FirstNonEmpty(context.ProjectRoot, err.ProjectRoot),
+		ProjectRoot: firstNonEmpty(context.ProjectRoot, err.ProjectRoot),
 		Command:     context.Command,
 		NextActions: []string{
 			"If Unity is closed, run `uloop launch`.",
