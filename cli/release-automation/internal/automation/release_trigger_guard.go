@@ -154,7 +154,7 @@ var sharedCommonPackageRoots = []string{
 	"cli/common/clicore/",
 	"cli/common/errors/",
 	"cli/common/project/",
-	"cli/common/skills/",
+	"cli/common/skillscan/",
 	"cli/common/tools/",
 	"cli/common/unityipc/",
 	"cli/common/unityprocess/",

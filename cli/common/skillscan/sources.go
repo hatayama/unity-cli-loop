@@ -1,11 +1,9 @@
-package clicore
+package skillscan
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/hatayama/unity-cli-loop/common/skills"
 )
 
 const (
@@ -31,7 +29,7 @@ type SkillSourceRoot struct {
 	CLIOnly bool
 }
 
-func collectInternalSkillToolNames(projectRoot string) map[string]bool {
+func CollectInternalSkillToolNames(projectRoot string) map[string]bool {
 	toolNames := map[string]bool{}
 	for _, sourceRoot := range EnumerateSkillSourceRoots(projectRoot) {
 		for _, toolName := range scanInternalSkillToolNames(sourceRoot) {
@@ -56,7 +54,7 @@ func EnumerateSkillSourceRoots(projectRoot string) []SkillSourceRoot {
 		sourceRoots = append(sourceRoots, SkillSourceRoot{Path: absolutePath, CLIOnly: cliOnly})
 	}
 
-	addSourceRoot(skills.CliOnlySourceRoot(projectRoot), true)
+	addSourceRoot(CliOnlySourceRoot(projectRoot), true)
 	addSourceRoot(filepath.Join(projectRoot, "Assets"), false)
 	for _, packageRoot := range enumerateDirectProjectPackageRoots(projectRoot) {
 		addSourceRoot(packageRoot, false)
