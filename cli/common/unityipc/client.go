@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	clicontract "github.com/hatayama/unity-cli-loop/common/clicontract"
@@ -36,15 +37,11 @@ const defaultMainThreadStallLimit = 5 * time.Minute
 const mainThreadStallProgressThresholdSeconds = 30
 
 type Client struct {
-	connection      Connection
-	requestID       int
-	clientVersion   string
-	acceptTimeout   time.Duration
-	responseTimeout time.Duration
-	// Test seams: zero means "use the derived/default values".
-	heartbeatSilenceOverride time.Duration
-	mainThreadStallLimit     time.Duration
-	mainThreadStallHandler   func(float64)
+	connection    Connection
+	requestIDMu   sync.Mutex
+	requestID     int
+	clientVersion string
+	options       ClientOptions
 }
 
 type ProgressFunc = func(message string)
@@ -128,18 +125,30 @@ func (err *RPCError) Error() string {
 	return fmt.Sprintf("unity error: %s", err.Message)
 }
 
-func NewClient(connection Connection, clientVersion string) *Client {
-	return &Client{connection: connection, clientVersion: clientVersion}
+func NewClient(connection Connection, clientVersion string, options ...ClientOption) *Client {
+	clientOptions := ClientOptions{}
+	for _, option := range options {
+		option(&clientOptions)
+	}
+	return &Client{connection: connection, clientVersion: clientVersion, options: clientOptions}
 }
 
 func (client *Client) WithResponseTimeout(timeout time.Duration) *Client {
-	client.responseTimeout = timeout
-	return client
+	return client.withOption(WithResponseTimeout(timeout))
 }
 
 func (client *Client) WithMainThreadStallHandler(handler func(float64)) *Client {
-	client.mainThreadStallHandler = handler
-	return client
+	return client.withOption(WithMainThreadStallHandler(handler))
+}
+
+func (client *Client) withOption(option ClientOption) *Client {
+	clientOptions := client.options
+	option(&clientOptions)
+	return &Client{
+		connection:    client.connection,
+		clientVersion: client.clientVersion,
+		options:       clientOptions,
+	}
 }
 
 func (client *Client) Send(ctx context.Context, method string, params map[string]any) (json.RawMessage, error) {
@@ -183,7 +192,7 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 		progress(ProgressEventConnected)
 	}
 
-	client.requestID++
+	requestID := client.nextRequestID()
 	request := rpcRequest{
 		JSONRPC: "2.0",
 		Method:  method,
@@ -194,7 +203,7 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 			AcceptsDispatchAck:   true,
 			AcceptsHeartbeat:     true,
 		},
-		ID: client.requestID,
+		ID: requestID,
 	}
 
 	payload, err := json.Marshal(request)
@@ -346,8 +355,8 @@ func (client *Client) handleHeartbeatResponse(
 }
 
 func (client *Client) reportMainThreadStall(stallSeconds float64, progress ProgressFunc) {
-	if client.mainThreadStallHandler != nil {
-		client.mainThreadStallHandler(stallSeconds)
+	if client.options.mainThreadStallHandler != nil {
+		client.options.mainThreadStallHandler(stallSeconds)
 	}
 	if progress != nil {
 		progress(fmt.Sprintf(
@@ -391,15 +400,15 @@ func finishOutcomeWithError(
 }
 
 func (client *Client) getAcceptTimeout() time.Duration {
-	if client.acceptTimeout > 0 {
-		return client.acceptTimeout
+	if client.options.acceptTimeout > 0 {
+		return client.options.acceptTimeout
 	}
 	return requestTimeout
 }
 
 func (client *Client) getResponseTimeout() time.Duration {
-	if client.responseTimeout > 0 {
-		return client.responseTimeout
+	if client.options.responseTimeout > 0 {
+		return client.options.responseTimeout
 	}
 	return finalResponseTimeout
 }
@@ -409,23 +418,30 @@ func (client *Client) getResponseTimeout() time.Duration {
 // to status polling) must stay an absolute deadline, and servers that did not
 // negotiate heartbeats keep the legacy absolute deadline too.
 func (client *Client) getHeartbeatSilence(heartbeatIntervalSeconds int) time.Duration {
-	if client.responseTimeout > 0 {
+	if client.options.responseTimeout > 0 {
 		return 0
 	}
 	if heartbeatIntervalSeconds <= 0 {
 		return 0
 	}
-	if client.heartbeatSilenceOverride > 0 {
-		return client.heartbeatSilenceOverride
+	if client.options.heartbeatSilenceOverride > 0 {
+		return client.options.heartbeatSilenceOverride
 	}
 	return time.Duration(heartbeatIntervalSeconds) * time.Second * heartbeatSilenceGraceFactor
 }
 
 func (client *Client) getMainThreadStallLimit() time.Duration {
-	if client.mainThreadStallLimit > 0 {
-		return client.mainThreadStallLimit
+	if client.options.mainThreadStallLimit > 0 {
+		return client.options.mainThreadStallLimit
 	}
 	return defaultMainThreadStallLimit
+}
+
+func (client *Client) nextRequestID() int {
+	client.requestIDMu.Lock()
+	defer client.requestIDMu.Unlock()
+	client.requestID++
+	return client.requestID
 }
 
 // Reports whether the error is a connection deadline expiry. go-winio's named pipe
