@@ -49,10 +49,13 @@ namespace io.github.hatayama.uLoopMCP
         [Description("Annotate interactive UI elements with names and simulate-mouse coordinates on the screenshot. Only works with CaptureMode=rendering in PlayMode.")]
         public bool AnnotateElements { get; set; } = false;
 
-        [Description("Return only annotated element JSON without capturing a screenshot image. Requires AnnotateElements=true and CaptureMode=rendering in PlayMode.")]
+        [Description("Return only annotation JSON without capturing a screenshot image. Requires AnnotateElements=true or AnnotateRaycastGrid=true, and CaptureMode=rendering in PlayMode.")]
         public bool ElementsOnly { get; set; } = false;
 
-        [Description("Annotate 3D physics raycast candidate points on rendering screenshots. Uses Camera.main and the same top-left Game View coordinates as simulate-mouse-input.")]
+        [Description("Annotate 3D physics raycast candidate points on rendering screenshots. Uses Camera.main, Camera.main.cullingMask visibility, and the same top-left Game View coordinates as simulate-mouse-input.")]
         public bool AnnotateRaycastGrid { get; set; } = false;
+
+        [Description("Comma-separated physics layer names used by AnnotateRaycastGrid. Hits are limited to layers also visible to Camera.main.cullingMask. When set, returns clustered PhysicsCollider entries in AnnotatedElements instead of the coarse grid points.")]
+        public string RaycastLayerMask { get; set; } = "";
     }
 }

@@ -261,13 +261,18 @@
           },
           "ElementsOnly": {
             "type": "boolean",
-            "description": "Return only annotated element JSON without capturing a screenshot image. Requires AnnotateElements=true and CaptureMode=rendering in PlayMode.",
+            "description": "Return only annotation JSON without capturing a screenshot image. Requires AnnotateElements=true or AnnotateRaycastGrid=true, and CaptureMode=rendering in PlayMode.",
             "default": false
           },
           "AnnotateRaycastGrid": {
             "type": "boolean",
-            "description": "Annotate 3D physics raycast candidate points on rendering screenshots. Uses Camera.main and the same top-left Game View coordinates as simulate-mouse-input.",
+            "description": "Annotate 3D physics raycast candidate points on rendering screenshots. Uses Camera.main, Camera.main.cullingMask visibility, and the same top-left Game View coordinates as simulate-mouse-input.",
             "default": false
+          },
+          "RaycastLayerMask": {
+            "type": "string",
+            "description": "Comma-separated physics layer names used by AnnotateRaycastGrid. Hits are limited to layers also visible to Camera.main.cullingMask. When set, returns clustered PhysicsCollider entries in AnnotatedElements instead of the coarse grid points.",
+            "default": ""
           }
         }
       }

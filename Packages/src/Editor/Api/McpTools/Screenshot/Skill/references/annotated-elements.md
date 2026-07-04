@@ -1,16 +1,18 @@
 # Annotated Elements and Coordinates
 
-Read this when using `uloop screenshot --capture-mode rendering --annotate-elements` to find coordinates for `simulate-mouse-ui` or `simulate-mouse-input`.
+Read this when using `uloop screenshot --capture-mode rendering --annotate-elements` or clustered `--annotate-raycast-grid --raycast-layer-mask <layers>` output to find coordinates for `simulate-mouse-ui` or `simulate-mouse-input`.
 
 ## AnnotatedElements Fields
 
-`AnnotatedElements` is empty unless `--annotate-elements` is used. Entries are sorted by z-order, frontmost first. Each item contains:
+`AnnotatedElements` is empty unless `--annotate-elements` is used, or unless `--annotate-raycast-grid --raycast-layer-mask <layers>` adds clustered 3D collider candidates. UI entries are sorted by z-order, frontmost first. Each item contains:
 
 - `Label`: Index label in JSON (`A` = frontmost, `B` = next, ...). Screenshot labels also include the interaction hint, such as `A / CLICK` or `B / DRAG`.
 - `Name`: Element name
 - `Path`: Hierarchy path from the scene root, for example `Canvas/Panel/Button`. Use this as `simulate-mouse-ui --target-path` when bypassing raycast blockers.
-- `Type`: Element type (`Button`, `Toggle`, `Slider`, `Dropdown`, `InputField`, `Scrollbar`, `Draggable`, `DropTarget`, `Selectable`)
-- `Interaction`: Derived interaction category (`Click`, `Drag`, `Drop`, `Text`). Use this to choose between `simulate-mouse-ui --action Click` and drag actions.
+- `Type`: Element type (`Button`, `Toggle`, `Slider`, `Dropdown`, `InputField`, `Scrollbar`, `Draggable`, `DropTarget`, `Selectable`, `PhysicsCollider`)
+- `Interaction`: Derived interaction category (`Click`, `Drag`, `Drop`, `Text`) or `Raycast` for clustered physics collider entries. Use this to choose between `simulate-mouse-ui --action Click`, drag actions, or `simulate-mouse-input`/`raycast`.
+- `Layer`: Physics layer name for `PhysicsCollider` entries. Empty for UI entries.
+- `Components`: Collider and MonoBehaviour component type names from the hit GameObject for `PhysicsCollider` entries. Empty for UI entries.
 - `SimX`, `SimY`: Center position in top-left Game View coordinates. Use these directly with `simulate-mouse-ui --x/--y`, `simulate-mouse-input --x/--y`, or `raycast --x/--y`.
 - `BoundsMinX`, `BoundsMinY`, `BoundsMaxX`, `BoundsMaxY`: Bounding box in simulate-mouse coordinates
 - `SortingOrder`: Canvas sorting order. Higher values are in front.
@@ -26,6 +28,10 @@ input_y = image_y / resolutionScale + imageToInputOffsetY
 ```
 
 When `ResolutionScale` is `1.0` and `ImageToInputOffsetY` is `0`, raw image pixel coordinates already match mouse-input coordinates. `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` are always returned as mouse-input coordinates, so pass those values directly.
+
+For `PhysicsCollider` entries, `SimX/SimY` is a real sampled raycast hit nearest to the cluster centroid. This avoids synthetic center points that may fall into empty space for L-shaped or ring-shaped collider coverage.
+
+`--raycast-layer-mask` filters by the requested physics layers and Camera.main.cullingMask. A layer that is requested but hidden from the active camera is treated as not visible and will not produce `PhysicsCollider` entries.
 
 The mouse input tools convert internally to Unity Input System coordinates:
 
