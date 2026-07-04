@@ -146,6 +146,17 @@ func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection u
 }
 
 func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
+	return runCompileWithDomainReloadWaitWithDeps(ctx, connection, params, stdout, stderr, defaultCompileWaitDeps())
+}
+
+func runCompileWithDomainReloadWaitWithDeps(
+	ctx context.Context,
+	connection unityipc.Connection,
+	params map[string]any,
+	stdout io.Writer,
+	stderr io.Writer,
+	compileWait compileWaitDeps,
+) int {
 	requestID, err := prepareCompileWaitParams(params)
 	if err != nil {
 		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{
@@ -182,13 +193,13 @@ func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Con
 	}
 
 	spinner.Update("Waiting for domain reload to complete...")
-	result, completed, waitErr := waitForCompileCompletion(ctx, compileCompletionOptions{
+	result, completed, waitErr := waitForCompileCompletionWithDeps(ctx, compileCompletionOptions{
 		connection:     connection,
 		requestID:      requestID,
 		forceRecompile: compileForceRecompileEnabled(params),
 		timeout:        compileWaitTimeout,
 		pollInterval:   compileWaitPollInterval,
-	})
+	}, compileWait)
 	if waitErr != nil {
 		spinner.Stop()
 		clicore.WriteClassifiedError(stderr, waitErr, clicore.ErrorContext{

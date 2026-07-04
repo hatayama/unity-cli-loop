@@ -41,8 +41,6 @@ type compileStatusResponse struct {
 	Message                  string          `json:"Message"`
 }
 
-var queryCompileStatus = queryCompileStatusFromUnity
-
 func shouldWaitForCompileDomainReload(command string, params map[string]any) bool {
 	if command != clicore.CompileCommandName {
 		return false
@@ -101,7 +99,7 @@ func isSafeCompileRequestID(requestID string) bool {
 	return true
 }
 
-func waitForCompileCompletion(ctx context.Context, options compileCompletionOptions) (json.RawMessage, bool, error) {
+func waitForCompileCompletionWithDeps(ctx context.Context, options compileCompletionOptions, deps compileWaitDeps) (json.RawMessage, bool, error) {
 	startedAt := time.Now()
 	deadline := startedAt.Add(options.timeout)
 	attempts := 0
@@ -120,7 +118,7 @@ func waitForCompileCompletion(ctx context.Context, options compileCompletionOpti
 		}
 
 		attempts++
-		status, err := queryCompileStatus(ctx, options.connection, options.requestID)
+		status, err := deps.queryCompileStatus(ctx, options.connection, options.requestID)
 		lastErr = err
 		if err == nil && status.Ready && status.HasResult && len(status.Result) > 0 {
 			logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, nil, &lastObservationKey)
