@@ -9,7 +9,7 @@ import (
 )
 
 func tryHandleCommandHelp(command string, startPath string, projectPath string, stdout io.Writer, stderr io.Writer) (bool, int) {
-	if isNativeCommandName(command) {
+	if _, ok := clicore.NativeCommand(command); ok {
 		printNativeSingleCommandHelp(command, stdout)
 		return true, 0
 	}
@@ -100,12 +100,11 @@ func printToolHelp(tool clicore.ToolDefinition, stdout io.Writer) {
 }
 
 func nativeCommandDescription(command string) (string, bool) {
-	for _, entry := range clicore.NativeCommands {
-		if entry.Name == command {
-			return entry.Description, true
-		}
+	entry, ok := clicore.NativeCommand(command)
+	if !ok {
+		return "", false
 	}
-	return "", false
+	return entry.Description, true
 }
 
 func nativeCommandUsesProject(command string) bool {

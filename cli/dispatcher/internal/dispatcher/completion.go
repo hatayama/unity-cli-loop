@@ -233,7 +233,7 @@ func printOptionsForCommand(command string, cache clicore.ToolsCache, stdout io.
 		clicore.WriteLine(stdout, strings.Join(options, "\n"))
 		return
 	}
-	if isNativeCommandName(command) {
+	if _, ok := clicore.NativeCommand(command); ok {
 		clicore.WriteLine(stdout, "")
 		return
 	}

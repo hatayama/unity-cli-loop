@@ -96,21 +96,12 @@ func printUnityToolCommandHelp(stdout io.Writer, cache clicore.ToolsCache, hasPr
 	}
 
 	for _, tool := range cache.Tools {
-		if isNativeCommandName(tool.Name) {
+		if _, ok := clicore.NativeCommand(tool.Name); ok {
 			continue
 		}
 		clicore.WriteFormat(stdout, "  %-22s %s\n", tool.Name, commandListDescription(tool.Description))
 	}
 	clicore.WriteLine(stdout, "  Run `uloop sync` after the Editor tool set changes to refresh this list.")
-}
-
-func isNativeCommandName(name string) bool {
-	for _, entry := range clicore.NativeCommands {
-		if entry.Name == name {
-			return true
-		}
-	}
-	return false
 }
 
 func commandListDescription(description string) string {
