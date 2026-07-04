@@ -267,8 +267,8 @@ func TestClassifyServerBusyRPCError(t *testing.T) {
 	}
 }
 
-func TestWriteClassifiedServerBusyRPCErrorWritesBusyStatus(t *testing.T) {
-	// Verifies server_busy output avoids the full error envelope because busy is a temporary state.
+func TestWriteClassifiedServerBusyRPCErrorWritesErrorEnvelope(t *testing.T) {
+	// Verifies server_busy output uses the same machine-readable error envelope as other failures.
 	err := &unityipc.RPCError{
 		Code:    -32603,
 		Message: "Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes.",
@@ -279,33 +279,31 @@ func TestWriteClassifiedServerBusyRPCErrorWritesBusyStatus(t *testing.T) {
 
 	WriteClassifiedError(&stderr, err, ErrorContext{ProjectRoot: "/tmp/MyProject", Command: "get-logs"})
 
-	var envelope cliStatusEnvelope
+	var envelope CLIErrorEnvelope
 	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
 		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
 	}
-	if envelope.Status != cliStatusBusy {
-		t.Fatalf("status mismatch: %#v", envelope)
+	if envelope.Success {
+		t.Fatalf("busy envelope reported success: %#v", envelope)
+	}
+	if envelope.Error.ErrorCode != errorCodeUnityServerBusy {
+		t.Fatalf("error code mismatch: %#v", envelope)
 	}
 	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile'. uloop is single-flight by design; never run uloop commands in parallel. The CLI already retried for up to 10 seconds, so wait for 'compile' to complete and run the command again."
-	if envelope.Message != expectedMessage {
+	if envelope.Error.Message != expectedMessage {
 		t.Fatalf("message mismatch: %#v", envelope)
 	}
-	if envelope.RunningToolName != "compile" || envelope.RequestedToolName != "get-logs" {
-		t.Fatalf("tool names mismatch: %#v", envelope)
+	data, ok := envelope.Error.Details["Data"].(map[string]any)
+	if !ok {
+		t.Fatalf("busy data missing: %#v", envelope)
 	}
-	if envelope.IsPlaying == nil || *envelope.IsPlaying != true {
-		t.Fatalf("isPlaying mismatch: %#v", envelope)
-	}
-	if envelope.IsPaused == nil || *envelope.IsPaused != true {
-		t.Fatalf("isPaused mismatch: %#v", envelope)
-	}
-	if bytes.Contains(stderr.Bytes(), []byte("Success")) || bytes.Contains(stderr.Bytes(), []byte("errorCode")) {
-		t.Fatalf("busy output should not include error envelope fields: %s", stderr.String())
+	if data["runningToolName"] != "compile" || data["requestedToolName"] != "get-logs" {
+		t.Fatalf("tool names mismatch: %#v", data)
 	}
 }
 
-func TestWriteErrorEnvelopeServerBusyAcceptsLegacyLowercaseDataDetails(t *testing.T) {
-	// Verifies legacy lower-camel error details still preserve busy tool names in status output.
+func TestWriteErrorEnvelopeServerBusyUsesUnifiedEnvelopeForLegacyLowercaseDataDetails(t *testing.T) {
+	// Verifies legacy lower-camel busy details no longer switch to the old status schema.
 	cliErr := CLIError{
 		ErrorCode: errorCodeUnityServerBusy,
 		Message:   "Unity is busy.",
@@ -323,18 +321,18 @@ func TestWriteErrorEnvelopeServerBusyAcceptsLegacyLowercaseDataDetails(t *testin
 
 	WriteErrorEnvelope(&stderr, cliErr)
 
-	var envelope cliStatusEnvelope
+	var envelope CLIErrorEnvelope
 	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
 		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
 	}
-	if envelope.RunningToolName != "compile" || envelope.RequestedToolName != "get-logs" {
-		t.Fatalf("tool names mismatch: %#v", envelope)
+	if envelope.Success {
+		t.Fatalf("busy envelope reported success: %#v", envelope)
 	}
-	if envelope.IsPlaying == nil || *envelope.IsPlaying != true {
-		t.Fatalf("isPlaying mismatch: %#v", envelope)
+	if envelope.Error.ErrorCode != errorCodeUnityServerBusy {
+		t.Fatalf("error code mismatch: %#v", envelope)
 	}
-	if envelope.IsPaused == nil || *envelope.IsPaused != false {
-		t.Fatalf("isPaused mismatch: %#v", envelope)
+	if bytes.Contains(stderr.Bytes(), []byte(`"Status"`)) {
+		t.Fatalf("busy output should not use status schema: %s", stderr.String())
 	}
 }
 
