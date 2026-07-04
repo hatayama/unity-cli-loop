@@ -126,8 +126,7 @@ func TestSendKeepsWaitingWhileHeartbeatsArrive(t *testing.T) {
 		writeFrame(t, conn, `{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`)
 	})
 
-	client := NewClient(connection, "9.9.9")
-	client.heartbeatSilenceOverride = 200 * time.Millisecond
+	client := NewClient(connection, "9.9.9", withHeartbeatSilenceOverrideForTest(200*time.Millisecond))
 
 	outcome, err := client.SendWithProgressOutcome(context.Background(), "run-tests", map[string]any{}, nil)
 	if err != nil {
@@ -151,10 +150,14 @@ func TestSendReportsMainThreadStallToHandler(t *testing.T) {
 	})
 
 	stallReports := []float64{}
-	client := NewClient(connection, "9.9.9").WithMainThreadStallHandler(func(stallSeconds float64) {
-		stallReports = append(stallReports, stallSeconds)
-	})
-	client.heartbeatSilenceOverride = 5 * time.Second
+	client := NewClient(
+		connection,
+		"9.9.9",
+		WithMainThreadStallHandler(func(stallSeconds float64) {
+			stallReports = append(stallReports, stallSeconds)
+		}),
+		withHeartbeatSilenceOverrideForTest(5*time.Second),
+	)
 
 	outcome, err := client.SendWithProgressOutcome(context.Background(), "run-tests", map[string]any{}, nil)
 	if err != nil {
@@ -178,8 +181,7 @@ func TestSendReportsMainThreadStallProgressWithModalHint(t *testing.T) {
 	})
 
 	progressMessages := []string{}
-	client := NewClient(connection, "9.9.9")
-	client.heartbeatSilenceOverride = 5 * time.Second
+	client := NewClient(connection, "9.9.9", withHeartbeatSilenceOverrideForTest(5*time.Second))
 
 	_, err := client.SendWithProgressOutcome(
 		context.Background(),
@@ -214,8 +216,7 @@ func TestSendFailsWithDiagnosisWhenHeartbeatsStop(t *testing.T) {
 	})
 	defer close(done)
 
-	client := NewClient(connection, "9.9.9")
-	client.heartbeatSilenceOverride = 150 * time.Millisecond
+	client := NewClient(connection, "9.9.9", withHeartbeatSilenceOverrideForTest(150*time.Millisecond))
 
 	startedAt := time.Now()
 	_, err := client.SendWithProgressOutcome(context.Background(), "run-tests", map[string]any{}, nil)
@@ -245,9 +246,12 @@ func TestSendFailsWhenMainThreadStallExceedsLimit(t *testing.T) {
 	})
 	defer close(done)
 
-	client := NewClient(connection, "9.9.9")
-	client.heartbeatSilenceOverride = 5 * time.Second
-	client.mainThreadStallLimit = 2 * time.Second
+	client := NewClient(
+		connection,
+		"9.9.9",
+		withHeartbeatSilenceOverrideForTest(5*time.Second),
+		withMainThreadStallLimitForTest(2*time.Second),
+	)
 
 	_, err := client.SendWithProgressOutcome(context.Background(), "run-tests", map[string]any{}, nil)
 	var unresponsiveErr *EditorUnresponsiveError

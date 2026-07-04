@@ -8,6 +8,7 @@ import (
 	"net"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,6 +38,21 @@ func TestFormatConnectionAttemptErrorExplainsDialFailureWithoutDisconnectClaim(t
 	}
 	if connectionErr.Unwrap().Error() != "dial unix /tmp/uloop/UnityCliLoop-sample.sock: connect: no such file or directory" {
 		t.Fatalf("cause mismatch: %v", connectionErr.Unwrap())
+	}
+}
+
+func TestWithResponseTimeoutReturnsConfiguredCopy(t *testing.T) {
+	// Verifies that builder-style timeout configuration does not mutate the original client.
+	connection := Connection{ProjectRoot: t.TempDir()}
+	client := NewClient(connection, "3.0.0-beta.6")
+
+	configuredClient := client.WithResponseTimeout(250 * time.Millisecond)
+
+	if client.getResponseTimeout() != finalResponseTimeout {
+		t.Fatalf("original client response timeout was mutated: %s", client.getResponseTimeout())
+	}
+	if configuredClient.getResponseTimeout() != 250*time.Millisecond {
+		t.Fatalf("configured client response timeout mismatch: %s", configuredClient.getResponseTimeout())
 	}
 }
 
@@ -76,6 +92,116 @@ func TestSendIncludesProjectRunnerVersionWithoutProjectIdentityMetadata(t *testi
 	case request := <-captured:
 		assertClientMetadataRequest(t, request)
 	}
+}
+
+func TestSendAssignsUniqueRequestIDsConcurrently(t *testing.T) {
+	// Verifies that a shared Client can assign request IDs safely during concurrent sends.
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	requestCount := 32
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	capturedIDs := make(chan int, requestCount)
+	serverErr := make(chan error, requestCount)
+	go captureConcurrentRequestIDs(listener, requestCount, capturedIDs, serverErr)
+
+	connection := Connection{
+		Endpoint: Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: "/tmp/MyProject",
+	}
+	client := NewClient(connection, "3.0.0-beta.6")
+
+	start := make(chan struct{})
+	clientErrs := make(chan error, requestCount)
+	wg := sync.WaitGroup{}
+	for i := 0; i < requestCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, sendErr := client.Send(context.Background(), "get-version", map[string]any{})
+			clientErrs <- sendErr
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(clientErrs)
+
+	for sendErr := range clientErrs {
+		if sendErr != nil {
+			t.Fatalf("Send failed: %v", sendErr)
+		}
+	}
+
+	seenIDs := map[int]bool{}
+	for i := 0; i < requestCount; i++ {
+		select {
+		case serverErrValue := <-serverErr:
+			t.Fatalf("server failed: %v", serverErrValue)
+		case requestID := <-capturedIDs:
+			if seenIDs[requestID] {
+				t.Fatalf("duplicate request ID captured: %d", requestID)
+			}
+			seenIDs[requestID] = true
+		}
+	}
+	if len(seenIDs) != requestCount {
+		t.Fatalf("request ID count mismatch: %d", len(seenIDs))
+	}
+}
+
+func captureConcurrentRequestIDs(
+	listener net.Listener,
+	requestCount int,
+	capturedIDs chan<- int,
+	serverErr chan<- error,
+) {
+	wg := sync.WaitGroup{}
+	for i := 0; i < requestCount; i++ {
+		conn, err := listener.Accept()
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		wg.Add(1)
+		go func(conn net.Conn) {
+			defer wg.Done()
+			defer func() {
+				_ = conn.Close()
+			}()
+
+			payload, readErr := Read(bufio.NewReader(conn))
+			if readErr != nil {
+				serverErr <- readErr
+				return
+			}
+
+			request := rpcRequest{}
+			if decodeErr := json.Unmarshal(payload, &request); decodeErr != nil {
+				serverErr <- decodeErr
+				return
+			}
+			capturedIDs <- request.ID
+
+			response := []byte(`{"jsonrpc":"2.0","result":{"ok":true},"id":1}`)
+			if writeErr := Write(conn, response); writeErr != nil {
+				serverErr <- writeErr
+				return
+			}
+		}(conn)
+	}
+	wg.Wait()
 }
 
 func captureClientMetadataRequest(
@@ -255,11 +381,10 @@ func TestSendWithProgressOutcomeWaitsForFinalResponseAfterDispatchAckWithoutAcce
 		},
 		ProjectRoot: "/tmp/MyProject",
 	}
-	client := NewClient(connection, "3.0.0-beta.6")
 	// The accept timeout must be wide enough that the accepted ack always arrives
 	// inside it even on a loaded CI machine, while the server delays the final
 	// response well past it to prove accepted requests outlive the accept timeout.
-	client.acceptTimeout = 250 * time.Millisecond
+	client := NewClient(connection, "3.0.0-beta.6", withAcceptTimeoutForTest(250*time.Millisecond))
 
 	outcome, err := client.SendWithProgressOutcome(context.Background(), "execute-dynamic-code", map[string]any{}, nil)
 	if err != nil {
@@ -324,9 +449,12 @@ func TestSendWithProgressOutcomeTimesOutFinalResponseAfterDispatchAck(t *testing
 		},
 		ProjectRoot: "/tmp/MyProject",
 	}
-	client := NewClient(connection, "3.0.0-beta.6")
-	client.acceptTimeout = time.Second
-	client.responseTimeout = 50 * time.Millisecond
+	client := NewClient(
+		connection,
+		"3.0.0-beta.6",
+		withAcceptTimeoutForTest(time.Second),
+		WithResponseTimeout(50*time.Millisecond),
+	)
 
 	outcome, err := client.SendWithProgressOutcome(context.Background(), "execute-dynamic-code", map[string]any{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "i/o timeout") {
@@ -388,8 +516,7 @@ func TestSendWithProgressOutcomeStillHonorsParentCancellationAfterDispatchAck(t 
 		},
 		ProjectRoot: "/tmp/MyProject",
 	}
-	client := NewClient(connection, "3.0.0-beta.6")
-	client.acceptTimeout = time.Second
+	client := NewClient(connection, "3.0.0-beta.6", withAcceptTimeoutForTest(time.Second))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
