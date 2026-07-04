@@ -187,6 +187,7 @@ func TestFindToolForCommandSkipsInternalSkillScanForExecuteDynamicCode(t *testin
 	tool, _, ok, err := findToolForCommandWithInternalToolNames(
 		t.TempDir(),
 		ExecuteDynamicCodeCommandName,
+		shouldPreferEmbeddedToolDefinition(ExecuteDynamicCodeCommandName),
 		func(string) map[string]bool {
 			collectorCalled = true
 			return map[string]bool{}
