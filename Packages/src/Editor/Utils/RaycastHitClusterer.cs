@@ -73,24 +73,42 @@ namespace io.github.hatayama.uLoopMCP
             List<RaycastClusterSample> samples,
             RaycastClusterSampleOcclusionCheck isOccluded)
         {
+            RaycastClusterInfo? reachableCluster = CreateReachableCluster(samples, isOccluded);
+            return reachableCluster?.Representative;
+        }
+
+        internal static RaycastClusterInfo? CreateReachableCluster(
+            List<RaycastClusterSample> samples,
+            RaycastClusterSampleOcclusionCheck isOccluded)
+        {
             System.Diagnostics.Debug.Assert(samples != null, "Raycast samples must not be null.");
             System.Diagnostics.Debug.Assert(isOccluded != null, "Raycast sample occlusion check must not be null.");
             List<RaycastClusterSample> validSamples = samples!;
             RaycastClusterSampleOcclusionCheck validIsOccluded = isOccluded!;
             System.Diagnostics.Debug.Assert(validSamples.Count > 0, "At least one raycast sample is required.");
 
-            List<RaycastClusterSample> candidates = CreateSamplesOrderedByCentroidDistance(validSamples);
-            foreach (RaycastClusterSample candidate in candidates)
+            List<RaycastClusterSample> reachableSamples = new List<RaycastClusterSample>();
+            foreach (RaycastClusterSample sample in validSamples)
             {
-                if (validIsOccluded(candidate))
+                if (validIsOccluded(sample))
                 {
                     continue;
                 }
 
-                return candidate;
+                reachableSamples.Add(sample);
             }
 
-            return null;
+            if (reachableSamples.Count == 0)
+            {
+                return null;
+            }
+
+            return new RaycastClusterInfo
+            {
+                Representative = SelectRepresentativeSample(reachableSamples),
+                SampleCount = reachableSamples.Count,
+                Samples = reachableSamples
+            };
         }
 
         private static Vector2Like CalculateCentroid(List<RaycastClusterSample> samples)
@@ -115,51 +133,6 @@ namespace io.github.hatayama.uLoopMCP
             float deltaX = sample.InputX - point.X;
             float deltaY = sample.InputY - point.Y;
             return deltaX * deltaX + deltaY * deltaY;
-        }
-
-        private static List<RaycastClusterSample> CreateSamplesOrderedByCentroidDistance(
-            List<RaycastClusterSample> samples)
-        {
-            Vector2Like centroid = CalculateCentroid(samples);
-            List<RankedRaycastClusterSample> rankedSamples = new List<RankedRaycastClusterSample>();
-            for (int i = 0; i < samples.Count; i++)
-            {
-                RaycastClusterSample sample = samples[i];
-                rankedSamples.Add(new RankedRaycastClusterSample
-                {
-                    Sample = sample,
-                    OriginalIndex = i,
-                    SquaredDistance = CalculateSquaredDistance(sample, centroid)
-                });
-            }
-
-            rankedSamples.Sort(CompareRankedSamples);
-
-            List<RaycastClusterSample> orderedSamples = new List<RaycastClusterSample>();
-            foreach (RankedRaycastClusterSample rankedSample in rankedSamples)
-            {
-                orderedSamples.Add(rankedSample.Sample);
-            }
-
-            return orderedSamples;
-        }
-
-        private static int CompareRankedSamples(RankedRaycastClusterSample left, RankedRaycastClusterSample right)
-        {
-            int distanceComparison = left.SquaredDistance.CompareTo(right.SquaredDistance);
-            if (distanceComparison != 0)
-            {
-                return distanceComparison;
-            }
-
-            return left.OriginalIndex.CompareTo(right.OriginalIndex);
-        }
-
-        private struct RankedRaycastClusterSample
-        {
-            public RaycastClusterSample Sample { get; set; }
-            public int OriginalIndex { get; set; }
-            public float SquaredDistance { get; set; }
         }
 
         private struct Vector2Like

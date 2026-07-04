@@ -19,6 +19,7 @@ namespace io.github.hatayama.uLoopMCP
         private const float LABEL_DARK_TEXT_LUMINANCE_THRESHOLD = 0.62f;
         private const float OUTPUT_LABEL_OUTLINE_DISTANCE = 2f;
         private const float OUTPUT_LABEL_TO_BORDER_GAP = 4f;
+        private const float MIN_VISIBLE_PHYSICS_COLLIDER_BOX_SIZE = 18f;
         private const string INTERACTION_CLICK = "Click";
         private const string INTERACTION_DRAG = "Drag";
         private const string INTERACTION_DROP = "Drop";
@@ -425,16 +426,67 @@ namespace io.github.hatayama.uLoopMCP
             Color contrastColor = GetContrastingTextColor(color);
             AnnotationBorderColors borderColors = GetAnnotationBorderColors(color);
             string displayLabel = CreateDisplayLabel(element);
+            AnnotationBounds bounds = CreateAnnotationBounds(element);
 
             return new AnnotationDrawInfo(
-                element.BoundsMinX,
-                element.BoundsMinY,
-                element.BoundsMaxX,
-                element.BoundsMaxY,
+                bounds.MinX,
+                bounds.MinY,
+                bounds.MaxX,
+                bounds.MaxY,
                 color,
                 contrastColor,
                 borderColors,
                 displayLabel);
+        }
+
+        private static AnnotationBounds CreateAnnotationBounds(UIElementInfo element)
+        {
+            AnnotationBounds bounds = new AnnotationBounds(
+                element.BoundsMinX,
+                element.BoundsMinY,
+                element.BoundsMaxX,
+                element.BoundsMaxY);
+
+            if (element.Type != "PhysicsCollider")
+            {
+                return bounds;
+            }
+
+            // JSON keeps the raw sampled-hit coverage; only the overlay expands tiny physics boxes so they remain visible.
+            return ExpandBoundsToMinimumSize(
+                bounds,
+                MIN_VISIBLE_PHYSICS_COLLIDER_BOX_SIZE);
+        }
+
+        private static AnnotationBounds ExpandBoundsToMinimumSize(
+            AnnotationBounds bounds,
+            float minimumSize)
+        {
+            Debug.Assert(bounds.MaxX >= bounds.MinX, "Annotation max X must not be smaller than min X.");
+            Debug.Assert(bounds.MaxY >= bounds.MinY, "Annotation max Y must not be smaller than min Y.");
+            Debug.Assert(minimumSize >= 0f, "Minimum annotation size must not be negative.");
+
+            float minX = bounds.MinX;
+            float minY = bounds.MinY;
+            float maxX = bounds.MaxX;
+            float maxY = bounds.MaxY;
+            float halfMinimumSize = minimumSize / 2f;
+
+            if (maxX - minX < minimumSize)
+            {
+                float centerX = (bounds.MinX + bounds.MaxX) / 2f;
+                minX = centerX - halfMinimumSize;
+                maxX = centerX + halfMinimumSize;
+            }
+
+            if (maxY - minY < minimumSize)
+            {
+                float centerY = (bounds.MinY + bounds.MaxY) / 2f;
+                minY = centerY - halfMinimumSize;
+                maxY = centerY + halfMinimumSize;
+            }
+
+            return new AnnotationBounds(minX, minY, maxX, maxY);
         }
 
         private static void CreateBorder(
@@ -688,6 +740,22 @@ namespace io.github.hatayama.uLoopMCP
                 Inner = inner;
                 Middle = middle;
                 Outer = outer;
+            }
+        }
+
+        private readonly struct AnnotationBounds
+        {
+            public readonly float MinX;
+            public readonly float MinY;
+            public readonly float MaxX;
+            public readonly float MaxY;
+
+            public AnnotationBounds(float minX, float minY, float maxX, float maxY)
+            {
+                MinX = minX;
+                MinY = minY;
+                MaxX = maxX;
+                MaxY = maxY;
             }
         }
 

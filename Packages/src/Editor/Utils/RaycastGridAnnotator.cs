@@ -128,19 +128,18 @@ namespace io.github.hatayama.uLoopMCP
 
             for (int i = 0; i < clusters.Count; i++)
             {
-                RaycastClusterSample? representative = SelectUnoccludedRepresentative(
+                RaycastClusterInfo? reachableCluster = CreateReachableClusterForUiContext(
                     clusters[i],
                     uiRaycastContext,
                     gameViewSize);
-                if (representative == null)
+                if (reachableCluster == null)
                 {
                     continue;
                 }
 
-                clusters[i].Representative = representative;
                 RaycastColliderMetadata metadata =
-                    clusterCollection.MetadataByClusterKey[representative.ClusterKey];
-                elements.Add(CreatePhysicsColliderElement($"R{elements.Count + 1}", clusters[i], metadata));
+                    clusterCollection.MetadataByClusterKey[reachableCluster.Representative.ClusterKey];
+                elements.Add(CreatePhysicsColliderElement($"R{elements.Count + 1}", reachableCluster, metadata));
             }
 
             return elements;
@@ -392,8 +391,9 @@ namespace io.github.hatayama.uLoopMCP
             RaycastClusterInfo cluster,
             RaycastColliderMetadata metadata)
         {
+            Debug.Assert(cluster.Samples.Count > 0, "Physics collider cluster must contain sampled hits.");
             RaycastClusterSample representative = cluster.Representative;
-            float halfSize = MARKER_SIZE / 2f;
+            RaycastSampleBounds sampleBounds = CalculateSampleBounds(cluster.Samples);
 
             UIElementInfo element = new UIElementInfo
             {
@@ -404,10 +404,10 @@ namespace io.github.hatayama.uLoopMCP
                 Interaction = "Raycast",
                 SimX = representative.InputX,
                 SimY = representative.InputY,
-                BoundsMinX = representative.InputX - halfSize,
-                BoundsMinY = representative.InputY - halfSize,
-                BoundsMaxX = representative.InputX + halfSize,
-                BoundsMaxY = representative.InputY + halfSize,
+                BoundsMinX = sampleBounds.MinX,
+                BoundsMinY = sampleBounds.MinY,
+                BoundsMaxX = sampleBounds.MaxX,
+                BoundsMaxY = sampleBounds.MaxY,
                 SortingOrder = 0,
                 SiblingIndex = 0,
                 Layer = metadata.Layer,
@@ -423,6 +423,27 @@ namespace io.github.hatayama.uLoopMCP
             return element;
         }
 
+        private static RaycastSampleBounds CalculateSampleBounds(List<RaycastClusterSample> samples)
+        {
+            Debug.Assert(samples.Count > 0, "At least one raycast sample is required.");
+
+            float minX = samples[0].InputX;
+            float minY = samples[0].InputY;
+            float maxX = samples[0].InputX;
+            float maxY = samples[0].InputY;
+
+            for (int i = 1; i < samples.Count; i++)
+            {
+                RaycastClusterSample sample = samples[i];
+                minX = Mathf.Min(minX, sample.InputX);
+                minY = Mathf.Min(minY, sample.InputY);
+                maxX = Mathf.Max(maxX, sample.InputX);
+                maxY = Mathf.Max(maxY, sample.InputY);
+            }
+
+            return new RaycastSampleBounds(minX, minY, maxX, maxY);
+        }
+
         private static UiRaycastHelper.RaycastContext? CreateUiRaycastContext()
         {
             EventSystem currentEventSystem = EventSystem.current;
@@ -434,17 +455,17 @@ namespace io.github.hatayama.uLoopMCP
             return new UiRaycastHelper.RaycastContext(currentEventSystem);
         }
 
-        private static RaycastClusterSample? SelectUnoccludedRepresentative(
+        private static RaycastClusterInfo? CreateReachableClusterForUiContext(
             RaycastClusterInfo cluster,
             UiRaycastHelper.RaycastContext? uiRaycastContext,
             Vector2 gameViewSize)
         {
             if (uiRaycastContext == null)
             {
-                return cluster.Representative;
+                return cluster;
             }
 
-            return RaycastHitClusterer.SelectReachableRepresentativeSample(
+            return RaycastHitClusterer.CreateReachableCluster(
                 cluster.Samples,
                 (RaycastClusterSample sample) => IsSampleOccludedByUi(sample, uiRaycastContext, gameViewSize));
         }
@@ -494,6 +515,22 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             return componentTypeNames;
+        }
+
+        private readonly struct RaycastSampleBounds
+        {
+            public readonly float MinX;
+            public readonly float MinY;
+            public readonly float MaxX;
+            public readonly float MaxY;
+
+            public RaycastSampleBounds(float minX, float minY, float maxX, float maxY)
+            {
+                MinX = minX;
+                MinY = minY;
+                MaxX = maxX;
+                MaxY = maxY;
+            }
         }
     }
 }

@@ -220,7 +220,37 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
-        public void CreatePhysicsColliderElement_ShouldKeepBoundsInTopLeftInputSpace()
+        public void CreateReachableCluster_WhenSamplesAreOccluded_ShouldExcludeOccludedSamples()
+        {
+            RaycastClusterSample reachableLeftSample = CreateSample(1, 0f, 0f);
+            RaycastClusterSample reachableRightSample = CreateSample(1, 10f, 0f);
+            RaycastClusterSample occludedSample = CreateSample(1, 100f, 100f);
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
+            {
+                reachableLeftSample,
+                reachableRightSample,
+                occludedSample
+            };
+            HashSet<RaycastClusterSample> occludedSamples = new HashSet<RaycastClusterSample>
+            {
+                occludedSample
+            };
+
+            RaycastClusterInfo reachableCluster = RaycastHitClusterer.CreateReachableCluster(
+                samples,
+                (RaycastClusterSample sample) => occludedSamples.Contains(sample));
+
+            Assert.That(reachableCluster, Is.Not.Null);
+            Assert.That(reachableCluster.SampleCount, Is.EqualTo(2));
+            Assert.That(reachableCluster.Samples, Is.EqualTo(new List<RaycastClusterSample>
+            {
+                reachableLeftSample,
+                reachableRightSample
+            }));
+        }
+
+        [Test]
+        public void CreatePhysicsColliderElement_ShouldUseSampleBoundsInTopLeftInputSpace()
         {
             RaycastClusterInfo cluster = new RaycastClusterInfo
             {
@@ -229,7 +259,13 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
                     InputX = 100f,
                     InputY = 200f
                 },
-                SampleCount = 3
+                SampleCount = 3,
+                Samples = new List<RaycastClusterSample>
+                {
+                    CreateSample(1, 80f, 180f),
+                    CreateSample(1, 100f, 200f),
+                    CreateSample(1, 130f, 220f)
+                }
             };
             RaycastColliderMetadata metadata = new RaycastColliderMetadata
             {
@@ -245,12 +281,58 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             Assert.That(element.Interaction, Is.EqualTo("Raycast"));
             Assert.That(element.SimX, Is.EqualTo(100f));
             Assert.That(element.SimY, Is.EqualTo(200f));
-            Assert.That(element.BoundsMinX, Is.EqualTo(91f));
-            Assert.That(element.BoundsMinY, Is.EqualTo(191f));
-            Assert.That(element.BoundsMaxX, Is.EqualTo(109f));
-            Assert.That(element.BoundsMaxY, Is.EqualTo(209f));
+            Assert.That(element.BoundsMinX, Is.EqualTo(80f));
+            Assert.That(element.BoundsMinY, Is.EqualTo(180f));
+            Assert.That(element.BoundsMaxX, Is.EqualTo(130f));
+            Assert.That(element.BoundsMaxY, Is.EqualTo(220f));
             Assert.That(element.SimX, Is.InRange(element.BoundsMinX, element.BoundsMaxX));
             Assert.That(element.SimY, Is.InRange(element.BoundsMinY, element.BoundsMaxY));
+        }
+
+        [Test]
+        public void CreatePhysicsColliderElement_WhenSamplesFormLShape_ShouldUseAxisAlignedBoundingBox()
+        {
+            RaycastClusterInfo cluster = new RaycastClusterInfo
+            {
+                Representative = CreateSample(1, 0f, 0f),
+                SampleCount = 3,
+                Samples = new List<RaycastClusterSample>
+                {
+                    CreateSample(1, 0f, 0f),
+                    CreateSample(1, 10f, 0f),
+                    CreateSample(1, 0f, 10f)
+                }
+            };
+            RaycastColliderMetadata metadata = CreateMetadata();
+
+            UIElementInfo element = RaycastGridAnnotator.CreatePhysicsColliderElement("R1", cluster, metadata);
+
+            Assert.That(element.BoundsMinX, Is.EqualTo(0f));
+            Assert.That(element.BoundsMinY, Is.EqualTo(0f));
+            Assert.That(element.BoundsMaxX, Is.EqualTo(10f));
+            Assert.That(element.BoundsMaxY, Is.EqualTo(10f));
+            Assert.That(element.SimX, Is.EqualTo(0f));
+            Assert.That(element.SimY, Is.EqualTo(0f));
+        }
+
+        [Test]
+        public void CreatePhysicsColliderElement_WhenClusterHasSingleSample_ShouldKeepDegenerateDataBounds()
+        {
+            RaycastClusterSample sample = CreateSample(1, 100f, 200f);
+            RaycastClusterInfo cluster = new RaycastClusterInfo
+            {
+                Representative = sample,
+                SampleCount = 1,
+                Samples = new List<RaycastClusterSample> { sample }
+            };
+            RaycastColliderMetadata metadata = CreateMetadata();
+
+            UIElementInfo element = RaycastGridAnnotator.CreatePhysicsColliderElement("R1", cluster, metadata);
+
+            Assert.That(element.BoundsMinX, Is.EqualTo(100f));
+            Assert.That(element.BoundsMinY, Is.EqualTo(200f));
+            Assert.That(element.BoundsMaxX, Is.EqualTo(100f));
+            Assert.That(element.BoundsMaxY, Is.EqualTo(200f));
         }
 
         [Test]
@@ -405,6 +487,17 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
                 HitLayer = layer,
                 HitLayerIndex = layerIndex,
                 HitGameObjectPath = objectPath
+            };
+        }
+
+        private static RaycastColliderMetadata CreateMetadata()
+        {
+            return new RaycastColliderMetadata
+            {
+                Name = "Cube",
+                Path = "Cube",
+                Layer = "Default",
+                Components = new List<string> { "BoxCollider" }
             };
         }
     }

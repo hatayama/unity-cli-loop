@@ -203,6 +203,72 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
+        public void CreateAnnotationOverlay_WhenBoundsAreDegenerate_ShouldDrawMinimumVisibleBorderAroundSimPoint()
+        {
+            List<UIElementInfo> elements = new List<UIElementInfo>
+            {
+                new UIElementInfo
+                {
+                    Label = "R1",
+                    Type = "PhysicsCollider",
+                    Interaction = "Raycast",
+                    SimX = 50f,
+                    SimY = 60f,
+                    BoundsMinX = 50f,
+                    BoundsMinY = 60f,
+                    BoundsMaxX = 50f,
+                    BoundsMaxY = 60f
+                }
+            };
+            GameObject overlay = UIElementAnnotator.CreateAnnotationOverlay(elements, 1f);
+
+            try
+            {
+                RectTransform innerTop = overlay.transform.Find("Border_DarkInner_Top").GetComponent<RectTransform>();
+
+                Assert.That(innerTop.anchoredPosition, Is.EqualTo(new Vector2(41f, 67f)));
+                Assert.That(innerTop.sizeDelta, Is.EqualTo(new Vector2(18f, 2f)));
+            }
+            finally
+            {
+                UIElementAnnotator.DestroyAnnotationOverlay(overlay);
+            }
+        }
+
+        [Test]
+        public void CreateAnnotationOverlay_WhenPhysicsBoundsAreNarrow_ShouldExpandAroundCoverageCenter()
+        {
+            List<UIElementInfo> elements = new List<UIElementInfo>
+            {
+                new UIElementInfo
+                {
+                    Label = "R1",
+                    Type = "PhysicsCollider",
+                    Interaction = "Raycast",
+                    SimX = 0f,
+                    SimY = 5f,
+                    BoundsMinX = 0f,
+                    BoundsMinY = 0f,
+                    BoundsMaxX = 10f,
+                    BoundsMaxY = 10f
+                }
+            };
+            GameObject overlay = UIElementAnnotator.CreateAnnotationOverlay(elements, 1f);
+
+            try
+            {
+                RectTransform innerTop = overlay.transform.Find("Border_DarkInner_Top").GetComponent<RectTransform>();
+
+                Assert.That(innerTop.anchoredPosition, Is.EqualTo(new Vector2(-4f, 12f)));
+                Assert.That(innerTop.sizeDelta, Is.EqualTo(new Vector2(18f, 2f)));
+            }
+            finally
+            {
+                UIElementAnnotator.DestroyAnnotationOverlay(overlay);
+            }
+        }
+
+        [Test]
         public void CreateAnnotationOverlay_WhenMultipleElementsAreAnnotated_ShouldDrawLabelsAboveAllBorders()
         {
             List<UIElementInfo> elements = new List<UIElementInfo>
