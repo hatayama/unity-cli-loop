@@ -570,13 +570,13 @@ namespace io.github.hatayama.uLoopMCP
 
             if (horizontal)
             {
-                float minX = Mathf.Min(segment.StartX, segment.EndX);
-                float width = Mathf.Abs(segment.EndX - segment.StartX);
+                float minX = Mathf.Min(segment.StartX, segment.EndX) - thickness / 2f;
+                float width = Mathf.Abs(segment.EndX - segment.StartX) + thickness;
                 return new Rect(minX, segment.StartY - thickness / 2f, width, thickness);
             }
 
-            float minY = Mathf.Min(segment.StartY, segment.EndY);
-            float height = Mathf.Abs(segment.EndY - segment.StartY);
+            float minY = Mathf.Min(segment.StartY, segment.EndY) - thickness / 2f;
+            float height = Mathf.Abs(segment.EndY - segment.StartY) + thickness;
             return new Rect(segment.StartX - thickness / 2f, minY, thickness, height);
         }
 
