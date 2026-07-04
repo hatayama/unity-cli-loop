@@ -23,7 +23,12 @@ import (
 	sharedupdate "github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
-var dispatcherHTTPClient = &http.Client{Timeout: 2 * time.Minute}
+var (
+	dispatcherHTTPClient = &http.Client{Timeout: 2 * time.Minute}
+	dispatcherRename     = os.Rename
+)
+
+const dispatcherRealCLIReadyFileName = "READY"
 
 func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin, stderr io.Writer) (string, error) {
 	pin.ProjectRunnerVersion = strings.TrimSpace(pin.ProjectRunnerVersion)
@@ -39,7 +44,7 @@ func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin, stderr io.
 		return "", err
 	}
 	realCLIPath := dispatcherCachedRealCLIPath(cacheRoot, pin.ProjectRunnerVersion, runtime.GOOS, runtime.GOARCH)
-	if isExecutableFile(realCLIPath) {
+	if isReadyDispatcherRealCLI(realCLIPath) {
 		return realCLIPath, nil
 	}
 
@@ -99,6 +104,19 @@ func isExecutableFile(filePath string) bool {
 	return info.Mode()&0o111 != 0
 }
 
+func isReadyDispatcherRealCLI(filePath string) bool {
+	return isExecutableFile(filePath) && fileExists(dispatcherRealCLIReadyPath(filePath))
+}
+
+func fileExists(filePath string) bool {
+	_, err := os.Stat(filePath)
+	return err == nil
+}
+
+func dispatcherRealCLIReadyPath(realCLIPath string) string {
+	return filepath.Join(filepath.Dir(realCLIPath), dispatcherRealCLIReadyFileName)
+}
+
 func downloadDispatcherRealCLIForPin(ctx context.Context, cacheRoot string, pin dispatcherPin, goos string, goarch string, stderr io.Writer) (string, error) {
 	assetName, err := dispatcherReleaseAssetName(goos, goarch)
 	if err != nil {
@@ -142,22 +160,40 @@ func downloadDispatcherRealCLIForPin(ctx context.Context, cacheRoot string, pin 
 }
 
 func installDownloadedDispatcherRealCLI(tempRealCLIPath string, realCLIPath string) (string, error) {
-	if isExecutableFile(realCLIPath) {
+	if isReadyDispatcherRealCLI(realCLIPath) {
 		return realCLIPath, nil
 	}
-	if err := os.Rename(tempRealCLIPath, realCLIPath); err == nil {
+	if err := dispatcherRename(tempRealCLIPath, realCLIPath); err == nil {
+		return markDispatcherRealCLIReady(realCLIPath)
+	}
+	if isReadyDispatcherRealCLI(realCLIPath) {
 		return realCLIPath, nil
 	}
-	if isExecutableFile(realCLIPath) {
-		return realCLIPath, nil
+	if err := removeDispatcherRealCLIReady(realCLIPath); err != nil {
+		return "", err
 	}
 	if err := os.Remove(realCLIPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
-	if err := os.Rename(tempRealCLIPath, realCLIPath); err != nil {
+	if err := dispatcherRename(tempRealCLIPath, realCLIPath); err != nil {
+		return "", err
+	}
+	return markDispatcherRealCLIReady(realCLIPath)
+}
+
+func markDispatcherRealCLIReady(realCLIPath string) (string, error) {
+	if err := os.WriteFile(dispatcherRealCLIReadyPath(realCLIPath), []byte("ready\n"), 0o644); err != nil {
 		return "", err
 	}
 	return realCLIPath, nil
+}
+
+func removeDispatcherRealCLIReady(realCLIPath string) error {
+	err := os.Remove(dispatcherRealCLIReadyPath(realCLIPath))
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 func dispatcherReleaseAssetName(goos string, goarch string) (string, error) {

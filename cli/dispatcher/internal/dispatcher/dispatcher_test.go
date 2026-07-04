@@ -505,10 +505,87 @@ func TestDownloadDispatcherRealCLIWritesDownloadStatus(t *testing.T) {
 		t.Fatalf("download status mismatch: %q", stderr.String())
 	}
 	assertFileContent(t, realCLIPath, "real")
+	assertFileContent(t, dispatcherRealCLIReadyPath(realCLIPath), "ready\n")
 }
 
 func TestInstallDownloadedDispatcherRealCLIKeepsExistingExecutable(t *testing.T) {
-	// Verifies concurrent downloads do not delete an executable another dispatcher already cached.
+	// Verifies concurrent downloads do not delete a ready executable another dispatcher already cached.
+	tempDir := t.TempDir()
+	realCLIPath := filepath.Join(tempDir, dispatcherRealCLIFileName(runtime.GOOS))
+	tempRealCLIPath := filepath.Join(tempDir, "downloaded-"+dispatcherRealCLIFileName(runtime.GOOS))
+	if err := os.WriteFile(realCLIPath, []byte("existing"), 0o755); err != nil {
+		t.Fatalf("failed to write existing real CLI: %v", err)
+	}
+	if err := os.WriteFile(dispatcherRealCLIReadyPath(realCLIPath), []byte("ready\n"), 0o644); err != nil {
+		t.Fatalf("failed to write ready marker: %v", err)
+	}
+	if err := os.WriteFile(tempRealCLIPath, []byte("downloaded"), 0o755); err != nil {
+		t.Fatalf("failed to write temp real CLI: %v", err)
+	}
+
+	path, err := installDownloadedDispatcherRealCLI(tempRealCLIPath, realCLIPath)
+	if err != nil {
+		t.Fatalf("installDownloadedDispatcherRealCLI failed: %v", err)
+	}
+	if path != realCLIPath {
+		t.Fatalf("real CLI path mismatch: %s", path)
+	}
+	assertFileContent(t, realCLIPath, "existing")
+}
+
+func TestInstallDownloadedDispatcherRealCLIKeepsReadyExecutableAfterRenameFailure(t *testing.T) {
+	// Verifies a cache entry that becomes ready during install is reused instead of replaced.
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not support the POSIX executable-bit setup this race regression uses.")
+	}
+	tempDir := t.TempDir()
+	realCLIPath := filepath.Join(tempDir, dispatcherRealCLIFileName(runtime.GOOS))
+	tempRealCLIPath := filepath.Join(tempDir, "downloaded-"+dispatcherRealCLIFileName(runtime.GOOS))
+	if err := os.WriteFile(realCLIPath, []byte("existing"), 0o644); err != nil {
+		t.Fatalf("failed to write existing real CLI: %v", err)
+	}
+	if err := os.WriteFile(dispatcherRealCLIReadyPath(realCLIPath), []byte("ready\n"), 0o644); err != nil {
+		t.Fatalf("failed to write ready marker: %v", err)
+	}
+	if err := os.WriteFile(tempRealCLIPath, []byte("downloaded"), 0o755); err != nil {
+		t.Fatalf("failed to write temp real CLI: %v", err)
+	}
+
+	previousRename := dispatcherRename
+	defer func() {
+		dispatcherRename = previousRename
+	}()
+	renameCalls := 0
+	dispatcherRename = func(oldPath string, newPath string) error {
+		renameCalls++
+		if oldPath != tempRealCLIPath || newPath != realCLIPath {
+			t.Fatalf("rename paths mismatch: %s -> %s", oldPath, newPath)
+		}
+		if renameCalls == 1 {
+			if err := os.Chmod(realCLIPath, 0o755); err != nil {
+				t.Fatalf("failed to mark existing real CLI executable: %v", err)
+			}
+			return errors.New("destination exists")
+		}
+		return previousRename(oldPath, newPath)
+	}
+
+	path, err := installDownloadedDispatcherRealCLI(tempRealCLIPath, realCLIPath)
+	if err != nil {
+		t.Fatalf("installDownloadedDispatcherRealCLI failed: %v", err)
+	}
+	if path != realCLIPath {
+		t.Fatalf("real CLI path mismatch: %s", path)
+	}
+	if renameCalls != 1 {
+		t.Fatalf("rename call count mismatch: %d", renameCalls)
+	}
+	assertFileContent(t, realCLIPath, "existing")
+	assertFileContent(t, dispatcherRealCLIReadyPath(realCLIPath), "ready\n")
+}
+
+func TestInstallDownloadedDispatcherRealCLIReplacesExecutableWithoutReady(t *testing.T) {
+	// Verifies executable files without READY are treated as incomplete cache entries.
 	tempDir := t.TempDir()
 	realCLIPath := filepath.Join(tempDir, dispatcherRealCLIFileName(runtime.GOOS))
 	tempRealCLIPath := filepath.Join(tempDir, "downloaded-"+dispatcherRealCLIFileName(runtime.GOOS))
@@ -526,7 +603,8 @@ func TestInstallDownloadedDispatcherRealCLIKeepsExistingExecutable(t *testing.T)
 	if path != realCLIPath {
 		t.Fatalf("real CLI path mismatch: %s", path)
 	}
-	assertFileContent(t, realCLIPath, "existing")
+	assertFileContent(t, realCLIPath, "downloaded")
+	assertFileContent(t, dispatcherRealCLIReadyPath(realCLIPath), "ready\n")
 }
 
 func TestLoadDispatcherPinFallsBackToPackagePin(t *testing.T) {
@@ -728,6 +806,9 @@ func writeCachedDispatcherRealCLI(t *testing.T, cacheRoot string, projectRunnerV
 	}
 	if err := os.WriteFile(realCLIPath, []byte("cached real cli"), 0o755); err != nil {
 		t.Fatalf("failed to write cached CLI: %v", err)
+	}
+	if err := os.WriteFile(dispatcherRealCLIReadyPath(realCLIPath), []byte("ready\n"), 0o644); err != nil {
+		t.Fatalf("failed to write cached CLI ready marker: %v", err)
 	}
 	return realCLIPath
 }
