@@ -33,7 +33,10 @@ function Test-LegacyNpmUloopPath {
     if (-not (Test-Path $CommandPath -PathType Leaf)) {
         return $false
     }
-    $CommandContent = Get-Content -Path $CommandPath -Raw
+    $CommandContent = Get-Content -Path $CommandPath -Raw -ErrorAction SilentlyContinue
+    if ($null -eq $CommandContent) {
+        return $false
+    }
     return $CommandContent.Contains('node_modules/uloop-cli') -or $CommandContent.Contains('node_modules\uloop-cli')
 }
 function Write-LegacyNpmMultilineArgumentWarning {

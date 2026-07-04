@@ -31,6 +31,8 @@ func TestCommandForWindowsConfiguresUserPathAndLegacyCleanup(t *testing.T) {
 	for _, expected := range []string{
 		"[Environment]::SetEnvironmentVariable('Path', $NewUserPath, 'User')",
 		"GetExtension($CommandPath), '.exe'",
+		"$CommandContent = Get-Content -Path $CommandPath -Raw -ErrorAction SilentlyContinue",
+		"if ($null -eq $CommandContent) {\n        return $false\n    }",
 		"foreach ($ShimName in @('uloop', 'uloop.cmd', 'uloop.ps1'))",
 		"Invoke-AllLegacyNpmPackageRemoval -ExpectedUloopPath $ExpectedUloopPath",
 		"$NpmArgs = @('uninstall', '-g', '--prefix', $LegacyPrefix, 'uloop-cli')",
