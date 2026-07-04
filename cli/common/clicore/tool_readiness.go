@@ -9,6 +9,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/project"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
 const (
@@ -23,7 +24,7 @@ const (
 const executeDynamicCodeReadinessProbe = `return "Unity CLI Loop dynamic code prewarm";`
 
 type toolReadinessDeps struct {
-	findRunningUnityProcess    func(context.Context, string) (*UnityProcess, error)
+	findRunningUnityProcess    func(context.Context, string) (*unityprocess.UnityProcess, error)
 	probeToolReadinessSequence func(context.Context, string) error
 }
 
@@ -37,7 +38,7 @@ func WaitForToolReadinessWithTimeout(ctx context.Context, projectRoot string, ti
 
 func defaultToolReadinessDeps() toolReadinessDeps {
 	return toolReadinessDeps{
-		findRunningUnityProcess:    FindRunningUnityProcess,
+		findRunningUnityProcess:    unityprocess.FindRunningUnityProcess,
 		probeToolReadinessSequence: ProbeToolReadinessSequence,
 	}
 }

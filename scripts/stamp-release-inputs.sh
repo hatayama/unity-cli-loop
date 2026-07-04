@@ -23,8 +23,9 @@ list_shared_common_inputs() {
     'cli/common/project/' \
     'cli/common/skills/' \
     'cli/common/tools/' \
-    'cli/common/unityipc/' |
-    grep -E '\.go$|/go\.mod$|/go\.sum$' |
+    'cli/common/unityipc/' \
+    'cli/common/unityprocess/' |
+    grep -E '\.go$|\.ps1$|/go\.mod$|/go\.sum$' |
     grep -v '_test\.go$' || true
 }
 

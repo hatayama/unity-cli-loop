@@ -44,6 +44,28 @@ func TestReleaseTriggerGuardRequiresBothTriggersForSharedCommonChanges(t *testin
 	}
 }
 
+// Verifies embedded shared common scripts require triggers in both release package roots.
+func TestReleaseTriggerGuardRequiresBothTriggersForSharedEmbeddedScripts(t *testing.T) {
+	result := AnalyzeReleaseTriggerGuard([]string{"cli/common/unityprocess/focus_unity_process.ps1"})
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected one violation, got %v", result.Violations)
+	}
+	violation := result.Violations[0]
+	if len(violation.ChangedInputs) != 1 || violation.ChangedInputs[0] != "cli/common/unityprocess/focus_unity_process.ps1" {
+		t.Fatalf("expected the changed embedded script to be listed, got %v", violation.ChangedInputs)
+	}
+	expectedRoots := []string{"cli/dispatcher/", "cli/project-runner/"}
+	if len(violation.MissingTriggerRoots) != len(expectedRoots) {
+		t.Fatalf("expected missing roots %v, got %v", expectedRoots, violation.MissingTriggerRoots)
+	}
+	for index, expectedRoot := range expectedRoots {
+		if violation.MissingTriggerRoots[index] != expectedRoot {
+			t.Fatalf("expected missing roots %v, got %v", expectedRoots, violation.MissingTriggerRoots)
+		}
+	}
+}
+
 // Verifies a partial trigger for shared common changes still fails for the missing package root.
 func TestReleaseTriggerGuardDetectsMissingDispatcherTrigger(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{

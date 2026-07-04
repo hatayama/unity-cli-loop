@@ -6,6 +6,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
 func newConnectionRetryClient(
@@ -81,7 +82,7 @@ func finishUndispatchedRetryProbe(
 	outcome unityipc.UnitySendOutcome,
 	err error,
 	processErr error,
-	runningProcess *clicore.UnityProcess,
+	runningProcess *unityprocess.UnityProcess,
 	lastOutcome unityipc.UnitySendOutcome,
 	lastErr error,
 ) (bool, unityipc.UnitySendOutcome, error) {
