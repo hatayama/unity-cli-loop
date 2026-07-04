@@ -257,39 +257,31 @@ func TestRunLaunchQuitDoesNotLaunchWhenUnityIsNotRunning(t *testing.T) {
 
 func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 	// Verifies launch reports an explicit ready payload after Unity accepts tool requests.
-	originalFinder := findRunningUnityProcessForLaunch
-	originalResolver := resolveUnityExecutablePathForLaunch
-	originalStartupMarkerWait := waitForUnityStartupMarkerForLaunch
-	originalReadinessWait := waitForToolReadinessForLaunch
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps := defaultLaunchDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
-	resolveUnityExecutablePathForLaunch = func(string) (string, error) {
+	deps.resolveUnityExecutablePath = func(string) (string, error) {
 		return "/usr/bin/true", nil
 	}
-	waitForUnityStartupMarkerForLaunch = func(context.Context, string, time.Duration, time.Duration) error {
+	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error {
 		return nil
 	}
-	waitForToolReadinessForLaunch = func(context.Context, string, time.Duration) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
 		return nil
 	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForLaunch = originalFinder
-		resolveUnityExecutablePathForLaunch = originalResolver
-		waitForUnityStartupMarkerForLaunch = originalStartupMarkerWait
-		waitForToolReadinessForLaunch = originalReadinessWait
-	})
 
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := runLaunch(
+	code := runLaunchWithDeps(
 		context.Background(),
 		launchOptions{projectPath: projectRoot, editorVersion: "6000.0.0f1"},
 		projectRoot,
 		&stdout,
 		&stderr,
+		deps,
 	)
 
 	if code != 0 {
@@ -312,18 +304,15 @@ func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 
 func TestWaitForLaunchReadinessUsesLaunchTimeout(t *testing.T) {
 	// Verifies launch gets a longer startup window without changing shared readiness defaults.
-	originalReadinessWait := waitForToolReadinessForLaunch
+	deps := defaultLaunchDeps()
 	var capturedTimeout time.Duration
-	waitForToolReadinessForLaunch = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
+	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
 		capturedTimeout = timeout
 		return nil
 	}
-	t.Cleanup(func() {
-		waitForToolReadinessForLaunch = originalReadinessWait
-	})
 
-	if err := waitForLaunchReadiness(context.Background(), t.TempDir()); err != nil {
-		t.Fatalf("waitForLaunchReadiness failed: %v", err)
+	if err := waitForLaunchReadinessWithDeps(context.Background(), t.TempDir(), deps); err != nil {
+		t.Fatalf("waitForLaunchReadinessWithDeps failed: %v", err)
 	}
 	if capturedTimeout != launchReadinessTimeout {
 		t.Fatalf("launch readiness timeout mismatch: %s", capturedTimeout)
@@ -332,19 +321,16 @@ func TestWaitForLaunchReadinessUsesLaunchTimeout(t *testing.T) {
 
 func TestWaitForLaunchReadinessWrapsStartupTimeout(t *testing.T) {
 	// Verifies launch timeout errors receive the launch-specific startup classification.
-	originalReadinessWait := waitForToolReadinessForLaunch
-	waitForToolReadinessForLaunch = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
+	deps := defaultLaunchDeps()
+	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
 		return clicore.UnityServerNotRespondingError{
 			ProjectRoot: projectRoot,
 			Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
 			Cause:       errors.New("timed out waiting for Unity tool readiness"),
 		}
 	}
-	t.Cleanup(func() {
-		waitForToolReadinessForLaunch = originalReadinessWait
-	})
 
-	err := waitForLaunchReadiness(context.Background(), t.TempDir())
+	err := waitForLaunchReadinessWithDeps(context.Background(), t.TempDir(), deps)
 
 	var startupErr launchStartupTimeoutError
 	if !errors.As(err, &startupErr) {
@@ -354,19 +340,16 @@ func TestWaitForLaunchReadinessWrapsStartupTimeout(t *testing.T) {
 
 func TestWaitForLaunchReadinessWrapsInternalProbeDeadline(t *testing.T) {
 	// Verifies probe deadlines are classified as launch startup timeouts while the parent context is active.
-	originalReadinessWait := waitForToolReadinessForLaunch
-	waitForToolReadinessForLaunch = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
+	deps := defaultLaunchDeps()
+	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
 		return clicore.UnityServerNotRespondingError{
 			ProjectRoot: projectRoot,
 			Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
 			Cause:       fmt.Errorf("probe deadline: %w", context.DeadlineExceeded),
 		}
 	}
-	t.Cleanup(func() {
-		waitForToolReadinessForLaunch = originalReadinessWait
-	})
 
-	err := waitForLaunchReadiness(context.Background(), t.TempDir())
+	err := waitForLaunchReadinessWithDeps(context.Background(), t.TempDir(), deps)
 
 	var startupErr launchStartupTimeoutError
 	if !errors.As(err, &startupErr) {
@@ -379,19 +362,16 @@ func TestWaitForLaunchReadinessWrapsInternalProbeDeadline(t *testing.T) {
 
 func TestWaitForLaunchReadinessPreservesNoProcessReachability(t *testing.T) {
 	// Verifies a launch whose Editor exited before readiness does not report that Unity is running.
-	originalReadinessWait := waitForToolReadinessForLaunch
-	waitForToolReadinessForLaunch = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
+	deps := defaultLaunchDeps()
+	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
 		return fmt.Errorf("timed out waiting for Unity tool readiness: %w", &unityipc.ConnectionAttemptError{
 			ProjectRoot: projectRoot,
 			Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
 			Cause:       errors.New("connect failed"),
 		})
 	}
-	t.Cleanup(func() {
-		waitForToolReadinessForLaunch = originalReadinessWait
-	})
 
-	err := waitForLaunchReadiness(context.Background(), t.TempDir())
+	err := waitForLaunchReadinessWithDeps(context.Background(), t.TempDir(), deps)
 
 	var startupErr launchStartupTimeoutError
 	if errors.As(err, &startupErr) {
@@ -408,17 +388,14 @@ func TestWaitForLaunchReadinessPreservesNoProcessReachability(t *testing.T) {
 
 func TestWaitForLaunchReadinessPreservesParentCancellation(t *testing.T) {
 	// Verifies caller cancellation is not converted into a launch startup timeout.
-	originalReadinessWait := waitForToolReadinessForLaunch
-	waitForToolReadinessForLaunch = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
+	deps := defaultLaunchDeps()
+	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
 		return ctx.Err()
 	}
-	t.Cleanup(func() {
-		waitForToolReadinessForLaunch = originalReadinessWait
-	})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := waitForLaunchReadiness(ctx, t.TempDir())
+	err := waitForLaunchReadinessWithDeps(ctx, t.TempDir(), deps)
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected parent cancellation, got %v", err)
@@ -427,36 +404,30 @@ func TestWaitForLaunchReadinessPreservesParentCancellation(t *testing.T) {
 
 func TestRunLaunchWritesStructuredResponseForExistingUnityProcess(t *testing.T) {
 	// Verifies launch reports machine-readable readiness when Unity was already running.
-	originalFinder := findRunningUnityProcessForLaunch
-	originalFocus := focusUnityProcessForLaunch
-	originalReadinessWait := waitForToolReadinessForLaunch
+	deps := defaultLaunchDeps()
 	readinessChecked := false
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 111}, nil
 	}
-	focusUnityProcessForLaunch = func(context.Context, int) error {
+	deps.focusUnityProcess = func(context.Context, int) error {
 		return nil
 	}
-	waitForToolReadinessForLaunch = func(context.Context, string, time.Duration) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
 		readinessChecked = true
 		return nil
 	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForLaunch = originalFinder
-		focusUnityProcessForLaunch = originalFocus
-		waitForToolReadinessForLaunch = originalReadinessWait
-	})
 
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := runLaunch(
+	code := runLaunchWithDeps(
 		context.Background(),
 		launchOptions{projectPath: projectRoot},
 		projectRoot,
 		&stdout,
 		&stderr,
+		deps,
 	)
 
 	if code != 0 {
@@ -482,31 +453,27 @@ func TestRunLaunchWritesStructuredResponseForExistingUnityProcess(t *testing.T) 
 
 func TestRunLaunchRequiresRestartForEditorVersionWithExistingUnityProcess(t *testing.T) {
 	// Verifies --editor-version cannot silently reuse an already running Editor process.
-	originalFinder := findRunningUnityProcessForLaunch
-	originalReadinessWait := waitForToolReadinessForLaunch
+	deps := defaultLaunchDeps()
 	readinessChecked := false
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 222}, nil
 	}
-	waitForToolReadinessForLaunch = func(context.Context, string, time.Duration) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
 		readinessChecked = true
 		return nil
 	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForLaunch = originalFinder
-		waitForToolReadinessForLaunch = originalReadinessWait
-	})
 
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := runLaunch(
+	code := runLaunchWithDeps(
 		context.Background(),
 		launchOptions{projectPath: projectRoot, editorVersion: "6000.0.0f1"},
 		projectRoot,
 		&stdout,
 		&stderr,
+		deps,
 	)
 
 	if code != 1 {
@@ -522,53 +489,41 @@ func TestRunLaunchRequiresRestartForEditorVersionWithExistingUnityProcess(t *tes
 
 func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 	// Verifies restart reports both the stopped process and the newly launched process.
-	originalFinder := findRunningUnityProcessForLaunch
-	originalKiller := killUnityProcessForLaunch
-	originalResolver := resolveUnityExecutablePathForLaunch
-	originalExitWait := waitForUnityProcessExitForLaunch
-	originalStartupMarkerWait := waitForUnityStartupMarkerForLaunch
-	originalReadinessWait := waitForToolReadinessForLaunch
+	deps := defaultLaunchDeps()
 	killedPid := 0
 	waitedPid := 0
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 222}, nil
 	}
-	killUnityProcessForLaunch = func(pid int) error {
+	deps.killUnityProcess = func(pid int) error {
 		killedPid = pid
 		return nil
 	}
-	waitForUnityProcessExitForLaunch = func(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration) error {
+	deps.waitForUnityProcessExit = func(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration) error {
 		waitedPid = pid
 		return nil
 	}
-	resolveUnityExecutablePathForLaunch = func(string) (string, error) {
+	deps.resolveUnityExecutablePath = func(string) (string, error) {
 		return "/usr/bin/true", nil
 	}
-	waitForUnityStartupMarkerForLaunch = func(context.Context, string, time.Duration, time.Duration) error {
+	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error {
 		return nil
 	}
-	waitForToolReadinessForLaunch = func(context.Context, string, time.Duration) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
 		return nil
 	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForLaunch = originalFinder
-		killUnityProcessForLaunch = originalKiller
-		resolveUnityExecutablePathForLaunch = originalResolver
-		waitForUnityProcessExitForLaunch = originalExitWait
-		waitForUnityStartupMarkerForLaunch = originalStartupMarkerWait
-		waitForToolReadinessForLaunch = originalReadinessWait
-	})
 
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := runLaunch(
+	code := runLaunchWithDeps(
 		context.Background(),
 		launchOptions{projectPath: projectRoot, restart: true, editorVersion: "6000.0.0f1"},
 		projectRoot,
 		&stdout,
 		&stderr,
+		deps,
 	)
 
 	if code != 0 {
@@ -597,36 +552,30 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 
 func TestRunLaunchQuitWaitsForKilledUnityProcess(t *testing.T) {
 	// Verifies quit does not report success before the killed Unity process disappears.
-	originalFinder := findRunningUnityProcessForLaunch
-	originalKiller := killUnityProcessForLaunch
-	originalExitWait := waitForUnityProcessExitForLaunch
+	deps := defaultLaunchDeps()
 	waitedPid := 0
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 333}, nil
 	}
-	killUnityProcessForLaunch = func(pid int) error {
+	deps.killUnityProcess = func(pid int) error {
 		return nil
 	}
-	waitForUnityProcessExitForLaunch = func(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration) error {
+	deps.waitForUnityProcessExit = func(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration) error {
 		waitedPid = pid
 		return nil
 	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForLaunch = originalFinder
-		killUnityProcessForLaunch = originalKiller
-		waitForUnityProcessExitForLaunch = originalExitWait
-	})
 
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := runLaunch(
+	code := runLaunchWithDeps(
 		context.Background(),
 		launchOptions{projectPath: projectRoot, quit: true},
 		projectRoot,
 		&stdout,
 		&stderr,
+		deps,
 	)
 
 	if code != 0 {
@@ -646,41 +595,33 @@ func TestRunLaunchQuitWaitsForKilledUnityProcess(t *testing.T) {
 
 func TestRunLaunchRestartReportsProcessExitWaitFailure(t *testing.T) {
 	// Verifies restart stops before Temp cleanup when the killed Unity process still holds files.
-	originalFinder := findRunningUnityProcessForLaunch
-	originalKiller := killUnityProcessForLaunch
-	originalExitWait := waitForUnityProcessExitForLaunch
-	originalResolver := resolveUnityExecutablePathForLaunch
+	deps := defaultLaunchDeps()
 	resolverCalled := false
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 444}, nil
 	}
-	killUnityProcessForLaunch = func(pid int) error {
+	deps.killUnityProcess = func(pid int) error {
 		return nil
 	}
-	waitForUnityProcessExitForLaunch = func(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration) error {
+	deps.waitForUnityProcessExit = func(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration) error {
 		return errors.New("still exiting")
 	}
-	resolveUnityExecutablePathForLaunch = func(string) (string, error) {
+	deps.resolveUnityExecutablePath = func(string) (string, error) {
 		resolverCalled = true
 		return "/usr/bin/true", nil
 	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForLaunch = originalFinder
-		killUnityProcessForLaunch = originalKiller
-		waitForUnityProcessExitForLaunch = originalExitWait
-		resolveUnityExecutablePathForLaunch = originalResolver
-	})
 
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := runLaunch(
+	code := runLaunchWithDeps(
 		context.Background(),
 		launchOptions{projectPath: projectRoot, restart: true},
 		projectRoot,
 		&stdout,
 		&stderr,
+		deps,
 	)
 
 	if code != 1 {
@@ -698,34 +639,28 @@ func TestRunLaunchRestartReportsProcessExitWaitFailure(t *testing.T) {
 func TestRunLaunchWritesExistingFocusSuccessVibeLog(t *testing.T) {
 	enableCliVibeLog(t)
 
-	originalFinder := findRunningUnityProcessForLaunch
-	originalFocus := focusUnityProcessForLaunch
-	originalReadinessWait := waitForToolReadinessForLaunch
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps := defaultLaunchDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 111}, nil
 	}
-	focusUnityProcessForLaunch = func(context.Context, int) error {
+	deps.focusUnityProcess = func(context.Context, int) error {
 		return nil
 	}
-	waitForToolReadinessForLaunch = func(context.Context, string, time.Duration) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
 		return nil
 	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForLaunch = originalFinder
-		focusUnityProcessForLaunch = originalFocus
-		waitForToolReadinessForLaunch = originalReadinessWait
-	})
 
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := runLaunch(
+	code := runLaunchWithDeps(
 		context.Background(),
 		launchOptions{projectPath: projectRoot},
 		projectRoot,
 		&stdout,
 		&stderr,
+		deps,
 	)
 
 	if code != 0 {
@@ -748,34 +683,28 @@ func TestRunLaunchWritesExistingFocusSuccessVibeLog(t *testing.T) {
 func TestRunLaunchWritesExistingFocusFailureVibeLog(t *testing.T) {
 	enableCliVibeLog(t)
 
-	originalFinder := findRunningUnityProcessForLaunch
-	originalFocus := focusUnityProcessForLaunch
-	originalReadinessWait := waitForToolReadinessForLaunch
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps := defaultLaunchDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 222}, nil
 	}
-	focusUnityProcessForLaunch = func(context.Context, int) error {
+	deps.focusUnityProcess = func(context.Context, int) error {
 		return fmt.Errorf("activation denied")
 	}
-	waitForToolReadinessForLaunch = func(context.Context, string, time.Duration) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
 		return nil
 	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForLaunch = originalFinder
-		focusUnityProcessForLaunch = originalFocus
-		waitForToolReadinessForLaunch = originalReadinessWait
-	})
 
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := runLaunch(
+	code := runLaunchWithDeps(
 		context.Background(),
 		launchOptions{projectPath: projectRoot},
 		projectRoot,
 		&stdout,
 		&stderr,
+		deps,
 	)
 
 	if code != 0 {
@@ -864,19 +793,16 @@ func TestWaitForUnityStartupMarkerReturnsNilWhenLockfileDoesNotAppear(t *testing
 
 func TestWaitForUnityProcessExitBoundsProcessScan(t *testing.T) {
 	// Verifies exit waiting applies the exit timeout to each running-process scan.
-	originalFinder := findRunningUnityProcessForLaunch
-	findRunningUnityProcessForLaunch = func(ctx context.Context, projectRoot string) (*clicore.UnityProcess, error) {
+	deps := defaultLaunchDeps()
+	deps.findRunningUnityProcess = func(ctx context.Context, projectRoot string) (*clicore.UnityProcess, error) {
 		if _, ok := ctx.Deadline(); !ok {
 			return nil, errors.New("missing process scan deadline")
 		}
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForLaunch = originalFinder
-	})
 
-	err := waitForUnityProcessExit(context.Background(), t.TempDir(), 123, time.Hour, 10*time.Millisecond)
+	err := waitForUnityProcessExitWithDeps(context.Background(), t.TempDir(), 123, time.Hour, 10*time.Millisecond, deps)
 
 	var timeoutErr launchProcessExitTimeoutError
 	if !errors.As(err, &timeoutErr) {
@@ -955,24 +881,19 @@ func decodeLaunchResponseFromOutput(t *testing.T, output string) launchReadyResp
 // Verifies launch survives a blocked process scan (e.g. sandboxed /bin/ps) by
 // probing the project IPC and reporting the running Editor instead of failing.
 func TestRunLaunchFallsBackToIpcProbeWhenProcessScanFails(t *testing.T) {
-	originalFinder := findRunningUnityProcessForLaunch
-	originalProbe := probeProjectIpcForLaunchFallback
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps := defaultLaunchDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, errors.New("failed to retrieve Unity process list: /bin/ps: operation not permitted")
 	}
-	probeProjectIpcForLaunchFallback = func(context.Context, string) error {
+	deps.probeProjectIpcFallback = func(context.Context, string) error {
 		return nil
 	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForLaunch = originalFinder
-		probeProjectIpcForLaunchFallback = originalProbe
-	})
 
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := runLaunch(context.Background(), launchOptions{projectPath: projectRoot}, projectRoot, &stdout, &stderr)
+	code := runLaunchWithDeps(context.Background(), launchOptions{projectPath: projectRoot}, projectRoot, &stdout, &stderr, deps)
 
 	if code != 0 {
 		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
@@ -991,24 +912,19 @@ func TestRunLaunchFallsBackToIpcProbeWhenProcessScanFails(t *testing.T) {
 
 // Verifies launch still fails when the process scan is blocked and the project IPC is silent.
 func TestRunLaunchReportsScanErrorWhenIpcProbeAlsoFails(t *testing.T) {
-	originalFinder := findRunningUnityProcessForLaunch
-	originalProbe := probeProjectIpcForLaunchFallback
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps := defaultLaunchDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, errors.New("failed to retrieve Unity process list: /bin/ps: operation not permitted")
 	}
-	probeProjectIpcForLaunchFallback = func(context.Context, string) error {
+	deps.probeProjectIpcFallback = func(context.Context, string) error {
 		return errors.New("connection refused")
 	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForLaunch = originalFinder
-		probeProjectIpcForLaunchFallback = originalProbe
-	})
 
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := runLaunch(context.Background(), launchOptions{projectPath: projectRoot}, projectRoot, &stdout, &stderr)
+	code := runLaunchWithDeps(context.Background(), launchOptions{projectPath: projectRoot}, projectRoot, &stdout, &stderr, deps)
 
 	if code != 1 {
 		t.Fatalf("expected failure, got %d stdout=%s", code, stdout.String())
@@ -1020,25 +936,20 @@ func TestRunLaunchReportsScanErrorWhenIpcProbeAlsoFails(t *testing.T) {
 
 // Verifies restart and quit refuse the fallback because they must kill a known process id.
 func TestRunLaunchRestartDoesNotUseIpcProbeFallback(t *testing.T) {
-	originalFinder := findRunningUnityProcessForLaunch
-	originalProbe := probeProjectIpcForLaunchFallback
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps := defaultLaunchDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, errors.New("failed to retrieve Unity process list: /bin/ps: operation not permitted")
 	}
-	probeProjectIpcForLaunchFallback = func(context.Context, string) error {
+	deps.probeProjectIpcFallback = func(context.Context, string) error {
 		t.Fatal("restart must not consult the IPC probe fallback")
 		return nil
 	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForLaunch = originalFinder
-		probeProjectIpcForLaunchFallback = originalProbe
-	})
 
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := runLaunch(context.Background(), launchOptions{restart: true, projectPath: projectRoot}, projectRoot, &stdout, &stderr)
+	code := runLaunchWithDeps(context.Background(), launchOptions{restart: true, projectPath: projectRoot}, projectRoot, &stdout, &stderr, deps)
 
 	if code != 1 {
 		t.Fatalf("expected failure, got %d stdout=%s", code, stdout.String())

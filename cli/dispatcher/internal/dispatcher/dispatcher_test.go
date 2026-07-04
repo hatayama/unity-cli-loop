@@ -43,13 +43,10 @@ func TestRunDispatcherUsesProjectPinAndCachedRealCLI(t *testing.T) {
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Chdir(projectRoot)
 
-	previousRunner := dispatcherRunRealCLI
-	defer func() {
-		dispatcherRunRealCLI = previousRunner
-	}()
+	deps := defaultDispatcherRunDeps()
 	var actualPath string
 	var actualArgs []string
-	dispatcherRunRealCLI = func(ctx context.Context, realCLIPath string, args []string, stdout io.Writer, stderr io.Writer) int {
+	deps.runRealCLI = func(ctx context.Context, realCLIPath string, args []string, stdout io.Writer, stderr io.Writer) int {
 		actualPath = realCLIPath
 		actualArgs = append([]string{}, args...)
 		return 7
@@ -57,7 +54,7 @@ func TestRunDispatcherUsesProjectPinAndCachedRealCLI(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := RunDispatcher(context.Background(), []string{"compile", "--force-recompile"}, &stdout, &stderr)
+	code := runDispatcherWithDeps(context.Background(), []string{"compile", "--force-recompile"}, &stdout, &stderr, deps)
 
 	if code != 7 {
 		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
@@ -81,19 +78,16 @@ func TestRunDispatcherPreservesExplicitProjectPathForRealCLI(t *testing.T) {
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Chdir(t.TempDir())
 
-	previousRunner := dispatcherRunRealCLI
-	defer func() {
-		dispatcherRunRealCLI = previousRunner
-	}()
+	deps := defaultDispatcherRunDeps()
 	var actualArgs []string
-	dispatcherRunRealCLI = func(ctx context.Context, realCLIPath string, args []string, stdout io.Writer, stderr io.Writer) int {
+	deps.runRealCLI = func(ctx context.Context, realCLIPath string, args []string, stdout io.Writer, stderr io.Writer) int {
 		actualArgs = append([]string{}, args...)
 		return 0
 	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := RunDispatcher(context.Background(), []string{"compile", "--project-path", projectRoot}, &stdout, &stderr)
+	code := runDispatcherWithDeps(context.Background(), []string{"compile", "--project-path", projectRoot}, &stdout, &stderr, deps)
 
 	if code != 0 {
 		t.Fatalf("dispatcher failed: code=%d stderr=%s", code, stderr.String())
@@ -111,19 +105,16 @@ func TestRunDispatcherForwardsProjectScopedVersionToPinnedRunner(t *testing.T) {
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Chdir(t.TempDir())
 
-	previousRunner := dispatcherRunRealCLI
-	defer func() {
-		dispatcherRunRealCLI = previousRunner
-	}()
+	deps := defaultDispatcherRunDeps()
 	var actualArgs []string
-	dispatcherRunRealCLI = func(ctx context.Context, realCLIPath string, args []string, stdout io.Writer, stderr io.Writer) int {
+	deps.runRealCLI = func(ctx context.Context, realCLIPath string, args []string, stdout io.Writer, stderr io.Writer) int {
 		actualArgs = append([]string{}, args...)
 		return 0
 	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := RunDispatcher(context.Background(), []string{"--project-path", projectRoot, "--version"}, &stdout, &stderr)
+	code := runDispatcherWithDeps(context.Background(), []string{"--project-path", projectRoot, "--version"}, &stdout, &stderr, deps)
 
 	if code != 0 {
 		t.Fatalf("dispatcher failed: code=%d stderr=%s", code, stderr.String())
@@ -144,19 +135,16 @@ func TestRunDispatcherForwardsProjectScopedVersionJSONToPinnedRunner(t *testing.
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Chdir(t.TempDir())
 
-	previousRunner := dispatcherRunRealCLI
-	defer func() {
-		dispatcherRunRealCLI = previousRunner
-	}()
+	deps := defaultDispatcherRunDeps()
 	var actualArgs []string
-	dispatcherRunRealCLI = func(ctx context.Context, realCLIPath string, args []string, stdout io.Writer, stderr io.Writer) int {
+	deps.runRealCLI = func(ctx context.Context, realCLIPath string, args []string, stdout io.Writer, stderr io.Writer) int {
 		actualArgs = append([]string{}, args...)
 		return 0
 	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := RunDispatcher(context.Background(), []string{"--project-path", projectRoot, "--version", "--json"}, &stdout, &stderr)
+	code := runDispatcherWithDeps(context.Background(), []string{"--project-path", projectRoot, "--version", "--json"}, &stdout, &stderr, deps)
 
 	if code != 0 {
 		t.Fatalf("dispatcher failed: code=%d stderr=%s", code, stderr.String())
@@ -204,17 +192,14 @@ func TestRunDispatcherLaunchQuitDoesNotRequireProjectPin(t *testing.T) {
 	projectRoot := createDispatcherUnityProject(t)
 	t.Chdir(t.TempDir())
 
-	previousFinder := findRunningUnityProcessForLaunch
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps := defaultDispatcherRunDeps()
+	deps.launch.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
-	defer func() {
-		findRunningUnityProcessForLaunch = previousFinder
-	}()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := RunDispatcher(context.Background(), []string{"launch", projectRoot, "--quit"}, &stdout, &stderr)
+	code := runDispatcherWithDeps(context.Background(), []string{"launch", projectRoot, "--quit"}, &stdout, &stderr, deps)
 
 	if code != 0 {
 		t.Fatalf("dispatcher launch failed: code=%d stderr=%s", code, stderr.String())
@@ -229,21 +214,19 @@ func TestRunDispatcherLaunchOptionsDoNotRequireProjectPin(t *testing.T) {
 	projectRoot := createDispatcherUnityProject(t)
 	t.Chdir(t.TempDir())
 
-	previousFinder := findRunningUnityProcessForLaunch
-	findRunningUnityProcessForLaunch = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps := defaultDispatcherRunDeps()
+	deps.launch.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
-	defer func() {
-		findRunningUnityProcessForLaunch = previousFinder
-	}()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := RunDispatcher(
+	code := runDispatcherWithDeps(
 		context.Background(),
 		[]string{"launch", "--editor-version", "6000.0.0f1", projectRoot, "--quit"},
 		&stdout,
-		&stderr)
+		&stderr,
+		deps)
 
 	if code != 0 {
 		t.Fatalf("dispatcher launch failed: code=%d stderr=%s", code, stderr.String())
@@ -303,21 +286,19 @@ func TestEnforceDispatcherFreshnessMarksFailedOptionalUpdateChecked(t *testing.T
 	cacheRoot := t.TempDir()
 	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
 
-	previousRunner := dispatcherRunUpdate
-	defer func() {
-		dispatcherRunUpdate = previousRunner
-	}()
+	deps := defaultDispatcherRunDeps()
 	runnerCalls := 0
-	dispatcherRunUpdate = func(context.Context) error {
+	deps.runUpdate = func(context.Context) error {
 		runnerCalls++
 		return errors.New("network unavailable")
 	}
 
 	var stderr bytes.Buffer
-	handled, code := enforceDispatcherFreshness(
+	handled, code := enforceDispatcherFreshnessWithDeps(
 		context.Background(),
 		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
-		&stderr)
+		&stderr,
+		deps)
 
 	if handled || code != 0 {
 		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
@@ -331,10 +312,11 @@ func TestEnforceDispatcherFreshnessMarksFailedOptionalUpdateChecked(t *testing.T
 	}
 
 	stderr.Reset()
-	handled, code = enforceDispatcherFreshness(
+	handled, code = enforceDispatcherFreshnessWithDeps(
 		context.Background(),
 		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
-		&stderr)
+		&stderr,
+		deps)
 
 	if handled || code != 0 {
 		t.Fatalf("second freshness result mismatch: handled=%t code=%d", handled, code)
@@ -350,14 +332,15 @@ func TestEnforceDispatcherFreshnessMarksFailedOptionalUpdateChecked(t *testing.T
 func TestEnforceDispatcherFreshnessReportsOptionalUpdateVersionChange(t *testing.T) {
 	// Verifies optional dispatcher self-updates tell users which launcher version will run next.
 	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
-	restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, "9.9.9")
+	deps, restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, "9.9.9")
 	defer restoreDispatcherUpdateHooks()
 
 	var stderr bytes.Buffer
-	handled, code := enforceDispatcherFreshness(
+	handled, code := enforceDispatcherFreshnessWithDeps(
 		context.Background(),
 		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
-		&stderr)
+		&stderr,
+		deps)
 
 	if handled || code != 0 {
 		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
@@ -371,14 +354,15 @@ func TestEnforceDispatcherFreshnessReportsOptionalUpdateVersionChange(t *testing
 func TestEnforceDispatcherFreshnessSkipsOptionalUpdateMessageWhenVersionDidNotChange(t *testing.T) {
 	// Verifies no-op optional dispatcher self-updates do not add noise before the real command output.
 	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
-	restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, dispatcherVersion)
+	deps, restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, dispatcherVersion)
 	defer restoreDispatcherUpdateHooks()
 
 	var stderr bytes.Buffer
-	handled, code := enforceDispatcherFreshness(
+	handled, code := enforceDispatcherFreshnessWithDeps(
 		context.Background(),
 		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
-		&stderr)
+		&stderr,
+		deps)
 
 	if handled || code != 0 {
 		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
@@ -391,14 +375,15 @@ func TestEnforceDispatcherFreshnessSkipsOptionalUpdateMessageWhenVersionDidNotCh
 func TestEnforceDispatcherFreshnessReportsRequiredUpdateVersionChange(t *testing.T) {
 	// Verifies required dispatcher self-updates include the version change before asking for a retry.
 	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
-	restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, "999.0.0")
+	deps, restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, "999.0.0")
 	defer restoreDispatcherUpdateHooks()
 
 	var stderr bytes.Buffer
-	handled, code := enforceDispatcherFreshness(
+	handled, code := enforceDispatcherFreshnessWithDeps(
 		context.Background(),
 		dispatcherPin{MinimumDispatcherVersion: "999.0.0"},
-		&stderr)
+		&stderr,
+		deps)
 
 	if !handled || code != 1 {
 		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
@@ -412,18 +397,17 @@ func TestEnforceDispatcherFreshnessReportsRequiredUpdateVersionChange(t *testing
 	}
 }
 
-func stubDispatcherUpdateHooks(t *testing.T, updatedVersion string) func() {
+func stubDispatcherUpdateHooks(t *testing.T, updatedVersion string) (dispatcherRunDeps, func()) {
 	t.Helper()
-	previousRunner := dispatcherRunUpdate
 	previousReader := dispatcherReadInstalledVersion
-	dispatcherRunUpdate = func(context.Context) error {
+	deps := defaultDispatcherRunDeps()
+	deps.runUpdate = func(context.Context) error {
 		return nil
 	}
 	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
 		return updatedVersion, nil
 	}
-	return func() {
-		dispatcherRunUpdate = previousRunner
+	return deps, func() {
 		dispatcherReadInstalledVersion = previousReader
 	}
 }

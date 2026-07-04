@@ -24,8 +24,8 @@ func (err launchStartupTimeoutError) Unwrap() error {
 	return err.cause
 }
 
-func waitForLaunchReadiness(ctx context.Context, projectRoot string) error {
-	err := waitForToolReadinessForLaunch(ctx, projectRoot, launchReadinessTimeout)
+func waitForLaunchReadinessWithDeps(ctx context.Context, projectRoot string, deps launchDeps) error {
+	err := deps.waitForToolReadiness(ctx, projectRoot, launchReadinessTimeout)
 	if err == nil {
 		return nil
 	}
