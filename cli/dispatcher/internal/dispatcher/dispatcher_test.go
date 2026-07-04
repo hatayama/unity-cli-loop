@@ -397,6 +397,79 @@ func TestEnforceDispatcherFreshnessReportsRequiredUpdateVersionChange(t *testing
 	}
 }
 
+func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
+	// Verifies dispatcher freshness decisions are pure and separate from update execution.
+	tests := []struct {
+		name               string
+		minimumVersion     string
+		currentVersion     string
+		selfUpdateDisabled bool
+		hasSiblingRealCLI  bool
+		updateDue          bool
+		expectedAction     dispatcherFreshnessAction
+	}{
+		{
+			name:           "no minimum",
+			currentVersion: dispatcherVersion,
+			expectedAction: dispatcherFreshnessNoop,
+		},
+		{
+			name:               "required update disabled",
+			minimumVersion:     "999.0.0",
+			currentVersion:     dispatcherVersion,
+			selfUpdateDisabled: true,
+			updateDue:          true,
+			expectedAction:     dispatcherFreshnessManualUpdateRequired,
+		},
+		{
+			name:           "required update runs immediately",
+			minimumVersion: "999.0.0",
+			currentVersion: dispatcherVersion,
+			expectedAction: dispatcherFreshnessRunRequiredUpdate,
+		},
+		{
+			name:              "optional sibling skip",
+			minimumVersion:    dispatcherVersion,
+			currentVersion:    dispatcherVersion,
+			hasSiblingRealCLI: true,
+			updateDue:         true,
+			expectedAction:    dispatcherFreshnessNoop,
+		},
+		{
+			name:           "optional due",
+			minimumVersion: dispatcherVersion,
+			currentVersion: dispatcherVersion,
+			updateDue:      true,
+			expectedAction: dispatcherFreshnessRunOptionalUpdate,
+		},
+		{
+			name:           "optional not due",
+			minimumVersion: dispatcherVersion,
+			currentVersion: dispatcherVersion,
+			expectedAction: dispatcherFreshnessNoop,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := decideDispatcherFreshness(dispatcherFreshnessInputs{
+				MinimumVersion:     tt.minimumVersion,
+				CurrentVersion:     tt.currentVersion,
+				SelfUpdateDisabled: tt.selfUpdateDisabled,
+				HasSiblingRealCLI:  tt.hasSiblingRealCLI,
+				UpdateDue:          tt.updateDue,
+			})
+
+			if plan.Action != tt.expectedAction {
+				t.Fatalf("action mismatch: %s", plan.Action)
+			}
+			if plan.MinimumVersion != strings.TrimSpace(tt.minimumVersion) {
+				t.Fatalf("minimum version mismatch: %s", plan.MinimumVersion)
+			}
+		})
+	}
+}
+
 func stubDispatcherUpdateHooks(t *testing.T, updatedVersion string) (dispatcherRunDeps, func()) {
 	t.Helper()
 	previousReader := dispatcherReadInstalledVersion

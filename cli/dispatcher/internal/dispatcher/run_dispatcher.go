@@ -191,32 +191,94 @@ func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr i
 	return enforceDispatcherFreshnessWithDeps(ctx, pin, stderr, defaultDispatcherRunDeps())
 }
 
+type dispatcherFreshnessAction string
+
+const (
+	dispatcherFreshnessNoop                 dispatcherFreshnessAction = "noop"
+	dispatcherFreshnessManualUpdateRequired dispatcherFreshnessAction = "manual-update-required"
+	dispatcherFreshnessRunRequiredUpdate    dispatcherFreshnessAction = "run-required-update"
+	dispatcherFreshnessRunOptionalUpdate    dispatcherFreshnessAction = "run-optional-update"
+)
+
+type dispatcherFreshnessInputs struct {
+	MinimumVersion     string
+	CurrentVersion     string
+	SelfUpdateDisabled bool
+	HasSiblingRealCLI  bool
+	UpdateDue          bool
+}
+
+type dispatcherFreshnessPlan struct {
+	Action         dispatcherFreshnessAction
+	MinimumVersion string
+}
+
 func enforceDispatcherFreshnessWithDeps(ctx context.Context, pin dispatcherPin, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
 	minimumVersion := strings.TrimSpace(pin.MinimumDispatcherVersion)
-	if minimumVersion == "" {
-		return false, 0
-	}
-	updateRequired := sharedversion.IsLessThan(dispatcherVersion, minimumVersion)
-	if updateRequired && dispatcherSelfUpdateDisabled() {
-		writeDispatcherManualUpdateRequiredError(stderr, minimumVersion, "Automatic update is disabled.")
-		return true, 1
-	}
-	if !updateRequired {
+	selfUpdateDisabled := dispatcherSelfUpdateDisabled()
+	updateRequired := minimumVersion != "" && sharedversion.IsLessThan(dispatcherVersion, minimumVersion)
+	hasSiblingRealCLI := false
+	if minimumVersion != "" && !updateRequired {
 		if _, ok := dispatcherSiblingRealCLIPath(pin); ok {
-			return false, 0
+			hasSiblingRealCLI = true
 		}
 	}
-
-	updateDue := !dispatcherSelfUpdateDisabled() && dispatcherSelfUpdateDueWithDeps(deps)
-	if !updateRequired && !updateDue {
-		return false, 0
+	updateDue := false
+	if minimumVersion != "" && !updateRequired && !hasSiblingRealCLI && !selfUpdateDisabled {
+		updateDue = dispatcherSelfUpdateDueWithDeps(deps)
 	}
+	plan := decideDispatcherFreshness(dispatcherFreshnessInputs{
+		MinimumVersion:     minimumVersion,
+		CurrentVersion:     dispatcherVersion,
+		SelfUpdateDisabled: selfUpdateDisabled,
+		HasSiblingRealCLI:  hasSiblingRealCLI,
+		UpdateDue:          updateDue,
+	})
+	return executeDispatcherFreshnessPlan(ctx, plan, stderr, deps)
+}
 
+func decideDispatcherFreshness(inputs dispatcherFreshnessInputs) dispatcherFreshnessPlan {
+	minimumVersion := strings.TrimSpace(inputs.MinimumVersion)
+	if minimumVersion == "" {
+		return dispatcherFreshnessPlan{Action: dispatcherFreshnessNoop}
+	}
+	updateRequired := sharedversion.IsLessThan(inputs.CurrentVersion, minimumVersion)
+	if updateRequired && inputs.SelfUpdateDisabled {
+		return dispatcherFreshnessPlan{Action: dispatcherFreshnessManualUpdateRequired, MinimumVersion: minimumVersion}
+	}
+	if updateRequired {
+		return dispatcherFreshnessPlan{Action: dispatcherFreshnessRunRequiredUpdate, MinimumVersion: minimumVersion}
+	}
+	if inputs.HasSiblingRealCLI || !inputs.UpdateDue {
+		return dispatcherFreshnessPlan{Action: dispatcherFreshnessNoop, MinimumVersion: minimumVersion}
+	}
+	return dispatcherFreshnessPlan{Action: dispatcherFreshnessRunOptionalUpdate, MinimumVersion: minimumVersion}
+}
+
+func executeDispatcherFreshnessPlan(ctx context.Context, plan dispatcherFreshnessPlan, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
+	switch plan.Action {
+	case dispatcherFreshnessNoop:
+		return false, 0
+	case dispatcherFreshnessManualUpdateRequired:
+		writeDispatcherManualUpdateRequiredError(stderr, plan.MinimumVersion, "Automatic update is disabled.")
+		return true, 1
+	case dispatcherFreshnessRunRequiredUpdate, dispatcherFreshnessRunOptionalUpdate:
+		return runDispatcherFreshnessUpdate(ctx, plan, stderr, deps)
+	default:
+		clicore.WriteErrorEnvelope(stderr, clicore.InternalCLIError(
+			"Dispatcher freshness routing bug: unknown action: "+string(plan.Action),
+			clicore.ErrorContext{},
+		))
+		return true, 1
+	}
+}
+
+func runDispatcherFreshnessUpdate(ctx context.Context, plan dispatcherFreshnessPlan, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
 	err := deps.runUpdate(ctx)
 	if err == nil {
 		markDispatcherSelfUpdateCheckedWithDeps(deps)
 		updatedVersion := dispatcherInstalledVersionOrEmpty(ctx)
-		if updateRequired {
+		if plan.Action == dispatcherFreshnessRunRequiredUpdate {
 			writeDispatcherSelfUpdateRequiredError(stderr, updatedVersion)
 			return true, 1
 		}
@@ -224,8 +286,8 @@ func enforceDispatcherFreshnessWithDeps(ctx context.Context, pin dispatcherPin, 
 		return false, 0
 	}
 
-	if updateRequired {
-		writeDispatcherManualUpdateRequiredError(stderr, minimumVersion, "Automatic update failed: "+err.Error())
+	if plan.Action == dispatcherFreshnessRunRequiredUpdate {
+		writeDispatcherManualUpdateRequiredError(stderr, plan.MinimumVersion, "Automatic update failed: "+err.Error())
 		return true, 1
 	}
 
