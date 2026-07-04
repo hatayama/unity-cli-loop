@@ -176,6 +176,48 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
+        public void SelectReachableRepresentativeSample_WhenNearestSampleIsOccluded_ShouldPromoteNextNearestSample()
+        {
+            RaycastClusterSample leftSample = CreateSample(1, 0f, 0f);
+            RaycastClusterSample nearestSample = CreateSample(1, 5f, 0f);
+            RaycastClusterSample farSample = CreateSample(1, 20f, 0f);
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
+            {
+                leftSample,
+                nearestSample,
+                farSample
+            };
+            HashSet<RaycastClusterSample> occludedSamples = new HashSet<RaycastClusterSample>
+            {
+                nearestSample
+            };
+
+            RaycastClusterSample representative = RaycastHitClusterer.SelectReachableRepresentativeSample(
+                samples,
+                (RaycastClusterSample sample) => occludedSamples.Contains(sample));
+
+            Assert.That(representative, Is.SameAs(leftSample));
+        }
+
+        [Test]
+        public void SelectReachableRepresentativeSample_WhenAllSamplesAreOccluded_ShouldReturnNull()
+        {
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
+            {
+                CreateSample(1, 0f, 0f),
+                CreateSample(1, 5f, 0f),
+                CreateSample(1, 20f, 0f)
+            };
+            HashSet<RaycastClusterSample> occludedSamples = new HashSet<RaycastClusterSample>(samples);
+
+            RaycastClusterSample representative = RaycastHitClusterer.SelectReachableRepresentativeSample(
+                samples,
+                (RaycastClusterSample sample) => occludedSamples.Contains(sample));
+
+            Assert.That(representative, Is.Null);
+        }
+
+        [Test]
         public void CreatePhysicsColliderElement_ShouldKeepBoundsInTopLeftInputSpace()
         {
             RaycastClusterInfo cluster = new RaycastClusterInfo
