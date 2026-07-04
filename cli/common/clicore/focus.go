@@ -16,13 +16,11 @@ import (
 const windowsPowerShellCommand = "powershell"
 
 var (
-	macUnityExecutablePattern             = regexp.MustCompile(`(?i)Unity\.app/Contents/MacOS/Unity`)
-	windowsUnityExecutablePattern         = regexp.MustCompile(`(?i)Unity\.exe`)
-	macProcessLinePattern                 = regexp.MustCompile(`^\s*(\d+)\s+(.*)$`)
-	projectPathFlagPattern                = regexp.MustCompile(`(?i)-projectpath(?:=|\s+)(.+)$`)
-	nextUnityFlagPattern                  = regexp.MustCompile(`\s-[A-Za-z][A-Za-z0-9-]*(?:=|\s|$)`)
-	findRunningUnityProcessForFocusWindow = FindRunningUnityProcess
-	focusUnityProcessForFocusWindow       = FocusUnityProcess
+	macUnityExecutablePattern     = regexp.MustCompile(`(?i)Unity\.app/Contents/MacOS/Unity`)
+	windowsUnityExecutablePattern = regexp.MustCompile(`(?i)Unity\.exe`)
+	macProcessLinePattern         = regexp.MustCompile(`^\s*(\d+)\s+(.*)$`)
+	projectPathFlagPattern        = regexp.MustCompile(`(?i)-projectpath(?:=|\s+)(.+)$`)
+	nextUnityFlagPattern          = regexp.MustCompile(`\s-[A-Za-z][A-Za-z0-9-]*(?:=|\s|$)`)
 )
 
 type UnityProcess struct {
@@ -37,8 +35,24 @@ type focusResponse struct {
 
 type RestoreFocusFunc func(context.Context) error
 
+type focusWindowDeps struct {
+	findRunningUnityProcess func(context.Context, string) (*UnityProcess, error)
+	focusUnityProcess       func(context.Context, int) error
+}
+
 func RunFocusWindow(ctx context.Context, projectRoot string, stdout io.Writer, stderr io.Writer) int {
-	runningProcess, err := findRunningUnityProcessForFocusWindow(ctx, projectRoot)
+	return runFocusWindow(ctx, projectRoot, stdout, stderr, defaultFocusWindowDeps())
+}
+
+func defaultFocusWindowDeps() focusWindowDeps {
+	return focusWindowDeps{
+		findRunningUnityProcess: FindRunningUnityProcess,
+		focusUnityProcess:       FocusUnityProcess,
+	}
+}
+
+func runFocusWindow(ctx context.Context, projectRoot string, stdout io.Writer, stderr io.Writer, deps focusWindowDeps) int {
+	runningProcess, err := deps.findRunningUnityProcess(ctx, projectRoot)
 	if err != nil {
 		writeFocusResponse(stderr, false, err.Error())
 		return 1
@@ -50,7 +64,7 @@ func RunFocusWindow(ctx context.Context, projectRoot string, stdout io.Writer, s
 
 	correlationID := NewCLIVibeCorrelationID()
 	logFocusWindowFocusAttempt(projectRoot, runningProcess.Pid, correlationID)
-	if err := focusUnityProcessForFocusWindow(ctx, runningProcess.Pid); err != nil {
+	if err := deps.focusUnityProcess(ctx, runningProcess.Pid); err != nil {
 		logFocusWindowFocusFailure(projectRoot, runningProcess.Pid, err, correlationID)
 		writeFocusResponse(stderr, false, fmt.Sprintf("Failed to focus Unity window: %s", err.Error()))
 		return 1

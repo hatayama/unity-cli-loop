@@ -153,24 +153,20 @@ func TestParseWindowsForegroundHandle(t *testing.T) {
 func TestRunFocusWindowWritesFocusSuccessVibeLog(t *testing.T) {
 	enableCliVibeLog(t)
 
-	originalFinder := findRunningUnityProcessForFocusWindow
-	originalFocus := focusUnityProcessForFocusWindow
-	findRunningUnityProcessForFocusWindow = func(context.Context, string) (*UnityProcess, error) {
-		return &UnityProcess{Pid: 321}, nil
+	deps := focusWindowDeps{
+		findRunningUnityProcess: func(context.Context, string) (*UnityProcess, error) {
+			return &UnityProcess{Pid: 321}, nil
+		},
+		focusUnityProcess: func(context.Context, int) error {
+			return nil
+		},
 	}
-	focusUnityProcessForFocusWindow = func(context.Context, int) error {
-		return nil
-	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForFocusWindow = originalFinder
-		focusUnityProcessForFocusWindow = originalFocus
-	})
 
 	projectRoot := t.TempDir()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunFocusWindow(context.Background(), projectRoot, &stdout, &stderr)
+	code := runFocusWindow(context.Background(), projectRoot, &stdout, &stderr, deps)
 
 	if code != 0 {
 		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
@@ -192,24 +188,20 @@ func TestRunFocusWindowWritesFocusSuccessVibeLog(t *testing.T) {
 func TestRunFocusWindowWritesFocusFailureVibeLog(t *testing.T) {
 	enableCliVibeLog(t)
 
-	originalFinder := findRunningUnityProcessForFocusWindow
-	originalFocus := focusUnityProcessForFocusWindow
-	findRunningUnityProcessForFocusWindow = func(context.Context, string) (*UnityProcess, error) {
-		return &UnityProcess{Pid: 654}, nil
+	deps := focusWindowDeps{
+		findRunningUnityProcess: func(context.Context, string) (*UnityProcess, error) {
+			return &UnityProcess{Pid: 654}, nil
+		},
+		focusUnityProcess: func(context.Context, int) error {
+			return fmt.Errorf("window denied")
+		},
 	}
-	focusUnityProcessForFocusWindow = func(context.Context, int) error {
-		return fmt.Errorf("window denied")
-	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForFocusWindow = originalFinder
-		focusUnityProcessForFocusWindow = originalFocus
-	})
 
 	projectRoot := t.TempDir()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunFocusWindow(context.Background(), projectRoot, &stdout, &stderr)
+	code := runFocusWindow(context.Background(), projectRoot, &stdout, &stderr, deps)
 
 	if code != 1 {
 		t.Fatalf("exit code mismatch: %d stdout=%s", code, stdout.String())
