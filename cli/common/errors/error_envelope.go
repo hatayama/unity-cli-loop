@@ -1,4 +1,4 @@
-package clicore
+package clierrors
 
 import (
 	"encoding/json"
@@ -244,7 +244,7 @@ func unityServerNotRespondingAfterDispatchError(err UnityServerNotRespondingErro
 		Message:     "Unity is running for this project, but the Unity CLI Loop server did not acknowledge the dispatched request.",
 		Retryable:   true,
 		SafeToRetry: false,
-		ProjectRoot: FirstNonEmpty(context.ProjectRoot, err.ProjectRoot),
+		ProjectRoot: firstNonEmpty(context.ProjectRoot, err.ProjectRoot),
 		Command:     context.Command,
 		NextActions: []string{
 			"Check Unity Console logs and project state because Unity may have received the request.",
@@ -258,7 +258,7 @@ func unityServerNotRespondingAfterDispatchError(err UnityServerNotRespondingErro
 	}
 }
 
-func UnknownCommandError(command string, cache ToolsCache, context ErrorContext) CLIError {
+func UnknownCommandError(command string, availableCommands []string, context ErrorContext) CLIError {
 	return CLIError{
 		ErrorCode:   errorCodeUnknownCommand,
 		Phase:       ErrorPhaseDispatch,
@@ -272,26 +272,9 @@ func UnknownCommandError(command string, cache ToolsCache, context ErrorContext)
 			"Run `uloop sync` if the local tool cache may be stale.",
 		},
 		Details: map[string]any{
-			"AvailableCommands": availableCommandNames(cache),
+			"AvailableCommands": availableCommands,
 		},
 	}
-}
-
-func availableCommandNames(cache ToolsCache) []string {
-	seen := map[string]bool{}
-	names := []string{}
-	for _, name := range NativeCommandNamesForCompletion() {
-		seen[name] = true
-		names = append(names, name)
-	}
-	for _, tool := range cache.Tools {
-		if seen[tool.Name] {
-			continue
-		}
-		seen[tool.Name] = true
-		names = append(names, tool.Name)
-	}
-	return names
 }
 
 func isSafeRetryCommand(command string) bool {

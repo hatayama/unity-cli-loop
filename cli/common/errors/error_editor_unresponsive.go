@@ -1,4 +1,4 @@
-package clicore
+package clierrors
 
 import "github.com/hatayama/unity-cli-loop/common/unityipc"
 
