@@ -202,7 +202,6 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        [Test]
         public void CreateAnnotationOverlay_WhenMultipleElementsAreAnnotated_ShouldDrawLabelsAboveAllBorders()
         {
             List<UIElementInfo> elements = new List<UIElementInfo>

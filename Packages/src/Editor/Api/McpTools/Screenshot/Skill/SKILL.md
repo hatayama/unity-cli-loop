@@ -118,5 +118,15 @@ When multiple windows match (e.g., multiple Inspector windows or when using `con
 - Use `ScreenshotToInputFormula` before passing raw image pixels to mouse tools. `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` are already mouse-input coordinates.
 - To discover a useful physics layer, first run `--annotate-raycast-grid` without `--raycast-layer-mask`, inspect `RaycastLayerSummaries`, then rerun with `--raycast-layer-mask <Layer>`.
 - Use `--raycast-layer-mask` with layer names from `find-game-objects` or project code when the game input code raycasts only specific layers. Layers hidden by Camera.main.cullingMask are not reported because they are not visible to the screenshot camera.
-- Clustered `PhysicsCollider` entries avoid points where the frontmost EventSystem hit comes from a `GraphicRaycaster` UI element, including world-space Canvas UI. PhysicsRaycaster and other non-uGUI hits are not treated as UI occlusion. If the centroid-nearest sample is covered, the nearest uncovered sampled hit is used; if every sampled hit in the cluster is covered, that collider is omitted.
+- Clustered `PhysicsCollider` entries avoid points where the frontmost EventSystem hit comes from a `GraphicRaycaster` UI element, including world-space Canvas UI. PhysicsRaycaster and other non-uGUI hits are not treated as UI occlusion. `BoundsMinX/Y` and `BoundsMaxX/Y` show the axis-aligned sampled-cell coverage bbox from reachable hits; use `SimX/SimY` for the actual click point. If every sampled hit in the cluster is covered, that collider is omitted.
+
+### Raycast Annotation Demo Scene
+
+Use `Assets/Scenes/RaycastAnnotationDemoScene.unity` as the maintained visual fixture for raycast annotation checks. Enter PlayMode, then run:
+
+```bash
+uloop screenshot --capture-mode rendering --annotate-raycast-grid true --raycast-layer-mask Default --resolution-scale 1
+```
+
+The scene contains a deterministic 4x4 set of `BoxCollider` tiles and a center `GraphicRaycaster` UI blocker. Verify relative behavior rather than fixed pixel coordinates: center tile frames should shrink around the blocker, frames should wrap the reachable sampled-cell bbox, and `SimX/SimY` should stay inside each frame.
 - Do not use `window` captures as mouse-input coordinates because they include Unity Editor chrome.

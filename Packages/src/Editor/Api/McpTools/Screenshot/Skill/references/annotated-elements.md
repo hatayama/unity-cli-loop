@@ -13,8 +13,8 @@ Read this when using `uloop screenshot --capture-mode rendering --annotate-eleme
 - `Interaction`: Derived interaction category (`Click`, `Drag`, `Drop`, `Text`) or `Raycast` for clustered physics collider entries. Use this to choose between `simulate-mouse-ui --action Click`, drag actions, or `simulate-mouse-input`/`raycast`.
 - `Layer`: Physics layer name for `PhysicsCollider` entries. Empty for UI entries.
 - `Components`: Collider and MonoBehaviour component type names from the hit GameObject for `PhysicsCollider` entries. Empty for UI entries.
-- `SimX`, `SimY`: Center position in top-left Game View coordinates. Use these directly with `simulate-mouse-ui --x/--y`, `simulate-mouse-input --x/--y`, or `raycast --x/--y`.
-- `BoundsMinX`, `BoundsMinY`, `BoundsMaxX`, `BoundsMaxY`: Bounding box in simulate-mouse coordinates
+- `SimX`, `SimY`: Target click position in top-left Game View coordinates. For UI entries this is the element center; for `PhysicsCollider` entries this is a representative sampled hit. Use these directly with `simulate-mouse-ui --x/--y`, `simulate-mouse-input --x/--y`, or `raycast --x/--y`.
+- `BoundsMinX`, `BoundsMinY`, `BoundsMaxX`, `BoundsMaxY`: Bounding box in simulate-mouse coordinates. For `PhysicsCollider` entries, this is the axis-aligned sampled-cell coverage box from reachable raycast hits, not a guarantee that every interior point is clickable.
 - `SortingOrder`: Canvas sorting order. Higher values are in front.
 - `SiblingIndex`: Transform sibling index under the element's direct parent. Do not use it as a reliable z-order signal across nested UI hierarchies.
 
@@ -40,11 +40,13 @@ input_y = image_y / resolutionScale + imageToInputOffsetY
 
 When `ResolutionScale` is `1.0` and `ImageToInputOffsetY` is `0`, raw image pixel coordinates already match mouse-input coordinates. `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` are always returned as mouse-input coordinates, so pass those values directly.
 
-For `PhysicsCollider` entries, `SimX/SimY` is a real sampled raycast hit nearest to the cluster centroid. This avoids synthetic center points that may fall into empty space for L-shaped or ring-shaped collider coverage.
+For `PhysicsCollider` entries, `SimX/SimY` is a real sampled raycast hit nearest to the reachable cluster centroid. This avoids synthetic center points that may fall into empty space for L-shaped or ring-shaped collider coverage. Always use `SimX/SimY` for clicking; use `BoundsMinX/Y` and `BoundsMaxX/Y` only as a sampled coverage guide.
 
 `--raycast-layer-mask` filters by the requested physics layers and Camera.main.cullingMask. A layer that is requested but hidden from the active camera is treated as not visible and will not produce `PhysicsCollider` entries.
 
-For clustered `PhysicsCollider` entries, points where the frontmost EventSystem hit comes from a `GraphicRaycaster` UI element are treated as covered by UI. This includes world-space Canvas UI. PhysicsRaycaster and other non-uGUI hits are not treated as UI occlusion. When the centroid-nearest sample is covered, the annotator promotes the nearest uncovered sampled hit; if every sampled hit in that collider cluster is covered, the collider is omitted from `AnnotatedElements`.
+For clustered `PhysicsCollider` entries, points where the frontmost EventSystem hit comes from a `GraphicRaycaster` UI element are treated as covered by UI. This includes world-space Canvas UI. PhysicsRaycaster and other non-uGUI hits are not treated as UI occlusion. Bounds and `SimX/SimY` are both derived from the remaining reachable samples; if every sampled hit in that collider cluster is covered, the collider is omitted from `AnnotatedElements`.
+
+`PhysicsCollider` bounds expand each reachable sample by half the dense raycast sampling step in X and Y, then clamp the result to the captured Game View area. This makes the frame approximate the covered raycast cells instead of shrinking to the sample centers. It may extend up to half a sample step past the visible collider edge, and it still does not guarantee that every interior point is clickable.
 
 The mouse input tools convert internally to Unity Input System coordinates:
 
