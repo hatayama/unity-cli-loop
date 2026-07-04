@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"sync"
 )
 
 const (
@@ -13,6 +14,12 @@ const (
 
 //go:embed contract.json
 var contractFiles embed.FS
+
+var (
+	contractLoadOnce sync.Once
+	loadedContract   Contract
+	loadContractErr  error
+)
 
 type Contract struct {
 	SchemaVersion int `json:"schemaVersion"`
@@ -24,6 +31,13 @@ type Contract struct {
 
 // Load reads and validates the embedded CLI contract.
 func Load() (Contract, error) {
+	contractLoadOnce.Do(func() {
+		loadedContract, loadContractErr = loadEmbeddedContract()
+	})
+	return loadedContract, loadContractErr
+}
+
+func loadEmbeddedContract() (Contract, error) {
 	content, err := contractFiles.ReadFile(contractFileName)
 	if err != nil {
 		return Contract{}, fmt.Errorf("CLI contract is not embedded: %w", err)
