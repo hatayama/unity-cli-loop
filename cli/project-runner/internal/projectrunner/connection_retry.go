@@ -12,14 +12,27 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
-var (
-	findRunningUnityProcessForConnectionRetry = clicore.FindRunningUnityProcess
-	focusUnityProcessForConnectionRetry       = clicore.FocusUnityProcessWithRestore
-	serverConnectionRetryTimeout              = 10 * time.Second
-	serverConnectionRetryPoll                 = 1 * time.Second
+const (
+	focusRestoreTimeout                 = 2 * time.Second
+	serverConnectionRetryDefaultTimeout = 10 * time.Second
+	serverConnectionRetryDefaultPoll    = 1 * time.Second
 )
 
-const focusRestoreTimeout = 2 * time.Second
+type connectionRetryDeps struct {
+	findRunningUnityProcess func(context.Context, string) (*clicore.UnityProcess, error)
+	focusUnityProcess       func(context.Context, int) (clicore.RestoreFocusFunc, error)
+	retryTimeout            time.Duration
+	retryPoll               time.Duration
+}
+
+func defaultConnectionRetryDeps() connectionRetryDeps {
+	return connectionRetryDeps{
+		findRunningUnityProcess: clicore.FindRunningUnityProcess,
+		focusUnityProcess:       clicore.FocusUnityProcessWithRestore,
+		retryTimeout:            serverConnectionRetryDefaultTimeout,
+		retryPoll:               serverConnectionRetryDefaultPoll,
+	}
+}
 
 type connectionRetryFocusReason string
 
@@ -39,21 +52,23 @@ const (
 // is alive and surfacing it quickly lets the caller decide.
 const serverConnectionRetryUnityAliveFactor = 6
 
-func unityAliveRetryWindow() time.Duration {
-	return serverConnectionRetryTimeout * serverConnectionRetryUnityAliveFactor
+func unityAliveRetryWindow(deps connectionRetryDeps) time.Duration {
+	return deps.retryTimeout * serverConnectionRetryUnityAliveFactor
 }
 
 type connectionRetryFocusController struct {
 	connection   unityipc.Connection
 	method       string
+	deps         connectionRetryDeps
 	attempted    bool
 	restoreFocus clicore.RestoreFocusFunc
 }
 
-func newConnectionRetryFocusController(connection unityipc.Connection, method string) *connectionRetryFocusController {
+func newConnectionRetryFocusController(connection unityipc.Connection, method string, deps connectionRetryDeps) *connectionRetryFocusController {
 	return &connectionRetryFocusController{
 		connection: connection,
 		method:     method,
+		deps:       deps,
 	}
 }
 
@@ -79,7 +94,7 @@ func (controller *connectionRetryFocusController) tryFocus(
 		return
 	}
 
-	runningProcess, err := findRunningUnityProcessForConnectionRetry(ctx, controller.connection.ProjectRoot)
+	runningProcess, err := controller.deps.findRunningUnityProcess(ctx, controller.connection.ProjectRoot)
 	if err != nil || runningProcess == nil {
 		return
 	}
@@ -99,7 +114,7 @@ func (controller *connectionRetryFocusController) tryFocusProcess(
 
 	correlationID := clicore.NewCLIVibeCorrelationID()
 	logConnectionRetryFocusAttempt(controller.connection, controller.method, pid, reason, cause, correlationID)
-	restorer, focusErr := focusUnityProcessForConnectionRetry(ctx, pid)
+	restorer, focusErr := controller.deps.focusUnityProcess(ctx, pid)
 	if focusErr == nil {
 		controller.restoreFocus = restorer
 		logConnectionRetryFocusSuccess(controller.connection, controller.method, pid, reason, cause, correlationID)
@@ -123,13 +138,14 @@ func sendWithTransientConnectionRetry(
 	params map[string]any,
 	progress unityipc.ProgressFunc,
 ) (unityipc.UnitySendOutcome, error) {
-	return sendWithTransientConnectionRetryAndResponseTimeout(
+	return sendWithTransientConnectionRetryWithDeps(
 		ctx,
 		connection,
 		method,
 		params,
 		progress,
 		0,
+		defaultConnectionRetryDeps(),
 	)
 }
 
@@ -141,20 +157,40 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 	progress unityipc.ProgressFunc,
 	responseTimeout time.Duration,
 ) (unityipc.UnitySendOutcome, error) {
+	return sendWithTransientConnectionRetryWithDeps(
+		ctx,
+		connection,
+		method,
+		params,
+		progress,
+		responseTimeout,
+		defaultConnectionRetryDeps(),
+	)
+}
+
+func sendWithTransientConnectionRetryWithDeps(
+	ctx context.Context,
+	connection unityipc.Connection,
+	method string,
+	params map[string]any,
+	progress unityipc.ProgressFunc,
+	responseTimeout time.Duration,
+	deps connectionRetryDeps,
+) (unityipc.UnitySendOutcome, error) {
 	startedAt := time.Now()
-	retryContext, cancel := context.WithTimeout(ctx, unityAliveRetryWindow())
+	retryContext, cancel := context.WithTimeout(ctx, unityAliveRetryWindow(deps))
 	defer cancel()
 
 	var lastOutcome unityipc.UnitySendOutcome
 	var lastErr error
-	focusController := newConnectionRetryFocusController(connection, method)
+	focusController := newConnectionRetryFocusController(connection, method, deps)
 	defer func() {
 		restoreContext, cancel := context.WithTimeout(context.Background(), focusRestoreTimeout)
 		defer cancel()
 		focusController.restore(restoreContext)
 	}()
 
-	retryTicker := time.NewTicker(serverConnectionRetryPoll)
+	retryTicker := time.NewTicker(deps.retryPoll)
 	defer retryTicker.Stop()
 	for {
 		client := newConnectionRetryClient(connection, responseTimeout, func(stallSeconds float64) {
@@ -163,7 +199,7 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 		// Each attempt keeps the base accept bound: a dispatched request that never gets
 		// acked must still fail at the base window. Only the dial-retry loop as a whole
 		// uses the extended unity-alive window.
-		attemptContext, cancelAttempt := context.WithTimeout(retryContext, serverConnectionRetryTimeout)
+		attemptContext, cancelAttempt := context.WithTimeout(retryContext, deps.retryTimeout)
 		outcome, err := client.SendWithProgressOutcomeAcceptContext(ctx, attemptContext, method, params, progress)
 		cancelAttempt()
 		if isUnityServerBusyRPCError(err) {
@@ -178,6 +214,7 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 				retryTicker,
 				lastOutcome,
 				lastErr,
+				deps,
 			); finished {
 				return finalOutcome, finalErr
 			}
@@ -195,7 +232,7 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 			)
 		}
 
-		runningProcess, processErr := findRunningUnityProcessForConnectionRetry(retryContext, connection.ProjectRoot)
+		runningProcess, processErr := deps.findRunningUnityProcess(retryContext, connection.ProjectRoot)
 		if finished, finalOutcome, finalErr := finishUndispatchedRetryProbe(
 			ctx,
 			retryContext,
@@ -226,6 +263,7 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 			connection,
 			lastOutcome,
 			lastErr,
+			deps,
 		); finished {
 			return finalOutcome, finalErr
 		}

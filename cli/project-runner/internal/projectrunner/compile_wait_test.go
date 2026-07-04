@@ -172,7 +172,7 @@ func TestWaitForCompileCompletionReturnsReadyStatusResult(t *testing.T) {
 	connection := compileWaitTestConnection(t)
 	requestID := "compile_test"
 	callCount := 0
-	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
 		callCount++
 		if callCount == 1 {
 			return compileStatusResponse{Ready: false, HasResult: true, Result: json.RawMessage(`{"Success":true}`)}, nil
@@ -180,12 +180,12 @@ func TestWaitForCompileCompletionReturnsReadyStatusResult(t *testing.T) {
 		return compileStatusResponse{Ready: true, HasResult: true, Result: json.RawMessage(`{"Success":true}`)}, nil
 	})
 
-	result, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
+	result, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:   connection,
 		requestID:    requestID,
 		timeout:      time.Second,
 		pollInterval: 5 * time.Millisecond,
-	})
+	}, deps)
 	if err != nil {
 		t.Fatalf("waitForCompileCompletion failed: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestWaitForCompileCompletionWritesPollLifecycleVibeLogs(t *testing.T) {
 	connection := compileWaitTestConnection(t)
 	requestID := "compile_poll_lifecycle_test"
 	callCount := 0
-	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
 		callCount++
 		if callCount == 1 {
 			return compileStatusResponse{
@@ -221,12 +221,12 @@ func TestWaitForCompileCompletionWritesPollLifecycleVibeLogs(t *testing.T) {
 		}, nil
 	})
 
-	result, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
+	result, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:   connection,
 		requestID:    requestID,
 		timeout:      time.Second,
 		pollInterval: 5 * time.Millisecond,
-	})
+	}, deps)
 	if err != nil {
 		t.Fatalf("waitForCompileCompletion failed: %v", err)
 	}
@@ -259,7 +259,7 @@ func TestWaitForCompileCompletionForceCompileWaitsForStoredResult(t *testing.T) 
 	connection := compileWaitTestConnection(t)
 	requestID := "compile_force_unknown"
 	callCount := 0
-	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
 		callCount++
 		if callCount == 1 {
 			return compileStatusResponse{Ready: true, HasResult: false}, nil
@@ -271,13 +271,13 @@ func TestWaitForCompileCompletionForceCompileWaitsForStoredResult(t *testing.T) 
 		}, nil
 	})
 
-	result, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
+	result, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:     connection,
 		requestID:      requestID,
 		forceRecompile: true,
 		timeout:        time.Second,
 		pollInterval:   5 * time.Millisecond,
-	})
+	}, deps)
 	if err != nil {
 		t.Fatalf("waitForCompileCompletion failed: %v", err)
 	}
@@ -308,17 +308,17 @@ func TestWaitForCompileCompletionForceCompileWaitsForStoredResult(t *testing.T) 
 func TestWaitForCompileCompletionForceCompileTimesOutWithoutStoredResult(t *testing.T) {
 	connection := compileWaitTestConnection(t)
 	requestID := "compile_force_no_result"
-	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
 		return compileStatusResponse{Ready: true, HasResult: false}, nil
 	})
 
-	_, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
+	_, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:     connection,
 		requestID:      requestID,
 		forceRecompile: true,
 		timeout:        20 * time.Millisecond,
 		pollInterval:   5 * time.Millisecond,
-	})
+	}, deps)
 	if err != nil {
 		t.Fatalf("waitForCompileCompletion failed: %v", err)
 	}
@@ -332,16 +332,16 @@ func TestWaitForCompileCompletionWritesTimeoutVibeLog(t *testing.T) {
 	enableCliVibeLog(t)
 	connection := compileWaitTestConnection(t)
 	requestID := "compile_timeout_log_test"
-	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
 		return compileStatusResponse{Ready: false, IsCompiling: true, Message: "Compiling"}, nil
 	})
 
-	_, completed, err := waitForCompileCompletion(context.Background(), compileCompletionOptions{
+	_, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:   connection,
 		requestID:    requestID,
 		timeout:      20 * time.Millisecond,
 		pollInterval: 5 * time.Millisecond,
-	})
+	}, deps)
 	if err != nil {
 		t.Fatalf("waitForCompileCompletion failed: %v", err)
 	}
@@ -370,17 +370,17 @@ func TestWaitForCompileCompletionWritesCancellationVibeLog(t *testing.T) {
 	connection := compileWaitTestConnection(t)
 	requestID := "compile_cancel_log_test"
 	ctx, cancel := context.WithCancel(context.Background())
-	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
 		cancel()
 		return compileStatusResponse{Ready: false, IsDomainReloadInProgress: true}, nil
 	})
 
-	_, completed, err := waitForCompileCompletion(ctx, compileCompletionOptions{
+	_, completed, err := waitForCompileCompletionWithDeps(ctx, compileCompletionOptions{
 		connection:   connection,
 		requestID:    requestID,
 		timeout:      time.Second,
 		pollInterval: time.Second,
-	})
+	}, deps)
 	if err == nil {
 		t.Fatal("waitForCompileCompletion should return the cancellation error")
 	}
@@ -445,7 +445,7 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 		}
 	}()
 
-	replaceQueryCompileStatus(t, func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
 		return compileStatusResponse{
 			Ready:     true,
 			HasResult: true,
@@ -468,7 +468,7 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := runCompileWithDomainReloadWait(context.Background(), connection, params, &stdout, &stderr)
+	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, params, &stdout, &stderr, deps)
 	if code != 0 {
 		t.Fatalf("runCompileWithDomainReloadWait failed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -594,14 +594,10 @@ func compileWaitTestConnection(t *testing.T) unityipc.Connection {
 	}
 }
 
-func replaceQueryCompileStatus(
-	t *testing.T,
+func compileWaitTestDeps(
 	replacement func(context.Context, unityipc.Connection, string) (compileStatusResponse, error),
-) {
-	t.Helper()
-	original := queryCompileStatus
-	queryCompileStatus = replacement
-	t.Cleanup(func() {
-		queryCompileStatus = original
-	})
+) compileWaitDeps {
+	return compileWaitDeps{
+		queryCompileStatus: replacement,
+	}
 }

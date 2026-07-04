@@ -27,8 +27,9 @@ func finishBusyRetry(
 	retryTicker *time.Ticker,
 	lastOutcome unityipc.UnitySendOutcome,
 	lastErr error,
+	deps connectionRetryDeps,
 ) (bool, unityipc.UnitySendOutcome, error) {
-	if time.Since(startedAt) >= serverConnectionRetryTimeout {
+	if time.Since(startedAt) >= deps.retryTimeout {
 		if ctx.Err() != nil {
 			return true, lastOutcome, ctx.Err()
 		}
@@ -118,8 +119,9 @@ func finishUnityAliveRetryWait(
 	connection unityipc.Connection,
 	lastOutcome unityipc.UnitySendOutcome,
 	lastErr error,
+	deps connectionRetryDeps,
 ) (bool, unityipc.UnitySendOutcome, error) {
-	if time.Since(startedAt) >= unityAliveRetryWindow() {
+	if time.Since(startedAt) >= unityAliveRetryWindow(deps) {
 		finalOutcome, finalErr := finishUnityAliveRetry(ctx, connection, lastOutcome, lastErr)
 		return true, finalOutcome, finalErr
 	}
