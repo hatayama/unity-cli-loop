@@ -70,10 +70,6 @@ type ErrorContext struct {
 }
 
 func WriteErrorEnvelope(writer io.Writer, err CLIError) {
-	if err.ErrorCode == errorCodeUnityServerBusy {
-		writeBusyStatusEnvelope(writer, err.Message, serverBusyStatusDetailsFromError(err))
-		return
-	}
 	encoder := json.NewEncoder(writer)
 	encoder.SetIndent("", "  ")
 	_ = encoder.Encode(CLIErrorEnvelope{
