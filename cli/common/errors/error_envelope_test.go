@@ -326,7 +326,7 @@ func TestWriteErrorEnvelopeServerBusyUsesUnifiedEnvelopeForLegacyLowercaseDataDe
 		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
 	}
 	if envelope.Success {
-		t.Fatalf("tool names mismatch: %#v", envelope)
+		t.Fatalf("busy envelope reported success: %#v", envelope)
 	}
 	if envelope.Error.ErrorCode != errorCodeUnityServerBusy {
 		t.Fatalf("error code mismatch: %#v", envelope)
