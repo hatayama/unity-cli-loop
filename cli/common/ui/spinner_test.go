@@ -1,4 +1,4 @@
-package clicore
+package ui
 
 import (
 	"bytes"
@@ -86,16 +86,14 @@ func TestSpinnerProgressFuncMapsConnectionEventsToExecutingMessage(t *testing.T)
 	}
 }
 
-func TestToolFeedbackSkipsExecuteDynamicCode(t *testing.T) {
-	// Verifies that execute-dynamic-code keeps the CLI hot path quiet.
-	if shouldShowToolFeedback(ExecuteDynamicCodeCommandName) {
-		t.Fatal("execute-dynamic-code should skip spinner feedback on the hot path")
-	}
-}
+func TestNewToolSpinnerRespectsFeedbackFlag(t *testing.T) {
+	// Verifies callers can disable tool spinner feedback for hot paths.
+	var stderr bytes.Buffer
 
-func TestToolFeedbackKeepsOtherUnityTools(t *testing.T) {
-	// Verifies that regular Unity tools still show interactive feedback.
-	if !shouldShowToolFeedback("get-logs") {
-		t.Fatal("non-hot-path Unity tools should keep spinner feedback")
+	spinner := NewToolSpinner(&stderr, false)
+	spinner.Stop()
+
+	if stderr.Len() != 0 {
+		t.Fatalf("disabled tool spinner wrote output: %q", stderr.String())
 	}
 }

@@ -155,9 +155,12 @@ var sharedCommonPackageRoots = []string{
 	"cli/common/errors/",
 	"cli/common/project/",
 	"cli/common/skillscan/",
+	"cli/common/tooldocs/",
 	"cli/common/tools/",
+	"cli/common/ui/",
 	"cli/common/unityipc/",
 	"cli/common/unityprocess/",
+	"cli/common/vibelog/",
 }
 
 var dispatcherOnlyCommonPackageRoots = []string{
