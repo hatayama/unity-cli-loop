@@ -47,7 +47,7 @@ func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin, stderr io.
 }
 
 func dispatcherSiblingRealCLIPath(pin dispatcherPin) (string, bool) {
-	if pin.ProjectRunnerVersion != clicore.Version {
+	if pin.ProjectRunnerVersion != clicore.Version() {
 		return "", false
 	}
 	executablePath, err := os.Executable()

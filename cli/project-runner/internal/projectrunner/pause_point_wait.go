@@ -424,7 +424,7 @@ func queryPausePointStatusFromUnity(
 	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
 	defer cancel()
 
-	result, err := unityipc.NewClient(connection, clicore.Version).Send(
+	result, err := unityipc.NewClient(connection, clicore.Version()).Send(
 		probeContext,
 		pausePointStatusCommandName,
 		map[string]any{"Id": id},
@@ -448,7 +448,7 @@ func clearPausePointStatusFromUnity(
 	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
 	defer cancel()
 
-	result, err := unityipc.NewClient(connection, clicore.Version).Send(
+	result, err := unityipc.NewClient(connection, clicore.Version()).Send(
 		probeContext,
 		pausePointClearStatusCommandName,
 		map[string]any{"Id": id},

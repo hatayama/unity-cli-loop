@@ -14,10 +14,10 @@ func TestRunProjectLocalVersionJSONIncludesProtocolVersion(t *testing.T) {
 	// Verifies Unity setup can inspect protocol compatibility without parsing human help text.
 	payload := clitest.RunVersionJSON(t, RunProjectLocal)
 
-	if payload["ProjectRunnerVersion"] != clicore.Version {
+	if payload["ProjectRunnerVersion"] != clicore.Version() {
 		t.Fatalf("projectRunnerVersion mismatch: %#v", payload)
 	}
-	if payload["ProtocolVersion"] != float64(clicore.ProtocolVersion) {
+	if payload["ProtocolVersion"] != float64(clicore.ProtocolVersion()) {
 		t.Fatalf("protocolVersion mismatch: %#v", payload)
 	}
 }
