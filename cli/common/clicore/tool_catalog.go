@@ -38,12 +38,17 @@ func FindDefaultTool(name string) (ToolDefinition, bool) {
 }
 
 func FindToolForCommand(projectRoot string, command string) (ToolDefinition, ToolsCache, bool, error) {
-	return findToolForCommandWithInternalToolNames(projectRoot, command, skillscan.CollectInternalSkillToolNames)
+	return findToolForCommandWithInternalToolNames(
+		projectRoot,
+		command,
+		shouldPreferEmbeddedToolDefinition(command),
+		skillscan.CollectInternalSkillToolNames)
 }
 
 func findToolForCommandWithInternalToolNames(
 	projectRoot string,
 	command string,
+	preferEmbedded bool,
 	collectInternalToolNames func(string) map[string]bool,
 ) (ToolDefinition, ToolsCache, bool, error) {
 	defaultCache := LoadDefaultTools()
@@ -51,5 +56,9 @@ func findToolForCommandWithInternalToolNames(
 		return tool, defaultCache, true, nil
 	}
 
-	return tools.FindForCommand(projectRoot, command, collectInternalToolNames(projectRoot))
+	return tools.FindForCommand(projectRoot, command, collectInternalToolNames(projectRoot), preferEmbedded)
+}
+
+func shouldPreferEmbeddedToolDefinition(command string) bool {
+	return command == ExecuteDynamicCodeCommandName
 }

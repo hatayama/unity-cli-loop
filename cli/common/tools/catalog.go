@@ -69,8 +69,13 @@ func Find(cache ToolCatalog, name string) (ToolDefinition, bool) {
 	return ToolDefinition{}, false
 }
 
-func FindForCommand(projectRoot string, command string, internalToolNames map[string]bool) (ToolDefinition, ToolCatalog, bool, error) {
-	if command == "execute-dynamic-code" {
+func FindForCommand(
+	projectRoot string,
+	command string,
+	internalToolNames map[string]bool,
+	preferEmbedded bool,
+) (ToolDefinition, ToolCatalog, bool, error) {
+	if preferEmbedded {
 		cache := LoadDefault()
 		tool, ok := Find(cache, command)
 		return tool, cache, ok, nil
