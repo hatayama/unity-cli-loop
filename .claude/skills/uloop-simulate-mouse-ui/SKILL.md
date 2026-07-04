@@ -10,17 +10,17 @@ Simulate mouse interaction on Unity PlayMode UI: $ARGUMENTS
 
 ## Workflow
 
-1. Ensure Unity is in PlayMode (use `npx --yes uloop-cli@2.2.0 control-play-mode --action Play` if not)
-2. Get UI element info: `npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering --annotate-elements true --elements-only true`
+1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
+2. Get UI element info: `uloop screenshot --capture-mode rendering --annotate-elements true --elements-only true`
 3. Use the `AnnotatedElements` array to find the target element by `Label`, `Name`, or `Path` (A=frontmost, B=next, ...). Use `Interaction` to distinguish click targets from drag/drop/text targets, then use `SimX`/`SimY` directly as `--x`/`--y` coordinates.
-4. Execute the appropriate `npx --yes uloop-cli@2.2.0 simulate-mouse-ui` command
-5. Take a screenshot to verify the result: `npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering --annotate-elements true`
+4. Execute the appropriate `uloop simulate-mouse-ui` command
+5. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering --annotate-elements true`
 6. Report what happened
 
 ## Tool Reference
 
 ```bash
-npx --yes uloop-cli@2.2.0 simulate-mouse-ui --action <action> --x <x> --y <y> [options]
+uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 ```
 
 ### Parameters
@@ -78,34 +78,34 @@ npx --yes uloop-cli@2.2.0 simulate-mouse-ui --action <action> --x <x> --y <y> [o
 
 ```bash
 # Click a button at a Game View position
-npx --yes uloop-cli@2.2.0 simulate-mouse-ui --action Click --x 400 --y 300
+uloop simulate-mouse-ui --action Click --x 400 --y 300
 
 # Force-click a button behind a raycast blocker by path
-npx --yes uloop-cli@2.2.0 simulate-mouse-ui --action Click --x 400 --y 300 --bypass-raycast true --target-path "Canvas/Panel/Button"
+uloop simulate-mouse-ui --action Click --x 400 --y 300 --bypass-raycast true --target-path "Canvas/Panel/Button"
 
 # Force-long-press a button behind a raycast blocker by path
-npx --yes uloop-cli@2.2.0 simulate-mouse-ui --action LongPress --x 400 --y 300 --duration 3.0 --bypass-raycast true --target-path "Canvas/Panel/Button"
+uloop simulate-mouse-ui --action LongPress --x 400 --y 300 --duration 3.0 --bypass-raycast true --target-path "Canvas/Panel/Button"
 
 # Force-drag an item behind a raycast blocker by path
-npx --yes uloop-cli@2.2.0 simulate-mouse-ui --action Drag --from-x 400 --from-y 300 --x 600 --y 300 --bypass-raycast true --target-path "Canvas/Item"
+uloop simulate-mouse-ui --action Drag --from-x 400 --from-y 300 --x 600 --y 300 --bypass-raycast true --target-path "Canvas/Item"
 
 # Force-drag and dispatch Drop to a blocked drop zone
-npx --yes uloop-cli@2.2.0 simulate-mouse-ui --action Drag --from-x 400 --from-y 300 --x 600 --y 300 --bypass-raycast true --target-path "Canvas/Item" --drop-target-path "Canvas/DropZone"
+uloop simulate-mouse-ui --action Drag --from-x 400 --from-y 300 --x 600 --y 300 --bypass-raycast true --target-path "Canvas/Item" --drop-target-path "Canvas/DropZone"
 
 # Long-press a button for 3 seconds
-npx --yes uloop-cli@2.2.0 simulate-mouse-ui --action LongPress --x 400 --y 300 --duration 3.0
+uloop simulate-mouse-ui --action LongPress --x 400 --y 300 --duration 3.0
 
 # One-shot drag (start to end in one call)
-npx --yes uloop-cli@2.2.0 simulate-mouse-ui --action Drag --from-x 400 --from-y 300 --x 600 --y 300
+uloop simulate-mouse-ui --action Drag --from-x 400 --from-y 300 --x 600 --y 300
 
 # Slow drag for visual inspection
-npx --yes uloop-cli@2.2.0 simulate-mouse-ui --action Drag --from-x 400 --from-y 300 --x 600 --y 300 --drag-speed 200
+uloop simulate-mouse-ui --action Drag --from-x 400 --from-y 300 --x 600 --y 300 --drag-speed 200
 
 # Split drag with hold (for inspection between steps)
-npx --yes uloop-cli@2.2.0 simulate-mouse-ui --action DragStart --x 400 --y 300
-npx --yes uloop-cli@2.2.0 screenshot --window-name Game
-npx --yes uloop-cli@2.2.0 simulate-mouse-ui --action DragMove --x 500 --y 300
-npx --yes uloop-cli@2.2.0 simulate-mouse-ui --action DragEnd --x 600 --y 300
+uloop simulate-mouse-ui --action DragStart --x 400 --y 300
+uloop screenshot --window-name Game
+uloop simulate-mouse-ui --action DragMove --x 500 --y 300
+uloop simulate-mouse-ui --action DragEnd --x 600 --y 300
 ```
 
 ## Prerequisites
@@ -127,6 +127,6 @@ Returns JSON with:
 - `EndPositionX`: Drag end X coordinate (nullable float; populated for drag actions only)
 - `EndPositionY`: Drag end Y coordinate (nullable float; populated for drag actions only)
 
-These are the only eight fields. There is no `Button`, `Duration`, `DragSpeed`, raycast list, or pointer-event log in the response — verify the visual outcome with a follow-up `npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering --annotate-elements true`.
+These are the only eight fields. There is no `Button`, `Duration`, `DragSpeed`, raycast list, or pointer-event log in the response — verify the visual outcome with a follow-up `uloop screenshot --capture-mode rendering --annotate-elements true`.
 
 Note: Click and LongPress on empty space (no UI element) still return `Success = true` with `HitGameObjectName = null`. Drag actions on empty space return `Success = false`.

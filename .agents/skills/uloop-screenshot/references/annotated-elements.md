@@ -1,6 +1,6 @@
 # Annotated Elements and Coordinates
 
-Read this when using `npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering --annotate-elements true` or clustered `--annotate-raycast-grid true --raycast-layer-mask <layers>` output to find coordinates for `simulate-mouse-ui` or `simulate-mouse-input`.
+Read this when using `uloop screenshot --capture-mode rendering --annotate-elements true` or clustered `--annotate-raycast-grid true --raycast-layer-mask <layers>` output to find coordinates for `simulate-mouse-ui` or `simulate-mouse-input`.
 
 ## AnnotatedElements Fields
 

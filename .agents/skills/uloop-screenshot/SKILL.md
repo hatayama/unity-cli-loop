@@ -3,14 +3,14 @@ name: uloop-screenshot
 description: "Capture Unity Editor windows or Game View rendering as PNG. Use for visual checks, debugging, documentation, or annotated UI element coordinates."
 ---
 
-# npx --yes uloop-cli@2.2.0 screenshot
+# uloop screenshot
 
 Take a screenshot of any Unity EditorWindow by name and save as PNG.
 
 ## Usage
 
 ```bash
-npx --yes uloop-cli@2.2.0 screenshot [--window-name <name>] [--resolution-scale <scale>] [--match-mode <mode>] [--capture-mode <mode>] [--annotate-elements <true|false>] [--annotate-raycast-grid <true|false>] [--raycast-layer-mask <layers>] [--elements-only <true|false>] [--output-directory <path>]
+uloop screenshot [--window-name <name>] [--resolution-scale <scale>] [--match-mode <mode>] [--capture-mode <mode>] [--annotate-elements <true|false>] [--annotate-raycast-grid <true|false>] [--raycast-layer-mask <layers>] [--elements-only <true|false>] [--output-directory <path>]
 ```
 
 ## Parameters
@@ -49,41 +49,41 @@ The window name is the text displayed in the window's title bar (tab). Common na
 
 ```bash
 # Take a screenshot of Game View (default)
-npx --yes uloop-cli@2.2.0 screenshot
+uloop screenshot
 
 # Capture game rendering (default scale coordinates match simulate-mouse, PlayMode required)
-npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering
+uloop screenshot --capture-mode rendering
 
 # Annotate interactive UI elements with index labels (for simulate-mouse workflow)
-npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering --annotate-elements true
+uloop screenshot --capture-mode rendering --annotate-elements true
 
 # Annotate 3D physics raycast candidate points
-npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering --annotate-raycast-grid true
+uloop screenshot --capture-mode rendering --annotate-raycast-grid true
 
 # Inspect hit layers, then rerun with the layer used by game input
-npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering --annotate-raycast-grid true --elements-only true
-npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering --annotate-raycast-grid true --raycast-layer-mask Default --elements-only true
+uloop screenshot --capture-mode rendering --annotate-raycast-grid true --elements-only true
+uloop screenshot --capture-mode rendering --annotate-raycast-grid true --raycast-layer-mask Default --elements-only true
 
 # Annotate clustered 3D collider candidates on selected layers
-npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering --annotate-raycast-grid true --raycast-layer-mask Ground,Clickable
+uloop screenshot --capture-mode rendering --annotate-raycast-grid true --raycast-layer-mask Ground,Clickable
 
 # Get UI element coordinates without capturing an image (fastest)
-npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering --annotate-elements true --elements-only true
+uloop screenshot --capture-mode rendering --annotate-elements true --elements-only true
 
 # Get clustered 3D collider coordinates without capturing an image
-npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering --annotate-raycast-grid true --raycast-layer-mask Default --elements-only true
+uloop screenshot --capture-mode rendering --annotate-raycast-grid true --raycast-layer-mask Default --elements-only true
 
 # Take a screenshot of Scene View
-npx --yes uloop-cli@2.2.0 screenshot --window-name Scene
+uloop screenshot --window-name Scene
 
 # Capture all windows starting with "Project" (prefix match)
-npx --yes uloop-cli@2.2.0 screenshot --window-name Project --match-mode prefix
+uloop screenshot --window-name Project --match-mode prefix
 
 # Save screenshot to a specific directory
-npx --yes uloop-cli@2.2.0 screenshot --output-directory /tmp/screenshots
+uloop screenshot --output-directory /tmp/screenshots
 
 # Combine options
-npx --yes uloop-cli@2.2.0 screenshot --window-name Scene --resolution-scale 0.5 --output-directory /tmp/screenshots
+uloop screenshot --window-name Scene --resolution-scale 0.5 --output-directory /tmp/screenshots
 ```
 
 ## Output
@@ -111,7 +111,7 @@ When multiple windows match (e.g., multiple Inspector windows or when using `con
 
 ## Notes
 
-- Use `npx --yes uloop-cli@2.2.0 focus-window` first if needed
+- Use `uloop focus-window` first if needed
 - Target window must be open in Unity Editor
 - Window name matching is always case-insensitive
 - Boolean options use value syntax. Write `--annotate-elements true`, `--annotate-raycast-grid true`, and `--elements-only true`; do not use bare boolean flags.
@@ -126,7 +126,7 @@ When multiple windows match (e.g., multiple Inspector windows or when using `con
 Use `Assets/Scenes/RaycastAnnotationDemoScene.unity` as the maintained visual fixture for raycast annotation checks. Enter PlayMode, then run:
 
 ```bash
-npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering --annotate-raycast-grid true --raycast-layer-mask Default --resolution-scale 1
+uloop screenshot --capture-mode rendering --annotate-raycast-grid true --raycast-layer-mask Default --resolution-scale 1
 ```
 
 The scene contains a deterministic 4x4 set of `BoxCollider` tiles and a center `GraphicRaycaster` UI blocker. Verify relative behavior rather than fixed pixel coordinates: center tile outlines should shrink around the blocker, outlines should follow reachable sampled cells, and `SimX/SimY` should stay inside `BoundsMinX/Y` and `BoundsMaxX/Y`.

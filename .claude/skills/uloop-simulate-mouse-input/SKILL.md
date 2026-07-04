@@ -10,16 +10,16 @@ Simulate mouse input via Input System in Unity PlayMode: $ARGUMENTS
 
 ## Workflow
 
-1. Ensure Unity is in PlayMode (use `npx --yes uloop-cli@2.2.0 control-play-mode --action Play` if not)
+1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
 2. For Click/LongPress: determine the target Game View input position from annotated `SimX`/`SimY`, raycast-grid `InputX`/`InputY`, or raw image pixels converted with `ScreenshotToInputFormula`
-3. Execute the appropriate `npx --yes uloop-cli@2.2.0 simulate-mouse-input` command
-4. Take a screenshot to verify the result: `npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering`
+3. Execute the appropriate `uloop simulate-mouse-input` command
+4. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering`
 5. Report what happened
 
 ## Tool Reference
 
 ```bash
-npx --yes uloop-cli@2.2.0 simulate-mouse-input --action <action> [options]
+uloop simulate-mouse-input --action <action> [options]
 ```
 
 ### Parameters
@@ -68,31 +68,31 @@ npx --yes uloop-cli@2.2.0 simulate-mouse-input --action <action> [options]
 
 ```bash
 # Left-click at the Game View center (for game logic)
-npx --yes uloop-cli@2.2.0 simulate-mouse-input --action Click --x 400 --y 300
+uloop simulate-mouse-input --action Click --x 400 --y 300
 
 # Right-click at screen center (e.g. place block)
-npx --yes uloop-cli@2.2.0 simulate-mouse-input --action Click --x 400 --y 300 --button Right
+uloop simulate-mouse-input --action Click --x 400 --y 300 --button Right
 
 # Hold left-click for 2 seconds (e.g. mine block)
-npx --yes uloop-cli@2.2.0 simulate-mouse-input --action LongPress --x 400 --y 300 --duration 2.0
+uloop simulate-mouse-input --action LongPress --x 400 --y 300 --duration 2.0
 
 # Look right (FPS camera)
-npx --yes uloop-cli@2.2.0 simulate-mouse-input --action MoveDelta --delta-x 100 --delta-y 0
+uloop simulate-mouse-input --action MoveDelta --delta-x 100 --delta-y 0
 
 # Scroll up (e.g. previous hotbar slot)
-npx --yes uloop-cli@2.2.0 simulate-mouse-input --action Scroll --scroll-y 120
+uloop simulate-mouse-input --action Scroll --scroll-y 120
 
 # Scroll down (e.g. next hotbar slot)
-npx --yes uloop-cli@2.2.0 simulate-mouse-input --action Scroll --scroll-y -120
+uloop simulate-mouse-input --action Scroll --scroll-y -120
 
 # Smooth camera pan right over 0.5 seconds
-npx --yes uloop-cli@2.2.0 simulate-mouse-input --action SmoothDelta --delta-x 300 --delta-y 0 --duration 0.5
+uloop simulate-mouse-input --action SmoothDelta --delta-x 300 --delta-y 0 --duration 0.5
 ```
 
 ## Coordinate System
 
 - `--x` / `--y` use **top-left Game View coordinates**.
-- Raw image pixels from `npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering` must be converted with `ScreenshotToInputFormula`.
+- Raw image pixels from `uloop screenshot --capture-mode rendering` must be converted with `ScreenshotToInputFormula`.
 - `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` can be passed directly to this tool.
 - Do not flip Y in the caller. The tool converts internally for Unity Input System:
 

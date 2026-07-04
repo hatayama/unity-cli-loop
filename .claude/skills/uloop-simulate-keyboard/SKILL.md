@@ -10,15 +10,15 @@ Simulate keyboard input on Unity PlayMode: $ARGUMENTS
 
 ## Workflow
 
-1. Ensure Unity is in PlayMode (use `npx --yes uloop-cli@2.2.0 control-play-mode --action Play` if not)
-2. Execute the appropriate `npx --yes uloop-cli@2.2.0 simulate-keyboard` command
-3. Take a screenshot to verify the result: `npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering`
+1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
+2. Execute the appropriate `uloop simulate-keyboard` command
+3. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering`
 4. Report what happened
 
 ## Tool Reference
 
 ```bash
-npx --yes uloop-cli@2.2.0 simulate-keyboard --action <action> --key <key> [options]
+uloop simulate-keyboard --action <action> --key <key> [options]
 ```
 
 ### Parameters
@@ -55,20 +55,20 @@ npx --yes uloop-cli@2.2.0 simulate-keyboard --action <action> --key <key> [optio
 
 ```bash
 # One-shot key press (tap W once)
-npx --yes uloop-cli@2.2.0 simulate-keyboard --action Press --key W
+uloop simulate-keyboard --action Press --key W
 
 # Jump (tap Space)
-npx --yes uloop-cli@2.2.0 simulate-keyboard --action Press --key Space
+uloop simulate-keyboard --action Press --key Space
 
 # Hold W for 2 seconds (move forward)
-npx --yes uloop-cli@2.2.0 simulate-keyboard --action Press --key W --duration 2.0
+uloop simulate-keyboard --action Press --key W --duration 2.0
 
 # Sprint forward (hold Shift + W, then release)
-npx --yes uloop-cli@2.2.0 simulate-keyboard --action KeyDown --key LeftShift
-npx --yes uloop-cli@2.2.0 simulate-keyboard --action KeyDown --key W
-npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering
-npx --yes uloop-cli@2.2.0 simulate-keyboard --action KeyUp --key W
-npx --yes uloop-cli@2.2.0 simulate-keyboard --action KeyUp --key LeftShift
+uloop simulate-keyboard --action KeyDown --key LeftShift
+uloop simulate-keyboard --action KeyDown --key W
+uloop screenshot --capture-mode rendering
+uloop simulate-keyboard --action KeyUp --key W
+uloop simulate-keyboard --action KeyUp --key LeftShift
 ```
 
 ## Output

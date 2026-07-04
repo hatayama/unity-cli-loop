@@ -3,14 +3,14 @@ name: uloop-raycast
 description: "Raycast from Camera.main through a Game View coordinate. Use when you need to check what a screenshot coordinate would hit in 3D physics before clicking or long-pressing with simulate-mouse-input."
 ---
 
-# npx --yes uloop-cli@2.2.0 raycast
+# uloop raycast
 
 Check what a top-left Game View coordinate hits in 3D physics.
 
 ## Usage
 
 ```bash
-npx --yes uloop-cli@2.2.0 raycast --x <x> --y <y> [--layer-mask <mask>] [--max-distance <distance>]
+uloop raycast --x <x> --y <y> [--layer-mask <mask>] [--max-distance <distance>]
 ```
 
 ## Parameters
@@ -25,7 +25,7 @@ npx --yes uloop-cli@2.2.0 raycast --x <x> --y <y> [--layer-mask <mask>] [--max-d
 ## Coordinate System
 
 - `--x` / `--y` use the same top-left Game View input coordinates as `simulate-mouse-input`.
-- Raw image pixels from `npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering` must be converted with `ScreenshotToInputFormula`.
+- Raw image pixels from `uloop screenshot --capture-mode rendering` must be converted with `ScreenshotToInputFormula`.
 - `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` can be passed directly to this tool.
 - Do not flip Y in the caller. The tool converts internally:
 
@@ -38,10 +38,10 @@ unity_y = gameViewHeight - input_y
 
 ```bash
 # Check what is under a screenshot coordinate
-npx --yes uloop-cli@2.2.0 raycast --x 960 --y 540
+uloop raycast --x 960 --y 540
 
 # Check only specific layers
-npx --yes uloop-cli@2.2.0 raycast --x 960 --y 540 --layer-mask 1
+uloop raycast --x 960 --y 540 --layer-mask 1
 ```
 
 ## Output

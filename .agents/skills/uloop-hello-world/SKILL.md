@@ -3,14 +3,14 @@ name: uloop-hello-world
 description: "Sample hello world tool via uloop CLI. Use when you need to test the MCP tool system or see an example of custom tool implementation."
 ---
 
-# npx --yes uloop-cli@2.2.0 hello-world
+# uloop hello-world
 
 Personalized hello world tool with multi-language support.
 
 ## Usage
 
 ```bash
-npx --yes uloop-cli@2.2.0 hello-world [options]
+uloop hello-world [options]
 ```
 
 ## Parameters
@@ -25,16 +25,16 @@ npx --yes uloop-cli@2.2.0 hello-world [options]
 
 ```bash
 # Default greeting
-npx --yes uloop-cli@2.2.0 hello-world
+uloop hello-world
 
 # Greet with custom name
-npx --yes uloop-cli@2.2.0 hello-world --name "Alice"
+uloop hello-world --name "Alice"
 
 # Japanese greeting
-npx --yes uloop-cli@2.2.0 hello-world --name "太郎" --language japanese
+uloop hello-world --name "太郎" --language japanese
 
 # Spanish greeting without timestamp
-npx --yes uloop-cli@2.2.0 hello-world --name "Carlos" --language spanish --include-timestamp false
+uloop hello-world --name "Carlos" --language spanish --include-timestamp false
 ```
 
 ## Output
