@@ -60,6 +60,10 @@ uloop screenshot --capture-mode rendering --annotate-elements
 # Annotate 3D physics raycast candidate points
 uloop screenshot --capture-mode rendering --annotate-raycast-grid
 
+# Inspect hit layers, then rerun with the layer used by game input
+uloop screenshot --capture-mode rendering --annotate-raycast-grid --elements-only
+uloop screenshot --capture-mode rendering --annotate-raycast-grid --raycast-layer-mask Default --elements-only
+
 # Annotate clustered 3D collider candidates on selected layers
 uloop screenshot --capture-mode rendering --annotate-raycast-grid --raycast-layer-mask Ground,Clickable
 
@@ -99,6 +103,7 @@ Returns JSON with:
   - `UnityInputFormula`: Formula used internally by mouse input tools to inject `Mouse.current.position`
   - `AnnotatedElements`: Array of annotated UI element metadata. Also includes clustered `PhysicsCollider` entries when `--annotate-raycast-grid --raycast-layer-mask <layers>` is used.
   - `RaycastGridPoints`: Array of coarse 3D raycast candidate metadata. Empty unless `--annotate-raycast-grid` is used without `--raycast-layer-mask`.
+  - `RaycastLayerSummaries`: Dense raycast hit counts by layer when `--annotate-raycast-grid` is used without `--raycast-layer-mask`. Empty when a mask is provided.
 
 For `AnnotatedElements` fields and Game View coordinates, read [references/annotated-elements.md](references/annotated-elements.md) before using screenshot coordinates with mouse simulation tools.
 
@@ -111,6 +116,7 @@ When multiple windows match (e.g., multiple Inspector windows or when using `con
 - Window name matching is always case-insensitive
 - Use `--capture-mode rendering` for coordinates that should be passed to `simulate-mouse-input`, `simulate-mouse-ui`, or `raycast`.
 - Use `ScreenshotToInputFormula` before passing raw image pixels to mouse tools. `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` are already mouse-input coordinates.
+- To discover a useful physics layer, first run `--annotate-raycast-grid` without `--raycast-layer-mask`, inspect `RaycastLayerSummaries`, then rerun with `--raycast-layer-mask <Layer>`.
 - Use `--raycast-layer-mask` with layer names from `find-game-objects` or project code when the game input code raycasts only specific layers. Layers hidden by Camera.main.cullingMask are not reported because they are not visible to the screenshot camera.
 - Clustered `PhysicsCollider` entries avoid points where the frontmost EventSystem hit comes from a `GraphicRaycaster` UI element, including world-space Canvas UI. PhysicsRaycaster and other non-uGUI hits are not treated as UI occlusion. If the centroid-nearest sample is covered, the nearest uncovered sampled hit is used; if every sampled hit in the cluster is covered, that collider is omitted.
 - Do not use `window` captures as mouse-input coordinates because they include Unity Editor chrome.

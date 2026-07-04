@@ -21,18 +21,45 @@ namespace io.github.hatayama.uLoopMCP
             Vector2 renderingImageSize,
             int imageToInputOffsetY)
         {
+            return CollectRaycastGridPointsForGrid(
+                renderingImageSize,
+                imageToInputOffsetY,
+                GRID_ROWS,
+                GRID_COLUMNS);
+        }
+
+        internal static List<RaycastLayerSummaryInfo> CollectRaycastLayerSummaries(
+            Vector2 renderingImageSize,
+            int imageToInputOffsetY)
+        {
+            List<RaycastGridPointInfo> points = CollectRaycastGridPointsForGrid(
+                renderingImageSize,
+                imageToInputOffsetY,
+                CLUSTERED_GRID_ROWS,
+                CLUSTERED_GRID_COLUMNS);
+            return CreateLayerSummaries(points);
+        }
+
+        private static List<RaycastGridPointInfo> CollectRaycastGridPointsForGrid(
+            Vector2 renderingImageSize,
+            int imageToInputOffsetY,
+            int rowCount,
+            int columnCount)
+        {
             List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>();
             int labelIndex = 1;
             // Sync once for the whole grid; each candidate raycast then reads the same current physics state.
             Physics.SyncTransforms();
 
-            for (int row = 1; row <= GRID_ROWS; row++)
+            for (int row = 1; row <= rowCount; row++)
             {
-                for (int column = 1; column <= GRID_COLUMNS; column++)
+                for (int column = 1; column <= columnCount; column++)
                 {
-                    Vector2 inputPosition = CalculateGridInputPosition(
+                    Vector2 inputPosition = CalculateGridInputPositionForGrid(
                         renderingImageSize,
                         imageToInputOffsetY,
+                        rowCount,
+                        columnCount,
                         row,
                         column);
                     GameViewRaycastResult raycastResult = GameViewRaycastUtility.RaycastFromInputPosition(
@@ -175,8 +202,117 @@ namespace io.github.hatayama.uLoopMCP
             RaycastHit hit = raycastResult.Hits[0];
             pointInfo.HitGameObjectName = hit.collider.gameObject.name;
             pointInfo.HitGameObjectPath = GameObjectPathUtility.GetFullPath(hit.collider.gameObject);
+            pointInfo.HitLayerIndex = hit.collider.gameObject.layer;
+            pointInfo.HitLayer = LayerMask.LayerToName(hit.collider.gameObject.layer);
             pointInfo.Distance = hit.distance;
             return pointInfo;
+        }
+
+        internal static List<RaycastLayerSummaryInfo> CreateLayerSummaries(List<RaycastGridPointInfo> points)
+        {
+            Dictionary<int, RaycastLayerSummaryAccumulator> accumulatorsByLayerIndex =
+                new Dictionary<int, RaycastLayerSummaryAccumulator>();
+
+            foreach (RaycastGridPointInfo point in points)
+            {
+                if (!point.Hit || point.HitLayerIndex == null)
+                {
+                    continue;
+                }
+
+                int layerIndex = point.HitLayerIndex.Value;
+                if (!accumulatorsByLayerIndex.ContainsKey(layerIndex))
+                {
+                    accumulatorsByLayerIndex.Add(
+                        layerIndex,
+                        new RaycastLayerSummaryAccumulator(point.HitLayer ?? "", layerIndex));
+                }
+
+                RaycastLayerSummaryAccumulator accumulator = accumulatorsByLayerIndex[layerIndex];
+                accumulator.AddHit(point.HitGameObjectPath ?? "");
+            }
+
+            List<RaycastLayerSummaryInfo> summaries = new List<RaycastLayerSummaryInfo>();
+            foreach (RaycastLayerSummaryAccumulator accumulator in accumulatorsByLayerIndex.Values)
+            {
+                summaries.Add(accumulator.CreateSummary());
+            }
+
+            summaries.Sort(CompareLayerSummaries);
+            return summaries;
+        }
+
+        private static int CompareLayerSummaries(
+            RaycastLayerSummaryInfo left,
+            RaycastLayerSummaryInfo right)
+        {
+            int hitCountComparison = right.HitCount.CompareTo(left.HitCount);
+            if (hitCountComparison != 0)
+            {
+                return hitCountComparison;
+            }
+
+            return left.LayerIndex.CompareTo(right.LayerIndex);
+        }
+
+        private sealed class RaycastLayerSummaryAccumulator
+        {
+            private readonly Dictionary<string, int> _objectHitCounts = new Dictionary<string, int>();
+            private string _representativeObjectPath = "";
+            private int _representativeObjectHitCount;
+
+            public string Layer { get; }
+            public int LayerIndex { get; }
+            public int HitCount { get; private set; }
+
+            public RaycastLayerSummaryAccumulator(string layer, int layerIndex)
+            {
+                Layer = layer;
+                LayerIndex = layerIndex;
+            }
+
+            public void AddHit(string objectPath)
+            {
+                HitCount++;
+                int objectHitCount = 1;
+                if (_objectHitCounts.ContainsKey(objectPath))
+                {
+                    objectHitCount = _objectHitCounts[objectPath] + 1;
+                }
+
+                _objectHitCounts[objectPath] = objectHitCount;
+                if (ShouldUseAsRepresentative(objectPath, objectHitCount))
+                {
+                    _representativeObjectPath = objectPath;
+                    _representativeObjectHitCount = objectHitCount;
+                }
+            }
+
+            public RaycastLayerSummaryInfo CreateSummary()
+            {
+                return new RaycastLayerSummaryInfo
+                {
+                    Layer = Layer,
+                    LayerIndex = LayerIndex,
+                    HitCount = HitCount,
+                    RepresentativeObjectPath = _representativeObjectPath
+                };
+            }
+
+            private bool ShouldUseAsRepresentative(string objectPath, int objectHitCount)
+            {
+                if (objectHitCount > _representativeObjectHitCount)
+                {
+                    return true;
+                }
+
+                if (objectHitCount < _representativeObjectHitCount)
+                {
+                    return false;
+                }
+
+                return string.CompareOrdinal(objectPath, _representativeObjectPath) < 0;
+            }
         }
 
         private static RaycastClusterCollection CollectClusterSamples(

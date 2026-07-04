@@ -18,6 +18,17 @@ Read this when using `uloop screenshot --capture-mode rendering --annotate-eleme
 - `SortingOrder`: Canvas sorting order. Higher values are in front.
 - `SiblingIndex`: Transform sibling index under the element's direct parent. Do not use it as a reliable z-order signal across nested UI hierarchies.
 
+## RaycastLayerSummaries Fields
+
+`RaycastLayerSummaries` is populated when `--annotate-raycast-grid` is used without `--raycast-layer-mask`. It is built from dense raycast samples, while `RaycastGridPoints` remains the coarse 5x5 annotated grid.
+
+- `Layer`: Physics layer name to pass to `--raycast-layer-mask`
+- `LayerIndex`: Unity physics layer index
+- `HitCount`: Dense raycast hit count for the layer
+- `RepresentativeObjectPath`: Hierarchy path for the object with the most hits on that layer. Ties are resolved alphabetically by path.
+
+Entries are sorted by `HitCount` descending, then `LayerIndex` ascending.
+
 ## Coordinate Conversion
 
 When `ImageCoordinateSystem` is `"top-left-game-view"`, convert raw image pixel coordinates from `screenshot --capture-mode rendering` with the formula returned in `ScreenshotToInputFormula`:

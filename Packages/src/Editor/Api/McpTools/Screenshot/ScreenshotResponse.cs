@@ -19,6 +19,7 @@ namespace io.github.hatayama.uLoopMCP
         public string UnityInputFormula { get; set; } = "";
         public List<UIElementInfo> AnnotatedElements { get; set; } = new();
         public List<RaycastGridPointInfo> RaycastGridPoints { get; set; } = new();
+        public List<RaycastLayerSummaryInfo> RaycastLayerSummaries { get; set; } = new();
 
         public ScreenshotInfo(string imagePath, long fileSizeBytes, int width, int height,
             string imageCoordinateSystem = McpConstants.COORDINATE_SYSTEM_TOP_LEFT_WINDOW,
@@ -35,6 +36,14 @@ namespace io.github.hatayama.uLoopMCP
         public ScreenshotInfo()
         {
         }
+    }
+
+    public class RaycastLayerSummaryInfo
+    {
+        public string Layer { get; set; } = "";
+        public int LayerIndex { get; set; }
+        public int HitCount { get; set; }
+        public string RepresentativeObjectPath { get; set; } = "";
     }
 
     public class ScreenshotResponse : BaseToolResponse
