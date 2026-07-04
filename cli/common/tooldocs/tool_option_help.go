@@ -1,9 +1,11 @@
-package clicore
+package tooldocs
 
 import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/hatayama/unity-cli-loop/common/tools"
 )
 
 // --code-file is CLI-side sugar for execute-dynamic-code: it loads a C# source file into
@@ -17,6 +19,12 @@ const (
 
 const DynamicCodeFileOptionDescription = "Read C# code from a file instead of --code when shell quoting would alter multiline code"
 
+const (
+	compileCommandName            = "compile"
+	executeDynamicCodeCommandName = "execute-dynamic-code"
+	runTestsCommandName           = "run-tests"
+)
+
 // OptionHelpEntry is one row of a tool's --help option listing.
 type OptionHelpEntry struct {
 	Name        string
@@ -24,7 +32,7 @@ type OptionHelpEntry struct {
 	Description string
 }
 
-func VisibleOptionHelpEntriesForTool(tool ToolDefinition) []OptionHelpEntry {
+func VisibleOptionHelpEntriesForTool(tool tools.ToolDefinition) []OptionHelpEntry {
 	schema := tool.EffectiveInputSchema()
 	entries := make([]OptionHelpEntry, 0, len(schema.Properties))
 	for propertyName, property := range schema.Properties {
@@ -47,14 +55,14 @@ func VisibleOptionHelpEntriesForTool(tool ToolDefinition) []OptionHelpEntry {
 	return entries
 }
 
-func optionUsage(optionName string, property ToolProperty) string {
+func optionUsage(optionName string, property tools.ToolProperty) string {
 	if IsBooleanProperty(property) {
 		return optionName
 	}
 	return optionName + " <" + optionValueName(property) + ">"
 }
 
-func optionValueName(property ToolProperty) string {
+func optionValueName(property tools.ToolProperty) string {
 	switch strings.ToLower(property.Type) {
 	case "integer":
 		return "integer"
@@ -69,7 +77,7 @@ func optionValueName(property ToolProperty) string {
 	}
 }
 
-func optionDescription(toolName string, propertyName string, property ToolProperty) string {
+func optionDescription(toolName string, propertyName string, property tools.ToolProperty) string {
 	if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
 		return OptionSummary(toolName, propertyName, property) + "; default: auto-save enabled"
 	}
@@ -100,7 +108,7 @@ func defaultValueText(value any) string {
 	return fmt.Sprint(value)
 }
 
-func OptionSummary(toolName string, propertyName string, property ToolProperty) string {
+func OptionSummary(toolName string, propertyName string, property tools.ToolProperty) string {
 	if IsNegatedBooleanProperty(property) {
 		if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
 			return "Fail before execution if unsaved editor changes remain instead of auto-saving them"
@@ -118,8 +126,8 @@ func OptionSummary(toolName string, propertyName string, property ToolProperty) 
 	return FirstHelpLine(property.Description)
 }
 
-func appendDynamicCodeFileOptionName(tool ToolDefinition, options []string) []string {
-	if tool.Name != ExecuteDynamicCodeCommandName {
+func appendDynamicCodeFileOptionName(tool tools.ToolDefinition, options []string) []string {
+	if tool.Name != executeDynamicCodeCommandName {
 		return options
 	}
 	for _, option := range options {
@@ -130,8 +138,8 @@ func appendDynamicCodeFileOptionName(tool ToolDefinition, options []string) []st
 	return append(options, DynamicCodeFileOptionName)
 }
 
-func appendDynamicCodeFileOptionHelpEntry(tool ToolDefinition, entries []OptionHelpEntry) []OptionHelpEntry {
-	if tool.Name != ExecuteDynamicCodeCommandName {
+func appendDynamicCodeFileOptionHelpEntry(tool tools.ToolDefinition, entries []OptionHelpEntry) []OptionHelpEntry {
+	if tool.Name != executeDynamicCodeCommandName {
 		return entries
 	}
 	for _, entry := range entries {

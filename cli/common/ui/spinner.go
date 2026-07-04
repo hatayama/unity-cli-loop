@@ -1,4 +1,4 @@
-package clicore
+package ui
 
 import (
 	"fmt"
@@ -27,8 +27,8 @@ type TerminalSpinner struct {
 	mutex    sync.Mutex
 }
 
-func NewToolSpinner(stderr io.Writer, command string) *TerminalSpinner {
-	return newSpinner(stderr, shouldShowToolFeedback(command) && isTerminalWriter(stderr), "Connecting to Unity...")
+func NewToolSpinner(stderr io.Writer, showFeedback bool) *TerminalSpinner {
+	return newSpinner(stderr, showFeedback && isTerminalWriter(stderr), "Connecting to Unity...")
 }
 
 func NewLaunchSpinner(stdout io.Writer, stderr io.Writer) *TerminalSpinner {
@@ -132,8 +132,4 @@ func isTerminalWriter(writer io.Writer) bool {
 	}
 
 	return info.Mode()&os.ModeCharDevice != 0
-}
-
-func shouldShowToolFeedback(command string) bool {
-	return command != ExecuteDynamicCodeCommandName
 }

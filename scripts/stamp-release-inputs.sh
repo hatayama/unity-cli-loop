@@ -22,9 +22,12 @@ list_shared_common_inputs() {
     'cli/common/errors/' \
     'cli/common/project/' \
     'cli/common/skillscan/' \
+    'cli/common/tooldocs/' \
     'cli/common/tools/' \
+    'cli/common/ui/' \
     'cli/common/unityipc/' \
-    'cli/common/unityprocess/' |
+    'cli/common/unityprocess/' \
+    'cli/common/vibelog/' |
     grep -E '\.go$|\.ps1$|/go\.mod$|/go\.sum$' |
     grep -v '_test\.go$' || true
 }

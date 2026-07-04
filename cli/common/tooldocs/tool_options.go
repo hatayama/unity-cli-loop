@@ -1,8 +1,10 @@
-package clicore
+package tooldocs
 
 import (
 	"sort"
 	"strings"
+
+	"github.com/hatayama/unity-cli-loop/common/tools"
 )
 
 const (
@@ -10,17 +12,17 @@ const (
 	ReloadExternalSceneChangesPropertyName = "ReloadExternalSceneChanges"
 )
 
-func FindProperty(tool ToolDefinition, kebabName string) (string, ToolProperty, bool, bool) {
+func FindProperty(tool tools.ToolDefinition, kebabName string) (string, tools.ToolProperty, bool, bool) {
 	schema := tool.EffectiveInputSchema()
 	for propertyName, property := range schema.Properties {
 		if OptionNameForProperty(tool.Name, propertyName, property) == kebabName {
 			return propertyName, property, IsNegatedBooleanProperty(property), true
 		}
 	}
-	return "", ToolProperty{}, false, false
+	return "", tools.ToolProperty{}, false, false
 }
 
-func OptionNameForProperty(toolName string, propertyName string, property ToolProperty) string {
+func OptionNameForProperty(toolName string, propertyName string, property tools.ToolProperty) string {
 	kebabName := pascalToKebab(propertyName)
 	if IsNegatedBooleanProperty(property) {
 		if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
@@ -34,19 +36,19 @@ func OptionNameForProperty(toolName string, propertyName string, property ToolPr
 	return kebabName
 }
 
-func isRunTestsSaveBeforeRunOption(toolName string, propertyName string, property ToolProperty) bool {
-	return toolName == RunTestsCommandName &&
+func isRunTestsSaveBeforeRunOption(toolName string, propertyName string, property tools.ToolProperty) bool {
+	return toolName == runTestsCommandName &&
 		propertyName == "SaveBeforeRun" &&
 		IsNegatedBooleanProperty(property)
 }
 
-func isCompileReloadExternalSceneChangesOption(toolName string, propertyName string, property ToolProperty) bool {
-	return toolName == CompileCommandName &&
+func isCompileReloadExternalSceneChangesOption(toolName string, propertyName string, property tools.ToolProperty) bool {
+	return toolName == compileCommandName &&
 		propertyName == ReloadExternalSceneChangesPropertyName &&
 		IsNegatedBooleanProperty(property)
 }
 
-func VisibleOptionNamesForTool(tool ToolDefinition) []string {
+func VisibleOptionNamesForTool(tool tools.ToolDefinition) []string {
 	schema := tool.EffectiveInputSchema()
 	options := make([]string, 0, len(schema.Properties))
 	for propertyName, property := range schema.Properties {
@@ -60,11 +62,11 @@ func VisibleOptionNamesForTool(tool ToolDefinition) []string {
 	return options
 }
 
-func IsBooleanProperty(property ToolProperty) bool {
+func IsBooleanProperty(property tools.ToolProperty) bool {
 	return strings.EqualFold(property.Type, "boolean")
 }
 
-func IsNegatedBooleanProperty(property ToolProperty) bool {
+func IsNegatedBooleanProperty(property tools.ToolProperty) bool {
 	defaultValue, ok := property.EffectiveDefault().(bool)
 	return IsBooleanProperty(property) && ok && defaultValue
 }
