@@ -180,6 +180,18 @@ func TestReleaseTriggerGuardRequiresDispatcherTriggerForInstallerChanges(t *test
 	}
 }
 
+// Verifies embedded installer templates are classified as dispatcher installer inputs.
+func TestReleaseTriggerGuardMatchesEmbeddedInstallerScripts(t *testing.T) {
+	for _, file := range []string{
+		"cli/dispatcher/internal/install/scripts/install_darwin.sh",
+		"cli/dispatcher/internal/install/scripts/install_windows.ps1",
+	} {
+		if !isDispatcherInstallerScript(file) {
+			t.Fatalf("expected embedded installer script to match: %s", file)
+		}
+	}
+}
+
 func commonPackageRootsImportedByModule(t *testing.T, moduleDir string) []string {
 	t.Helper()
 	command := exec.Command("go", "list", "-deps", "./...")

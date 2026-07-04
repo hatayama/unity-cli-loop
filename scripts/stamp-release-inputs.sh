@@ -40,7 +40,10 @@ list_dispatcher_only_common_inputs() {
 }
 
 list_installer_inputs() {
-  git ls-files -- scripts/install.sh scripts/install.ps1
+  git ls-files -- \
+    scripts/install.sh \
+    scripts/install.ps1 \
+    'cli/dispatcher/internal/install/scripts/'
 }
 
 # Hashes path/content pairs so renames change the stamp as well. Only tracked
