@@ -1,4 +1,4 @@
-package clicore
+package skillscan
 
 import (
 	"encoding/json"
