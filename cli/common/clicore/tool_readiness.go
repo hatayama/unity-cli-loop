@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/project"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
@@ -133,11 +134,11 @@ func probeToolReadiness(ctx context.Context, projectRoot string, executeDynamicC
 	}
 
 	if !executeDynamicCodeAvailable {
-		_, err := unityipc.NewClient(connection, Version()).Send(probeContext, "get-version", map[string]any{})
+		_, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(probeContext, "get-version", map[string]any{})
 		return err
 	}
 
-	response, err := unityipc.NewClient(connection, Version()).Send(probeContext, "execute-dynamic-code", executeDynamicCodeReadinessProbeParams())
+	response, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(probeContext, "execute-dynamic-code", executeDynamicCodeReadinessProbeParams())
 	if err != nil {
 		return err
 	}
