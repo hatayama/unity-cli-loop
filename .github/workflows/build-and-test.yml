@@ -32,6 +32,7 @@ jobs:
 
       - name: Test release automation shell helpers
         run: |
+          sh -n cli/dispatcher/internal/install/scripts/install_darwin.sh
           scripts/test-go-cli-toolchain.sh
           scripts/test-resolve-native-cli-release-target.sh
           scripts/test-resolve-dispatcher-release-target.sh
@@ -114,9 +115,10 @@ jobs:
       - name: Parse PowerShell installer in Windows PowerShell
         shell: powershell
         run: |
-          $null = [scriptblock]::Create((Get-Content -Raw scripts/install.ps1))
-          $null = [scriptblock]::Create((Get-Content -Raw scripts/check-release-installer.ps1))
-          $null = [scriptblock]::Create((Get-Content -Raw scripts/test-check-release-installer.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 cli/dispatcher/internal/install/scripts/install_windows.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/install.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/check-release-installer.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-check-release-installer.ps1))
 
       - name: Test release installer smoke helper
         shell: powershell

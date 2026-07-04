@@ -119,6 +119,40 @@ func TestCommandForMacConfiguresShellPathAndLegacyCleanup(t *testing.T) {
 	}
 }
 
+func TestWindowsInstallScriptReplacesTemplateValues(t *testing.T) {
+	// Verifies Windows setup templates cannot ship with unresolved placeholders.
+	installDir := `C:\Temp\uloop's bin`
+	targetPath := `C:\Temp\uloop's bin\uloop.exe`
+	setupScript := windowsInstallScript(installDir, targetPath)
+
+	if strings.Contains(setupScript, "{{") {
+		t.Fatalf("setup script contains unresolved template placeholder: %s", setupScript)
+	}
+	if !strings.Contains(setupScript, `$InstallDir = 'C:\Temp\uloop''s bin'`) {
+		t.Fatalf("setup script does not quote install dir correctly: %s", setupScript)
+	}
+	if !strings.Contains(setupScript, `$ExpectedUloopPath = 'C:\Temp\uloop''s bin\uloop.exe'`) {
+		t.Fatalf("setup script does not quote target path correctly: %s", setupScript)
+	}
+}
+
+func TestPosixInstallScriptReplacesTemplateValues(t *testing.T) {
+	// Verifies POSIX setup templates cannot ship with unresolved placeholders.
+	installDir := "/tmp/uloop's bin"
+	targetPath := "/tmp/uloop's bin/uloop"
+	setupScript := posixInstallScript(installDir, targetPath)
+
+	if strings.Contains(setupScript, "{{") {
+		t.Fatalf("setup script contains unresolved template placeholder: %s", setupScript)
+	}
+	if !strings.Contains(setupScript, `InstallDir='/tmp/uloop'"'"'s bin'`) {
+		t.Fatalf("setup script does not quote install dir correctly: %s", setupScript)
+	}
+	if !strings.Contains(setupScript, `ExpectedUloopPath='/tmp/uloop'"'"'s bin/uloop'`) {
+		t.Fatalf("setup script does not quote target path correctly: %s", setupScript)
+	}
+}
+
 func TestCommandForMacPreservesRootInstallDir(t *testing.T) {
 	// Verifies macOS install keeps the root directory when removing trailing separators.
 	command, err := CommandForOS("darwin", Options{
