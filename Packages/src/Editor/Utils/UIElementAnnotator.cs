@@ -19,6 +19,7 @@ namespace io.github.hatayama.uLoopMCP
         private const float LABEL_DARK_TEXT_LUMINANCE_THRESHOLD = 0.62f;
         private const float OUTPUT_LABEL_OUTLINE_DISTANCE = 2f;
         private const float OUTPUT_LABEL_TO_BORDER_GAP = 4f;
+        private const float RAYCAST_COVERAGE_FILL_ALPHA = 0.25f;
         private const string INTERACTION_CLICK = "Click";
         private const string INTERACTION_DRAG = "Drag";
         private const string INTERACTION_DROP = "Drop";
@@ -118,6 +119,11 @@ namespace io.github.hatayama.uLoopMCP
             foreach (UIElementInfo element in elements)
             {
                 drawInfos.Add(CreateAnnotationDrawInfo(element));
+            }
+
+            foreach (AnnotationDrawInfo drawInfo in drawInfos)
+            {
+                CreateRaycastCoverageFillForElement(root.transform, drawInfo);
             }
 
             foreach (AnnotationDrawInfo drawInfo in drawInfos)
@@ -434,7 +440,56 @@ namespace io.github.hatayama.uLoopMCP
                 color,
                 contrastColor,
                 borderColors,
-                displayLabel);
+                displayLabel,
+                element.RaycastCoverageCells);
+        }
+
+        private static void CreateRaycastCoverageFillForElement(
+            Transform parent,
+            AnnotationDrawInfo drawInfo)
+        {
+            if (drawInfo.RaycastCoverageCells.Count == 0)
+            {
+                return;
+            }
+
+            Color fillColor = drawInfo.Color;
+            fillColor.a = RAYCAST_COVERAGE_FILL_ALPHA;
+            for (int i = 0; i < drawInfo.RaycastCoverageCells.Count; i++)
+            {
+                CreateRaycastCoverageFillCell(
+                    parent,
+                    i,
+                    drawInfo.RaycastCoverageCells[i],
+                    fillColor);
+            }
+        }
+
+        private static void CreateRaycastCoverageFillCell(
+            Transform parent,
+            int index,
+            RaycastCoverageCell coverageCell,
+            Color color)
+        {
+            Debug.Assert(coverageCell.MaxX >= coverageCell.MinX, "Coverage cell maxX must not be smaller than minX.");
+            Debug.Assert(coverageCell.MaxY >= coverageCell.MinY, "Coverage cell maxY must not be smaller than minY.");
+
+            GameObject fillGo = new GameObject($"RaycastCoverageFill_{index}");
+            fillGo.hideFlags = HideFlags.HideAndDontSave;
+            fillGo.transform.SetParent(parent, false);
+
+            RectTransform rt = fillGo.AddComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.zero;
+            rt.pivot = Vector2.zero;
+            rt.anchoredPosition = new Vector2(coverageCell.MinX, coverageCell.MinY);
+            rt.sizeDelta = new Vector2(
+                coverageCell.MaxX - coverageCell.MinX,
+                coverageCell.MaxY - coverageCell.MinY);
+
+            Image image = fillGo.AddComponent<Image>();
+            image.color = color;
+            image.raycastTarget = false;
         }
 
         private static void CreateBorder(
@@ -701,6 +756,7 @@ namespace io.github.hatayama.uLoopMCP
             public readonly Color ContrastColor;
             public readonly AnnotationBorderColors BorderColors;
             public readonly string DisplayLabel;
+            public readonly List<RaycastCoverageCell> RaycastCoverageCells;
 
             public AnnotationDrawInfo(
                 float screenMinX,
@@ -710,7 +766,8 @@ namespace io.github.hatayama.uLoopMCP
                 Color color,
                 Color contrastColor,
                 AnnotationBorderColors borderColors,
-                string displayLabel)
+                string displayLabel,
+                List<RaycastCoverageCell> raycastCoverageCells)
             {
                 ScreenMinX = screenMinX;
                 ScreenMinY = screenMinY;
@@ -720,6 +777,7 @@ namespace io.github.hatayama.uLoopMCP
                 ContrastColor = contrastColor;
                 BorderColors = borderColors;
                 DisplayLabel = displayLabel;
+                RaycastCoverageCells = raycastCoverageCells;
             }
         }
 

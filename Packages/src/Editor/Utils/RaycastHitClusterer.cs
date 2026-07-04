@@ -217,4 +217,23 @@ namespace io.github.hatayama.uLoopMCP
             MaxY = maxY;
         }
     }
+
+    /// <summary>
+    /// Describes one visible raycast sample cell in screen-space coordinates.
+    /// </summary>
+    internal readonly struct RaycastCoverageCell
+    {
+        public readonly float MinX;
+        public readonly float MinY;
+        public readonly float MaxX;
+        public readonly float MaxY;
+
+        public RaycastCoverageCell(float minX, float minY, float maxX, float maxY)
+        {
+            MinX = minX;
+            MinY = minY;
+            MaxX = maxX;
+            MaxY = maxY;
+        }
+    }
 }

@@ -48,6 +48,8 @@ For clustered `PhysicsCollider` entries, points where the frontmost EventSystem 
 
 `PhysicsCollider` bounds expand each reachable sample by half the dense raycast sampling step in X and Y, then clamp the result to the captured Game View area. This makes the frame approximate the covered raycast cells instead of shrinking to the sample centers. It may extend up to half a sample step past the visible collider edge, and it still does not guarantee that every interior point is clickable.
 
+In annotated screenshots, translucent filled cells show the sampled reachable coverage at the current raycast grid resolution. The frame is the `BoundsMinX/Y` to `BoundsMaxX/Y` bbox around those cells, and the marker is the verified click point `SimX/SimY`. The filled shape can still differ from the exact rendered collider edge by up to half a sample step.
+
 The mouse input tools convert internally to Unity Input System coordinates:
 
 ```text
