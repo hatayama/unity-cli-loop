@@ -19,30 +19,21 @@ import (
 
 // Verifies transient IPC connection failures focus Unity once and restore focus before reporting server-not-responding.
 func TestSendWithTransientConnectionRetryReportsUnityServerNotResponding(t *testing.T) {
-	originalFinder := findRunningUnityProcessForConnectionRetry
-	originalFocus := focusUnityProcessForConnectionRetry
-	originalTimeout := serverConnectionRetryTimeout
-	originalPoll := serverConnectionRetryPoll
+	deps := defaultConnectionRetryDeps()
 	focusCallCount := 0
 	restoreCallCount := 0
-	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 123}, nil
 	}
-	focusUnityProcessForConnectionRetry = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
+	deps.focusUnityProcess = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
 		focusCallCount++
 		return func(context.Context) error {
 			restoreCallCount++
 			return nil
 		}, nil
 	}
-	serverConnectionRetryTimeout = time.Nanosecond
-	serverConnectionRetryPoll = time.Nanosecond
-	t.Cleanup(func() {
-		findRunningUnityProcessForConnectionRetry = originalFinder
-		focusUnityProcessForConnectionRetry = originalFocus
-		serverConnectionRetryTimeout = originalTimeout
-		serverConnectionRetryPoll = originalPoll
-	})
+	deps.retryTimeout = time.Nanosecond
+	deps.retryPoll = time.Nanosecond
 
 	connection := unityipc.Connection{
 		Endpoint: unityipc.Endpoint{
@@ -52,12 +43,14 @@ func TestSendWithTransientConnectionRetryReportsUnityServerNotResponding(t *test
 		ProjectRoot: t.TempDir(),
 	}
 
-	_, err := sendWithTransientConnectionRetry(
+	_, err := sendWithTransientConnectionRetryWithDeps(
 		context.Background(),
 		connection,
 		"get-logs",
 		map[string]any{},
-		nil)
+		nil,
+		0,
+		deps)
 
 	var notRespondingErr clicore.UnityServerNotRespondingError
 	if !errors.As(err, &notRespondingErr) {
@@ -75,24 +68,15 @@ func TestSendWithTransientConnectionRetryReportsUnityServerNotResponding(t *test
 func TestSendWithTransientConnectionRetryWritesFocusSuccessVibeLog(t *testing.T) {
 	enableCliVibeLog(t)
 
-	originalFinder := findRunningUnityProcessForConnectionRetry
-	originalFocus := focusUnityProcessForConnectionRetry
-	originalTimeout := serverConnectionRetryTimeout
-	originalPoll := serverConnectionRetryPoll
-	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps := defaultConnectionRetryDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 456}, nil
 	}
-	focusUnityProcessForConnectionRetry = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
+	deps.focusUnityProcess = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
 		return nil, nil
 	}
-	serverConnectionRetryTimeout = time.Nanosecond
-	serverConnectionRetryPoll = time.Nanosecond
-	t.Cleanup(func() {
-		findRunningUnityProcessForConnectionRetry = originalFinder
-		focusUnityProcessForConnectionRetry = originalFocus
-		serverConnectionRetryTimeout = originalTimeout
-		serverConnectionRetryPoll = originalPoll
-	})
+	deps.retryTimeout = time.Nanosecond
+	deps.retryPoll = time.Nanosecond
 
 	projectRoot := t.TempDir()
 	connection := unityipc.Connection{
@@ -103,12 +87,14 @@ func TestSendWithTransientConnectionRetryWritesFocusSuccessVibeLog(t *testing.T)
 		ProjectRoot: projectRoot,
 	}
 
-	_, _ = sendWithTransientConnectionRetry(
+	_, _ = sendWithTransientConnectionRetryWithDeps(
 		context.Background(),
 		connection,
 		"get-logs",
 		map[string]any{},
-		nil)
+		nil,
+		0,
+		deps)
 
 	logContent := readOnlyCliVibeLog(t, projectRoot)
 	for _, expected := range []string{
@@ -128,24 +114,15 @@ func TestSendWithTransientConnectionRetryWritesFocusSuccessVibeLog(t *testing.T)
 func TestSendWithTransientConnectionRetryWritesFocusFailureVibeLog(t *testing.T) {
 	enableCliVibeLog(t)
 
-	originalFinder := findRunningUnityProcessForConnectionRetry
-	originalFocus := focusUnityProcessForConnectionRetry
-	originalTimeout := serverConnectionRetryTimeout
-	originalPoll := serverConnectionRetryPoll
-	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps := defaultConnectionRetryDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 789}, nil
 	}
-	focusUnityProcessForConnectionRetry = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
+	deps.focusUnityProcess = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
 		return nil, fmt.Errorf("focus denied")
 	}
-	serverConnectionRetryTimeout = time.Nanosecond
-	serverConnectionRetryPoll = time.Nanosecond
-	t.Cleanup(func() {
-		findRunningUnityProcessForConnectionRetry = originalFinder
-		focusUnityProcessForConnectionRetry = originalFocus
-		serverConnectionRetryTimeout = originalTimeout
-		serverConnectionRetryPoll = originalPoll
-	})
+	deps.retryTimeout = time.Nanosecond
+	deps.retryPoll = time.Nanosecond
 
 	projectRoot := t.TempDir()
 	connection := unityipc.Connection{
@@ -156,12 +133,14 @@ func TestSendWithTransientConnectionRetryWritesFocusFailureVibeLog(t *testing.T)
 		ProjectRoot: projectRoot,
 	}
 
-	_, _ = sendWithTransientConnectionRetry(
+	_, _ = sendWithTransientConnectionRetryWithDeps(
 		context.Background(),
 		connection,
 		"compile",
 		map[string]any{},
-		nil)
+		nil,
+		0,
+		deps)
 
 	logContent := readOnlyCliVibeLog(t, projectRoot)
 	for _, expected := range []string{
@@ -180,20 +159,13 @@ func TestSendWithTransientConnectionRetryWritesFocusFailureVibeLog(t *testing.T)
 
 // Verifies process probe timeouts keep the structured server-not-responding error.
 func TestSendWithTransientConnectionRetryClassifiesProcessProbeTimeout(t *testing.T) {
-	originalFinder := findRunningUnityProcessForConnectionRetry
-	originalTimeout := serverConnectionRetryTimeout
-	originalPoll := serverConnectionRetryPoll
-	findRunningUnityProcessForConnectionRetry = func(ctx context.Context, projectRoot string) (*clicore.UnityProcess, error) {
+	deps := defaultConnectionRetryDeps()
+	deps.findRunningUnityProcess = func(ctx context.Context, projectRoot string) (*clicore.UnityProcess, error) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}
-	serverConnectionRetryTimeout = time.Nanosecond
-	serverConnectionRetryPoll = time.Nanosecond
-	t.Cleanup(func() {
-		findRunningUnityProcessForConnectionRetry = originalFinder
-		serverConnectionRetryTimeout = originalTimeout
-		serverConnectionRetryPoll = originalPoll
-	})
+	deps.retryTimeout = time.Nanosecond
+	deps.retryPoll = time.Nanosecond
 
 	connection := unityipc.Connection{
 		Endpoint: unityipc.Endpoint{
@@ -203,12 +175,14 @@ func TestSendWithTransientConnectionRetryClassifiesProcessProbeTimeout(t *testin
 		ProjectRoot: t.TempDir(),
 	}
 
-	_, err := sendWithTransientConnectionRetry(
+	_, err := sendWithTransientConnectionRetryWithDeps(
 		context.Background(),
 		connection,
 		"get-logs",
 		map[string]any{},
-		nil)
+		nil,
+		0,
+		deps)
 
 	var notRespondingErr clicore.UnityServerNotRespondingError
 	if !errors.As(err, &notRespondingErr) {
@@ -342,28 +316,23 @@ func TestConnectionRetryFocusReasonClassifiesEditorUnresponsive(t *testing.T) {
 
 // Verifies a transient process discovery miss does not suppress a later focus attempt.
 func TestConnectionRetryFocusControllerRetriesAfterProcessDiscoveryMiss(t *testing.T) {
-	originalFinder := findRunningUnityProcessForConnectionRetry
-	originalFocus := focusUnityProcessForConnectionRetry
+	deps := defaultConnectionRetryDeps()
 	findCallCount := 0
 	focusCallCount := 0
-	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		findCallCount++
 		if findCallCount == 1 {
 			return nil, nil
 		}
 		return &clicore.UnityProcess{Pid: 123}, nil
 	}
-	focusUnityProcessForConnectionRetry = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
+	deps.focusUnityProcess = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
 		focusCallCount++
 		return nil, nil
 	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForConnectionRetry = originalFinder
-		focusUnityProcessForConnectionRetry = originalFocus
-	})
 
 	connection := unityipc.Connection{ProjectRoot: t.TempDir()}
-	controller := newConnectionRetryFocusController(connection, "get-logs")
+	controller := newConnectionRetryFocusController(connection, "get-logs", deps)
 
 	controller.tryFocus(context.Background(), focusReasonMainThreadStall, errors.New("first probe missed"))
 	controller.tryFocus(context.Background(), focusReasonFinalResponseTimeout, errors.New("terminal timeout"))
@@ -382,14 +351,11 @@ func TestSendWithTransientConnectionRetryDoesNotCancelAcceptedRequestAtRetryTime
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
 	}
 
-	originalTimeout := serverConnectionRetryTimeout
+	deps := defaultConnectionRetryDeps()
 	// The retry window must be wide enough that the dial plus accepted ack always
 	// completes inside it even on a loaded CI machine, while the server delay stays
 	// well past the window so the timeout reliably fires mid-request.
-	serverConnectionRetryTimeout = 200 * time.Millisecond
-	t.Cleanup(func() {
-		serverConnectionRetryTimeout = originalTimeout
-	})
+	deps.retryTimeout = 200 * time.Millisecond
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -438,12 +404,14 @@ func TestSendWithTransientConnectionRetryDoesNotCancelAcceptedRequestAtRetryTime
 		ProjectRoot: t.TempDir(),
 	}
 
-	outcome, err := sendWithTransientConnectionRetry(
+	outcome, err := sendWithTransientConnectionRetryWithDeps(
 		context.Background(),
 		connection,
 		"compile",
 		map[string]any{},
-		nil)
+		nil,
+		0,
+		deps)
 	if err != nil {
 		t.Fatalf("accepted request should not be canceled by retry timeout: %v", err)
 	}
@@ -464,14 +432,11 @@ func TestSendWithTransientConnectionRetryKeepsRetryTimeoutBeforeAcceptedAck(t *t
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
 	}
 
-	originalTimeout := serverConnectionRetryTimeout
+	deps := defaultConnectionRetryDeps()
 	// The retry window must be wide enough that the dial and request write always
 	// complete inside it even on a loaded CI machine, while the server delay stays
 	// well past the window so the pre-accept timeout reliably fires first.
-	serverConnectionRetryTimeout = 200 * time.Millisecond
-	t.Cleanup(func() {
-		serverConnectionRetryTimeout = originalTimeout
-	})
+	deps.retryTimeout = 200 * time.Millisecond
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -513,12 +478,14 @@ func TestSendWithTransientConnectionRetryKeepsRetryTimeoutBeforeAcceptedAck(t *t
 		ProjectRoot: t.TempDir(),
 	}
 
-	outcome, err := sendWithTransientConnectionRetry(
+	outcome, err := sendWithTransientConnectionRetryWithDeps(
 		context.Background(),
 		connection,
 		"compile",
 		map[string]any{},
-		nil)
+		nil,
+		0,
+		deps)
 	if err == nil {
 		t.Fatalf("expected retry timeout before accepted ack, got result %s", outcome.Result)
 	}
@@ -539,27 +506,20 @@ func TestSendWithTransientConnectionRetryKeepsUnityFocusedAfterPreAcceptTimeout(
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
 	}
 
-	originalFinder := findRunningUnityProcessForConnectionRetry
-	originalFocus := focusUnityProcessForConnectionRetry
-	originalTimeout := serverConnectionRetryTimeout
+	deps := defaultConnectionRetryDeps()
 	focusCallCount := 0
 	restoreCallCount := 0
-	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 123}, nil
 	}
-	focusUnityProcessForConnectionRetry = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
+	deps.focusUnityProcess = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
 		focusCallCount++
 		return func(context.Context) error {
 			restoreCallCount++
 			return nil
 		}, nil
 	}
-	serverConnectionRetryTimeout = 100 * time.Millisecond
-	t.Cleanup(func() {
-		findRunningUnityProcessForConnectionRetry = originalFinder
-		focusUnityProcessForConnectionRetry = originalFocus
-		serverConnectionRetryTimeout = originalTimeout
-	})
+	deps.retryTimeout = 100 * time.Millisecond
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -595,12 +555,14 @@ func TestSendWithTransientConnectionRetryKeepsUnityFocusedAfterPreAcceptTimeout(
 		ProjectRoot: t.TempDir(),
 	}
 
-	_, err = sendWithTransientConnectionRetry(
+	_, err = sendWithTransientConnectionRetryWithDeps(
 		context.Background(),
 		connection,
 		"get-logs",
 		map[string]any{},
-		nil)
+		nil,
+		0,
+		deps)
 
 	if err == nil {
 		t.Fatal("expected pre-accept timeout")
@@ -620,11 +582,8 @@ func TestSendWithTransientConnectionRetryRetriesBusyResponses(t *testing.T) {
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
 	}
 
-	originalPoll := serverConnectionRetryPoll
-	serverConnectionRetryPoll = 5 * time.Millisecond
-	t.Cleanup(func() {
-		serverConnectionRetryPoll = originalPoll
-	})
+	deps := defaultConnectionRetryDeps()
+	deps.retryPoll = 5 * time.Millisecond
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -659,12 +618,14 @@ func TestSendWithTransientConnectionRetryRetriesBusyResponses(t *testing.T) {
 		ProjectRoot: t.TempDir(),
 	}
 
-	outcome, err := sendWithTransientConnectionRetry(
+	outcome, err := sendWithTransientConnectionRetryWithDeps(
 		context.Background(),
 		connection,
 		"get-logs",
 		map[string]any{},
-		nil)
+		nil,
+		0,
+		deps)
 	if err != nil {
 		t.Fatalf("busy response should be retried to success: %v", err)
 	}
@@ -679,29 +640,22 @@ func TestSendWithTransientConnectionRetryReturnsBusyAfterRetryWindow(t *testing.
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
 	}
 
-	originalFinder := findRunningUnityProcessForConnectionRetry
-	originalTimeout := serverConnectionRetryTimeout
-	originalPoll := serverConnectionRetryPoll
+	deps := defaultConnectionRetryDeps()
 	// The busy assertion only holds once at least one busy response lands inside the
 	// retry window. A narrow window can expire before the first dial completes on a
 	// loaded CI machine, surfacing a dial timeout instead of the busy RPC error.
-	serverConnectionRetryTimeout = 500 * time.Millisecond
-	serverConnectionRetryPoll = 5 * time.Millisecond
+	deps.retryTimeout = 500 * time.Millisecond
+	deps.retryPoll = 5 * time.Millisecond
 	// A dial cut short by the expiring window probes for a running Unity process.
 	// The dial deadline is a separate timer that can fire microseconds before
 	// retryContext reports expiry, so an instant probe would reach the busy-masking
 	// guard while retryContext.Err() is still nil and surface the dial error instead.
 	// Block until the context is done, like a real OS process scan that always
 	// outlasts those microseconds, so the busy guard sees the expired context.
-	findRunningUnityProcessForConnectionRetry = func(ctx context.Context, projectRoot string) (*clicore.UnityProcess, error) {
+	deps.findRunningUnityProcess = func(ctx context.Context, projectRoot string) (*clicore.UnityProcess, error) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}
-	t.Cleanup(func() {
-		findRunningUnityProcessForConnectionRetry = originalFinder
-		serverConnectionRetryTimeout = originalTimeout
-		serverConnectionRetryPoll = originalPoll
-	})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -739,12 +693,14 @@ func TestSendWithTransientConnectionRetryReturnsBusyAfterRetryWindow(t *testing.
 		ProjectRoot: t.TempDir(),
 	}
 
-	_, err = sendWithTransientConnectionRetry(
+	_, err = sendWithTransientConnectionRetryWithDeps(
 		context.Background(),
 		connection,
 		"get-logs",
 		map[string]any{},
-		nil)
+		nil,
+		0,
+		deps)
 	if err == nil {
 		t.Fatal("expected busy error after retry window")
 	}
@@ -762,26 +718,17 @@ func TestSendWithTransientConnectionRetryExtendsWindowWhileUnityProcessRuns(t *t
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
 	}
 
-	originalFinder := findRunningUnityProcessForConnectionRetry
-	originalFocus := focusUnityProcessForConnectionRetry
-	originalTimeout := serverConnectionRetryTimeout
-	originalPoll := serverConnectionRetryPoll
-	findRunningUnityProcessForConnectionRetry = func(context.Context, string) (*clicore.UnityProcess, error) {
+	deps := defaultConnectionRetryDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 123}, nil
 	}
-	focusUnityProcessForConnectionRetry = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
+	deps.focusUnityProcess = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
 		return func(context.Context) error { return nil }, nil
 	}
 	// Base window expires well before the server comes up; only the extended
 	// unity-alive window (base * factor) allows the late dial to succeed.
-	serverConnectionRetryTimeout = 100 * time.Millisecond
-	serverConnectionRetryPoll = 10 * time.Millisecond
-	t.Cleanup(func() {
-		findRunningUnityProcessForConnectionRetry = originalFinder
-		focusUnityProcessForConnectionRetry = originalFocus
-		serverConnectionRetryTimeout = originalTimeout
-		serverConnectionRetryPoll = originalPoll
-	})
+	deps.retryTimeout = 100 * time.Millisecond
+	deps.retryPoll = 10 * time.Millisecond
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -832,12 +779,14 @@ func TestSendWithTransientConnectionRetryExtendsWindowWhileUnityProcessRuns(t *t
 		ProjectRoot: t.TempDir(),
 	}
 
-	outcome, err := sendWithTransientConnectionRetry(
+	outcome, err := sendWithTransientConnectionRetryWithDeps(
 		context.Background(),
 		connection,
 		"get-logs",
 		map[string]any{},
-		nil)
+		nil,
+		0,
+		deps)
 	if err != nil {
 		t.Fatalf("expected success after server came back inside the extended window, got %v", err)
 	}
@@ -853,14 +802,9 @@ func TestSendWithTransientConnectionRetryKeepsBusyBoundedByBaseWindow(t *testing
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
 	}
 
-	originalTimeout := serverConnectionRetryTimeout
-	originalPoll := serverConnectionRetryPoll
-	serverConnectionRetryTimeout = 200 * time.Millisecond
-	serverConnectionRetryPoll = 10 * time.Millisecond
-	t.Cleanup(func() {
-		serverConnectionRetryTimeout = originalTimeout
-		serverConnectionRetryPoll = originalPoll
-	})
+	deps := defaultConnectionRetryDeps()
+	deps.retryTimeout = 200 * time.Millisecond
+	deps.retryPoll = 10 * time.Millisecond
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -898,12 +842,14 @@ func TestSendWithTransientConnectionRetryKeepsBusyBoundedByBaseWindow(t *testing
 	}
 
 	startedAt := time.Now()
-	_, err = sendWithTransientConnectionRetry(
+	_, err = sendWithTransientConnectionRetryWithDeps(
 		context.Background(),
 		connection,
 		"get-logs",
 		map[string]any{},
-		nil)
+		nil,
+		0,
+		deps)
 	elapsed := time.Since(startedAt)
 
 	var rpcErr *unityipc.RPCError
@@ -912,7 +858,7 @@ func TestSendWithTransientConnectionRetryKeepsBusyBoundedByBaseWindow(t *testing
 	}
 	// Generous CI margin: the assertion only needs to prove busy did not run for the
 	// full extended window (base * factor = 1200ms here).
-	if elapsed >= unityAliveRetryWindow() {
+	if elapsed >= unityAliveRetryWindow(deps) {
 		t.Fatalf("busy retries ran into the extended window: %v", elapsed)
 	}
 }
@@ -924,15 +870,10 @@ func TestSendWithTransientConnectionRetrySurfacesDispatchedFailureAfterBusy(t *t
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
 	}
 
-	originalTimeout := serverConnectionRetryTimeout
-	originalPoll := serverConnectionRetryPoll
+	deps := defaultConnectionRetryDeps()
 	retryWindow := 150 * time.Millisecond
-	serverConnectionRetryTimeout = retryWindow
-	serverConnectionRetryPoll = 5 * time.Millisecond
-	t.Cleanup(func() {
-		serverConnectionRetryTimeout = originalTimeout
-		serverConnectionRetryPoll = originalPoll
-	})
+	deps.retryTimeout = retryWindow
+	deps.retryPoll = 5 * time.Millisecond
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -985,12 +926,14 @@ func TestSendWithTransientConnectionRetrySurfacesDispatchedFailureAfterBusy(t *t
 		ProjectRoot: t.TempDir(),
 	}
 
-	_, err = sendWithTransientConnectionRetry(
+	_, err = sendWithTransientConnectionRetryWithDeps(
 		context.Background(),
 		connection,
 		"get-logs",
 		map[string]any{},
-		nil)
+		nil,
+		0,
+		deps)
 	if err == nil {
 		t.Fatal("expected the dispatched failure to surface")
 	}
