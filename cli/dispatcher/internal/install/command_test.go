@@ -31,6 +31,8 @@ func TestCommandForWindowsConfiguresUserPathAndLegacyCleanup(t *testing.T) {
 	for _, expected := range []string{
 		"[Environment]::SetEnvironmentVariable('Path', $NewUserPath, 'User')",
 		"GetExtension($CommandPath), '.exe'",
+		"$CommandContent = Get-Content -Path $CommandPath -Raw -ErrorAction SilentlyContinue",
+		"if ($null -eq $CommandContent) {\n        return $false\n    }",
 		"foreach ($ShimName in @('uloop', 'uloop.cmd', 'uloop.ps1'))",
 		"Invoke-AllLegacyNpmPackageRemoval -ExpectedUloopPath $ExpectedUloopPath",
 		"$NpmArgs = @('uninstall', '-g', '--prefix', $LegacyPrefix, 'uloop-cli')",
@@ -100,6 +102,7 @@ func TestCommandForMacConfiguresShellPathAndLegacyCleanup(t *testing.T) {
 		"# >>> uloop PATH >>>",
 		"# <<< uloop PATH <<<",
 		"fish_add_path --move",
+		`tmp_path=$(mktemp "$profile_dir/.uloop_path.XXXXXX" 2>/dev/null || true)`,
 		"npm uninstall -g --prefix",
 		"npm uninstall -g uloop-cli",
 		"report_path_shadowing",
@@ -116,6 +119,40 @@ func TestCommandForMacConfiguresShellPathAndLegacyCleanup(t *testing.T) {
 	}
 	if command.TargetPath != "/Users/ExampleUser/.local/bin/uloop" {
 		t.Fatalf("target path mismatch: %s", command.TargetPath)
+	}
+}
+
+func TestWindowsInstallScriptReplacesTemplateValues(t *testing.T) {
+	// Verifies Windows setup templates cannot ship with unresolved placeholders.
+	installDir := `C:\Temp\uloop's bin`
+	targetPath := `C:\Temp\uloop's bin\uloop.exe`
+	setupScript := windowsInstallScript(installDir, targetPath)
+
+	if strings.Contains(setupScript, "{{") {
+		t.Fatalf("setup script contains unresolved template placeholder: %s", setupScript)
+	}
+	if !strings.Contains(setupScript, `$InstallDir = 'C:\Temp\uloop''s bin'`) {
+		t.Fatalf("setup script does not quote install dir correctly: %s", setupScript)
+	}
+	if !strings.Contains(setupScript, `$ExpectedUloopPath = 'C:\Temp\uloop''s bin\uloop.exe'`) {
+		t.Fatalf("setup script does not quote target path correctly: %s", setupScript)
+	}
+}
+
+func TestPosixInstallScriptReplacesTemplateValues(t *testing.T) {
+	// Verifies POSIX setup templates cannot ship with unresolved placeholders.
+	installDir := "/tmp/uloop's bin"
+	targetPath := "/tmp/uloop's bin/uloop"
+	setupScript := posixInstallScript(installDir, targetPath)
+
+	if strings.Contains(setupScript, "{{") {
+		t.Fatalf("setup script contains unresolved template placeholder: %s", setupScript)
+	}
+	if !strings.Contains(setupScript, `InstallDir='/tmp/uloop'"'"'s bin'`) {
+		t.Fatalf("setup script does not quote install dir correctly: %s", setupScript)
+	}
+	if !strings.Contains(setupScript, `ExpectedUloopPath='/tmp/uloop'"'"'s bin/uloop'`) {
+		t.Fatalf("setup script does not quote target path correctly: %s", setupScript)
 	}
 }
 
@@ -434,8 +471,8 @@ func TestPosixInstallScriptFailsWhenSymlinkProfileTargetCannotBeWritten(t *testi
 	}
 }
 
-func TestPosixInstallScriptFailsWhenShellProfileIsUnknown(t *testing.T) {
-	// Verifies macOS shell setup reports manual PATH setup when no profile can be updated.
+func TestPosixInstallScriptSucceedsWhenShellProfileIsUnknown(t *testing.T) {
+	// Verifies macOS shell setup treats manual PATH guidance as non-fatal.
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell setup is not available on Windows")
 	}
@@ -456,12 +493,12 @@ func TestPosixInstallScriptFailsWhenShellProfileIsUnknown(t *testing.T) {
 		"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
 	}
 	output, err := process.CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected POSIX setup failure:\n%s", output)
+	if err != nil {
+		t.Fatalf("expected POSIX setup success:\n%s", output)
 	}
 	outputText := string(output)
 	if !strings.Contains(outputText, "Add this directory to PATH in your shell profile:") {
-		t.Fatalf("setup failure should include manual PATH guidance:\n%s", outputText)
+		t.Fatalf("setup output should include manual PATH guidance:\n%s", outputText)
 	}
 	if !strings.Contains(outputText, installDir) {
 		t.Fatalf("manual PATH guidance should include install dir:\n%s", outputText)

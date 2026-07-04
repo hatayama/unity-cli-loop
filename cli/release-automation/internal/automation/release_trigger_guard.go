@@ -200,7 +200,9 @@ func isCommonGoSourceUnderPackageRoots(file string, packageRoots []string) bool 
 }
 
 func isDispatcherInstallerScript(file string) bool {
-	return file == "scripts/install.sh" || file == "scripts/install.ps1"
+	return file == "scripts/install.sh" ||
+		file == "scripts/install.ps1" ||
+		strings.HasPrefix(file, "cli/dispatcher/internal/install/scripts/")
 }
 
 func anyFileUnderRoot(files []string, root string) bool {
