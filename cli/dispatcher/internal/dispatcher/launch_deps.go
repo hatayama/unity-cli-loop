@@ -5,10 +5,11 @@ import (
 	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
 type launchDeps struct {
-	findRunningUnityProcess    func(context.Context, string) (*clicore.UnityProcess, error)
+	findRunningUnityProcess    func(context.Context, string) (*unityprocess.UnityProcess, error)
 	focusUnityProcess          func(context.Context, int) error
 	killUnityProcess           func(int) error
 	resolveUnityExecutablePath func(string) (string, error)
@@ -20,8 +21,8 @@ type launchDeps struct {
 
 func defaultLaunchDeps() launchDeps {
 	return launchDeps{
-		findRunningUnityProcess:    clicore.FindRunningUnityProcess,
-		focusUnityProcess:          clicore.FocusUnityProcess,
+		findRunningUnityProcess:    unityprocess.FindRunningUnityProcess,
+		focusUnityProcess:          unityprocess.FocusUnityProcess,
 		killUnityProcess:           killUnityProcess,
 		resolveUnityExecutablePath: resolveUnityExecutablePath,
 		waitForUnityProcessExit:    waitForUnityProcessExit,

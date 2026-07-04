@@ -10,6 +10,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
 const (
@@ -19,16 +20,16 @@ const (
 )
 
 type connectionRetryDeps struct {
-	findRunningUnityProcess func(context.Context, string) (*clicore.UnityProcess, error)
-	focusUnityProcess       func(context.Context, int) (clicore.RestoreFocusFunc, error)
+	findRunningUnityProcess func(context.Context, string) (*unityprocess.UnityProcess, error)
+	focusUnityProcess       func(context.Context, int) (unityprocess.RestoreFocusFunc, error)
 	retryTimeout            time.Duration
 	retryPoll               time.Duration
 }
 
 func defaultConnectionRetryDeps() connectionRetryDeps {
 	return connectionRetryDeps{
-		findRunningUnityProcess: clicore.FindRunningUnityProcess,
-		focusUnityProcess:       clicore.FocusUnityProcessWithRestore,
+		findRunningUnityProcess: unityprocess.FindRunningUnityProcess,
+		focusUnityProcess:       unityprocess.FocusUnityProcessWithRestore,
 		retryTimeout:            serverConnectionRetryDefaultTimeout,
 		retryPoll:               serverConnectionRetryDefaultPoll,
 	}
@@ -61,7 +62,7 @@ type connectionRetryFocusController struct {
 	method       string
 	deps         connectionRetryDeps
 	attempted    bool
-	restoreFocus clicore.RestoreFocusFunc
+	restoreFocus unityprocess.RestoreFocusFunc
 }
 
 func newConnectionRetryFocusController(connection unityipc.Connection, method string, deps connectionRetryDeps) *connectionRetryFocusController {

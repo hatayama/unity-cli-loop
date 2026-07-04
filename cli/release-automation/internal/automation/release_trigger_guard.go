@@ -157,6 +157,7 @@ var sharedCommonPackageRoots = []string{
 	"cli/common/skills/",
 	"cli/common/tools/",
 	"cli/common/unityipc/",
+	"cli/common/unityprocess/",
 }
 
 var dispatcherOnlyCommonPackageRoots = []string{
@@ -182,8 +183,8 @@ func isCommonGoSourceUnderPackageRoots(file string, packageRoots []string) bool 
 	}
 	// JSON files under common (contract.json, default-tools.json) are
 	// release-please stamp targets rather than binary inputs, and test files
-	// never ship, so only non-test Go sources count as release inputs.
-	if !strings.HasSuffix(file, ".go") || strings.HasSuffix(file, "_test.go") {
+	// never ship, so only code and embedded runtime scripts count as release inputs.
+	if strings.HasSuffix(file, "_test.go") || (!strings.HasSuffix(file, ".go") && !strings.HasSuffix(file, ".ps1")) {
 		return false
 	}
 	for _, packageRoot := range packageRoots {
