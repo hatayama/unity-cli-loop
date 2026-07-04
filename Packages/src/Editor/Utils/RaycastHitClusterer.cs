@@ -150,6 +150,8 @@ namespace io.github.hatayama.uLoopMCP
         public int ClusterKey { get; set; }
         public float InputX { get; set; }
         public float InputY { get; set; }
+        public int Row { get; set; }
+        public int Column { get; set; }
     }
 
     /// <summary>

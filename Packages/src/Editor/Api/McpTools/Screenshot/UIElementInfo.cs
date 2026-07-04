@@ -19,5 +19,8 @@ namespace io.github.hatayama.uLoopMCP
         public string Label { get; set; } = "";
         public int SortingOrder { get; set; }
         public int SiblingIndex { get; set; }
+
+        internal List<RaycastOutlineSegment> RaycastOutlineSegments { get; set; } =
+            new List<RaycastOutlineSegment>();
     }
 }

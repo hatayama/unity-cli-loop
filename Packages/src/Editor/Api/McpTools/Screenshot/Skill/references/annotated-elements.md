@@ -44,9 +44,9 @@ For `PhysicsCollider` entries, `SimX/SimY` is a real sampled raycast hit nearest
 
 `--raycast-layer-mask` filters by the requested physics layers and Camera.main.cullingMask. A layer that is requested but hidden from the active camera is treated as not visible and will not produce `PhysicsCollider` entries.
 
-For clustered `PhysicsCollider` entries, points where the frontmost EventSystem hit comes from a `GraphicRaycaster` UI element are treated as covered by UI. This includes world-space Canvas UI. PhysicsRaycaster and other non-uGUI hits are not treated as UI occlusion. Bounds and `SimX/SimY` are both derived from the remaining reachable samples; if every sampled hit in that collider cluster is covered, the collider is omitted from `AnnotatedElements`.
+For clustered `PhysicsCollider` entries, points where the frontmost EventSystem hit comes from a `GraphicRaycaster` UI element are treated as covered by UI. This includes world-space Canvas UI. PhysicsRaycaster and other non-uGUI hits are not treated as UI occlusion. Bounds, screenshot outlines, and `SimX/SimY` are derived from the remaining reachable samples; if every sampled hit in that collider cluster is covered, the collider is omitted from `AnnotatedElements`.
 
-`PhysicsCollider` bounds expand each reachable sample by half the dense raycast sampling step in X and Y, then clamp the result to the captured Game View area. This makes the frame approximate the covered raycast cells instead of shrinking to the sample centers. It may extend up to half a sample step past the visible collider edge, and it still does not guarantee that every interior point is clickable.
+`PhysicsCollider` bounds expand each reachable sample by half the dense raycast sampling step in X and Y, then clamp the result to the captured Game View area. The screenshot overlay draws only the outer edges of those reachable sample cells, so angled, L-shaped, separated, and partially UI-covered hit regions do not become one large rectangle. `BoundsMinX/Y` and `BoundsMaxX/Y` are still an axis-aligned bbox for JSON consumers, may extend up to half a sample step past the visible collider edge, and do not guarantee that every interior point is clickable.
 
 The mouse input tools convert internally to Unity Input System coordinates:
 
