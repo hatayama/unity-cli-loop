@@ -22,16 +22,27 @@ const (
 
 const executeDynamicCodeReadinessProbe = `return "Unity CLI Loop dynamic code prewarm";`
 
-var (
-	findRunningUnityProcessForReadiness    = FindRunningUnityProcess
-	probeToolReadinessSequenceForReadiness = ProbeToolReadinessSequence
-)
+type toolReadinessDeps struct {
+	findRunningUnityProcess    func(context.Context, string) (*UnityProcess, error)
+	probeToolReadinessSequence func(context.Context, string) error
+}
 
 func WaitForToolReadiness(ctx context.Context, projectRoot string) error {
 	return WaitForToolReadinessWithTimeout(ctx, projectRoot, ToolReadinessTimeout)
 }
 
 func WaitForToolReadinessWithTimeout(ctx context.Context, projectRoot string, timeout time.Duration) error {
+	return waitForToolReadinessWithDeps(ctx, projectRoot, timeout, defaultToolReadinessDeps())
+}
+
+func defaultToolReadinessDeps() toolReadinessDeps {
+	return toolReadinessDeps{
+		findRunningUnityProcess:    FindRunningUnityProcess,
+		probeToolReadinessSequence: ProbeToolReadinessSequence,
+	}
+}
+
+func waitForToolReadinessWithDeps(ctx context.Context, projectRoot string, timeout time.Duration, deps toolReadinessDeps) error {
 	// Why: launch and compile can both recreate Unity's project IPC server; a real
 	// tool request proves the user-visible command will not be the cold transport probe.
 	timeoutContext, cancel := context.WithTimeout(ctx, timeout)
@@ -41,7 +52,7 @@ func WaitForToolReadinessWithTimeout(ctx context.Context, projectRoot string, ti
 	ticker := time.NewTicker(ToolReadinessPoll)
 	defer ticker.Stop()
 	for {
-		if err := probeToolReadinessSequenceForReadiness(timeoutContext, projectRoot); err == nil {
+		if err := deps.probeToolReadinessSequence(timeoutContext, projectRoot); err == nil {
 			return nil
 		} else {
 			if IsReadinessCLIUpdateRequiredError(err) {
@@ -52,17 +63,21 @@ func WaitForToolReadinessWithTimeout(ctx context.Context, projectRoot string, ti
 
 		select {
 		case <-timeoutContext.Done():
-			return toolReadinessDoneError(ctx, projectRoot, lastErr)
+			return toolReadinessDoneErrorWithDeps(ctx, projectRoot, lastErr, deps)
 		case <-ticker.C:
 		}
 	}
 }
 
 func toolReadinessDoneError(ctx context.Context, projectRoot string, cause error) error {
+	return toolReadinessDoneErrorWithDeps(ctx, projectRoot, cause, defaultToolReadinessDeps())
+}
+
+func toolReadinessDoneErrorWithDeps(ctx context.Context, projectRoot string, cause error, deps toolReadinessDeps) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	runningProcess, err := findRunningUnityProcessForReadiness(context.Background(), projectRoot)
+	runningProcess, err := deps.findRunningUnityProcess(context.Background(), projectRoot)
 	if err == nil && runningProcess != nil {
 		return UnityServerNotRespondingError{
 			ProjectRoot: projectRoot,
