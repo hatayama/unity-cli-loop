@@ -19,6 +19,7 @@ list_shared_common_inputs() {
     cli/common/go.sum \
     'cli/common/clicontract/' \
     'cli/common/clicore/' \
+    'cli/common/errors/' \
     'cli/common/project/' \
     'cli/common/skills/' \
     'cli/common/tools/' \
