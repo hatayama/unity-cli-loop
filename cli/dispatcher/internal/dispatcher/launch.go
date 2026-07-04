@@ -29,17 +29,6 @@ const (
 	unityLockfileName        = "UnityLockfile"
 )
 
-var (
-	findRunningUnityProcessForLaunch    = clicore.FindRunningUnityProcess
-	focusUnityProcessForLaunch          = clicore.FocusUnityProcess
-	killUnityProcessForLaunch           = killUnityProcess
-	resolveUnityExecutablePathForLaunch = resolveUnityExecutablePath
-	waitForUnityProcessExitForLaunch    = waitForUnityProcessExit
-	waitForUnityStartupMarkerForLaunch  = waitForUnityStartupMarkerOrTimeout
-	waitForToolReadinessForLaunch       = clicore.WaitForToolReadinessWithTimeout
-	probeProjectIpcForLaunchFallback    = clicore.ProbeToolReadinessSequence
-)
-
 var editorVersionPattern = regexp.MustCompile(`(?m)^m_EditorVersion:\s*(.+)$`)
 
 type launchOptions struct {
@@ -52,13 +41,14 @@ type launchOptions struct {
 	maxDepth       int
 }
 
-func tryHandleLaunchRequest(
+func tryHandleLaunchRequestWithDeps(
 	ctx context.Context,
 	args []string,
 	startPath string,
 	globalProjectPath string,
 	stdout io.Writer,
 	stderr io.Writer,
+	deps launchDeps,
 ) (bool, int) {
 	if len(args) == 0 || args[0] != clicore.LaunchCommandName {
 		return false, 0
@@ -74,7 +64,7 @@ func tryHandleLaunchRequest(
 		return true, 1
 	}
 
-	exitCode := runLaunch(ctx, options, startPath, stdout, stderr)
+	exitCode := runLaunchWithDeps(ctx, options, startPath, stdout, stderr, deps)
 	return true, exitCode
 }
 
@@ -96,6 +86,10 @@ func parseLaunchOptions(args []string, globalProjectPath string) (launchOptions,
 }
 
 func runLaunch(ctx context.Context, options launchOptions, startPath string, stdout io.Writer, stderr io.Writer) int {
+	return runLaunchWithDeps(ctx, options, startPath, stdout, stderr, defaultLaunchDeps())
+}
+
+func runLaunchWithDeps(ctx context.Context, options launchOptions, startPath string, stdout io.Writer, stderr io.Writer, deps launchDeps) int {
 	writeLaunchProjectSearch(stdout, options, startPath)
 
 	projectRoot, err := resolveLaunchProjectRoot(startPath, options)
@@ -108,13 +102,13 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 		return 1
 	}
 
-	runningProcess, handled, code := findLaunchRunningProcess(ctx, options, projectRoot, stdout, stderr)
+	runningProcess, handled, code := findLaunchRunningProcess(ctx, options, projectRoot, stdout, stderr, deps)
 	if handled {
 		return code
 	}
 
 	if runningProcess != nil {
-		if handled, code := handleExistingLaunchProcess(ctx, options, projectRoot, runningProcess, stdout, stderr); handled {
+		if handled, code := handleExistingLaunchProcess(ctx, options, projectRoot, runningProcess, stdout, stderr, deps); handled {
 			return code
 		}
 	}
@@ -123,7 +117,7 @@ func runLaunch(ctx context.Context, options launchOptions, startPath string, std
 		return writeLaunchQuitResponse(stdout, stderr, projectRoot, nil, launchNoProcessMessage)
 	}
 
-	return startUnityAndWaitForReadiness(ctx, options, projectRoot, runningProcess, stdout, stderr)
+	return startUnityAndWaitForReadiness(ctx, options, projectRoot, runningProcess, stdout, stderr, deps)
 }
 
 func writeLaunchProjectSearch(stdout io.Writer, options launchOptions, startPath string) {
@@ -154,15 +148,16 @@ func findLaunchRunningProcess(
 	projectRoot string,
 	stdout io.Writer,
 	stderr io.Writer,
+	deps launchDeps,
 ) (*clicore.UnityProcess, bool, int) {
-	runningProcess, err := findRunningUnityProcessForLaunch(ctx, projectRoot)
+	runningProcess, err := deps.findRunningUnityProcess(ctx, projectRoot)
 	if err == nil {
 		return runningProcess, false, 0
 	}
 	// Sandboxes can block the process scan (e.g. /bin/ps). A responding project IPC
 	// proves Unity is running, so plain launch must not fail on the scan alone.
 	// Restart and quit still fail because they need a process id to kill.
-	if !options.restart && !options.quit && probeProjectIpcForLaunchFallback(ctx, projectRoot) == nil {
+	if !options.restart && !options.quit && deps.probeProjectIpcFallback(ctx, projectRoot) == nil {
 		return nil, true, writeDetectionFallbackLaunchReadyResponse(stdout, stderr, projectRoot, err)
 	}
 	clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
@@ -176,19 +171,20 @@ func handleExistingLaunchProcess(
 	runningProcess *clicore.UnityProcess,
 	stdout io.Writer,
 	stderr io.Writer,
+	deps launchDeps,
 ) (bool, int) {
 	if !options.restart && !options.quit {
 		if options.editorVersion != "" {
 			clicore.WriteClassifiedError(stderr, launchEditorVersionRequiresRestartError(options.editorVersion), clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 			return true, 1
 		}
-		return true, waitForExistingLaunchReadiness(ctx, projectRoot, runningProcess.Pid, stdout, stderr)
+		return true, waitForExistingLaunchReadiness(ctx, projectRoot, runningProcess.Pid, stdout, stderr, deps)
 	}
-	if err := killUnityProcessForLaunch(runningProcess.Pid); err != nil {
+	if err := deps.killUnityProcess(runningProcess.Pid); err != nil {
 		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return true, 1
 	}
-	if err := waitForUnityProcessExitForLaunch(ctx, projectRoot, runningProcess.Pid, launchProcessExitPoll, launchProcessExitTimeout); err != nil {
+	if err := deps.waitForUnityProcessExit(ctx, projectRoot, runningProcess.Pid, launchProcessExitPoll, launchProcessExitTimeout); err != nil {
 		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return true, 1
 	}
@@ -210,12 +206,12 @@ func launchEditorVersionRequiresRestartError(editorVersion string) error {
 	}
 }
 
-func waitForExistingLaunchReadiness(ctx context.Context, projectRoot string, pid int, stdout io.Writer, stderr io.Writer) int {
-	logLaunchExistingFocus(ctx, projectRoot, pid)
+func waitForExistingLaunchReadiness(ctx context.Context, projectRoot string, pid int, stdout io.Writer, stderr io.Writer, deps launchDeps) int {
+	logLaunchExistingFocusWithDeps(ctx, projectRoot, pid, deps)
 	spinner := clicore.NewLaunchSpinner(stdout, stderr)
 	defer spinner.Stop()
 	writeLaunchReadinessWait(stdout, spinner)
-	if err := waitForLaunchReadiness(ctx, projectRoot); err != nil {
+	if err := waitForLaunchReadinessWithDeps(ctx, projectRoot, deps); err != nil {
 		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
@@ -230,6 +226,7 @@ func startUnityAndWaitForReadiness(
 	runningProcess *clicore.UnityProcess,
 	stdout io.Writer,
 	stderr io.Writer,
+	deps launchDeps,
 ) int {
 	removedStaleTemp, err := cleanStaleUnityTemp(projectRoot)
 	if err != nil {
@@ -250,7 +247,7 @@ func startUnityAndWaitForReadiness(
 		return 1
 	}
 
-	unityPath, err := resolveUnityExecutablePathForLaunch(unityVersion)
+	unityPath, err := deps.resolveUnityExecutablePath(unityVersion)
 	if err != nil {
 		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
@@ -274,12 +271,12 @@ func startUnityAndWaitForReadiness(
 		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
-	if err := waitForUnityStartupMarkerForLaunch(ctx, unityLockfilePath(projectRoot), launchLockfilePoll, launchLockfileTimeout); err != nil {
+	if err := deps.waitForUnityStartupMarker(ctx, unityLockfilePath(projectRoot), launchLockfilePoll, launchLockfileTimeout); err != nil {
 		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
 	writeLaunchReadinessWait(stdout, spinner)
-	if err := waitForLaunchReadiness(ctx, projectRoot); err != nil {
+	if err := waitForLaunchReadinessWithDeps(ctx, projectRoot, deps); err != nil {
 		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
@@ -320,6 +317,10 @@ func cleanStaleUnityTemp(projectRoot string) (bool, error) {
 }
 
 func waitForUnityProcessExit(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration) error {
+	return waitForUnityProcessExitWithDeps(ctx, projectRoot, pid, pollInterval, timeout, defaultLaunchDeps())
+}
+
+func waitForUnityProcessExitWithDeps(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration, deps launchDeps) error {
 	timeoutContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	timeoutError := func() error {
@@ -337,7 +338,7 @@ func waitForUnityProcessExit(ctx context.Context, projectRoot string, pid int, p
 	defer ticker.Stop()
 
 	for {
-		runningProcess, err := findRunningUnityProcessForLaunch(timeoutContext, projectRoot)
+		runningProcess, err := deps.findRunningUnityProcess(timeoutContext, projectRoot)
 		if err != nil {
 			if timeoutContext.Err() != nil {
 				return timeoutError()
