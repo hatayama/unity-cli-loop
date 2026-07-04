@@ -10,12 +10,28 @@ import (
 
 const (
 	manifestFileName = "manifest.json"
+	packageFileName  = "package.json"
 	packageName      = "io.github.hatayama.uloopmcp"
 	packageNameAlias = "io.github.hatayama.uLoopMCP"
 )
 
 type manifestData struct {
 	Dependencies map[string]string `json:"dependencies"`
+}
+
+type packageData struct {
+	Name string `json:"name"`
+}
+
+// PackageIdentity identifies a Unity package independently from where it was found.
+type PackageIdentity struct {
+	Name string
+}
+
+// PackageSearchResult is a package root candidate discovered from project, manifest, or cache state.
+type PackageSearchResult struct {
+	Identity PackageIdentity
+	Root     string
 }
 
 func FindEditorFolders(basePath string, maxDepth int) []string {
@@ -46,55 +62,108 @@ func FindEditorFolders(basePath string, maxDepth int) []string {
 	return editorFolders
 }
 
-func enumerateDirectProjectPackageRoots(projectRoot string) []string {
+func EnumeratePackageSearchResults(projectRoot string) []PackageSearchResult {
+	results := []PackageSearchResult{}
+	seen := map[string]bool{}
+	addResult := func(result PackageSearchResult) {
+		if result.Root == "" || result.Identity.Name == "" {
+			return
+		}
+		absoluteRoot, err := filepath.Abs(result.Root)
+		if err != nil {
+			return
+		}
+		key := strings.ToLower(result.Identity.Name) + "\n" + absoluteRoot
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		result.Root = absoluteRoot
+		results = append(results, result)
+	}
+
+	for _, result := range enumerateDirectProjectPackageResults(projectRoot) {
+		addResult(result)
+	}
+	for _, result := range enumerateManifestLocalPackageResults(projectRoot) {
+		addResult(result)
+	}
+	for _, result := range enumeratePackageCacheResults(projectRoot) {
+		addResult(result)
+	}
+	for _, result := range enumerateUnityCliLoopPackageCacheFallbackResults(projectRoot) {
+		addResult(result)
+	}
+	return results
+}
+
+func FindUnityCliLoopPackage(projectRoot string) (PackageSearchResult, bool) {
+	bestResult := PackageSearchResult{}
+	bestPriority := 0
+	found := false
+	for _, result := range EnumeratePackageSearchResults(projectRoot) {
+		if !isTargetPackageIdentity(result.Identity) {
+			continue
+		}
+		resolvedRoot := resolvePackageRootCandidate(result.Root)
+		if resolvedRoot == "" {
+			continue
+		}
+		result.Root = resolvedRoot
+		priority := unityCliLoopPackagePriority(projectRoot, resolvedRoot)
+		if !found || priority < bestPriority || priority == bestPriority && result.Root < bestResult.Root {
+			bestResult = result
+			bestPriority = priority
+			found = true
+		}
+	}
+	return bestResult, found
+}
+
+func enumerateDirectProjectPackageResults(projectRoot string) []PackageSearchResult {
 	packagesRoot := filepath.Join(projectRoot, "Packages")
 	entries, err := os.ReadDir(packagesRoot)
 	if err != nil {
-		return []string{}
+		return []PackageSearchResult{}
 	}
-	packageRoots := []string{}
+	results := []PackageSearchResult{}
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-		packageRoots = append(packageRoots, resolveSkillSearchRootCandidate(filepath.Join(packagesRoot, entry.Name())))
+		root := resolveSkillSearchRootCandidate(filepath.Join(packagesRoot, entry.Name()))
+		identity := resolvePackageIdentity(root, entry.Name())
+		results = append(results, PackageSearchResult{Identity: identity, Root: root})
 	}
-	sort.Strings(packageRoots)
-	return packageRoots
+	sortPackageSearchResults(results)
+	return results
 }
 
-func resolveManifestLocalPackageRoots(projectRoot string) []string {
-	return resolveManifestLocalPackageRootsMatching(projectRoot, nil)
-}
-
-func resolveTargetManifestLocalPackageRoots(projectRoot string) []string {
-	return resolveManifestLocalPackageRootsMatching(projectRoot, isTargetManifestPackageName)
-}
-
-func resolveManifestLocalPackageRootsMatching(projectRoot string, includeDependency func(string) bool) []string {
+func enumerateManifestLocalPackageResults(projectRoot string) []PackageSearchResult {
 	dependencies := readManifestDependencies(projectRoot)
 	if len(dependencies) == 0 {
-		return []string{}
+		return []PackageSearchResult{}
 	}
-	packageRoots := []string{}
+	results := []PackageSearchResult{}
 	for dependencyName, dependencyValue := range dependencies {
-		if includeDependency != nil && !includeDependency(dependencyName) {
-			continue
-		}
 		localPath := resolveLocalDependencyPath(dependencyValue, projectRoot)
 		if localPath == "" {
 			continue
 		}
-		packageRoots = append(packageRoots, resolveSkillSearchRootCandidate(localPath))
+		root := resolveSkillSearchRootCandidate(localPath)
+		results = append(results, PackageSearchResult{
+			Identity: PackageIdentity{Name: dependencyName},
+			Root:     root,
+		})
 	}
-	sort.Strings(packageRoots)
-	return packageRoots
+	sortPackageSearchResults(results)
+	return results
 }
 
-func resolveDependencyPackageCacheRoots(projectRoot string) []string {
+func enumeratePackageCacheResults(projectRoot string) []PackageSearchResult {
 	dependencies := readManifestDependencies(projectRoot)
 	if len(dependencies) == 0 {
-		return []string{}
+		return []PackageSearchResult{}
 	}
 	dependencyNames := map[string]bool{}
 	for dependencyName := range dependencies {
@@ -103,9 +172,9 @@ func resolveDependencyPackageCacheRoots(projectRoot string) []string {
 	packageCacheDir := filepath.Join(projectRoot, "Library", "PackageCache")
 	entries, err := os.ReadDir(packageCacheDir)
 	if err != nil {
-		return []string{}
+		return []PackageSearchResult{}
 	}
-	packageRoots := []string{}
+	results := []PackageSearchResult{}
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -117,47 +186,43 @@ func resolveDependencyPackageCacheRoots(projectRoot string) []string {
 		if !dependencyNames[strings.ToLower(dependencyName)] {
 			continue
 		}
-		packageRoots = append(packageRoots, resolveSkillSearchRootCandidate(filepath.Join(packageCacheDir, entry.Name())))
+		root := resolveSkillSearchRootCandidate(filepath.Join(packageCacheDir, entry.Name()))
+		results = append(results, PackageSearchResult{
+			Identity: PackageIdentity{Name: dependencyName},
+			Root:     root,
+		})
 	}
-	sort.Strings(packageRoots)
-	return packageRoots
+	sortPackageSearchResults(results)
+	return results
 }
 
-func ResolvePackageRoot(projectRoot string) string {
-	candidates := []string{
-		filepath.Join(projectRoot, "Packages", "src"),
-		filepath.Join(projectRoot, "Packages", packageName),
-		filepath.Join(projectRoot, "Packages", packageNameAlias),
-	}
-	for _, candidate := range candidates {
-		if resolvedRoot := resolvePackageRootCandidate(candidate); resolvedRoot != "" {
-			return resolvedRoot
-		}
-	}
-	for _, candidate := range resolveTargetManifestLocalPackageRoots(projectRoot) {
-		if resolvedRoot := resolvePackageRootCandidate(candidate); resolvedRoot != "" {
-			return resolvedRoot
-		}
-	}
-
-	return resolvePackageCacheRoot(projectRoot)
-}
-
-func resolvePackageCacheRoot(projectRoot string) string {
+func enumerateUnityCliLoopPackageCacheFallbackResults(projectRoot string) []PackageSearchResult {
 	packageCacheDir := filepath.Join(projectRoot, "Library", "PackageCache")
 	entries, err := os.ReadDir(packageCacheDir)
 	if err != nil {
-		return ""
+		return []PackageSearchResult{}
 	}
+	results := []PackageSearchResult{}
 	for _, entry := range entries {
 		if !entry.IsDir() || !isTargetPackageCacheDir(entry.Name()) {
 			continue
 		}
-		if resolvedRoot := resolvePackageRootCandidate(filepath.Join(packageCacheDir, entry.Name())); resolvedRoot != "" {
-			return resolvedRoot
-		}
+		root := resolveSkillSearchRootCandidate(filepath.Join(packageCacheDir, entry.Name()))
+		results = append(results, PackageSearchResult{
+			Identity: PackageIdentity{Name: packageIdentityNameFromCacheDir(entry.Name())},
+			Root:     root,
+		})
 	}
-	return ""
+	sortPackageSearchResults(results)
+	return results
+}
+
+func ResolvePackageRoot(projectRoot string) string {
+	result, ok := FindUnityCliLoopPackage(projectRoot)
+	if !ok {
+		return ""
+	}
+	return result.Root
 }
 
 func resolvePackageRootCandidate(candidate string) string {
@@ -182,6 +247,20 @@ func resolveSkillSearchRootCandidate(candidate string) string {
 		return nestedRoot
 	}
 	return candidate
+}
+
+func resolvePackageIdentity(packageRoot string, fallbackName string) PackageIdentity {
+	content, err := os.ReadFile(filepath.Join(packageRoot, packageFileName))
+	if err == nil {
+		packageManifest := packageData{}
+		if json.Unmarshal(content, &packageManifest) == nil && packageManifest.Name != "" {
+			return PackageIdentity(packageManifest)
+		}
+	}
+	if resolvePackageRootCandidate(packageRoot) != "" && strings.EqualFold(fallbackName, "src") {
+		return PackageIdentity{Name: packageName}
+	}
+	return PackageIdentity{Name: fallbackName}
 }
 
 func readManifestDependencies(projectRoot string) map[string]string {
@@ -227,8 +306,50 @@ func isTargetPackageCacheDir(dirName string) bool {
 		strings.HasPrefix(normalizedName, strings.ToLower(packageNameAlias)+"@")
 }
 
-func isTargetManifestPackageName(dependencyName string) bool {
-	normalizedName := strings.ToLower(dependencyName)
+func isTargetPackageIdentity(identity PackageIdentity) bool {
+	normalizedName := strings.ToLower(identity.Name)
 	return normalizedName == strings.ToLower(packageName) ||
 		normalizedName == strings.ToLower(packageNameAlias)
+}
+
+func packageIdentityNameFromCacheDir(dirName string) string {
+	if separatorIndex := strings.Index(dirName, "@"); separatorIndex >= 0 {
+		return dirName[:separatorIndex]
+	}
+	return dirName
+}
+
+func sortPackageSearchResults(results []PackageSearchResult) {
+	sort.Slice(results, func(left int, right int) bool {
+		if results[left].Root == results[right].Root {
+			return results[left].Identity.Name < results[right].Identity.Name
+		}
+		return results[left].Root < results[right].Root
+	})
+}
+
+func unityCliLoopPackagePriority(projectRoot string, packageRoot string) int {
+	priorityCandidates := []string{
+		filepath.Join(projectRoot, "Packages", "src"),
+		filepath.Join(projectRoot, "Packages", packageName),
+		filepath.Join(projectRoot, "Packages", packageNameAlias),
+	}
+	normalizedRoot := normalizedAbsolutePath(packageRoot)
+	for index, candidate := range priorityCandidates {
+		if normalizedRoot == normalizedAbsolutePath(candidate) {
+			return index
+		}
+	}
+	if strings.Contains(normalizedRoot, string(filepath.Separator)+"Library"+string(filepath.Separator)+"PackageCache"+string(filepath.Separator)) {
+		return 20
+	}
+	return 10
+}
+
+func normalizedAbsolutePath(path string) string {
+	absolutePath, err := filepath.Abs(path)
+	if err != nil {
+		return filepath.Clean(path)
+	}
+	return filepath.Clean(absolutePath)
 }

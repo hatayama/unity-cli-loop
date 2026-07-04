@@ -1,6 +1,7 @@
 package clicore
 
 import (
+	"github.com/hatayama/unity-cli-loop/common/skillscan"
 	"github.com/hatayama/unity-cli-loop/common/tools"
 )
 
@@ -17,11 +18,11 @@ type (
 )
 
 func LoadTools(projectRoot string) (ToolsCache, error) {
-	return tools.Load(projectRoot, collectInternalSkillToolNames(projectRoot))
+	return tools.Load(projectRoot, skillscan.CollectInternalSkillToolNames(projectRoot))
 }
 
 func LoadProjectToolCache(projectRoot string) (ToolsCache, bool) {
-	return tools.LoadProjectCache(projectRoot, collectInternalSkillToolNames(projectRoot))
+	return tools.LoadProjectCache(projectRoot, skillscan.CollectInternalSkillToolNames(projectRoot))
 }
 
 func LoadDefaultTools() ToolsCache {
@@ -37,7 +38,7 @@ func FindDefaultTool(name string) (ToolDefinition, bool) {
 }
 
 func FindToolForCommand(projectRoot string, command string) (ToolDefinition, ToolsCache, bool, error) {
-	return findToolForCommandWithInternalToolNames(projectRoot, command, collectInternalSkillToolNames)
+	return findToolForCommandWithInternalToolNames(projectRoot, command, skillscan.CollectInternalSkillToolNames)
 }
 
 func findToolForCommandWithInternalToolNames(
