@@ -15,6 +15,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/project"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
 const (
@@ -149,7 +150,7 @@ func findLaunchRunningProcess(
 	stdout io.Writer,
 	stderr io.Writer,
 	deps launchDeps,
-) (*clicore.UnityProcess, bool, int) {
+) (*unityprocess.UnityProcess, bool, int) {
 	runningProcess, err := deps.findRunningUnityProcess(ctx, projectRoot)
 	if err == nil {
 		return runningProcess, false, 0
@@ -168,7 +169,7 @@ func handleExistingLaunchProcess(
 	ctx context.Context,
 	options launchOptions,
 	projectRoot string,
-	runningProcess *clicore.UnityProcess,
+	runningProcess *unityprocess.UnityProcess,
 	stdout io.Writer,
 	stderr io.Writer,
 	deps launchDeps,
@@ -223,7 +224,7 @@ func startUnityAndWaitForReadiness(
 	ctx context.Context,
 	options launchOptions,
 	projectRoot string,
-	runningProcess *clicore.UnityProcess,
+	runningProcess *unityprocess.UnityProcess,
 	stdout io.Writer,
 	stderr io.Writer,
 	deps launchDeps,
