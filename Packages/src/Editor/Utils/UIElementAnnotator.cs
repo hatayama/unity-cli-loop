@@ -114,10 +114,11 @@ namespace io.github.hatayama.uLoopMCP
 
             Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             List<AnnotationDrawInfo> drawInfos = new List<AnnotationDrawInfo>(elements.Count);
+            float physicsAnnotationScreenHeight = CalculatePhysicsAnnotationScreenHeight(elements);
 
             foreach (UIElementInfo element in elements)
             {
-                drawInfos.Add(CreateAnnotationDrawInfo(element));
+                drawInfos.Add(CreateAnnotationDrawInfo(element, physicsAnnotationScreenHeight));
             }
 
             foreach (AnnotationDrawInfo drawInfo in drawInfos)
@@ -373,6 +374,12 @@ namespace io.github.hatayama.uLoopMCP
             AnnotationDrawInfo drawInfo,
             AnnotationBorderMetrics borderMetrics)
         {
+            if (drawInfo.OutlineSegments.Count > 0)
+            {
+                CreateAnnotationOutlineForElement(parent, drawInfo, borderMetrics);
+                return;
+            }
+
             CreateBorder(
                 parent,
                 "LightOuter",
@@ -402,6 +409,32 @@ namespace io.github.hatayama.uLoopMCP
                 drawInfo.BorderColors.Inner);
         }
 
+        private static void CreateAnnotationOutlineForElement(
+            Transform parent,
+            AnnotationDrawInfo drawInfo,
+            AnnotationBorderMetrics borderMetrics)
+        {
+            float outerThickness = borderMetrics.ColorThickness + borderMetrics.NeutralThickness * 2f;
+            CreateOutline(
+                parent,
+                "LightOuter",
+                drawInfo.OutlineSegments,
+                outerThickness,
+                drawInfo.BorderColors.Outer);
+            CreateOutline(
+                parent,
+                "ColorMiddle",
+                drawInfo.OutlineSegments,
+                borderMetrics.ColorThickness,
+                drawInfo.BorderColors.Middle);
+            CreateOutline(
+                parent,
+                "DarkInner",
+                drawInfo.OutlineSegments,
+                borderMetrics.NeutralThickness,
+                drawInfo.BorderColors.Inner);
+        }
+
         private static void CreateAnnotationLabelForElement(
             Transform parent,
             AnnotationDrawInfo drawInfo,
@@ -419,22 +452,86 @@ namespace io.github.hatayama.uLoopMCP
                 borderMetrics.LabelOutlineDistance);
         }
 
-        private static AnnotationDrawInfo CreateAnnotationDrawInfo(UIElementInfo element)
+        private static AnnotationDrawInfo CreateAnnotationDrawInfo(
+            UIElementInfo element,
+            float physicsAnnotationScreenHeight)
         {
             Color color = GetAnnotationColorForElement(element);
             Color contrastColor = GetContrastingTextColor(color);
             AnnotationBorderColors borderColors = GetAnnotationBorderColors(color);
             string displayLabel = CreateDisplayLabel(element);
+            float screenMinX = element.BoundsMinX;
+            float screenMinY = element.BoundsMinY;
+            float screenMaxX = element.BoundsMaxX;
+            float screenMaxY = element.BoundsMaxY;
+            List<RaycastOutlineSegment> outlineSegments = element.RaycastOutlineSegments;
+
+            if (IsPhysicsColliderElement(element))
+            {
+                Debug.Assert(
+                    physicsAnnotationScreenHeight >= 0f,
+                    "Physics collider annotations require a non-negative Game View height.");
+                screenMinY = physicsAnnotationScreenHeight - element.BoundsMaxY;
+                screenMaxY = physicsAnnotationScreenHeight - element.BoundsMinY;
+                outlineSegments = ConvertTopLeftOutlineSegmentsToScreenSegments(
+                    element.RaycastOutlineSegments,
+                    physicsAnnotationScreenHeight);
+            }
 
             return new AnnotationDrawInfo(
-                element.BoundsMinX,
-                element.BoundsMinY,
-                element.BoundsMaxX,
-                element.BoundsMaxY,
+                screenMinX,
+                screenMinY,
+                screenMaxX,
+                screenMaxY,
                 color,
                 contrastColor,
                 borderColors,
-                displayLabel);
+                displayLabel,
+                outlineSegments);
+        }
+
+        private static float CalculatePhysicsAnnotationScreenHeight(List<UIElementInfo> elements)
+        {
+            foreach (UIElementInfo element in elements)
+            {
+                if (!IsPhysicsColliderElement(element))
+                {
+                    continue;
+                }
+
+                return GameViewCoordinateUtility.GetMainGameViewSize().y;
+            }
+
+            return 0f;
+        }
+
+        private static bool IsPhysicsColliderElement(UIElementInfo element)
+        {
+            return element.Type == "PhysicsCollider";
+        }
+
+        private static List<RaycastOutlineSegment> ConvertTopLeftOutlineSegmentsToScreenSegments(
+            List<RaycastOutlineSegment> outlineSegments,
+            float screenHeight)
+        {
+            List<RaycastOutlineSegment> screenSegments = new List<RaycastOutlineSegment>(outlineSegments.Count);
+            foreach (RaycastOutlineSegment segment in outlineSegments)
+            {
+                screenSegments.Add(ConvertTopLeftOutlineSegmentToScreenSegment(segment, screenHeight));
+            }
+
+            return screenSegments;
+        }
+
+        internal static RaycastOutlineSegment ConvertTopLeftOutlineSegmentToScreenSegment(
+            RaycastOutlineSegment segment,
+            float screenHeight)
+        {
+            return new RaycastOutlineSegment(
+                segment.StartX,
+                screenHeight - segment.StartY,
+                segment.EndX,
+                screenHeight - segment.EndY);
         }
 
         private static void CreateBorder(
@@ -448,6 +545,39 @@ namespace io.github.hatayama.uLoopMCP
             CreateBorderEdge(parent, $"{name}_Bottom", borderEdgeRects.Bottom, color);
             CreateBorderEdge(parent, $"{name}_Left", borderEdgeRects.Left, color);
             CreateBorderEdge(parent, $"{name}_Right", borderEdgeRects.Right, color);
+        }
+
+        private static void CreateOutline(
+            Transform parent,
+            string name,
+            List<RaycastOutlineSegment> outlineSegments,
+            float thickness,
+            Color color)
+        {
+            for (int i = 0; i < outlineSegments.Count; i++)
+            {
+                Rect rect = CalculateOutlineSegmentRect(outlineSegments[i], thickness);
+                CreateBorderEdge(parent, $"{name}_Outline_{i}", rect, color);
+            }
+        }
+
+        internal static Rect CalculateOutlineSegmentRect(RaycastOutlineSegment segment, float thickness)
+        {
+            Debug.Assert(thickness >= 0f, "Outline thickness must not be negative.");
+            bool horizontal = Mathf.Approximately(segment.StartY, segment.EndY);
+            bool vertical = Mathf.Approximately(segment.StartX, segment.EndX);
+            Debug.Assert(horizontal || vertical, "Raycast outline segments must be axis-aligned.");
+
+            if (horizontal)
+            {
+                float minX = Mathf.Min(segment.StartX, segment.EndX) - thickness / 2f;
+                float width = Mathf.Abs(segment.EndX - segment.StartX) + thickness;
+                return new Rect(minX, segment.StartY - thickness / 2f, width, thickness);
+            }
+
+            float minY = Mathf.Min(segment.StartY, segment.EndY) - thickness / 2f;
+            float height = Mathf.Abs(segment.EndY - segment.StartY) + thickness;
+            return new Rect(segment.StartX - thickness / 2f, minY, thickness, height);
         }
 
         internal static BorderEdgeRects CalculateBorderEdgeRects(
@@ -701,6 +831,7 @@ namespace io.github.hatayama.uLoopMCP
             public readonly Color ContrastColor;
             public readonly AnnotationBorderColors BorderColors;
             public readonly string DisplayLabel;
+            public readonly List<RaycastOutlineSegment> OutlineSegments;
 
             public AnnotationDrawInfo(
                 float screenMinX,
@@ -710,7 +841,8 @@ namespace io.github.hatayama.uLoopMCP
                 Color color,
                 Color contrastColor,
                 AnnotationBorderColors borderColors,
-                string displayLabel)
+                string displayLabel,
+                List<RaycastOutlineSegment> outlineSegments)
             {
                 ScreenMinX = screenMinX;
                 ScreenMinY = screenMinY;
@@ -720,6 +852,7 @@ namespace io.github.hatayama.uLoopMCP
                 ContrastColor = contrastColor;
                 BorderColors = borderColors;
                 DisplayLabel = displayLabel;
+                OutlineSegments = outlineSegments;
             }
         }
 

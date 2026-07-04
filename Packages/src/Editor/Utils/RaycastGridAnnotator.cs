@@ -13,8 +13,8 @@ namespace io.github.hatayama.uLoopMCP
     {
         private const int GRID_COLUMNS = 5;
         private const int GRID_ROWS = 5;
-        private const int CLUSTERED_GRID_COLUMNS = 20;
-        private const int CLUSTERED_GRID_ROWS = 20;
+        private const int CLUSTERED_GRID_COLUMNS = 40;
+        private const int CLUSTERED_GRID_ROWS = 40;
         private const float MARKER_SIZE = 18f;
 
         internal static List<RaycastGridPointInfo> CollectRaycastGridPoints(
@@ -353,7 +353,7 @@ namespace io.github.hatayama.uLoopMCP
 
                     RaycastHit hit = raycastResult.Hits[0];
                     Collider collider = hit.collider;
-                    int clusterKey = collider.GetInstanceID();
+                    int clusterKey = CreateClusterKey(collider);
                     if (!clusterCollection.MetadataByClusterKey.ContainsKey(clusterKey))
                     {
                         clusterCollection.MetadataByClusterKey.Add(
@@ -361,22 +361,34 @@ namespace io.github.hatayama.uLoopMCP
                             CreateColliderMetadata(collider));
                     }
 
-                    clusterCollection.Samples.Add(CreateClusterSample(inputPosition, clusterKey));
+                    clusterCollection.Samples.Add(CreateClusterSample(inputPosition, clusterKey, row, column));
                 }
             }
 
             return clusterCollection;
         }
 
+        internal static int CreateClusterKey(Collider collider)
+        {
+            Debug.Assert(collider != null, "Collider is required for raycast clustering.");
+
+            // A placement area can use several colliders on one object; one annotation should describe the clickable object.
+            return collider!.gameObject.GetInstanceID();
+        }
+
         private static RaycastClusterSample CreateClusterSample(
             Vector2 inputPosition,
-            int clusterKey)
+            int clusterKey,
+            int row,
+            int column)
         {
             return new RaycastClusterSample
             {
                 ClusterKey = clusterKey,
                 InputX = inputPosition.x,
-                InputY = inputPosition.y
+                InputY = inputPosition.y,
+                Row = row,
+                Column = column
             };
         }
 
@@ -401,6 +413,8 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Assert(cluster.Samples.Count > 0, "Physics collider cluster must contain sampled hits.");
             RaycastClusterSample representative = cluster.Representative;
             RaycastSampleBounds sampleBounds = CalculateSampleCellBounds(cluster.Samples, sampleCoverage);
+            List<RaycastOutlineSegment> outlineSegments =
+                RaycastSampleOutlineBuilder.CreateOutlineSegments(cluster.Samples, sampleCoverage);
 
             UIElementInfo element = new UIElementInfo
             {
@@ -418,7 +432,8 @@ namespace io.github.hatayama.uLoopMCP
                 SortingOrder = 0,
                 SiblingIndex = 0,
                 Layer = metadata.Layer,
-                Components = new List<string>(metadata.Components)
+                Components = new List<string>(metadata.Components),
+                RaycastOutlineSegments = outlineSegments
             };
 
             Debug.Assert(

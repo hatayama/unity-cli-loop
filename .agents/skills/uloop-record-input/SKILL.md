@@ -1,6 +1,6 @@
 ---
 name: uloop-record-input
-description: "Record keyboard and mouse input during PlayMode into a JSON file. Use when you need to: (1) Capture human gameplay input for later replay, (2) Record input sequences for E2E testing, (3) Save input for bug reproduction. Captures Input System device-state diffs frame-by-frame in PlayMode and serializes them to JSON when stopped. Requires PlayMode and the New Input System."
+description: "Record PlayMode keyboard and mouse input to JSON. Use to capture gameplay, bug repro, or E2E input sequences for replay."
 ---
 
 # uloop record-input
@@ -39,7 +39,7 @@ Replay injects input frame-by-frame, so the game must also be deterministic to p
 
 - Unity must be in **PlayMode**
 - **Input System package** must be installed (`com.unity.inputsystem`)
-- Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings
+- Use this only when the project already uses the New Input System.
 
 ## Output
 

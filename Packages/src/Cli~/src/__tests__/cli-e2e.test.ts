@@ -889,22 +889,24 @@ describe('CLI E2E Tests (requires running Unity)', () => {
 
   // Domain Reload tests must run last to avoid affecting other tests
   describe('compile --force-recompile (Domain Reload)', () => {
-    it('should support --force-recompile option', () => {
-      const { exitCode } = runCli('compile --force-recompile');
+    it('should reject --force-recompile without an explicit value', () => {
+      const result: { stdout: string; stderr: string; exitCode: number } = runCli(
+        'compile --force-recompile',
+      );
 
-      // Domain Reload causes connection to be lost, so we just verify the command runs
-      // The exit code may be non-zero due to connection being dropped during reload
-      expect(typeof exitCode).toBe('number');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("option '--force-recompile <value>' argument missing");
     });
   });
 
   describe('compile --wait-for-domain-reload', () => {
-    it('should support --wait-for-domain-reload option', () => {
-      const { exitCode } = runCli('compile --wait-for-domain-reload');
+    it('should reject --wait-for-domain-reload without an explicit value', () => {
+      const result: { stdout: string; stderr: string; exitCode: number } = runCli(
+        'compile --wait-for-domain-reload',
+      );
 
-      // This option is intended to survive domain reload and return once the
-      // compile result is available again.
-      expect(typeof exitCode).toBe('number');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("option '--wait-for-domain-reload <value>' argument missing");
     });
   });
 });

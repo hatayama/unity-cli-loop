@@ -138,6 +138,26 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
+        public void CreateClusterKey_WhenGameObjectHasMultipleColliders_ShouldGroupByGameObject()
+        {
+            GameObject gameObject = new GameObject("MultiColliderPlacementArea");
+            try
+            {
+                BoxCollider boxCollider = gameObject.AddComponent<BoxCollider>();
+                SphereCollider sphereCollider = gameObject.AddComponent<SphereCollider>();
+
+                int boxClusterKey = RaycastGridAnnotator.CreateClusterKey(boxCollider);
+                int sphereClusterKey = RaycastGridAnnotator.CreateClusterKey(sphereCollider);
+
+                Assert.That(boxClusterKey, Is.EqualTo(sphereClusterKey));
+            }
+            finally
+            {
+                Object.DestroyImmediate(gameObject);
+            }
+        }
+
+        [Test]
         public void CreateClusters_WhenSamplesFormLShape_ShouldChooseActualHitClosestToCentroid()
         {
             List<RaycastClusterSample> samples = new List<RaycastClusterSample>
@@ -362,6 +382,137 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
+        public void CreateOutlineSegments_WhenSingleCell_ShouldReturnFourEdges()
+        {
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
+            {
+                CreateSample(1, 10f, 20f, 1, 1)
+            };
+            RaycastSampleCoverage coverage = CreateCoverage(5f, 10f, 0f, 0f, 100f, 100f);
+
+            List<RaycastOutlineSegment> segments =
+                RaycastSampleOutlineBuilder.CreateOutlineSegments(samples, coverage);
+
+            Assert.That(segments.Count, Is.EqualTo(4));
+            AssertSegment(segments[0], 5f, 10f, 15f, 10f);
+            AssertSegment(segments[1], 5f, 30f, 15f, 30f);
+            AssertSegment(segments[2], 5f, 10f, 5f, 30f);
+            AssertSegment(segments[3], 15f, 10f, 15f, 30f);
+        }
+
+        [Test]
+        public void CreateOutlineSegments_WhenCellsAreAdjacent_ShouldMergeSharedEdges()
+        {
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
+            {
+                CreateSample(1, 10f, 20f, 1, 1),
+                CreateSample(1, 20f, 20f, 1, 2)
+            };
+            RaycastSampleCoverage coverage = CreateCoverage(5f, 10f, 0f, 0f, 100f, 100f);
+
+            List<RaycastOutlineSegment> segments =
+                RaycastSampleOutlineBuilder.CreateOutlineSegments(samples, coverage);
+
+            Assert.That(segments.Count, Is.EqualTo(4));
+            AssertSegment(segments[0], 5f, 10f, 25f, 10f);
+            AssertSegment(segments[1], 5f, 30f, 25f, 30f);
+            AssertSegment(segments[2], 5f, 10f, 5f, 30f);
+            AssertSegment(segments[3], 25f, 10f, 25f, 30f);
+        }
+
+        [Test]
+        public void CreateOutlineSegments_WhenCellsFormLShape_ShouldKeepConcaveOutline()
+        {
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
+            {
+                CreateSample(1, 10f, 10f, 1, 1),
+                CreateSample(1, 20f, 10f, 1, 2),
+                CreateSample(1, 10f, 20f, 2, 1)
+            };
+            RaycastSampleCoverage coverage = CreateCoverage(5f, 5f, 0f, 0f, 100f, 100f);
+
+            List<RaycastOutlineSegment> segments =
+                RaycastSampleOutlineBuilder.CreateOutlineSegments(samples, coverage);
+
+            Assert.That(segments.Count, Is.EqualTo(6));
+            AssertSegment(segments[0], 5f, 5f, 25f, 5f);
+            AssertSegment(segments[1], 15f, 15f, 25f, 15f);
+            AssertSegment(segments[2], 5f, 25f, 15f, 25f);
+            AssertSegment(segments[3], 5f, 5f, 5f, 25f);
+            AssertSegment(segments[4], 15f, 15f, 15f, 25f);
+            AssertSegment(segments[5], 25f, 5f, 25f, 15f);
+        }
+
+        [Test]
+        public void CreateOutlineSegments_WhenCellsHaveHole_ShouldReturnInnerAndOuterEdges()
+        {
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
+            {
+                CreateSample(1, 10f, 10f, 1, 1),
+                CreateSample(1, 20f, 10f, 1, 2),
+                CreateSample(1, 30f, 10f, 1, 3),
+                CreateSample(1, 10f, 20f, 2, 1),
+                CreateSample(1, 30f, 20f, 2, 3),
+                CreateSample(1, 10f, 30f, 3, 1),
+                CreateSample(1, 20f, 30f, 3, 2),
+                CreateSample(1, 30f, 30f, 3, 3)
+            };
+            RaycastSampleCoverage coverage = CreateCoverage(5f, 5f, 0f, 0f, 100f, 100f);
+
+            List<RaycastOutlineSegment> segments =
+                RaycastSampleOutlineBuilder.CreateOutlineSegments(samples, coverage);
+
+            Assert.That(segments.Count, Is.EqualTo(8));
+            Assert.That(ContainsSegment(segments, 15f, 15f, 25f, 15f), Is.True);
+            Assert.That(ContainsSegment(segments, 15f, 25f, 25f, 25f), Is.True);
+            Assert.That(ContainsSegment(segments, 15f, 15f, 15f, 25f), Is.True);
+            Assert.That(ContainsSegment(segments, 25f, 15f, 25f, 25f), Is.True);
+        }
+
+        [Test]
+        public void CreateOutlineSegments_WhenCellsAreDisconnected_ShouldKeepSeparateComponents()
+        {
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
+            {
+                CreateSample(1, 10f, 10f, 1, 1),
+                CreateSample(1, 30f, 10f, 1, 3)
+            };
+            RaycastSampleCoverage coverage = CreateCoverage(5f, 5f, 0f, 0f, 100f, 100f);
+
+            List<RaycastOutlineSegment> segments =
+                RaycastSampleOutlineBuilder.CreateOutlineSegments(samples, coverage);
+
+            Assert.That(segments.Count, Is.EqualTo(8));
+            Assert.That(ContainsSegment(segments, 5f, 5f, 15f, 5f), Is.True);
+            Assert.That(ContainsSegment(segments, 25f, 5f, 35f, 5f), Is.True);
+        }
+
+        [Test]
+        public void CreatePhysicsColliderElement_WhenSamplesHaveGridCells_ShouldAttachOutlineSegments()
+        {
+            RaycastClusterInfo cluster = new RaycastClusterInfo
+            {
+                Representative = CreateSample(1, 10f, 10f, 1, 1),
+                SampleCount = 2,
+                Samples = new List<RaycastClusterSample>
+                {
+                    CreateSample(1, 10f, 10f, 1, 1),
+                    CreateSample(1, 20f, 10f, 1, 2)
+                }
+            };
+            RaycastSampleCoverage coverage = CreateCoverage(5f, 5f, 0f, 0f, 100f, 100f);
+
+            UIElementInfo element = RaycastGridAnnotator.CreatePhysicsColliderElement(
+                "R1",
+                cluster,
+                CreateMetadata(),
+                coverage);
+
+            Assert.That(element.RaycastOutlineSegments.Count, Is.EqualTo(4));
+            AssertSegment(element.RaycastOutlineSegments[0], 5f, 5f, 25f, 5f);
+        }
+
+        [Test]
         public void IsUiOcclusionRaycastResult_WhenGraphicRaycasterHit_ShouldReturnTrue()
         {
             GameObject canvasObject = new GameObject("GraphicRaycasterOcclusionTest");
@@ -492,14 +643,55 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             Assert.That(summaries, Is.Empty);
         }
 
-        private static RaycastClusterSample CreateSample(int clusterKey, float inputX, float inputY)
+        private static RaycastClusterSample CreateSample(
+            int clusterKey,
+            float inputX,
+            float inputY,
+            int row = 0,
+            int column = 0)
         {
             return new RaycastClusterSample
             {
                 ClusterKey = clusterKey,
                 InputX = inputX,
-                InputY = inputY
+                InputY = inputY,
+                Row = row,
+                Column = column
             };
+        }
+
+        private static bool ContainsSegment(
+            List<RaycastOutlineSegment> segments,
+            float startX,
+            float startY,
+            float endX,
+            float endY)
+        {
+            foreach (RaycastOutlineSegment segment in segments)
+            {
+                if (segment.StartX == startX &&
+                    segment.StartY == startY &&
+                    segment.EndX == endX &&
+                    segment.EndY == endY)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static void AssertSegment(
+            RaycastOutlineSegment segment,
+            float startX,
+            float startY,
+            float endX,
+            float endY)
+        {
+            Assert.That(segment.StartX, Is.EqualTo(startX));
+            Assert.That(segment.StartY, Is.EqualTo(startY));
+            Assert.That(segment.EndX, Is.EqualTo(endX));
+            Assert.That(segment.EndY, Is.EqualTo(endY));
         }
 
         private static RaycastGridPointInfo CreateLayerHitPoint(

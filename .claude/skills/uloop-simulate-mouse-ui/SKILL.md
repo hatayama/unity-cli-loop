@@ -1,6 +1,6 @@
 ---
 name: uloop-simulate-mouse-ui
-description: "Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem screen coordinates from annotated screenshots. Use when you need to: (1) Click buttons or interactive UI elements during PlayMode testing, (2) Drag UI elements between annotated screen positions, (3) Long-press or hold a drag for sustained pointer interactions. First get target coordinates with `uloop screenshot --capture-mode rendering --annotate-elements --elements-only` and use `AnnotatedElements[].SimX` / `SimY`; for gameplay code that reads Mouse.current, use simulate-mouse-input instead."
+description: "Simulate PlayMode EventSystem UI mouse actions using top-left Game View coordinates. Use for UI clicks, long-presses, or drags from annotated screenshots."
 context: fork
 ---
 
@@ -11,10 +11,10 @@ Simulate mouse interaction on Unity PlayMode UI: $ARGUMENTS
 ## Workflow
 
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
-2. Get UI element info: `uloop screenshot --capture-mode rendering --annotate-elements --elements-only`
+2. Get UI element info: `uloop screenshot --capture-mode rendering --annotate-elements true --elements-only true`
 3. Use the `AnnotatedElements` array to find the target element by `Label`, `Name`, or `Path` (A=frontmost, B=next, ...). Use `Interaction` to distinguish click targets from drag/drop/text targets, then use `SimX`/`SimY` directly as `--x`/`--y` coordinates.
 4. Execute the appropriate `uloop simulate-mouse-ui` command
-5. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering --annotate-elements`
+5. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering --annotate-elements true`
 6. Report what happened
 
 ## Tool Reference
@@ -28,10 +28,10 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--action` | enum | `Click` | `Click`, `Drag`, `DragStart`, `DragMove`, `DragEnd`, `LongPress` |
-| `--x` | number | `0` | Target X position in screen pixels (origin: top-left). For Drag action, this is the destination. |
-| `--y` | number | `0` | Target Y position in screen pixels (origin: top-left). For Drag action, this is the destination. |
-| `--from-x` | number | `0` | Start X position for Drag action. Drag starts here and moves to x,y. |
-| `--from-y` | number | `0` | Start Y position for Drag action. Drag starts here and moves to x,y. |
+| `--x` | number | `0` | Target X position in Game View pixels (origin: top-left). Used by Click, LongPress, DragStart, DragMove, and DragEnd; for Drag, this is the destination. |
+| `--y` | number | `0` | Target Y position in Game View pixels (origin: top-left). Used by Click, LongPress, DragStart, DragMove, and DragEnd; for Drag, this is the destination. |
+| `--from-x` | number | `0` | Start X position in Game View pixels for Drag action. Drag starts here and moves to x,y. |
+| `--from-y` | number | `0` | Start Y position in Game View pixels for Drag action. Drag starts here and moves to x,y. |
 | `--drag-speed` | number | `2000` | Drag speed in pixels per second (0 for instant). 2000 is fast (default), 200 is slow enough to watch. Applies to Drag, DragMove, and DragEnd actions. |
 | `--duration` | number | `0.5` | Hold duration in seconds for LongPress action. |
 | `--button` | enum | `Left` | Mouse button. `Click` and `LongPress` support `Left`, `Right`, and `Middle`. Drag actions support `Left` only; other buttons return an error. |
@@ -67,7 +67,7 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 ## Coordinate System
 
 - Origin is **top-left** (0, 0)
-- All positions are in **screen pixels**
+- All positions are in **top-left Game View pixels**
 - Get coordinates from `AnnotatedElements` JSON (`SimX`/`SimY`) — do NOT look up GameObject positions
 - Clicking or long-pressing on empty space (no UI element) still succeeds with a message indicating no element was hit
 - Dragging on empty space (no draggable UI element) returns `Success = false`
@@ -77,7 +77,7 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 ## Examples
 
 ```bash
-# Click a button at screen position
+# Click a button at a Game View position
 uloop simulate-mouse-ui --action Click --x 400 --y 300
 
 # Force-click a button behind a raycast blocker by path
@@ -127,6 +127,6 @@ Returns JSON with:
 - `EndPositionX`: Drag end X coordinate (nullable float; populated for drag actions only)
 - `EndPositionY`: Drag end Y coordinate (nullable float; populated for drag actions only)
 
-These are the only eight fields. There is no `Button`, `Duration`, `DragSpeed`, raycast list, or pointer-event log in the response — verify the visual outcome with a follow-up `uloop screenshot --capture-mode rendering --annotate-elements`.
+These are the only eight fields. There is no `Button`, `Duration`, `DragSpeed`, raycast list, or pointer-event log in the response — verify the visual outcome with a follow-up `uloop screenshot --capture-mode rendering --annotate-elements true`.
 
 Note: Click and LongPress on empty space (no UI element) still return `Success = true` with `HitGameObjectName = null`. Drag actions on empty space return `Success = false`.

@@ -127,6 +127,40 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
+        public void ConvertTopLeftOutlineSegmentToScreenSegment_ShouldFlipYForCanvasSpace()
+        {
+            RaycastOutlineSegment inputSegment = new RaycastOutlineSegment(10f, 20f, 30f, 20f);
+
+            RaycastOutlineSegment screenSegment =
+                UIElementAnnotator.ConvertTopLeftOutlineSegmentToScreenSegment(inputSegment, 100f);
+
+            Assert.That(screenSegment.StartX, Is.EqualTo(10f));
+            Assert.That(screenSegment.StartY, Is.EqualTo(80f));
+            Assert.That(screenSegment.EndX, Is.EqualTo(30f));
+            Assert.That(screenSegment.EndY, Is.EqualTo(80f));
+        }
+
+        [Test]
+        public void CalculateOutlineSegmentRect_WhenHorizontalSegment_ShouldExtendBothEndpoints()
+        {
+            RaycastOutlineSegment segment = new RaycastOutlineSegment(10f, 20f, 30f, 20f);
+
+            Rect rect = UIElementAnnotator.CalculateOutlineSegmentRect(segment, 4f);
+
+            Assert.That(rect, Is.EqualTo(new Rect(8f, 18f, 24f, 4f)));
+        }
+
+        [Test]
+        public void CalculateOutlineSegmentRect_WhenVerticalSegment_ShouldExtendBothEndpoints()
+        {
+            RaycastOutlineSegment segment = new RaycastOutlineSegment(10f, 20f, 10f, 50f);
+
+            Rect rect = UIElementAnnotator.CalculateOutlineSegmentRect(segment, 4f);
+
+            Assert.That(rect, Is.EqualTo(new Rect(8f, 18f, 4f, 34f)));
+        }
+
+        [Test]
         public void GetAnnotationBorderColors_WhenAnnotationColorIsProvided_ShouldPutAnnotationColorInTheMiddle()
         {
             Color annotationColor = new Color(1f, 0.15f, 0.65f, 0.95f);

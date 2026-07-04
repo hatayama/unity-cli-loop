@@ -203,7 +203,7 @@ Use `get-hierarchy` to explore the UI tree structure, then target the right elem
 **Step 1**: Get Canvas hierarchy to understand UI structure
 
 ```powershell
-uloop get-hierarchy --root-path 'Canvas' --max-depth 3
+uloop get-hierarchy --root-path 'Canvas' --max-depth 3 --include-inactive true
 ```
 
 **Step 2**: Based on the hierarchy JSON, click the desired button
