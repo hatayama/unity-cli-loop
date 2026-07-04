@@ -188,4 +188,33 @@ namespace io.github.hatayama.uLoopMCP
         public Dictionary<int, RaycastColliderMetadata> MetadataByClusterKey { get; set; } =
             new Dictionary<int, RaycastColliderMetadata>();
     }
+
+    /// <summary>
+    /// Describes the screen-space cell area represented by each dense raycast sample.
+    /// </summary>
+    internal readonly struct RaycastSampleCoverage
+    {
+        public readonly float HalfStepX;
+        public readonly float HalfStepY;
+        public readonly float MinX;
+        public readonly float MinY;
+        public readonly float MaxX;
+        public readonly float MaxY;
+
+        public RaycastSampleCoverage(
+            float halfStepX,
+            float halfStepY,
+            float minX,
+            float minY,
+            float maxX,
+            float maxY)
+        {
+            HalfStepX = halfStepX;
+            HalfStepY = halfStepY;
+            MinX = minX;
+            MinY = minY;
+            MaxX = maxX;
+            MaxY = maxY;
+        }
+    }
 }
