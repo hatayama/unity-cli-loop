@@ -1,12 +1,14 @@
 package project
 
 import (
+	stderrors "errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -93,6 +95,10 @@ func TestFindUnityProjectRootWithinHonorsMaxDepth(t *testing.T) {
 	_, err := FindUnityProjectRootWithin(workspaceRoot, 1)
 	if err == nil {
 		t.Fatal("expected max depth search to miss nested project")
+	}
+	var projectNotFoundErr clierrors.ProjectNotFoundError
+	if !stderrors.As(err, &projectNotFoundErr) {
+		t.Fatalf("expected ProjectNotFoundError, got %T", err)
 	}
 }
 
@@ -262,6 +268,16 @@ func TestNotUnityProjectError_WhenSuggestionExists_ShouldIncludeConvertedPath(t 
 		if !strings.Contains(message, expected) {
 			t.Fatalf("message %q should contain %q", message, expected)
 		}
+	}
+}
+
+func TestNotUnityProjectErrorReturnsTypedError(t *testing.T) {
+	// Verifies explicit project path failures are type-classifiable by CLI error handling.
+	err := notUnityProjectError("/tmp/not-unity", "")
+
+	var notUnityErr clierrors.NotUnityProjectError
+	if !stderrors.As(err, &notUnityErr) {
+		t.Fatalf("expected NotUnityProjectError, got %T", err)
 	}
 }
 

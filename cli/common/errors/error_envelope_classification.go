@@ -3,7 +3,6 @@ package clierrors
 import (
 	"encoding/json"
 	"errors"
-	"strings"
 
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
@@ -17,7 +16,7 @@ func ClassifyError(err error, context ErrorContext) CLIError {
 		return classifiedError
 	}
 
-	return classifyMessageError(err.Error(), context)
+	return InternalCLIError(err.Error(), context)
 }
 
 // classifiableCLIError lets an error type self-classify into a CLIError envelope,
@@ -151,31 +150,6 @@ func genericRPCError(rpcErr *unityipc.RPCError, details map[string]any, context 
 		},
 		Details: details,
 	}
-}
-
-func classifyMessageError(message string, context ErrorContext) CLIError {
-	if isProjectNotFoundMessage(message) {
-		return CLIError{
-			ErrorCode:   errorCodeProjectNotFound,
-			Phase:       ErrorPhaseProjectResolve,
-			Message:     message,
-			Retryable:   false,
-			SafeToRetry: false,
-			Command:     context.Command,
-			NextActions: []string{
-				"Run the command from inside a Unity project.",
-				"Pass `--project-path <path>` when targeting another Unity project.",
-			},
-		}
-	}
-
-	return InternalCLIError(message, context)
-}
-
-func isProjectNotFoundMessage(message string) bool {
-	return message == "unity project not found. Use --project-path option to specify the target" ||
-		strings.HasPrefix(message, "not a Unity project:") ||
-		strings.HasPrefix(message, "--project-path does not point to a Unity project:")
 }
 
 func RPCDataType(data map[string]any) string {

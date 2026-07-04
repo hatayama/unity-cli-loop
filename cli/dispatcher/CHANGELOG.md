@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+* Project resolution errors are now classified from typed failures instead of copied text.
+
 ## [3.0.1-beta.12](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.1-beta.11...dispatcher-v3.0.1-beta.12) (2026-07-03)
 
 

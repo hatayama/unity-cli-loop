@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -76,12 +77,12 @@ func FindProjectRoot(startPath string) (string, error) {
 		}
 
 		if exists(filepath.Join(currentPath, ".git")) {
-			return "", fmt.Errorf("unity project not found. Use --project-path option to specify the target")
+			return "", clierrors.ProjectNotFoundError{}
 		}
 
 		parentPath := filepath.Dir(currentPath)
 		if parentPath == currentPath {
-			return "", fmt.Errorf("unity project not found. Use --project-path option to specify the target")
+			return "", clierrors.ProjectNotFoundError{}
 		}
 		currentPath = parentPath
 	}
@@ -124,12 +125,12 @@ func findUnityProjectRootInParents(currentPath string) (string, error) {
 		}
 
 		if exists(filepath.Join(currentPath, ".git")) {
-			return "", fmt.Errorf("unity project not found. Use --project-path option to specify the target")
+			return "", clierrors.ProjectNotFoundError{}
 		}
 
 		parentPath := filepath.Dir(currentPath)
 		if parentPath == currentPath {
-			return "", fmt.Errorf("unity project not found. Use --project-path option to specify the target")
+			return "", clierrors.ProjectNotFoundError{}
 		}
 		currentPath = parentPath
 	}
@@ -260,13 +261,10 @@ func windowsDrivePath(driveLetter byte, rest string) string {
 }
 
 func notUnityProjectError(projectRoot string, suggestion string) error {
-	if suggestion == "" {
-		return fmt.Errorf("not a Unity project: %s", projectRoot)
+	return clierrors.NotUnityProjectError{
+		ProjectRoot: projectRoot,
+		Suggestion:  suggestion,
 	}
-	return fmt.Errorf(
-		"not a Unity project: %s. This looks like a WSL or Git Bash path. Did you mean: %s",
-		projectRoot,
-		suggestion)
 }
 
 func isASCIIAlpha(value byte) bool {

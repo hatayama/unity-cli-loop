@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+* Project resolution errors are now classified from typed failures instead of copied text.
+
 ## [3.0.0-beta.46](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.45...uloop-project-runner-v3.0.0-beta.46) (2026-07-02)
 
 
