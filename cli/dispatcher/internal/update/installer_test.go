@@ -22,6 +22,16 @@ func TestScriptURLForStableVersionUsesReleaseInstaller(t *testing.T) {
 	}
 }
 
+func TestScriptAssetURLForStableVersionUsesReleaseAsset(t *testing.T) {
+	// Verifies dispatcher self-update downloads installer scripts from signed release assets.
+	url := ScriptAssetURL("3.0.0", WindowsScriptName)
+
+	expected := "https://github.com/hatayama/unity-cli-loop/releases/download/dispatcher-v3.0.0/install.ps1"
+	if url != expected {
+		t.Fatalf("script asset URL mismatch: got %q want %q", url, expected)
+	}
+}
+
 func TestProjectRunnerReleaseTagAddsMissingPrefix(t *testing.T) {
 	// Verifies project runner downloads use the GitHub release tag format.
 	tag := ProjectRunnerReleaseTag("3.0.0-beta.3")

@@ -3,7 +3,9 @@ package dispatcher
 import (
 	"context"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
@@ -80,10 +82,47 @@ func updateCommandForOSWithOptions(goos string, options updateOptions) (string, 
 }
 
 func runUpdateCommand(ctx context.Context, updateCommand update.Command, stdout io.Writer, stderr io.Writer) error {
-	command := exec.CommandContext(ctx, updateCommand.Name, updateCommand.Args...)
+	tempDir, err := os.MkdirTemp("", "uloop-update-")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = os.RemoveAll(tempDir)
+	}()
+
+	installerPath, err := downloadVerifiedUpdateInstaller(ctx, updateCommand, tempDir)
+	if err != nil {
+		return err
+	}
+
+	args := updateExecutionArgs(updateCommand, installerPath)
+	command := exec.CommandContext(ctx, updateCommand.Name, args...)
 	command.Stdout = stdout
 	command.Stderr = stderr
+	command.Env = append(os.Environ(), updateCommand.Env...)
 	return command.Run()
+}
+
+func downloadVerifiedUpdateInstaller(ctx context.Context, updateCommand update.Command, tempDir string) (string, error) {
+	installerPath := filepath.Join(tempDir, updateCommand.InstallerName)
+	checksumPath := installerPath + ".sha256"
+	if err := downloadDispatcherFile(ctx, updateCommand.InstallerURL, installerPath); err != nil {
+		return "", err
+	}
+	if err := downloadDispatcherFile(ctx, updateCommand.InstallerChecksumURL, checksumPath); err != nil {
+		return "", err
+	}
+	if err := verifyDispatcherChecksum(installerPath, checksumPath); err != nil {
+		return "", err
+	}
+	return installerPath, nil
+}
+
+func updateExecutionArgs(updateCommand update.Command, installerPath string) []string {
+	if updateCommand.Name == "powershell" {
+		return []string{"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", installerPath}
+	}
+	return append(updateCommand.Args, installerPath)
 }
 
 func printUpdateHelp(stdout io.Writer) {
