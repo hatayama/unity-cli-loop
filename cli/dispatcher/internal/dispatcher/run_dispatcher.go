@@ -32,17 +32,31 @@ const (
 	dispatcherSelfUpdateInterval       = 24 * time.Hour
 )
 
-var (
-	dispatcherNow        = time.Now
-	dispatcherRunRealCLI = runRealCLICommand
-	dispatcherRunUpdate  = runDispatcherUpdateCommand
-)
-
 type dispatcherUpdateState struct {
 	LastChecked time.Time `json:"lastChecked"`
 }
 
+type dispatcherRunDeps struct {
+	now        func() time.Time
+	runRealCLI func(context.Context, string, []string, io.Writer, io.Writer) int
+	runUpdate  func(context.Context) error
+	launch     launchDeps
+}
+
+func defaultDispatcherRunDeps() dispatcherRunDeps {
+	return dispatcherRunDeps{
+		now:        time.Now,
+		runRealCLI: runRealCLICommand,
+		runUpdate:  runDispatcherUpdateCommand,
+		launch:     defaultLaunchDeps(),
+	}
+}
+
 func RunDispatcher(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
+	return runDispatcherWithDeps(ctx, args, stdout, stderr, defaultDispatcherRunDeps())
+}
+
+func runDispatcherWithDeps(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer, deps dispatcherRunDeps) int {
 	if handled, code := tryHandleDispatcherInfoRequest(args, stdout); handled {
 		return code
 	}
@@ -54,7 +68,7 @@ func RunDispatcher(ctx context.Context, args []string, stdout io.Writer, stderr 
 	}
 
 	if shouldRunInDispatcherProcess(remainingArgs) {
-		return runDispatcherProcessCommand(ctx, remainingArgs, projectPath, stdout, stderr)
+		return runDispatcherProcessCommandWithDeps(ctx, remainingArgs, projectPath, stdout, stderr, deps)
 	}
 
 	startPath, err := os.Getwd()
@@ -75,7 +89,7 @@ func RunDispatcher(ctx context.Context, args []string, stdout io.Writer, stderr 
 		return 1
 	}
 
-	if handled, code := enforceDispatcherFreshness(ctx, pin, stderr); handled {
+	if handled, code := enforceDispatcherFreshnessWithDeps(ctx, pin, stderr, deps); handled {
 		return code
 	}
 
@@ -85,19 +99,20 @@ func RunDispatcher(ctx context.Context, args []string, stdout io.Writer, stderr 
 		return 1
 	}
 
-	return dispatcherRunRealCLI(ctx, realCLIPath, args, stdout, stderr)
+	return deps.runRealCLI(ctx, realCLIPath, args, stdout, stderr)
 }
 
 // runDispatcherProcessCommand executes dispatcher-owned commands without
 // delegating to the shared runner entrypoint. The dispatcher binary is being
 // slimmed down to the forwarding machinery plus bootstrap commands, so its
 // execution path must not run through RunProjectLocal.
-func runDispatcherProcessCommand(
+func runDispatcherProcessCommandWithDeps(
 	ctx context.Context,
 	remainingArgs []string,
 	projectPath string,
 	stdout io.Writer,
 	stderr io.Writer,
+	deps dispatcherRunDeps,
 ) int {
 	if handled, code := tryHandleProjectScopeHelpRequest(remainingArgs, projectPath, stdout); handled {
 		return code
@@ -112,7 +127,7 @@ func runDispatcherProcessCommand(
 		return 1
 	}
 
-	if handled, code := tryHandlePreConnectionRequest(
+	if handled, code := tryHandlePreConnectionRequestWithDeps(
 		ctx,
 		remainingArgs,
 		command,
@@ -121,6 +136,7 @@ func runDispatcherProcessCommand(
 		projectPath,
 		stdout,
 		stderr,
+		deps,
 	); handled {
 		return code
 	}
@@ -172,6 +188,10 @@ func resolveDispatcherProjectRoot(startPath string, explicitProjectPath string, 
 }
 
 func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr io.Writer) (bool, int) {
+	return enforceDispatcherFreshnessWithDeps(ctx, pin, stderr, defaultDispatcherRunDeps())
+}
+
+func enforceDispatcherFreshnessWithDeps(ctx context.Context, pin dispatcherPin, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
 	minimumVersion := strings.TrimSpace(pin.MinimumDispatcherVersion)
 	if minimumVersion == "" {
 		return false, 0
@@ -187,14 +207,14 @@ func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr i
 		}
 	}
 
-	updateDue := !dispatcherSelfUpdateDisabled() && dispatcherSelfUpdateDue()
+	updateDue := !dispatcherSelfUpdateDisabled() && dispatcherSelfUpdateDueWithDeps(deps)
 	if !updateRequired && !updateDue {
 		return false, 0
 	}
 
-	err := dispatcherRunUpdate(ctx)
+	err := deps.runUpdate(ctx)
 	if err == nil {
-		markDispatcherSelfUpdateChecked()
+		markDispatcherSelfUpdateCheckedWithDeps(deps)
 		updatedVersion := dispatcherInstalledVersionOrEmpty(ctx)
 		if updateRequired {
 			writeDispatcherSelfUpdateRequiredError(stderr, updatedVersion)
@@ -210,7 +230,7 @@ func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr i
 	}
 
 	// Why: optional update failures should not retry and redraw installer progress on every command.
-	markDispatcherSelfUpdateChecked()
+	markDispatcherSelfUpdateCheckedWithDeps(deps)
 	clicore.WriteFormat(stderr, "warning: dispatcher self-update skipped: %v\n", err)
 	return false, 0
 }
@@ -258,7 +278,7 @@ func dispatcherSelfUpdateDisabled() bool {
 	return value == "1" || strings.EqualFold(value, "true")
 }
 
-func dispatcherSelfUpdateDue() bool {
+func dispatcherSelfUpdateDueWithDeps(deps dispatcherRunDeps) bool {
 	cacheRoot, err := dispatcherCacheRoot(runtime.GOOS)
 	if err != nil {
 		return false
@@ -272,10 +292,10 @@ func dispatcherSelfUpdateDue() bool {
 	if err := json.Unmarshal(content, &state); err != nil {
 		return true
 	}
-	return dispatcherNow().Sub(state.LastChecked) >= dispatcherSelfUpdateInterval
+	return deps.now().Sub(state.LastChecked) >= dispatcherSelfUpdateInterval
 }
 
-func markDispatcherSelfUpdateChecked() {
+func markDispatcherSelfUpdateCheckedWithDeps(deps dispatcherRunDeps) {
 	cacheRoot, err := dispatcherCacheRoot(runtime.GOOS)
 	if err != nil {
 		return
@@ -283,7 +303,7 @@ func markDispatcherSelfUpdateChecked() {
 	if err := os.MkdirAll(cacheRoot, 0o755); err != nil {
 		return
 	}
-	content, err := json.Marshal(dispatcherUpdateState{LastChecked: dispatcherNow().UTC()})
+	content, err := json.Marshal(dispatcherUpdateState{LastChecked: deps.now().UTC()})
 	if err != nil {
 		return
 	}

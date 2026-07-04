@@ -34,7 +34,7 @@ func tryHandleDispatcherInfoRequest(args []string, stdout io.Writer) (bool, int)
 	return false, 0
 }
 
-func tryHandlePreConnectionRequest(
+func tryHandlePreConnectionRequestWithDeps(
 	ctx context.Context,
 	remainingArgs []string,
 	command string,
@@ -43,6 +43,7 @@ func tryHandlePreConnectionRequest(
 	projectPath string,
 	stdout io.Writer,
 	stderr io.Writer,
+	deps dispatcherRunDeps,
 ) (bool, int) {
 	if clicore.ShouldHandleCompletionRequest(remainingArgs) {
 		completionTools := loadCompletionTools(startPath, projectPath)
@@ -67,7 +68,7 @@ func tryHandlePreConnectionRequest(
 	if handled, code := tryHandleUninstallRequest(ctx, remainingArgs, stdout, stderr); handled {
 		return true, code
 	}
-	if handled, code := tryHandleLaunchRequest(ctx, remainingArgs, startPath, projectPath, stdout, stderr); handled {
+	if handled, code := tryHandleLaunchRequestWithDeps(ctx, remainingArgs, startPath, projectPath, stdout, stderr, deps.launch); handled {
 		return true, code
 	}
 	if handled, code := tryHandleSkillsRequest(remainingArgs, startPath, projectPath, stdout, stderr); handled {

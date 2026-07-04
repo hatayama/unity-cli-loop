@@ -6,10 +6,10 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
-func logLaunchExistingFocus(ctx context.Context, projectRoot string, pid int) {
+func logLaunchExistingFocusWithDeps(ctx context.Context, projectRoot string, pid int, deps launchDeps) {
 	correlationID := clicore.NewCLIVibeCorrelationID()
 	logLaunchExistingFocusAttempt(projectRoot, pid, correlationID)
-	if err := focusUnityProcessForLaunch(ctx, pid); err != nil {
+	if err := deps.focusUnityProcess(ctx, pid); err != nil {
 		logLaunchExistingFocusFailure(projectRoot, pid, err, correlationID)
 		return
 	}
