@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/clitest"
+	"github.com/hatayama/unity-cli-loop/common/skillscan"
 )
 
 // Tests that run-tests-specific help text does not leak into unrelated tool schemas.
@@ -340,5 +341,5 @@ func writeToolCache(t *testing.T, projectRoot string, content string) {
 // shared clitest.WriteSkillFile helper, which owns the CRLF normalization.
 func writeTestSkill(t *testing.T, projectRoot string, relativeDir string, content string) {
 	t.Helper()
-	clitest.WriteSkillFile(t, projectRoot, relativeDir, SkillFileName, content)
+	clitest.WriteSkillFile(t, projectRoot, relativeDir, skillscan.SkillFileName, content)
 }

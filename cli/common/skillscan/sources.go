@@ -31,7 +31,7 @@ type SkillSourceRoot struct {
 
 func CollectInternalSkillToolNames(projectRoot string) map[string]bool {
 	toolNames := map[string]bool{}
-	for _, sourceRoot := range EnumerateSkillSourceRoots(projectRoot) {
+	for _, sourceRoot := range EnumerateSourceRoots(projectRoot) {
 		for _, toolName := range scanInternalSkillToolNames(sourceRoot) {
 			toolNames[toolName] = true
 		}
@@ -39,7 +39,7 @@ func CollectInternalSkillToolNames(projectRoot string) map[string]bool {
 	return toolNames
 }
 
-func EnumerateSkillSourceRoots(projectRoot string) []SkillSourceRoot {
+func EnumerateSourceRoots(projectRoot string) []SkillSourceRoot {
 	sourceRoots := []SkillSourceRoot{}
 	seen := map[string]bool{}
 	addSourceRoot := func(path string, cliOnly bool) {
@@ -56,16 +56,9 @@ func EnumerateSkillSourceRoots(projectRoot string) []SkillSourceRoot {
 
 	addSourceRoot(CliOnlySourceRoot(projectRoot), true)
 	addSourceRoot(filepath.Join(projectRoot, "Assets"), false)
-	for _, packageRoot := range enumerateDirectProjectPackageRoots(projectRoot) {
-		addSourceRoot(packageRoot, false)
+	for _, packageResult := range EnumeratePackageSearchResults(projectRoot) {
+		addSourceRoot(packageResult.Root, false)
 	}
-	for _, packageRoot := range resolveManifestLocalPackageRoots(projectRoot) {
-		addSourceRoot(packageRoot, false)
-	}
-	for _, packageRoot := range resolveDependencyPackageCacheRoots(projectRoot) {
-		addSourceRoot(packageRoot, false)
-	}
-	addSourceRoot(ResolvePackageRoot(projectRoot), false)
 	return sourceRoots
 }
 
