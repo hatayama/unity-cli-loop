@@ -400,9 +400,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             Debug.Assert(cluster.Samples.Count > 0, "Physics collider cluster must contain sampled hits.");
             RaycastClusterSample representative = cluster.Representative;
-            List<RaycastCoverageCell> coverageCells =
-                CreateSampleCoverageCells(cluster.Samples, sampleCoverage);
-            RaycastSampleBounds sampleBounds = CalculateSampleCellBounds(coverageCells);
+            RaycastSampleBounds sampleBounds = CalculateSampleCellBounds(cluster.Samples, sampleCoverage);
 
             UIElementInfo element = new UIElementInfo
             {
@@ -420,8 +418,7 @@ namespace io.github.hatayama.uLoopMCP
                 SortingOrder = 0,
                 SiblingIndex = 0,
                 Layer = metadata.Layer,
-                Components = new List<string>(metadata.Components),
-                RaycastCoverageCells = coverageCells
+                Components = new List<string>(metadata.Components)
             };
 
             Debug.Assert(
@@ -448,65 +445,31 @@ namespace io.github.hatayama.uLoopMCP
                 imageToInputOffsetY + renderingImageSize.y);
         }
 
-        internal static List<RaycastCoverageCell> CreateSampleCoverageCells(
+        private static RaycastSampleBounds CalculateSampleCellBounds(
             List<RaycastClusterSample> samples,
             RaycastSampleCoverage sampleCoverage)
         {
             Debug.Assert(samples.Count > 0, "At least one raycast sample is required.");
 
-            List<RaycastCoverageCell> coverageCells = new List<RaycastCoverageCell>(samples.Count);
-            foreach (RaycastClusterSample sample in samples)
+            float minX = samples[0].InputX - sampleCoverage.HalfStepX;
+            float minY = samples[0].InputY - sampleCoverage.HalfStepY;
+            float maxX = samples[0].InputX + sampleCoverage.HalfStepX;
+            float maxY = samples[0].InputY + sampleCoverage.HalfStepY;
+
+            for (int i = 1; i < samples.Count; i++)
             {
-                coverageCells.Add(CreateSampleCoverageCell(sample, sampleCoverage));
+                RaycastClusterSample sample = samples[i];
+                minX = Mathf.Min(minX, sample.InputX - sampleCoverage.HalfStepX);
+                minY = Mathf.Min(minY, sample.InputY - sampleCoverage.HalfStepY);
+                maxX = Mathf.Max(maxX, sample.InputX + sampleCoverage.HalfStepX);
+                maxY = Mathf.Max(maxY, sample.InputY + sampleCoverage.HalfStepY);
             }
 
-            return coverageCells;
-        }
-
-        private static RaycastCoverageCell CreateSampleCoverageCell(
-            RaycastClusterSample sample,
-            RaycastSampleCoverage sampleCoverage)
-        {
-            float minX = Mathf.Clamp(
-                sample.InputX - sampleCoverage.HalfStepX,
-                sampleCoverage.MinX,
-                sampleCoverage.MaxX);
-            float minY = Mathf.Clamp(
-                sample.InputY - sampleCoverage.HalfStepY,
-                sampleCoverage.MinY,
-                sampleCoverage.MaxY);
-            float maxX = Mathf.Clamp(
-                sample.InputX + sampleCoverage.HalfStepX,
-                sampleCoverage.MinX,
-                sampleCoverage.MaxX);
-            float maxY = Mathf.Clamp(
-                sample.InputY + sampleCoverage.HalfStepY,
-                sampleCoverage.MinY,
-                sampleCoverage.MaxY);
-
-            return new RaycastCoverageCell(minX, minY, maxX, maxY);
-        }
-
-        private static RaycastSampleBounds CalculateSampleCellBounds(
-            List<RaycastCoverageCell> coverageCells)
-        {
-            Debug.Assert(coverageCells.Count > 0, "At least one raycast coverage cell is required.");
-
-            float minX = coverageCells[0].MinX;
-            float minY = coverageCells[0].MinY;
-            float maxX = coverageCells[0].MaxX;
-            float maxY = coverageCells[0].MaxY;
-
-            for (int i = 1; i < coverageCells.Count; i++)
-            {
-                RaycastCoverageCell coverageCell = coverageCells[i];
-                minX = Mathf.Min(minX, coverageCell.MinX);
-                minY = Mathf.Min(minY, coverageCell.MinY);
-                maxX = Mathf.Max(maxX, coverageCell.MaxX);
-                maxY = Mathf.Max(maxY, coverageCell.MaxY);
-            }
-
-            return new RaycastSampleBounds(minX, minY, maxX, maxY);
+            return new RaycastSampleBounds(
+                Mathf.Clamp(minX, sampleCoverage.MinX, sampleCoverage.MaxX),
+                Mathf.Clamp(minY, sampleCoverage.MinY, sampleCoverage.MaxY),
+                Mathf.Clamp(maxX, sampleCoverage.MinX, sampleCoverage.MaxX),
+                Mathf.Clamp(maxY, sampleCoverage.MinY, sampleCoverage.MaxY));
         }
 
         private static UiRaycastHelper.RaycastContext? CreateUiRaycastContext()

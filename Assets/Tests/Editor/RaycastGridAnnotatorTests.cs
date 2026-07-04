@@ -362,42 +362,6 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
-        public void CreateSampleCoverageCells_WhenSamplesFormLShape_ShouldPreserveHitCellShape()
-        {
-            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
-            {
-                CreateSample(1, 20f, 20f),
-                CreateSample(1, 30f, 20f),
-                CreateSample(1, 20f, 30f)
-            };
-            RaycastSampleCoverage coverage = CreateCoverage(5f, 5f, 0f, 0f, 100f, 100f);
-
-            List<RaycastCoverageCell> coverageCells =
-                RaycastGridAnnotator.CreateSampleCoverageCells(samples, coverage);
-
-            Assert.That(coverageCells.Count, Is.EqualTo(3));
-            AssertCoverageCell(coverageCells[0], 15f, 15f, 25f, 25f);
-            AssertCoverageCell(coverageCells[1], 25f, 15f, 35f, 25f);
-            AssertCoverageCell(coverageCells[2], 15f, 25f, 25f, 35f);
-        }
-
-        [Test]
-        public void CreateSampleCoverageCells_WhenSampleTouchesViewportEdge_ShouldClampCell()
-        {
-            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
-            {
-                CreateSample(1, 3f, 4f)
-            };
-            RaycastSampleCoverage coverage = CreateCoverage(5f, 10f, 0f, 0f, 200f, 300f);
-
-            List<RaycastCoverageCell> coverageCells =
-                RaycastGridAnnotator.CreateSampleCoverageCells(samples, coverage);
-
-            Assert.That(coverageCells.Count, Is.EqualTo(1));
-            AssertCoverageCell(coverageCells[0], 0f, 0f, 8f, 14f);
-        }
-
-        [Test]
         public void IsUiOcclusionRaycastResult_WhenGraphicRaycasterHit_ShouldReturnTrue()
         {
             GameObject canvasObject = new GameObject("GraphicRaycasterOcclusionTest");
@@ -572,19 +536,6 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             float maxY)
         {
             return new RaycastSampleCoverage(halfStepX, halfStepY, minX, minY, maxX, maxY);
-        }
-
-        private static void AssertCoverageCell(
-            RaycastCoverageCell coverageCell,
-            float minX,
-            float minY,
-            float maxX,
-            float maxY)
-        {
-            Assert.That(coverageCell.MinX, Is.EqualTo(minX));
-            Assert.That(coverageCell.MinY, Is.EqualTo(minY));
-            Assert.That(coverageCell.MaxX, Is.EqualTo(maxX));
-            Assert.That(coverageCell.MaxY, Is.EqualTo(maxY));
         }
     }
 }

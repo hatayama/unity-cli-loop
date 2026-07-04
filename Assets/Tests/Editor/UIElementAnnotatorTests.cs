@@ -173,43 +173,6 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
-        public void CreateAnnotationOverlay_WhenRaycastCoverageCellsExist_ShouldDrawFillBelowBorders()
-        {
-            UIElementInfo element = new UIElementInfo
-            {
-                Label = "A",
-                Type = "PhysicsCollider",
-                Interaction = "Raycast",
-                BoundsMinX = 10f,
-                BoundsMinY = 20f,
-                BoundsMaxX = 110f,
-                BoundsMaxY = 70f
-            };
-            element.RaycastCoverageCells.Add(new RaycastCoverageCell(12f, 24f, 42f, 54f));
-            List<UIElementInfo> elements = new List<UIElementInfo> { element };
-            GameObject overlay = UIElementAnnotator.CreateAnnotationOverlay(elements, 1f);
-
-            try
-            {
-                Transform fill = overlay.transform.Find("RaycastCoverageFill_0");
-                Transform border = overlay.transform.Find("Border_DarkInner_Top");
-                Assert.That(fill, Is.Not.Null);
-                Assert.That(fill.GetSiblingIndex(), Is.LessThan(border.GetSiblingIndex()));
-
-                RectTransform fillRect = fill.GetComponent<RectTransform>();
-                Image fillImage = fill.GetComponent<Image>();
-                Assert.That(fillRect.anchoredPosition, Is.EqualTo(new Vector2(12f, 24f)));
-                Assert.That(fillRect.sizeDelta, Is.EqualTo(new Vector2(30f, 30f)));
-                Assert.That(fillImage.color.a, Is.EqualTo(0.25f).Within(0.001f));
-                Assert.That(fillImage.raycastTarget, Is.False);
-            }
-            finally
-            {
-                UIElementAnnotator.DestroyAnnotationOverlay(overlay);
-            }
-        }
-
-        [Test]
         public void CreateAnnotationOverlay_WhenElementIsAnnotated_ShouldKeepLabelOutlineAwayFromBorder()
         {
             List<UIElementInfo> elements = new List<UIElementInfo>
