@@ -11,9 +11,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal static class CliPinSynchronizer
     {
-        internal static void SyncCurrentProjectPin()
+        internal static bool SyncCurrentProjectPin()
         {
-            SyncProjectPinFile(UnityCliLoopConstants.PackageResolvedPath, ResolveCurrentProjectRoot(UnityEngine.Application.dataPath));
+            return SyncProjectPinFile(UnityCliLoopConstants.PackageResolvedPath, ResolveCurrentProjectRoot(UnityEngine.Application.dataPath));
         }
 
         internal static string ResolveCurrentProjectRoot(string assetsPath)
@@ -61,6 +61,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (!File.Exists(sourcePath))
             {
+                // Why: the pin JSON is the only runtime source for the dispatcher's project runner version,
+                // so a missing package source must be visible instead of silently skipping synchronization.
+                Debug.LogWarning(
+                    $"Unity CLI Loop skipped {pinFileName} synchronization because the package source pin was not found at {sourcePath}.");
                 return false;
             }
 
