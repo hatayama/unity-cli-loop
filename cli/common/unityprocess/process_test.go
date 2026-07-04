@@ -1,6 +1,8 @@
 package unityprocess
 
 import (
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -147,5 +149,21 @@ func TestParseWindowsForegroundHandle(t *testing.T) {
 	}
 	if parseWindowsForegroundHandle("not-a-handle") != 0 {
 		t.Fatal("expected invalid handle to be ignored")
+	}
+}
+
+// Verifies comparable project paths preserve case on case-sensitive-capable platforms.
+func TestNormalizeComparablePathPreservesCaseOutsideWindows(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows project matching is intentionally case-insensitive.")
+	}
+
+	path := filepath.Join(t.TempDir(), "CaseSensitiveProject")
+	normalizedPath, err := normalizeComparablePath(path)
+	if err != nil {
+		t.Fatalf("normalizeComparablePath failed: %v", err)
+	}
+	if !strings.Contains(normalizedPath, "CaseSensitiveProject") {
+		t.Fatalf("expected normalized path to preserve case, got %q", normalizedPath)
 	}
 }

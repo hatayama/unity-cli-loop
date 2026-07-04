@@ -190,5 +190,9 @@ func normalizeComparablePath(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return strings.ToLower(filepath.ToSlash(filepath.Clean(absolutePath))), nil
+	normalizedPath := filepath.ToSlash(filepath.Clean(absolutePath))
+	if runtime.GOOS == "windows" {
+		return strings.ToLower(normalizedPath), nil
+	}
+	return normalizedPath, nil
 }
