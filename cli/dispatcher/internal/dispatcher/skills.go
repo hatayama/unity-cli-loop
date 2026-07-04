@@ -8,6 +8,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/project"
+	"github.com/hatayama/unity-cli-loop/common/skillscan"
 )
 
 const (
@@ -355,7 +356,7 @@ func detectInstalledSkillTargets(projectRoot string, skills []skillDefinition, o
 func hasAnyInstalledSkill(baseDir string, skills []skillDefinition) (bool, error) {
 	for _, skill := range skills {
 		for _, grouped := range []bool{false, true} {
-			skillFile := filepath.Join(getPreferredSkillDir(baseDir, skill.name, grouped), clicore.SkillFileName)
+			skillFile := filepath.Join(getPreferredSkillDir(baseDir, skill.name, grouped), skillscan.SkillFileName)
 			if _, err := os.Stat(skillFile); err == nil {
 				return true, nil
 			} else if !os.IsNotExist(err) {
