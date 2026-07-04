@@ -73,8 +73,7 @@ func TestPipeSendKeepsWaitingWhileHeartbeatsArrive(t *testing.T) {
 		writeFrame(t, conn, `{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`)
 	})
 
-	client := NewClient(connection, "9.9.9")
-	client.heartbeatSilenceOverride = 200 * time.Millisecond
+	client := NewClient(connection, "9.9.9", withHeartbeatSilenceOverrideForTest(200*time.Millisecond))
 
 	outcome, err := client.SendWithProgressOutcome(context.Background(), "run-tests", map[string]any{}, nil)
 	if err != nil {
@@ -96,8 +95,7 @@ func TestPipeSendFailsWithDiagnosisWhenHeartbeatsStop(t *testing.T) {
 	})
 	defer close(done)
 
-	client := NewClient(connection, "9.9.9")
-	client.heartbeatSilenceOverride = 150 * time.Millisecond
+	client := NewClient(connection, "9.9.9", withHeartbeatSilenceOverrideForTest(150*time.Millisecond))
 
 	_, err := client.SendWithProgressOutcome(context.Background(), "run-tests", map[string]any{}, nil)
 	if err == nil {
