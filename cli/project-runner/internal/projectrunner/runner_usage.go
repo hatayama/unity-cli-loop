@@ -20,7 +20,7 @@ func tryHandleRunnerInfoRequest(args []string, stdout io.Writer) (bool, int) {
 		return true, 0
 	}
 	if clicore.IsVersionRequest(args) {
-		clicore.WriteLine(stdout, clicore.Version)
+		clicore.WriteLine(stdout, clicore.Version())
 		return true, 0
 	}
 	return false, 0

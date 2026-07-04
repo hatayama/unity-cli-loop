@@ -199,7 +199,7 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 		Params:  params,
 		ULoop: rpcClientMetadata{
 			ProjectRunnerVersion: client.clientVersion,
-			ProtocolVersion:      clicontract.Current.ProtocolVersion,
+			ProtocolVersion:      clicontract.ProtocolVersion(),
 			AcceptsDispatchAck:   true,
 			AcceptsHeartbeat:     true,
 		},

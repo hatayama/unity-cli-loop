@@ -159,7 +159,7 @@ func queryCompileStatusFromUnity(ctx context.Context, connection unityipc.Connec
 	probeContext, cancel := context.WithTimeout(ctx, compileStatusProbeTimeout)
 	defer cancel()
 
-	response, err := unityipc.NewClient(connection, clicore.Version).Send(
+	response, err := unityipc.NewClient(connection, clicore.Version()).Send(
 		probeContext,
 		compileStatusCommandName,
 		map[string]any{compileRequestIDParam: requestID},
@@ -202,7 +202,7 @@ func logCliDebugModeResolved(connection unityipc.Connection, command string) {
 			"debug_enabled":    true,
 			"debug_source":     "env",
 			"project_identity": clicore.ProjectIdentity(connection.ProjectRoot),
-			"cli_version":      clicore.Version,
+			"cli_version":      clicore.Version(),
 		},
 	})
 }

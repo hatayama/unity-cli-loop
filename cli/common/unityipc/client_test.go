@@ -251,7 +251,7 @@ func assertClientMetadataRequest(t *testing.T, request map[string]any) {
 	if metadata["projectRunnerVersion"] != "3.0.0-beta.6" {
 		t.Fatalf("project runner version metadata mismatch: %#v", metadata)
 	}
-	if metadata["protocolVersion"] != float64(clicontract.Current.ProtocolVersion) {
+	if metadata["protocolVersion"] != float64(clicontract.ProtocolVersion()) {
 		t.Fatalf("protocol version metadata mismatch: %#v", metadata)
 	}
 	if metadata["acceptsDispatchAck"] != true {

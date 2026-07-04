@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"sync"
 )
 
 const (
@@ -14,7 +15,11 @@ const (
 //go:embed contract.json
 var contractFiles embed.FS
 
-var Current = mustLoadContract()
+var (
+	contractLoadOnce sync.Once
+	loadedContract   Contract
+	loadContractErr  error
+)
 
 type Contract struct {
 	SchemaVersion int `json:"schemaVersion"`
@@ -24,28 +29,61 @@ type Contract struct {
 	ProjectRunnerVersion string `json:"projectRunnerVersion"`
 }
 
-func mustLoadContract() Contract {
+// Load reads and validates the embedded CLI contract.
+func Load() (Contract, error) {
+	contractLoadOnce.Do(func() {
+		loadedContract, loadContractErr = loadEmbeddedContract()
+	})
+	return loadedContract, loadContractErr
+}
+
+func loadEmbeddedContract() (Contract, error) {
 	content, err := contractFiles.ReadFile(contractFileName)
 	if err != nil {
-		panic(fmt.Sprintf("CLI contract is not embedded: %v", err))
+		return Contract{}, fmt.Errorf("CLI contract is not embedded: %w", err)
 	}
 
+	return parseContract(content)
+}
+
+// ProjectRunnerVersion returns the project runner release version from the CLI contract.
+func ProjectRunnerVersion() string {
+	return mustLoadContract().ProjectRunnerVersion
+}
+
+// ProtocolVersion returns the IPC protocol generation from the CLI contract.
+func ProtocolVersion() int {
+	return mustLoadContract().ProtocolVersion
+}
+
+func parseContract(content []byte) (Contract, error) {
 	var contract Contract
 	if err := json.Unmarshal(content, &contract); err != nil {
-		panic(fmt.Sprintf("CLI contract is invalid JSON: %v", err))
+		return Contract{}, fmt.Errorf("CLI contract is invalid JSON: %w", err)
 	}
 	if contract.SchemaVersion != schemaVersion {
-		panic(fmt.Sprintf("CLI contract schema version mismatch: %d", contract.SchemaVersion))
+		return Contract{}, fmt.Errorf("CLI contract schema version mismatch: %d", contract.SchemaVersion)
 	}
-	requireString(contract.ProjectRunnerVersion, "projectRunnerVersion")
+	if err := requireString(contract.ProjectRunnerVersion, "projectRunnerVersion"); err != nil {
+		return Contract{}, err
+	}
 	if contract.ProtocolVersion < 1 {
-		panic(fmt.Sprintf("CLI contract protocolVersion must be at least 1, got %d", contract.ProtocolVersion))
+		return Contract{}, fmt.Errorf("CLI contract protocolVersion must be at least 1, got %d", contract.ProtocolVersion)
+	}
+	return contract, nil
+}
+
+func mustLoadContract() Contract {
+	contract, err := Load()
+	if err != nil {
+		panic(err)
 	}
 	return contract
 }
 
-func requireString(value string, key string) {
+func requireString(value string, key string) error {
 	if value == "" {
-		panic(fmt.Sprintf("contract field %s must not be empty", key))
+		return fmt.Errorf("contract field %s must not be empty", key)
 	}
+	return nil
 }
