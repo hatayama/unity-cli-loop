@@ -39,11 +39,12 @@ list_dispatcher_only_common_inputs() {
     grep -v '_test\.go$' || true
 }
 
-list_installer_inputs() {
+list_dispatcher_script_inputs() {
   git ls-files -- \
     scripts/install.sh \
     scripts/install.ps1 \
-    'cli/dispatcher/internal/install/scripts/'
+    'cli/dispatcher/internal/install/scripts/' \
+    'cli/dispatcher/internal/uninstall/scripts/'
 }
 
 # Hashes path/content pairs so renames change the stamp as well. Only tracked
@@ -75,7 +76,7 @@ write_stamp() {
 }
 
 common_hash=$(list_shared_common_inputs | hash_input_list)
-dispatcher_hash=$({ list_shared_common_inputs; list_dispatcher_only_common_inputs; list_installer_inputs; } | hash_input_list)
+dispatcher_hash=$({ list_shared_common_inputs; list_dispatcher_only_common_inputs; list_dispatcher_script_inputs; } | hash_input_list)
 
 write_stamp cli/project-runner/shared-inputs-stamp.json "$common_hash"
 write_stamp cli/dispatcher/shared-inputs-stamp.json "$dispatcher_hash"
