@@ -3,20 +3,30 @@
 package unityprocess
 
 import (
+	"bytes"
 	"context"
 	"os/exec"
 )
 
 func FocusUnityProcess(ctx context.Context, pid int) error {
 	script := buildFocusUnityProcessWindowsScript(pid)
-	return exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", script).Run()
+	stderr := bytes.Buffer{}
+	command := exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", script)
+	command.Stderr = &stderr
+	if err := command.Run(); err != nil {
+		return commandErrorWithStderr(err, stderr.String())
+	}
+	return nil
 }
 
 func FocusUnityProcessWithRestore(ctx context.Context, pid int) (RestoreFocusFunc, error) {
 	script := buildFocusUnityProcessWindowsWithRestoreScript(pid)
-	output, err := exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", script).Output()
+	stderr := bytes.Buffer{}
+	command := exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", script)
+	command.Stderr = &stderr
+	output, err := command.Output()
 	if err != nil {
-		return nil, err
+		return nil, commandErrorWithStderr(err, stderr.String())
 	}
 	previousHandle := parseWindowsForegroundHandle(string(output))
 	if previousHandle == 0 {
@@ -29,5 +39,11 @@ func FocusUnityProcessWithRestore(ctx context.Context, pid int) (RestoreFocusFun
 
 func restoreWindowsForegroundWindow(ctx context.Context, handle int64) error {
 	script := buildRestoreWindowsForegroundWindowScript(handle)
-	return exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", script).Run()
+	stderr := bytes.Buffer{}
+	command := exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", script)
+	command.Stderr = &stderr
+	if err := command.Run(); err != nil {
+		return commandErrorWithStderr(err, stderr.String())
+	}
+	return nil
 }
