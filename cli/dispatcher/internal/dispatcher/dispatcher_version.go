@@ -8,15 +8,11 @@ import (
 	"github.com/hatayama/unity-cli-loop/dispatcher/dispatchercontract"
 )
 
-var (
-	dispatcherVersion         = dispatchercontract.DispatcherCurrent.DispatcherVersion
-	dispatcherContractVersion = dispatchercontract.DispatcherCurrent.DispatcherContractVersion
-)
+var dispatcherVersion = dispatchercontract.DispatcherCurrent.DispatcherVersion
 
 func writeDispatcherVersionJSON(stdout io.Writer) {
 	content, err := json.Marshal(map[string]any{
-		"DispatcherVersion":         dispatcherVersion,
-		"DispatcherContractVersion": dispatcherContractVersion,
+		"DispatcherVersion": dispatcherVersion,
 	})
 	if err != nil {
 		panic(err)

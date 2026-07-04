@@ -25,8 +25,8 @@ func TestRunDispatcherVersionJSONReportsDispatcherIdentity(t *testing.T) {
 	if payload["DispatcherVersion"] != dispatcherVersion {
 		t.Fatalf("DispatcherVersion mismatch: %v", payload["DispatcherVersion"])
 	}
-	if _, ok := payload["DispatcherContractVersion"]; !ok {
-		t.Fatalf("DispatcherContractVersion missing: %#v", payload)
+	if _, ok := payload["DispatcherContractVersion"]; ok {
+		t.Fatalf("DispatcherContractVersion must not be emitted: %#v", payload)
 	}
 }
 

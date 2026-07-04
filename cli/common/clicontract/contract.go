@@ -9,7 +9,6 @@ import (
 
 const (
 	contractFileName = "contract.json"
-	schemaVersion    = 1
 )
 
 //go:embed contract.json
@@ -22,7 +21,6 @@ var (
 )
 
 type Contract struct {
-	SchemaVersion int `json:"schemaVersion"`
 	// ProtocolVersion is the C# IPC contract generation this binary speaks. It moves only
 	// when the Unity package and the CLI can no longer interoperate, never per release.
 	ProtocolVersion      int    `json:"protocolVersion"`
@@ -60,9 +58,6 @@ func parseContract(content []byte) (Contract, error) {
 	var contract Contract
 	if err := json.Unmarshal(content, &contract); err != nil {
 		return Contract{}, fmt.Errorf("CLI contract is invalid JSON: %w", err)
-	}
-	if contract.SchemaVersion != schemaVersion {
-		return Contract{}, fmt.Errorf("CLI contract schema version mismatch: %d", contract.SchemaVersion)
 	}
 	if err := requireString(contract.ProjectRunnerVersion, "projectRunnerVersion"); err != nil {
 		return Contract{}, err

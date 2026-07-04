@@ -77,9 +77,7 @@ write_contract() {
   mkdir -p cli/dispatcher/dispatchercontract
   printf '%s\n' \
     '{' \
-    '  "schemaVersion": 1,' \
-    '  "dispatcherVersion": "'"$version"'",' \
-    '  "dispatcherContractVersion": 1' \
+    '  "dispatcherVersion": "'"$version"'"' \
     '}' > cli/dispatcher/dispatchercontract/dispatcher-contract.json
 }
 
