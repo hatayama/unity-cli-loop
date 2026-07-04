@@ -1,19 +1,19 @@
 ---
 name: uloop-launch
-description: "Launch Unity project with matching Editor version via uloop CLI. Use when you need to: (1) Open a Unity project with the correct Editor version, (2) Restart Unity to apply changes, (3) Switch build target when launching."
+description: "Use when Unity Editor is not running or needs a clean restart."
 ---
 
-# uloop launch
+# npx --yes uloop-cli@2.2.0 launch
 
 Launch Unity Editor with the correct version for a project.
 
-`uloop launch` is not fire-and-forget. When Unity needs to start or restart, the command waits
+`npx --yes uloop-cli@2.2.0 launch` is not fire-and-forget. When Unity needs to start or restart, the command waits
 until Unity is actually ready for CLI operations before it exits.
 
 ## Usage
 
 ```bash
-uloop launch [project-path] [options]
+npx --yes uloop-cli@2.2.0 launch [project-path] [options]
 ```
 
 ## Parameters
@@ -31,19 +31,19 @@ uloop launch [project-path] [options]
 
 ```bash
 # Search for Unity project in current directory and launch
-uloop launch
+npx --yes uloop-cli@2.2.0 launch
 
 # Launch specific project
-uloop launch /path/to/project
+npx --yes uloop-cli@2.2.0 launch /path/to/project
 
 # Restart Unity (kill existing and relaunch)
-uloop launch -r
+npx --yes uloop-cli@2.2.0 launch -r
 
 # Launch with build target
-uloop launch -p Android
+npx --yes uloop-cli@2.2.0 launch -p Android
 
 # Add project to Unity Hub without launching
-uloop launch -a
+npx --yes uloop-cli@2.2.0 launch -a
 ```
 
 ## Output

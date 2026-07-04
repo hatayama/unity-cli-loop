@@ -1,16 +1,16 @@
 ---
 name: uloop-get-logs
-description: "Retrieve current Unity Console entries via uloop CLI. Use when you need to: (1) inspect errors, warnings, or logs after compile, tests, PlayMode, or dynamic code execution, (2) search current Console messages or stack traces, (3) confirm whether a recent Unity operation emitted logs. Prefer this over reading Editor.log or Unity log files for normal Console contents; use log files only for startup, crash, freeze, or uloop connection failures."
+description: "Read current Unity Console entries from a running Editor. Use during bug investigation after compile, tests, PlayMode, or dynamic code to inspect logs, warnings, errors, and stack traces."
 ---
 
-# uloop get-logs
+# npx --yes uloop-cli@2.2.0 get-logs
 
 Retrieve logs from Unity Console.
 
 ## Usage
 
 ```bash
-uloop get-logs [options]
+npx --yes uloop-cli@2.2.0 get-logs [options]
 ```
 
 ## Parameters
@@ -34,16 +34,16 @@ uloop get-logs [options]
 
 ```bash
 # Get all logs
-uloop get-logs
+npx --yes uloop-cli@2.2.0 get-logs
 
 # Get only errors
-uloop get-logs --log-type Error
+npx --yes uloop-cli@2.2.0 get-logs --log-type Error
 
 # Search for specific text
-uloop get-logs --search-text "NullReference"
+npx --yes uloop-cli@2.2.0 get-logs --search-text "NullReference"
 
 # Regex search
-uloop get-logs --search-text "Missing.*Component" --use-regex
+npx --yes uloop-cli@2.2.0 get-logs --search-text "Missing.*Component" --use-regex
 ```
 
 ## Output

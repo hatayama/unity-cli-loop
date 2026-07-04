@@ -1,16 +1,16 @@
 ---
 name: uloop-focus-window
-description: "Bring Unity Editor window to front via uloop CLI. Use when you need to: (1) Focus Unity Editor before capturing screenshots, (2) Ensure Unity window is visible for visual checks, (3) Bring Unity to foreground for user interaction."
+description: "Bring the Unity Editor window to front. Use when Unity must be visible for visual checks or user-facing interaction."
 ---
 
-# uloop focus-window
+# npx --yes uloop-cli@2.2.0 focus-window
 
 Bring Unity Editor window to front using OS-level commands.
 
 ## Usage
 
 ```bash
-uloop focus-window
+npx --yes uloop-cli@2.2.0 focus-window
 ```
 
 ## Parameters
@@ -27,7 +27,7 @@ None.
 
 ```bash
 # Focus Unity Editor
-uloop focus-window
+npx --yes uloop-cli@2.2.0 focus-window
 ```
 
 ## Output
@@ -42,5 +42,5 @@ These are the only two fields. There is no PID, window-handle, or platform field
 
 - **Works even when Unity is busy** (compiling, domain reload, etc.)
 - Uses OS-level commands (osascript on macOS, PowerShell on Windows)
-- Useful before `uloop capture-unity-window` to ensure the target window is visible
+- Useful before `npx --yes uloop-cli@2.2.0 capture-unity-window` to ensure the target window is visible
 - Brings the main Unity Editor window to the foreground

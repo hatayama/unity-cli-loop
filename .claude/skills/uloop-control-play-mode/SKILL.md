@@ -1,16 +1,16 @@
 ---
 name: uloop-control-play-mode
-description: "Control Unity Editor play mode (play/stop/pause). Use when you need to: (1) Start play mode to test game behavior, (2) Stop play mode to return to edit mode, (3) Pause play mode for frame-by-frame inspection."
+description: "Control Unity Editor Play Mode. Use to start, stop, or pause Play Mode for runtime behavior checks and frame inspection."
 ---
 
-# uloop control-play-mode
+# npx --yes uloop-cli@2.2.0 control-play-mode
 
 Control Unity Editor play mode (play/stop/pause).
 
 ## Usage
 
 ```bash
-uloop control-play-mode [options]
+npx --yes uloop-cli@2.2.0 control-play-mode [options]
 ```
 
 ## Parameters
@@ -29,13 +29,13 @@ uloop control-play-mode [options]
 
 ```bash
 # Start play mode
-uloop control-play-mode --action Play
+npx --yes uloop-cli@2.2.0 control-play-mode --action Play
 
 # Stop play mode
-uloop control-play-mode --action Stop
+npx --yes uloop-cli@2.2.0 control-play-mode --action Stop
 
 # Pause play mode
-uloop control-play-mode --action Pause
+npx --yes uloop-cli@2.2.0 control-play-mode --action Pause
 ```
 
 ## Output

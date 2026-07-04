@@ -31,7 +31,7 @@ Use these patterns when you need shell-safe inline code:
 Single-quote the whole snippet and keep C# string literals unchanged.
 
 ```zsh
-uloop execute-dynamic-code --code 'return "Hello from zsh";'
+npx --yes uloop-cli@2.2.0 execute-dynamic-code --code 'return "Hello from zsh";'
 ```
 
 ### Single quotes inside inline C# code
@@ -39,7 +39,7 @@ uloop execute-dynamic-code --code 'return "Hello from zsh";'
 If the C# snippet itself contains a single quote, close and reopen the shell string with `'\''`.
 
 ```zsh
-uloop execute-dynamic-code --code 'char initial = '\''A'\''; return initial.ToString();'
+npx --yes uloop-cli@2.2.0 execute-dynamic-code --code 'char initial = '\''A'\''; return initial.ToString();'
 ```
 
 ### JSON-like values passed via `--parameters`
@@ -47,7 +47,7 @@ uloop execute-dynamic-code --code 'char initial = '\''A'\''; return initial.ToSt
 Wrap the whole expression in single quotes so the shell does not interpret double quotes.
 
 ```zsh
-uloop execute-dynamic-code --code 'return parameters["param0"];' --parameters '{"param0":"Hello from zsh"}'
+npx --yes uloop-cli@2.2.0 execute-dynamic-code --code 'return parameters["param0"];' --parameters '{"param0":"Hello from zsh"}'
 ```
 
 ## Click UI Button by Path
@@ -137,7 +137,7 @@ return $"Moved {player.name} to {targetPos}";
 
 # Tool Combination Workflows
 
-Examples of combining `execute-dynamic-code` with other uloop tools for multi-step PlayMode automation.
+Examples of combining `execute-dynamic-code` with other npx --yes uloop-cli@2.2.0 tools for multi-step PlayMode automation.
 
 ## find-game-objects → Click Button
 
@@ -146,7 +146,7 @@ Use `find-game-objects` to discover buttons with their hierarchy paths, then cli
 **Step 1**: Find all GameObjects with Button component
 
 ```zsh
-uloop find-game-objects --required-components UnityEngine.UI.Button --include-inactive false
+npx --yes uloop-cli@2.2.0 find-game-objects --required-components UnityEngine.UI.Button
 ```
 
 **Step 2**: Click the target button using the path from Step 1
@@ -172,7 +172,7 @@ Use `get-hierarchy` to explore the UI tree structure, then target the right elem
 **Step 1**: Get Canvas hierarchy to understand UI structure
 
 ```zsh
-uloop get-hierarchy --root-path "Canvas" --max-depth 3 --include-components true
+npx --yes uloop-cli@2.2.0 get-hierarchy --root-path "Canvas" --max-depth 3
 ```
 
 **Step 2**: Based on the hierarchy JSON, click the desired button
@@ -212,7 +212,7 @@ return "Clicked PlayButton";
 **Step 2**: Capture Game View to verify the result
 
 ```zsh
-uloop screenshot --window-name Game
+npx --yes uloop-cli@2.2.0 screenshot --window-name Game
 ```
 
 ## Execute Action → Check Logs for Side Effects
@@ -222,7 +222,7 @@ Run an action then inspect Unity Console logs to verify expected behavior.
 **Step 1**: Clear console before the action
 
 ```zsh
-uloop clear-console
+npx --yes uloop-cli@2.2.0 clear-console
 ```
 
 **Step 2**: Perform the action
@@ -246,7 +246,7 @@ return "Invoked TakeDamage(50)";
 **Step 3**: Check logs for expected output
 
 ```zsh
-uloop get-logs --log-type Log --search-text "damage"
+npx --yes uloop-cli@2.2.0 get-logs --log-type Log --search-text "damage"
 ```
 
 ## Full Automation: Play → Act → Capture → Stop
@@ -256,13 +256,13 @@ End-to-end test flow: start Play mode, perform actions, capture evidence, stop.
 **Step 0**: Clear console to isolate this run
 
 ```zsh
-uloop clear-console
+npx --yes uloop-cli@2.2.0 clear-console
 ```
 
 **Step 1**: Start Play mode
 
 ```zsh
-uloop control-play-mode --action Play
+npx --yes uloop-cli@2.2.0 control-play-mode --action Play
 ```
 
 **Step 2**: Wait for scene initialization, then find and click a button
@@ -283,17 +283,17 @@ return $"Clicked {startBtn.gameObject.name}";
 **Step 3**: Capture screenshot as evidence
 
 ```zsh
-uloop screenshot --window-name Game
+npx --yes uloop-cli@2.2.0 screenshot --window-name Game
 ```
 
 **Step 4**: Check logs for errors
 
 ```zsh
-uloop get-logs --log-type Error
+npx --yes uloop-cli@2.2.0 get-logs --log-type Error
 ```
 
 **Step 5**: Stop Play mode
 
 ```zsh
-uloop control-play-mode --action Stop
+npx --yes uloop-cli@2.2.0 control-play-mode --action Stop
 ```

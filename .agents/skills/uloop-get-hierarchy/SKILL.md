@@ -1,9 +1,9 @@
 ---
 name: uloop-get-hierarchy
-description: "Get Unity scene hierarchy as a structured tree from all roots, a root path, or the current Hierarchy selection. Use this when you need the child tree, parent-child structure, or descendants under selected GameObject(s) with `--use-selection`. Use find-game-objects for selected object details and component properties. Hierarchy data is written to a JSON file on disk and the response returns the file path (not the tree inline) — open the file to read the structure."
+description: "Get the Unity scene hierarchy as a structured tree. Use for parent-child structure, descendants, roots, or subtrees under objects the user currently selected."
 ---
 
-# uloop get-hierarchy
+# npx --yes uloop-cli@2.2.0 get-hierarchy
 
 Get Unity Hierarchy structure from the whole scene, a root path, or selected Hierarchy objects.
 
@@ -12,7 +12,7 @@ Use this for hierarchy structure, especially descendants under the current selec
 ## Usage
 
 ```bash
-uloop get-hierarchy [options]
+npx --yes uloop-cli@2.2.0 get-hierarchy [options]
 ```
 
 ## Parameters
@@ -37,19 +37,19 @@ uloop get-hierarchy [options]
 
 ```bash
 # Get entire hierarchy
-uloop get-hierarchy
+npx --yes uloop-cli@2.2.0 get-hierarchy
 
 # Get hierarchy from specific root
-uloop get-hierarchy --root-path "Canvas/UI"
+npx --yes uloop-cli@2.2.0 get-hierarchy --root-path "Canvas/UI"
 
 # Limit depth
-uloop get-hierarchy --max-depth 2
+npx --yes uloop-cli@2.2.0 get-hierarchy --max-depth 2
 
 # Without components
-uloop get-hierarchy --include-components false
+npx --yes uloop-cli@2.2.0 get-hierarchy --include-components false
 
 # Get hierarchy from currently selected GameObjects
-uloop get-hierarchy --use-selection
+npx --yes uloop-cli@2.2.0 get-hierarchy --use-selection
 ```
 
 ## Output

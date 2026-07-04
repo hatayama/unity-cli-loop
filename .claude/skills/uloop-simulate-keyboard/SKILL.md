@@ -1,6 +1,6 @@
 ---
 name: uloop-simulate-keyboard
-description: "Simulate keyboard key input in PlayMode via Input System. Use when you need to: (1) Press game control keys like WASD, Space, or Shift during PlayMode, (2) Hold keys down for continuous movement or actions, (3) Combine multiple held keys for complex input like Shift+W for sprint. Injects into Unity Input System (`Keyboard.current`); requires PlayMode and the New Input System."
+description: "Simulate keyboard input in PlayMode through Unity Input System. Use for key presses, holds, releases, and game controls such as WASD or Space."
 context: fork
 ---
 
@@ -10,15 +10,15 @@ Simulate keyboard input on Unity PlayMode: $ARGUMENTS
 
 ## Workflow
 
-1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
-2. Execute the appropriate `uloop simulate-keyboard` command
-3. Take a screenshot to verify the result: `uloop screenshot --capture-mode rendering`
+1. Ensure Unity is in PlayMode (use `npx --yes uloop-cli@2.2.0 control-play-mode --action Play` if not)
+2. Execute the appropriate `npx --yes uloop-cli@2.2.0 simulate-keyboard` command
+3. Take a screenshot to verify the result: `npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering`
 4. Report what happened
 
 ## Tool Reference
 
 ```bash
-uloop simulate-keyboard --action <action> --key <key> [options]
+npx --yes uloop-cli@2.2.0 simulate-keyboard --action <action> --key <key> [options]
 ```
 
 ### Parameters
@@ -55,20 +55,20 @@ uloop simulate-keyboard --action <action> --key <key> [options]
 
 ```bash
 # One-shot key press (tap W once)
-uloop simulate-keyboard --action Press --key W
+npx --yes uloop-cli@2.2.0 simulate-keyboard --action Press --key W
 
 # Jump (tap Space)
-uloop simulate-keyboard --action Press --key Space
+npx --yes uloop-cli@2.2.0 simulate-keyboard --action Press --key Space
 
 # Hold W for 2 seconds (move forward)
-uloop simulate-keyboard --action Press --key W --duration 2.0
+npx --yes uloop-cli@2.2.0 simulate-keyboard --action Press --key W --duration 2.0
 
 # Sprint forward (hold Shift + W, then release)
-uloop simulate-keyboard --action KeyDown --key LeftShift
-uloop simulate-keyboard --action KeyDown --key W
-uloop screenshot --capture-mode rendering
-uloop simulate-keyboard --action KeyUp --key W
-uloop simulate-keyboard --action KeyUp --key LeftShift
+npx --yes uloop-cli@2.2.0 simulate-keyboard --action KeyDown --key LeftShift
+npx --yes uloop-cli@2.2.0 simulate-keyboard --action KeyDown --key W
+npx --yes uloop-cli@2.2.0 screenshot --capture-mode rendering
+npx --yes uloop-cli@2.2.0 simulate-keyboard --action KeyUp --key W
+npx --yes uloop-cli@2.2.0 simulate-keyboard --action KeyUp --key LeftShift
 ```
 
 ## Output
@@ -82,6 +82,6 @@ Returns JSON with:
 ## Prerequisites
 
 - Unity must be in **PlayMode**
-- **Input System package** (`com.unity.inputsystem`) must be installed
-- Active Input Handling must be set to **Input System Package (New)** or **Both** in Player Settings
+- **Input System package** must be installed (`com.unity.inputsystem`)
+- Use this only when the project already uses the New Input System.
 - Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`
