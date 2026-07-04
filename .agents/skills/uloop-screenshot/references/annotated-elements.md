@@ -38,7 +38,7 @@ input_x = image_x / resolutionScale
 input_y = image_y / resolutionScale + imageToInputOffsetY
 ```
 
-When `ResolutionScale` is `1.0` and `ImageToInputOffsetY` is `0`, raw image pixel coordinates already match mouse-input coordinates. `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` are always returned as mouse-input coordinates, so pass those values directly.
+When `ResolutionScale` is `1.0` and `ImageToInputOffsetY` is `0` for rendering captures, raw image pixel coordinates already match mouse-input coordinates. `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` are already mouse-input coordinates in that mode, so pass those values directly.
 
 For `PhysicsCollider` entries, `SimX/SimY` is a real sampled raycast hit nearest to the reachable cluster centroid. This avoids synthetic center points that may fall into empty space for L-shaped or ring-shaped collider coverage. Always use `SimX/SimY` for clicking; use `BoundsMinX/Y` and `BoundsMaxX/Y` only as a sampled coverage guide.
 

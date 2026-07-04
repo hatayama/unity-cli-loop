@@ -24,7 +24,7 @@ uloop screenshot [--window-name <name>] [--resolution-scale <scale>] [--match-mo
 | `--output-directory` | string | `""` | Output directory path for saving screenshots. When empty, uses default path (.uloop/outputs/Screenshots/). Accepts absolute paths. |
 | `--annotate-elements` | boolean value | `false` | Annotate interactive UI elements with index labels and interaction hints (A / CLICK, B / DRAG, ...). Pass `true` or `false`; bare flags are not accepted. Only works with `--capture-mode rendering` in PlayMode. |
 | `--annotate-raycast-grid` | boolean value | `false` | Annotate 3D physics raycast candidate points (R1, R2, ...). Pass `true` or `false`; bare flags are not accepted. Only works with `--capture-mode rendering`; uses Camera.main and its culling mask. |
-| `--raycast-layer-mask` | string | `""` | Comma-separated physics layer names for `--annotate-raycast-grid true`. Hits are limited to layers also visible to Camera.main.cullingMask. When set, dense raycast samples are clustered by collider and returned as `Type="PhysicsCollider"` entries in `AnnotatedElements`; samples blocked by EventSystem `GraphicRaycaster` UI hits are skipped. |
+| `--raycast-layer-mask` | string | `""` | Comma-separated physics layer names for `--annotate-raycast-grid true`. Hits are limited to layers also visible to Camera.main.cullingMask. When set, dense raycast samples are clustered by clickable GameObject and returned as `Type="PhysicsCollider"` entries in `AnnotatedElements`; multiple colliders on the same GameObject share one entry. Samples blocked by EventSystem `GraphicRaycaster` UI hits are skipped. |
 | `--elements-only` | boolean value | `false` | Return only annotation JSON without capturing a screenshot image. Pass `true` or `false`; bare flags are not accepted. Requires `--annotate-elements true` or `--annotate-raycast-grid true`, and `--capture-mode rendering` in PlayMode. |
 
 ## Match Modes
@@ -94,10 +94,10 @@ Returns JSON with:
   - `Height`: Captured image height in pixels
   - `ImageCoordinateSystem`: `"top-left-game-view"` for `--capture-mode rendering`, or `"top-left-window"` for window captures
   - `ResolutionScale`: Resolution scale used for capture
-  - `ImageToInputOffsetY`: Y offset added after unscaling image pixels to get mouse-input coordinates
-  - `GameViewWidth` / `GameViewHeight`: Game View size used by mouse input tools
-  - `ScreenshotToInputFormula`: Formula for turning image coordinates into mouse-input coordinates
-  - `UnityInputFormula`: Formula used internally by mouse input tools to inject `Mouse.current.position`
+  - `ImageToInputOffsetY`: Y offset added after unscaling image pixels to get mouse-input coordinates (rendering captures only)
+  - `GameViewWidth` / `GameViewHeight`: Game View size used by mouse input tools (rendering captures only)
+  - `ScreenshotToInputFormula`: Formula for turning image coordinates into mouse-input coordinates (rendering captures only; unavailable for window captures)
+  - `UnityInputFormula`: Formula used internally by mouse input tools to inject `Mouse.current.position` (rendering captures only; empty for window captures)
   - `AnnotatedElements`: Array of annotated UI element metadata. Also includes clustered `PhysicsCollider` entries when `--annotate-raycast-grid true --raycast-layer-mask <layers>` is used.
   - `RaycastGridPoints`: Array of coarse 3D raycast candidate metadata. Empty unless `--annotate-raycast-grid true` is used without `--raycast-layer-mask`.
   - `RaycastLayerSummaries`: Dense raycast hit counts by layer when `--annotate-raycast-grid true` is used without `--raycast-layer-mask`. Empty when a mask is provided.
