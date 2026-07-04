@@ -230,7 +230,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool result = CliInstallationDetector.IsShellDetectionUsableForPathSetup(
                 detection,
                 UnityEngine.RuntimePlatform.OSXEditor,
-                (path, platform) => false);
+                (path, platform) => false,
+                "3.0.1-beta.6");
 
             Assert.That(result, Is.False);
         }

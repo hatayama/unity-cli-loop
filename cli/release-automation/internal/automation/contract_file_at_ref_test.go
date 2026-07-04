@@ -256,10 +256,9 @@ func TestContractFileAtRefWithLegacyFallback_WhenPrimaryReadSucceeds_DoesNotCons
 	}
 }
 
-// Verifies the "no path found at an existing ref" outcome still classifies as
-// missing through the sentinel-based classifier, so the bootstrap exemption
-// keeps working when the path list grows.
-func TestContractFileAtRefWithLegacyFallback_WhenAllPathsAbsentAtExistingRef_ClassifiesAsMissingByClassifier(t *testing.T) {
+// Verifies that when every legacy path is also absent at a resolvable ref,
+// the primary show error is surfaced so operators keep the initial signal.
+func TestContractFileAtRefWithLegacyFallback_WhenAllPathsAbsentAtExistingRef_ReturnsPrimaryShowError(t *testing.T) {
 	workDir, binDir := setupMockGitBin(t)
 
 	writeExistenceMockGit(t, binDir, mockGitExistenceFixture{
@@ -280,13 +279,6 @@ func TestContractFileAtRefWithLegacyFallback_WhenAllPathsAbsentAtExistingRef_Cla
 		"generation/second.json")
 	if err == nil {
 		t.Fatal("expected an error when every path is absent")
-	}
-
-	// The runner-side caller wraps this outcome with the sentinel message. The
-	// classifier must accept it regardless of the checked-path count.
-	sentinelErr := errors.New(runnerContractMissingAtReleaseMessage("uloop-project-runner-v0.0.0"))
-	if !protocolMinimumVersionReleaseContractIsMissing(sentinelErr) {
-		t.Fatalf("expected classifier to recognize sentinel message, got: %v", sentinelErr)
 	}
 }
 

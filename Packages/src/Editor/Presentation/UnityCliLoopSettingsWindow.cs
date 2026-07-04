@@ -985,10 +985,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string cliVersion,
             bool cliIsDispatcher)
         {
+            // Why: route through the setup facade so the pin JSON stays the single source for the minimum
+            // dispatcher version instead of duplicating the constant in the presentation layer.
             return CliSetupCompatibility.Evaluate(
                 cliVersion,
                 cliIsDispatcher,
-                CliConstants.MINIMUM_REQUIRED_DISPATCHER_VERSION);
+                CliSetupApplicationFacade.GetMinimumRequiredCliVersion());
         }
 
         private async Task HandleUninstallCli()
