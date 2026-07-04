@@ -88,16 +88,18 @@ namespace io.github.hatayama.uLoopMCP
             int imageToInputOffsetY,
             int layerMask)
         {
-            List<RaycastClusterSample> samples = CollectClusterSamples(
+            RaycastClusterCollection clusterCollection = CollectClusterSamples(
                 renderingImageSize,
                 imageToInputOffsetY,
                 layerMask);
-            List<RaycastClusterInfo> clusters = RaycastHitClusterer.CreateClusters(samples);
+            List<RaycastClusterInfo> clusters = RaycastHitClusterer.CreateClusters(clusterCollection.Samples);
             List<UIElementInfo> elements = new List<UIElementInfo>();
 
             for (int i = 0; i < clusters.Count; i++)
             {
-                elements.Add(CreatePhysicsColliderElement($"R{i + 1}", clusters[i]));
+                RaycastColliderMetadata metadata =
+                    clusterCollection.MetadataByClusterKey[clusters[i].Representative.ClusterKey];
+                elements.Add(CreatePhysicsColliderElement($"R{i + 1}", clusters[i], metadata));
             }
 
             return elements;
@@ -163,12 +165,12 @@ namespace io.github.hatayama.uLoopMCP
             return pointInfo;
         }
 
-        private static List<RaycastClusterSample> CollectClusterSamples(
+        private static RaycastClusterCollection CollectClusterSamples(
             Vector2 renderingImageSize,
             int imageToInputOffsetY,
             int layerMask)
         {
-            List<RaycastClusterSample> samples = new List<RaycastClusterSample>();
+            RaycastClusterCollection clusterCollection = new RaycastClusterCollection();
             // Sync once before the dense pass so every sample reads the same current physics state.
             Physics.SyncTransforms();
 
@@ -195,28 +197,39 @@ namespace io.github.hatayama.uLoopMCP
                     }
 
                     RaycastHit hit = raycastResult.Hits[0];
-                    samples.Add(CreateClusterSample(inputPosition, raycastResult, hit));
+                    Collider collider = hit.collider;
+                    int clusterKey = collider.GetInstanceID();
+                    if (!clusterCollection.MetadataByClusterKey.ContainsKey(clusterKey))
+                    {
+                        clusterCollection.MetadataByClusterKey.Add(
+                            clusterKey,
+                            CreateColliderMetadata(collider));
+                    }
+
+                    clusterCollection.Samples.Add(CreateClusterSample(inputPosition, clusterKey));
                 }
             }
 
-            return samples;
+            return clusterCollection;
         }
 
         private static RaycastClusterSample CreateClusterSample(
             Vector2 inputPosition,
-            GameViewRaycastResult raycastResult,
-            RaycastHit hit)
+            int clusterKey)
         {
-            Collider collider = hit.collider;
-            GameObject hitObject = collider.gameObject;
-
             return new RaycastClusterSample
             {
-                ClusterKey = collider.GetInstanceID(),
+                ClusterKey = clusterKey,
                 InputX = inputPosition.x,
-                InputY = inputPosition.y,
-                ScreenX = raycastResult.Conversion.InjectedUnityPosition.x,
-                ScreenY = raycastResult.Conversion.InjectedUnityPosition.y,
+                InputY = inputPosition.y
+            };
+        }
+
+        private static RaycastColliderMetadata CreateColliderMetadata(Collider collider)
+        {
+            GameObject hitObject = collider.gameObject;
+            return new RaycastColliderMetadata
+            {
                 Name = hitObject.name,
                 Path = GameObjectPathUtility.GetFullPath(hitObject),
                 Layer = LayerMask.LayerToName(hitObject.layer),
@@ -226,35 +239,44 @@ namespace io.github.hatayama.uLoopMCP
 
         internal static UIElementInfo CreatePhysicsColliderElement(
             string label,
-            RaycastClusterInfo cluster)
+            RaycastClusterInfo cluster,
+            RaycastColliderMetadata metadata)
         {
             RaycastClusterSample representative = cluster.Representative;
             float halfSize = MARKER_SIZE / 2f;
 
-            return new UIElementInfo
+            UIElementInfo element = new UIElementInfo
             {
                 Label = label,
-                Name = representative.Name,
-                Path = representative.Path,
+                Name = metadata.Name,
+                Path = metadata.Path,
                 Type = "PhysicsCollider",
                 Interaction = "Raycast",
                 SimX = representative.InputX,
                 SimY = representative.InputY,
-                BoundsMinX = representative.ScreenX - halfSize,
-                BoundsMinY = representative.ScreenY - halfSize,
-                BoundsMaxX = representative.ScreenX + halfSize,
-                BoundsMaxY = representative.ScreenY + halfSize,
+                BoundsMinX = representative.InputX - halfSize,
+                BoundsMinY = representative.InputY - halfSize,
+                BoundsMaxX = representative.InputX + halfSize,
+                BoundsMaxY = representative.InputY + halfSize,
                 SortingOrder = 0,
                 SiblingIndex = 0,
-                Layer = representative.Layer,
-                Components = new List<string>(representative.Components)
+                Layer = metadata.Layer,
+                Components = new List<string>(metadata.Components)
             };
+
+            Debug.Assert(
+                element.SimX >= element.BoundsMinX &&
+                element.SimX <= element.BoundsMaxX &&
+                element.SimY >= element.BoundsMinY &&
+                element.SimY <= element.BoundsMaxY,
+                "Physics collider bounds must use the same top-left input coordinate space as SimX/SimY.");
+            return element;
         }
 
         private static List<string> GetRelevantComponentTypeNames(GameObject hitObject)
         {
             List<string> componentTypeNames = new List<string>();
-            HashSet<string> seenTypeNames = new HashSet<string>();
+            HashSet<System.Type> seenTypes = new HashSet<System.Type>();
             Component[] components = hitObject.GetComponents<Component>();
 
             foreach (Component component in components)
@@ -269,14 +291,14 @@ namespace io.github.hatayama.uLoopMCP
                     continue;
                 }
 
-                string typeName = component.GetType().Name;
-                if (seenTypeNames.Contains(typeName))
+                System.Type componentType = component.GetType();
+                if (seenTypes.Contains(componentType))
                 {
                     continue;
                 }
 
-                seenTypeNames.Add(typeName);
-                componentTypeNames.Add(typeName);
+                seenTypes.Add(componentType);
+                componentTypeNames.Add(componentType.Name);
             }
 
             return componentTypeNames;

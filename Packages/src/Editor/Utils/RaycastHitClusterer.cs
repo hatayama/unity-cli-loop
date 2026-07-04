@@ -107,12 +107,6 @@ namespace io.github.hatayama.uLoopMCP
         public int ClusterKey { get; set; }
         public float InputX { get; set; }
         public float InputY { get; set; }
-        public float ScreenX { get; set; }
-        public float ScreenY { get; set; }
-        public string Name { get; set; } = "";
-        public string Path { get; set; } = "";
-        public string Layer { get; set; } = "";
-        public List<string> Components { get; set; } = new List<string>();
     }
 
     /// <summary>
@@ -122,5 +116,27 @@ namespace io.github.hatayama.uLoopMCP
     {
         public RaycastClusterSample Representative { get; set; } = new RaycastClusterSample();
         public int SampleCount { get; set; }
+    }
+
+    /// <summary>
+    /// Carries GameObject metadata for one clustered collider.
+    /// </summary>
+    internal sealed class RaycastColliderMetadata
+    {
+        public string Name { get; set; } = "";
+        public string Path { get; set; } = "";
+        public string Layer { get; set; } = "";
+        public List<string> Components { get; set; } = new List<string>();
+    }
+
+    /// <summary>
+    /// Keeps pure raycast samples separate from per-collider metadata.
+    /// </summary>
+    internal sealed class RaycastClusterCollection
+    {
+        public List<RaycastClusterSample> Samples { get; set; } = new List<RaycastClusterSample>();
+
+        public Dictionary<int, RaycastColliderMetadata> MetadataByClusterKey { get; set; } =
+            new Dictionary<int, RaycastColliderMetadata>();
     }
 }

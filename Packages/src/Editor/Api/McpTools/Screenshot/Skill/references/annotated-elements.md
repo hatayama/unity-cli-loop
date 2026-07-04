@@ -31,6 +31,8 @@ When `ResolutionScale` is `1.0` and `ImageToInputOffsetY` is `0`, raw image pixe
 
 For `PhysicsCollider` entries, `SimX/SimY` is a real sampled raycast hit nearest to the cluster centroid. This avoids synthetic center points that may fall into empty space for L-shaped or ring-shaped collider coverage.
 
+`--raycast-layer-mask` filters by the requested physics layers and Camera.main.cullingMask. A layer that is requested but hidden from the active camera is treated as not visible and will not produce `PhysicsCollider` entries.
+
 The mouse input tools convert internally to Unity Input System coordinates:
 
 ```text

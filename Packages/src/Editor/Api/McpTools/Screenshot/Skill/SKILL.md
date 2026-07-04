@@ -23,8 +23,8 @@ uloop screenshot [--window-name <name>] [--resolution-scale <scale>] [--match-mo
 | `--capture-mode` | enum | `window` | `window`=capture EditorWindow including toolbar, `rendering`=capture game rendering only (PlayMode required, coordinates match simulate-mouse) |
 | `--output-directory` | string | `""` | Output directory path for saving screenshots. When empty, uses default path (.uloop/outputs/Screenshots/). Accepts absolute paths. |
 | `--annotate-elements` | boolean | `false` | Annotate interactive UI elements with index labels and interaction hints (A / CLICK, B / DRAG, ...). Only works with `--capture-mode rendering` in PlayMode. |
-| `--annotate-raycast-grid` | boolean | `false` | Annotate 3D physics raycast candidate points (R1, R2, ...). Only works with `--capture-mode rendering`; uses Camera.main. |
-| `--raycast-layer-mask` | string | `""` | Comma-separated physics layer names for `--annotate-raycast-grid`. When set, dense raycast samples are clustered by collider and returned as `Type="PhysicsCollider"` entries in `AnnotatedElements`. |
+| `--annotate-raycast-grid` | boolean | `false` | Annotate 3D physics raycast candidate points (R1, R2, ...). Only works with `--capture-mode rendering`; uses Camera.main and its culling mask. |
+| `--raycast-layer-mask` | string | `""` | Comma-separated physics layer names for `--annotate-raycast-grid`. Hits are limited to layers also visible to Camera.main.cullingMask. When set, dense raycast samples are clustered by collider and returned as `Type="PhysicsCollider"` entries in `AnnotatedElements`. |
 | `--elements-only` | boolean | `false` | Return only annotation JSON without capturing a screenshot image. Requires `--annotate-elements` or `--annotate-raycast-grid`, and `--capture-mode rendering` in PlayMode. |
 
 ## Match Modes
@@ -111,5 +111,5 @@ When multiple windows match (e.g., multiple Inspector windows or when using `con
 - Window name matching is always case-insensitive
 - Use `--capture-mode rendering` for coordinates that should be passed to `simulate-mouse-input`, `simulate-mouse-ui`, or `raycast`.
 - Use `ScreenshotToInputFormula` before passing raw image pixels to mouse tools. `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` are already mouse-input coordinates.
-- Use `--raycast-layer-mask` with layer names from `find-game-objects` or project code when the game input code raycasts only specific layers.
+- Use `--raycast-layer-mask` with layer names from `find-game-objects` or project code when the game input code raycasts only specific layers. Layers hidden by Camera.main.cullingMask are not reported because they are not visible to the screenshot camera.
 - Do not use `window` captures as mouse-input coordinates because they include Unity Editor chrome.

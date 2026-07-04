@@ -176,32 +176,37 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
-        public void CreatePhysicsColliderElement_ShouldKeepSimCoordinatesInTopLeftInputSpace()
+        public void CreatePhysicsColliderElement_ShouldKeepBoundsInTopLeftInputSpace()
         {
             RaycastClusterInfo cluster = new RaycastClusterInfo
             {
                 Representative = new RaycastClusterSample
                 {
                     InputX = 100f,
-                    InputY = 200f,
-                    ScreenX = 100f,
-                    ScreenY = 880f,
-                    Name = "Cube",
-                    Path = "Cube",
-                    Layer = "Default",
-                    Components = new List<string> { "BoxCollider" }
+                    InputY = 200f
                 },
                 SampleCount = 3
             };
+            RaycastColliderMetadata metadata = new RaycastColliderMetadata
+            {
+                Name = "Cube",
+                Path = "Cube",
+                Layer = "Default",
+                Components = new List<string> { "BoxCollider" }
+            };
 
-            UIElementInfo element = RaycastGridAnnotator.CreatePhysicsColliderElement("R1", cluster);
+            UIElementInfo element = RaycastGridAnnotator.CreatePhysicsColliderElement("R1", cluster, metadata);
 
             Assert.That(element.Type, Is.EqualTo("PhysicsCollider"));
             Assert.That(element.Interaction, Is.EqualTo("Raycast"));
             Assert.That(element.SimX, Is.EqualTo(100f));
             Assert.That(element.SimY, Is.EqualTo(200f));
-            Assert.That(element.BoundsMinY, Is.EqualTo(871f));
-            Assert.That(element.BoundsMaxY, Is.EqualTo(889f));
+            Assert.That(element.BoundsMinX, Is.EqualTo(91f));
+            Assert.That(element.BoundsMinY, Is.EqualTo(191f));
+            Assert.That(element.BoundsMaxX, Is.EqualTo(109f));
+            Assert.That(element.BoundsMaxY, Is.EqualTo(209f));
+            Assert.That(element.SimX, Is.InRange(element.BoundsMinX, element.BoundsMaxX));
+            Assert.That(element.SimY, Is.InRange(element.BoundsMinY, element.BoundsMaxY));
         }
 
         private static RaycastClusterSample CreateSample(int clusterKey, float inputX, float inputY)
@@ -210,13 +215,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             {
                 ClusterKey = clusterKey,
                 InputX = inputX,
-                InputY = inputY,
-                ScreenX = inputX,
-                ScreenY = inputY,
-                Name = $"Collider{clusterKey}",
-                Path = $"Root/Collider{clusterKey}",
-                Layer = "Default",
-                Components = new List<string> { "BoxCollider" }
+                InputY = inputY
             };
         }
     }
