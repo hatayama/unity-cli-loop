@@ -82,11 +82,7 @@ type dispatcherMinimumVersionReleaseContract struct {
 }
 
 type dispatcherMinimumVersionCliPin struct {
-	SchemaVersion            int    `json:"schemaVersion"`
-	PackageName              string `json:"packageName"`
-	PackageVersion           string `json:"packageVersion"`
 	ProjectRunnerVersion     string `json:"projectRunnerVersion"`
-	RequiredProtocolVersion  int    `json:"requiredProtocolVersion"`
 	MinimumDispatcherVersion string `json:"minimumDispatcherVersion"`
 }
 
