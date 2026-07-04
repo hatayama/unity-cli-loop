@@ -257,7 +257,7 @@ func resolvePackageIdentity(packageRoot string, fallbackName string) PackageIden
 			return PackageIdentity(packageManifest)
 		}
 	}
-	if resolvePackageRootCandidate(packageRoot) != "" {
+	if resolvePackageRootCandidate(packageRoot) != "" && strings.EqualFold(fallbackName, "src") {
 		return PackageIdentity{Name: packageName}
 	}
 	return PackageIdentity{Name: fallbackName}

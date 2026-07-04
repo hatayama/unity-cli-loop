@@ -100,6 +100,21 @@ func TestResolvePackageRootIgnoresOtherManifestFilePackages(t *testing.T) {
 	}
 }
 
+// Tests that marker-only project packages are not treated as the Unity CLI Loop package unless they are Packages/src.
+func TestResolvePackageRootIgnoresMarkerOnlyUnrelatedProjectPackage(t *testing.T) {
+	projectRoot := t.TempDir()
+	unrelatedPackageRoot := filepath.Join(projectRoot, "Packages", "unrelated-package")
+	markerPath := filepath.Join(unrelatedPackageRoot, "Editor", "FirstPartyTools")
+	if err := os.MkdirAll(markerPath, 0o755); err != nil {
+		t.Fatalf("failed to create marker path: %v", err)
+	}
+
+	actualRoot := ResolvePackageRoot(projectRoot)
+	if actualRoot != "" {
+		t.Fatalf("unrelated marker-only package should not resolve as package root: %s", actualRoot)
+	}
+}
+
 // Tests that the historical Packages/src package root takes precedence over named package folders.
 func TestResolvePackageRootPrefersPackagesSrc(t *testing.T) {
 	projectRoot := t.TempDir()
