@@ -25,6 +25,10 @@ func TestCommandForDarwinRemovesUloopFromInstallDirectory(t *testing.T) {
 	if !strings.Contains(joinedArgs, "rm -f") {
 		t.Fatalf("remove command missing: %s", joinedArgs)
 	}
+	uninstallScript := posixUninstallScript(command.TargetPath)
+	if !strings.Contains(uninstallScript, `TargetPath='/Users/ExampleUser/.local/bin/uloop'`) {
+		t.Fatalf("target path assignment missing: %s", uninstallScript)
+	}
 	if command.TargetPath != "/Users/ExampleUser/.local/bin/uloop" {
 		t.Fatalf("target path mismatch: %s", command.TargetPath)
 	}
@@ -51,7 +55,7 @@ func TestCommandForWindowsSchedulesRemovalAfterCurrentProcessExits(t *testing.T)
 	for _, expected := range []string{
 		"Get-Process -Id $ParentPid",
 		"$ParentProcess | Wait-Process",
-		"$ParentPid = 5678",
+		"$ParentPid = [int]'5678'",
 		`return $Path.Trim().Trim('"').TrimEnd([char[]]@('\','/')).Replace('/','\')`,
 		"[Environment]::SetEnvironmentVariable('Path', $NewUserPath, 'User')",
 	} {
@@ -64,6 +68,41 @@ func TestCommandForWindowsSchedulesRemovalAfterCurrentProcessExits(t *testing.T)
 	}
 	if command.TargetPath != `C:\Users\ExampleUser\AppData\Local\Programs\uloop\bin\uloop.exe` {
 		t.Fatalf("target path mismatch: %s", command.TargetPath)
+	}
+}
+
+func TestPosixUninstallScriptReplacesTemplateValues(t *testing.T) {
+	// Verifies POSIX uninstall templates cannot ship with unresolved placeholders.
+	targetPath := "/tmp/uloop's bin/uloop"
+	uninstallScript := posixUninstallScript(targetPath)
+
+	if strings.Contains(uninstallScript, "{{") {
+		t.Fatalf("uninstall script contains unresolved template placeholder: %s", uninstallScript)
+	}
+	if !strings.Contains(uninstallScript, `TargetPath='/tmp/uloop'"'"'s bin/uloop'`) {
+		t.Fatalf("uninstall script does not quote target path correctly: %s", uninstallScript)
+	}
+}
+
+func TestWindowsUninstallScriptsReplaceTemplateValues(t *testing.T) {
+	// Verifies Windows uninstall templates cannot ship with unresolved placeholders.
+	targetPath := `C:\Temp\uloop's bin\uloop.exe`
+	deletionScript := windowsDeletionScript(targetPath, 5678)
+	launchScript := windowsLaunchScript(encodePowerShellCommand(deletionScript))
+
+	for _, script := range []string{deletionScript, launchScript} {
+		if strings.Contains(script, "{{") {
+			t.Fatalf("uninstall script contains unresolved template placeholder: %s", script)
+		}
+	}
+	if !strings.Contains(deletionScript, `$Target = 'C:\Temp\uloop''s bin\uloop.exe'`) {
+		t.Fatalf("deletion script does not quote target path correctly: %s", deletionScript)
+	}
+	if !strings.Contains(deletionScript, `$ParentPid = [int]'5678'`) {
+		t.Fatalf("deletion script does not quote parent pid correctly: %s", deletionScript)
+	}
+	if !strings.Contains(launchScript, "$EncodedDeletion = '") {
+		t.Fatalf("launch script does not assign encoded deletion command: %s", launchScript)
 	}
 }
 

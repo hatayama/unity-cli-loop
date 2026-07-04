@@ -180,14 +180,17 @@ func TestReleaseTriggerGuardRequiresDispatcherTriggerForInstallerChanges(t *test
 	}
 }
 
-// Verifies embedded installer templates are classified as dispatcher installer inputs.
-func TestReleaseTriggerGuardMatchesEmbeddedInstallerScripts(t *testing.T) {
+// Verifies embedded dispatcher script templates are classified as dispatcher inputs.
+func TestReleaseTriggerGuardMatchesEmbeddedDispatcherScripts(t *testing.T) {
 	for _, file := range []string{
 		"cli/dispatcher/internal/install/scripts/install_darwin.sh",
 		"cli/dispatcher/internal/install/scripts/install_windows.ps1",
+		"cli/dispatcher/internal/uninstall/scripts/uninstall_darwin.sh",
+		"cli/dispatcher/internal/uninstall/scripts/uninstall_windows_delete.ps1",
+		"cli/dispatcher/internal/uninstall/scripts/uninstall_windows_launch.ps1",
 	} {
-		if !isDispatcherInstallerScript(file) {
-			t.Fatalf("expected embedded installer script to match: %s", file)
+		if !isDispatcherScriptInput(file) {
+			t.Fatalf("expected embedded dispatcher script to match: %s", file)
 		}
 	}
 }
