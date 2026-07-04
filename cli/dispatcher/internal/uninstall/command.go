@@ -3,7 +3,7 @@ package uninstall
 import (
 	"encoding/base64"
 	"errors"
-	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf16"
 
@@ -36,10 +36,9 @@ func CommandForOS(goos string, options Options) (Command, error) {
 	switch goos {
 	case "darwin":
 		targetPath := nativepath.CommandPath(goos, options.InstallDir, PosixCommandName, WindowsCommandName)
-		script := "rm -f " + shellQuote(targetPath)
 		return Command{
 			Name:       "sh",
-			Args:       []string{"-c", script},
+			Args:       posixUninstallArgs(targetPath),
 			TargetPath: targetPath,
 		}, nil
 	case "windows":
@@ -58,12 +57,22 @@ func CommandForOS(goos string, options Options) (Command, error) {
 	}
 }
 
+func posixUninstallArgs(targetPath string) []string {
+	return []string{
+		"-c",
+		posixUninstallScript(targetPath),
+	}
+}
+
+func posixUninstallScript(targetPath string) string {
+	return strings.NewReplacer(
+		"'{{TARGET_PATH}}'", shellQuote(targetPath),
+	).Replace(uninstallScriptTemplate("scripts/uninstall_darwin.sh"))
+}
+
 func windowsUninstallArgs(targetPath string, currentPID int) []string {
 	deleteScript := windowsDeletionScript(targetPath, currentPID)
-	launchScript := fmt.Sprintf(
-		"$EncodedDeletion = '%s'\nStart-Process -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand',$EncodedDeletion) -WindowStyle Hidden\n",
-		encodePowerShellCommand(deleteScript),
-	)
+	launchScript := windowsLaunchScript(encodePowerShellCommand(deleteScript))
 	return []string{
 		"-NoProfile",
 		"-ExecutionPolicy",
@@ -73,38 +82,17 @@ func windowsUninstallArgs(targetPath string, currentPID int) []string {
 	}
 }
 
+func windowsLaunchScript(encodedDeletionScript string) string {
+	return strings.NewReplacer(
+		"'{{ENCODED_DELETION}}'", powerShellSingleQuote(encodedDeletionScript),
+	).Replace(uninstallScriptTemplate("scripts/uninstall_windows_launch.ps1"))
+}
+
 func windowsDeletionScript(targetPath string, currentPID int) string {
-	return fmt.Sprintf(
-		`$Target = %s
-$ParentPid = %d
-$InstallDir = Split-Path -Parent $Target
-$NormalizePath = {
-    param([string]$Path)
-    if (-not $Path) {
-        return ''
-    }
-    return $Path.Trim().Trim('"').TrimEnd([char[]]@('\','/')).Replace('/','\')
-}
-$ParentProcess = Get-Process -Id $ParentPid -ErrorAction SilentlyContinue
-if ($ParentProcess) {
-    $ParentProcess | Wait-Process -ErrorAction SilentlyContinue
-}
-$UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-if ($UserPath) {
-    $NormalizedInstallDir = & $NormalizePath $InstallDir
-    $PathEntries = $UserPath -split ';' | Where-Object { $_ -and -not [string]::Equals((& $NormalizePath $_), $NormalizedInstallDir, [System.StringComparison]::OrdinalIgnoreCase) }
-    $NewUserPath = [string]::Join(';', $PathEntries)
-    if (-not [string]::Equals($UserPath, $NewUserPath, [System.StringComparison]::Ordinal)) {
-        [Environment]::SetEnvironmentVariable('Path', $NewUserPath, 'User')
-    }
-}
-if (Test-Path -LiteralPath $Target) {
-    Remove-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
-}
-`,
-		powerShellSingleQuote(targetPath),
-		currentPID,
-	)
+	return strings.NewReplacer(
+		"'{{TARGET_PATH}}'", powerShellSingleQuote(targetPath),
+		"{{CURRENT_PID}}", strconv.Itoa(currentPID),
+	).Replace(uninstallScriptTemplate("scripts/uninstall_windows_delete.ps1"))
 }
 
 func encodePowerShellCommand(script string) string {

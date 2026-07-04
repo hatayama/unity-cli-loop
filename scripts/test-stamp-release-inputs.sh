@@ -21,7 +21,7 @@ create_fixture_repo() {
     git config user.email "test@example.com"
     git config user.name "Test User"
 
-    mkdir -p cli/common/clicore/subpkg cli/common/clitest cli/common/version/subpkg cli/dispatcher/internal/install/scripts cli/project-runner scripts
+    mkdir -p cli/common/clicore/subpkg cli/common/clitest cli/common/version/subpkg cli/dispatcher/internal/install/scripts cli/dispatcher/internal/uninstall/scripts cli/project-runner scripts
     printf 'package clicore\n' > cli/common/clicore/core.go
     printf 'package subpkg\n' > cli/common/clicore/subpkg/core.go
     printf 'package clicore\n\n// test-only content\n' > cli/common/clicore/core_test.go
@@ -34,6 +34,9 @@ create_fixture_repo() {
     printf 'Write-Host install\n' > scripts/install.ps1
     printf 'echo embedded install\n' > cli/dispatcher/internal/install/scripts/install_darwin.sh
     printf 'Write-Host embedded install\n' > cli/dispatcher/internal/install/scripts/install_windows.ps1
+    printf 'echo embedded uninstall\n' > cli/dispatcher/internal/uninstall/scripts/uninstall_darwin.sh
+    printf 'Write-Host embedded uninstall\n' > cli/dispatcher/internal/uninstall/scripts/uninstall_windows_delete.ps1
+    printf 'Write-Host embedded uninstall launch\n' > cli/dispatcher/internal/uninstall/scripts/uninstall_windows_launch.ps1
     printf '{}\n' > cli/dispatcher/shared-inputs-stamp.json
     printf '{}\n' > cli/project-runner/shared-inputs-stamp.json
     git add .
@@ -182,8 +185,23 @@ if [ "$(stamp_hash "$work_dir" cli/dispatcher/shared-inputs-stamp.json)" = "$dis
   exit 1
 fi
 
-# Verifies a dispatcher-only common package change moves only the dispatcher stamp.
+# Verifies an embedded uninstaller template change also moves only the dispatcher stamp.
 commit_fixture_change "$work_dir" "embedded installer change"
+runner_hash_after_embedded_installer=$(stamp_hash "$work_dir" cli/project-runner/shared-inputs-stamp.json)
+dispatcher_hash_after_embedded_installer=$(stamp_hash "$work_dir" cli/dispatcher/shared-inputs-stamp.json)
+printf 'Write-Host embedded uninstall v2\n' > "$work_dir/cli/dispatcher/internal/uninstall/scripts/uninstall_windows_delete.ps1"
+run_stamp "$work_dir"
+if [ "$(stamp_hash "$work_dir" cli/project-runner/shared-inputs-stamp.json)" != "$runner_hash_after_embedded_installer" ]; then
+  echo "Expected an embedded uninstaller change to keep the project-runner stamp." >&2
+  exit 1
+fi
+if [ "$(stamp_hash "$work_dir" cli/dispatcher/shared-inputs-stamp.json)" = "$dispatcher_hash_after_embedded_installer" ]; then
+  echo "Expected an embedded uninstaller change to move the dispatcher stamp." >&2
+  exit 1
+fi
+
+# Verifies a dispatcher-only common package change moves only the dispatcher stamp.
+commit_fixture_change "$work_dir" "embedded uninstaller change"
 runner_hash_before_dispatcher_only=$(stamp_hash "$work_dir" cli/project-runner/shared-inputs-stamp.json)
 dispatcher_hash_before_dispatcher_only=$(stamp_hash "$work_dir" cli/dispatcher/shared-inputs-stamp.json)
 printf 'package version\n\nconst changed = true\n' > "$work_dir/cli/common/version/compare.go"

@@ -24,7 +24,7 @@ type releaseTriggerRule struct {
 //
 // These rules are re-encoded as shell in scripts/stamp-release-inputs.sh
 // (list_shared_common_inputs / list_dispatcher_only_common_inputs /
-// list_installer_inputs); update both together. scripts/test-stamp-release-inputs.sh
+// list_dispatcher_script_inputs); update both together. scripts/test-stamp-release-inputs.sh
 // covers the same shared, dispatcher-only, installer, and ignored input cases.
 var releaseTriggerRules = []releaseTriggerRule{
 	{
@@ -38,8 +38,8 @@ var releaseTriggerRules = []releaseTriggerRule{
 		triggerRoots:     []string{"cli/dispatcher/"},
 	},
 	{
-		inputDescription: "installer scripts shipped as dispatcher release assets",
-		matchesInput:     isDispatcherInstallerScript,
+		inputDescription: "dispatcher installer and uninstaller script inputs",
+		matchesInput:     isDispatcherScriptInput,
 		triggerRoots:     []string{"cli/dispatcher/"},
 	},
 }
@@ -199,10 +199,11 @@ func isCommonGoSourceUnderPackageRoots(file string, packageRoots []string) bool 
 	return false
 }
 
-func isDispatcherInstallerScript(file string) bool {
+func isDispatcherScriptInput(file string) bool {
 	return file == "scripts/install.sh" ||
 		file == "scripts/install.ps1" ||
-		strings.HasPrefix(file, "cli/dispatcher/internal/install/scripts/")
+		strings.HasPrefix(file, "cli/dispatcher/internal/install/scripts/") ||
+		strings.HasPrefix(file, "cli/dispatcher/internal/uninstall/scripts/")
 }
 
 func anyFileUnderRoot(files []string, root string) bool {

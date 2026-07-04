@@ -24,6 +24,7 @@ reviews:
     - "**/*.go"
     - "**/*.py"
     - "**/*.sh"
+    - "cli/dispatcher/internal/**/scripts/**/*.ps1"
     - "**/*.command"
     - "**/*.md"
     - "**/*.uss"
