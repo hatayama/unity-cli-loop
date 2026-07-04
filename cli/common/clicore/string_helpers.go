@@ -1,15 +1,9 @@
 package clicore
 
-import "strings"
+import "github.com/hatayama/unity-cli-loop/common/tooldocs"
 
 func FirstHelpLine(description string) string {
-	for _, line := range strings.Split(description, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
+	return tooldocs.FirstHelpLine(description)
 }
 
 func FirstNonEmpty(values ...string) string {

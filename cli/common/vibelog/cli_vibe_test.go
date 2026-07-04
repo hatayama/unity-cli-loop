@@ -6,7 +6,7 @@ import (
 )
 
 // Verifies CLI Vibe logs are skipped unless ULOOP_DEBUG is enabled.
-func TestWriteCliVibeLogSkipsWhenDebugDisabled(t *testing.T) {
+func TestWriteCLIVibeLogSkipsWhenDebugDisabled(t *testing.T) {
 	t.Setenv(CLIVibeLogEnvName, "")
 	projectRoot := t.TempDir()
 
@@ -16,7 +16,7 @@ func TestWriteCliVibeLogSkipsWhenDebugDisabled(t *testing.T) {
 		Message:   "test message",
 	})
 	if err != nil {
-		t.Fatalf("writeCliVibeLog should skip without error: %v", err)
+		t.Fatalf("WriteCLIVibeLog should skip without error: %v", err)
 	}
 	logFiles, err := filepath.Glob(filepath.Join(projectRoot, CLIVibeLogDirectory, CLIVibeLogPrefix+"_*.json"))
 	if err != nil {
