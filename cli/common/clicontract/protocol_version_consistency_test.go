@@ -45,11 +45,12 @@ type unityPackageCliPin struct {
 // its own package. This check is deterministic and needs no git diff or release numbering.
 func TestProtocolVersionMatchesUnityPackage(t *testing.T) {
 	unityProtocolVersion := readUnityRequiredProtocolVersion(t)
-	if Current.ProtocolVersion != unityProtocolVersion {
+	cliProtocolVersion := ProtocolVersion()
+	if cliProtocolVersion != unityProtocolVersion {
 		t.Fatalf(
 			"protocol version mismatch: cli/contract.json declares %d but %s requires %d; "+
 				"bump both together on a breaking IPC change",
-			Current.ProtocolVersion, unityProtocolConstantPath, unityProtocolVersion)
+			cliProtocolVersion, unityProtocolConstantPath, unityProtocolVersion)
 	}
 }
 
@@ -69,11 +70,11 @@ func TestUnityPackageCliPinMatchesReleaseContracts(t *testing.T) {
 	if pin.PackageVersion != manifest.Version {
 		t.Fatalf("expected %s packageVersion to match %s version: %q != %q", unityPackageCliPinPath, unityPackageManifestPath, pin.PackageVersion, manifest.Version)
 	}
-	if pin.ProjectRunnerVersion != Current.ProjectRunnerVersion {
-		t.Fatalf("expected %s projectRunnerVersion to match cli/contract.json projectRunnerVersion: %q != %q", unityPackageCliPinPath, pin.ProjectRunnerVersion, Current.ProjectRunnerVersion)
+	if pin.ProjectRunnerVersion != ProjectRunnerVersion() {
+		t.Fatalf("expected %s projectRunnerVersion to match cli/contract.json projectRunnerVersion: %q != %q", unityPackageCliPinPath, pin.ProjectRunnerVersion, ProjectRunnerVersion())
 	}
-	if pin.RequiredProtocolVersion != Current.ProtocolVersion {
-		t.Fatalf("expected %s requiredProtocolVersion to match cli/contract.json protocolVersion: %d != %d", unityPackageCliPinPath, pin.RequiredProtocolVersion, Current.ProtocolVersion)
+	if pin.RequiredProtocolVersion != ProtocolVersion() {
+		t.Fatalf("expected %s requiredProtocolVersion to match cli/contract.json protocolVersion: %d != %d", unityPackageCliPinPath, pin.RequiredProtocolVersion, ProtocolVersion())
 	}
 	if pin.RequiredProtocolVersion != readUnityRequiredProtocolVersion(t) {
 		t.Fatalf("expected %s requiredProtocolVersion to match %s", unityPackageCliPinPath, unityProtocolConstantPath)

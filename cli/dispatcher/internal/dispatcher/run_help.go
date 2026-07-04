@@ -17,7 +17,7 @@ const (
 func printHelp(stdout io.Writer) {
 	printMainHelp(
 		stdout,
-		clicore.Version,
+		clicore.Version(),
 		nativeCLIDescription,
 		clicore.ToolsCache{},
 		false)
@@ -37,7 +37,7 @@ func printHelpForResolvedProject(stdout io.Writer, explicitProjectPath string) {
 	}
 
 	cache, ok := clicore.LoadProjectToolCache(connection.ProjectRoot)
-	printMainHelp(stdout, clicore.Version, nativeCLIDescription, cache, ok)
+	printMainHelp(stdout, clicore.Version(), nativeCLIDescription, cache, ok)
 }
 
 func printLauncherHelp(stdout io.Writer) {

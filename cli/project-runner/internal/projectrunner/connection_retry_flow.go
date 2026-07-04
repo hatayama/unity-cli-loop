@@ -13,7 +13,7 @@ func newConnectionRetryClient(
 	responseTimeout time.Duration,
 	mainThreadStallHandler func(float64),
 ) *unityipc.Client {
-	client := unityipc.NewClient(connection, clicore.Version)
+	client := unityipc.NewClient(connection, clicore.Version())
 	if responseTimeout > 0 {
 		client = client.WithResponseTimeout(responseTimeout)
 	}

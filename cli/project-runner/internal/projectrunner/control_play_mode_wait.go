@@ -198,7 +198,7 @@ func requestControlPlayModeStatus(
 	probeContext, cancel := context.WithTimeout(ctx, controlPlayModeStatusTimeout)
 	defer cancel()
 
-	result, err := unityipc.NewClient(connection, clicore.Version).Send(
+	result, err := unityipc.NewClient(connection, clicore.Version()).Send(
 		probeContext,
 		controlPlayModeCommandName,
 		map[string]any{

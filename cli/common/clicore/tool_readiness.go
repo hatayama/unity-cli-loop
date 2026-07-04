@@ -132,11 +132,11 @@ func probeToolReadiness(ctx context.Context, projectRoot string, executeDynamicC
 	}
 
 	if !executeDynamicCodeAvailable {
-		_, err := unityipc.NewClient(connection, Version).Send(probeContext, "get-version", map[string]any{})
+		_, err := unityipc.NewClient(connection, Version()).Send(probeContext, "get-version", map[string]any{})
 		return err
 	}
 
-	response, err := unityipc.NewClient(connection, Version).Send(probeContext, "execute-dynamic-code", executeDynamicCodeReadinessProbeParams())
+	response, err := unityipc.NewClient(connection, Version()).Send(probeContext, "execute-dynamic-code", executeDynamicCodeReadinessProbeParams())
 	if err != nil {
 		return err
 	}
