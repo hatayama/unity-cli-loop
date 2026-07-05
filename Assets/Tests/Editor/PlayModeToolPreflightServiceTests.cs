@@ -27,14 +27,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void RequireActiveAndNotPaused_WhenEditModeIsNotPlaying_ReturnsNotActiveFailure()
         {
             // Verifies the paused-aware preflight also fails with the exact not-active message when PlayMode is inactive.
-            ValidationResult result = PlayModeToolPreflightService.RequireActiveAndNotPaused("recording input");
+            ValidationResult result = PlayModeToolPreflightService.RequireActiveAndNotPaused(RecordInputUseCase.PausedActionDescription);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo(ExpectedNotActiveMessage));
         }
 
         [Test]
-        public void PlayModeNotActiveMessage_MatchesOriginalToolResponseString()
+        public void PlayModeNotActiveMessage_EqualsExpectedWireString()
         {
             // Pins the not-active constant exposed to callers so any refactor keeps the wire string byte-identical.
             Assert.That(
@@ -43,38 +43,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void FormatPausedMessage_WithRecordingInputSuffix_MatchesOriginalToolResponse()
+        public void FormatPausedMessage_WithRecordInputSuffix_ReturnsExpectedWireString()
         {
-            // Pins RecordInput's exact wire-visible paused message.
+            // Verifies RecordInput's paused preflight message stays byte-identical, including the suffix the use case actually passes.
             Assert.That(
-                PlayModeToolPreflightService.FormatPausedMessage("recording input"),
+                PlayModeToolPreflightService.FormatPausedMessage(RecordInputUseCase.PausedActionDescription),
                 Is.EqualTo("PlayMode is paused. Resume PlayMode before recording input."));
         }
 
         [Test]
-        public void FormatPausedMessage_WithReplayingInputSuffix_MatchesOriginalToolResponse()
+        public void FormatPausedMessage_WithReplayInputSuffix_ReturnsExpectedWireString()
         {
-            // Pins ReplayInput's exact wire-visible paused message.
+            // Verifies ReplayInput's paused preflight message stays byte-identical, including the suffix the use case actually passes.
             Assert.That(
-                PlayModeToolPreflightService.FormatPausedMessage("replaying input"),
+                PlayModeToolPreflightService.FormatPausedMessage(ReplayInputUseCase.PausedActionDescription),
                 Is.EqualTo("PlayMode is paused. Resume PlayMode before replaying input."));
         }
 
         [Test]
-        public void FormatPausedMessage_WithSimulatingKeyboardInputSuffix_MatchesOriginalToolResponse()
+        public void FormatPausedMessage_WithSimulateKeyboardSuffix_ReturnsExpectedWireString()
         {
-            // Pins SimulateKeyboard's exact wire-visible paused message.
+            // Verifies SimulateKeyboard's paused preflight message stays byte-identical, including the suffix the use case actually passes.
             Assert.That(
-                PlayModeToolPreflightService.FormatPausedMessage("simulating keyboard input"),
+                PlayModeToolPreflightService.FormatPausedMessage(SimulateKeyboardUseCase.PausedActionDescription),
                 Is.EqualTo("PlayMode is paused. Resume PlayMode before simulating keyboard input."));
         }
 
         [Test]
-        public void FormatPausedMessage_WithSimulatingMouseInputSuffix_MatchesOriginalToolResponse()
+        public void FormatPausedMessage_WithSimulateMouseInputSuffix_ReturnsExpectedWireString()
         {
-            // Pins SimulateMouseInput's exact wire-visible paused message.
+            // Verifies SimulateMouseInput's paused preflight message stays byte-identical, including the suffix the use case actually passes.
             Assert.That(
-                PlayModeToolPreflightService.FormatPausedMessage("simulating mouse input"),
+                PlayModeToolPreflightService.FormatPausedMessage(SimulateMouseInputUseCase.PausedActionDescription),
                 Is.EqualTo("PlayMode is paused. Resume PlayMode before simulating mouse input."));
         }
     }

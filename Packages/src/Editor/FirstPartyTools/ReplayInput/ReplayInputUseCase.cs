@@ -20,6 +20,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class ReplayInputUseCase : IUnityCliLoopReplayInputService
     {
+        // Wire-visible fragment of the paused preflight message; tests pin the composed string.
+        public const string PausedActionDescription = "replaying input";
+
 #if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning disable CS1998
 #endif
@@ -84,7 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 #if ULOOP_HAS_INPUT_SYSTEM
         private static UnityCliLoopReplayInputResult ExecuteStart(UnityCliLoopReplayInputRequest request)
         {
-            ValidationResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused("replaying input");
+            ValidationResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!preflight.IsValid)
             {
                 return new UnityCliLoopReplayInputResult
