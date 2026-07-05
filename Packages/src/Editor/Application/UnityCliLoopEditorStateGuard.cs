@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -22,15 +21,24 @@ namespace io.github.hatayama.UnityCliLoop.Application
             NotUpdating = 2,
         }
 
-        public static void Validate(string toolName)
+        public static void Validate(string toolName, IEditorRuntimeStatePort editorRuntimeStatePort)
         {
+            Debug.Assert(editorRuntimeStatePort != null, "editorRuntimeStatePort must not be null");
+
             ValidateForState(
-                toolName,
-                EditorApplication.isCompiling,
-                EditorApplication.isUpdating);
+                toolName: toolName,
+                isCompiling: editorRuntimeStatePort.IsCompiling,
+                isUpdating: editorRuntimeStatePort.IsUpdating,
+                isPlaying: editorRuntimeStatePort.IsPlaying,
+                isPaused: editorRuntimeStatePort.IsPaused);
         }
 
-        internal static void ValidateForState(string toolName, bool isCompiling, bool isUpdating)
+        internal static void ValidateForState(
+            string toolName,
+            bool isCompiling,
+            bool isUpdating,
+            bool isPlaying,
+            bool isPaused)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(toolName), "toolName must not be null or whitespace");
 
@@ -45,8 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 throw new UnityCliLoopToolBusyException(
                     UnityCompileOperationName,
                     toolName,
-                    EditorApplication.isPlaying,
-                    EditorApplication.isPaused);
+                    isPlaying,
+                    isPaused);
             }
 
             if ((condition & GuardCondition.NotUpdating) != 0 && isUpdating)
@@ -54,8 +62,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 throw new UnityCliLoopToolBusyException(
                     UnityAssetDatabaseUpdateOperationName,
                     toolName,
-                    EditorApplication.isPlaying,
-                    EditorApplication.isPaused);
+                    isPlaying,
+                    isPaused);
             }
         }
 

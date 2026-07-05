@@ -30,7 +30,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             try
             {
                 UnityCliLoopToolBusyException exception =
-                    UnityCliLoopToolExecutionService.CreateBusyException("running-tool", "requested-tool");
+                    UnityCliLoopToolExecutionService.CreateBusyException(
+                        "running-tool",
+                        "requested-tool",
+                        new NoOpEditorRuntimeStatePort());
 
                 Assert.That(exception.RunningToolName, Is.EqualTo("running-tool"));
                 Assert.That(exception.RequestedToolName, Is.EqualTo("requested-tool"));
@@ -51,7 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
             PendingTypedTool pendingTool = new PendingTypedTool();
             registry.RegisterTool(pendingTool);
-            UnityCliLoopToolExecutionService executionService = new UnityCliLoopToolExecutionService();
+            UnityCliLoopToolExecutionService executionService =
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort());
             ImmediateMainThreadDispatcher dispatcher = new ImmediateMainThreadDispatcher();
             MainThreadSwitcher.RegisterService(dispatcher);
             BlockingSynchronizationContext blockedContext = new BlockingSynchronizationContext();

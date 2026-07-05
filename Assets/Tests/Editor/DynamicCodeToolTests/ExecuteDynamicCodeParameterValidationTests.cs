@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.Tests.Editor;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
@@ -20,7 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             // Verifies that a string Parameters value is rejected with a clear validation error before any compilation starts.
             // Arrange
             UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
-            UnityCliLoopToolExecutionService executionService = new();
+            UnityCliLoopToolExecutionService executionService = new(new NoOpEditorRuntimeStatePort());
             JObject paramsToken = new()            {
                 ["Code"] = "return \"ok\";",
                 ["Parameters"] = "{}", // invalid: string instead of object
