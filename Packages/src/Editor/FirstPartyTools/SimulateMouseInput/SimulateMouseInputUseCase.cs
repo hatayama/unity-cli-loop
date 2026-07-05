@@ -18,22 +18,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Coordinates Input System mouse simulation for the bundled simulate-mouse-input tool.
     /// </summary>
-    public class SimulateMouseInputUseCase : IUnityCliLoopMouseInputSimulationService
+    public class SimulateMouseInputUseCase
     {
 #if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning disable CS1998
 #endif
-        public async Task<UnityCliLoopMouseInputSimulationResult> SimulateMouseInputAsync(
-            UnityCliLoopMouseInputSimulationRequest request,
+        public async Task<SimulateMouseInputResponse> ExecuteAsync(
+            SimulateMouseInputSchema request,
             CancellationToken ct)
 #if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning restore CS1998
 #endif
         {
+            if (request == null)
+            {
+                throw new System.ArgumentNullException(nameof(request));
+            }
+
             ct.ThrowIfCancellationRequested();
 
 #if !ULOOP_HAS_INPUT_SYSTEM
-            return new UnityCliLoopMouseInputSimulationResult
+            return new SimulateMouseInputResponse
             {
                 Success = false,
                 Message = "simulate-mouse-input requires the Input System package (com.unity.inputsystem). Install it via Package Manager and set Active Input Handling to 'Input System Package (New)' or 'Both' in Player Settings.",
@@ -44,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!EditorApplication.isPlaying)
             {
-                return new UnityCliLoopMouseInputSimulationResult
+                return new SimulateMouseInputResponse
                 {
                     Success = false,
                     Message = "PlayMode is not active. Use control-play-mode tool to start PlayMode first.",
@@ -54,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (EditorApplication.isPaused)
             {
-                return new UnityCliLoopMouseInputSimulationResult
+                return new SimulateMouseInputResponse
                 {
                     Success = false,
                     Message = "PlayMode is paused. Resume PlayMode before simulating mouse input.",
@@ -64,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!System.Enum.IsDefined(typeof(UnityCliLoopMouseInputAction), request.Action))
             {
-                return new UnityCliLoopMouseInputSimulationResult
+                return new SimulateMouseInputResponse
                 {
                     Success = false,
                     Message = $"Invalid Action value: {(int)request.Action}. Use Click, LongPress, MoveDelta, Scroll, or SmoothDelta.",
@@ -74,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!System.Enum.IsDefined(typeof(UnityCliLoopMouseButton), request.Button))
             {
-                return new UnityCliLoopMouseInputSimulationResult
+                return new SimulateMouseInputResponse
                 {
                     Success = false,
                     Message = $"Invalid Button value: {(int)request.Button}. Use Left, Right, or Middle.",
@@ -85,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Mouse? mouse = Mouse.current;
             if (mouse == null)
             {
-                return new UnityCliLoopMouseInputSimulationResult
+                return new SimulateMouseInputResponse
                 {
                     Success = false,
                     Message = "No mouse device found in Input System. Ensure the Input System package is properly configured.",
@@ -106,7 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             EnsureOverlayExists();
 
-            UnityCliLoopMouseInputSimulationResult response;
+            SimulateMouseInputResponse response;
 
             switch (request.Action)
             {
@@ -159,12 +164,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new Vector2(inputPos.x, Screen.height - inputPos.y);
         }
 
-        private async Task<UnityCliLoopMouseInputSimulationResult> ExecuteClick(
-            Mouse mouse, UnityCliLoopMouseInputSimulationRequest request, CancellationToken ct)
+        private async Task<SimulateMouseInputResponse> ExecuteClick(
+            Mouse mouse, SimulateMouseInputSchema request, CancellationToken ct)
         {
             if (request.Duration < 0f || float.IsNaN(request.Duration) || float.IsInfinity(request.Duration))
             {
-                return new UnityCliLoopMouseInputSimulationResult
+                return new SimulateMouseInputResponse
                 {
                     Success = false,
                     Message = $"Duration must be non-negative, got: {request.Duration}",
@@ -258,7 +263,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string durationText = request.Duration > 0f ? $" for {InputSimulationDurationFormatter.FormatSeconds(request.Duration)}s" : "";
-            return new UnityCliLoopMouseInputSimulationResult
+            return new SimulateMouseInputResponse
             {
                 Success = true,
                 Message = $"Clicked {buttonName} at ({inputPos.x:F1}, {inputPos.y:F1}){durationText}",
@@ -269,12 +274,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private async Task<UnityCliLoopMouseInputSimulationResult> ExecuteLongPress(
-            Mouse mouse, UnityCliLoopMouseInputSimulationRequest request, CancellationToken ct)
+        private async Task<SimulateMouseInputResponse> ExecuteLongPress(
+            Mouse mouse, SimulateMouseInputSchema request, CancellationToken ct)
         {
             if (request.Duration <= 0f || float.IsNaN(request.Duration) || float.IsInfinity(request.Duration))
             {
-                return new UnityCliLoopMouseInputSimulationResult
+                return new SimulateMouseInputResponse
                 {
                     Success = false,
                     Message = $"Duration must be positive for LongPress, got: {request.Duration}",
@@ -370,7 +375,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return TimedOutButtonResult(UnityCliLoopMouseInputAction.LongPress, buttonName, inputPos);
             }
 
-            return new UnityCliLoopMouseInputSimulationResult
+            return new SimulateMouseInputResponse
             {
                 Success = true,
                 Message = $"Long-pressed {buttonName} at ({inputPos.x:F1}, {inputPos.y:F1}) for {InputSimulationDurationFormatter.FormatSeconds(request.Duration)}s",
@@ -381,8 +386,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private async Task<UnityCliLoopMouseInputSimulationResult> ExecuteMoveDelta(
-            Mouse mouse, UnityCliLoopMouseInputSimulationRequest request, CancellationToken ct)
+        private async Task<SimulateMouseInputResponse> ExecuteMoveDelta(
+            Mouse mouse, SimulateMouseInputSchema request, CancellationToken ct)
         {
             Vector2 delta = new(request.DeltaX, request.DeltaY);
             SimulateMouseInputOverlayState.SetMoveDelta(delta);
@@ -410,7 +415,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return TimedOutActionResult(UnityCliLoopMouseInputAction.MoveDelta);
             }
 
-            return new UnityCliLoopMouseInputSimulationResult
+            return new SimulateMouseInputResponse
             {
                 Success = true,
                 Message = $"Mouse delta injected: ({request.DeltaX:F1}, {request.DeltaY:F1})",
@@ -418,8 +423,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private async Task<UnityCliLoopMouseInputSimulationResult> ExecuteScroll(
-            Mouse mouse, UnityCliLoopMouseInputSimulationRequest request, CancellationToken ct)
+        private async Task<SimulateMouseInputResponse> ExecuteScroll(
+            Mouse mouse, SimulateMouseInputSchema request, CancellationToken ct)
         {
             Vector2 scroll = new(request.ScrollX, request.ScrollY);
 
@@ -449,7 +454,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return TimedOutActionResult(UnityCliLoopMouseInputAction.Scroll);
             }
 
-            return new UnityCliLoopMouseInputSimulationResult
+            return new SimulateMouseInputResponse
             {
                 Success = true,
                 Message = $"Scroll injected: ({request.ScrollX:F1}, {request.ScrollY:F1})",
@@ -460,12 +465,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Distributes totalDelta across frames over duration for human-like smooth movement.
         // Uses ApplyOnNextConfiguredUpdate per frame so the delta is visible to game code
         // in the same Input System update cycle. Resets delta to zero only after the final frame.
-        private async Task<UnityCliLoopMouseInputSimulationResult> ExecuteSmoothDelta(
-            Mouse mouse, UnityCliLoopMouseInputSimulationRequest request, CancellationToken ct)
+        private async Task<SimulateMouseInputResponse> ExecuteSmoothDelta(
+            Mouse mouse, SimulateMouseInputSchema request, CancellationToken ct)
         {
             if (request.Duration <= 0f || float.IsNaN(request.Duration) || float.IsInfinity(request.Duration))
             {
-                return new UnityCliLoopMouseInputSimulationResult
+                return new SimulateMouseInputResponse
                 {
                     Success = false,
                     Message = $"Duration must be positive for SmoothDelta, got: {request.Duration}",
@@ -529,7 +534,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return TimedOutActionResult(UnityCliLoopMouseInputAction.SmoothDelta);
             }
 
-            return new UnityCliLoopMouseInputSimulationResult
+            return new SimulateMouseInputResponse
             {
                 Success = true,
                 Message = $"Smooth delta ({request.DeltaX:F1}, {request.DeltaY:F1}) over {duration:F2}s",
@@ -537,22 +542,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static UnityCliLoopMouseInputSimulationResult InterruptedButtonResult(
+        private static SimulateMouseInputResponse InterruptedButtonResult(
             UnityCliLoopMouseInputAction action,
             string buttonName,
             Vector2 inputPos)
         {
-            UnityCliLoopMouseInputSimulationResult result = InterruptedActionResult(action);
+            SimulateMouseInputResponse result = InterruptedActionResult(action);
             result.Button = buttonName;
             result.PositionX = inputPos.x;
             result.PositionY = inputPos.y;
             return result;
         }
 
-        private static UnityCliLoopMouseInputSimulationResult InterruptedActionResult(
+        private static SimulateMouseInputResponse InterruptedActionResult(
             UnityCliLoopMouseInputAction action)
         {
-            UnityCliLoopMouseInputSimulationResult result = new()
+            SimulateMouseInputResponse result = new()
             {
                 Success = true,
                 Message = "Mouse input stopped because Unity paused during Pause Point inspection. Unity CLI Loop released its held input bookkeeping.",
@@ -563,22 +568,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return result;
         }
 
-        private static UnityCliLoopMouseInputSimulationResult TimedOutButtonResult(
+        private static SimulateMouseInputResponse TimedOutButtonResult(
             UnityCliLoopMouseInputAction action,
             string buttonName,
             Vector2 inputPos)
         {
-            UnityCliLoopMouseInputSimulationResult result = TimedOutActionResult(action);
+            SimulateMouseInputResponse result = TimedOutActionResult(action);
             result.Button = buttonName;
             result.PositionX = inputPos.x;
             result.PositionY = inputPos.y;
             return result;
         }
 
-        private static UnityCliLoopMouseInputSimulationResult TimedOutActionResult(
+        private static SimulateMouseInputResponse TimedOutActionResult(
             UnityCliLoopMouseInputAction action)
         {
-            return new UnityCliLoopMouseInputSimulationResult
+            return new SimulateMouseInputResponse
             {
                 Success = false,
                 Message = "Mouse input timed out while waiting for Unity Editor update. Cleanup is queued for the next Editor tick.",
@@ -586,7 +591,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static void AttachPausePointHit(UnityCliLoopMouseInputSimulationResult result)
+        private static void AttachPausePointHit(SimulateMouseInputResponse result)
         {
             if (result == null)
             {
