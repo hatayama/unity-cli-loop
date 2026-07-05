@@ -2,12 +2,12 @@ using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 
-namespace io.github.hatayama.UnityCliLoop.Presentation
+namespace io.github.hatayama.UnityCliLoop.Application
 {
     /// <summary>
     /// Describes the setup action required for the global uloop command.
     /// </summary>
-    internal readonly struct CliSetupCompatibilityState
+    public readonly struct CliSetupCompatibilityState
     {
         public CliSetupCompatibilityState(bool needsUpdate, bool isCompatible)
         {
@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// <summary>
     /// Evaluates setup compatibility for the global uloop dispatcher.
     /// </summary>
-    internal static class CliSetupCompatibility
+    public static class CliSetupCompatibility
     {
         public static CliSetupCompatibilityState Evaluate(
             string cliVersion,
