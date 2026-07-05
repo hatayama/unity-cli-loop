@@ -2,8 +2,6 @@ using System.Security.Cryptography;
 using System.Text;
 using UnityEngine;
 
-using io.github.hatayama.UnityCliLoop.Domain;
-
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     internal enum BridgeTransportKind
