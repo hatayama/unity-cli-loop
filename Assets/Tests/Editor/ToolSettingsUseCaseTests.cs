@@ -3,6 +3,7 @@ using System.Linq;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.CompositionRoot;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -23,7 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService());
+                new UnityCliLoopToolExecutionService(),
+                UnityCliLoopToolDiscovery.DiscoverTools);
             ToolSettingsUseCase useCase = new(
                 toolSettingsService,
                 toolRegistrarService,
@@ -48,7 +50,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService());
+                new UnityCliLoopToolExecutionService(),
+                UnityCliLoopToolDiscovery.DiscoverTools);
             ToolSettingsUseCase useCase = new(
                 toolSettingsService,
                 toolRegistrarService,
@@ -70,7 +73,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService());
+                new UnityCliLoopToolExecutionService(),
+                UnityCliLoopToolDiscovery.DiscoverTools);
             Dictionary<string, string> descriptions = new()
             {
                 [UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT] = "Pause point description"

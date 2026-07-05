@@ -10,6 +10,7 @@ using UnityEngine;
 using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.CompositionRoot;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -165,7 +166,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService());
+                new UnityCliLoopToolExecutionService(),
+                UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new SingleFlightTestTool());
 
@@ -221,7 +223,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService());
+                new UnityCliLoopToolExecutionService(),
+                UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new ExecuteDynamicCodeTestTool());
             service.RegisterCustomTool(new SingleFlightTestTool());
@@ -285,7 +288,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService());
+                new UnityCliLoopToolExecutionService(),
+                UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
 
@@ -324,7 +328,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService());
+                new UnityCliLoopToolExecutionService(),
+                UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
 
@@ -360,7 +365,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService());
+                new UnityCliLoopToolExecutionService(),
+                UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
 
@@ -399,7 +405,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService());
+                new UnityCliLoopToolExecutionService(),
+                UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
 
@@ -441,7 +448,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService());
+                new UnityCliLoopToolExecutionService(),
+                UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
 
             string hierarchyResponse = null;
@@ -537,7 +545,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService());
+                new UnityCliLoopToolExecutionService(),
+                UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new SingleFlightTestTool());
 

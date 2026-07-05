@@ -29,7 +29,8 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new SkillInstallLayoutInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService());
+                new UnityCliLoopToolExecutionService(),
+                UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(toolRegistrarService);
             ToolContractsRegistrar.RegisterService(toolRegistrarService);
             ToolSettingsUseCaseRegistry.Register(new ToolSettingsUseCase(
