@@ -23,6 +23,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class RecordInputUseCase : IUnityCliLoopRecordInputService
     {
+        // Wire-visible fragment of the paused preflight message; tests pin the composed string.
+        public const string PausedActionDescription = "recording input";
+
 #if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning disable CS1998
 #endif
@@ -88,22 +91,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityCliLoopRecordInputRequest request,
             CancellationToken ct)
         {
-            if (!EditorApplication.isPlaying)
+            ValidationResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
+            if (!preflight.IsValid)
             {
                 return new UnityCliLoopRecordInputResult
                 {
                     Success = false,
-                    Message = "PlayMode is not active. Use control-play-mode tool to start PlayMode first.",
-                    Action = RecordInputAction.Start.ToString()
-                };
-            }
-
-            if (EditorApplication.isPaused)
-            {
-                return new UnityCliLoopRecordInputResult
-                {
-                    Success = false,
-                    Message = "PlayMode is paused. Resume PlayMode before recording input.",
+                    Message = preflight.ErrorMessage,
                     Action = RecordInputAction.Start.ToString()
                 };
             }

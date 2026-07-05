@@ -20,6 +20,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class SimulateMouseInputUseCase
     {
+        // Wire-visible fragment of the paused preflight message; tests pin the composed string.
+        public const string PausedActionDescription = "simulating mouse input";
+
 #if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning disable CS1998
 #endif
@@ -47,22 +50,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 #else
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
 
-            if (!EditorApplication.isPlaying)
+            ValidationResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
+            if (!preflight.IsValid)
             {
                 return new SimulateMouseInputResponse
                 {
                     Success = false,
-                    Message = "PlayMode is not active. Use control-play-mode tool to start PlayMode first.",
-                    Action = parameters.Action.ToString()
-                };
-            }
-
-            if (EditorApplication.isPaused)
-            {
-                return new SimulateMouseInputResponse
-                {
-                    Success = false,
-                    Message = "PlayMode is paused. Resume PlayMode before simulating mouse input.",
+                    Message = preflight.ErrorMessage,
                     Action = parameters.Action.ToString()
                 };
             }
