@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/FirstPartyTools/SimulateMouseInput/Application/MouseInputState.cs",
             "Packages/src/Editor/FirstPartyTools/SimulateMouseUi/Application/MouseDragState.cs",
             "Packages/src/Editor/FirstPartyTools/Common/Overlay/OverlayCanvasFactory.cs",
-            "Packages/src/Editor/Application/MainThreadSwitcher.cs",
+            "Packages/src/Editor/ToolContracts/MainThreadSwitcher.cs",
             "Packages/src/Editor/ToolContracts/VibeLogger.cs",
             "Packages/src/Editor/Application/UnityCliLoopServerApplicationService.cs",
             "Packages/src/Runtime/RecordInput/RecordInputOverlayState.cs",
@@ -252,10 +252,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that timeout result branches use plain captured bools instead of UnityEngine.Object null checks.
             string source = ReadSourceFile("Packages/src/Editor/FirstPartyTools/SimulateMouseUi/SimulateMouseUiUseCase.cs");
 
-            Assert.That(source, Does.Contain("bool hitTarget = target != null;"));
-            Assert.That(source, Does.Contain("bool shouldReleasePointer = rawTarget != null && target != null;"));
-            Assert.That(source, Does.Not.Contain("CreateClickResult(parameters, inputPos, targetName, target != null)"));
-            Assert.That(source, Does.Not.Contain("CreateLongPressResult(parameters, inputPos, targetName, target != null)"));
+            Assert.That(source, Does.Contain("bool hitTarget = resolvedTargets.Target != null;"));
+            Assert.That(source, Does.Contain("bool shouldReleasePointer = resolvedTargets.RawTarget != null && resolvedTargets.Target != null;"));
+            Assert.That(source, Does.Not.Contain("CreateClickResult(parameters, inputPos, targetName, resolvedTargets.Target != null)"));
+            Assert.That(source, Does.Not.Contain("CreateLongPressResult(parameters, inputPos, targetName, resolvedTargets.Target != null)"));
         }
 
         [Test]
