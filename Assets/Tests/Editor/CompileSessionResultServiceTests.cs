@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 errors: new[] { error },
                 warnings: new[] { warning });
 
-            UnityCliLoopCompileResult response =
+            CompileResponse response =
                 CompileSessionResultService.CreateCompileResult(result, forceRecompile: false);
 
             Assert.That(response.Success, Is.False);
@@ -75,7 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isIndeterminate: true,
                 message: null);
 
-            UnityCliLoopCompileResult response =
+            CompileResponse response =
                 CompileSessionResultService.CreateCompileResult(result, forceRecompile: true);
 
             Assert.That(response.Success, Is.Null);
@@ -100,7 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 warnings: Array.Empty<CompilerMessage>(),
                 message: "Internal force compile status message.");
 
-            UnityCliLoopCompileResult response =
+            CompileResponse response =
                 CompileSessionResultService.CreateCompileResult(result, forceRecompile: true);
 
             Assert.That(response.Success, Is.True);
@@ -133,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 message: "Compilation stopped because open Scene files changed externally.",
                 preserveDetailsWhenForceRecompile: true);
 
-            UnityCliLoopCompileResult response =
+            CompileResponse response =
                 CompileSessionResultService.CreateCompileResult(result, forceRecompile: true);
 
             Assert.That(response.Success, Is.False);
@@ -163,7 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 errors: new[] { error },
                 warnings: Array.Empty<CompilerMessage>());
 
-            UnityCliLoopCompileResult response =
+            CompileResponse response =
                 CompileSessionResultService.CreateCompileResult(result, forceRecompile: false);
 
             Assert.That(response.Message, Does.Contain("TestAssemblies"));
@@ -182,13 +182,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             try
             {
-                UnityCliLoopCompileResult response = new UnityCliLoopCompileResult
+                CompileResponse response = new CompileResponse
                 {
                     Success = true,
                     ErrorCount = 0,
                     WarningCount = 0,
-                    Errors = Array.Empty<UnityCliLoopCompileIssue>(),
-                    Warnings = Array.Empty<UnityCliLoopCompileIssue>(),
+                    Errors = Array.Empty<CompileIssue>(),
+                    Warnings = Array.Empty<CompileIssue>(),
                     Message = "Compilation completed."
                 };
 

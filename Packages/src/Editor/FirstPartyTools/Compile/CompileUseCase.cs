@@ -14,7 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Processing sequence: 1. Play Mode preparation, 2. Compilation state validation, 3. Compilation execution, 4. Result formatting
     /// Related classes: CompileTool, PlayModeCompilationPreparationService, CompilationStateValidationService, CompilationExecutionService
     /// </summary>
-    public class CompileUseCase : IUnityCliLoopCompilationService
+    public class CompileUseCase
     {
         private const int MAX_WAIT_MS = 5000;
         private const int POLL_INTERVAL_MS = 50;
@@ -31,10 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Executes compilation processing
         /// </summary>
-        /// <param name="parameters">Compilation parameters</param>
+        /// <param name="request">Compilation parameters</param>
         /// <param name="ct">Cancellation control token</param>
         /// <returns>Compilation result</returns>
-        public async Task<UnityCliLoopCompileResult> CompileAsync(UnityCliLoopCompileRequest request, CancellationToken ct)
+        public async Task<CompileResponse> CompileAsync(CompileSchema request, CancellationToken ct)
         {
             if (request == null)
             {
@@ -61,14 +61,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     preparation.ErrorMessage,
                     BuildCompileLogContext(request),
                     correlationId);
-                UnityCliLoopCompileResult response = CreateCompileResult(
+                CompileResponse response = CreateCompileResult(
                     false,
                     1,
                     0,
                     new[] { CreateIssue(preparation.ErrorMessage, "", 0) },
-                    Array.Empty<UnityCliLoopCompileIssue>(),
+                    Array.Empty<CompileIssue>(),
                     null);
-                UnityCliLoopCompileResult persistedResponse =
+                CompileResponse persistedResponse =
                     StoreResponseIfNeeded(request, response, correlationId);
                 return persistedResponse;
             }
@@ -93,14 +93,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     correlationId);
                 if (!exited)
                 {
-                    UnityCliLoopCompileResult response = CreateCompileResult(
+                    CompileResponse response = CreateCompileResult(
                         false,
                         1,
                         0,
                         new[] { CreateIssue("Play Mode did not exit within 5 seconds; compilation aborted.", "", 0) },
-                        Array.Empty<UnityCliLoopCompileIssue>(),
+                        Array.Empty<CompileIssue>(),
                         null);
-                    UnityCliLoopCompileResult persistedResponse =
+                    CompileResponse persistedResponse =
                         StoreResponseIfNeeded(request, response, correlationId);
                     return persistedResponse;
                 }
@@ -117,14 +117,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     validation.ErrorMessage,
                     BuildCompileLogContext(request),
                     correlationId);
-                UnityCliLoopCompileResult response = CreateCompileResult(
+                CompileResponse response = CreateCompileResult(
                     false,
                     1,
                     0,
                     new[] { CreateIssue(validation.ErrorMessage, "", 0) },
-                    Array.Empty<UnityCliLoopCompileIssue>(),
+                    Array.Empty<CompileIssue>(),
                     null);
-                UnityCliLoopCompileResult persistedResponse =
+                CompileResponse persistedResponse =
                     StoreResponseIfNeeded(request, response, correlationId);
                 return persistedResponse;
             }
@@ -135,22 +135,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CompileResult result = await executionService.ExecuteCompilationAsync(request, ct);
 
             // 4. Result formatting
-            UnityCliLoopCompileResult successResponse =
+            CompileResponse successResponse =
                 CompileSessionResultService.CreateCompileResult(result, request.ForceRecompile);
-            UnityCliLoopCompileResult persistedSuccessResponse =
+            CompileResponse persistedSuccessResponse =
                 StoreResponseIfNeeded(request, successResponse, correlationId);
             return persistedSuccessResponse;
         }
 
-        private static UnityCliLoopCompileResult CreateCompileResult(
+        private static CompileResponse CreateCompileResult(
             bool? success,
             int? errorCount,
             int? warningCount,
-            UnityCliLoopCompileIssue[] errors,
-            UnityCliLoopCompileIssue[] warnings,
+            CompileIssue[] errors,
+            CompileIssue[] warnings,
             string message)
         {
-            return new UnityCliLoopCompileResult
+            return new CompileResponse
             {
                 Success = success,
                 ErrorCount = errorCount,
@@ -161,9 +161,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static UnityCliLoopCompileIssue CreateIssue(string message, string file, int line)
+        private static CompileIssue CreateIssue(string message, string file, int line)
         {
-            return new UnityCliLoopCompileIssue
+            return new CompileIssue
             {
                 Message = message,
                 File = file,
@@ -185,7 +185,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return !EditorApplication.isPlaying;
         }
 
-        private static void PrepareResultStorage(UnityCliLoopCompileRequest request)
+        private static void PrepareResultStorage(CompileSchema request)
         {
             Debug.Assert(request != null, "request must not be null");
 
@@ -202,9 +202,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             request.RequestId = CreateRequestId();
         }
 
-        private UnityCliLoopCompileResult StoreResponseIfNeeded(
-            UnityCliLoopCompileRequest request,
-            UnityCliLoopCompileResult response,
+        private CompileResponse StoreResponseIfNeeded(
+            CompileSchema request,
+            CompileResponse response,
             string correlationId)
         {
             Debug.Assert(request != null, "request must not be null");
@@ -235,7 +235,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private void MarkPendingCompileRequestIfNeeded(
-            UnityCliLoopCompileRequest request,
+            CompileSchema request,
             DateTime markedAtUtc,
             string correlationId)
         {
@@ -271,7 +271,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static void LogCompileRequestReceived(
-            UnityCliLoopCompileRequest request,
+            CompileSchema request,
             string correlationId)
         {
             Debug.Assert(request != null, "request must not be null");
@@ -291,7 +291,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId);
         }
 
-        private static string ResolveCorrelationId(UnityCliLoopCompileRequest request)
+        private static string ResolveCorrelationId(CompileSchema request)
         {
             Debug.Assert(request != null, "request must not be null");
 
@@ -303,7 +303,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return VibeLogger.GenerateCorrelationId();
         }
 
-        private static object BuildCompileLogContext(UnityCliLoopCompileRequest request)
+        private static object BuildCompileLogContext(CompileSchema request)
         {
             Debug.Assert(request != null, "request must not be null");
 

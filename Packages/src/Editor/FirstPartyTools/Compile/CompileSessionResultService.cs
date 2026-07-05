@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string MissingTestFrameworkReferenceHint =
             "Possible test asmdef issue: Unity test framework symbols are missing. Make sure com.unity.test-framework is installed and add optionalUnityReferences: [\"TestAssemblies\"] or enable testAssemblies on the test asmdef.";
 
-        internal static UnityCliLoopCompileResult CreateCompileResult(
+        internal static CompileResponse CreateCompileResult(
             CompileResult result,
             bool forceRecompile)
         {
@@ -30,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (result.IsIndeterminate)
             {
-                return new UnityCliLoopCompileResult
+                return new CompileResponse
                 {
                     Success = result.Success,
                     ErrorCount = result.ErrorCount,
@@ -41,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
-            return new UnityCliLoopCompileResult
+            return new CompileResponse
             {
                 Success = result.Success,
                 ErrorCount = result.Errors?.Length ?? 0,
@@ -56,7 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityCliLoopEditorSessionStateService sessionStateService,
             string requestId,
             bool forceRecompile,
-            UnityCliLoopCompileResult result,
+            CompileResponse result,
             string correlationId)
         {
             Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
@@ -98,10 +98,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId);
         }
 
-        private static UnityCliLoopCompileResult CreateForceCompileResult(CompileResult result)
+        private static CompileResponse CreateForceCompileResult(CompileResult result)
         {
             ForceCompileUnknownResult unknownResult = ForceCompileUnknownResult.Create(result.Success);
-            return new UnityCliLoopCompileResult
+            return new CompileResponse
             {
                 Success = unknownResult.Success,
                 ErrorCount = unknownResult.ErrorCount,
@@ -112,14 +112,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static UnityCliLoopCompileIssue[] ToIssues(UnityEditor.Compilation.CompilerMessage[] messages)
+        private static CompileIssue[] ToIssues(UnityEditor.Compilation.CompilerMessage[] messages)
         {
             if (messages == null)
             {
                 return null;
             }
 
-            return messages.Select(message => new UnityCliLoopCompileIssue
+            return messages.Select(message => new CompileIssue
             {
                 Message = message.message,
                 File = message.file,
@@ -193,7 +193,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new CompileResultRecordingContext(false, "", false);
         }
 
-        internal static CompileResultRecordingContext Create(UnityCliLoopCompileRequest request)
+        internal static CompileResultRecordingContext Create(CompileSchema request)
         {
             Debug.Assert(request != null, "request must not be null");
 
