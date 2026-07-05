@@ -85,35 +85,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // 2. Test execution
             ct.ThrowIfCancellationRequested();
             SerializableTestResult result;
-
-            try
+            if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
             {
-                if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
-                {
-                    result = await _executionService.ExecutePlayModeTestAsync(filter, ct);
-                }
-                else
-                {
-                    result = await _executionService.ExecuteEditModeTestAsync(filter, ct);
-                }
+                result = await _executionService.ExecutePlayModeTestAsync(filter, ct);
             }
-            catch (System.OperationCanceledException)
+            else
             {
-                // Propagate cancellation exceptions
-                throw;
-            }
-            catch (System.Exception ex)
-            {
-                // Log full exception details for debugging
-                UnityEngine.Debug.LogError($"Test execution failed: {ex}");
-                VibeLogger.LogError(
-                    "test_execution_failed",
-                    "Test execution encountered an error",
-                    new { testMode = parameters.TestMode, filterType = parameters.FilterType, filterValue = parameters.FilterValue, error = ex.Message }
-                );
-
-                // Surface the failure; the tool layer converts it into an error response.
-                throw new System.InvalidOperationException("Test execution failed. Please check the logs for details.", ex);
+                result = await _executionService.ExecuteEditModeTestAsync(filter, ct);
             }
 
             await _waitForTestRunnerCleanupAsync(ct);
