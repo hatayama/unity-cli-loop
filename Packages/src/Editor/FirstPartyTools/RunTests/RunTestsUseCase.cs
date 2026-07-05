@@ -53,7 +53,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <returns>Test execution result</returns>
         public async Task<RunTestsResponse> ExecuteAsync(RunTestsSchema parameters, CancellationToken ct)
         {
-            Debug.Assert(parameters != null, "parameters must not be null");
+            if (parameters == null)
+            {
+                throw new System.ArgumentNullException(nameof(parameters));
+            }
 
             if (!IsSupportedTestMode(parameters.TestMode))
             {
@@ -63,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ct.ThrowIfCancellationRequested();
             if (!_executionService.IsTestFrameworkAvailable)
             {
-                return CreateTestFrameworkUnavailableResponse();
+                return RunTestsResponse.CreateTestFrameworkUnavailable();
             }
 
             ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.SaveBeforeRun);
@@ -109,15 +112,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new { testMode = parameters.TestMode, filterType = parameters.FilterType, filterValue = parameters.FilterValue, error = ex.Message }
                 );
 
-                // Create a minimal error result
+                // Surface the failure; the tool layer converts it into an error response.
                 throw new System.InvalidOperationException("Test execution failed. Please check the logs for details.", ex);
             }
 
             await _waitForTestRunnerCleanupAsync(ct);
 
             // 3. Response creation.
-            // Why: pass every derived field explicitly so RunTestsResponse's derivation branches stay skipped
-            // and the wire output matches the pre-collapse pipeline byte-for-byte.
+            // Why: pass the derived fields explicitly so the constructor does not re-derive them;
+            // the null-triggered derivation exists only as a source-compat fallback for callers
+            // that omit the optional arguments.
             RunTestsResponse response = new(
                 success: result.success,
                 message: result.message,
@@ -147,15 +151,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return Enum.IsDefined(typeof(UnityCliLoopTestMode), testMode);
         }
 
-        private static RunTestsResponse CreateTestFrameworkUnavailableResponse()
-        {
-            return CreateFailureResponse(RunTestsResponse.TestFrameworkUnavailableMessage);
-        }
-
         private static RunTestsResponse CreateFailureResponse(string message)
         {
-            // Why: supply every optional argument so RunTestsResponse skips its derivation branches
-            // and returns the same explicit failure shape the intermediate DTO used to build.
+            // Why: supply every optional argument so the constructor does not re-derive
+            // status or explanation fields from the failure message.
             return new RunTestsResponse(
                 success: false,
                 message: message,
