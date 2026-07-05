@@ -22,7 +22,6 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         {
             Type dtoType = typeof(TDto);
             Dictionary<string, ParameterInfo> properties = new();
-            List<string> required = new();
 
             // Create instance to get default values
             TDto defaultInstance = new();
@@ -51,13 +50,6 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                 
                 // Get enum values if applicable
                 string[] enumValues = GetEnumValues(property.PropertyType);
-                
-                // Check if property is required
-                bool isRequired = IsRequired(property);
-                if (isRequired)
-                {
-                    required.Add(parameterName);
-                }
 
                 // Create parameter info
                 ParameterInfo paramInfo = new(
@@ -70,7 +62,11 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                 properties[parameterName] = paramInfo;
             }
 
-            return new ToolParameterSchema(properties, required.ToArray());
+            // Why: generated schemas never mark parameters as required — every tool DTO
+            // carries a usable default, and neither the package nor the CLI enforces or
+            // displays required-ness. If required parameters are ever introduced, add them
+            // end-to-end (attribute + CLI enforcement) as a feature, not here.
+            return new ToolParameterSchema(properties);
         }
 
         /// <summary>
@@ -155,15 +151,5 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             return null;
         }
 
-        /// <summary>
-        /// Check if property is required using custom Required attribute
-        /// For now, returns false as Unity doesn't support DataAnnotations
-        /// Can be extended with custom attributes if needed
-        /// </summary>
-        private static bool IsRequired(PropertyInfo property)
-        {
-            // TODO: Implement custom Required attribute if needed
-            return false;
-        }
     }
 } 
