@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 namespace io.github.hatayama.UnityCliLoop.Domain
 {
     /// <summary>
-    /// Defines the file-system boundary used by the skill setup domain service.
+    /// Defines the file-system boundary for skill setup operations.
     /// </summary>
     public interface ISkillSetupPort
     {

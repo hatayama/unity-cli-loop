@@ -240,7 +240,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void SkillSetupPolicy_WhenLoaded_CompilesUnderDomainAssembly()
         {
-            // Tests that skill setup targets and policy services stay in the domain layer.
+            // Tests that the skill setup port and its domain types stay in the domain layer.
             string portAssemblyName = typeof(ISkillSetupPort).Assembly.GetName().Name;
             string targetAssemblyName = typeof(SkillSetupTargetInfo).Assembly.GetName().Name;
             string stateAssemblyName = typeof(SkillInstallState).Assembly.GetName().Name;
