@@ -22,17 +22,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         IUnityCliLoopServerInstanceFactory,
         IUnityCliLoopServerLifecycleSource
     {
-        public event Action ServerStarted
-        {
-            add { }
-            remove { }
-        }
-
-        public event Action ServerStopping
-        {
-            add { }
-            remove { }
-        }
         public event Action ServerLoopExited;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
 
@@ -69,9 +58,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public class UnityCliLoopBridgeServer : IUnityCliLoopServerInstance
     {
-        public event Action ServerStopping;
-        public event Action ServerStarted;
-
         // Fired from thread pool when ServerLoopAsync exits while _isRunning is still true.
         // Subscribers must marshal to main thread before accessing Unity APIs.
         public event Action ServerLoopExited;
@@ -152,9 +138,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         );
                     }
                 }, TaskScheduler.Default);
-
-                ServerStarted?.Invoke();
-                
             }
             catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
             {
@@ -178,9 +161,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 return;
             }
-
-            // Notify that server is stopping
-            ServerStopping?.Invoke();
 
             _isRunning = false;
 
