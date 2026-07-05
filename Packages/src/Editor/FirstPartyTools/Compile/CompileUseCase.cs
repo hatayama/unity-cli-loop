@@ -5,7 +5,6 @@ using UnityEditor;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Domain;
-using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -21,10 +20,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const int POLL_INTERVAL_MS = 50;
         private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
 
-        public CompileUseCase()
+        public CompileUseCase(UnityCliLoopEditorSessionStateService sessionStateService)
         {
+            Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+
             _sessionStateService =
-                new UnityCliLoopEditorSessionStateService(new UnityCliLoopEditorSessionStateRepository());
+                sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
         }
 
         /// <summary>
@@ -130,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // 3. Compilation execution
             ct.ThrowIfCancellationRequested();
-            CompilationExecutionService executionService = new();
+            CompilationExecutionService executionService = new(_sessionStateService);
             CompileResult result = await executionService.ExecuteCompilationAsync(request, ct);
 
             // 4. Result formatting

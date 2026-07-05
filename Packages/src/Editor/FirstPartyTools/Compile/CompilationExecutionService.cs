@@ -1,5 +1,9 @@
+using System;
 using System.Threading.Tasks;
 using System.Threading;
+using UnityEngine;
+
+using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -10,6 +14,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class CompilationExecutionService
     {
+        private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
+
+        public CompilationExecutionService(UnityCliLoopEditorSessionStateService sessionStateService)
+        {
+            Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+
+            _sessionStateService =
+                sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
+        }
+
         /// <summary>
         /// Execute compilation asynchronously
         /// </summary>
@@ -22,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new System.ArgumentNullException(nameof(request));
             }
 
-            using CompileController compileController = new();
+            using CompileController compileController = new(_sessionStateService);
             compileController.SetResultRecordingContext(CompileResultRecordingContext.Create(request));
             compileController.SetExternalSceneChangePolicy(request.ReloadExternalSceneChanges);
             return await compileController.TryCompileAsync(request.ForceRecompile, ct);

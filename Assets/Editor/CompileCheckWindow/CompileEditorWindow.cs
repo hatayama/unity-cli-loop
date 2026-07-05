@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -36,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             // Create instances only if they don't exist yet
             if (_compileController == null || _logDisplay == null)
             {
-                _compileController = new CompileController();
+                _compileController = new CompileController(UnityCliLoopEditorSessionStateFacade.Service);
                 _logDisplay = new CompileLogDisplay();
 
                 // Subscribe to events
