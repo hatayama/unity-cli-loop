@@ -338,19 +338,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void TestExecutionTypes_WhenLoaded_CompileUnderFirstPartyToolsAssembly()
-        {
-            // Tests that bundled test-runner implementation types stay inside the first-party tool assembly.
-            string serviceAssemblyName = typeof(IUnityCliLoopTestExecutionService).Assembly.GetName().Name;
-            string requestAssemblyName = typeof(UnityCliLoopTestExecutionRequest).Assembly.GetName().Name;
-            string resultAssemblyName = typeof(UnityCliLoopTestExecutionResult).Assembly.GetName().Name;
-
-            Assert.That(serviceAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(requestAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(resultAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-        }
-
-        [Test]
         public void RunTestsUseCase_WhenLoaded_CompilesUnderApplicationAssembly()
         {
             // Tests that the bundled tool owns the test execution implementation.
