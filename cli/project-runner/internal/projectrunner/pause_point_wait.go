@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
@@ -424,7 +425,7 @@ func queryPausePointStatusFromUnity(
 	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
 	defer cancel()
 
-	result, err := unityipc.NewClient(connection, clicore.Version()).Send(
+	result, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
 		probeContext,
 		pausePointStatusCommandName,
 		map[string]any{"Id": id},
@@ -448,7 +449,7 @@ func clearPausePointStatusFromUnity(
 	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
 	defer cancel()
 
-	result, err := unityipc.NewClient(connection, clicore.Version()).Send(
+	result, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
 		probeContext,
 		pausePointClearStatusCommandName,
 		map[string]any{"Id": id},

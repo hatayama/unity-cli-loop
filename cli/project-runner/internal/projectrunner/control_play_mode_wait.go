@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
@@ -198,7 +199,7 @@ func requestControlPlayModeStatus(
 	probeContext, cancel := context.WithTimeout(ctx, controlPlayModeStatusTimeout)
 	defer cancel()
 
-	result, err := unityipc.NewClient(connection, clicore.Version()).Send(
+	result, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
 		probeContext,
 		controlPlayModeCommandName,
 		map[string]any{

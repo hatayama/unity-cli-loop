@@ -3,6 +3,7 @@ package projectrunner
 import (
 	"io"
 
+	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
@@ -20,7 +21,7 @@ func tryHandleRunnerInfoRequest(args []string, stdout io.Writer) (bool, int) {
 		return true, 0
 	}
 	if clicore.IsVersionRequest(args) {
-		clicore.WriteLine(stdout, clicore.Version())
+		clicore.WriteLine(stdout, clicontract.ProjectRunnerVersion())
 		return true, 0
 	}
 	return false, 0

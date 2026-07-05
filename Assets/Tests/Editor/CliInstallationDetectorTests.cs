@@ -194,12 +194,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void ParseShellCliInstallationOutput_WhenDispatcherJsonExists_ReturnsDispatcherDetection()
         {
-            // Verifies setup detection recognizes the dispatcher contract exposed by global uloop.
+            // Verifies setup detection recognizes the dispatcher release exposed by global uloop.
             string output = "__ULOOP_PATH_START__\n"
                             + "/Users/ExampleUser/.local/bin/uloop\n"
                             + "__ULOOP_PATH_END__\n"
                             + "__ULOOP_CONTRACT_START__\n"
-                            + "{\"DispatcherVersion\":\"3.0.0\",\"DispatcherContractVersion\":1}\n"
+                            + "{\"DispatcherVersion\":\"3.0.0\"}\n"
                             + "__ULOOP_CONTRACT_END__\n"
                             + "__ULOOP_CONTRACT_STATUS_START__\n"
                             + "0\n"
@@ -216,34 +216,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(detection.Version, Is.EqualTo("3.0.0"));
             Assert.That(detection.IsDispatcher, Is.True);
-            Assert.That(detection.ExecutablePath, Is.EqualTo("/Users/ExampleUser/.local/bin/uloop"));
-        }
-
-        [Test]
-        public void ParseShellCliInstallationOutput_WhenDispatcherContractVersionDiffers_ReturnsVersionWithoutProtocol()
-        {
-            // Verifies dispatcher setup detection rejects mismatched launcher contract generations.
-            string output = "__ULOOP_PATH_START__\n"
-                            + "/Users/ExampleUser/.local/bin/uloop\n"
-                            + "__ULOOP_PATH_END__\n"
-                            + "__ULOOP_CONTRACT_START__\n"
-                            + "{\"DispatcherVersion\":\"3.0.0\",\"DispatcherContractVersion\":2}\n"
-                            + "__ULOOP_CONTRACT_END__\n"
-                            + "__ULOOP_CONTRACT_STATUS_START__\n"
-                            + "0\n"
-                            + "__ULOOP_CONTRACT_STATUS_END__\n"
-                            + "__ULOOP_VERSION_START__\n"
-                            + "3.0.0\n"
-                            + "__ULOOP_VERSION_END__\n"
-                            + "__ULOOP_VERSION_STATUS_START__\n"
-                            + "0\n"
-                            + "__ULOOP_VERSION_STATUS_END__\n";
-
-            CliInstallationDetection detection =
-                CliInstallationDetector.ParseShellCliInstallationOutput(output);
-
-            Assert.That(detection.Version, Is.EqualTo("3.0.0"));
-            Assert.That(detection.IsDispatcher, Is.False);
             Assert.That(detection.ExecutablePath, Is.EqualTo("/Users/ExampleUser/.local/bin/uloop"));
         }
 

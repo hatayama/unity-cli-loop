@@ -91,18 +91,6 @@ func TestContractFileAtRefWithLegacyFallback_WhenRefMissing_PropagatesShowError(
 	if content != "" {
 		t.Fatalf("expected no content on missing ref, got %q", content)
 	}
-
-	// Confirm the dispatcher guard does not treat a missing ref as initial.
-	missing, guardErr := isMissingDispatcherContractAtRefError(
-		context.Background(),
-		fixture.repoRoot,
-		"no-such-ref")
-	if guardErr != nil {
-		t.Fatalf("expected guard to run without executor error, got %v", guardErr)
-	}
-	if missing {
-		t.Fatal("expected missing-ref to NOT be treated as an initial contract by the guard")
-	}
 }
 
 // Verifies a non-ExitError from the presence probe after a show failure

@@ -10,30 +10,12 @@ import (
 	"testing"
 )
 
-// Verifies release PRs cannot point minimumDispatcherVersion at a dispatcher tag without contract metadata.
-func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleaseLacksDispatcherContract_Fails(t *testing.T) {
-	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
-		currentProjectRunnerVersion:      "3.0.0-beta.40",
-		currentDispatcherVersion:         "1.0.1",
-		currentDispatcherContractVersion: 1,
-		minimumDispatcherVersion:         "1.0.0",
-		releaseContract:                  `{"schemaVersion":1,"dispatcherVersion":"1.0.0"}`,
-	})
-
-	if result.exitCode != 1 {
-		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
-	}
-	assertDispatcherMinimumVersionLogContains(t, result.stderr, "does not define dispatcherContractVersion")
-	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:"+dispatcherContractFile)
-}
-
 // Verifies release PRs pass when the current dispatcher release itself is the minimum dispatcher version.
 func TestRunDispatcherMinimumVersionCheck_WhenMinimumIsCurrentRelease_Passes(t *testing.T) {
 	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
-		currentProjectRunnerVersion:      "3.0.0-beta.40",
-		currentDispatcherVersion:         "1.0.0",
-		currentDispatcherContractVersion: 1,
-		minimumDispatcherVersion:         "1.0.0",
+		currentProjectRunnerVersion: "3.0.0-beta.40",
+		currentDispatcherVersion:    "1.0.0",
+		minimumDispatcherVersion:    "1.0.0",
 	})
 
 	if result.exitCode != 0 {
@@ -47,11 +29,10 @@ func TestRunDispatcherMinimumVersionCheck_WhenMinimumIsCurrentRelease_Passes(t *
 // before dispatchercontract existed fall back to the previous cli/dispatcher path.
 func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleaseIsPreviousCliGeneration_FallsBackToCliDispatcherRootPath(t *testing.T) {
 	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
-		currentProjectRunnerVersion:      "3.0.0-beta.40",
-		currentDispatcherVersion:         "1.0.1",
-		currentDispatcherContractVersion: 1,
-		minimumDispatcherVersion:         "1.0.0",
-		previousReleaseContract:          `{"schemaVersion":1,"dispatcherVersion":"1.0.0","dispatcherContractVersion":1}`,
+		currentProjectRunnerVersion: "3.0.0-beta.40",
+		currentDispatcherVersion:    "1.0.1",
+		minimumDispatcherVersion:    "1.0.0",
+		previousReleaseContract:     `{"dispatcherVersion":"1.0.0"}`,
 	})
 
 	if result.exitCode != 0 {
@@ -67,11 +48,10 @@ func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleaseIsPreviousCliGenerat
 // later cli/ grouping move fall back to the middle-generation dispatcher path.
 func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleaseIsMiddleGeneration_FallsBackToRootModulesPath(t *testing.T) {
 	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
-		currentProjectRunnerVersion:      "3.0.0-beta.40",
-		currentDispatcherVersion:         "1.0.1",
-		currentDispatcherContractVersion: 1,
-		minimumDispatcherVersion:         "1.0.0",
-		middleReleaseContract:            `{"schemaVersion":1,"dispatcherVersion":"1.0.0","dispatcherContractVersion":1}`,
+		currentProjectRunnerVersion: "3.0.0-beta.40",
+		currentDispatcherVersion:    "1.0.1",
+		minimumDispatcherVersion:    "1.0.0",
+		middleReleaseContract:       `{"dispatcherVersion":"1.0.0"}`,
 	})
 
 	if result.exitCode != 0 {
@@ -87,11 +67,10 @@ func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleaseIsMiddleGeneration_F
 // remain readable through the oldest cli/dispatcher-contract.json path.
 func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleasePredatesDirectorySplit_FallsBackToLegacyPath(t *testing.T) {
 	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
-		currentProjectRunnerVersion:      "3.0.0-beta.40",
-		currentDispatcherVersion:         "1.0.1",
-		currentDispatcherContractVersion: 1,
-		minimumDispatcherVersion:         "1.0.0",
-		legacyReleaseContract:            `{"schemaVersion":1,"dispatcherVersion":"1.0.0","dispatcherContractVersion":1}`,
+		currentProjectRunnerVersion: "3.0.0-beta.40",
+		currentDispatcherVersion:    "1.0.1",
+		minimumDispatcherVersion:    "1.0.0",
+		legacyReleaseContract:       `{"dispatcherVersion":"1.0.0"}`,
 	})
 
 	if result.exitCode != 0 {
@@ -109,7 +88,6 @@ func TestRunDispatcherMinimumVersionCheck_WhenProjectPinDiffersFromPackagePin_Fa
 	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
 		currentProjectRunnerVersion:        "3.0.0-beta.40",
 		currentDispatcherVersion:           "1.0.0",
-		currentDispatcherContractVersion:   1,
 		minimumDispatcherVersion:           "1.0.0",
 		projectPinMinimumDispatcherVersion: "0.9.0",
 	})
@@ -120,25 +98,9 @@ func TestRunDispatcherMinimumVersionCheck_WhenProjectPinDiffersFromPackagePin_Fa
 	assertDispatcherMinimumVersionLogContains(t, result.stderr, ".uloop/project-runner-pin.json minimumDispatcherVersion")
 }
 
-// Verifies invalid dispatcher contract metadata reports the actual bad value.
-func TestRunDispatcherMinimumVersionCheck_WhenCurrentDispatcherContractIsInvalid_FailsWithValue(t *testing.T) {
-	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
-		currentProjectRunnerVersion:      "3.0.0-beta.40",
-		currentDispatcherVersion:         "1.0.0",
-		currentDispatcherContractVersion: 0,
-		minimumDispatcherVersion:         "1.0.0",
-	})
-
-	if result.exitCode != 1 {
-		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
-	}
-	assertDispatcherMinimumVersionLogContains(t, result.stderr, "dispatcherContractVersion must be at least 1, got 0")
-}
-
 type dispatcherMinimumVersionCase struct {
 	currentProjectRunnerVersion        string
 	currentDispatcherVersion           string
-	currentDispatcherContractVersion   int
 	minimumDispatcherVersion           string
 	projectPinMinimumDispatcherVersion string
 	releaseContract                    string
@@ -219,8 +181,7 @@ func prepareDispatcherMinimumVersionFiles(t *testing.T, workDir string, testCase
 	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, cliContractFile), buildDispatcherMinimumVersionCliContract(
 		testCase.currentProjectRunnerVersion))
 	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, dispatcherContractFile), buildDispatcherMinimumVersionContract(
-		currentDispatcherVersion,
-		testCase.currentDispatcherContractVersion))
+		currentDispatcherVersion))
 	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, protocolMinimumVersionFile), buildDispatcherMinimumVersionConstants(
 		2,
 		testCase.currentProjectRunnerVersion,
@@ -243,13 +204,11 @@ func writeDispatcherMinimumVersionFile(t *testing.T, path string, content string
 }
 
 func buildDispatcherMinimumVersionCliContract(projectRunnerVersion string) string {
-	return `{"schemaVersion":1,"protocolVersion":2,"projectRunnerVersion":"` + projectRunnerVersion + `"}`
+	return `{"protocolVersion":2,"projectRunnerVersion":"` + projectRunnerVersion + `"}`
 }
 
-func buildDispatcherMinimumVersionContract(dispatcherVersion string, dispatcherContractVersion int) string {
-	return `{"schemaVersion":1,"dispatcherVersion":"` + dispatcherVersion + `","dispatcherContractVersion":` +
-		strconv.Itoa(dispatcherContractVersion) +
-		`}`
+func buildDispatcherMinimumVersionContract(dispatcherVersion string) string {
+	return `{"dispatcherVersion":"` + dispatcherVersion + `"}`
 }
 
 func buildDispatcherMinimumVersionConstants(
