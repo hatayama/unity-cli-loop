@@ -211,12 +211,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that tool-specific settings concepts stay in the domain layer.
             string toolSettingsDataAssemblyName = typeof(ToolSettingsData).Assembly.GetName().Name;
             string editorSettingsDataAssemblyName = typeof(UnityCliLoopEditorSettingsData).Assembly.GetName().Name;
-            string toolSettingsServiceAssemblyName = typeof(ToolSettingsService).Assembly.GetName().Name;
+            string toolSettingsPortAssemblyName = typeof(IToolSettingsPort).Assembly.GetName().Name;
             string editorSettingsServiceAssemblyName = typeof(UnityCliLoopEditorSettingsService).Assembly.GetName().Name;
 
             Assert.That(toolSettingsDataAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(editorSettingsDataAssemblyName, Is.EqualTo(DomainAssemblyName));
-            Assert.That(toolSettingsServiceAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(toolSettingsPortAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(editorSettingsServiceAssemblyName, Is.EqualTo(DomainAssemblyName));
         }
 

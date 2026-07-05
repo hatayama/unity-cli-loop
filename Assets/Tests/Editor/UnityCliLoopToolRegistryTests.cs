@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public static UnityCliLoopToolRegistry Create()
         {
             return new UnityCliLoopToolRegistry(
-                new ToolSettingsService(new ToolSettingsRepository()),
+                new ToolSettingsRepository(),
                 internalToolNameProvider: null,
                 toolDiscovery: UnityCliLoopToolDiscovery.DiscoverTools);
         }
@@ -454,10 +454,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that extension-facing static registrar APIs still delegate to the shared registry.
             UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
-                toolSettingsService,
+                toolSettingsPort,
                 new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ManualRegistrationTool tool = new();
