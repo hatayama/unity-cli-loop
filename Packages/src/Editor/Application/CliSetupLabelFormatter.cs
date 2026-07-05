@@ -1,11 +1,11 @@
 using io.github.hatayama.UnityCliLoop.Domain;
 
-namespace io.github.hatayama.UnityCliLoop.Presentation
+namespace io.github.hatayama.UnityCliLoop.Application
 {
     /// <summary>
     /// Formats CLI setup labels shared by Settings and Setup Wizard.
     /// </summary>
-    internal static class CliSetupLabelFormatter
+    public static class CliSetupLabelFormatter
     {
         public static string GetCliReplacementButtonText(string action, string cliVersion, string requiredCliVersion)
         {
