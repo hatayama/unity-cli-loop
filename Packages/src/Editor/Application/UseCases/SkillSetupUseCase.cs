@@ -13,30 +13,30 @@ namespace io.github.hatayama.UnityCliLoop.Application
     /// </summary>
     public sealed class SkillSetupUseCase
     {
-        private readonly SkillSetupService _skillSetupService;
+        private readonly ISkillSetupPort _skillSetupPort;
 
-        public SkillSetupUseCase(SkillSetupService skillSetupService)
+        public SkillSetupUseCase(ISkillSetupPort skillSetupPort)
         {
-            Debug.Assert(skillSetupService != null, "skillSetupService must not be null");
+            Debug.Assert(skillSetupPort != null, "skillSetupPort must not be null");
 
-            _skillSetupService = skillSetupService ?? throw new ArgumentNullException(nameof(skillSetupService));
+            _skillSetupPort = skillSetupPort ?? throw new ArgumentNullException(nameof(skillSetupPort));
         }
 
         public void RemoveSkillFiles(string toolName)
         {
-            _skillSetupService.RemoveSkillFiles(toolName);
+            _skillSetupPort.RemoveSkillFiles(toolName);
         }
 
         public bool IsSkillInstalled(string toolName)
         {
-            return _skillSetupService.IsSkillInstalled(toolName);
+            return _skillSetupPort.IsSkillInstalled(toolName);
         }
 
         public List<SkillSetupTargetInfo> DetectSkillTargetsForLayoutAtProjectRoot(
             string projectRoot,
             bool groupSkillsUnderUnityCliLoop)
         {
-            return _skillSetupService.DetectSkillTargetsForLayoutAtProjectRoot(
+            return _skillSetupPort.DetectSkillTargetsForLayoutAtProjectRoot(
                 projectRoot,
                 groupSkillsUnderUnityCliLoop);
         }
@@ -45,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             string projectRoot,
             bool groupSkillsUnderUnityCliLoop)
         {
-            return _skillSetupService.DetectSkillTargetsForLayoutFastAtProjectRoot(
+            return _skillSetupPort.DetectSkillTargetsForLayoutFastAtProjectRoot(
                 projectRoot,
                 groupSkillsUnderUnityCliLoop);
         }
@@ -57,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             Debug.Assert(targets != null, "targets must not be null");
 
-            return _skillSetupService.InstallSkillFilesAsync(
+            return _skillSetupPort.InstallSkillFilesAsync(
                 targets,
                 groupSkillsUnderUnityCliLoop,
                 ct);
@@ -68,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             bool groupSkillsUnderUnityCliLoop,
             CancellationToken ct)
         {
-            return _skillSetupService.InstallSkillFilesForToolAsync(
+            return _skillSetupPort.InstallSkillFilesForToolAsync(
                 toolName,
                 groupSkillsUnderUnityCliLoop,
                 ct);
@@ -79,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             SkillSetupTargetInfo target,
             bool groupSkillsUnderUnityCliLoop)
         {
-            return _skillSetupService.GetV3MigrationSkillInstallStateAtProjectRoot(
+            return _skillSetupPort.GetV3MigrationSkillInstallStateAtProjectRoot(
                 projectRoot,
                 target,
                 groupSkillsUnderUnityCliLoop);
@@ -93,7 +93,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             Debug.Assert(targets != null, "targets must not be null");
 
-            return _skillSetupService.InstallV3MigrationSkillFilesAsync(
+            return _skillSetupPort.InstallV3MigrationSkillFilesAsync(
                 projectRoot,
                 targets,
                 groupSkillsUnderUnityCliLoop,
@@ -108,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             Debug.Assert(targets != null, "targets must not be null");
 
-            return _skillSetupService.RemoveV3MigrationSkillFilesAsync(
+            return _skillSetupPort.RemoveV3MigrationSkillFilesAsync(
                 projectRoot,
                 targets,
                 groupSkillsUnderUnityCliLoop,
