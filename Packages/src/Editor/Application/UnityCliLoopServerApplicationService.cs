@@ -28,13 +28,12 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
     /// <summary>
     /// Defines the event source used to observe Unity CLI Loop server lifecycle behavior.
+    /// Why only ServerLoopExited: it is the one lifecycle signal raised by the server itself
+    /// (from the thread pool when the accept loop dies). ServerStarted/ServerStopping describe
+    /// controller-level readiness and are published manually via the lifecycle registry.
     /// </summary>
     public interface IUnityCliLoopServerLifecycleSource
     {
-        event Action ServerStarted;
-
-        event Action ServerStopping;
-
         event Action ServerLoopExited;
     }
 
@@ -70,6 +69,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
     /// <summary>
     /// Provides Unity CLI Loop Server Lifecycle Registry operations for its owning module.
+    /// ServerStarted/ServerStopping are delivered only through the Publish* methods;
+    /// ServerLoopExited is delivered only by the registered lifecycle source.
     /// </summary>
     public sealed class UnityCliLoopServerLifecycleRegistryService
     {
@@ -97,11 +98,17 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             add
             {
-                AddHandler(ref _serverStartedHandlers, value, source => source.ServerStarted += value);
+                lock (_syncRoot)
+                {
+                    _serverStartedHandlers += value;
+                }
             }
             remove
             {
-                RemoveHandler(ref _serverStartedHandlers, value, source => source.ServerStarted -= value);
+                lock (_syncRoot)
+                {
+                    _serverStartedHandlers -= value;
+                }
             }
         }
 
@@ -109,11 +116,17 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             add
             {
-                AddHandler(ref _serverStoppingHandlers, value, source => source.ServerStopping += value);
+                lock (_syncRoot)
+                {
+                    _serverStoppingHandlers += value;
+                }
             }
             remove
             {
-                RemoveHandler(ref _serverStoppingHandlers, value, source => source.ServerStopping -= value);
+                lock (_syncRoot)
+                {
+                    _serverStoppingHandlers -= value;
+                }
             }
         }
 
@@ -121,11 +134,25 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             add
             {
-                AddHandler(ref _serverLoopExitedHandlers, value, source => source.ServerLoopExited += value);
+                lock (_syncRoot)
+                {
+                    _serverLoopExitedHandlers += value;
+                    if (_source != null)
+                    {
+                        _source.ServerLoopExited += value;
+                    }
+                }
             }
             remove
             {
-                RemoveHandler(ref _serverLoopExitedHandlers, value, source => source.ServerLoopExited -= value);
+                lock (_syncRoot)
+                {
+                    _serverLoopExitedHandlers -= value;
+                    if (_source != null)
+                    {
+                        _source.ServerLoopExited -= value;
+                    }
+                }
             }
         }
 
@@ -135,13 +162,16 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             lock (_syncRoot)
             {
-                if (_source != null)
+                if (_source != null && _serverLoopExitedHandlers != null)
                 {
-                    UnwireHandlers(_source);
+                    _source.ServerLoopExited -= _serverLoopExitedHandlers;
                 }
 
                 _source = source;
-                WireHandlers(_source);
+                if (_serverLoopExitedHandlers != null)
+                {
+                    _source.ServerLoopExited += _serverLoopExitedHandlers;
+                }
             }
         }
 
@@ -165,78 +195,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
             }
 
             handlers?.Invoke();
-        }
-
-        private void AddHandler(
-            ref Action handlers,
-            Action value,
-            Action<IUnityCliLoopServerLifecycleSource> wireHandler)
-        {
-            System.Diagnostics.Debug.Assert(value != null, "value must not be null");
-            System.Diagnostics.Debug.Assert(wireHandler != null, "wireHandler must not be null");
-
-            lock (_syncRoot)
-            {
-                handlers += value;
-                if (_source != null)
-                {
-                    wireHandler(_source);
-                }
-            }
-        }
-
-        private void RemoveHandler(
-            ref Action handlers,
-            Action value,
-            Action<IUnityCliLoopServerLifecycleSource> unwireHandler)
-        {
-            System.Diagnostics.Debug.Assert(value != null, "value must not be null");
-            System.Diagnostics.Debug.Assert(unwireHandler != null, "unwireHandler must not be null");
-
-            lock (_syncRoot)
-            {
-                handlers -= value;
-                if (_source != null)
-                {
-                    unwireHandler(_source);
-                }
-            }
-        }
-
-        private void WireHandlers(IUnityCliLoopServerLifecycleSource source)
-        {
-            if (_serverStartedHandlers != null)
-            {
-                source.ServerStarted += _serverStartedHandlers;
-            }
-
-            if (_serverStoppingHandlers != null)
-            {
-                source.ServerStopping += _serverStoppingHandlers;
-            }
-
-            if (_serverLoopExitedHandlers != null)
-            {
-                source.ServerLoopExited += _serverLoopExitedHandlers;
-            }
-        }
-
-        private void UnwireHandlers(IUnityCliLoopServerLifecycleSource source)
-        {
-            if (_serverStartedHandlers != null)
-            {
-                source.ServerStarted -= _serverStartedHandlers;
-            }
-
-            if (_serverStoppingHandlers != null)
-            {
-                source.ServerStopping -= _serverStoppingHandlers;
-            }
-
-            if (_serverLoopExitedHandlers != null)
-            {
-                source.ServerLoopExited -= _serverLoopExitedHandlers;
-            }
         }
     }
 
