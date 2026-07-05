@@ -67,11 +67,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MouseUiSimulationCommand parameters,
             EventSystem? eventSystem)
         {
-            if (!EditorApplication.isPlaying)
+            ValidationResult playModeResult = PlayModeToolPreflightService.RequireActive();
+            if (!playModeResult.IsValid)
             {
-                return CreateFailure(
-                    parameters,
-                    "PlayMode is not active. Use control-play-mode tool to start PlayMode first.");
+                return CreateFailure(parameters, playModeResult.ErrorMessage);
             }
 
             if (eventSystem == null)
