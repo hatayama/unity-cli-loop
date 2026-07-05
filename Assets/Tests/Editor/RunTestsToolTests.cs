@@ -104,41 +104,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void Constructor_WhenLegacySuccessfulCallerOmitsStatus_ShouldDerivePassedStatus()
+        public void Constructor_ShouldStoreEveryArgumentVerbatim()
         {
-            // Verifies source-compatible constructor calls cannot report success as execution failure.
+            // Verifies the constructor propagates every field as supplied instead of deriving any of them.
             RunTestsResponse response = new(
                 success: true,
-                message: "Test execution completed with status: Passed",
+                message: "arbitrary message",
                 completedAt: "2026-01-01T00:00:00.0000000Z",
-                testCount: 1,
-                passedCount: 1,
-                failedCount: 0,
-                skippedCount: 0);
+                testCount: 5,
+                passedCount: 3,
+                failedCount: 2,
+                skippedCount: 1,
+                xmlPath: "/tmp/results.xml",
+                status: "CustomStatus",
+                hasFailures: false,
+                noTestsFound: true,
+                noTestsFoundExplanation: "custom explanation");
 
-            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.Passed));
-            Assert.That(response.HasFailures, Is.False);
-            Assert.That(response.NoTestsFound, Is.False);
-            Assert.That(response.NoTestsFoundExplanation, Is.Empty);
-        }
-
-        [Test]
-        public void Constructor_WhenLegacyNoTestsCallerOmitsStatus_ShouldDeriveNoTestsFoundStatus()
-        {
-            // Verifies source-compatible zero-discovery responses remain distinct from execution failures.
-            RunTestsResponse response = new(
-                success: false,
-                message: RunTestsResponse.NoTestsFoundMessage,
-                completedAt: "2026-01-01T00:00:00.0000000Z",
-                testCount: 0,
-                passedCount: 0,
-                failedCount: 0,
-                skippedCount: 0);
-
-            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.NoTestsFound));
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Message, Is.EqualTo("arbitrary message"));
+            Assert.That(response.CompletedAt, Is.EqualTo("2026-01-01T00:00:00.0000000Z"));
+            Assert.That(response.TestCount, Is.EqualTo(5));
+            Assert.That(response.PassedCount, Is.EqualTo(3));
+            Assert.That(response.FailedCount, Is.EqualTo(2));
+            Assert.That(response.SkippedCount, Is.EqualTo(1));
+            Assert.That(response.XmlPath, Is.EqualTo("/tmp/results.xml"));
+            Assert.That(response.Status, Is.EqualTo("CustomStatus"));
             Assert.That(response.HasFailures, Is.False);
             Assert.That(response.NoTestsFound, Is.True);
-            Assert.That(response.NoTestsFoundExplanation, Does.Contain("not a test failure"));
+            Assert.That(response.NoTestsFoundExplanation, Is.EqualTo("custom explanation"));
         }
     }
-} 
+}
