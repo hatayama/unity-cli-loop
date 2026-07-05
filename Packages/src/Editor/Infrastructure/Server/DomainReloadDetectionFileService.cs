@@ -15,11 +15,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
         private readonly IUnityCliLoopEditorLegacySessionStateReader _legacySessionStateReader;
 
-        public DomainReloadDetectionFileService()
-            : this(new UnityCliLoopEditorSessionStateService(new UnityCliLoopEditorSessionStateRepository()))
-        {
-        }
-
         internal DomainReloadDetectionFileService(
             UnityCliLoopEditorSessionStateService sessionStateService,
             IUnityCliLoopEditorLegacySessionStateReader legacySessionStateReader = null)

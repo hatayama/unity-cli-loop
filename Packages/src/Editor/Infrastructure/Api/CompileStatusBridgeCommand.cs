@@ -23,7 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             string requestId = ReadRequestId(paramsToken);
             UnityCliLoopEditorSessionStateService sessionStateService =
-                new UnityCliLoopEditorSessionStateService(new UnityCliLoopEditorSessionStateRepository());
+                UnityCliLoopEditorSessionStateFacade.Service;
             sessionStateService.ClearExpiredCompileResult(DateTime.UtcNow);
             bool isCompiling = EditorApplication.isCompiling;
             bool isUpdating = EditorApplication.isUpdating;

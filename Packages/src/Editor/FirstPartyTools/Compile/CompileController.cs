@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using System.Threading;
 
 using io.github.hatayama.UnityCliLoop.Domain;
-using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -18,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class CompileController : IDisposable
     {
+        private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
         private bool _isCompiling = false;
         private List<CompilerMessage> _compileMessages = new();
         private TaskCompletionSource<CompileResult> _currentCompileTask;
@@ -25,6 +25,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private bool _reloadExternalSceneChanges = true;
         private CompileResultRecordingContext _resultRecordingContext = CompileResultRecordingContext.Disabled();
         private DateTime _compileStartedAtUtc = DateTime.MinValue;
+
+        public CompileController(UnityCliLoopEditorSessionStateService sessionStateService)
+        {
+            UnityEngine.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+
+            _sessionStateService =
+                sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
+        }
 
         /// <summary>
         /// Event that occurs when compilation is complete.
@@ -508,12 +516,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            UnityCliLoopEditorSessionStateService sessionStateService =
-                new UnityCliLoopEditorSessionStateService(new UnityCliLoopEditorSessionStateRepository());
             UnityCliLoopCompileResult response =
                 CompileSessionResultService.CreateCompileResult(result, _resultRecordingContext.ForceRecompile);
             CompileSessionResultService.StoreCompileResult(
-                sessionStateService,
+                _sessionStateService,
                 _resultRecordingContext.RequestId,
                 _resultRecordingContext.ForceRecompile,
                 response,
