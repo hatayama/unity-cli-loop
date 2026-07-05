@@ -18,6 +18,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class SimulateMouseUiUseCase
     {
+        // Wire-visible fragment of the paused preflight message; tests pin the composed string.
+        public const string PausedActionDescription = "simulating UI input";
+
         private const float EXPAND_DURATION = SimulateMouseUiAnimationConstants.EXPAND_DURATION;
         private const float EXPAND_START_SCALE = SimulateMouseUiAnimationConstants.EXPAND_START_SCALE;
         private const float DISSIPATE_DURATION = SimulateMouseUiAnimationConstants.DISSIPATE_DURATION;
@@ -67,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MouseUiSimulationCommand parameters,
             EventSystem? eventSystem)
         {
-            ValidationResult playModeResult = PlayModeToolPreflightService.RequireActive();
+            ValidationResult playModeResult = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!playModeResult.IsValid)
             {
                 return CreateFailure(parameters, playModeResult.ErrorMessage);
