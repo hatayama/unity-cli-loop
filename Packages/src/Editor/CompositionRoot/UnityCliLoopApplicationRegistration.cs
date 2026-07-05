@@ -37,7 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 toolSettingsPort,
                 toolRegistrarService,
                 new SkillInstallLayoutToolSkillDescriptionProvider()));
-            SkillSetupUseCase skillSetupUseCase = new(new SkillSetupService(new ToolSkillSetupService(toolSettingsPort)));
+            ISkillSetupPort skillSetupPort = new ToolSkillSetupService(toolSettingsPort);
+            SkillSetupUseCase skillSetupUseCase = new(skillSetupPort);
             SkillSetupUseCaseRegistry.Register(skillSetupUseCase);
             ThirdPartyToolMigrationUseCaseRegistry.Register(
                 new ThirdPartyToolMigrationUseCase(new ThirdPartyToolMigrationFileService()));
