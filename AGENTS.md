@@ -33,17 +33,38 @@ compatible must not bump it.
 
 Do not touch the protocol version to "keep up with releases":
 
-- `cli/common/clicontract/contract.json` `projectRunnerVersion`, `cli/common/tools/default-tools.json`
-  `version`, and `cli/dispatcher/dispatchercontract/dispatcher-contract.json` `dispatcherVersion` are stamped by
-  release-please only. Never edit them by hand in a feature PR.
-- `CliConstants.MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION` is the release that setup installs. It
-  must always point at a published project runner release.
+- `cli/common/clicontract/contract.json` `projectRunnerVersion`, the pin files'
+  `projectRunnerVersion`, and `cli/dispatcher/dispatchercontract/dispatcher-contract.json`
+  `dispatcherVersion` are stamped by release-please only. Never edit them by hand in a feature PR.
 - When a protocol bump changes `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION`, prepare the matching
-  project runner release tag first, then update `CliConstants.MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION`
-  in the same PR. PR CI fails, and the PR warning comment stays open, until the minimum project
-  runner release advances to a published release that advertises the required protocol.
+  project runner release first. PR CI (`check-protocol-minimum-version`) fails until the pin's
+  `projectRunnerVersion` points at a published project runner release that advertises the
+  required protocol; release-please advances that value when the runner release is cut.
 - Runtime protocol mismatch guidance must use the unpinned CLI update path for older clients and
   tell newer clients to align the package and CLI releases.
+
+## Project Runner Pin
+
+`Packages/src/project-runner-pin.json` (mirrored byte-identically to `.uloop/project-runner-pin.json`
+by `CliPinSynchronizer`) is the single source for cross-component version requirements. It
+currently has two required fields:
+
+- `projectRunnerVersion` — the project runner release the dispatcher must run for this package.
+  Stamped by release-please; never edit by hand.
+- `minimumDispatcherVersion` — the semver floor the package requires of the globally installed
+  dispatcher. The dispatcher force-updates itself when it is older than this value, and the
+  package reads it (via `CliPinReader`) for setup and installation checks. This is the only
+  manually maintained minimum-version declaration; raise it only when the package genuinely
+  needs a newly published dispatcher, not because the dispatcher implementation changed.
+
+There is no dispatcher⇄package integer contract generation; the pin's semver floor is the only
+dispatcher gate. The IPC `protocolVersion` pair described above is the only integer generation
+in the system.
+
+Pin format discipline: the pin evolves additively only — never delete or rename an existing
+field. The forced-update instruction (`minimumDispatcherVersion`) travels inside the pin, so an
+old dispatcher that cannot parse a new pin never learns it must update. For the same reason the
+dispatcher must stay lenient when reading pins written by older packages.
 
 ## Generated Skill Files
 
@@ -74,13 +95,7 @@ Run `scripts/stamp-release-inputs.sh` to refresh `cli/project-runner/shared-inpu
 `cli/dispatcher/shared-inputs-stamp.json`, and commit the stamp updates with the change. Pull
 request CI runs `check-release-triggers` (authoritative rules: `releaseTriggerRules` in
 `cli/release-automation/internal/automation/release_trigger_guard.go`) and fails when shared
-release inputs changed without the matching triggers. CI also runs `check-dispatcher-contract`,
-which fails when `dispatcherContractVersion` moves backwards.
-
-Do not bump `dispatcherContractVersion` unless the dispatcher contract itself changes.
-Do not raise Unity package `MINIMUM_REQUIRED_DISPATCHER_VERSION` or pin-file
-`minimumDispatcherVersion` just because the dispatcher implementation changed; those should
-advance only when the package must require a newly published dispatcher.
+release inputs changed without the matching triggers.
 
 ## Windows Compatibility Guardrails
 
