@@ -177,6 +177,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteAsync_WithUnsupportedFilterType_ShouldFailFastWithoutRunningTests()
+        {
+            // Verifies invalid filter-type enum values surface as a Success=false response instead of a JSON-RPC error.
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                NoCleanupWait
+            );
+            RunTestsSchema parameters = new()
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = (TestFilterType)999,
+                FilterValue = "value"
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.ExecutionFailed));
+            Assert.That(response.Message, Does.Contain("Unsupported filter type"));
+            Assert.That(executionService.WasCalled, Is.False);
+        }
+
+        [Test]
         public async Task ExecuteAsync_AfterTestExecution_ShouldWaitForCleanup()
         {
             // Verifies run-tests waits for Unity Test Runner cleanup before responding.

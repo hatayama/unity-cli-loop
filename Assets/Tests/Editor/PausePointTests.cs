@@ -328,6 +328,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task Enable_WhenIdIsEmpty_ReturnsValidationFailureResponse()
+        {
+            // Verifies empty id surfaces as a Success=false response instead of a JSON-RPC error.
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = string.Empty,
+                ["timeoutSeconds"] = 30
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Id must not be null or empty."));
+        }
+
+        [Test]
+        public async Task Enable_WhenTimeoutSecondsIsZero_ReturnsValidationFailureResponse()
+        {
+            // Verifies non-positive TimeoutSeconds surface as a Success=false response instead of a JSON-RPC error.
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["timeoutSeconds"] = 0
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("TimeoutSeconds must be greater than zero."));
+        }
+
+        [Test]
+        public async Task Clear_WhenIdIsEmptyAndAllIsFalse_ReturnsValidationFailureResponse()
+        {
+            // Verifies empty id on clear-pause-point surfaces as a Success=false response.
+            ClearPausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = string.Empty,
+                ["all"] = false
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Id must not be null or empty."));
+        }
+
+        [Test]
         public void PauseMethod_WhenSourceIsScanned_UsesUnityEditorConditionalWithoutDebugBreak()
         {
             // Verifies the public marker follows Unity's conditional call-site removal pattern.

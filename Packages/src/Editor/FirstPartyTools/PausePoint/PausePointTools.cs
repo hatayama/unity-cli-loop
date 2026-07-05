@@ -33,6 +33,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class PausePointResponse : UnityCliLoopToolResponse
     {
+        // Defaults to true so existing snapshot/clear paths keep their prior semantics.
+        // Only explicit validation failures set this to false.
+        public bool Success { get; set; } = true;
         public string Id { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
         public bool IsEnabled { get; set; }
@@ -174,13 +177,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(parameters));
             }
 
-            string id = RequireId(parameters.Id);
-            if (parameters.TimeoutSeconds <= 0)
+            string idError = ValidateId(parameters.Id);
+            if (idError != null)
             {
-                throw new UnityCliLoopToolParameterValidationException("TimeoutSeconds must be greater than zero.");
+                return CreateValidationFailure(idError);
             }
 
-            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(id, parameters.TimeoutSeconds);
+            if (parameters.TimeoutSeconds <= 0)
+            {
+                return CreateValidationFailure("TimeoutSeconds must be greater than zero.");
+            }
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(parameters.Id, parameters.TimeoutSeconds);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.Warning = CreateEnableWarning();
             return response;
@@ -199,19 +207,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return PausePointResponse.FromClearAll(clearAllResult);
             }
 
-            string id = RequireId(parameters.Id);
-            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear(id);
+            string idError = ValidateId(parameters.Id);
+            if (idError != null)
+            {
+                return CreateValidationFailure(idError);
+            }
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear(parameters.Id);
             return PausePointResponse.FromSnapshot(snapshot);
         }
 
-        private static string RequireId(string id)
+        // Returns an error message when id fails validation, or null when it is valid.
+        private static string ValidateId(string id)
         {
             if (string.IsNullOrWhiteSpace(id))
             {
-                throw new UnityCliLoopToolParameterValidationException("Id must not be null or empty.");
+                return "Id must not be null or empty.";
             }
 
-            return id;
+            return null;
+        }
+
+        private static PausePointResponse CreateValidationFailure(string message)
+        {
+            return new PausePointResponse
+            {
+                Success = false,
+                Message = message
+            };
         }
 
         private static string CreateEnableWarning()

@@ -122,7 +122,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     break;
 
                 default:
-                    throw new ArgumentException($"Unknown keyboard action: {parameters.Action}");
+                    // Only reachable when an out-of-range enum value is cast from an integer;
+                    // surface as a Success=false response so the CLI treats it as a normal validation failure.
+                    return new SimulateKeyboardResponse
+                    {
+                        Success = false,
+                        Message = $"Unknown keyboard action: {parameters.Action}",
+                        Action = parameters.Action.ToString()
+                    };
             }
 
             VibeLogger.LogInfo(
