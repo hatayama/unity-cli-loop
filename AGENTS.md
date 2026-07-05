@@ -46,8 +46,8 @@ Do not touch the protocol version to "keep up with releases":
 ## Project Runner Pin
 
 `Packages/src/project-runner-pin.json` (mirrored byte-identically to `.uloop/project-runner-pin.json`
-by `CliPinSynchronizer`) is the single source for cross-component version requirements. It has
-exactly two fields:
+by `CliPinSynchronizer`) is the single source for cross-component version requirements. It
+currently has two required fields:
 
 - `projectRunnerVersion` — the project runner release the dispatcher must run for this package.
   Stamped by release-please; never edit by hand.

@@ -42,6 +42,6 @@ reviews:
 
         Do not request a protocol bump for ordinary CLI features, bug fixes, UI changes, documentation, or additive wire-format changes that older counterparts can safely ignore. `projectRunnerVersion` is release-please managed release metadata. If a PR bumps `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION`, the pin's `projectRunnerVersion` must point at a published project runner release that advertises the required protocol before the Unity package is released; that value is advanced by release-please when the runner release is cut, and CI (`check-protocol-minimum-version`) enforces it.
 
-        The project runner pin (`Packages/src/project-runner-pin.json`, mirrored to `.uloop/project-runner-pin.json`) must keep exactly its current fields and evolve additively only; flag any PR that deletes or renames a pin field, because old dispatchers learn about forced updates by parsing the pin.
+        The project runner pin (`Packages/src/project-runner-pin.json`, mirrored to `.uloop/project-runner-pin.json`) must preserve its existing fields and evolve additively only; flag any PR that deletes or renames a pin field, because old dispatchers learn about forced updates by parsing the pin.
 chat:
   auto_reply: true
