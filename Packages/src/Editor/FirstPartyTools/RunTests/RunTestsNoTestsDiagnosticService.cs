@@ -24,19 +24,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string AppendDiagnosticsIfNeeded(
             string message,
-            bool success,
-            int testCount,
+            bool noTestsFound,
             UnityCliLoopTestMode testMode,
             TestFilterType filterType)
         {
-            if (!ShouldAppendDiagnostics(message, success, testCount, filterType))
+            if (!ShouldAppendDiagnostics(noTestsFound, filterType))
             {
                 return message;
             }
 
             RunTestsAsmdefInfo[] asmdefs = LoadProjectAsmdefs();
             RunTestsAsmdefDiagnosticFinding[] findings = Analyze(asmdefs, testMode);
-            return AppendFindingsIfEligible(message, success, testCount, findings);
+            return AppendFindingsIfEligible(message, noTestsFound, findings);
         }
 
         internal static string AppendDiagnosticsOrOriginalMessage(string message, Func<string> appendDiagnostics)
@@ -64,13 +63,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static string AppendFindingsIfEligible(
             string message,
-            bool success,
-            int testCount,
+            bool noTestsFound,
             IReadOnlyList<RunTestsAsmdefDiagnosticFinding> findings)
         {
             Debug.Assert(findings != null, "findings must not be null");
 
-            if (!ShouldInspect(message, success, testCount) || findings.Count == 0)
+            if (!noTestsFound || findings.Count == 0)
             {
                 return message;
             }
@@ -149,20 +147,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return findings.ToArray();
         }
 
-        internal static bool ShouldAppendDiagnostics(
-            string message,
-            bool success,
-            int testCount,
-            TestFilterType filterType)
+        internal static bool ShouldAppendDiagnostics(bool noTestsFound, TestFilterType filterType)
         {
-            return filterType == TestFilterType.all && ShouldInspect(message, success, testCount);
-        }
-
-        internal static bool ShouldInspect(string message, bool success, int testCount)
-        {
-            return !success
-                   && testCount == 0
-                   && string.Equals(message, RunTestsResponse.NoTestsFoundMessage, StringComparison.Ordinal);
+            return filterType == TestFilterType.all && noTestsFound;
         }
 
         private static RunTestsAsmdefInfo[] LoadProjectAsmdefs()

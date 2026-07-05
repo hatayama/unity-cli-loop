@@ -119,9 +119,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await _waitForTestRunnerCleanupAsync(ct);
 
             // 3. Response creation.
-            // Why: pass the derived fields explicitly so the constructor does not re-derive them;
-            // the null-triggered derivation exists only as a source-compat fallback for callers
-            // that omit the optional arguments.
             RunTestsResponse response = new(
                 success: result.success,
                 message: result.message,
@@ -139,8 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 response.Message,
                 () => _noTestsDiagnosticService.AppendDiagnosticsIfNeeded(
                     response.Message,
-                    response.Success,
-                    response.TestCount,
+                    response.NoTestsFound,
                     parameters.TestMode,
                     parameters.FilterType));
             return response;
@@ -153,8 +149,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static RunTestsResponse CreateFailureResponse(string message)
         {
-            // Why: supply every optional argument so the constructor does not re-derive
-            // status or explanation fields from the failure message.
             return new RunTestsResponse(
                 success: false,
                 message: message,
