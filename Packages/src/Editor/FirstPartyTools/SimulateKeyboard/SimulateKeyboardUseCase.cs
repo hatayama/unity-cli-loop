@@ -17,79 +17,84 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Coordinates Input System keyboard simulation for the bundled simulate-keyboard tool.
     /// </summary>
-    public class SimulateKeyboardUseCase : IUnityCliLoopKeyboardSimulationService
+    public class SimulateKeyboardUseCase
     {
 #if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning disable CS1998
 #endif
-        public async Task<UnityCliLoopKeyboardSimulationResult> SimulateKeyboardAsync(
-            UnityCliLoopKeyboardSimulationRequest request,
+        public async Task<SimulateKeyboardResponse> ExecuteAsync(
+            SimulateKeyboardSchema parameters,
             CancellationToken ct)
 #if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning restore CS1998
 #endif
         {
+            if (parameters == null)
+            {
+                throw new System.ArgumentNullException(nameof(parameters));
+            }
+
             ct.ThrowIfCancellationRequested();
 
 #if !ULOOP_HAS_INPUT_SYSTEM
-            return new UnityCliLoopKeyboardSimulationResult
+            return new SimulateKeyboardResponse
             {
                 Success = false,
                 Message = "simulate-keyboard requires the Input System package (com.unity.inputsystem). Install it via Package Manager and set Active Input Handling to 'Input System Package (New)' or 'Both' in Player Settings.",
-                Action = request.Action.ToString()
+                Action = parameters.Action.ToString()
             };
 #else
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
 
             if (!EditorApplication.isPlaying)
             {
-                return new UnityCliLoopKeyboardSimulationResult
+                return new SimulateKeyboardResponse
                 {
                     Success = false,
                     Message = "PlayMode is not active. Use control-play-mode tool to start PlayMode first.",
-                    Action = request.Action.ToString()
+                    Action = parameters.Action.ToString()
                 };
             }
 
             if (EditorApplication.isPaused)
             {
-                return new UnityCliLoopKeyboardSimulationResult
+                return new SimulateKeyboardResponse
                 {
                     Success = false,
                     Message = "PlayMode is paused. Resume PlayMode before simulating keyboard input.",
-                    Action = request.Action.ToString()
+                    Action = parameters.Action.ToString()
                 };
             }
 
-            if (string.IsNullOrEmpty(request.Key))
+            if (string.IsNullOrEmpty(parameters.Key))
             {
-                return new UnityCliLoopKeyboardSimulationResult
+                return new SimulateKeyboardResponse
                 {
                     Success = false,
                     Message = "Key parameter is required. Examples: \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\".",
-                    Action = request.Action.ToString()
+                    Action = parameters.Action.ToString()
                 };
             }
 
-            string normalizedKey = NormalizeKeyName(request.Key);
+            string normalizedKey = NormalizeKeyName(parameters.Key);
             if (!Enum.TryParse<Key>(normalizedKey, ignoreCase: true, out Key key) || key == Key.None)
             {
-                return new UnityCliLoopKeyboardSimulationResult
+                return new SimulateKeyboardResponse
                 {
                     Success = false,
-                    Message = $"Invalid key name: \"{request.Key}\". Use Input System Key enum names (e.g. \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\").",
-                    Action = request.Action.ToString()
+                    Message = $"Invalid key name: \"{parameters.Key}\". Use Input System Key enum names (e.g. \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\").",
+                    Action = parameters.Action.ToString()
                 };
             }
 
             Keyboard keyboard = Keyboard.current;
             if (keyboard == null)
             {
-                return new UnityCliLoopKeyboardSimulationResult
+                return new SimulateKeyboardResponse
                 {
                     Success = false,
                     Message = "No keyboard device found in Input System. Ensure the Input System package is properly configured.",
-                    Action = request.Action.ToString()
+                    Action = parameters.Action.ToString()
                 };
             }
 
@@ -98,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             VibeLogger.LogInfo(
                 "simulate_keyboard_start",
                 "Keyboard simulation started",
-                new { Action = request.Action.ToString(), Key = request.Key },
+                new { Action = parameters.Action.ToString(), Key = parameters.Key },
                 correlationId: correlationId
             );
 
@@ -106,12 +111,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             EnsureOverlayExists();
 
-            UnityCliLoopKeyboardSimulationResult response;
+            SimulateKeyboardResponse response;
 
-            switch (request.Action)
+            switch (parameters.Action)
             {
                 case UnityCliLoopKeyboardAction.Press:
-                    response = await ExecutePress(keyboard, key, request.Duration, ct);
+                    response = await ExecutePress(keyboard, key, parameters.Duration, ct);
                     break;
 
                 case UnityCliLoopKeyboardAction.KeyDown:
@@ -123,13 +128,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     break;
 
                 default:
-                    throw new ArgumentException($"Unknown keyboard action: {request.Action}");
+                    throw new ArgumentException($"Unknown keyboard action: {parameters.Action}");
             }
 
             VibeLogger.LogInfo(
                 "simulate_keyboard_complete",
                 $"Keyboard simulation completed: {response.Message}",
-                new { Action = request.Action.ToString(), Success = response.Success },
+                new { Action = parameters.Action.ToString(), Success = response.Success },
                 correlationId: correlationId
             );
 
@@ -143,12 +148,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             OverlayCanvasFactory.EnsureExists();
         }
 
-        private async Task<UnityCliLoopKeyboardSimulationResult> ExecutePress(
+        private async Task<SimulateKeyboardResponse> ExecutePress(
             Keyboard keyboard, Key key, float duration, CancellationToken ct)
         {
             if (duration < 0f || float.IsNaN(duration) || float.IsInfinity(duration))
             {
-                return new UnityCliLoopKeyboardSimulationResult
+                return new SimulateKeyboardResponse
                 {
                     Success = false,
                     Message = $"Duration must be non-negative, got: {duration}",
@@ -160,7 +165,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string keyName = key.ToString();
             if (KeyboardKeyState.IsKeyHeld(key))
             {
-                return new UnityCliLoopKeyboardSimulationResult
+                return new SimulateKeyboardResponse
                 {
                     Success = false,
                     Message = $"Key '{keyName}' is already held down. Call KeyUp first.",
@@ -243,7 +248,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string edgeText = pressEdgeObserved
                 ? ""
                 : " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it, so retry or verify with a focused log)";
-            return new UnityCliLoopKeyboardSimulationResult
+            return new SimulateKeyboardResponse
             {
                 Success = true,
                 Message = $"Pressed '{keyName}'{durationText}{edgeText}",
@@ -253,13 +258,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private async Task<UnityCliLoopKeyboardSimulationResult> ExecuteKeyDown(Keyboard keyboard, Key key, CancellationToken ct)
+        private async Task<SimulateKeyboardResponse> ExecuteKeyDown(Keyboard keyboard, Key key, CancellationToken ct)
         {
             string keyName = key.ToString();
 
             if (KeyboardKeyState.IsKeyHeld(key))
             {
-                return new UnityCliLoopKeyboardSimulationResult
+                return new SimulateKeyboardResponse
                 {
                     Success = false,
                     Message = $"Key '{keyName}' is already held down. Call KeyUp first.",
@@ -325,7 +330,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string keyDownEdgeText = pressEdgeObserved
                 ? ""
                 : " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it)";
-            return new UnityCliLoopKeyboardSimulationResult
+            return new SimulateKeyboardResponse
             {
                 Success = true,
                 Message = $"Key '{keyName}' held down{keyDownEdgeText}",
@@ -335,13 +340,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private async Task<UnityCliLoopKeyboardSimulationResult> ExecuteKeyUp(Keyboard keyboard, Key key, CancellationToken ct)
+        private async Task<SimulateKeyboardResponse> ExecuteKeyUp(Keyboard keyboard, Key key, CancellationToken ct)
         {
             string keyName = key.ToString();
 
             if (!KeyboardKeyState.IsKeyHeld(key))
             {
-                return new UnityCliLoopKeyboardSimulationResult
+                return new SimulateKeyboardResponse
                 {
                     Success = false,
                     Message = $"Key '{keyName}' is not currently held. Call KeyDown first.",
@@ -375,7 +380,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return TimedOutKeyResult(UnityCliLoopKeyboardAction.KeyUp, keyName);
             }
 
-            return new UnityCliLoopKeyboardSimulationResult
+            return new SimulateKeyboardResponse
             {
                 Success = true,
                 Message = $"Key '{keyName}' released",
@@ -396,12 +401,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // pressEdgeObserved stays nullable because KeyUp has no press edge to report;
         // Press/KeyDown must pass their observation so pause-point interruptions (the
         // most common E2E path) do not silently drop the field.
-        private static UnityCliLoopKeyboardSimulationResult InterruptedKeyResult(
+        private static SimulateKeyboardResponse InterruptedKeyResult(
             UnityCliLoopKeyboardAction action,
             string keyName,
             bool? pressEdgeObserved)
         {
-            UnityCliLoopKeyboardSimulationResult result = new()
+            SimulateKeyboardResponse result = new()
             {
                 Success = true,
                 Message = $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' was released from Unity CLI Loop bookkeeping.",
@@ -414,11 +419,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return result;
         }
 
-        private static UnityCliLoopKeyboardSimulationResult TimedOutKeyResult(
+        private static SimulateKeyboardResponse TimedOutKeyResult(
             UnityCliLoopKeyboardAction action,
             string keyName)
         {
-            return new UnityCliLoopKeyboardSimulationResult
+            return new SimulateKeyboardResponse
             {
                 Success = false,
                 Message = $"Keyboard input timed out while waiting for Unity Editor update. Key '{keyName}' cleanup is queued for the next Editor tick.",
@@ -427,7 +432,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static void AttachPausePointHit(UnityCliLoopKeyboardSimulationResult result)
+        private static void AttachPausePointHit(SimulateKeyboardResponse result)
         {
             if (result == null)
             {

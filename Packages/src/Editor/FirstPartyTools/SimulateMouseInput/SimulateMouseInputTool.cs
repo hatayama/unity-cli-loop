@@ -16,52 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         protected override async Task<SimulateMouseInputResponse> ExecuteAsync(SimulateMouseInputSchema parameters, CancellationToken ct)
         {
             SimulateMouseInputUseCase useCase = new();
-            UnityCliLoopMouseInputSimulationResult result =
-                await useCase.SimulateMouseInputAsync(ToRequest(parameters), ct);
-            return ToResponse(result);
-        }
-
-        private static UnityCliLoopMouseInputSimulationRequest ToRequest(SimulateMouseInputSchema parameters)
-        {
-            if (parameters == null)
-            {
-                throw new System.ArgumentNullException(nameof(parameters));
-            }
-
-            return new UnityCliLoopMouseInputSimulationRequest
-            {
-                Action = parameters.Action,
-                X = parameters.X,
-                Y = parameters.Y,
-                Button = parameters.Button,
-                Duration = parameters.Duration,
-                DeltaX = parameters.DeltaX,
-                DeltaY = parameters.DeltaY,
-                ScrollX = parameters.ScrollX,
-                ScrollY = parameters.ScrollY,
-            };
-        }
-
-        private static SimulateMouseInputResponse ToResponse(UnityCliLoopMouseInputSimulationResult result)
-        {
-            if (result == null)
-            {
-                throw new System.ArgumentNullException(nameof(result));
-            }
-
-            return new SimulateMouseInputResponse
-            {
-                Success = result.Success,
-                Message = result.Message,
-                Action = result.Action,
-                Button = result.Button,
-                PositionX = result.PositionX,
-                PositionY = result.PositionY,
-                InterruptedByPausePoint = result.InterruptedByPausePoint,
-                PausePointId = result.PausePointId,
-                PausePointHitCount = result.PausePointHitCount,
-                PausePointHits = result.PausePointHits,
-            };
+            return await useCase.ExecuteAsync(parameters, ct);
         }
     }
 }
