@@ -118,6 +118,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return Task.FromResult(true);
             }
 
+            // Why: resolve the minimum dispatcher version once on the caller thread so the background
+            // detection task does not perform Unity package IO from a worker thread.
+            string minimumDispatcherVersion = CliPinReader.LoadMinimumDispatcherVersionOrThrow();
+
             return Task.Run(
                 () =>
                 {
@@ -125,7 +129,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return IsShellDetectionUsableForPathSetup(
                         detection,
                         platform,
-                        NativeCliInstaller.IsPackageOwnedCurrentUserInstallPath);
+                        NativeCliInstaller.IsPackageOwnedCurrentUserInstallPath,
+                        minimumDispatcherVersion);
                 },
                 ct);
         }
@@ -241,9 +246,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static bool IsShellDetectionUsableForPathSetup(
             CliInstallationDetection detection,
             RuntimePlatform platform,
-            Func<string, RuntimePlatform, bool> isPackageOwnedCurrentUserInstallPath)
+            Func<string, RuntimePlatform, bool> isPackageOwnedCurrentUserInstallPath,
+            string minimumDispatcherVersion)
         {
             UnityEngine.Debug.Assert(isPackageOwnedCurrentUserInstallPath != null, "isPackageOwnedCurrentUserInstallPath must not be null");
+            UnityEngine.Debug.Assert(!string.IsNullOrEmpty(minimumDispatcherVersion), "minimumDispatcherVersion must not be null or empty");
 
             if (isPackageOwnedCurrentUserInstallPath(detection.ExecutablePath, platform))
             {
@@ -257,7 +264,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             return CliVersionComparer.IsVersionGreaterThanOrEqual(
                 detection.Version,
-                CliConstants.MINIMUM_REQUIRED_DISPATCHER_VERSION);
+                minimumDispatcherVersion);
         }
 
         internal static string BuildShellCliDetectionCommandForShell(

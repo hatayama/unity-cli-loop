@@ -5,7 +5,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -83,7 +82,7 @@ func TestRunDispatcherMinimumVersionCheck_WhenMinimumReleasePredatesDirectorySpl
 	assertDispatcherMinimumVersionLogContains(t, result.gitLog, "dispatcher-v1.0.0:"+legacyDispatcherContractFile)
 }
 
-// Verifies committed pin files cannot drift from the C# minimum dispatcher version.
+// Verifies committed project pin cannot drift from the package pin's minimum dispatcher version.
 func TestRunDispatcherMinimumVersionCheck_WhenProjectPinDiffersFromPackagePin_Fails(t *testing.T) {
 	result := runDispatcherMinimumVersionCheckCase(t, dispatcherMinimumVersionCase{
 		currentProjectRunnerVersion:        "3.0.0-beta.40",
@@ -182,10 +181,6 @@ func prepareDispatcherMinimumVersionFiles(t *testing.T, workDir string, testCase
 		testCase.currentProjectRunnerVersion))
 	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, dispatcherContractFile), buildDispatcherMinimumVersionContract(
 		currentDispatcherVersion))
-	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, protocolMinimumVersionFile), buildDispatcherMinimumVersionConstants(
-		2,
-		testCase.currentProjectRunnerVersion,
-		testCase.minimumDispatcherVersion))
 	writeDispatcherMinimumVersionFile(t, filepath.Join(workDir, unityPackageCliPinFile), buildDispatcherMinimumVersionPin(
 		testCase.currentProjectRunnerVersion,
 		testCase.minimumDispatcherVersion))
@@ -209,22 +204,6 @@ func buildDispatcherMinimumVersionCliContract(projectRunnerVersion string) strin
 
 func buildDispatcherMinimumVersionContract(dispatcherVersion string) string {
 	return `{"dispatcherVersion":"` + dispatcherVersion + `"}`
-}
-
-func buildDispatcherMinimumVersionConstants(
-	requiredProtocolVersion int,
-	minimumProjectRunnerVersion string,
-	minimumDispatcherVersion string,
-) string {
-	return `namespace Tests {
-public static class CliConstants {
-public const int REQUIRED_CLI_PROTOCOL_VERSION = ` +
-		strconv.Itoa(requiredProtocolVersion) +
-		`;
-public const string MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION = "` + minimumProjectRunnerVersion + `";
-public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "` + minimumDispatcherVersion + `";
-}
-}`
 }
 
 func buildDispatcherMinimumVersionPin(projectRunnerVersion string, minimumDispatcherVersion string) string {

@@ -17,10 +17,7 @@ const (
 	unityProjectCliPinPath    = "../../../.uloop/project-runner-pin.json"
 )
 
-var (
-	unityRequiredProtocolVersionPattern  = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
-	unityMinimumDispatcherVersionPattern = regexp.MustCompile(`MINIMUM_REQUIRED_DISPATCHER_VERSION\s*=\s*"([^"]+)"`)
-)
+var unityRequiredProtocolVersionPattern = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
 
 type unityPackageCliPin struct {
 	ProjectRunnerVersion     string `json:"projectRunnerVersion"`
@@ -44,9 +41,9 @@ func TestProtocolVersionMatchesUnityPackage(t *testing.T) {
 	}
 }
 
-// TestUnityPackageCliPinMatchesReleaseContracts verifies the dispatcher pin copied into
-// projects points at the project runner release from cli/contract.json and at the minimum
-// dispatcher version declared in CliConstants.
+// TestUnityPackageCliPinMatchesReleaseContracts verifies the pin JSON shipped with the package
+// advertises the same project runner release as cli/contract.json and defines a minimum
+// dispatcher version.
 func TestUnityPackageCliPinMatchesReleaseContracts(t *testing.T) {
 	pin := readJSONFile[unityPackageCliPin](t, unityPackageCliPinPath)
 
@@ -55,9 +52,6 @@ func TestUnityPackageCliPinMatchesReleaseContracts(t *testing.T) {
 	}
 	if pin.MinimumDispatcherVersion == "" {
 		t.Fatalf("expected %s minimumDispatcherVersion to be set", unityPackageCliPinPath)
-	}
-	if pin.MinimumDispatcherVersion != readUnityMinimumRequiredDispatcherVersion(t) {
-		t.Fatalf("expected %s minimumDispatcherVersion to match %s MINIMUM_REQUIRED_DISPATCHER_VERSION", unityPackageCliPinPath, unityProtocolConstantPath)
 	}
 }
 
@@ -91,22 +85,6 @@ func readUnityRequiredProtocolVersion(t *testing.T) int {
 	}
 
 	return unityProtocolVersion
-}
-
-func readUnityMinimumRequiredDispatcherVersion(t *testing.T) string {
-	t.Helper()
-
-	content, err := os.ReadFile(filepath.Clean(unityProtocolConstantPath))
-	if err != nil {
-		t.Fatalf("failed to read Unity dispatcher version constant from %s: %v", unityProtocolConstantPath, err)
-	}
-
-	matches := unityMinimumDispatcherVersionPattern.FindStringSubmatch(string(content))
-	if len(matches) != 2 {
-		t.Fatalf("%s does not define MINIMUM_REQUIRED_DISPATCHER_VERSION", unityProtocolConstantPath)
-	}
-
-	return matches[1]
 }
 
 func readJSONFile[T any](t *testing.T, path string) T {
