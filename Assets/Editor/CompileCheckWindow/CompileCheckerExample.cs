@@ -1,4 +1,5 @@
 using UnityEditor;
+using UnityEditor.Compilation;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -19,8 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             {
                 // How Masamichi requested to use it
                 CompileResult result = await compileController.TryCompileAsync();
-                var err = result.error;
-                var warning = result.warning;
+                CompilerMessage[] err = result.Errors;
+                CompilerMessage[] warning = result.Warnings;
 
                 Debug.Log($"Compilation result: Success={result.Success}");
                 Debug.Log($"Number of errors: {err.Length}");
@@ -53,8 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             {
                 // Example of forced re-compilation
                 CompileResult result = await compileController.TryCompileAsync(forceRecompile: true);
-                var err = result.error;
-                var warning = result.warning;
+                CompilerMessage[] err = result.Errors;
+                CompilerMessage[] warning = result.Warnings;
 
                 Debug.Log($"Forced compilation result: Success={result.Success}");
                 Debug.Log($"Number of errors: {err.Length}, Number of warnings: {warning.Length}");
