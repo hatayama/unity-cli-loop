@@ -77,5 +77,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 PlayModeToolPreflightService.FormatPausedMessage(SimulateMouseInputUseCase.PausedActionDescription),
                 Is.EqualTo("PlayMode is paused. Resume PlayMode before simulating mouse input."));
         }
+
+        [Test]
+        public void FormatPausedMessage_WithSimulateMouseUiSuffix_ReturnsExpectedWireString()
+        {
+            // Verifies SimulateMouseUi's paused preflight message stays byte-identical, including the suffix the use case actually passes.
+            Assert.That(
+                PlayModeToolPreflightService.FormatPausedMessage(SimulateMouseUiUseCase.PausedActionDescription),
+                Is.EqualTo("PlayMode is paused. Resume PlayMode before simulating UI input."));
+        }
     }
 }
