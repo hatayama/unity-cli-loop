@@ -88,22 +88,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityCliLoopRecordInputRequest request,
             CancellationToken ct)
         {
-            if (!EditorApplication.isPlaying)
+            ValidationResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused("recording input");
+            if (!preflight.IsValid)
             {
                 return new UnityCliLoopRecordInputResult
                 {
                     Success = false,
-                    Message = "PlayMode is not active. Use control-play-mode tool to start PlayMode first.",
-                    Action = RecordInputAction.Start.ToString()
-                };
-            }
-
-            if (EditorApplication.isPaused)
-            {
-                return new UnityCliLoopRecordInputResult
-                {
-                    Success = false,
-                    Message = "PlayMode is paused. Resume PlayMode before recording input.",
+                    Message = preflight.ErrorMessage,
                     Action = RecordInputAction.Start.ToString()
                 };
             }

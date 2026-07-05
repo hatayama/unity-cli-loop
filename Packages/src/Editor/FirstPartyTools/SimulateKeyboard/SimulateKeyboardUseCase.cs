@@ -46,22 +46,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 #else
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
 
-            if (!EditorApplication.isPlaying)
+            ValidationResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused("simulating keyboard input");
+            if (!preflight.IsValid)
             {
                 return new SimulateKeyboardResponse
                 {
                     Success = false,
-                    Message = "PlayMode is not active. Use control-play-mode tool to start PlayMode first.",
-                    Action = parameters.Action.ToString()
-                };
-            }
-
-            if (EditorApplication.isPaused)
-            {
-                return new SimulateKeyboardResponse
-                {
-                    Success = false,
-                    Message = "PlayMode is paused. Resume PlayMode before simulating keyboard input.",
+                    Message = preflight.ErrorMessage,
                     Action = parameters.Action.ToString()
                 };
             }
