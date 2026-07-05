@@ -10,12 +10,7 @@ import (
 	"strings"
 )
 
-var (
-	dispatcherMinimumProjectRunnerVersionPattern = regexp.MustCompile(`MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION\s*=\s*"([^"]+)"`)
-	dispatcherMinimumVersionPattern              = regexp.MustCompile(`MINIMUM_REQUIRED_DISPATCHER_VERSION\s*=\s*"([^"]+)"`)
-	dispatcherRequiredProtocolVersionPattern     = regexp.MustCompile(`REQUIRED_CLI_PROTOCOL_VERSION\s*=\s*(\d+)`)
-	dispatcherProjectRunnerVersionPattern        = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)?$`)
-)
+var dispatcherProjectRunnerVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)?$`)
 
 type dispatcherPin struct {
 	SchemaVersion            int    `json:"schemaVersion"`
@@ -51,16 +46,6 @@ func loadDispatcherPin(projectRoot string) (dispatcherPin, error) {
 		}
 	}
 
-	for _, constantsPath := range dispatcherCliConstantsCandidatePaths(projectRoot) {
-		pin, err := readDispatcherPinFromCliConstants(constantsPath)
-		if err == nil {
-			return pin, nil
-		}
-		if !errors.Is(err, os.ErrNotExist) {
-			return dispatcherPin{}, err
-		}
-	}
-
 	if invalidPackagePinError != nil {
 		return dispatcherPin{}, invalidPackagePinError
 	}
@@ -84,26 +69,6 @@ func dispatcherPinCandidatePaths(projectRoot string) []dispatcherPinCandidatePat
 		for _, match := range matches {
 			paths = append(paths, dispatcherPinCandidatePath{Path: match})
 		}
-	}
-	return paths
-}
-
-func dispatcherCliConstantsCandidatePaths(projectRoot string) []string {
-	paths := []string{
-		filepath.Join(projectRoot, "Packages", "src", "Editor", "Domain", "CliConstants.cs"),
-		filepath.Join(projectRoot, "Packages", dispatcherUnityPackageName, "Editor", "Domain", "CliConstants.cs"),
-	}
-	packageCachePattern := filepath.Join(
-		projectRoot,
-		"Library",
-		"PackageCache",
-		dispatcherUnityPackageName+"@*",
-		"Editor",
-		"Domain",
-		"CliConstants.cs")
-	matches, err := filepath.Glob(packageCachePattern)
-	if err == nil {
-		paths = append(paths, matches...)
 	}
 	return paths
 }
@@ -136,44 +101,6 @@ func readDispatcherPin(pinPath string) (dispatcherPin, error) {
 	}
 	pin.SourcePath = pinPath
 	return pin, nil
-}
-
-func readDispatcherPinFromCliConstants(constantsPath string) (dispatcherPin, error) {
-	content, err := os.ReadFile(constantsPath)
-	if err != nil {
-		return dispatcherPin{}, err
-	}
-	text := string(content)
-	versionMatch := dispatcherMinimumProjectRunnerVersionPattern.FindStringSubmatch(text)
-	if len(versionMatch) != 2 {
-		return dispatcherPin{}, fmt.Errorf("%s does not define MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION", constantsPath)
-	}
-	projectRunnerVersion := normalizeDispatcherVersion(versionMatch[1])
-	if err := validateDispatcherProjectRunnerVersion(projectRunnerVersion); err != nil {
-		return dispatcherPin{}, fmt.Errorf("%s defines invalid MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION: %w", constantsPath, err)
-	}
-	dispatcherVersionMatch := dispatcherMinimumVersionPattern.FindStringSubmatch(text)
-	if len(dispatcherVersionMatch) != 2 {
-		return dispatcherPin{}, fmt.Errorf("%s does not define MINIMUM_REQUIRED_DISPATCHER_VERSION", constantsPath)
-	}
-	minimumDispatcherVersion := normalizeDispatcherVersion(dispatcherVersionMatch[1])
-	if err := validateDispatcherProjectRunnerVersion(minimumDispatcherVersion); err != nil {
-		return dispatcherPin{}, fmt.Errorf("%s defines invalid MINIMUM_REQUIRED_DISPATCHER_VERSION: %w", constantsPath, err)
-	}
-	protocolVersion := 0
-	protocolMatch := dispatcherRequiredProtocolVersionPattern.FindStringSubmatch(text)
-	if len(protocolMatch) == 2 {
-		_, _ = fmt.Sscanf(protocolMatch[1], "%d", &protocolVersion)
-	}
-
-	return dispatcherPin{
-		SchemaVersion:            1,
-		PackageName:              dispatcherUnityPackageName,
-		ProjectRunnerVersion:     projectRunnerVersion,
-		RequiredProtocolVersion:  protocolVersion,
-		MinimumDispatcherVersion: minimumDispatcherVersion,
-		SourcePath:               constantsPath,
-	}, nil
 }
 
 func normalizeDispatcherVersion(value string) string {

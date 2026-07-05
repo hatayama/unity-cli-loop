@@ -20,7 +20,10 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 
         internal void Initialize()
         {
-            CliPinSynchronizer.SyncCurrentProjectPin();
+            // Why: pin synchronization is now mandatory for the dispatcher, but a false result (missing
+            // source pin, or destination already matches) is signalled via the return value and must not
+            // abort the remaining startup steps. CliPinSynchronizer logs its own warnings on failure.
+            _ = CliPinSynchronizer.SyncCurrentProjectPin();
             UnityCliLoopApplicationServices applicationServices = _applicationRegistration.Register();
             ApplicationEditorStartup.Initialize(applicationServices.DomainReloadDetectionService);
             FirstPartyToolsEditorStartup.Initialize();
