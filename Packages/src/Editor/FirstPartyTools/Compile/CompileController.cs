@@ -868,16 +868,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal bool PreserveDetailsWhenForceRecompile { get; }
 
         /// <summary>
-        /// Alias for error messages (for backward compatibility).
-        /// </summary>
-        public CompilerMessage[] error => Errors;
-        
-        /// <summary>
-        /// Alias for warning messages (for backward compatibility).
-        /// </summary>
-        public CompilerMessage[] warning => Warnings;
-
-        /// <summary>
         /// Initializes the compilation result.
         /// </summary>
         /// <param name="success">The compilation success flag. Null indicates indeterminate status.</param>
