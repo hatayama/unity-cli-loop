@@ -41,7 +41,6 @@ type ProtocolMinimumVersionValues struct {
 	RequiredProtocolVersion     int
 	HasRequiredProtocol         bool
 	MinimumProjectRunnerVersion string
-	UsesPreRenameMinimumVersion bool
 }
 
 type ProtocolMinimumVersionGuardResult struct {
@@ -95,12 +94,17 @@ func RunMinimumCliReleaseProtocolCheck(ctx context.Context, stdout io.Writer, st
 		return 1
 	}
 
-	content, err := minimumCliReleaseProtocolFile(ctx, repoRoot, ref)
+	constantsContent, err := minimumCliReleaseFile(ctx, repoRoot, ref, protocolMinimumVersionFile)
 	if err != nil {
 		writeProtocolMinimumVersionLine(stderr, fmt.Sprintf("failed to read %s: %v", protocolMinimumVersionFile, err))
 		return 1
 	}
-	values, err := ParseProtocolMinimumVersionValues(content)
+	pinContent, err := minimumCliReleaseFile(ctx, repoRoot, ref, unityPackageCliPinFile)
+	if err != nil {
+		writeProtocolMinimumVersionLine(stderr, fmt.Sprintf("failed to read %s: %v", unityPackageCliPinFile, err))
+		return 1
+	}
+	values, err := ParseProtocolMinimumVersionValues(constantsContent, pinContent)
 	if err != nil {
 		writeProtocolMinimumVersionLine(stderr, err)
 		return 1
@@ -141,7 +145,7 @@ func AnalyzeProtocolMinimumVersionGuardForRefs(
 		return ProtocolMinimumVersionGuardResult{}, fmt.Errorf("failed to resolve git repository root: %w", err)
 	}
 
-	baseValues, err := protocolMinimumVersionBaseValuesAtRef(ctx, repoRoot, config.BaseRef)
+	baseValues, err := protocolMinimumVersionValuesAtRef(ctx, repoRoot, config.BaseRef)
 	if err != nil {
 		return ProtocolMinimumVersionGuardResult{}, err
 	}
@@ -154,9 +158,7 @@ func AnalyzeProtocolMinimumVersionGuardForRefs(
 	if protocolMinimumVersionGuardNeedsReleaseCheck(result) {
 		_, err = verifyMinimumCliReleaseProtocolAtRef(ctx, repoRoot, result.Head)
 		if err != nil {
-			if !protocolMinimumVersionBootstrapAllowsUnpublishedProjectRunner(ctx, repoRoot, config.HeadRef, result, err) {
-				result.MinimumCliReleaseProtocolError = err.Error()
-			}
+			result.MinimumCliReleaseProtocolError = err.Error()
 		}
 	}
 	return result, nil
@@ -259,12 +261,12 @@ func verifyMinimumCliReleaseProtocolAtRef(
 	return verifyMinimumCliReleaseIsPublished(ctx, repoRoot, release)
 }
 
-func minimumCliReleaseProtocolFile(ctx context.Context, repoRoot string, ref string) ([]byte, error) {
+func minimumCliReleaseFile(ctx context.Context, repoRoot string, ref string, file string) ([]byte, error) {
 	if ref == "" {
-		return os.ReadFile(filepath.Join(repoRoot, protocolMinimumVersionFile))
+		return os.ReadFile(filepath.Join(repoRoot, file))
 	}
 
-	content, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, protocolMinimumVersionFile)
+	content, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, file)
 	if err != nil {
 		return nil, err
 	}
@@ -319,11 +321,11 @@ func FormatProtocolMinimumVersionWarning(result ProtocolMinimumVersionGuardResul
 	builder.WriteString(protocolMinimumVersionMarker)
 	builder.WriteString("\n")
 	if result.NeedsMinimumVersionUpdate {
-		builder.WriteString("Protocol version changed, but `MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION` did not.\n\n")
+		builder.WriteString("Protocol version changed, but `" + unityPackageCliPinFile + "` `projectRunnerVersion` did not.\n\n")
 	} else if result.RequiredProtocolChanged {
-		builder.WriteString("Protocol version changed, but `MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION` does not point to a published project runner release that advertises the required protocol.\n\n")
+		builder.WriteString("Protocol version changed, but `" + unityPackageCliPinFile + "` `projectRunnerVersion` does not point to a published project runner release that advertises the required protocol.\n\n")
 	} else {
-		builder.WriteString("`MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION` changed, but it does not point to a published project runner release that advertises the required protocol.\n\n")
+		builder.WriteString("`" + unityPackageCliPinFile + "` `projectRunnerVersion` changed, but it does not point to a published project runner release that advertises the required protocol.\n\n")
 	}
 	builder.WriteString("- Base required protocol: ")
 	builder.WriteString(protocolMinimumVersionValueLabel(result.Base))
@@ -340,7 +342,7 @@ func FormatProtocolMinimumVersionWarning(result ProtocolMinimumVersionGuardResul
 		builder.WriteString("\n")
 	}
 	builder.WriteString("\n")
-	builder.WriteString("Update `MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION` to a published project runner release that advertises the new protocol before releasing the Unity package.")
+	builder.WriteString("Update `" + unityPackageCliPinFile + "` `projectRunnerVersion` to a published project runner release that advertises the new protocol before releasing the Unity package.")
 	return builder.String()
 }
 
@@ -353,34 +355,6 @@ func protocolMinimumVersionGuardNeedsReleaseCheck(result ProtocolMinimumVersionG
 		return false
 	}
 	return result.RequiredProtocolChanged || result.MinimumProjectRunnerVersionChanged
-}
-
-func protocolMinimumVersionBootstrapAllowsUnpublishedProjectRunner(
-	ctx context.Context,
-	repoRoot string,
-	headRef string,
-	result ProtocolMinimumVersionGuardResult,
-	err error,
-) bool {
-	if !protocolMinimumVersionReleaseContractIsMissing(err) {
-		return false
-	}
-	if !result.Base.UsesPreRenameMinimumVersion {
-		return false
-	}
-	if !result.MinimumProjectRunnerVersionChanged {
-		return false
-	}
-
-	headProjectRunnerVersion, err := protocolMinimumProjectRunnerVersionAtRef(ctx, repoRoot, headRef)
-	if err != nil {
-		return false
-	}
-	return result.Head.MinimumProjectRunnerVersion == headProjectRunnerVersion
-}
-
-func protocolMinimumVersionReleaseContractIsMissing(err error) bool {
-	return strings.Contains(err.Error(), releaseContractMissingSentinel)
 }
 
 func protocolMinimumVersionValueLabel(values ProtocolMinimumVersionValues) string {
@@ -401,43 +375,15 @@ func protocolMinimumVersionValuesAtRef(
 	repoRoot string,
 	ref string,
 ) (ProtocolMinimumVersionValues, error) {
-	content, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, protocolMinimumVersionFile)
+	constantsContent, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, protocolMinimumVersionFile)
 	if err != nil {
 		return ProtocolMinimumVersionValues{}, err
 	}
-	return ParseProtocolMinimumVersionValues([]byte(content))
-}
-
-func protocolMinimumVersionBaseValuesAtRef(
-	ctx context.Context,
-	repoRoot string,
-	ref string,
-) (ProtocolMinimumVersionValues, error) {
-	content, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, protocolMinimumVersionFile)
+	pinContent, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, unityPackageCliPinFile)
 	if err != nil {
 		return ProtocolMinimumVersionValues{}, err
 	}
-	return parseProtocolMinimumVersionBaseValues([]byte(content))
-}
-
-func protocolMinimumProjectRunnerVersionAtRef(
-	ctx context.Context,
-	repoRoot string,
-	ref string,
-) (string, error) {
-	content, err := runnerContractFileAtRef(ctx, repoRoot, ref)
-	if err != nil {
-		return "", err
-	}
-
-	contract := minimumCliReleaseContract{}
-	if err := json.Unmarshal([]byte(content), &contract); err != nil {
-		return "", fmt.Errorf("%s is invalid JSON: %w", cliContractFile, err)
-	}
-	if contract.ProjectRunnerVersion == "" {
-		return "", fmt.Errorf("%s does not define projectRunnerVersion", cliContractFile)
-	}
-	return contract.ProjectRunnerVersion, nil
+	return ParseProtocolMinimumVersionValues([]byte(constantsContent), []byte(pinContent))
 }
 
 func writeProtocolMinimumVersionLine(writer io.Writer, values ...any) {

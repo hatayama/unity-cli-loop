@@ -778,9 +778,7 @@ func TestLoadDispatcherPinFailsWhenPinFileMissing(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(constantsPath), 0o755); err != nil {
 		t.Fatalf("failed to create constants directory: %v", err)
 	}
-	content := `public const int REQUIRED_CLI_PROTOCOL_VERSION = 3;
-public const string MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION = "3.0.0-beta.56";
-public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "1.0.0";`
+	content := `public const int REQUIRED_CLI_PROTOCOL_VERSION = 3;`
 	if err := os.WriteFile(constantsPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write constants: %v", err)
 	}

@@ -1,6 +1,5 @@
 using NUnit.Framework;
 
-using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Presentation;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -10,6 +9,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class CliSetupCompatibilityTests
     {
+        // Why: fixed test value keeps compat logic assertions independent of the shipping pin version.
+        private const string TEST_MINIMUM_DISPATCHER_VERSION = "3.0.0";
+
         [TestCase(null, false, false, false)]
         [TestCase("2.1.10", false, true, false)]
         [TestCase("3.0.0", false, true, false)]
@@ -26,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CliSetupCompatibilityState state = CliSetupCompatibility.Evaluate(
                 cliVersion,
                 isDispatcher,
-                CliConstants.MINIMUM_REQUIRED_DISPATCHER_VERSION);
+                TEST_MINIMUM_DISPATCHER_VERSION);
 
             Assert.That(state.NeedsUpdate, Is.EqualTo(expectedNeedsUpdate));
             Assert.That(state.IsCompatible, Is.EqualTo(expectedCompatible));
@@ -40,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CliSetupCompatibilityState state = CliSetupCompatibility.Evaluate(
                 "not-a-version",
                 true,
-                CliConstants.MINIMUM_REQUIRED_DISPATCHER_VERSION);
+                TEST_MINIMUM_DISPATCHER_VERSION);
 
             Assert.That(state.NeedsUpdate, Is.True);
             Assert.That(state.IsCompatible, Is.False);
