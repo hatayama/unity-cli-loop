@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Directory.CreateDirectory(projectRoot);
                 File.WriteAllText(
                     Path.Combine(packageRoot, UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME),
-                    "{\"projectRunnerVersion\":\"3.0.0\"}");
+                    "{\"projectRunnerVersion\":\"3.0.0\",\"minimumDispatcherVersion\":\"3.0.1\"}");
 
                 bool changed = CliPinSynchronizer.SyncProjectPinFile(packageRoot, projectRoot);
 
@@ -37,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             projectRoot,
                             UnityCliLoopConstants.ULOOP_DIR,
                             UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME)),
-                    Is.EqualTo("{\"projectRunnerVersion\":\"3.0.0\"}"));
+                    Is.EqualTo("{\"projectRunnerVersion\":\"3.0.0\",\"minimumDispatcherVersion\":\"3.0.1\"}"));
             }
             finally
             {
@@ -64,8 +64,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 string destinationPath = Path.Combine(
                     projectUloopRoot,
                     UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME);
-                File.WriteAllText(sourcePath, "{\"projectRunnerVersion\":\"3.0.0\"}");
-                File.WriteAllText(destinationPath, "{\"projectRunnerVersion\":\"3.0.0\"}");
+                File.WriteAllText(sourcePath, "{\"projectRunnerVersion\":\"3.0.0\",\"minimumDispatcherVersion\":\"3.0.1\"}");
+                File.WriteAllText(destinationPath, "{\"projectRunnerVersion\":\"3.0.0\",\"minimumDispatcherVersion\":\"3.0.1\"}");
                 DateTime previousWriteTime = File.GetLastWriteTimeUtc(destinationPath);
 
                 bool changed = CliPinSynchronizer.SyncProjectPinFile(packageRoot, projectRoot);
@@ -94,16 +94,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Directory.CreateDirectory(projectUloopRoot);
                 File.WriteAllText(
                     Path.Combine(packageRoot, UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME),
-                    "{\"projectRunnerVersion\":\"3.0.1\"}");
+                    "{\"projectRunnerVersion\":\"3.0.1\",\"minimumDispatcherVersion\":\"3.0.1\"}");
                 string destinationPath = Path.Combine(
                     projectUloopRoot,
                     UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME);
-                File.WriteAllText(destinationPath, "{\"projectRunnerVersion\":\"3.0.0\"}");
+                File.WriteAllText(destinationPath, "{\"projectRunnerVersion\":\"3.0.0\",\"minimumDispatcherVersion\":\"3.0.1\"}");
 
                 bool changed = CliPinSynchronizer.SyncProjectPinFile(packageRoot, projectRoot);
 
                 Assert.That(changed, Is.True);
-                Assert.That(File.ReadAllText(destinationPath), Is.EqualTo("{\"projectRunnerVersion\":\"3.0.1\"}"));
+                Assert.That(File.ReadAllText(destinationPath), Is.EqualTo("{\"projectRunnerVersion\":\"3.0.1\",\"minimumDispatcherVersion\":\"3.0.1\"}"));
             }
             finally
             {
