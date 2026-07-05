@@ -207,11 +207,7 @@ EOF_MANIFEST
 
   cat > Packages/src/project-runner-pin.json <<EOF_PIN
 {
-  "schemaVersion": 1,
-  "packageName": "test.package",
-  "packageVersion": "$version",
   "projectRunnerVersion": "$version",
-  "requiredProtocolVersion": 2,
   "minimumDispatcherVersion": "3.0.0"
 }
 EOF_PIN

@@ -269,9 +269,9 @@ public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "` + minimumDispatcher
 }
 
 func buildDispatcherMinimumVersionPin(projectRunnerVersion string, minimumDispatcherVersion string) string {
-	return `{"schemaVersion":1,"packageName":"test.package","packageVersion":"3.0.0-beta.40","projectRunnerVersion":"` +
+	return `{"projectRunnerVersion":"` +
 		projectRunnerVersion +
-		`","requiredProtocolVersion":2,"minimumDispatcherVersion":"` +
+		`","minimumDispatcherVersion":"` +
 		minimumDispatcherVersion +
 		`"}`
 }

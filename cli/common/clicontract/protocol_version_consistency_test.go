@@ -13,7 +13,6 @@ import (
 // Unity package accepts. It is relative to this package directory (cli/common/clicontract).
 const (
 	unityProtocolConstantPath = "../../../Packages/src/Editor/Domain/CliConstants.cs"
-	unityPackageManifestPath  = "../../../Packages/src/package.json"
 	unityPackageCliPinPath    = "../../../Packages/src/project-runner-pin.json"
 	unityProjectCliPinPath    = "../../../.uloop/project-runner-pin.json"
 )
@@ -23,17 +22,8 @@ var (
 	unityMinimumDispatcherVersionPattern = regexp.MustCompile(`MINIMUM_REQUIRED_DISPATCHER_VERSION\s*=\s*"([^"]+)"`)
 )
 
-type unityPackageManifest struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-}
-
 type unityPackageCliPin struct {
-	SchemaVersion            int    `json:"schemaVersion"`
-	PackageName              string `json:"packageName"`
-	PackageVersion           string `json:"packageVersion"`
 	ProjectRunnerVersion     string `json:"projectRunnerVersion"`
-	RequiredProtocolVersion  int    `json:"requiredProtocolVersion"`
 	MinimumDispatcherVersion string `json:"minimumDispatcherVersion"`
 }
 
@@ -55,29 +45,13 @@ func TestProtocolVersionMatchesUnityPackage(t *testing.T) {
 }
 
 // TestUnityPackageCliPinMatchesReleaseContracts verifies the dispatcher pin copied into
-// projects points at the package release, project runner release, and protocol generation from their
-// canonical declarations.
+// projects points at the project runner release from cli/contract.json and at the minimum
+// dispatcher version declared in CliConstants.
 func TestUnityPackageCliPinMatchesReleaseContracts(t *testing.T) {
-	manifest := readJSONFile[unityPackageManifest](t, unityPackageManifestPath)
 	pin := readJSONFile[unityPackageCliPin](t, unityPackageCliPinPath)
 
-	if pin.SchemaVersion != 1 {
-		t.Fatalf("expected %s schemaVersion to be 1, got %d", unityPackageCliPinPath, pin.SchemaVersion)
-	}
-	if pin.PackageName != manifest.Name {
-		t.Fatalf("expected %s packageName to match %s name: %q != %q", unityPackageCliPinPath, unityPackageManifestPath, pin.PackageName, manifest.Name)
-	}
-	if pin.PackageVersion != manifest.Version {
-		t.Fatalf("expected %s packageVersion to match %s version: %q != %q", unityPackageCliPinPath, unityPackageManifestPath, pin.PackageVersion, manifest.Version)
-	}
 	if pin.ProjectRunnerVersion != ProjectRunnerVersion() {
 		t.Fatalf("expected %s projectRunnerVersion to match cli/contract.json projectRunnerVersion: %q != %q", unityPackageCliPinPath, pin.ProjectRunnerVersion, ProjectRunnerVersion())
-	}
-	if pin.RequiredProtocolVersion != ProtocolVersion() {
-		t.Fatalf("expected %s requiredProtocolVersion to match cli/contract.json protocolVersion: %d != %d", unityPackageCliPinPath, pin.RequiredProtocolVersion, ProtocolVersion())
-	}
-	if pin.RequiredProtocolVersion != readUnityRequiredProtocolVersion(t) {
-		t.Fatalf("expected %s requiredProtocolVersion to match %s", unityPackageCliPinPath, unityProtocolConstantPath)
 	}
 	if pin.MinimumDispatcherVersion == "" {
 		t.Fatalf("expected %s minimumDispatcherVersion to be set", unityPackageCliPinPath)
