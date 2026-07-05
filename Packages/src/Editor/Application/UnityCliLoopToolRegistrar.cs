@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
@@ -16,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
         private readonly IInternalToolNameProvider _internalToolNameProvider;
         private readonly UnityCliLoopToolExecutionService _toolExecutionService;
         private readonly ToolSettingsService _toolSettingsService;
+        private readonly Func<IReadOnlyList<IUnityCliLoopTool>> _toolDiscovery;
         private UnityCliLoopToolRegistry _sharedRegistry;
 
         internal event Action OnToolsChanged;
@@ -23,19 +25,23 @@ namespace io.github.hatayama.UnityCliLoop.Application
         internal UnityCliLoopToolRegistrarService(
             IInternalToolNameProvider internalToolNameProvider,
             ToolSettingsService toolSettingsService,
-            UnityCliLoopToolExecutionService toolExecutionService)
+            UnityCliLoopToolExecutionService toolExecutionService,
+            Func<IReadOnlyList<IUnityCliLoopTool>> toolDiscovery)
         {
             UnityEngine.Debug.Assert(internalToolNameProvider != null, "internalToolNameProvider must not be null");
             UnityEngine.Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
             UnityEngine.Debug.Assert(toolExecutionService != null, "toolExecutionService must not be null");
+            UnityEngine.Debug.Assert(toolDiscovery != null, "toolDiscovery must not be null");
 
             _internalToolNameProvider = internalToolNameProvider ?? throw new ArgumentNullException(nameof(internalToolNameProvider));
             _toolSettingsService = toolSettingsService ?? throw new ArgumentNullException(nameof(toolSettingsService));
             _toolExecutionService = toolExecutionService ?? throw new ArgumentNullException(nameof(toolExecutionService));
+            _toolDiscovery = toolDiscovery ?? throw new ArgumentNullException(nameof(toolDiscovery));
         }
 
         /// <summary>
-        /// Get shared registry (lazy initialization)
+        /// Get shared registry (lazy initialization). Tool discovery runs on first access,
+        /// matching the timing of the registry's previous self-contained scan.
         /// </summary>
         private UnityCliLoopToolRegistry SharedRegistry
         {
@@ -45,8 +51,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 {
                     _sharedRegistry = new UnityCliLoopToolRegistry(
                         _toolSettingsService,
-                        _internalToolNameProvider);
-                    // Standard tools are automatically registered in UnityCliLoopToolRegistry constructor
+                        _internalToolNameProvider,
+                        _toolDiscovery);
                 }
                 return _sharedRegistry;
             }

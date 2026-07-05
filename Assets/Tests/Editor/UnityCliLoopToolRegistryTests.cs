@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.CompositionRoot;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -21,7 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public static UnityCliLoopToolRegistry Create()
         {
             return new UnityCliLoopToolRegistry(
-                new ToolSettingsService(new ToolSettingsRepository()));
+                new ToolSettingsService(new ToolSettingsRepository()),
+                toolDiscovery: UnityCliLoopToolDiscovery.DiscoverTools);
         }
     }
 
@@ -455,7 +457,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService());
+                new UnityCliLoopToolExecutionService(),
+                UnityCliLoopToolDiscovery.DiscoverTools);
             ManualRegistrationTool tool = new();
 
             ApplicationRegistrar.RegisterService(service);
