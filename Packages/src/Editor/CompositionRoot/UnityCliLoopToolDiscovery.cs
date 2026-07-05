@@ -20,7 +20,23 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 
             foreach (Assembly assembly in assemblies)
             {
-                Type[] types = assembly.GetTypes()
+                if (assembly.IsDynamic)
+                {
+                    continue;
+                }
+
+                Type[] loadedTypes;
+                try
+                {
+                    loadedTypes = assembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    // A partially loadable assembly must not abort tool discovery for every other assembly.
+                    loadedTypes = Array.FindAll(ex.Types, static t => t != null);
+                }
+
+                Type[] types = loadedTypes
                     .Where(type => type.GetCustomAttribute<UnityCliLoopToolAttribute>() != null)
                     .Where(type => typeof(IUnityCliLoopTool).IsAssignableFrom(type))
                     .Where(type => !type.IsAbstract && !type.IsInterface)
