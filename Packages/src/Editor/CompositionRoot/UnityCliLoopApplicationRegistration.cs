@@ -26,10 +26,11 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             DomainReloadDetectionFileService domainReloadDetectionService = new(
                 sessionStateService);
             MainThreadSwitcher.RegisterService(new EditorMainThreadDispatcher());
+            EditorRuntimeStateService editorRuntimeStateService = new();
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new SkillInstallLayoutInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService(),
+                new UnityCliLoopToolExecutionService(editorRuntimeStateService),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(toolRegistrarService);
             ToolContractsRegistrar.RegisterService(toolRegistrarService);

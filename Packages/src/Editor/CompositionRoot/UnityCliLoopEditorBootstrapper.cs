@@ -26,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             _ = CliPinSynchronizer.SyncCurrentProjectPin();
             UnityCliLoopApplicationServices applicationServices = _applicationRegistration.Register();
             ApplicationEditorStartup.Initialize(applicationServices.DomainReloadDetectionService);
+            EditorRuntimeStateSnapshotSubscriber.InitializeForEditorStartup();
             FirstPartyToolsEditorStartup.Initialize();
             InfrastructureEditorStartup.Initialize(applicationServices.EditorSettingsService);
             PresentationEditorStartup.Initialize(
