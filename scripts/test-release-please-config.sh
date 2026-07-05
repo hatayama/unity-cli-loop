@@ -139,13 +139,13 @@ assert_json_value '.packages["cli/project-runner"].["changelog-path"]' 'CHANGELO
 # so there is nothing left under cli/project-runner to exclude from
 # uloop-project-runner releases.
 assert_json_value '.packages["cli/project-runner"] | has("exclude-paths")' 'false'
-assert_json_value '.packages["cli/project-runner"]["extra-files"] | length' '4'
-assert_json_value '.packages["cli/project-runner"]["extra-files"][0].path' '/cli/common/tools/default-tools.json'
-assert_json_value '.packages["cli/project-runner"]["extra-files"][1].path' '/cli/common/clicontract/contract.json'
-assert_json_value '.packages["cli/project-runner"]["extra-files"][2].path' '/Packages/src/project-runner-pin.json'
+assert_json_value '.packages["cli/project-runner"]["extra-files"] | length' '3'
+assert_json_value '.packages["cli/project-runner"]["extra-files"][0].path' '/cli/common/clicontract/contract.json'
+assert_json_value '.packages["cli/project-runner"]["extra-files"][0].jsonpath' '$.projectRunnerVersion'
+assert_json_value '.packages["cli/project-runner"]["extra-files"][1].path' '/Packages/src/project-runner-pin.json'
+assert_json_value '.packages["cli/project-runner"]["extra-files"][1].jsonpath' '$.projectRunnerVersion'
+assert_json_value '.packages["cli/project-runner"]["extra-files"][2].path' '/.uloop/project-runner-pin.json'
 assert_json_value '.packages["cli/project-runner"]["extra-files"][2].jsonpath' '$.projectRunnerVersion'
-assert_json_value '.packages["cli/project-runner"]["extra-files"][3].path' '/.uloop/project-runner-pin.json'
-assert_json_value '.packages["cli/project-runner"]["extra-files"][3].jsonpath' '$.projectRunnerVersion'
 
 # The dispatcher tag format must stay dispatcher-v<version> to continue the
 # existing tag sequence started before release-please management.

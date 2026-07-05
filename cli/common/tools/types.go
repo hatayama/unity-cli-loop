@@ -1,7 +1,6 @@
 package tools
 
 type ToolCatalog struct {
-	Version       string           `json:"version"`
 	ServerVersion string           `json:"serverVersion,omitempty"`
 	UpdatedAt     string           `json:"updatedAt,omitempty"`
 	Tools         []ToolDefinition `json:"tools"`

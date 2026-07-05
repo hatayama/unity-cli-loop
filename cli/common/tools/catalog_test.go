@@ -9,7 +9,7 @@ import (
 // Tests that callers can explicitly prefer embedded definitions without tools knowing command names.
 func TestFindForCommandUsesEmbeddedDefinitionWhenRequested(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeToolCache(t, projectRoot, `{"version":"test","tools":[]}`)
+	writeToolCache(t, projectRoot, `{"tools":[]}`)
 
 	tool, _, ok, err := FindForCommand(projectRoot, "execute-dynamic-code", map[string]bool{}, true)
 	if err != nil {
@@ -28,7 +28,6 @@ func TestFindForCommandUsesEmbeddedDefinitionWhenRequested(t *testing.T) {
 func TestFindForCommandUsesProjectCacheWhenEmbeddedPreferenceIsFalse(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeToolCache(t, projectRoot, `{
-  "version": "test",
   "tools": [
     {
       "name": "execute-dynamic-code",
