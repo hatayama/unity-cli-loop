@@ -24,60 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityCliLoopEditorSessionStateService sessionStateService =
                 UnityCliLoopEditorSessionStateFacade.Service;
             CompileUseCase useCase = new(sessionStateService);
-            UnityCliLoopCompileResult result = await useCase.CompileAsync(ToRequest(parameters), ct);
-            return ToResponse(result);
-        }
-
-        private static UnityCliLoopCompileRequest ToRequest(CompileSchema parameters)
-        {
-            if (parameters == null)
-            {
-                throw new System.ArgumentNullException(nameof(parameters));
-            }
-
-            return new UnityCliLoopCompileRequest
-            {
-                ForceRecompile = parameters.ForceRecompile,
-                WaitForDomainReload = parameters.WaitForDomainReload,
-                ReloadExternalSceneChanges = parameters.ReloadExternalSceneChanges,
-                RequestId = parameters.RequestId,
-            };
-        }
-
-        private static CompileResponse ToResponse(UnityCliLoopCompileResult result)
-        {
-            if (result == null)
-            {
-                throw new System.ArgumentNullException(nameof(result));
-            }
-
-            CompileResponse response = new(
-                success: result.Success,
-                errorCount: result.ErrorCount,
-                warningCount: result.WarningCount,
-                errors: ToCompileIssues(result.Errors),
-                warnings: ToCompileIssues(result.Warnings),
-                message: result.Message);
-
-            response.ProjectRoot = result.ProjectRoot;
-            return response;
-        }
-
-        private static CompileIssue[] ToCompileIssues(UnityCliLoopCompileIssue[] issues)
-        {
-            if (issues == null)
-            {
-                return null;
-            }
-
-            CompileIssue[] mappedIssues = new CompileIssue[issues.Length];
-            for (int i = 0; i < issues.Length; i++)
-            {
-                UnityCliLoopCompileIssue issue = issues[i];
-                mappedIssues[i] = new CompileIssue(issue.Message, issue.File, issue.Line);
-            }
-
-            return mappedIssues;
+            return await useCase.CompileAsync(parameters, ct);
         }
     }
 }
