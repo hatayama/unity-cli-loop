@@ -61,13 +61,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     preparation.ErrorMessage,
                     BuildCompileLogContext(request),
                     correlationId);
-                CompileResponse response = CreateCompileResult(
-                    false,
-                    1,
-                    0,
-                    new[] { new CompileIssue(preparation.ErrorMessage, "", 0) },
-                    Array.Empty<CompileIssue>(),
-                    null);
+                CompileResponse response = new(
+                    success: false,
+                    errorCount: 1,
+                    warningCount: 0,
+                    errors: new[] { new CompileIssue(preparation.ErrorMessage, "", 0) },
+                    warnings: Array.Empty<CompileIssue>());
                 CompileResponse persistedResponse =
                     StoreResponseIfNeeded(request, response, correlationId);
                 return persistedResponse;
@@ -93,13 +92,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     correlationId);
                 if (!exited)
                 {
-                    CompileResponse response = CreateCompileResult(
-                        false,
-                        1,
-                        0,
-                        new[] { new CompileIssue("Play Mode did not exit within 5 seconds; compilation aborted.", "", 0) },
-                        Array.Empty<CompileIssue>(),
-                        null);
+                    CompileResponse response = new(
+                        success: false,
+                        errorCount: 1,
+                        warningCount: 0,
+                        errors: new[] { new CompileIssue("Play Mode did not exit within 5 seconds; compilation aborted.", "", 0) },
+                        warnings: Array.Empty<CompileIssue>());
                     CompileResponse persistedResponse =
                         StoreResponseIfNeeded(request, response, correlationId);
                     return persistedResponse;
@@ -117,13 +115,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     validation.ErrorMessage,
                     BuildCompileLogContext(request),
                     correlationId);
-                CompileResponse response = CreateCompileResult(
-                    false,
-                    1,
-                    0,
-                    new[] { new CompileIssue(validation.ErrorMessage, "", 0) },
-                    Array.Empty<CompileIssue>(),
-                    null);
+                CompileResponse response = new(
+                    success: false,
+                    errorCount: 1,
+                    warningCount: 0,
+                    errors: new[] { new CompileIssue(validation.ErrorMessage, "", 0) },
+                    warnings: Array.Empty<CompileIssue>());
                 CompileResponse persistedResponse =
                     StoreResponseIfNeeded(request, response, correlationId);
                 return persistedResponse;
@@ -140,25 +137,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CompileResponse persistedSuccessResponse =
                 StoreResponseIfNeeded(request, successResponse, correlationId);
             return persistedSuccessResponse;
-        }
-
-        private static CompileResponse CreateCompileResult(
-            bool? success,
-            int? errorCount,
-            int? warningCount,
-            CompileIssue[] errors,
-            CompileIssue[] warnings,
-            string message)
-        {
-            return new CompileResponse
-            {
-                Success = success,
-                ErrorCount = errorCount,
-                WarningCount = warningCount,
-                Errors = errors,
-                Warnings = warnings,
-                Message = message,
-            };
         }
 
         private async Task<bool> WaitForPlayModeExitAsync(CancellationToken ct)

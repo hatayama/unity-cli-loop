@@ -30,26 +30,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (result.IsIndeterminate)
             {
-                return new CompileResponse
-                {
-                    Success = result.Success,
-                    ErrorCount = result.ErrorCount,
-                    WarningCount = result.WarningCount,
-                    Errors = null,
-                    Warnings = null,
-                    Message = result.Message ?? "Compilation status is unknown. Use get-logs to inspect the compiler output."
-                };
+                return new CompileResponse(
+                    success: result.Success,
+                    errorCount: result.ErrorCount,
+                    warningCount: result.WarningCount,
+                    errors: null,
+                    warnings: null,
+                    message: result.Message ?? "Compilation status is unknown. Use get-logs to inspect the compiler output.");
             }
 
-            return new CompileResponse
-            {
-                Success = result.Success,
-                ErrorCount = result.Errors?.Length ?? 0,
-                WarningCount = result.Warnings?.Length ?? 0,
-                Errors = ToIssues(result.Errors),
-                Warnings = ToIssues(result.Warnings),
-                Message = AddMissingTestFrameworkReferenceHint(result.Message, result.Errors)
-            };
+            return new CompileResponse(
+                success: result.Success,
+                errorCount: result.Errors?.Length ?? 0,
+                warningCount: result.Warnings?.Length ?? 0,
+                errors: ToIssues(result.Errors),
+                warnings: ToIssues(result.Warnings),
+                message: AddMissingTestFrameworkReferenceHint(result.Message, result.Errors));
         }
 
         internal static void StoreCompileResult(
@@ -101,15 +97,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static CompileResponse CreateForceCompileResult(CompileResult result)
         {
             ForceCompileUnknownResult unknownResult = ForceCompileUnknownResult.Create(result.Success);
-            return new CompileResponse
-            {
-                Success = unknownResult.Success,
-                ErrorCount = unknownResult.ErrorCount,
-                WarningCount = unknownResult.WarningCount,
-                Errors = null,
-                Warnings = null,
-                Message = unknownResult.Message
-            };
+            return new CompileResponse(
+                success: unknownResult.Success,
+                errorCount: unknownResult.ErrorCount,
+                warningCount: unknownResult.WarningCount,
+                errors: null,
+                warnings: null,
+                message: unknownResult.Message);
         }
 
         private static CompileIssue[] ToIssues(UnityEditor.Compilation.CompilerMessage[] messages)
