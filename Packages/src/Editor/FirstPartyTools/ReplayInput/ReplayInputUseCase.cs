@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -69,7 +68,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     break;
 
                 default:
-                    throw new ArgumentException($"Unknown replay-input action: {request.Action}");
+                    // Only reachable when an out-of-range enum value is cast from an integer;
+                    // surface as a Success=false response so the CLI treats it as a validation failure.
+                    response = new UnityCliLoopReplayInputResult
+                    {
+                        Success = false,
+                        Message = $"Unknown replay-input action: {request.Action}",
+                        Action = request.Action.ToString()
+                    };
+                    break;
             }
 
             VibeLogger.LogInfo(

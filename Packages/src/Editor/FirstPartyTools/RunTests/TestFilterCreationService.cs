@@ -1,5 +1,3 @@
-using System;
-
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -10,21 +8,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class TestFilterCreationService
     {
         /// <summary>
-        /// Create test execution filter
+        /// Create test execution filter. Returns (filter, errorMessage); errorMessage is non-null
+        /// only when the caller supplied an out-of-range enum value cast from an integer.
         /// </summary>
         /// <param name="filterType">Filter type</param>
         /// <param name="filterValue">Filter value</param>
-        /// <returns>Test execution filter</returns>
-        public TestExecutionFilter CreateFilter(TestFilterType filterType, string filterValue)
+        /// <returns>Test execution filter or an error message describing an invalid filter type</returns>
+        public (TestExecutionFilter filter, string errorMessage) TryCreateFilter(TestFilterType filterType, string filterValue)
         {
-            return filterType switch
+            switch (filterType)
             {
-                TestFilterType.all => TestExecutionFilter.All(),
-                TestFilterType.exact => TestExecutionFilter.ByTestName(filterValue),
-                TestFilterType.regex => TestExecutionFilter.ByClassName(filterValue),
-                TestFilterType.assembly => TestExecutionFilter.ByAssemblyName(filterValue),
-                _ => throw new ArgumentException($"Unsupported filter type: {filterType}")
-            };
+                case TestFilterType.all:
+                    return (TestExecutionFilter.All(), null);
+                case TestFilterType.exact:
+                    return (TestExecutionFilter.ByTestName(filterValue), null);
+                case TestFilterType.regex:
+                    return (TestExecutionFilter.ByClassName(filterValue), null);
+                case TestFilterType.assembly:
+                    return (TestExecutionFilter.ByAssemblyName(filterValue), null);
+                default:
+                    return (null, $"Unsupported filter type: {filterType}");
+            }
         }
     }
 }

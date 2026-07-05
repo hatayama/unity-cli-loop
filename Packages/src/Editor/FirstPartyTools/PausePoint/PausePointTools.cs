@@ -33,6 +33,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class PausePointResponse : UnityCliLoopToolResponse
     {
+        // Defaults to true so existing snapshot/clear paths keep their prior semantics.
+        // Only explicit validation failures set this to false.
+        public bool Success { get; set; } = true;
         public string Id { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
         public bool IsEnabled { get; set; }
@@ -174,10 +177,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(parameters));
             }
 
-            string id = RequireId(parameters.Id);
+            (string id, string idError) = TryRequireId(parameters.Id);
+            if (idError != null)
+            {
+                return CreateValidationFailure(idError);
+            }
+
             if (parameters.TimeoutSeconds <= 0)
             {
-                throw new UnityCliLoopToolParameterValidationException("TimeoutSeconds must be greater than zero.");
+                return CreateValidationFailure("TimeoutSeconds must be greater than zero.");
             }
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(id, parameters.TimeoutSeconds);
@@ -199,19 +207,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return PausePointResponse.FromClearAll(clearAllResult);
             }
 
-            string id = RequireId(parameters.Id);
+            (string id, string idError) = TryRequireId(parameters.Id);
+            if (idError != null)
+            {
+                return CreateValidationFailure(idError);
+            }
+
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear(id);
             return PausePointResponse.FromSnapshot(snapshot);
         }
 
-        private static string RequireId(string id)
+        // Returns (id, error). error is non-null when the caller-supplied id fails validation.
+        private static (string id, string errorMessage) TryRequireId(string id)
         {
             if (string.IsNullOrWhiteSpace(id))
             {
-                throw new UnityCliLoopToolParameterValidationException("Id must not be null or empty.");
+                return (null, "Id must not be null or empty.");
             }
 
-            return id;
+            return (id, null);
+        }
+
+        private static PausePointResponse CreateValidationFailure(string message)
+        {
+            return new PausePointResponse
+            {
+                Success = false,
+                Message = message
+            };
         }
 
         private static string CreateEnableWarning()

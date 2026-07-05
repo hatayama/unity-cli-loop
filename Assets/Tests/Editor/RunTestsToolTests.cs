@@ -51,10 +51,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// Test for filter creation via service.
         /// </summary>
         [Test]
-        public void CreateFilter_WithRegexType_ShouldReturnRegexFilter()
+        public void TryCreateFilter_WithRegexType_ShouldReturnRegexFilter()
         {
-            TestExecutionFilter result = filterService.CreateFilter(TestFilterType.regex, "TestClass");
+            // Verifies regex filter type is mapped to a class-name filter with the caller's value.
+            (TestExecutionFilter result, string errorMessage) = filterService.TryCreateFilter(TestFilterType.regex, "TestClass");
 
+            Assert.That(errorMessage, Is.Null);
             Assert.That(result.FilterType, Is.EqualTo(TestExecutionFilterType.Regex));
             Assert.That(result.FilterValue, Is.EqualTo("TestClass"));
         }
@@ -63,10 +65,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// Test for creating exact filter.
         /// </summary>
         [Test]
-        public void CreateFilter_WithExactType_ShouldReturnExactFilter()
+        public void TryCreateFilter_WithExactType_ShouldReturnExactFilter()
         {
-            TestExecutionFilter result = filterService.CreateFilter(TestFilterType.exact, "io.github.Test");
+            // Verifies exact filter type is mapped to a test-name filter with the caller's value.
+            (TestExecutionFilter result, string errorMessage) = filterService.TryCreateFilter(TestFilterType.exact, "io.github.Test");
 
+            Assert.That(errorMessage, Is.Null);
             Assert.That(result.FilterType, Is.EqualTo(TestExecutionFilterType.Exact));
             Assert.That(result.FilterValue, Is.EqualTo("io.github.Test"));
         }
@@ -75,12 +79,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// Test for unsupported filter types.
         /// </summary>
         [Test]
-        public void CreateFilter_WithUnsupportedType_ShouldThrowException()
+        public void TryCreateFilter_WithUnsupportedType_ShouldReturnErrorMessage()
         {
-            Assert.Throws<System.ArgumentException>(() =>
-            {
-                filterService.CreateFilter((TestFilterType)999, "value");
-            });
+            // Verifies out-of-range enum values surface as an error message rather than an exception.
+            (TestExecutionFilter result, string errorMessage) = filterService.TryCreateFilter((TestFilterType)999, "value");
+
+            Assert.That(result, Is.Null);
+            Assert.That(errorMessage, Does.Contain("Unsupported filter type"));
         }
 
         [Test]

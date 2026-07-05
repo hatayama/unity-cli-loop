@@ -37,7 +37,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             ct.ThrowIfCancellationRequested();
             CaptureMainThreadContext();
-            MouseUiSimulationCommand parameters = MouseUiSimulationCommand.FromSchema(request);
+
+            (MouseUiSimulationCommand? parameters, string? actionError) = MouseUiSimulationCommand.TryFromSchema(request);
+            if (parameters == null)
+            {
+                return new SimulateMouseUiResponse
+                {
+                    Success = false,
+                    Message = actionError ?? "Invalid mouse UI request.",
+                    Action = request.Action.ToString()
+                };
+            }
 
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
 
@@ -211,7 +221,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return await ExecuteLongPress(parameters, eventSystem, ct).ConfigureAwait(false);
 
                 default:
-                    throw new ArgumentException($"Unknown mouse action: {parameters.Action}");
+                    // Unreachable when TryFromSchema succeeds; kept as a defensive Success=false response
+                    // instead of a throw so any future MouseAction addition surfaces as a validation failure.
+                    return new SimulateMouseUiResponse
+                    {
+                        Success = false,
+                        Message = $"Unknown mouse action: {parameters.Action}",
+                        Action = parameters.Action.ToString()
+                    };
             }
         }
 
@@ -1434,14 +1451,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         private sealed class MouseUiSimulationCommand
         {
-            private MouseUiSimulationCommand(SimulateMouseUiSchema request)
+            private MouseUiSimulationCommand(SimulateMouseUiSchema request, MouseAction action)
             {
-                if (request == null)
-                {
-                    throw new ArgumentNullException(nameof(request));
-                }
-
-                Action = ToRuntimeMouseAction(request.Action);
+                Action = action;
                 X = request.X;
                 Y = request.Y;
                 FromX = request.FromX;
@@ -1466,29 +1478,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public string TargetPath { get; }
             public string DropTargetPath { get; }
 
-            public static MouseUiSimulationCommand FromSchema(SimulateMouseUiSchema request)
+            // Returns (command, error). Error is non-null iff the caller supplied an out-of-range enum value.
+            public static (MouseUiSimulationCommand? command, string? errorMessage) TryFromSchema(SimulateMouseUiSchema request)
             {
-                return new MouseUiSimulationCommand(request);
+                if (request == null)
+                {
+                    throw new ArgumentNullException(nameof(request));
+                }
+
+                (bool ok, MouseAction action) = TryConvertMouseAction(request.Action);
+                if (!ok)
+                {
+                    return (null, $"Unknown mouse UI action: {request.Action}");
+                }
+
+                return (new MouseUiSimulationCommand(request, action), null);
             }
 
-            private static MouseAction ToRuntimeMouseAction(UnityCliLoopMouseUiAction action)
+            private static (bool ok, MouseAction action) TryConvertMouseAction(UnityCliLoopMouseUiAction action)
             {
                 switch (action)
                 {
                     case UnityCliLoopMouseUiAction.Click:
-                        return MouseAction.Click;
+                        return (true, MouseAction.Click);
                     case UnityCliLoopMouseUiAction.Drag:
-                        return MouseAction.Drag;
+                        return (true, MouseAction.Drag);
                     case UnityCliLoopMouseUiAction.DragStart:
-                        return MouseAction.DragStart;
+                        return (true, MouseAction.DragStart);
                     case UnityCliLoopMouseUiAction.DragMove:
-                        return MouseAction.DragMove;
+                        return (true, MouseAction.DragMove);
                     case UnityCliLoopMouseUiAction.DragEnd:
-                        return MouseAction.DragEnd;
+                        return (true, MouseAction.DragEnd);
                     case UnityCliLoopMouseUiAction.LongPress:
-                        return MouseAction.LongPress;
+                        return (true, MouseAction.LongPress);
                     default:
-                        throw new ArgumentException($"Unknown mouse UI action: {action}");
+                        return (false, default);
                 }
             }
 
