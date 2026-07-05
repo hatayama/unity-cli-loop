@@ -147,7 +147,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             bool displaySuccess = result.Success ?? false;
             bool shouldWarn = result.Success == false;
             string logMessage =
-                $"Compilation finished: Success={displaySuccess}, Indeterminate={result.IsIndeterminate}, Errors={result.error.Length}, Warnings={result.warning.Length}, Message={message}";
+                $"Compilation finished: Success={displaySuccess}, Indeterminate={result.IsIndeterminate}, Errors={result.Errors.Length}, Warnings={result.Warnings.Length}, Message={message}";
 
             if (shouldWarn)
             {
