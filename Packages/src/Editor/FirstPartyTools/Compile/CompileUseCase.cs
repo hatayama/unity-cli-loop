@@ -65,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     false,
                     1,
                     0,
-                    new[] { CreateIssue(preparation.ErrorMessage, "", 0) },
+                    new[] { new CompileIssue(preparation.ErrorMessage, "", 0) },
                     Array.Empty<CompileIssue>(),
                     null);
                 CompileResponse persistedResponse =
@@ -97,7 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         false,
                         1,
                         0,
-                        new[] { CreateIssue("Play Mode did not exit within 5 seconds; compilation aborted.", "", 0) },
+                        new[] { new CompileIssue("Play Mode did not exit within 5 seconds; compilation aborted.", "", 0) },
                         Array.Empty<CompileIssue>(),
                         null);
                     CompileResponse persistedResponse =
@@ -121,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     false,
                     1,
                     0,
-                    new[] { CreateIssue(validation.ErrorMessage, "", 0) },
+                    new[] { new CompileIssue(validation.ErrorMessage, "", 0) },
                     Array.Empty<CompileIssue>(),
                     null);
                 CompileResponse persistedResponse =
@@ -158,16 +158,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Errors = errors,
                 Warnings = warnings,
                 Message = message,
-            };
-        }
-
-        private static CompileIssue CreateIssue(string message, string file, int line)
-        {
-            return new CompileIssue
-            {
-                Message = message,
-                File = file,
-                Line = line,
             };
         }
 

@@ -119,12 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            return messages.Select(message => new CompileIssue
-            {
-                Message = message.message,
-                File = message.file,
-                Line = message.line
-            }).ToArray();
+            return messages.Select(message => new CompileIssue(message.message, message.file, message.line)).ToArray();
         }
 
         private static string AddMissingTestFrameworkReferenceHint(

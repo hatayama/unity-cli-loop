@@ -202,8 +202,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UnityCliLoopStoredCompileResult storedResult =
                     sessionStateService.GetCompileResult("compile_test_request");
 
+                // Pins every property name of the stored payload because the CLI parses this JSON
+                // and CompileResponse no longer has a dedicated storage DTO guarding the shape.
                 Assert.That(storedResult.ResultJson, Does.Contain("\"Success\":true"));
                 Assert.That(storedResult.ResultJson, Does.Contain("\"ErrorCount\":0"));
+                Assert.That(storedResult.ResultJson, Does.Contain("\"WarningCount\":0"));
+                Assert.That(storedResult.ResultJson, Does.Contain("\"Errors\":[]"));
+                Assert.That(storedResult.ResultJson, Does.Contain("\"Warnings\":[]"));
+                Assert.That(storedResult.ResultJson, Does.Contain("\"Message\":\"Compilation completed.\""));
+                Assert.That(storedResult.ResultJson, Does.Contain("\"ProjectRoot\":"));
                 Assert.That(storedResult.ResultJson, Does.Not.Contain("\"success\""));
             }
             finally
