@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 namespace io.github.hatayama.UnityCliLoop.Dev
@@ -14,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         [MenuItem("UnityCliLoop/Debug/Compile Tests/Compile Checker Usage Example")]
         public static async void TestCompileChecker()
         {
-            CompileController compileController = new();
+            CompileController compileController = new(UnityCliLoopEditorSessionStateFacade.Service);
             
             try
             {
@@ -48,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         [MenuItem("UnityCliLoop/Debug/Compile Tests/Force Compile Checker Usage Example")]
         public static async void TestForceCompileChecker()
         {
-            CompileController compileController = new();
+            CompileController compileController = new(UnityCliLoopEditorSessionStateFacade.Service);
             
             try
             {

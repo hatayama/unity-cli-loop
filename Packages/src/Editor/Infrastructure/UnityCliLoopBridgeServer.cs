@@ -25,11 +25,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public event Action ServerLoopExited;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
 
-        public UnityCliLoopBridgeServerInstanceFactory()
-            : this(new DomainReloadDetectionFileService())
-        {
-        }
-
         internal UnityCliLoopBridgeServerInstanceFactory(IDomainReloadDetectionService domainReloadDetectionService)
         {
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
@@ -85,11 +80,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly ConcurrentDictionary<int, Task> _clientTasks = new();
         private int _nextClientTaskId;
         private const int ClientDisconnectMonitorPollMilliseconds = 100;
-
-        public UnityCliLoopBridgeServer()
-            : this(new DomainReloadDetectionFileService())
-        {
-        }
 
         internal UnityCliLoopBridgeServer(IDomainReloadDetectionService domainReloadDetectionService)
         {
