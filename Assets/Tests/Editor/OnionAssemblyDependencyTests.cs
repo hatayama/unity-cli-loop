@@ -69,12 +69,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ProjectRootCanonicalizer_WhenLoaded_CompilesUnderDomainAssembly()
+        public void ProjectRootCanonicalizer_WhenLoaded_CompilesUnderInfrastructureAssembly()
         {
-            // Tests that project-root endpoint normalization stays with the domain policy.
+            // Tests that project-root endpoint normalization stays with the infrastructure transport it serves.
             string canonicalizerAssemblyName = typeof(ProjectRootCanonicalizer).Assembly.GetName().Name;
 
-            Assert.That(canonicalizerAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(canonicalizerAssemblyName, Is.EqualTo(InfrastructureAssemblyName));
         }
 
         [Test]
