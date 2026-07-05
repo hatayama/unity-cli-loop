@@ -25,13 +25,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 validationService,
                 NoCleanupWait
             );
-            UnityCliLoopTestExecutionRequest parameters = new()
+            RunTestsSchema parameters = new()
             {
                 TestMode = UnityCliLoopTestMode.EditMode,
                 SaveBeforeRun = true
             };
 
-            UnityCliLoopTestExecutionResult response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.ExecutionFailed));
@@ -60,12 +60,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 validationService,
                 NoCleanupWait
             );
-            UnityCliLoopTestExecutionRequest parameters = new()
+            RunTestsSchema parameters = new()
             {
                 TestMode = (UnityCliLoopTestMode)999
             };
 
-            UnityCliLoopTestExecutionResult response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Does.Contain("Unsupported test mode"));
@@ -85,7 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 validationService,
                 NoCleanupWait
             );
-            UnityCliLoopTestExecutionRequest parameters = new();
+            RunTestsSchema parameters = new();
 
             await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
@@ -109,13 +109,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 validationService,
                 NoCleanupWait
             );
-            UnityCliLoopTestExecutionRequest parameters = new()
+            RunTestsSchema parameters = new()
             {
                 TestMode = UnityCliLoopTestMode.PlayMode,
                 SaveBeforeRun = true
             };
 
-            UnityCliLoopTestExecutionResult response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.ExecutionFailed));
@@ -157,14 +157,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 validationService,
                 NoCleanupWait
             );
-            UnityCliLoopTestExecutionRequest parameters = new()
+            RunTestsSchema parameters = new()
             {
                 TestMode = UnityCliLoopTestMode.PlayMode,
                 FilterType = TestFilterType.exact,
                 FilterValue = "MissingTest"
             };
 
-            UnityCliLoopTestExecutionResult response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.NoTestsFound));
@@ -194,7 +194,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     return Task.CompletedTask;
                 }
             );
-            UnityCliLoopTestExecutionRequest parameters = new();
+            RunTestsSchema parameters = new();
 
             await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
@@ -221,7 +221,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     return Task.CompletedTask;
                 }
             );
-            UnityCliLoopTestExecutionRequest parameters = new();
+            RunTestsSchema parameters = new();
 
             await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
@@ -250,7 +250,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     return Task.CompletedTask;
                 }
             );
-            UnityCliLoopTestExecutionRequest parameters = new();
+            RunTestsSchema parameters = new();
 
             await useCase.ExecuteAsync(parameters, CancellationToken.None);
 

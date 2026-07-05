@@ -12,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Processing sequence: 1. Test filter creation, 2. Test execution, 3. Result processing
     /// Related classes: RunTestsTool, TestFilterCreationService, TestExecutionService
     /// </summary>
-    public class RunTestsUseCase : IUnityCliLoopTestExecutionService
+    public class RunTestsUseCase
     {
         private readonly TestFilterCreationService _filterService;
         private readonly TestExecutionService _executionService;
@@ -51,8 +51,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <param name="parameters">Test execution parameters</param>
         /// <param name="ct">Cancellation control token</param>
         /// <returns>Test execution result</returns>
-        public async Task<UnityCliLoopTestExecutionResult> ExecuteAsync(UnityCliLoopTestExecutionRequest parameters, CancellationToken ct)
+        public async Task<RunTestsResponse> ExecuteAsync(RunTestsSchema parameters, CancellationToken ct)
         {
+            if (parameters == null)
+            {
+                throw new System.ArgumentNullException(nameof(parameters));
+            }
+
             if (!IsSupportedTestMode(parameters.TestMode))
             {
                 return CreateFailureResponse("Unsupported test mode: " + parameters.TestMode);
@@ -61,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ct.ThrowIfCancellationRequested();
             if (!_executionService.IsTestFrameworkAvailable)
             {
-                return CreateTestFrameworkUnavailableResponse();
+                return RunTestsResponse.CreateTestFrameworkUnavailable();
             }
 
             ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.SaveBeforeRun);
@@ -76,11 +81,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 filter = _filterService.CreateFilter(parameters.FilterType, parameters.FilterValue);
             }
-            
+
             // 2. Test execution
             ct.ThrowIfCancellationRequested();
             SerializableTestResult result;
-            
+
             try
             {
                 if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
@@ -102,33 +107,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Log full exception details for debugging
                 UnityEngine.Debug.LogError($"Test execution failed: {ex}");
                 VibeLogger.LogError(
-                    "test_execution_failed", 
-                    "Test execution encountered an error", 
+                    "test_execution_failed",
+                    "Test execution encountered an error",
                     new { testMode = parameters.TestMode, filterType = parameters.FilterType, filterValue = parameters.FilterValue, error = ex.Message }
                 );
-                
-                // Create a minimal error result
+
+                // Surface the failure; the tool layer converts it into an error response.
                 throw new System.InvalidOperationException("Test execution failed. Please check the logs for details.", ex);
             }
 
             await _waitForTestRunnerCleanupAsync(ct);
-            
-            // 3. Response creation
-            UnityCliLoopTestExecutionResult response = new UnityCliLoopTestExecutionResult
-            {
-                Success = result.success,
-                Status = result.status,
-                HasFailures = result.hasFailures,
-                NoTestsFound = result.noTestsFound,
-                NoTestsFoundExplanation = result.noTestsFoundExplanation,
-                Message = result.message,
-                CompletedAt = result.completedAt,
-                TestCount = result.testCount,
-                PassedCount = result.passedCount,
-                FailedCount = result.failedCount,
-                SkippedCount = result.skippedCount,
-                XmlPath = result.xmlPath
-            };
+
+            // 3. Response creation.
+            // Why: pass the derived fields explicitly so the constructor does not re-derive them;
+            // the null-triggered derivation exists only as a source-compat fallback for callers
+            // that omit the optional arguments.
+            RunTestsResponse response = new(
+                success: result.success,
+                message: result.message,
+                completedAt: result.completedAt,
+                testCount: result.testCount,
+                passedCount: result.passedCount,
+                failedCount: result.failedCount,
+                skippedCount: result.skippedCount,
+                xmlPath: result.xmlPath,
+                status: result.status,
+                hasFailures: result.hasFailures,
+                noTestsFound: result.noTestsFound,
+                noTestsFoundExplanation: result.noTestsFoundExplanation);
             response.Message = RunTestsNoTestsDiagnosticService.AppendDiagnosticsOrOriginalMessage(
                 response.Message,
                 () => _noTestsDiagnosticService.AppendDiagnosticsIfNeeded(
@@ -140,38 +146,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return response;
         }
 
-        public Task<UnityCliLoopTestExecutionResult> RunTestsAsync(UnityCliLoopTestExecutionRequest request, CancellationToken ct)
-        {
-            return ExecuteAsync(request, ct);
-        }
-
         private static bool IsSupportedTestMode(UnityCliLoopTestMode testMode)
         {
             return Enum.IsDefined(typeof(UnityCliLoopTestMode), testMode);
         }
 
-        private static UnityCliLoopTestExecutionResult CreateTestFrameworkUnavailableResponse()
+        private static RunTestsResponse CreateFailureResponse(string message)
         {
-            return CreateFailureResponse(RunTestsResponse.TestFrameworkUnavailableMessage);
-        }
-
-        private static UnityCliLoopTestExecutionResult CreateFailureResponse(string message)
-        {
-            return new UnityCliLoopTestExecutionResult
-            {
-                Success = false,
-                Status = RunTestsExecutionStatus.ExecutionFailed,
-                HasFailures = false,
-                NoTestsFound = false,
-                NoTestsFoundExplanation = string.Empty,
-                Message = message,
-                CompletedAt = DateTime.UtcNow.ToString("o"),
-                TestCount = 0,
-                PassedCount = 0,
-                FailedCount = 0,
-                SkippedCount = 0,
-                XmlPath = null
-            };
+            // Why: supply every optional argument so the constructor does not re-derive
+            // status or explanation fields from the failure message.
+            return new RunTestsResponse(
+                success: false,
+                message: message,
+                completedAt: DateTime.UtcNow.ToString("o"),
+                testCount: 0,
+                passedCount: 0,
+                failedCount: 0,
+                skippedCount: 0,
+                xmlPath: null,
+                status: RunTestsExecutionStatus.ExecutionFailed,
+                hasFailures: false,
+                noTestsFound: false,
+                noTestsFoundExplanation: string.Empty);
         }
 
         private static async Task WaitForTestRunnerCleanupAsync(CancellationToken ct)
