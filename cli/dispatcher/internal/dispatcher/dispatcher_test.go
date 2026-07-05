@@ -770,8 +770,8 @@ func TestLoadDispatcherPinRejectsInvalidMinimumDispatcherVersion(t *testing.T) {
 	}
 }
 
-func TestLoadDispatcherPinFallsBackToCliConstants(t *testing.T) {
-	// Verifies old package layouts can still resolve a CLI version from CliConstants.cs.
+func TestLoadDispatcherPinFailsWhenPinFileMissing(t *testing.T) {
+	// Verifies loadDispatcherPin now requires a pin JSON and does not fall back to CliConstants.cs.
 	projectRoot := createDispatcherUnityProject(t)
 	constantsPath := filepath.Join(projectRoot, "Packages", "src", "Editor", "Domain", "CliConstants.cs")
 	if err := os.MkdirAll(filepath.Dir(constantsPath), 0o755); err != nil {
@@ -784,44 +784,38 @@ public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "1.0.0";`
 		t.Fatalf("failed to write constants: %v", err)
 	}
 
-	pin, err := loadDispatcherPin(projectRoot)
-	if err != nil {
-		t.Fatalf("loadDispatcherPin failed: %v", err)
+	_, err := loadDispatcherPin(projectRoot)
+
+	if err == nil {
+		t.Fatal("expected pin resolution to fail when no pin JSON is present")
 	}
-	if pin.ProjectRunnerVersion != "3.0.0-beta.56" {
-		t.Fatalf("projectRunnerVersion mismatch: %s", pin.ProjectRunnerVersion)
-	}
-	if pin.RequiredProtocolVersion != 3 {
-		t.Fatalf("protocol mismatch: %d", pin.RequiredProtocolVersion)
-	}
-	if pin.MinimumDispatcherVersion != "1.0.0" {
-		t.Fatalf("minimumDispatcherVersion mismatch: %s", pin.MinimumDispatcherVersion)
+	if !strings.Contains(err.Error(), "project runner pin not found") {
+		t.Fatalf("expected 'project runner pin not found' message, got: %v", err)
 	}
 }
 
-func TestLoadDispatcherPinFromCliConstantsNormalizesVersionPrefix(t *testing.T) {
-	// Verifies v-prefixed fallback constants are normalized before dispatcher resolution.
+func TestRunDispatcherMissingPinEmitsPinResolutionGuidance(t *testing.T) {
+	// Verifies the dispatcher surfaces the pin-resolution error envelope with NextActions guidance when the pin is missing.
 	projectRoot := createDispatcherUnityProject(t)
-	constantsPath := filepath.Join(projectRoot, "Packages", "src", "Editor", "Domain", "CliConstants.cs")
-	if err := os.MkdirAll(filepath.Dir(constantsPath), 0o755); err != nil {
-		t.Fatalf("failed to create constants directory: %v", err)
-	}
-	content := `public const int REQUIRED_CLI_PROTOCOL_VERSION = 3;
-public const string MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION = "v3.0.0-beta.59";
-public const string MINIMUM_REQUIRED_DISPATCHER_VERSION = "v1.0.0";`
-	if err := os.WriteFile(constantsPath, []byte(content), 0o644); err != nil {
-		t.Fatalf("failed to write constants: %v", err)
-	}
+	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
+	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
+	t.Chdir(projectRoot)
 
-	pin, err := loadDispatcherPin(projectRoot)
-	if err != nil {
-		t.Fatalf("loadDispatcherPin failed: %v", err)
+	deps := defaultDispatcherRunDeps()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, &stdout, &stderr, deps)
+
+	if code == 0 {
+		t.Fatalf("expected non-zero exit when pin is missing, stderr=%s", stderr.String())
 	}
-	if pin.ProjectRunnerVersion != "3.0.0-beta.59" {
-		t.Fatalf("projectRunnerVersion mismatch: %s", pin.ProjectRunnerVersion)
+	stderrText := stderr.String()
+	if !strings.Contains(stderrText, "Could not resolve the required uloop project runner") {
+		t.Fatalf("expected pin resolution error message, got: %s", stderrText)
 	}
-	if pin.MinimumDispatcherVersion != "1.0.0" {
-		t.Fatalf("minimumDispatcherVersion mismatch: %s", pin.MinimumDispatcherVersion)
+	if !strings.Contains(stderrText, "project-runner-pin.json") {
+		t.Fatalf("expected NextActions to reference project-runner-pin.json, got: %s", stderrText)
 	}
 }
 

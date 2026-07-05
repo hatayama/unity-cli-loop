@@ -112,6 +112,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void SyncProjectPinFile_WhenSourcePinMissing_ShouldLogWarningAndSkip()
+        {
+            // Tests that a missing package source pin now emits a warning instead of silently returning false.
+            string root = CreateTestRoot();
+            string packageRoot = Path.Combine(root, "package");
+            string projectRoot = Path.Combine(root, "project");
+
+            try
+            {
+                Directory.CreateDirectory(packageRoot);
+                Directory.CreateDirectory(projectRoot);
+                string sourcePath = Path.Combine(
+                    packageRoot,
+                    UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME);
+                LogAssert.Expect(
+                    LogType.Warning,
+                    $"Unity CLI Loop skipped {UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME} synchronization because the package source pin was not found at {sourcePath}.");
+
+                bool changed = CliPinSynchronizer.SyncProjectPinFile(packageRoot, projectRoot);
+
+                Assert.That(changed, Is.False);
+                Assert.That(File.Exists(sourcePath), Is.False);
+                Assert.That(
+                    File.Exists(
+                        Path.Combine(
+                            projectRoot,
+                            UnityCliLoopConstants.ULOOP_DIR,
+                            UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME)),
+                    Is.False);
+            }
+            finally
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+
+        [Test]
         public void SyncProjectPinFile_WhenPackageRootMissing_ShouldSkipWrite()
         {
             // Tests that startup skips pin synchronization while Unity package resolution is incomplete.
