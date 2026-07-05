@@ -9,6 +9,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 {
     /// <summary>
     /// Registry for Unity CLI tool implementations and their catalog metadata.
+    /// Tool discovery is performed outside this class; callers pass in the tools to register.
     /// </summary>
     public class UnityCliLoopToolRegistry
     {
@@ -16,75 +17,32 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         private readonly IInternalToolNameProvider _internalToolNameProvider;
         private readonly ToolSettingsService _toolSettingsService;
 
+        /// <summary>
+        /// Creates a registry. Callers must pass <paramref name="toolDiscovery"/> explicitly;
+        /// pass null to get a manual-registration-only registry with no automatic scan.
+        /// </summary>
+        /// <param name="toolSettingsService">Service used to resolve per-tool enabled state.</param>
+        /// <param name="internalToolNameProvider">Provider of internal tool names to hide from catalogs; null uses an empty provider.</param>
+        /// <param name="toolDiscovery">Delegate that returns the tools to auto-register; null registers no tools automatically.</param>
         internal UnityCliLoopToolRegistry(
             ToolSettingsService toolSettingsService,
-            IInternalToolNameProvider internalToolNameProvider = null)
+            IInternalToolNameProvider internalToolNameProvider,
+            Func<IReadOnlyList<IUnityCliLoopTool>> toolDiscovery)
         {
             System.Diagnostics.Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
 
             _toolSettingsService = toolSettingsService ?? throw new ArgumentNullException(nameof(toolSettingsService));
             _internalToolNameProvider = internalToolNameProvider ?? new EmptyInternalToolNameProvider();
-            RegisterDefaultTools();
-        }
 
-        private void RegisterDefaultTools()
-        {
-            RegisterToolsWithAttributes();
-        }
-
-        private void RegisterToolsWithAttributes()
-        {
-            Assembly[] assemblies = System.AppDomain.CurrentDomain.GetAssemblies();
-            List<Type> toolTypes = new();
-
-            foreach (Assembly assembly in assemblies)
+            if (toolDiscovery == null)
             {
-                Type[] types = assembly.GetTypes()
-                    .Where(type => type.GetCustomAttribute<UnityCliLoopToolAttribute>() != null)
-                    .Where(type => typeof(IUnityCliLoopTool).IsAssignableFrom(type))
-                    .Where(type => !type.IsAbstract && !type.IsInterface)
-                    .ToArray();
-
-                toolTypes.AddRange(types);
+                return;
             }
 
-            foreach (Type type in toolTypes)
+            foreach (IUnityCliLoopTool tool in toolDiscovery())
             {
-                if (!IsValidToolType(type))
-                {
-                    UnityEngine.Debug.LogWarning($"{UnityCliLoopConstants.SECURITY_LOG_PREFIX} Skipping invalid tool type: {type.FullName}");
-                    continue;
-                }
-
-                IUnityCliLoopTool tool = CreateTool(type);
                 RegisterTool(tool);
             }
-        }
-
-        private IUnityCliLoopTool CreateTool(Type type)
-        {
-            IUnityCliLoopTool tool = (IUnityCliLoopTool)Activator.CreateInstance(type);
-            return tool;
-        }
-
-        private bool IsValidToolType(Type type)
-        {
-            if (!typeof(IUnityCliLoopTool).IsAssignableFrom(type))
-            {
-                return false;
-            }
-
-            if (type.IsAbstract || type.IsInterface)
-            {
-                return false;
-            }
-
-            if (type.GetCustomAttribute<UnityCliLoopToolAttribute>() == null)
-            {
-                return false;
-            }
-
-            return type.GetConstructor(Type.EmptyTypes) != null;
         }
 
         public void RegisterTool(IUnityCliLoopTool tool)
