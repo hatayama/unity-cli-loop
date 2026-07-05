@@ -142,11 +142,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return response;
         }
 
-        public Task<RunTestsResponse> RunTestsAsync(RunTestsSchema request, CancellationToken ct)
-        {
-            return ExecuteAsync(request, ct);
-        }
-
         private static bool IsSupportedTestMode(UnityCliLoopTestMode testMode)
         {
             return Enum.IsDefined(typeof(UnityCliLoopTestMode), testMode);

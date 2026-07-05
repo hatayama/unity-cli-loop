@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         protected override async Task<RunTestsResponse> ExecuteAsync(RunTestsSchema parameters, CancellationToken ct)
         {
             RunTestsUseCase useCase = new();
-            return await useCase.RunTestsAsync(parameters, ct);
+            return await useCase.ExecuteAsync(parameters, ct);
         }
     }
 }
