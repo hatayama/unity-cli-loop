@@ -13,9 +13,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class RunTestsNoTestsDiagnosticServiceTests
     {
         [Test]
-        public void AppendFindingsIfEligible_WhenRunWasSuccessful_DoesNotAppendFindings()
+        public void AppendFindingsIfEligible_WhenNoTestsFoundIsFalse_DoesNotAppendFindings()
         {
-            // Verifies that a normal successful result cannot receive no-test asmdef hints.
+            // Verifies that runs that did discover tests cannot receive no-test asmdef hints.
             RunTestsAsmdefDiagnosticFinding[] findings =
             {
                 new RunTestsAsmdefDiagnosticFinding("Assets/Tests/EditMode/Sample.Tests.asmdef", "sample finding")
@@ -23,8 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             string message = RunTestsNoTestsDiagnosticService.AppendFindingsIfEligible(
                 RunTestsResponse.NoTestsFoundMessage,
-                success: true,
-                testCount: 1,
+                noTestsFound: false,
                 findings);
 
             Assert.That(message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
@@ -33,32 +32,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void AppendFindingsIfEligible_WhenNoFindingsExist_DoesNotAppendGenericHint()
         {
-            // Verifies that filter-only no-discovery results stay unchanged when asmdefs look healthy.
+            // Verifies that no-discovery results stay unchanged when asmdefs look healthy.
             string message = RunTestsNoTestsDiagnosticService.AppendFindingsIfEligible(
                 RunTestsResponse.NoTestsFoundMessage,
-                success: false,
-                testCount: 0,
+                noTestsFound: true,
                 Array.Empty<RunTestsAsmdefDiagnosticFinding>());
 
             Assert.That(message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
         }
 
         [Test]
-        public void AppendFindingsIfEligible_WhenMessageIsNull_DoesNotAppendFindings()
+        public void AppendFindingsIfEligible_WhenNoTestsFoundIsTrueAndFindingsExist_AppendsHint()
         {
-            // Verifies unset result messages are ignored by no-test diagnostics.
+            // Verifies that asmdef hints are appended to the original message when no tests were discovered.
             RunTestsAsmdefDiagnosticFinding[] findings =
             {
                 new RunTestsAsmdefDiagnosticFinding("Assets/Tests/EditMode/Sample.Tests.asmdef", "sample finding")
             };
 
             string message = RunTestsNoTestsDiagnosticService.AppendFindingsIfEligible(
-                null,
-                success: false,
-                testCount: 0,
+                RunTestsResponse.NoTestsFoundMessage,
+                noTestsFound: true,
                 findings);
 
-            Assert.That(message, Is.Null);
+            Assert.That(message, Does.StartWith(RunTestsResponse.NoTestsFoundMessage));
+            Assert.That(message, Does.Contain("Possible asmdef issues"));
+            Assert.That(message, Does.Contain("sample finding"));
         }
 
         [Test]
@@ -87,9 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that unfiltered no-discovery results can receive asmdef diagnostics.
             bool shouldAppend = RunTestsNoTestsDiagnosticService.ShouldAppendDiagnostics(
-                RunTestsResponse.NoTestsFoundMessage,
-                success: false,
-                testCount: 0,
+                noTestsFound: true,
                 TestFilterType.all);
 
             Assert.That(shouldAppend, Is.True);
@@ -100,10 +97,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that narrow filter misses cannot receive asmdef diagnostics.
             bool shouldAppend = RunTestsNoTestsDiagnosticService.ShouldAppendDiagnostics(
-                RunTestsResponse.NoTestsFoundMessage,
-                success: false,
-                testCount: 0,
+                noTestsFound: true,
                 TestFilterType.exact);
+
+            Assert.That(shouldAppend, Is.False);
+        }
+
+        [Test]
+        public void ShouldAppendDiagnostics_WhenNoTestsFoundIsFalse_ReturnsFalse()
+        {
+            // Verifies that runs that discovered tests are gated out even under the wide filter.
+            bool shouldAppend = RunTestsNoTestsDiagnosticService.ShouldAppendDiagnostics(
+                noTestsFound: false,
+                TestFilterType.all);
 
             Assert.That(shouldAppend, Is.False);
         }
