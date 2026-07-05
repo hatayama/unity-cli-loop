@@ -745,7 +745,7 @@ func TestLoadDispatcherPinRejectsInvalidProjectRunnerVersion(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(pinPath), 0o755); err != nil {
 		t.Fatalf("failed to create pin directory: %v", err)
 	}
-	content := `{"schemaVersion":1,"packageName":"io.github.hatayama.uloopmcp","packageVersion":"3.0.0-beta.1","projectRunnerVersion":"../../payload","requiredProtocolVersion":2,"minimumDispatcherVersion":"3.0.0-beta.39"}`
+	content := `{"projectRunnerVersion":"../../payload","minimumDispatcherVersion":"3.0.0-beta.39"}`
 	if err := os.WriteFile(pinPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write pin: %v", err)
 	}
@@ -855,9 +855,9 @@ func writeDispatcherPinFileWithMinimum(t *testing.T, pinPath string, projectRunn
 	if err := os.MkdirAll(filepath.Dir(pinPath), 0o755); err != nil {
 		t.Fatalf("failed to create pin directory: %v", err)
 	}
-	content := `{"schemaVersion":1,"packageName":"io.github.hatayama.uloopmcp","packageVersion":"3.0.0-beta.1","projectRunnerVersion":"` +
+	content := `{"projectRunnerVersion":"` +
 		projectRunnerVersion +
-		`","requiredProtocolVersion":2,"minimumDispatcherVersion":"` +
+		`","minimumDispatcherVersion":"` +
 		minimumDispatcherVersion +
 		`"}`
 	if err := os.WriteFile(pinPath, []byte(content), 0o644); err != nil {

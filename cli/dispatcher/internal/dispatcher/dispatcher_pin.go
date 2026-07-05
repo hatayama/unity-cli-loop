@@ -13,11 +13,7 @@ import (
 var dispatcherProjectRunnerVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)?$`)
 
 type dispatcherPin struct {
-	SchemaVersion            int    `json:"schemaVersion"`
-	PackageName              string `json:"packageName"`
-	PackageVersion           string `json:"packageVersion"`
 	ProjectRunnerVersion     string `json:"projectRunnerVersion"`
-	RequiredProtocolVersion  int    `json:"requiredProtocolVersion"`
 	MinimumDispatcherVersion string `json:"minimumDispatcherVersion"`
 	SourcePath               string `json:"-"`
 }
@@ -95,9 +91,6 @@ func readDispatcherPin(pinPath string) (dispatcherPin, error) {
 		if err := validateDispatcherProjectRunnerVersion(pin.MinimumDispatcherVersion); err != nil {
 			return dispatcherPin{}, fmt.Errorf("%s defines invalid minimumDispatcherVersion: %w", pinPath, err)
 		}
-	}
-	if pin.SchemaVersion == 0 {
-		return dispatcherPin{}, fmt.Errorf("%s does not define schemaVersion", pinPath)
 	}
 	pin.SourcePath = pinPath
 	return pin, nil

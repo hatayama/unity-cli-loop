@@ -15,16 +15,6 @@
           "type": "json",
           "path": "package.json",
           "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
-          "path": "project-runner-pin.json",
-          "jsonpath": "$.packageVersion"
-        },
-        {
-          "type": "json",
-          "path": "/.uloop/project-runner-pin.json",
-          "jsonpath": "$.packageVersion"
         }
       ]
     },
