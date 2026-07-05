@@ -429,31 +429,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void InputSimulationTypes_WhenLoaded_CompileUnderFirstPartyToolsAssembly()
-        {
-            // Tests that bundled input simulation implementation types stay inside the first-party tool assembly.
-            string keyboardServiceAssemblyName = typeof(IUnityCliLoopKeyboardSimulationService).Assembly.GetName().Name;
-            string keyboardRequestAssemblyName = typeof(UnityCliLoopKeyboardSimulationRequest).Assembly.GetName().Name;
-            string keyboardResultAssemblyName = typeof(UnityCliLoopKeyboardSimulationResult).Assembly.GetName().Name;
-            string mouseServiceAssemblyName = typeof(IUnityCliLoopMouseInputSimulationService).Assembly.GetName().Name;
-            string mouseRequestAssemblyName = typeof(UnityCliLoopMouseInputSimulationRequest).Assembly.GetName().Name;
-            string mouseResultAssemblyName = typeof(UnityCliLoopMouseInputSimulationResult).Assembly.GetName().Name;
-            string mouseUiServiceAssemblyName = typeof(IUnityCliLoopMouseUiSimulationService).Assembly.GetName().Name;
-            string mouseUiRequestAssemblyName = typeof(UnityCliLoopMouseUiSimulationRequest).Assembly.GetName().Name;
-            string mouseUiResultAssemblyName = typeof(UnityCliLoopMouseUiSimulationResult).Assembly.GetName().Name;
-
-            Assert.That(keyboardServiceAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(keyboardRequestAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(keyboardResultAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(mouseServiceAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(mouseRequestAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(mouseResultAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(mouseUiServiceAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(mouseUiRequestAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(mouseUiResultAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-        }
-
-        [Test]
         public void InputSimulationUseCases_WhenLoaded_CompileUnderApplicationAssembly()
         {
             // Tests that the bundled tools own the keyboard and mouse input simulation implementations.
