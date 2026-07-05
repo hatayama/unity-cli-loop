@@ -15,23 +15,23 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     {
         private readonly Dictionary<string, IUnityCliLoopTool> _tools = new();
         private readonly IInternalToolNameProvider _internalToolNameProvider;
-        private readonly ToolSettingsService _toolSettingsService;
+        private readonly IToolSettingsPort _toolSettingsPort;
 
         /// <summary>
         /// Creates a registry. Callers must pass <paramref name="toolDiscovery"/> explicitly;
         /// pass null to get a manual-registration-only registry with no automatic scan.
         /// </summary>
-        /// <param name="toolSettingsService">Service used to resolve per-tool enabled state.</param>
+        /// <param name="toolSettingsPort">Port used to resolve per-tool enabled state.</param>
         /// <param name="internalToolNameProvider">Provider of internal tool names to hide from catalogs; null uses an empty provider.</param>
         /// <param name="toolDiscovery">Delegate that returns the tools to auto-register; null registers no tools automatically.</param>
         internal UnityCliLoopToolRegistry(
-            ToolSettingsService toolSettingsService,
+            IToolSettingsPort toolSettingsPort,
             IInternalToolNameProvider internalToolNameProvider,
             Func<IReadOnlyList<IUnityCliLoopTool>> toolDiscovery)
         {
-            System.Diagnostics.Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
+            System.Diagnostics.Debug.Assert(toolSettingsPort != null, "toolSettingsPort must not be null");
 
-            _toolSettingsService = toolSettingsService ?? throw new ArgumentNullException(nameof(toolSettingsService));
+            _toolSettingsPort = toolSettingsPort ?? throw new ArgumentNullException(nameof(toolSettingsPort));
             _internalToolNameProvider = internalToolNameProvider ?? new EmptyInternalToolNameProvider();
 
             if (toolDiscovery == null)
@@ -72,7 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
         public bool IsToolEnabled(string toolName)
         {
-            return ToolSettingsToolLinkPolicy.IsToolEnabled(toolName, _toolSettingsService);
+            return ToolSettingsToolLinkPolicy.IsToolEnabled(toolName, _toolSettingsPort);
         }
 
         public ToolInfo[] GetRegisteredTools()
@@ -86,7 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return _tools.Values
                 .Where(tool => ToolExecutionAvailability.ShouldExposeInRegisteredTools(
                     tool.ToolName,
-                    ToolSettingsToolLinkPolicy.IsToolEnabled(tool.ToolName, _toolSettingsService)))
+                    ToolSettingsToolLinkPolicy.IsToolEnabled(tool.ToolName, _toolSettingsPort)))
                 .Where(tool => !internalToolNames.Contains(tool.ToolName))
                 .Select(tool =>
             {

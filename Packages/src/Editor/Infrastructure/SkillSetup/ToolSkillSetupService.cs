@@ -14,13 +14,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public sealed class ToolSkillSetupService : ISkillSetupPort
     {
-        private readonly ToolSettingsService _toolSettingsService;
+        private readonly IToolSettingsPort _toolSettingsPort;
 
-        public ToolSkillSetupService(ToolSettingsService toolSettingsService)
+        public ToolSkillSetupService(IToolSettingsPort toolSettingsPort)
         {
-            Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
+            Debug.Assert(toolSettingsPort != null, "toolSettingsPort must not be null");
 
-            _toolSettingsService = toolSettingsService ?? throw new System.ArgumentNullException(nameof(toolSettingsService));
+            _toolSettingsPort = toolSettingsPort ?? throw new System.ArgumentNullException(nameof(toolSettingsPort));
         }
 
         public void RemoveSkillFiles(string toolName)
@@ -69,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             await ToolSkillSynchronizer.InstallSkillFiles(
                 synchronizerTargets,
                 groupSkillsUnderUnityCliLoop,
-                _toolSettingsService.GetDisabledTools());
+                _toolSettingsPort.GetDisabledTools());
         }
 
         public async Task InstallSkillFilesForToolAsync(
@@ -83,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             await ToolSkillSynchronizer.InstallSkillFilesForTool(
                 toolName,
                 groupSkillsUnderUnityCliLoop,
-                _toolSettingsService.GetDisabledTools());
+                _toolSettingsPort.GetDisabledTools());
         }
 
         public SkillInstallState GetV3MigrationSkillInstallStateAtProjectRoot(

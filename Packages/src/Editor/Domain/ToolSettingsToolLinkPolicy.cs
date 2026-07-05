@@ -24,12 +24,12 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return !PausePointAuxiliaryToolNames.Contains(toolName);
         }
 
-        internal static bool IsToolEnabled(string toolName, ToolSettingsService toolSettingsService)
+        internal static bool IsToolEnabled(string toolName, IToolSettingsPort toolSettingsPort)
         {
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
-            Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
+            Debug.Assert(toolSettingsPort != null, "toolSettingsPort must not be null");
 
-            return toolSettingsService.IsToolEnabled(GetSettingsToolName(toolName));
+            return toolSettingsPort.IsToolEnabled(GetSettingsToolName(toolName));
         }
 
         internal static string GetSettingsToolName(string toolName)
