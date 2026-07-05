@@ -47,11 +47,6 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "/cli/common/tools/default-tools.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
           "path": "/cli/common/clicontract/contract.json",
           "jsonpath": "$.projectRunnerVersion"
         },

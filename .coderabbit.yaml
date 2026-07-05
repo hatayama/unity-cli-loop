@@ -40,6 +40,6 @@ reviews:
 
         The compatibility gate is an exact protocol match, not a release-semver range. If a change makes a CLI/package from the previous protocol generation unable to interoperate, require both `cli/common/clicontract/contract.json` `protocolVersion` and `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION` to be incremented in the same PR.
 
-        Do not request a protocol bump for ordinary CLI features, bug fixes, UI changes, documentation, or additive wire-format changes that older counterparts can safely ignore. `projectRunnerVersion` and `default-tools.json` `version` are release-please managed release metadata. If a PR bumps `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION`, require a matching update to `CliConstants.MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION` after the corresponding published project runner release tag is available, because setup must install a project runner release that advertises the required protocol.
+        Do not request a protocol bump for ordinary CLI features, bug fixes, UI changes, documentation, or additive wire-format changes that older counterparts can safely ignore. `projectRunnerVersion` is release-please managed release metadata. If a PR bumps `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION`, require a matching update to `CliConstants.MINIMUM_REQUIRED_PROJECT_RUNNER_VERSION` after the corresponding published project runner release tag is available, because setup must install a project runner release that advertises the required protocol.
 chat:
   auto_reply: true

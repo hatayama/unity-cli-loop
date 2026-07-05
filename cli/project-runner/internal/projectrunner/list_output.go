@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sort"
 
+	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
@@ -47,8 +48,10 @@ func newListCatalog(cache clicore.ToolsCache) listCatalog {
 		tools = append(tools, newListTool(tool))
 	}
 
+	// Sourced from the embedded CLI contract because the tool catalog no longer
+	// carries a release-please-stamped version field of its own.
 	return listCatalog{
-		Version:       cache.Version,
+		Version:       clicontract.ProjectRunnerVersion(),
 		ServerVersion: cache.ServerVersion,
 		UpdatedAt:     cache.UpdatedAt,
 		Tools:         tools,
