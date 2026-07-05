@@ -41,10 +41,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             (MouseUiSimulationCommand? parameters, string? actionError) = MouseUiSimulationCommand.TryFromSchema(request);
             if (parameters == null)
             {
+                // TryFromSchema guarantees actionError is non-null when command is null.
                 return new SimulateMouseUiResponse
                 {
                     Success = false,
-                    Message = actionError ?? "Invalid mouse UI request.",
+                    Message = actionError!,
                     Action = request.Action.ToString()
                 };
             }
@@ -223,12 +224,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 default:
                     // Unreachable when TryFromSchema succeeds; kept as a defensive Success=false response
                     // instead of a throw so any future MouseAction addition surfaces as a validation failure.
-                    return new SimulateMouseUiResponse
-                    {
-                        Success = false,
-                        Message = $"Unknown mouse action: {parameters.Action}",
-                        Action = parameters.Action.ToString()
-                    };
+                    return CreateFailure(parameters, $"Unknown mouse action: {parameters.Action}");
             }
         }
 
@@ -1486,33 +1482,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     throw new ArgumentNullException(nameof(request));
                 }
 
-                (bool ok, MouseAction action) = TryConvertMouseAction(request.Action);
-                if (!ok)
+                MouseAction? action = TryConvertMouseAction(request.Action);
+                if (action == null)
                 {
                     return (null, $"Unknown mouse UI action: {request.Action}");
                 }
 
-                return (new MouseUiSimulationCommand(request, action), null);
+                return (new MouseUiSimulationCommand(request, action.Value), null);
             }
 
-            private static (bool ok, MouseAction action) TryConvertMouseAction(UnityCliLoopMouseUiAction action)
+            private static MouseAction? TryConvertMouseAction(UnityCliLoopMouseUiAction action)
             {
                 switch (action)
                 {
                     case UnityCliLoopMouseUiAction.Click:
-                        return (true, MouseAction.Click);
+                        return MouseAction.Click;
                     case UnityCliLoopMouseUiAction.Drag:
-                        return (true, MouseAction.Drag);
+                        return MouseAction.Drag;
                     case UnityCliLoopMouseUiAction.DragStart:
-                        return (true, MouseAction.DragStart);
+                        return MouseAction.DragStart;
                     case UnityCliLoopMouseUiAction.DragMove:
-                        return (true, MouseAction.DragMove);
+                        return MouseAction.DragMove;
                     case UnityCliLoopMouseUiAction.DragEnd:
-                        return (true, MouseAction.DragEnd);
+                        return MouseAction.DragEnd;
                     case UnityCliLoopMouseUiAction.LongPress:
-                        return (true, MouseAction.LongPress);
+                        return MouseAction.LongPress;
                     default:
-                        return (false, default);
+                        return null;
                 }
             }
 

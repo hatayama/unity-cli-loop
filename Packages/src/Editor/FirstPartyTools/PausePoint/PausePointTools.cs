@@ -177,7 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(parameters));
             }
 
-            (string id, string idError) = TryRequireId(parameters.Id);
+            string idError = ValidateId(parameters.Id);
             if (idError != null)
             {
                 return CreateValidationFailure(idError);
@@ -188,7 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateValidationFailure("TimeoutSeconds must be greater than zero.");
             }
 
-            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(id, parameters.TimeoutSeconds);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(parameters.Id, parameters.TimeoutSeconds);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.Warning = CreateEnableWarning();
             return response;
@@ -207,25 +207,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return PausePointResponse.FromClearAll(clearAllResult);
             }
 
-            (string id, string idError) = TryRequireId(parameters.Id);
+            string idError = ValidateId(parameters.Id);
             if (idError != null)
             {
                 return CreateValidationFailure(idError);
             }
 
-            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear(id);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear(parameters.Id);
             return PausePointResponse.FromSnapshot(snapshot);
         }
 
-        // Returns (id, error). error is non-null when the caller-supplied id fails validation.
-        private static (string id, string errorMessage) TryRequireId(string id)
+        // Returns an error message when id fails validation, or null when it is valid.
+        private static string ValidateId(string id)
         {
             if (string.IsNullOrWhiteSpace(id))
             {
-                return (null, "Id must not be null or empty.");
+                return "Id must not be null or empty.";
             }
 
-            return (id, null);
+            return null;
         }
 
         private static PausePointResponse CreateValidationFailure(string message)
