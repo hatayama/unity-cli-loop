@@ -5,6 +5,7 @@ using NUnit.Framework;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -20,7 +21,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             FakeNativeCliInstaller nativeCliInstaller = new();
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
-                nativeCliInstaller);
+                nativeCliInstaller,
+                new CliPinReaderService());
 
             await service.InstallGlobalCliAsync(RuntimePlatform.OSXEditor, CancellationToken.None);
 
@@ -35,7 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies setup reads the minimum dispatcher version from the package pin JSON.
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
-                new FakeNativeCliInstaller());
+                new FakeNativeCliInstaller(),
+                new CliPinReaderService());
 
             Assert.That(service.GetMinimumRequiredCliVersion(), Is.EqualTo(ExpectedMinimumDispatcherVersion()));
         }
@@ -46,7 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies setup derives the prefixed release tag from the package pin instead of a duplicated constant.
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
-                new FakeNativeCliInstaller());
+                new FakeNativeCliInstaller(),
+                new CliPinReaderService());
 
             Assert.That(service.GetMinimumRequiredCliReleaseTag(), Is.EqualTo(ExpectedDispatcherReleaseTag()));
         }
@@ -58,7 +62,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             FakeNativeCliInstaller nativeCliInstaller = new();
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
-                nativeCliInstaller);
+                nativeCliInstaller,
+                new CliPinReaderService());
 
             NativeCliInstallCommand command = service.GetGlobalCliInstallCommand(
                 RuntimePlatform.OSXEditor,
@@ -71,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static string ExpectedMinimumDispatcherVersion()
         {
-            CliPinLoadResult result = CliPinReader.LoadPackagePin();
+            CliPinLoadResult result = new CliPinReaderService().LoadPackagePin();
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             return result.Pin.MinimumDispatcherVersion;
         }
