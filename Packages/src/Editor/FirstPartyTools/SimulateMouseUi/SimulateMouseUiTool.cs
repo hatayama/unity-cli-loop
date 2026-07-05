@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         protected override async Task<SimulateMouseUiResponse> ExecuteAsync(SimulateMouseUiSchema parameters, CancellationToken ct)
         {
             SimulateMouseUiUseCase useCase = new();
-            return await useCase.ExecuteAsync(parameters, ct).ConfigureAwait(false);
+            return await useCase.ExecuteAsync(parameters, ct);
         }
     }
 }

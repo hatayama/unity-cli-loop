@@ -24,15 +24,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 #pragma warning disable CS1998
 #endif
         public async Task<SimulateMouseInputResponse> ExecuteAsync(
-            SimulateMouseInputSchema request,
+            SimulateMouseInputSchema parameters,
             CancellationToken ct)
 #if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning restore CS1998
 #endif
         {
-            if (request == null)
+            if (parameters == null)
             {
-                throw new System.ArgumentNullException(nameof(request));
+                throw new System.ArgumentNullException(nameof(parameters));
             }
 
             ct.ThrowIfCancellationRequested();
@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 Success = false,
                 Message = "simulate-mouse-input requires the Input System package (com.unity.inputsystem). Install it via Package Manager and set Active Input Handling to 'Input System Package (New)' or 'Both' in Player Settings.",
-                Action = request.Action.ToString()
+                Action = parameters.Action.ToString()
             };
 #else
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Success = false,
                     Message = "PlayMode is not active. Use control-play-mode tool to start PlayMode first.",
-                    Action = request.Action.ToString()
+                    Action = parameters.Action.ToString()
                 };
             }
 
@@ -63,27 +63,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Success = false,
                     Message = "PlayMode is paused. Resume PlayMode before simulating mouse input.",
-                    Action = request.Action.ToString()
+                    Action = parameters.Action.ToString()
                 };
             }
 
-            if (!System.Enum.IsDefined(typeof(UnityCliLoopMouseInputAction), request.Action))
+            if (!System.Enum.IsDefined(typeof(UnityCliLoopMouseInputAction), parameters.Action))
             {
                 return new SimulateMouseInputResponse
                 {
                     Success = false,
-                    Message = $"Invalid Action value: {(int)request.Action}. Use Click, LongPress, MoveDelta, Scroll, or SmoothDelta.",
-                    Action = request.Action.ToString()
+                    Message = $"Invalid Action value: {(int)parameters.Action}. Use Click, LongPress, MoveDelta, Scroll, or SmoothDelta.",
+                    Action = parameters.Action.ToString()
                 };
             }
 
-            if (!System.Enum.IsDefined(typeof(UnityCliLoopMouseButton), request.Button))
+            if (!System.Enum.IsDefined(typeof(UnityCliLoopMouseButton), parameters.Button))
             {
                 return new SimulateMouseInputResponse
                 {
                     Success = false,
-                    Message = $"Invalid Button value: {(int)request.Button}. Use Left, Right, or Middle.",
-                    Action = request.Action.ToString()
+                    Message = $"Invalid Button value: {(int)parameters.Button}. Use Left, Right, or Middle.",
+                    Action = parameters.Action.ToString()
                 };
             }
 
@@ -94,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Success = false,
                     Message = "No mouse device found in Input System. Ensure the Input System package is properly configured.",
-                    Action = request.Action.ToString()
+                    Action = parameters.Action.ToString()
                 };
             }
 
@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             VibeLogger.LogInfo(
                 "simulate_mouse_input_start",
                 "Mouse input simulation started",
-                new { Action = request.Action.ToString(), Button = request.Button.ToString() },
+                new { Action = parameters.Action.ToString(), Button = parameters.Button.ToString() },
                 correlationId: correlationId
             );
 
@@ -113,36 +113,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             SimulateMouseInputResponse response;
 
-            switch (request.Action)
+            switch (parameters.Action)
             {
                 case UnityCliLoopMouseInputAction.Click:
-                    response = await ExecuteClick(mouse, request, ct);
+                    response = await ExecuteClick(mouse, parameters, ct);
                     break;
 
                 case UnityCliLoopMouseInputAction.LongPress:
-                    response = await ExecuteLongPress(mouse, request, ct);
+                    response = await ExecuteLongPress(mouse, parameters, ct);
                     break;
 
                 case UnityCliLoopMouseInputAction.MoveDelta:
-                    response = await ExecuteMoveDelta(mouse, request, ct);
+                    response = await ExecuteMoveDelta(mouse, parameters, ct);
                     break;
 
                 case UnityCliLoopMouseInputAction.Scroll:
-                    response = await ExecuteScroll(mouse, request, ct);
+                    response = await ExecuteScroll(mouse, parameters, ct);
                     break;
 
                 case UnityCliLoopMouseInputAction.SmoothDelta:
-                    response = await ExecuteSmoothDelta(mouse, request, ct);
+                    response = await ExecuteSmoothDelta(mouse, parameters, ct);
                     break;
 
                 default:
-                    throw new ArgumentException($"Unknown mouse input action: {request.Action}");
+                    throw new ArgumentException($"Unknown mouse input action: {parameters.Action}");
             }
 
             VibeLogger.LogInfo(
                 "simulate_mouse_input_complete",
                 $"Mouse input simulation completed: {response.Message}",
-                new { Action = request.Action.ToString(), Success = response.Success },
+                new { Action = parameters.Action.ToString(), Success = response.Success },
                 correlationId: correlationId
             );
 
