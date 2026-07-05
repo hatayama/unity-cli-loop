@@ -66,16 +66,20 @@ namespace io.github.hatayama.UnityCliLoop.Application
     {
         private readonly ICliInstallationDetector _cliInstallationDetector;
         private readonly INativeCliInstaller _nativeCliInstaller;
+        private readonly ICliPinReader _cliPinReader;
 
         public CliSetupApplicationService(
             ICliInstallationDetector cliInstallationDetector,
-            INativeCliInstaller nativeCliInstaller)
+            INativeCliInstaller nativeCliInstaller,
+            ICliPinReader cliPinReader)
         {
             Debug.Assert(cliInstallationDetector != null, "cliInstallationDetector must not be null");
             Debug.Assert(nativeCliInstaller != null, "nativeCliInstaller must not be null");
+            Debug.Assert(cliPinReader != null, "cliPinReader must not be null");
 
-            _cliInstallationDetector = cliInstallationDetector;
-            _nativeCliInstaller = nativeCliInstaller;
+            _cliInstallationDetector = cliInstallationDetector ?? throw new ArgumentNullException(nameof(cliInstallationDetector));
+            _nativeCliInstaller = nativeCliInstaller ?? throw new ArgumentNullException(nameof(nativeCliInstaller));
+            _cliPinReader = cliPinReader ?? throw new ArgumentNullException(nameof(cliPinReader));
         }
 
         public bool IsCliCheckCompleted()
@@ -127,14 +131,14 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             // Why: v3 setup installs the global dispatcher and reads the minimum from the package pin JSON
             // so that the single source of truth stays consistent with the dispatcher installation flow.
-            return CliPinReader.LoadMinimumDispatcherVersionOrThrow();
+            return _cliPinReader.LoadMinimumDispatcherVersionOrThrow();
         }
 
         public string GetMinimumRequiredCliReleaseTag()
         {
             // Why: v3 setup installs the global dispatcher, and the release tag is derived from the pin so it
             // cannot drift from the version reported by GetMinimumRequiredCliVersion.
-            return CliPinReader.BuildDispatcherReleaseTag(CliPinReader.LoadMinimumDispatcherVersionOrThrow());
+            return CliPinReader.BuildDispatcherReleaseTag(_cliPinReader.LoadMinimumDispatcherVersionOrThrow());
         }
 
         public bool IsPackageOwnedCurrentUserInstallPath(
