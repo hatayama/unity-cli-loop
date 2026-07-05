@@ -128,8 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME);
                 LogAssert.Expect(
                     LogType.Warning,
-                    new System.Text.RegularExpressions.Regex(
-                        $"Unity CLI Loop skipped {System.Text.RegularExpressions.Regex.Escape(UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME)} synchronization because the package source pin was not found"));
+                    $"Unity CLI Loop skipped {UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME} synchronization because the package source pin was not found at {sourcePath}.");
 
                 bool changed = CliPinSynchronizer.SyncProjectPinFile(packageRoot, projectRoot);
 
