@@ -454,10 +454,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that extension-facing static registrar APIs still delegate to the shared registry.
             UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            IToolSettingsPort toolSettingsService = new ToolSettingsRepository();
+            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
-                toolSettingsService,
+                toolSettingsPort,
                 new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ManualRegistrationTool tool = new();

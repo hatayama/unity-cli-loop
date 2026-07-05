@@ -20,14 +20,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void TryGetToolCatalog_WhenRegistryAvailable_ShowsOnlyWaitForPausePointCommand()
         {
             // Verifies Tool Settings exposes only the parent pause point command.
-            IToolSettingsPort toolSettingsService = new InMemoryToolSettingsPort();
+            IToolSettingsPort toolSettingsPort = new InMemoryToolSettingsPort();
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new EmptyInternalToolNameProvider(),
-                toolSettingsService,
+                toolSettingsPort,
                 new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ToolSettingsUseCase useCase = new(
-                toolSettingsService,
+                toolSettingsPort,
                 toolRegistrarService,
                 new StaticToolSkillDescriptionProvider(new Dictionary<string, string>()));
             useCase.WarmupRegistry();
@@ -46,14 +46,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void IsToolEnabled_WhenWaitForPausePointDisabled_DisablesPausePointAuxiliaryTools()
         {
             // Verifies pause point auxiliary tools follow the wait-for-pause-point setting.
-            IToolSettingsPort toolSettingsService = new InMemoryToolSettingsPort();
+            IToolSettingsPort toolSettingsPort = new InMemoryToolSettingsPort();
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new EmptyInternalToolNameProvider(),
-                toolSettingsService,
+                toolSettingsPort,
                 new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ToolSettingsUseCase useCase = new(
-                toolSettingsService,
+                toolSettingsPort,
                 toolRegistrarService,
                 new StaticToolSkillDescriptionProvider(new Dictionary<string, string>()));
 
@@ -69,10 +69,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void TryGetToolCatalog_WhenSkillDescriptionExists_IncludesDescription()
         {
             // Verifies Tool Settings can show source skill descriptions without changing public tool metadata.
-            IToolSettingsPort toolSettingsService = new InMemoryToolSettingsPort();
+            IToolSettingsPort toolSettingsPort = new InMemoryToolSettingsPort();
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new EmptyInternalToolNameProvider(),
-                toolSettingsService,
+                toolSettingsPort,
                 new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             Dictionary<string, string> descriptions = new()
@@ -80,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 [UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT] = "Pause point description"
             };
             ToolSettingsUseCase useCase = new(
-                toolSettingsService,
+                toolSettingsPort,
                 toolRegistrarService,
                 new StaticToolSkillDescriptionProvider(descriptions));
             useCase.WarmupRegistry();

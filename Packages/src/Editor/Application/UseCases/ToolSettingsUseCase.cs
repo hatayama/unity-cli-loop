@@ -20,20 +20,20 @@ namespace io.github.hatayama.UnityCliLoop.Application
             UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT
         };
 
-        private readonly IToolSettingsPort _toolSettingsService;
+        private readonly IToolSettingsPort _toolSettingsPort;
         private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
         private readonly IToolSkillDescriptionProvider _toolSkillDescriptionProvider;
 
         internal ToolSettingsUseCase(
-            IToolSettingsPort toolSettingsService,
+            IToolSettingsPort toolSettingsPort,
             UnityCliLoopToolRegistrarService toolRegistrarService,
             IToolSkillDescriptionProvider toolSkillDescriptionProvider)
         {
-            Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
+            Debug.Assert(toolSettingsPort != null, "toolSettingsPort must not be null");
             Debug.Assert(toolRegistrarService != null, "toolRegistrarService must not be null");
             Debug.Assert(toolSkillDescriptionProvider != null, "toolSkillDescriptionProvider must not be null");
 
-            _toolSettingsService = toolSettingsService ?? throw new ArgumentNullException(nameof(toolSettingsService));
+            _toolSettingsPort = toolSettingsPort ?? throw new ArgumentNullException(nameof(toolSettingsPort));
             _toolRegistrarService = toolRegistrarService ?? throw new ArgumentNullException(nameof(toolRegistrarService));
             _toolSkillDescriptionProvider = toolSkillDescriptionProvider
                 ?? throw new ArgumentNullException(nameof(toolSkillDescriptionProvider));
@@ -41,13 +41,13 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
         internal bool IsToolEnabled(string toolName)
         {
-            return ToolSettingsToolLinkPolicy.IsToolEnabled(toolName, _toolSettingsService);
+            return ToolSettingsToolLinkPolicy.IsToolEnabled(toolName, _toolSettingsPort);
         }
 
         internal void SetToolEnabled(string toolName, bool enabled)
         {
             string settingsToolName = ToolSettingsToolLinkPolicy.GetSettingsToolName(toolName);
-            _toolSettingsService.SetToolEnabled(settingsToolName, enabled);
+            _toolSettingsPort.SetToolEnabled(settingsToolName, enabled);
             _toolRegistrarService.NotifyToolChanges();
         }
 

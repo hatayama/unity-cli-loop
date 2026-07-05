@@ -21,7 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private string _settingsFileContent;
         private bool _backupFileExisted;
         private string _backupFileContent;
-        private IToolSettingsPort _toolSettingsService;
+        private IToolSettingsPort _toolSettingsPort;
 
         [SetUp]
         public void SetUp()
@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             _backupFileExisted = File.Exists(SettingsBackupPath);
             _backupFileContent = _backupFileExisted ? File.ReadAllText(SettingsBackupPath) : null;
-            _toolSettingsService = new ToolSettingsRepository();
+            _toolSettingsPort = new ToolSettingsRepository();
 
             string uloopDir = Path.GetDirectoryName(SettingsFilePath);
             if (!string.IsNullOrEmpty(uloopDir) && !Directory.Exists(uloopDir))
@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Neutralize existing files so backup recovery doesn't leak across tests
             DeleteIfExists(SettingsFilePath);
             DeleteIfExists(SettingsBackupPath);
-            _toolSettingsService.InvalidateCache();
+            _toolSettingsPort.InvalidateCache();
         }
 
         [TearDown]
@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             RestoreFile(SettingsFilePath, _settingsFileExisted, _settingsFileContent);
             RestoreFile(SettingsBackupPath, _backupFileExisted, _backupFileContent);
-            _toolSettingsService.InvalidateCache();
+            _toolSettingsPort.InvalidateCache();
         }
 
         private static void RestoreFile(string path, bool existed, string content)
@@ -70,9 +70,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void SetToolEnabled_Disable_ThenIsToolEnabled_ShouldReturnFalse()
         {
-            _toolSettingsService.SetToolEnabled("compile", false);
+            _toolSettingsPort.SetToolEnabled("compile", false);
 
-            bool result = _toolSettingsService.IsToolEnabled("compile");
+            bool result = _toolSettingsPort.IsToolEnabled("compile");
 
             Assert.IsFalse(result);
         }
@@ -80,10 +80,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void SetToolEnabled_DisableThenEnable_ShouldReturnTrue()
         {
-            _toolSettingsService.SetToolEnabled("compile", false);
-            _toolSettingsService.SetToolEnabled("compile", true);
+            _toolSettingsPort.SetToolEnabled("compile", false);
+            _toolSettingsPort.SetToolEnabled("compile", true);
 
-            bool result = _toolSettingsService.IsToolEnabled("compile");
+            bool result = _toolSettingsPort.IsToolEnabled("compile");
 
             Assert.IsTrue(result);
         }
@@ -92,9 +92,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void IsToolEnabled_WhenNeverDisabled_ShouldReturnTrue()
         {
             DeleteIfExists(SettingsFilePath);
-            _toolSettingsService.InvalidateCache();
+            _toolSettingsPort.InvalidateCache();
 
-            bool result = _toolSettingsService.IsToolEnabled("compile");
+            bool result = _toolSettingsPort.IsToolEnabled("compile");
 
             Assert.IsTrue(result);
         }
@@ -104,13 +104,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void SetToolEnabled_ShouldPersistAcrossCacheInvalidation()
         {
-            _toolSettingsService.SetToolEnabled("compile", false);
-            _toolSettingsService.SetToolEnabled("get-logs", false);
-            _toolSettingsService.InvalidateCache();
+            _toolSettingsPort.SetToolEnabled("compile", false);
+            _toolSettingsPort.SetToolEnabled("get-logs", false);
+            _toolSettingsPort.InvalidateCache();
 
-            Assert.IsFalse(_toolSettingsService.IsToolEnabled("compile"));
-            Assert.IsFalse(_toolSettingsService.IsToolEnabled("get-logs"));
-            Assert.IsTrue(_toolSettingsService.IsToolEnabled("clear-console"));
+            Assert.IsFalse(_toolSettingsPort.IsToolEnabled("compile"));
+            Assert.IsFalse(_toolSettingsPort.IsToolEnabled("get-logs"));
+            Assert.IsTrue(_toolSettingsPort.IsToolEnabled("clear-console"));
         }
 
         // ── Deduplication ──────────────────────────────────────────────
@@ -118,10 +118,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void SetToolEnabled_DisableSameToolTwice_ShouldNotDuplicate()
         {
-            _toolSettingsService.SetToolEnabled("compile", false);
-            _toolSettingsService.SetToolEnabled("compile", false);
+            _toolSettingsPort.SetToolEnabled("compile", false);
+            _toolSettingsPort.SetToolEnabled("compile", false);
 
-            string[] disabledTools = _toolSettingsService.GetDisabledTools();
+            string[] disabledTools = _toolSettingsPort.GetDisabledTools();
             int compileCount = 0;
             foreach (string tool in disabledTools)
             {
@@ -136,14 +136,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void InvalidateCache_ShouldReloadFromFile()
         {
-            _toolSettingsService.SetToolEnabled("compile", false);
-            Assert.IsFalse(_toolSettingsService.IsToolEnabled("compile"));
+            _toolSettingsPort.SetToolEnabled("compile", false);
+            Assert.IsFalse(_toolSettingsPort.IsToolEnabled("compile"));
 
             // Externally modify the file to clear disabledTools
             File.WriteAllText(SettingsFilePath, "{\"disabledTools\":[]}");
-            _toolSettingsService.InvalidateCache();
+            _toolSettingsPort.InvalidateCache();
 
-            Assert.IsTrue(_toolSettingsService.IsToolEnabled("compile"));
+            Assert.IsTrue(_toolSettingsPort.IsToolEnabled("compile"));
         }
 
         // ── Backup recovery ────────────────────────────────────────────
@@ -153,9 +153,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             DeleteIfExists(SettingsFilePath);
             File.WriteAllText(SettingsBackupPath, "{\"disabledTools\":[\"compile\"]}");
-            _toolSettingsService.InvalidateCache();
+            _toolSettingsPort.InvalidateCache();
 
-            Assert.IsFalse(_toolSettingsService.IsToolEnabled("compile"));
+            Assert.IsFalse(_toolSettingsPort.IsToolEnabled("compile"));
             Assert.IsTrue(File.Exists(SettingsFilePath), "Primary file should be recovered from backup");
         }
 
@@ -164,12 +164,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void SetToolEnabled_MultipleTools_ShouldTrackIndependently()
         {
-            _toolSettingsService.SetToolEnabled("compile", false);
-            _toolSettingsService.SetToolEnabled("get-logs", false);
-            _toolSettingsService.SetToolEnabled("compile", true);
+            _toolSettingsPort.SetToolEnabled("compile", false);
+            _toolSettingsPort.SetToolEnabled("get-logs", false);
+            _toolSettingsPort.SetToolEnabled("compile", true);
 
-            Assert.IsTrue(_toolSettingsService.IsToolEnabled("compile"));
-            Assert.IsFalse(_toolSettingsService.IsToolEnabled("get-logs"));
+            Assert.IsTrue(_toolSettingsPort.IsToolEnabled("compile"));
+            Assert.IsFalse(_toolSettingsPort.IsToolEnabled("get-logs"));
         }
 
         private static void DeleteIfExists(string path)

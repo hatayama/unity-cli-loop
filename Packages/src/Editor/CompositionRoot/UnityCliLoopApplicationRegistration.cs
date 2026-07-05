@@ -15,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
         internal UnityCliLoopApplicationServices Register()
         {
             VibeLogger.InitializeForEditorStartup();
-            IToolSettingsPort toolSettingsService = new ToolSettingsRepository();
+            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
             UnityCliLoopEditorSettingsRepository editorSettingsRepository = new();
             UnityCliLoopEditorSettingsService editorSettingsService = new(editorSettingsRepository);
             UnityCliLoopEditorSessionStateRepository sessionStateRepository = new();
@@ -28,16 +28,16 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             EditorRuntimeStateService editorRuntimeStateService = new();
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new SkillInstallLayoutInternalToolNameProvider(),
-                toolSettingsService,
+                toolSettingsPort,
                 new UnityCliLoopToolExecutionService(editorRuntimeStateService),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(toolRegistrarService);
             ToolContractsRegistrar.RegisterService(toolRegistrarService);
             ToolSettingsUseCaseRegistry.Register(new ToolSettingsUseCase(
-                toolSettingsService,
+                toolSettingsPort,
                 toolRegistrarService,
                 new SkillInstallLayoutToolSkillDescriptionProvider()));
-            SkillSetupUseCase skillSetupUseCase = new(new SkillSetupService(new ToolSkillSetupService(toolSettingsService)));
+            SkillSetupUseCase skillSetupUseCase = new(new SkillSetupService(new ToolSkillSetupService(toolSettingsPort)));
             SkillSetupUseCaseRegistry.Register(skillSetupUseCase);
             ThirdPartyToolMigrationUseCaseRegistry.Register(
                 new ThirdPartyToolMigrationUseCase(new ThirdPartyToolMigrationFileService()));

@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     {
         private readonly IInternalToolNameProvider _internalToolNameProvider;
         private readonly UnityCliLoopToolExecutionService _toolExecutionService;
-        private readonly IToolSettingsPort _toolSettingsService;
+        private readonly IToolSettingsPort _toolSettingsPort;
         private readonly Func<IReadOnlyList<IUnityCliLoopTool>> _toolDiscovery;
         private UnityCliLoopToolRegistry _sharedRegistry;
 
@@ -24,17 +24,17 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
         internal UnityCliLoopToolRegistrarService(
             IInternalToolNameProvider internalToolNameProvider,
-            IToolSettingsPort toolSettingsService,
+            IToolSettingsPort toolSettingsPort,
             UnityCliLoopToolExecutionService toolExecutionService,
             Func<IReadOnlyList<IUnityCliLoopTool>> toolDiscovery)
         {
             UnityEngine.Debug.Assert(internalToolNameProvider != null, "internalToolNameProvider must not be null");
-            UnityEngine.Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
+            UnityEngine.Debug.Assert(toolSettingsPort != null, "toolSettingsPort must not be null");
             UnityEngine.Debug.Assert(toolExecutionService != null, "toolExecutionService must not be null");
             UnityEngine.Debug.Assert(toolDiscovery != null, "toolDiscovery must not be null");
 
             _internalToolNameProvider = internalToolNameProvider ?? throw new ArgumentNullException(nameof(internalToolNameProvider));
-            _toolSettingsService = toolSettingsService ?? throw new ArgumentNullException(nameof(toolSettingsService));
+            _toolSettingsPort = toolSettingsPort ?? throw new ArgumentNullException(nameof(toolSettingsPort));
             _toolExecutionService = toolExecutionService ?? throw new ArgumentNullException(nameof(toolExecutionService));
             _toolDiscovery = toolDiscovery ?? throw new ArgumentNullException(nameof(toolDiscovery));
         }
@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 if (_sharedRegistry == null)
                 {
                     _sharedRegistry = new UnityCliLoopToolRegistry(
-                        _toolSettingsService,
+                        _toolSettingsPort,
                         _internalToolNameProvider,
                         _toolDiscovery);
                 }
