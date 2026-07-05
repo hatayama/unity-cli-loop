@@ -49,11 +49,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string VERSION_JSON_LEGACY_CLI_VERSION_PROPERTY = "CliVersion";
         private const string VERSION_JSON_DISPATCHER_VERSION_PROPERTY = "DispatcherVersion";
 
+        private readonly ICliPinReader _cliPinReader;
+
         private string _cachedCliVersion;
         private bool _cachedCliIsDispatcher;
         private string _cachedCliExecutablePath;
         private bool _cacheInitialized;
         private bool _isRefreshing;
+
+        public CliInstallationDetector(ICliPinReader cliPinReader)
+        {
+            UnityEngine.Debug.Assert(cliPinReader != null, "cliPinReader must not be null");
+
+            _cliPinReader = cliPinReader ?? throw new ArgumentNullException(nameof(cliPinReader));
+        }
 
         public bool IsCliInstalled()
         {
@@ -120,7 +129,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             // Why: resolve the minimum dispatcher version once on the caller thread so the background
             // detection task does not perform Unity package IO from a worker thread.
-            string minimumDispatcherVersion = CliPinReader.LoadMinimumDispatcherVersionOrThrow();
+            string minimumDispatcherVersion = _cliPinReader.LoadMinimumDispatcherVersionOrThrow();
 
             return Task.Run(
                 () =>

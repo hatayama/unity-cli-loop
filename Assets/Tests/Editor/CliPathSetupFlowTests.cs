@@ -5,6 +5,7 @@ using NUnit.Framework;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -21,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             FakeNativeCliInstaller installer = new FakeNativeCliInstaller(
                 CreateSupportedPlan(),
                 CreateAppliedResult());
-            CliSetupApplicationService service = new(detector, installer);
+            CliSetupApplicationService service = new(detector, installer, new CliPinReaderService());
 
             CliPathSetupFlowResult result = await service.EnsureCliVisibleFromShellAsync(
                 RuntimePlatform.OSXEditor,
@@ -39,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             FakeNativeCliInstaller installer = new FakeNativeCliInstaller(
                 CreateSupportedPlan(),
                 CreateAppliedResult());
-            CliSetupApplicationService service = new(detector, installer);
+            CliSetupApplicationService service = new(detector, installer, new CliPinReaderService());
 
             CliPathSetupFlowResult result = await service.EnsureCliVisibleFromShellAsync(
                 RuntimePlatform.OSXEditor,
@@ -58,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             FakeNativeCliInstaller installer = new FakeNativeCliInstaller(
                 CreateUnsupportedPlan(),
                 CreateAppliedResult());
-            CliSetupApplicationService service = new(detector, installer);
+            CliSetupApplicationService service = new(detector, installer, new CliPinReaderService());
 
             CliPathSetupFlowResult result = await service.EnsureCliVisibleFromShellAsync(
                 RuntimePlatform.OSXEditor,
@@ -78,7 +79,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CliPathSetupApplyStatus.Failed,
                 "profile is read-only");
             FakeNativeCliInstaller installer = new FakeNativeCliInstaller(CreateSupportedPlan(), applyResult);
-            CliSetupApplicationService service = new CliSetupApplicationService(detector, installer);
+            CliSetupApplicationService service = new CliSetupApplicationService(
+                detector,
+                installer,
+                new CliPinReaderService());
 
             CliPathSetupFlowResult result = await service.EnsureCliVisibleFromShellAsync(
                 RuntimePlatform.OSXEditor,

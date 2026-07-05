@@ -41,9 +41,11 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             SkillSetupUseCaseRegistry.Register(skillSetupUseCase);
             ThirdPartyToolMigrationUseCaseRegistry.Register(
                 new ThirdPartyToolMigrationUseCase(new ThirdPartyToolMigrationFileService()));
+            CliPinReaderService cliPinReaderService = new();
             CliSetupApplicationFacade.RegisterService(new CliSetupApplicationService(
-                new CliInstallationDetector(),
-                new NativeCliInstallerService()));
+                new CliInstallationDetector(cliPinReaderService),
+                new NativeCliInstallerService(),
+                cliPinReaderService));
             UnityCliLoopBridgeServerInstanceFactory serverFactory = new(domainReloadDetectionService);
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry = new();
             lifecycleRegistry.RegisterSource(serverFactory);
