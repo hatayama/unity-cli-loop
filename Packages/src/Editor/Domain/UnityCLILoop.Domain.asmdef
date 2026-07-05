@@ -20,5 +20,5 @@
             "define": "ULOOP_HAS_TEST_FRAMEWORK"
         }
     ],
-    "noEngineReferences": false
+    "noEngineReferences": true
 }
