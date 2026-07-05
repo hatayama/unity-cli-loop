@@ -40,8 +40,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
         }
 
         /// <summary>
-        /// Get shared registry (lazy initialization). Tool discovery runs on first access,
-        /// matching the timing of the registry's previous self-contained scan.
+        /// Get shared registry (lazy initialization). Tool discovery runs on first access
+        /// so the reflection scan stays off the service construction path during editor startup.
         /// </summary>
         private UnityCliLoopToolRegistry SharedRegistry
         {

@@ -17,10 +17,17 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         private readonly IInternalToolNameProvider _internalToolNameProvider;
         private readonly ToolSettingsService _toolSettingsService;
 
+        /// <summary>
+        /// Creates a registry. Callers must pass <paramref name="toolDiscovery"/> explicitly;
+        /// pass null to get a manual-registration-only registry with no automatic scan.
+        /// </summary>
+        /// <param name="toolSettingsService">Service used to resolve per-tool enabled state.</param>
+        /// <param name="internalToolNameProvider">Provider of internal tool names to hide from catalogs; null uses an empty provider.</param>
+        /// <param name="toolDiscovery">Delegate that returns the tools to auto-register; null registers no tools automatically.</param>
         internal UnityCliLoopToolRegistry(
             ToolSettingsService toolSettingsService,
-            IInternalToolNameProvider internalToolNameProvider = null,
-            Func<IReadOnlyList<IUnityCliLoopTool>> toolDiscovery = null)
+            IInternalToolNameProvider internalToolNameProvider,
+            Func<IReadOnlyList<IUnityCliLoopTool>> toolDiscovery)
         {
             System.Diagnostics.Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
 

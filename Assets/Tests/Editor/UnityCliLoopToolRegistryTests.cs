@@ -23,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             return new UnityCliLoopToolRegistry(
                 new ToolSettingsService(new ToolSettingsRepository()),
+                internalToolNameProvider: null,
                 toolDiscovery: UnityCliLoopToolDiscovery.DiscoverTools);
         }
     }
