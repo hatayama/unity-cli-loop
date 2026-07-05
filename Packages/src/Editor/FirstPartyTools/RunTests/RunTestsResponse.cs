@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -95,6 +96,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool noTestsFound,
             string noTestsFoundExplanation)
         {
+            Debug.Assert(!string.IsNullOrEmpty(status), "status must be a RunTestsExecutionStatus value");
+            Debug.Assert(noTestsFoundExplanation != null, "noTestsFoundExplanation must not be null; pass string.Empty when not applicable");
+
             Success = success;
             Message = message;
             CompletedAt = completedAt;

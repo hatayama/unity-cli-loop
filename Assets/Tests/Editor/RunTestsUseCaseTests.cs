@@ -294,7 +294,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             public bool TestFrameworkAvailable { get; set; } = true;
             public bool WasCalled { get; private set; }
-            public SerializableTestResult NextResult { get; set; } = new();
+            // Default stub result satisfies RunTestsResponse preconditions (non-null status
+            // and noTestsFoundExplanation); individual tests override NextResult when they
+            // need a specific execution status.
+            public SerializableTestResult NextResult { get; set; } = new()
+            {
+                status = RunTestsExecutionStatus.Passed,
+                noTestsFoundExplanation = string.Empty
+            };
 
             public override bool IsTestFrameworkAvailable => TestFrameworkAvailable;
 
