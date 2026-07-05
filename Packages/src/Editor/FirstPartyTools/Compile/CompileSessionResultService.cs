@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string MissingTestFrameworkReferenceHint =
             "Possible test asmdef issue: Unity test framework symbols are missing. Make sure com.unity.test-framework is installed and add optionalUnityReferences: [\"TestAssemblies\"] or enable testAssemblies on the test asmdef.";
 
-        internal static UnityCliLoopCompileResult CreateCompileResult(
+        internal static CompileResponse CreateCompileResult(
             CompileResult result,
             bool forceRecompile)
         {
@@ -30,33 +30,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (result.IsIndeterminate)
             {
-                return new UnityCliLoopCompileResult
-                {
-                    Success = result.Success,
-                    ErrorCount = result.ErrorCount,
-                    WarningCount = result.WarningCount,
-                    Errors = null,
-                    Warnings = null,
-                    Message = result.Message ?? "Compilation status is unknown. Use get-logs to inspect the compiler output."
-                };
+                return new CompileResponse(
+                    success: result.Success,
+                    errorCount: result.ErrorCount,
+                    warningCount: result.WarningCount,
+                    errors: null,
+                    warnings: null,
+                    message: result.Message ?? "Compilation status is unknown. Use get-logs to inspect the compiler output.");
             }
 
-            return new UnityCliLoopCompileResult
-            {
-                Success = result.Success,
-                ErrorCount = result.Errors?.Length ?? 0,
-                WarningCount = result.Warnings?.Length ?? 0,
-                Errors = ToIssues(result.Errors),
-                Warnings = ToIssues(result.Warnings),
-                Message = AddMissingTestFrameworkReferenceHint(result.Message, result.Errors)
-            };
+            return new CompileResponse(
+                success: result.Success,
+                errorCount: result.Errors?.Length ?? 0,
+                warningCount: result.Warnings?.Length ?? 0,
+                errors: ToIssues(result.Errors),
+                warnings: ToIssues(result.Warnings),
+                message: AddMissingTestFrameworkReferenceHint(result.Message, result.Errors));
         }
 
         internal static void StoreCompileResult(
             UnityCliLoopEditorSessionStateService sessionStateService,
             string requestId,
             bool forceRecompile,
-            UnityCliLoopCompileResult result,
+            CompileResponse result,
             string correlationId)
         {
             Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
@@ -98,33 +94,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId);
         }
 
-        private static UnityCliLoopCompileResult CreateForceCompileResult(CompileResult result)
+        private static CompileResponse CreateForceCompileResult(CompileResult result)
         {
             ForceCompileUnknownResult unknownResult = ForceCompileUnknownResult.Create(result.Success);
-            return new UnityCliLoopCompileResult
-            {
-                Success = unknownResult.Success,
-                ErrorCount = unknownResult.ErrorCount,
-                WarningCount = unknownResult.WarningCount,
-                Errors = null,
-                Warnings = null,
-                Message = unknownResult.Message
-            };
+            return new CompileResponse(
+                success: unknownResult.Success,
+                errorCount: unknownResult.ErrorCount,
+                warningCount: unknownResult.WarningCount,
+                errors: null,
+                warnings: null,
+                message: unknownResult.Message);
         }
 
-        private static UnityCliLoopCompileIssue[] ToIssues(UnityEditor.Compilation.CompilerMessage[] messages)
+        private static CompileIssue[] ToIssues(UnityEditor.Compilation.CompilerMessage[] messages)
         {
             if (messages == null)
             {
                 return null;
             }
 
-            return messages.Select(message => new UnityCliLoopCompileIssue
-            {
-                Message = message.message,
-                File = message.file,
-                Line = message.line
-            }).ToArray();
+            return messages.Select(message => new CompileIssue(message.message, message.file, message.line)).ToArray();
         }
 
         private static string AddMissingTestFrameworkReferenceHint(
@@ -193,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new CompileResultRecordingContext(false, "", false);
         }
 
-        internal static CompileResultRecordingContext Create(UnityCliLoopCompileRequest request)
+        internal static CompileResultRecordingContext Create(CompileSchema request)
         {
             Debug.Assert(request != null, "request must not be null");
 

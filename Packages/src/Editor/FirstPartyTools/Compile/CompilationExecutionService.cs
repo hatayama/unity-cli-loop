@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         /// <param name="request">Compile request with force and delayed-result settings.</param>
         /// <returns>Compilation result</returns>
-        public async Task<CompileResult> ExecuteCompilationAsync(UnityCliLoopCompileRequest request, CancellationToken ct)
+        public async Task<CompileResult> ExecuteCompilationAsync(CompileSchema request, CancellationToken ct)
         {
             if (request == null)
             {
