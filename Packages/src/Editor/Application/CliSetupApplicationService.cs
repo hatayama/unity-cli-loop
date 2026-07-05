@@ -127,26 +127,14 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             // Why: v3 setup installs the global dispatcher and reads the minimum from the package pin JSON
             // so that the single source of truth stays consistent with the dispatcher installation flow.
-            return LoadRequiredMinimumDispatcherVersion();
+            return CliPinReader.LoadMinimumDispatcherVersionOrThrow();
         }
 
         public string GetMinimumRequiredCliReleaseTag()
         {
             // Why: v3 setup installs the global dispatcher, and the release tag is derived from the pin so it
             // cannot drift from the version reported by GetMinimumRequiredCliVersion.
-            return CliPinReader.BuildDispatcherReleaseTag(LoadRequiredMinimumDispatcherVersion());
-        }
-
-        private static string LoadRequiredMinimumDispatcherVersion()
-        {
-            CliPinLoadResult pinResult = CliPinReader.LoadPackagePin();
-            if (!pinResult.Success)
-            {
-                // Why: setup cannot silently default to "compatible" because that would install an unpinned CLI.
-                throw new InvalidOperationException(
-                    "Unity CLI Loop cannot resolve minimum dispatcher version: " + pinResult.ErrorMessage);
-            }
-            return pinResult.Pin.MinimumDispatcherVersion;
+            return CliPinReader.BuildDispatcherReleaseTag(CliPinReader.LoadMinimumDispatcherVersionOrThrow());
         }
 
         public bool IsPackageOwnedCurrentUserInstallPath(

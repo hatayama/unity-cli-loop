@@ -120,7 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             // Why: resolve the minimum dispatcher version once on the caller thread so the background
             // detection task does not perform Unity package IO from a worker thread.
-            string minimumDispatcherVersion = ResolveMinimumDispatcherVersionOrThrow();
+            string minimumDispatcherVersion = CliPinReader.LoadMinimumDispatcherVersionOrThrow();
 
             return Task.Run(
                 () =>
@@ -133,18 +133,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         minimumDispatcherVersion);
                 },
                 ct);
-        }
-
-        private static string ResolveMinimumDispatcherVersionOrThrow()
-        {
-            CliPinLoadResult pinResult = CliPinReader.LoadPackagePin();
-            if (!pinResult.Success)
-            {
-                // Why: PATH-setup validity must fail closed rather than default to "compatible" when the pin is broken.
-                throw new InvalidOperationException(
-                    "Unity CLI Loop cannot resolve minimum dispatcher version for PATH setup: " + pinResult.ErrorMessage);
-            }
-            return pinResult.Pin.MinimumDispatcherVersion;
         }
 
         public void InvalidateCache()

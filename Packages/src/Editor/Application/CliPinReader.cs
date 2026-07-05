@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 
 using Newtonsoft.Json.Linq;
@@ -110,6 +111,20 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public static string BuildDispatcherReleaseTag(string minimumDispatcherVersion)
         {
             return CliConstants.DISPATCHER_RELEASE_TAG_PREFIX + minimumDispatcherVersion;
+        }
+
+        // Why: setup/detection paths must fail closed when the pin is unreadable rather than defaulting
+        // to "compatible", so both call sites share one Fail-Fast helper instead of duplicating it.
+        public static string LoadMinimumDispatcherVersionOrThrow()
+        {
+            CliPinLoadResult pinResult = LoadPackagePin();
+            if (!pinResult.Success)
+            {
+                throw new InvalidOperationException(
+                    "Unity CLI Loop cannot resolve minimum dispatcher version from the package pin: "
+                    + pinResult.ErrorMessage);
+            }
+            return pinResult.Pin.MinimumDispatcherVersion;
         }
     }
 }
