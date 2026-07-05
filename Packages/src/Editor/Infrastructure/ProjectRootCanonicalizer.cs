@@ -4,12 +4,12 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 
-namespace io.github.hatayama.UnityCliLoop.Domain
+namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
     /// Provides Project Root Canonicalizer behavior for Unity CLI Loop.
     /// </summary>
-    public static class ProjectRootCanonicalizer
+    internal static class ProjectRootCanonicalizer
     {
         private const string LIBC = "libc";
         private const string KERNEL32 = "kernel32.dll";
