@@ -35,7 +35,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                Directory.Delete(root, recursive: true);
+                // Why: guard so a failure before directory creation does not mask the original
+                // exception with a DirectoryNotFoundException from cleanup.
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
             }
         }
 
@@ -71,7 +76,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                Directory.Delete(root, recursive: true);
+                // Why: guard so a failure before directory creation does not mask the original
+                // exception with a DirectoryNotFoundException from cleanup.
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
             }
         }
 
@@ -96,7 +106,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                Directory.Delete(root, recursive: true);
+                // Why: guard so a failure before directory creation does not mask the original
+                // exception with a DirectoryNotFoundException from cleanup.
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
             }
         }
 
@@ -121,7 +136,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                Directory.Delete(root, recursive: true);
+                // Why: guard so a failure before directory creation does not mask the original
+                // exception with a DirectoryNotFoundException from cleanup.
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
+            }
+        }
+
+        [Test]
+        public void LoadPinFromPath_WhenFileIsInvalidJson_ReturnsFailureWithInvalidJsonMessage()
+        {
+            // Tests that a pin file with malformed JSON fails with a message naming the pin path
+            // instead of letting the JsonReaderException escape.
+            string root = CreateTestRoot();
+            string pinPath = Path.Combine(root, "project-runner-pin.json");
+
+            try
+            {
+                Directory.CreateDirectory(root);
+                File.WriteAllText(pinPath, "{\"projectRunnerVersion\":");
+
+                CliPinLoadResult result = CliPinReaderService.LoadPinFromPath(pinPath);
+
+                Assert.That(result.Success, Is.False);
+                Assert.That(
+                    result.ErrorMessage,
+                    Does.StartWith($"Unity CLI Loop pin file at {pinPath} contains invalid JSON:"));
+            }
+            finally
+            {
+                // Why: guard so a failure before directory creation does not mask the original
+                // exception with a DirectoryNotFoundException from cleanup.
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
             }
         }
 

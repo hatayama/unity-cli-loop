@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.Application;
@@ -61,7 +62,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     $"Unity CLI Loop pin file at {pinPath} is empty.");
             }
 
-            JObject parsed = JObject.Parse(content);
+            // Why: a corrupt pin must surface as a structured failure like every other unreadable-pin
+            // case, not as a raw parse exception; mirrors the JsonReaderException handling in
+            // JsonRpcProcessor and keeps LoadMinimumDispatcherVersionOrThrow's fail-closed message useful.
+            JObject parsed;
+            try
+            {
+                parsed = JObject.Parse(content);
+            }
+            catch (JsonReaderException ex)
+            {
+                return CliPinLoadResult.FromFailure(
+                    $"Unity CLI Loop pin file at {pinPath} contains invalid JSON: {ex.Message}");
+            }
+
             string projectRunnerVersion = parsed[PIN_JSON_PROJECT_RUNNER_VERSION_KEY]?.ToString();
             string minimumDispatcherVersion = parsed[PIN_JSON_MINIMUM_DISPATCHER_VERSION_KEY]?.ToString();
             if (string.IsNullOrWhiteSpace(projectRunnerVersion))
