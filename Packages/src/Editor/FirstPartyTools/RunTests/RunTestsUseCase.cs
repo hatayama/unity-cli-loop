@@ -79,7 +79,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TestExecutionFilter filter = null;
             if (parameters.FilterType != TestFilterType.all)
             {
-                filter = _filterService.CreateFilter(parameters.FilterType, parameters.FilterValue);
+                (TestExecutionFilter createdFilter, string filterError) = _filterService.TryCreateFilter(parameters.FilterType, parameters.FilterValue);
+                if (filterError != null)
+                {
+                    return CreateFailureResponse(filterError);
+                }
+                filter = createdFilter;
             }
 
             // 2. Test execution

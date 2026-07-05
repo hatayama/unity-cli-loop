@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -70,7 +69,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     break;
 
                 default:
-                    throw new ArgumentException($"Unknown record-input action: {request.Action}");
+                    // Only reachable when an out-of-range enum value is cast from an integer;
+                    // surface as a Success=false response so the CLI treats it as a validation failure.
+                    response = new UnityCliLoopRecordInputResult
+                    {
+                        Success = false,
+                        Message = $"Unknown record-input action: {request.Action}",
+                        Action = request.Action.ToString()
+                    };
+                    break;
             }
 
             VibeLogger.LogInfo(
