@@ -14,9 +14,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public sealed class ToolSkillSetupService : ISkillSetupPort
     {
-        private readonly ToolSettingsService _toolSettingsService;
+        private readonly IToolSettingsPort _toolSettingsService;
 
-        public ToolSkillSetupService(ToolSettingsService toolSettingsService)
+        public ToolSkillSetupService(IToolSettingsPort toolSettingsService)
         {
             Debug.Assert(toolSettingsService != null, "toolSettingsService must not be null");
 

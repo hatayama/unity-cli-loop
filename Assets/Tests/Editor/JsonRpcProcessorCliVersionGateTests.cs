@@ -162,7 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(isPlaying: false, isPaused: false);
 
             UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            IToolSettingsPort toolSettingsService = new ToolSettingsRepository();
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
@@ -219,7 +219,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(isPlaying: false, isPaused: false);
 
             UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            IToolSettingsPort toolSettingsService = new ToolSettingsRepository();
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
@@ -284,7 +284,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies long compile waits are allowed to persist their result after the CLI response deadline closes.
             UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            IToolSettingsPort toolSettingsService = new ToolSettingsRepository();
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
@@ -324,7 +324,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies missing compile reload-wait params preserve the default wait contract.
             UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            IToolSettingsPort toolSettingsService = new ToolSettingsRepository();
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
@@ -361,7 +361,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies fire-and-forget compile requests still cancel when the CLI connection goes away.
             UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            IToolSettingsPort toolSettingsService = new ToolSettingsRepository();
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
@@ -401,7 +401,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies JSON-RPC compile dispatch policy matches the camelCase tool deserializer contract.
             UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            IToolSettingsPort toolSettingsService = new ToolSettingsRepository();
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
@@ -444,7 +444,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             MainThreadSwitcher.RegisterService(dispatcher);
 
             UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            IToolSettingsPort toolSettingsService = new ToolSettingsRepository();
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
@@ -541,7 +541,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             MainThreadSwitcher.RegisterService(dispatcher);
 
             UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            ToolSettingsService toolSettingsService = new(new ToolSettingsRepository());
+            IToolSettingsPort toolSettingsService = new ToolSettingsRepository();
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,

@@ -21,7 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private string _settingsFileContent;
         private bool _backupFileExisted;
         private string _backupFileContent;
-        private ToolSettingsService _toolSettingsService;
+        private IToolSettingsPort _toolSettingsService;
 
         [SetUp]
         public void SetUp()
@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             _backupFileExisted = File.Exists(SettingsBackupPath);
             _backupFileContent = _backupFileExisted ? File.ReadAllText(SettingsBackupPath) : null;
-            _toolSettingsService = new ToolSettingsService(new ToolSettingsRepository());
+            _toolSettingsService = new ToolSettingsRepository();
 
             string uloopDir = Path.GetDirectoryName(SettingsFilePath);
             if (!string.IsNullOrEmpty(uloopDir) && !Directory.Exists(uloopDir))

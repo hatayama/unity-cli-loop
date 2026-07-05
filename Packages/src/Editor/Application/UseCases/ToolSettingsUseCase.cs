@@ -20,12 +20,12 @@ namespace io.github.hatayama.UnityCliLoop.Application
             UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT
         };
 
-        private readonly ToolSettingsService _toolSettingsService;
+        private readonly IToolSettingsPort _toolSettingsService;
         private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
         private readonly IToolSkillDescriptionProvider _toolSkillDescriptionProvider;
 
         internal ToolSettingsUseCase(
-            ToolSettingsService toolSettingsService,
+            IToolSettingsPort toolSettingsService,
             UnityCliLoopToolRegistrarService toolRegistrarService,
             IToolSkillDescriptionProvider toolSkillDescriptionProvider)
         {

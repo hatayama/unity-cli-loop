@@ -15,8 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
         internal UnityCliLoopApplicationServices Register()
         {
             VibeLogger.InitializeForEditorStartup();
-            ToolSettingsRepository toolSettingsRepository = new();
-            ToolSettingsService toolSettingsService = new(toolSettingsRepository);
+            IToolSettingsPort toolSettingsService = new ToolSettingsRepository();
             UnityCliLoopEditorSettingsRepository editorSettingsRepository = new();
             UnityCliLoopEditorSettingsService editorSettingsService = new(editorSettingsRepository);
             UnityCliLoopEditorSessionStateRepository sessionStateRepository = new();

@@ -50,7 +50,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/Application/UseCases/SkillSetupUseCase.cs",
             "Packages/src/Editor/Domain/UnityCliLoopEditorSettingsService.cs",
             "Packages/src/Editor/Domain/UnityCliLoopEditorSessionStateService.cs",
-            "Packages/src/Editor/Domain/ToolSettingsService.cs",
             "Packages/src/Editor/Infrastructure/Server/DomainReloadDetectionFileService.cs"
         };
 

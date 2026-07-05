@@ -15,17 +15,17 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     {
         private readonly Dictionary<string, IUnityCliLoopTool> _tools = new();
         private readonly IInternalToolNameProvider _internalToolNameProvider;
-        private readonly ToolSettingsService _toolSettingsService;
+        private readonly IToolSettingsPort _toolSettingsService;
 
         /// <summary>
         /// Creates a registry. Callers must pass <paramref name="toolDiscovery"/> explicitly;
         /// pass null to get a manual-registration-only registry with no automatic scan.
         /// </summary>
-        /// <param name="toolSettingsService">Service used to resolve per-tool enabled state.</param>
+        /// <param name="toolSettingsService">Port used to resolve per-tool enabled state.</param>
         /// <param name="internalToolNameProvider">Provider of internal tool names to hide from catalogs; null uses an empty provider.</param>
         /// <param name="toolDiscovery">Delegate that returns the tools to auto-register; null registers no tools automatically.</param>
         internal UnityCliLoopToolRegistry(
-            ToolSettingsService toolSettingsService,
+            IToolSettingsPort toolSettingsService,
             IInternalToolNameProvider internalToolNameProvider,
             Func<IReadOnlyList<IUnityCliLoopTool>> toolDiscovery)
         {

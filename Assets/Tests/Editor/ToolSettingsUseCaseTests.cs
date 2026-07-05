@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void TryGetToolCatalog_WhenRegistryAvailable_ShowsOnlyWaitForPausePointCommand()
         {
             // Verifies Tool Settings exposes only the parent pause point command.
-            ToolSettingsService toolSettingsService = new(new InMemoryToolSettingsPort());
+            IToolSettingsPort toolSettingsService = new InMemoryToolSettingsPort();
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
@@ -46,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void IsToolEnabled_WhenWaitForPausePointDisabled_DisablesPausePointAuxiliaryTools()
         {
             // Verifies pause point auxiliary tools follow the wait-for-pause-point setting.
-            ToolSettingsService toolSettingsService = new(new InMemoryToolSettingsPort());
+            IToolSettingsPort toolSettingsService = new InMemoryToolSettingsPort();
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
@@ -69,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void TryGetToolCatalog_WhenSkillDescriptionExists_IncludesDescription()
         {
             // Verifies Tool Settings can show source skill descriptions without changing public tool metadata.
-            ToolSettingsService toolSettingsService = new(new InMemoryToolSettingsPort());
+            IToolSettingsPort toolSettingsService = new InMemoryToolSettingsPort();
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
