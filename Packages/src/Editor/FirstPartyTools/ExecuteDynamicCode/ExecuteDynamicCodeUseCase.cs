@@ -28,15 +28,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ExecuteDynamicCodeSchema parameters,
             CancellationToken cancellationToken)
         {
-            string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
-            DynamicCodeDomainReloadWaitSignal domainReloadWaitSignal = DynamicCodeDomainReloadWaitSignal.Start(parameters);
+            using DynamicCodeDomainReloadWaitSignal domainReloadWaitSignal =
+                DynamicCodeDomainReloadWaitSignal.Start(parameters);
 
             try
             {
                 object[] parametersArray = ConvertParameters(parameters.Parameters);
                 string originalCode = parameters.Code ?? string.Empty;
 
-                LogExecutionStart(parameters, correlationId);
+                LogExecutionStart(parameters, UnityCliLoopConstants.GenerateCorrelationId());
 
                 DynamicCodeExecutionRequest request = CreateExecutionRequest(
                     originalCode,
@@ -84,17 +84,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ExecuteDynamicCodeResponse response = CreateCancelledResponse();
                 response.EmitTimingsInJsonResponse = parameters?.IncludeTimings ?? false;
                 return response;
-            }
-            catch (Exception ex)
-            {
-                LogExecutionException(ex, correlationId);
-                ExecuteDynamicCodeResponse response = CreateExceptionResponse(ex);
-                response.EmitTimingsInJsonResponse = parameters?.IncludeTimings ?? false;
-                return response;
-            }
-            finally
-            {
-                domainReloadWaitSignal.Dispose();
             }
         }
 
@@ -335,38 +324,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     StringComparison.Ordinal);
         }
 
-        private ExecuteDynamicCodeResponse CreateExceptionResponse(Exception ex)
-        {
-            return new ExecuteDynamicCodeResponse
-            {
-                Success = false,
-                Result = string.Empty,
-                Logs = new List<string> { $"Original Error: {ex.Message}" },
-                CompilationErrors = new List<CompilationErrorDto>(),
-                ErrorMessage = CreateFriendlyExceptionMessage(ex)
-            };
-        }
-
-        private static string CreateFriendlyExceptionMessage(Exception ex)
-        {
-            if (ex == null)
-            {
-                return "Unknown error occurred";
-            }
-
-            if (ex is TimeoutException)
-            {
-                return "Request timeout";
-            }
-
-            if (ex is ArgumentException)
-            {
-                return "Invalid request parameters";
-            }
-
-            return ex.Message ?? "Unknown error occurred";
-        }
-
         private static ExecuteDynamicCodeResponse CreateCancelledResponse()
         {
             return new ExecuteDynamicCodeResponse
@@ -377,22 +334,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CompilationErrors = new List<CompilationErrorDto>(),
                 ErrorMessage = UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED
             };
-        }
-
-        private static void LogExecutionException(Exception ex, string correlationId)
-        {
-            VibeLogger.LogError(
-                "execute_dynamic_code_error",
-                "Dynamic code execution failed with exception",
-                new
-                {
-                    correlationId,
-                    error = ex.Message,
-                    stackTrace = ex.StackTrace
-                },
-                correlationId,
-                "Unexpected error during dynamic code execution",
-                "Investigate error cause and improve error handling");
         }
 
         private ExecuteDynamicCodeResponse ConvertExecutionResultToResponse(ExecutionResult result)
