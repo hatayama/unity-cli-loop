@@ -11,25 +11,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
 
     /// <summary>
-    /// Class specialized in handling Unity API calls
-    /// Supports new command-based structure
-    /// 
-    /// Design document reference: Packages/src/Editor/ARCHITECTURE.md
-    /// 
-    /// Related classes:
-    /// - UnityCommandRegistry: Registry that manages all available Unity commands
-    /// - CustomCommandManager: Provides access to the command registry singleton
-    /// - JsonRpcProcessor: Receives JSON-RPC requests and delegates to this handler
-    /// - IUnityCommand: Interface implemented by all command classes
-    /// - AbstractUnityCommand: Base class for all Unity commands
-    /// - BaseCommandResponse: Base response type for all commands
-    /// - MainThreadSwitcher: Ensures command execution on Unity's main thread
-    /// 
-    /// Command execution flow:
-    /// 1. JsonRpcProcessor receives request from the CLI client
-    /// 2. Delegates to ExecuteCommand method with command name and parameters
-    /// 3. Looks up command in registry and executes asynchronously
-    /// 4. Returns command response or error information
+    /// Routes JSON-RPC execution requests received by JsonRpcProcessor to either the
+    /// internal bridge command router or the registered tools in the Application layer.
+    /// Terminology for "tool" vs "internal bridge command" is defined in docs/glossary.md.
     /// </summary>
     public static class UnityApiHandler
     {
