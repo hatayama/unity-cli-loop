@@ -13,9 +13,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that compile-time editor state is reported as retryable tool busy.
             UnityCliLoopToolBusyException exception = Assert.Throws<UnityCliLoopToolBusyException>(
                 () => UnityCliLoopEditorStateGuard.ValidateForState(
-                    UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
-                    true,
-                    false));
+                    toolName: UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                    isCompiling: true,
+                    isUpdating: false,
+                    isPlaying: false,
+                    isPaused: false));
 
             Assert.That(exception.RunningToolName, Is.Not.Empty);
             Assert.That(exception.RequestedToolName, Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
@@ -27,9 +29,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that asset-update editor state is reported as retryable tool busy.
             UnityCliLoopToolBusyException exception = Assert.Throws<UnityCliLoopToolBusyException>(
                 () => UnityCliLoopEditorStateGuard.ValidateForState(
-                    UnityCliLoopConstants.TOOL_NAME_CONTROL_PLAY_MODE,
-                    false,
-                    true));
+                    toolName: UnityCliLoopConstants.TOOL_NAME_CONTROL_PLAY_MODE,
+                    isCompiling: false,
+                    isUpdating: true,
+                    isPlaying: false,
+                    isPaused: false));
 
             Assert.That(exception.RunningToolName, Is.Not.Empty);
             Assert.That(exception.RequestedToolName, Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_CONTROL_PLAY_MODE));
@@ -41,9 +45,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that read-only tools bypass state guards that only protect mutating commands.
             Assert.DoesNotThrow(
                 () => UnityCliLoopEditorStateGuard.ValidateForState(
-                    "get-logs",
-                    true,
-                    true));
+                    toolName: "get-logs",
+                    isCompiling: true,
+                    isUpdating: true,
+                    isPlaying: false,
+                    isPaused: false));
         }
     }
 }

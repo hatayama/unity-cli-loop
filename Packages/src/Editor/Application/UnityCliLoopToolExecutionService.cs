@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
-using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -17,9 +16,17 @@ namespace io.github.hatayama.UnityCliLoop.Application
     {
         private const string UnknownToolName = "unknown";
 
+        private readonly IEditorRuntimeStatePort _editorRuntimeStatePort;
         private readonly object _executionStateLock = new();
         private string _runningToolName;
         private int _runningExecutionCount;
+
+        internal UnityCliLoopToolExecutionService(IEditorRuntimeStatePort editorRuntimeStatePort)
+        {
+            Debug.Assert(editorRuntimeStatePort != null, "editorRuntimeStatePort must not be null");
+
+            _editorRuntimeStatePort = editorRuntimeStatePort ?? throw new ArgumentNullException(nameof(editorRuntimeStatePort));
+        }
 
         internal async Task<UnityCliLoopToolResponse> ExecuteToolAsync(
             UnityCliLoopToolRegistry registry,
@@ -50,14 +57,14 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             if (!TryEnterExecution(toolName, out string runningToolName))
             {
-                throw CreateBusyException(runningToolName, toolName);
+                throw CreateBusyException(runningToolName, toolName, _editorRuntimeStatePort);
             }
 
             try
             {
                 await MainThreadSwitcher.SwitchToMainThread(ct);
                 ct.ThrowIfCancellationRequested();
-                UnityCliLoopEditorStateGuard.Validate(toolName);
+                UnityCliLoopEditorStateGuard.Validate(toolName, _editorRuntimeStatePort);
 
                 UnityCliLoopToolResponse response = await tool.ExecuteAsync(paramsToken, ct).ConfigureAwait(false);
                 if (response == null)
@@ -120,18 +127,20 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
         internal static UnityCliLoopToolBusyException CreateBusyException(
             string runningToolName,
-            string requestedToolName)
+            string requestedToolName,
+            IEditorRuntimeStatePort editorRuntimeStatePort)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(runningToolName), "runningToolName must not be null or whitespace");
             Debug.Assert(!string.IsNullOrWhiteSpace(requestedToolName), "requestedToolName must not be null or whitespace");
+            Debug.Assert(editorRuntimeStatePort != null, "editorRuntimeStatePort must not be null");
 
             if (MainThreadSwitcher.IsMainThread)
             {
                 return new UnityCliLoopToolBusyException(
                     runningToolName,
                     requestedToolName,
-                    EditorApplication.isPlaying,
-                    EditorApplication.isPaused);
+                    editorRuntimeStatePort.IsPlaying,
+                    editorRuntimeStatePort.IsPaused);
             }
 
             (bool HasValue, bool IsPlaying, bool IsPaused) playState =

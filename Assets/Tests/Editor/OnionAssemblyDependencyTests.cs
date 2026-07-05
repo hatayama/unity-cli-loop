@@ -651,6 +651,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void ApplicationSources_WhenLoaded_DoNotReferenceUnityEditor()
+        {
+            // Tests that Application code stays free of UnityEditor so it can compile without the Editor platform.
+            string[] offendingReferences = ReadApplicationSourcePaths()
+                .SelectMany(path => FindForbiddenReferences(path, new[] { "UnityEditor" }))
+                .OrderBy(reference => reference)
+                .ToArray();
+
+            Assert.That(offendingReferences, Is.Empty);
+        }
+
+        [Test]
         public void ProjectIpcInfrastructure_WhenLoaded_CompilesUnderInfrastructureAssembly()
         {
             // Tests that project IPC transport implementation is owned by infrastructure.

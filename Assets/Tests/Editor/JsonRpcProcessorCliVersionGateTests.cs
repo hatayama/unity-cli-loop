@@ -166,7 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService(),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new SingleFlightTestTool());
@@ -223,7 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService(),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new ExecuteDynamicCodeTestTool());
@@ -288,7 +288,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService(),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
@@ -328,7 +328,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService(),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
@@ -365,7 +365,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService(),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
@@ -405,7 +405,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService(),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
@@ -448,7 +448,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService(),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
 
@@ -545,7 +545,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService(),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(service);
             service.RegisterCustomTool(new SingleFlightTestTool());

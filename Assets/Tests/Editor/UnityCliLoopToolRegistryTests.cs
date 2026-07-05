@@ -388,7 +388,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that third-party sample tools deserialize camelCase JSON into typed schema values.
             UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
-            UnityCliLoopToolExecutionService executionService = new();
+            UnityCliLoopToolExecutionService executionService = new(new NoOpEditorRuntimeStatePort());
             JObject parameters = JObject.FromObject(new
             {
                 name = "<USER_NAME>",
@@ -413,7 +413,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that tool execution may omit params and still use schema defaults.
             UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
-            UnityCliLoopToolExecutionService executionService = new();
+            UnityCliLoopToolExecutionService executionService = new(new NoOpEditorRuntimeStatePort());
 
             UnityCliLoopToolResponse response = await executionService.ExecuteToolAsync(
                 registry,
@@ -431,7 +431,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that tool responses do not carry obsolete per-response protocol version metadata.
             UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
-            UnityCliLoopToolExecutionService executionService = new();
+            UnityCliLoopToolExecutionService executionService = new(new NoOpEditorRuntimeStatePort());
             JObject parameters = JObject.FromObject(new
             {
                 name = "Masamichi",
@@ -458,7 +458,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService service = new(
                 new EmptyInternalToolNameProvider(),
                 toolSettingsService,
-                new UnityCliLoopToolExecutionService(),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ManualRegistrationTool tool = new();
 
