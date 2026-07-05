@@ -48,7 +48,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string VERSION_JSON_PROJECT_RUNNER_VERSION_PROPERTY = "ProjectRunnerVersion";
         private const string VERSION_JSON_LEGACY_CLI_VERSION_PROPERTY = "CliVersion";
         private const string VERSION_JSON_DISPATCHER_VERSION_PROPERTY = "DispatcherVersion";
-        private const string VERSION_JSON_DISPATCHER_CONTRACT_VERSION_PROPERTY = "DispatcherContractVersion";
 
         private string _cachedCliVersion;
         private bool _cachedCliIsDispatcher;
@@ -392,15 +391,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static CliInstallationDetection ParseDispatcherContract(JObject parsed, string executablePath)
         {
+            // Why: dispatcher compatibility is enforced by the pin's minimumDispatcherVersion (semver floor),
+            // so identifying the dispatcher only needs its release version.
             string dispatcherVersion = parsed[VERSION_JSON_DISPATCHER_VERSION_PROPERTY]?.ToString();
-            JToken dispatcherContractVersionToken = parsed[VERSION_JSON_DISPATCHER_CONTRACT_VERSION_PROPERTY];
-            int? dispatcherContractVersion = ReadIntegerToken(dispatcherContractVersionToken);
-            if (string.IsNullOrEmpty(dispatcherVersion) || dispatcherContractVersion == null)
-            {
-                return new CliInstallationDetection(null, executablePath);
-            }
-
-            if (dispatcherContractVersion.Value != CliConstants.REQUIRED_DISPATCHER_CONTRACT_VERSION)
+            if (string.IsNullOrEmpty(dispatcherVersion))
             {
                 return new CliInstallationDetection(null, executablePath);
             }
@@ -409,33 +403,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 dispatcherVersion,
                 executablePath,
                 true);
-        }
-
-        private static int? ReadIntegerToken(JToken integerToken)
-        {
-            if (integerToken == null || integerToken.Type != JTokenType.Integer)
-            {
-                return null;
-            }
-
-            JValue integerValue = integerToken as JValue;
-            object rawInteger = integerValue?.Value;
-            if (rawInteger is int integer)
-            {
-                return integer;
-            }
-
-            if (!(rawInteger is long longInteger))
-            {
-                return null;
-            }
-
-            if (longInteger < int.MinValue || longInteger > int.MaxValue)
-            {
-                return null;
-            }
-
-            return (int)longInteger;
         }
 
         private static string ExecuteAndGetOutput(ProcessStartInfo startInfo, CancellationToken ct)

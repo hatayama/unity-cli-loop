@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clitest"
 )
 
@@ -14,10 +14,10 @@ func TestRunProjectLocalVersionJSONIncludesProtocolVersion(t *testing.T) {
 	// Verifies Unity setup can inspect protocol compatibility without parsing human help text.
 	payload := clitest.RunVersionJSON(t, RunProjectLocal)
 
-	if payload["ProjectRunnerVersion"] != clicore.Version() {
+	if payload["ProjectRunnerVersion"] != clicontract.ProjectRunnerVersion() {
 		t.Fatalf("projectRunnerVersion mismatch: %#v", payload)
 	}
-	if payload["ProtocolVersion"] != float64(clicore.ProtocolVersion()) {
+	if payload["ProtocolVersion"] != float64(clicontract.ProtocolVersion()) {
 		t.Fatalf("protocolVersion mismatch: %#v", payload)
 	}
 }

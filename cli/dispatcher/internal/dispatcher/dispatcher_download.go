@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 	sharedupdate "github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
@@ -52,7 +53,7 @@ func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin, stderr io.
 }
 
 func dispatcherSiblingRealCLIPath(pin dispatcherPin) (string, bool) {
-	if pin.ProjectRunnerVersion != clicore.Version() {
+	if pin.ProjectRunnerVersion != clicontract.ProjectRunnerVersion() {
 		return "", false
 	}
 	executablePath, err := os.Executable()

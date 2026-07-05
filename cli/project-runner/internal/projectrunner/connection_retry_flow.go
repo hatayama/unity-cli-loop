@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
@@ -14,7 +15,7 @@ func newConnectionRetryClient(
 	responseTimeout time.Duration,
 	mainThreadStallHandler func(float64),
 ) *unityipc.Client {
-	client := unityipc.NewClient(connection, clicore.Version())
+	client := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion())
 	if responseTimeout > 0 {
 		client = client.WithResponseTimeout(responseTimeout)
 	}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/project"
 )
@@ -17,7 +18,7 @@ const (
 func printHelp(stdout io.Writer) {
 	printMainHelp(
 		stdout,
-		clicore.Version(),
+		clicontract.ProjectRunnerVersion(),
 		nativeCLIDescription,
 		clicore.ToolsCache{},
 		false)
@@ -37,7 +38,7 @@ func printHelpForResolvedProject(stdout io.Writer, explicitProjectPath string) {
 	}
 
 	cache, ok := clicore.LoadProjectToolCache(connection.ProjectRoot)
-	printMainHelp(stdout, clicore.Version(), nativeCLIDescription, cache, ok)
+	printMainHelp(stdout, clicontract.ProjectRunnerVersion(), nativeCLIDescription, cache, ok)
 }
 
 func printLauncherHelp(stdout io.Writer) {

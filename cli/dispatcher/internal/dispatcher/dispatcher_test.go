@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 )
@@ -37,8 +38,8 @@ func TestRunDispatcherUsesProjectPinAndCachedRealCLI(t *testing.T) {
 	// Verifies dispatcher reads the project pin and executes the cached real CLI.
 	projectRoot := createDispatcherUnityProject(t)
 	cacheRoot := t.TempDir()
-	writeDispatcherProjectPin(t, projectRoot, clicore.Version())
-	expectedCLIPath := writeCachedDispatcherRealCLI(t, cacheRoot, clicore.Version())
+	writeDispatcherProjectPin(t, projectRoot, clicontract.ProjectRunnerVersion())
+	expectedCLIPath := writeCachedDispatcherRealCLI(t, cacheRoot, clicontract.ProjectRunnerVersion())
 	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Chdir(projectRoot)
@@ -72,8 +73,8 @@ func TestRunDispatcherPreservesExplicitProjectPathForRealCLI(t *testing.T) {
 	// Verifies dispatcher accepts trailing --project-path and passes the original arguments onward.
 	projectRoot := createDispatcherUnityProject(t)
 	cacheRoot := t.TempDir()
-	writeDispatcherProjectPin(t, projectRoot, clicore.Version())
-	writeCachedDispatcherRealCLI(t, cacheRoot, clicore.Version())
+	writeDispatcherProjectPin(t, projectRoot, clicontract.ProjectRunnerVersion())
+	writeCachedDispatcherRealCLI(t, cacheRoot, clicontract.ProjectRunnerVersion())
 	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Chdir(t.TempDir())
@@ -99,8 +100,8 @@ func TestRunDispatcherForwardsProjectScopedVersionToPinnedRunner(t *testing.T) {
 	// Verifies --project-path --version is forwarded so the pinned runner reports its own version.
 	projectRoot := createDispatcherUnityProject(t)
 	cacheRoot := t.TempDir()
-	writeDispatcherProjectPin(t, projectRoot, clicore.Version())
-	writeCachedDispatcherRealCLI(t, cacheRoot, clicore.Version())
+	writeDispatcherProjectPin(t, projectRoot, clicontract.ProjectRunnerVersion())
+	writeCachedDispatcherRealCLI(t, cacheRoot, clicontract.ProjectRunnerVersion())
 	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Chdir(t.TempDir())
@@ -129,8 +130,8 @@ func TestRunDispatcherForwardsProjectScopedVersionJSONToPinnedRunner(t *testing.
 	// Verifies --project-path --version --json is forwarded so the pinned runner reports its own version payload.
 	projectRoot := createDispatcherUnityProject(t)
 	cacheRoot := t.TempDir()
-	writeDispatcherProjectPin(t, projectRoot, clicore.Version())
-	writeCachedDispatcherRealCLI(t, cacheRoot, clicore.Version())
+	writeDispatcherProjectPin(t, projectRoot, clicontract.ProjectRunnerVersion())
+	writeCachedDispatcherRealCLI(t, cacheRoot, clicontract.ProjectRunnerVersion())
 	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
 	t.Chdir(t.TempDir())

@@ -43,4 +43,5 @@ func TestCliContractDoesNotDeclareDispatcherReleaseFields(t *testing.T) {
 	fields := clitest.RequireContractFieldMap(t, contractFiles, contractFileName)
 	clitest.RequireContractFieldMissing(t, fields, "dispatcherVersion")
 	clitest.RequireContractFieldMissing(t, fields, "dispatcherContractVersion")
+	clitest.RequireContractFieldMissing(t, fields, "schemaVersion")
 }
