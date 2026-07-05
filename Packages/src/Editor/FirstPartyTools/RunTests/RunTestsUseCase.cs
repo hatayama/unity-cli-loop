@@ -12,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Processing sequence: 1. Test filter creation, 2. Test execution, 3. Result processing
     /// Related classes: RunTestsTool, TestFilterCreationService, TestExecutionService
     /// </summary>
-    public class RunTestsUseCase : IUnityCliLoopTestExecutionService
+    public class RunTestsUseCase
     {
         private readonly TestFilterCreationService _filterService;
         private readonly TestExecutionService _executionService;
@@ -51,8 +51,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <param name="parameters">Test execution parameters</param>
         /// <param name="ct">Cancellation control token</param>
         /// <returns>Test execution result</returns>
-        public async Task<UnityCliLoopTestExecutionResult> ExecuteAsync(UnityCliLoopTestExecutionRequest parameters, CancellationToken ct)
+        public async Task<RunTestsResponse> ExecuteAsync(RunTestsSchema parameters, CancellationToken ct)
         {
+            Debug.Assert(parameters != null, "parameters must not be null");
+
             if (!IsSupportedTestMode(parameters.TestMode))
             {
                 return CreateFailureResponse("Unsupported test mode: " + parameters.TestMode);
@@ -76,11 +78,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 filter = _filterService.CreateFilter(parameters.FilterType, parameters.FilterValue);
             }
-            
+
             // 2. Test execution
             ct.ThrowIfCancellationRequested();
             SerializableTestResult result;
-            
+
             try
             {
                 if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
@@ -102,33 +104,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Log full exception details for debugging
                 UnityEngine.Debug.LogError($"Test execution failed: {ex}");
                 VibeLogger.LogError(
-                    "test_execution_failed", 
-                    "Test execution encountered an error", 
+                    "test_execution_failed",
+                    "Test execution encountered an error",
                     new { testMode = parameters.TestMode, filterType = parameters.FilterType, filterValue = parameters.FilterValue, error = ex.Message }
                 );
-                
+
                 // Create a minimal error result
                 throw new System.InvalidOperationException("Test execution failed. Please check the logs for details.", ex);
             }
 
             await _waitForTestRunnerCleanupAsync(ct);
-            
-            // 3. Response creation
-            UnityCliLoopTestExecutionResult response = new UnityCliLoopTestExecutionResult
-            {
-                Success = result.success,
-                Status = result.status,
-                HasFailures = result.hasFailures,
-                NoTestsFound = result.noTestsFound,
-                NoTestsFoundExplanation = result.noTestsFoundExplanation,
-                Message = result.message,
-                CompletedAt = result.completedAt,
-                TestCount = result.testCount,
-                PassedCount = result.passedCount,
-                FailedCount = result.failedCount,
-                SkippedCount = result.skippedCount,
-                XmlPath = result.xmlPath
-            };
+
+            // 3. Response creation.
+            // Why: pass every derived field explicitly so RunTestsResponse's derivation branches stay skipped
+            // and the wire output matches the pre-collapse pipeline byte-for-byte.
+            RunTestsResponse response = new(
+                success: result.success,
+                message: result.message,
+                completedAt: result.completedAt,
+                testCount: result.testCount,
+                passedCount: result.passedCount,
+                failedCount: result.failedCount,
+                skippedCount: result.skippedCount,
+                xmlPath: result.xmlPath,
+                status: result.status,
+                hasFailures: result.hasFailures,
+                noTestsFound: result.noTestsFound,
+                noTestsFoundExplanation: result.noTestsFoundExplanation);
             response.Message = RunTestsNoTestsDiagnosticService.AppendDiagnosticsOrOriginalMessage(
                 response.Message,
                 () => _noTestsDiagnosticService.AppendDiagnosticsIfNeeded(
@@ -140,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return response;
         }
 
-        public Task<UnityCliLoopTestExecutionResult> RunTestsAsync(UnityCliLoopTestExecutionRequest request, CancellationToken ct)
+        public Task<RunTestsResponse> RunTestsAsync(RunTestsSchema request, CancellationToken ct)
         {
             return ExecuteAsync(request, ct);
         }
@@ -150,28 +152,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return Enum.IsDefined(typeof(UnityCliLoopTestMode), testMode);
         }
 
-        private static UnityCliLoopTestExecutionResult CreateTestFrameworkUnavailableResponse()
+        private static RunTestsResponse CreateTestFrameworkUnavailableResponse()
         {
             return CreateFailureResponse(RunTestsResponse.TestFrameworkUnavailableMessage);
         }
 
-        private static UnityCliLoopTestExecutionResult CreateFailureResponse(string message)
+        private static RunTestsResponse CreateFailureResponse(string message)
         {
-            return new UnityCliLoopTestExecutionResult
-            {
-                Success = false,
-                Status = RunTestsExecutionStatus.ExecutionFailed,
-                HasFailures = false,
-                NoTestsFound = false,
-                NoTestsFoundExplanation = string.Empty,
-                Message = message,
-                CompletedAt = DateTime.UtcNow.ToString("o"),
-                TestCount = 0,
-                PassedCount = 0,
-                FailedCount = 0,
-                SkippedCount = 0,
-                XmlPath = null
-            };
+            // Why: supply every optional argument so RunTestsResponse skips its derivation branches
+            // and returns the same explicit failure shape the intermediate DTO used to build.
+            return new RunTestsResponse(
+                success: false,
+                message: message,
+                completedAt: DateTime.UtcNow.ToString("o"),
+                testCount: 0,
+                passedCount: 0,
+                failedCount: 0,
+                skippedCount: 0,
+                xmlPath: null,
+                status: RunTestsExecutionStatus.ExecutionFailed,
+                hasFailures: false,
+                noTestsFound: false,
+                noTestsFoundExplanation: string.Empty);
         }
 
         private static async Task WaitForTestRunnerCleanupAsync(CancellationToken ct)
