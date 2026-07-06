@@ -17,8 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public sealed class UnityCliLoopServerControllerService :
         IUnityCliLoopServerController,
-        IUnityCliLoopServerRecoveryCoordinator,
-        IUnityCliLoopServerStateReader
+        IUnityCliLoopServerRecoveryCoordinator
     {
         private enum ServerStopIntent
         {
@@ -32,7 +31,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly UnityCliLoopServerLifecycleRegistryService _serverLifecycleRegistry;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
         private readonly ISessionFlagsRepository _sessionFlagsRepository;
-        private readonly SessionRecoveryService _sessionRecoveryService;
+        private readonly UnityCliLoopServerInitializationUseCase _initializationUseCase;
+        private readonly UnityCliLoopServerShutdownUseCase _shutdownUseCase;
+        private readonly DomainReloadRecoveryUseCase _domainReloadRecoveryUseCase;
         private readonly IUnityCliLoopServerReadinessProbe _readinessProbe;
         private readonly IUnityCliLoopServerDomainReloadLifecycle _domainReloadLifecycle;
         private readonly Func<bool> _isReadinessProbeBlocked;
@@ -49,6 +50,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopServerLifecycleRegistryService serverLifecycleRegistry,
             IDomainReloadDetectionService domainReloadDetectionService,
             ISessionFlagsRepository sessionFlagsRepository,
+            UnityCliLoopServerInitializationUseCase initializationUseCase,
+            UnityCliLoopServerShutdownUseCase shutdownUseCase,
+            DomainReloadRecoveryUseCase domainReloadRecoveryUseCase,
             IUnityCliLoopServerReadinessProbe readinessProbe,
             IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle,
             Func<bool> isReadinessProbeBlocked = null,
@@ -60,6 +64,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             System.Diagnostics.Debug.Assert(serverLifecycleRegistry != null, "serverLifecycleRegistry must not be null");
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
             System.Diagnostics.Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
+            System.Diagnostics.Debug.Assert(initializationUseCase != null, "initializationUseCase must not be null");
+            System.Diagnostics.Debug.Assert(shutdownUseCase != null, "shutdownUseCase must not be null");
+            System.Diagnostics.Debug.Assert(domainReloadRecoveryUseCase != null, "domainReloadRecoveryUseCase must not be null");
             System.Diagnostics.Debug.Assert(readinessProbe != null, "readinessProbe must not be null");
             System.Diagnostics.Debug.Assert(domainReloadLifecycle != null, "domainReloadLifecycle must not be null");
             System.Diagnostics.Debug.Assert(readinessIdleTimeoutMilliseconds > 0, "readinessIdleTimeoutMilliseconds must be positive");
@@ -68,16 +75,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _serverLifecycleRegistry = serverLifecycleRegistry ?? throw new ArgumentNullException(nameof(serverLifecycleRegistry));
             _domainReloadDetectionService = domainReloadDetectionService ?? throw new ArgumentNullException(nameof(domainReloadDetectionService));
             _sessionFlagsRepository = sessionFlagsRepository ?? throw new ArgumentNullException(nameof(sessionFlagsRepository));
+            _initializationUseCase = initializationUseCase ?? throw new ArgumentNullException(nameof(initializationUseCase));
+            _shutdownUseCase = shutdownUseCase ?? throw new ArgumentNullException(nameof(shutdownUseCase));
+            _domainReloadRecoveryUseCase = domainReloadRecoveryUseCase ?? throw new ArgumentNullException(nameof(domainReloadRecoveryUseCase));
             _readinessProbe = readinessProbe ?? throw new ArgumentNullException(nameof(readinessProbe));
             _domainReloadLifecycle = domainReloadLifecycle ?? throw new ArgumentNullException(nameof(domainReloadLifecycle));
             _isReadinessProbeBlocked = isReadinessProbeBlocked ?? IsEditorBusyForReadinessProbe;
             _waitBeforeReadinessRetryAsync = waitBeforeReadinessRetryAsync ?? TimerDelay.Wait;
             _waitBeforeRecoveryRetryAsync = waitBeforeRecoveryRetryAsync ?? TimerDelay.Wait;
             _readinessIdleTimeoutMilliseconds = readinessIdleTimeoutMilliseconds;
-            _sessionRecoveryService = new SessionRecoveryService(
-                this,
-                _domainReloadDetectionService,
-                _sessionFlagsRepository);
         }
 
         private static bool IsEditorBusyForReadinessProbe()
@@ -240,16 +246,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
             }
 
-            UnityCliLoopServerStartupService startupService =
-                new UnityCliLoopServerStartupService(_serverInstanceFactory, _sessionFlagsRepository);
-            UnityCliLoopServerInitializationUseCase useCase =
-                new UnityCliLoopServerInitializationUseCase(
-                    new EditorSecurityValidationService(),
-                    startupService);
             System.Threading.CancellationToken cancellationToken = System.Threading.CancellationToken.None;
 
             ServerInitializationResult<IUnityCliLoopServerInstance> result =
-                await useCase.ExecuteAsync(cancellationToken);
+                await _initializationUseCase.ExecuteAsync(cancellationToken);
 
             if (!result.Success)
             {
@@ -302,12 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _serverLifecycleRegistry.PublishServerStopping();
             PrepareForServerShutdown();
 
-            UnityCliLoopServerStartupService startupService =
-                new UnityCliLoopServerStartupService(_serverInstanceFactory, _sessionFlagsRepository);
-            UnityCliLoopServerShutdownUseCase useCase =
-                new UnityCliLoopServerShutdownUseCase(startupService, this);
-
-            ServerShutdownResult result = await useCase.ExecuteAsync(ct);
+            ServerShutdownResult result = await _shutdownUseCase.ExecuteAsync(_bridgeServer, ct);
 
             if (result.Success)
             {
@@ -341,12 +336,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             ClearStartupProtection();
             _domainReloadLifecycle.PrepareForDomainReload();
 
-            DomainReloadRecoveryUseCase useCase =
-                new DomainReloadRecoveryUseCase(
-                    _sessionRecoveryService,
-                    _domainReloadDetectionService,
-                    _sessionFlagsRepository);
-            ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(_bridgeServer);
+            ServiceResult<string> result = _domainReloadRecoveryUseCase.ExecuteBeforeDomainReload(_bridgeServer);
             
             // Clear instance if server shutdown succeeded
             if (result.Success)
@@ -366,13 +356,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private async Task ExecuteAfterDomainReloadRecoveryAsync(CancellationToken cancellationToken)
         {
-            DomainReloadRecoveryUseCase useCase =
-                new DomainReloadRecoveryUseCase(
-                    _sessionRecoveryService,
-                    _domainReloadDetectionService,
-                    _sessionFlagsRepository);
             ServiceResult<string> result =
-                await useCase.ExecuteAfterDomainReloadAsync(cancellationToken);
+                await _domainReloadRecoveryUseCase.ExecuteAfterDomainReloadAsync(this, cancellationToken);
             if (!result.Success)
             {
                 string message = $"Domain reload recovery failed after Unity finished reloading assemblies. {result.ErrorMessage}";
