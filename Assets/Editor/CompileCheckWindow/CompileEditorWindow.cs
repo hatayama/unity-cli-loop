@@ -37,7 +37,9 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             // Create instances only if they don't exist yet
             if (_compileController == null || _logDisplay == null)
             {
-                _compileController = new CompileController(UnityCliLoopEditorSessionStateFacade.Service);
+                _compileController = new CompileController(
+                    UnityCliLoopCompileResultSessionRepositoryFacade.Repository,
+                    UnityCliLoopPendingCompileSessionRepositoryFacade.Repository);
                 _logDisplay = new CompileLogDisplay();
 
                 // Subscribe to events

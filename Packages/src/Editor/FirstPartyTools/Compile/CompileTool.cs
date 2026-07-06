@@ -19,11 +19,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         protected override async Task<CompileResponse> ExecuteAsync(CompileSchema parameters, CancellationToken ct)
         {
             // Why: CompileTool is created via Activator.CreateInstance by the tool registry and cannot
-            // receive CompositionRoot-owned services through its own constructor, so the shared
-            // session state service is fetched from the facade here and threaded through the pipeline.
-            UnityCliLoopEditorSessionStateService sessionStateService =
-                UnityCliLoopEditorSessionStateFacade.Service;
-            CompileUseCase useCase = new(sessionStateService);
+            // receive CompositionRoot-owned services through its own constructor, so the shared compile
+            // session collaborators are fetched from facades here and threaded through the pipeline.
+            CompileUseCase useCase = new(
+                UnityCliLoopCompileSessionLifecycleFacade.Service,
+                UnityCliLoopCompileResultSessionRepositoryFacade.Repository,
+                UnityCliLoopPendingCompileSessionRepositoryFacade.Repository);
             return await useCase.CompileAsync(parameters, ct);
         }
     }

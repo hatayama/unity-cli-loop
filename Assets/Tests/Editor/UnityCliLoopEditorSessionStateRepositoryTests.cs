@@ -13,21 +13,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private UnityCliLoopEditorSessionStateSnapshot _originalSnapshot;
         private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
-        private UnityCliLoopEditorSessionStateService _sessionStateService;
+        private UnityCliLoopCompileSessionLifecycleService _compileSessionLifecycleService;
+        private UnityCliLoopCompileResultSessionRepository _compileResultSessionRepository;
+        private UnityCliLoopPendingCompileSessionRepository _pendingCompileSessionRepository;
 
         [SetUp]
         public void SetUp()
         {
             _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
-            _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
-            _originalSnapshot = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
+            _compileResultSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            _pendingCompileSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
+            _compileSessionLifecycleService =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileSessionLifecycleService();
+            _originalSnapshot = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
         }
 
         [TearDown]
         public void TearDown()
         {
-            _originalSnapshot.Restore(_sessionStateService);
+            _originalSnapshot.Restore();
         }
 
         [Test]
@@ -48,10 +55,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetFlags_WhenServiceAndRepositoryAreRecreated_ReadsExistingSessionValues()
         {
             // Verifies that SessionState survives service/repository recreation within the same Editor session.
-            _sessionStateService.MarkDomainReloadStarted(serverIsRunning: true);
+            _compileSessionLifecycleService.MarkDomainReloadStarted(serverIsRunning: true);
 
-            UnityCliLoopEditorSessionStateService recreatedService =
-                UnityCliLoopEditorSessionStateTestFactory.CreateService();
             UnityCliLoopSessionFlagsRepository recreatedFlagsRepository =
                 UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
 
@@ -70,8 +75,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that the one-session migration scan request survives Domain Reload service recreation.
             _sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(true);
 
-            UnityCliLoopEditorSessionStateService recreatedService =
-                UnityCliLoopEditorSessionStateTestFactory.CreateService();
             UnityCliLoopSessionFlagsRepository recreatedFlagsRepository =
                 UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
 
@@ -83,16 +86,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies compile results survive service recreation and are keyed by request id.
             DateTime completedAtUtc = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
-            _sessionStateService.StoreCompileResult(
+            _compileResultSessionRepository.StoreCompileResult(
                 "compile_test_request",
                 forceRecompile: true,
                 resultJson: "{\"Success\":null}",
                 completedAtUtc: completedAtUtc);
 
-            UnityCliLoopEditorSessionStateService recreatedService =
-                UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            UnityCliLoopCompileResultSessionRepository recreatedRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
             UnityCliLoopStoredCompileResult storedResult =
-                recreatedService.GetCompileResult("compile_test_request");
+                recreatedRepository.GetCompileResult("compile_test_request");
 
             Assert.That(storedResult.HasResult, Is.True);
             Assert.That(storedResult.RequestId, Is.EqualTo("compile_test_request"));
@@ -105,14 +108,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetCompileResult_WhenRequestIdDiffers_ReturnsEmptyResult()
         {
             // Verifies stale results from older compile commands are never returned to a new request.
-            _sessionStateService.StoreCompileResult(
+            _compileResultSessionRepository.StoreCompileResult(
                 "compile_old_request",
                 forceRecompile: false,
                 resultJson: "{\"Success\":true}",
                 completedAtUtc: DateTime.UtcNow);
 
             UnityCliLoopStoredCompileResult storedResult =
-                _sessionStateService.GetCompileResult("compile_new_request");
+                _compileResultSessionRepository.GetCompileResult("compile_new_request");
 
             Assert.That(storedResult.HasResult, Is.False);
         }
@@ -121,21 +124,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetCompileResult_WhenAnotherRequestStoresLater_ReturnsOriginalResult()
         {
             // Verifies compile results are keyed by request id instead of a single global slot.
-            _sessionStateService.StoreCompileResult(
+            _compileResultSessionRepository.StoreCompileResult(
                 "compile_first_request",
                 forceRecompile: false,
                 resultJson: "{\"Success\":true}",
                 completedAtUtc: DateTime.UtcNow);
-            _sessionStateService.StoreCompileResult(
+            _compileResultSessionRepository.StoreCompileResult(
                 "compile_second_request",
                 forceRecompile: true,
                 resultJson: "{\"Success\":null}",
                 completedAtUtc: DateTime.UtcNow);
 
             UnityCliLoopStoredCompileResult firstResult =
-                _sessionStateService.GetCompileResult("compile_first_request");
+                _compileResultSessionRepository.GetCompileResult("compile_first_request");
             UnityCliLoopStoredCompileResult secondResult =
-                _sessionStateService.GetCompileResult("compile_second_request");
+                _compileResultSessionRepository.GetCompileResult("compile_second_request");
 
             Assert.That(firstResult.HasResult, Is.True);
             Assert.That(firstResult.ResultJson, Is.EqualTo("{\"Success\":true}"));
@@ -153,11 +156,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopCompileResultSessionRepository.SetLegacyCompileResultJson("{\"Success\":true}");
             UnityCliLoopCompileResultSessionRepository.SetLegacyCompileResultCompletedAtUtcTicks(
                 completedAtUtc.Ticks.ToString());
-            UnityCliLoopEditorSessionStateService recreatedService =
-                UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            UnityCliLoopCompileResultSessionRepository recreatedRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
 
             UnityCliLoopStoredCompileResult storedResult =
-                recreatedService.GetCompileResult("compile_legacy_request");
+                recreatedRepository.GetCompileResult("compile_legacy_request");
 
             Assert.That(storedResult.HasResult, Is.True);
             Assert.That(storedResult.ResultJson, Is.EqualTo("{\"Success\":true}"));
@@ -169,15 +172,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies pending compile recovery state survives Domain Reload service recreation.
             DateTime markedAtUtc = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
-            _sessionStateService.MarkPendingCompileRequest(
+            _compileSessionLifecycleService.MarkPendingCompileRequest(
                 "compile_test_request",
                 forceRecompile: true,
                 markedAtUtc: markedAtUtc);
 
-            UnityCliLoopEditorSessionStateService recreatedService =
-                UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            UnityCliLoopPendingCompileSessionRepository recreatedRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
             UnityCliLoopPendingCompileRequest pendingRequest =
-                recreatedService.GetPendingCompileRequest();
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(recreatedRepository);
 
             Assert.That(pendingRequest.HasRequest, Is.True);
             Assert.That(pendingRequest.RequestId, Is.EqualTo("compile_test_request"));
@@ -191,19 +194,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies pending compile requests are keyed by request id instead of a single global slot.
             DateTime markedAtUtc = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
-            _sessionStateService.MarkPendingCompileRequest(
+            _compileSessionLifecycleService.MarkPendingCompileRequest(
                 "compile_first_request",
                 forceRecompile: false,
                 markedAtUtc: markedAtUtc);
-            _sessionStateService.MarkPendingCompileRequest(
+            _compileSessionLifecycleService.MarkPendingCompileRequest(
                 "compile_second_request",
                 forceRecompile: true,
                 markedAtUtc: markedAtUtc);
 
             UnityCliLoopPendingCompileRequest firstRequest =
-                _sessionStateService.GetPendingCompileRequestForRequestId("compile_first_request");
+                _pendingCompileSessionRepository.GetPendingCompileRequestForRequestId("compile_first_request");
             UnityCliLoopPendingCompileRequest secondRequest =
-                _sessionStateService.GetPendingCompileRequestForRequestId("compile_second_request");
+                _pendingCompileSessionRepository.GetPendingCompileRequestForRequestId("compile_second_request");
 
             Assert.That(firstRequest.HasRequest, Is.True);
             Assert.That(firstRequest.ForceRecompile, Is.False);
@@ -221,14 +224,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopPendingCompileSessionRepository.SetLegacyPendingCompileExpiresAtUtcTicks(
                 expiresAtUtc.Ticks.ToString());
             UnityCliLoopPendingCompileSessionRepository.SetLegacyPendingCompileReloadObserved(true);
-            UnityCliLoopEditorSessionStateService recreatedService =
-                new UnityCliLoopEditorSessionStateService(
-                    new UnityCliLoopSessionFlagsRepository(),
-                    new UnityCliLoopCompileResultSessionRepository(),
-                    new UnityCliLoopPendingCompileSessionRepository());
+            UnityCliLoopPendingCompileSessionRepository recreatedRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
 
             UnityCliLoopPendingCompileRequest pendingRequest =
-                recreatedService.GetPendingCompileRequestForRequestId("compile_legacy_request");
+                recreatedRepository.GetPendingCompileRequestForRequestId("compile_legacy_request");
 
             Assert.That(pendingRequest.HasRequest, Is.True);
             Assert.That(pendingRequest.ForceRecompile, Is.True);
@@ -240,15 +240,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void MarkDomainReloadStarted_WhenPendingCompileRequestExists_MarksReloadObserved()
         {
             // Verifies pending compile recovery only becomes eligible after Unity starts Domain Reload.
-            _sessionStateService.MarkPendingCompileRequest(
+            _compileSessionLifecycleService.MarkPendingCompileRequest(
                 "compile_test_request",
                 forceRecompile: false,
                 markedAtUtc: DateTime.UtcNow);
 
-            _sessionStateService.MarkDomainReloadStarted(serverIsRunning: true);
+            _compileSessionLifecycleService.MarkDomainReloadStarted(serverIsRunning: true);
 
             UnityCliLoopPendingCompileRequest pendingRequest =
-                _sessionStateService.GetPendingCompileRequest();
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
+                    _pendingCompileSessionRepository);
             Assert.That(pendingRequest.HasRequest, Is.True);
             Assert.That(pendingRequest.ReloadObserved, Is.True);
         }
@@ -259,30 +260,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies stale pending compile recovery state cannot satisfy later CLI polling.
             DateTime markedAtUtc = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
             DateTime now = new DateTime(2026, 5, 30, 0, 32, 1, DateTimeKind.Utc);
-            _sessionStateService.MarkPendingCompileRequest(
+            _compileSessionLifecycleService.MarkPendingCompileRequest(
                 "compile_test_request",
                 forceRecompile: false,
                 markedAtUtc: markedAtUtc);
 
-            bool cleared = _sessionStateService.ClearExpiredPendingCompileRequest(now);
+            bool cleared = _compileSessionLifecycleService.ClearExpiredPendingCompileRequest(now);
 
             Assert.That(cleared, Is.True);
-            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
+            Assert.That(
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
+                    _pendingCompileSessionRepository).HasRequest,
+                Is.False);
         }
 
         [Test]
         public void ClearPendingCompileRequestIfMatches_WhenRequestIdMatches_ClearsSessionValue()
         {
             // Verifies stored compile results can clear their matching pending recovery state.
-            _sessionStateService.MarkPendingCompileRequest(
+            _compileSessionLifecycleService.MarkPendingCompileRequest(
                 "compile_test_request",
                 forceRecompile: false,
                 markedAtUtc: DateTime.UtcNow);
 
-            bool cleared = _sessionStateService.ClearPendingCompileRequestIfMatches("compile_test_request");
+            bool cleared = _pendingCompileSessionRepository.ClearPendingCompileRequestIfMatches("compile_test_request");
 
             Assert.That(cleared, Is.True);
-            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
+            Assert.That(
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
+                    _pendingCompileSessionRepository).HasRequest,
+                Is.False);
         }
 
         [Test]
@@ -295,14 +302,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopCompileResultSessionRepository.SetCompileResultCompletedAtUtcTicks(
                 "compile_test_request",
                 "not_ticks");
-            UnityCliLoopEditorSessionStateService recreatedService =
-                UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            UnityCliLoopCompileResultSessionRepository recreatedRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
 
             UnityCliLoopStoredCompileResult storedResult =
-                recreatedService.GetStoredCompileResult();
+                recreatedRepository.GetStoredCompileResult();
 
             Assert.That(storedResult.HasResult, Is.False);
-            Assert.That(recreatedService.GetStoredCompileResult().HasResult, Is.False);
+            Assert.That(recreatedRepository.GetStoredCompileResult().HasResult, Is.False);
         }
 
         [Test]
@@ -313,11 +320,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopCompileResultSessionRepository.SetLegacyCompileResultForceRecompile(false);
             UnityCliLoopCompileResultSessionRepository.SetLegacyCompileResultJson("{\"Success\":true}");
             UnityCliLoopCompileResultSessionRepository.SetLegacyCompileResultCompletedAtUtcTicks(long.MaxValue.ToString());
-            UnityCliLoopEditorSessionStateService recreatedService =
-                UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            UnityCliLoopCompileResultSessionRepository recreatedRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
 
             UnityCliLoopStoredCompileResult storedResult =
-                recreatedService.GetCompileResult("compile_legacy_request");
+                recreatedRepository.GetCompileResult("compile_legacy_request");
 
             Assert.That(storedResult.HasResult, Is.False);
             Assert.That(UnityCliLoopCompileResultSessionRepository.GetLegacyCompileResultRequestId(), Is.Empty);
@@ -328,16 +335,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies stale compile results do not survive indefinitely across commands.
             DateTime now = new DateTime(2026, 5, 30, 0, 32, 1, DateTimeKind.Utc);
-            _sessionStateService.StoreCompileResult(
+            _compileResultSessionRepository.StoreCompileResult(
                 "compile_test_request",
                 forceRecompile: false,
                 resultJson: "{\"Success\":true}",
                 completedAtUtc: new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc));
 
-            bool cleared = _sessionStateService.ClearExpiredCompileResult(now);
+            bool cleared = _compileSessionLifecycleService.ClearExpiredCompileResult(now);
 
             Assert.That(cleared, Is.True);
-            Assert.That(_sessionStateService.GetStoredCompileResult().HasResult, Is.False);
+            Assert.That(_compileResultSessionRepository.GetStoredCompileResult().HasResult, Is.False);
         }
 
         [Test]
@@ -358,10 +365,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ClearAll_WhenFlagsAreSet_ClearsEveryTransientFlag()
         {
             // Verifies that test and shutdown cleanup can reset all runtime SessionState flags together.
-            _sessionStateService.MarkDomainReloadStarted(serverIsRunning: true);
+            _compileSessionLifecycleService.MarkDomainReloadStarted(serverIsRunning: true);
             _sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(true);
             _sessionFlagsRepository.SetIsServerManuallyStopped(true);
-            _sessionStateService.StoreCompileResult(
+            _compileResultSessionRepository.StoreCompileResult(
                 "compile_test_request",
                 forceRecompile: false,
                 resultJson: "{\"Success\":true}",
@@ -377,8 +384,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sessionFlagsRepository.GetShowPostCompileReconnectingUI(), Is.False);
             Assert.That(_sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
             Assert.That(_sessionFlagsRepository.GetIsServerManuallyStopped(), Is.False);
-            Assert.That(_sessionStateService.GetStoredCompileResult().HasResult, Is.False);
-            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
+            Assert.That(_compileResultSessionRepository.GetStoredCompileResult().HasResult, Is.False);
+            Assert.That(
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
+                    _pendingCompileSessionRepository).HasRequest,
+                Is.False);
         }
 
         [Test]
@@ -387,13 +397,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that explicit Stop Server survives Domain Reload service recreation.
             _sessionFlagsRepository.MarkServerManuallyStopped();
 
-            UnityCliLoopEditorSessionStateService recreatedService =
-                UnityCliLoopEditorSessionStateTestFactory.CreateService();
             UnityCliLoopSessionFlagsRepository recreatedFlagsRepository =
                 UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
 
             Assert.That(recreatedFlagsRepository.GetIsServerRunning(), Is.False);
             Assert.That(recreatedFlagsRepository.GetIsServerManuallyStopped(), Is.True);
         }
+
     }
 }

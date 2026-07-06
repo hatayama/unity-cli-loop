@@ -35,7 +35,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private UnityCliLoopEditorSettingsRepository _editorSettingsRepository;
         private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
-        private UnityCliLoopEditorSessionStateService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
 
         [SetUp]
@@ -66,8 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UnityCliLoopEditorSettingsTestFactory.CreatePortWithRepository(out _editorSettingsRepository);
             _editorSettingsRepository.InvalidateCache();
             _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
-            _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
-            _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
+            _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
         }
 
@@ -78,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RestoreFile(LegacySettingsFilePath, _legacySettingsFileExisted, _legacySettingsFileContent);
             RestoreFile(BackupFilePath, _backupFileExisted, _backupFileContent);
             RestoreFile(TempFilePath, _tempFileExisted, _tempFileContent);
-            _originalSessionState.Restore(_sessionStateService);
+            _originalSessionState.Restore();
             _editorSettingsRepository.InvalidateCache();
         }
 

@@ -13,28 +13,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     [TestFixture]
     public sealed class CompileStatusBridgeCommandTests
     {
-        private UnityCliLoopEditorSessionStateService _sessionStateService;
+        private UnityCliLoopCompileSessionLifecycleService _compileSessionLifecycleService;
+        private UnityCliLoopCompileResultSessionRepository _compileResultSessionRepository;
+        private UnityCliLoopPendingCompileSessionRepository _pendingCompileSessionRepository;
         private UnityCliLoopEditorSessionStateSnapshot _originalSnapshot;
 
         [SetUp]
         public void SetUp()
         {
-            _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
-            _originalSnapshot = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
+            _compileSessionLifecycleService =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileSessionLifecycleService();
+            _compileResultSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            _pendingCompileSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
+            _originalSnapshot = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
         }
 
         [TearDown]
         public void TearDown()
         {
-            _originalSnapshot.Restore(_sessionStateService);
+            _originalSnapshot.Restore();
         }
 
         [Test]
         public void BuildResponse_WhenUnityIsIdleAndResultMatches_ReturnsReadyResult()
         {
             // Verifies the CLI can retrieve the compile result once Unity has stopped compiling and reloading.
-            _sessionStateService.StoreCompileResult(
+            _compileResultSessionRepository.StoreCompileResult(
                 "compile_test_request",
                 forceRecompile: false,
                 resultJson: "{\"Success\":true}",
@@ -45,7 +52,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isCompiling: false,
                 isUpdating: false,
                 isDomainReloadInProgress: false,
-                _sessionStateService);
+                _compileSessionLifecycleService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.True);
@@ -57,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildResponse_WhenUnityIsStillCompiling_ReturnsNotReadyWithStoredResult()
         {
             // Verifies compile status does not release the result before Unity can accept follow-up commands.
-            _sessionStateService.StoreCompileResult(
+            _compileResultSessionRepository.StoreCompileResult(
                 "compile_test_request",
                 forceRecompile: false,
                 resultJson: "{\"Success\":true}",
@@ -68,7 +77,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isCompiling: true,
                 isUpdating: false,
                 isDomainReloadInProgress: false,
-                _sessionStateService);
+                _compileSessionLifecycleService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
 
             Assert.That(response.Ready, Is.False);
             Assert.That(response.HasResult, Is.True);
@@ -79,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildResponse_WhenRequestIdDiffers_DoesNotReturnStaleResult()
         {
             // Verifies an older compile result cannot satisfy a newer CLI request.
-            _sessionStateService.StoreCompileResult(
+            _compileResultSessionRepository.StoreCompileResult(
                 "compile_old_request",
                 forceRecompile: false,
                 resultJson: "{\"Success\":true}",
@@ -90,7 +101,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isCompiling: false,
                 isUpdating: false,
                 isDomainReloadInProgress: false,
-                _sessionStateService);
+                _compileSessionLifecycleService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.False);
@@ -101,7 +114,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildResponse_WhenUnityIsIdleAndPendingRequestHasNoReloadSignal_WaitsForResult()
         {
             // Verifies idle polling cannot complete while the original compile operation is still running.
-            _sessionStateService.MarkPendingCompileRequest(
+            _compileSessionLifecycleService.MarkPendingCompileRequest(
                 "compile_test_request",
                 forceRecompile: false,
                 markedAtUtc: System.DateTime.UtcNow);
@@ -111,30 +124,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isCompiling: false,
                 isUpdating: false,
                 isDomainReloadInProgress: false,
-                _sessionStateService);
+                _compileSessionLifecycleService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.False);
             Assert.That(response.Result, Is.Null);
-            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.True);
+            Assert.That(
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
+                    _pendingCompileSessionRepository).HasRequest,
+                Is.True);
         }
 
         [Test]
         public void BuildResponse_WhenUnityIsIdleAndPendingRequestObservedReload_ReturnsRecoveredResult()
         {
             // Verifies reload recovery returns an indeterminate result after Unity actually started Domain Reload.
-            _sessionStateService.MarkPendingCompileRequest(
+            _compileSessionLifecycleService.MarkPendingCompileRequest(
                 "compile_test_request",
                 forceRecompile: false,
                 markedAtUtc: System.DateTime.UtcNow);
-            _sessionStateService.MarkPendingCompileRequestReloadObserved();
+            _pendingCompileSessionRepository.MarkPendingCompileRequestReloadObserved();
 
             GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
                 "compile_test_request",
                 isCompiling: false,
                 isUpdating: false,
                 isDomainReloadInProgress: false,
-                _sessionStateService);
+                _compileSessionLifecycleService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.True);
@@ -142,14 +162,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Result["ErrorCount"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(response.Result["Warnings"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(response.Result["Message"]?.ToString(), Does.Contain("reloaded scripts"));
-            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
+            Assert.That(
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
+                    _pendingCompileSessionRepository).HasRequest,
+                Is.False);
         }
 
         [Test]
         public void BuildResponse_WhenUnityIsBusyAndPendingRequestHasNoResult_WaitsForReadiness()
         {
             // Verifies pending recovery does not publish an indeterminate result before Unity is idle.
-            _sessionStateService.MarkPendingCompileRequest(
+            _compileSessionLifecycleService.MarkPendingCompileRequest(
                 "compile_test_request",
                 forceRecompile: false,
                 markedAtUtc: System.DateTime.UtcNow);
@@ -159,30 +182,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isCompiling: true,
                 isUpdating: false,
                 isDomainReloadInProgress: false,
-                _sessionStateService);
+                _compileSessionLifecycleService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
 
             Assert.That(response.Ready, Is.False);
             Assert.That(response.HasResult, Is.False);
             Assert.That(response.Result, Is.Null);
-            Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.True);
+            Assert.That(
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
+                    _pendingCompileSessionRepository).HasRequest,
+                Is.True);
         }
 
         [Test]
         public void BuildResponse_WhenForceCompilePendingRequestHasNoResult_ReturnsExplanationMessage()
         {
             // Verifies forced compile recovery explains why detailed result fields are null.
-            _sessionStateService.MarkPendingCompileRequest(
+            _compileSessionLifecycleService.MarkPendingCompileRequest(
                 "compile_test_request",
                 forceRecompile: true,
                 markedAtUtc: System.DateTime.UtcNow);
-            _sessionStateService.MarkPendingCompileRequestReloadObserved();
+            _pendingCompileSessionRepository.MarkPendingCompileRequestReloadObserved();
 
             GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
                 "compile_test_request",
                 isCompiling: false,
                 isUpdating: false,
                 isDomainReloadInProgress: false,
-                _sessionStateService);
+                _compileSessionLifecycleService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.True);
@@ -192,5 +222,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 response.Result["Message"]?.ToString(),
                 Is.EqualTo(ForceCompileUnknownResult.MessageText));
         }
+
     }
 }
