@@ -10,6 +10,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal sealed class UnityCliLoopBridgeHeartbeatService
     {
+        /// <summary>
+        /// Sends heartbeat frames at the given interval until cancelled. Write failures end
+        /// the loop silently because the connection teardown is owned by the read loop.
+        /// </summary>
         internal async Task SendHeartbeatsAsync(
             Func<string> createHeartbeatJson,
             Func<string, Task> writeFrameAsync,

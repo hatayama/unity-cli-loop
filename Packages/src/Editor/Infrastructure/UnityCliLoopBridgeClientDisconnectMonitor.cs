@@ -11,6 +11,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private const int ClientDisconnectMonitorPollMilliseconds = 100;
 
+        /// <summary>
+        /// Monitors an accepted client connection and cancels the request token source when the client disconnects.
+        /// </summary>
         internal async Task MonitorClientDisconnectAsync(
             BridgeClientConnection client,
             CancellationTokenSource requestCancellationTokenSource)
