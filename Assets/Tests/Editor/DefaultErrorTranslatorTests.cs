@@ -2,6 +2,7 @@ using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -74,6 +75,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TranslationOutput translation = _translator.TranslateFromException(exception);
 
             UserFriendlyErrorDto dto = _formatter.Format(translation, exception.Message, exception);
+
+            Assert.AreEqual(ErrorSeverity.Medium, dto.Severity);
+        }
+
+        [Test]
+        public void DetermineSeverity_ParameterValidation_ShouldBeLow()
+        {
+            // Verifies parameter validation exceptions remain user-correctable low severity.
+            UnityCliLoopToolParameterValidationException exception = new("invalid params");
+            TranslationOutput translation = _translator.TranslateFromException(exception);
+
+            UserFriendlyErrorDto dto = _formatter.Format(translation, exception.Message, exception);
+
+            Assert.AreEqual(ErrorSeverity.Low, dto.Severity);
+        }
+
+        [Test]
+        public void DetermineSeverity_CompilerBlockingMessage_ShouldBeHigh()
+        {
+            // Verifies compiler messages that block execution remain high severity.
+            UserFriendlyErrorDto dto = _formatter.Format(
+                new TranslationOutput(),
+                "Top-level statements must precede namespace declarations");
+
+            Assert.AreEqual(ErrorSeverity.High, dto.Severity);
+        }
+
+        [Test]
+        public void DetermineSeverity_AmbiguousReferenceMessage_ShouldBeMedium()
+        {
+            // Verifies ambiguous reference compiler messages remain medium severity.
+            UserFriendlyErrorDto dto = _formatter.Format(
+                new TranslationOutput(),
+                "error CS0104: ambiguous reference");
 
             Assert.AreEqual(ErrorSeverity.Medium, dto.Severity);
         }
