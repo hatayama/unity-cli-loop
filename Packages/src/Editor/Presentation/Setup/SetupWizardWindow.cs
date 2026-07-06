@@ -197,11 +197,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private VisualElement _nodejsOk;
         private Button _refreshButton;
 
-        // Step 1
-        private VisualElement _cliStatusIcon;
-        private Label _cliStatusLabel;
-        private Button _installCliButton;
-
         // Step 2
         private VisualElement _groupSkillsRow;
         private VisualElement _skillsTargetRow;
@@ -221,6 +216,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private Label _githubLinkLabel;
         private Image _githubLinkIcon;
         private ScrollView _mainScrollView;
+        private SetupWizardCliStepPresenter _cliStepPresenter;
 
         // State
         private bool _isInstallingCli;
@@ -305,9 +301,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _nodejsOk = rootVisualElement.Q<VisualElement>("nodejs-ok");
             _refreshButton = rootVisualElement.Q<Button>("refresh-button");
 
-            _cliStatusIcon = rootVisualElement.Q<VisualElement>("cli-status-icon");
-            _cliStatusLabel = rootVisualElement.Q<Label>("cli-status-label");
-            _installCliButton = rootVisualElement.Q<Button>("install-cli-button");
+            VisualElement cliStatusIcon = rootVisualElement.Q<VisualElement>("cli-status-icon");
+            Label cliStatusLabel = rootVisualElement.Q<Label>("cli-status-label");
+            Button installCliButton = rootVisualElement.Q<Button>("install-cli-button");
+            _cliStepPresenter = new SetupWizardCliStepPresenter(
+                cliStatusIcon,
+                cliStatusLabel,
+                installCliButton,
+                HandleInstallCli);
 
             _groupSkillsRow = rootVisualElement.Q<VisualElement>("group-skills-row");
             _skillsTargetRow = rootVisualElement.Q<VisualElement>("skills-target-row");
@@ -331,7 +332,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void BindEvents()
         {
             _refreshButton.clicked += () => RefreshUI();
-            _installCliButton.clicked += HandleInstallCli;
             _installSkillsButton.clicked += HandleInstallSkills;
             InitializeSkillsTargetField();
             InitializeGroupSkillsToggle();
@@ -405,11 +405,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             RefreshAutoShowToggle();
             ViewDataBinder.SetVisible(_nodejsWarning, false);
             ViewDataBinder.SetVisible(_nodejsOk, false);
-            ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--success", false);
-            ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--pending", true);
-            _cliStatusLabel.text = "Checking...";
-            _installCliButton.SetEnabled(false);
-            _installCliButton.text = "Checking...";
+            _cliStepPresenter.ShowChecking();
             ViewDataBinder.SetVisible(_groupSkillsRow, false);
             _groupSkillsToggle.SetEnabled(false);
             UpdateSkillsStatusLabel("Checking installed skills...");
@@ -452,11 +448,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             RefreshAutoShowToggle();
             ViewDataBinder.SetVisible(_nodejsWarning, false);
             ViewDataBinder.SetVisible(_nodejsOk, false);
-            ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--success", false);
-            ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--pending", true);
-            _cliStatusLabel.text = "Checking...";
-            _installCliButton.SetEnabled(false);
-            _installCliButton.text = "Checking...";
+            _cliStepPresenter.ShowChecking();
             if (refreshSkillsSection)
             {
                 ViewDataBinder.SetVisible(_groupSkillsRow, false);
@@ -482,7 +474,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool cliInstalled = IsCliInstalled(cliVersion);
             _needsCliPathSetup = await ShouldRepairCliPathSetupAsync(CancellationToken.None);
 
-            UpdateCliStep(cliInstalled, cliVersion, cliIsDispatcher, requiredCliVersion);
+            _cliStepPresenter.Update(
+                cliInstalled,
+                cliVersion,
+                cliIsDispatcher,
+                requiredCliVersion,
+                _isInstallingCli,
+                _needsCliPathSetup);
 
             if (!refreshSkillsSection)
             {
@@ -634,120 +632,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                    || selectedTargetInfo.InstallState == SkillInstallState.Checking
                 ? new List<SkillSetupTargetInfo>()
                 : new List<SkillSetupTargetInfo> { selectedTargetInfo };
-        }
-
-        private void UpdateCliStep(
-            bool cliInstalled,
-            string cliVersion,
-            bool cliIsDispatcher,
-            string requiredCliVersion)
-        {
-            CliSetupCompatibilityState state = CliSetupCompatibility.Evaluate(
-                cliVersion,
-                cliIsDispatcher,
-                requiredCliVersion);
-            string buttonText = GetCliButtonTextForSetupWizard(
-                cliInstalled,
-                _isInstallingCli,
-                false,
-                state.NeedsUpdate,
-                _needsCliPathSetup,
-                cliVersion,
-                requiredCliVersion);
-            bool cliVersionMatched = state.IsCompatible && cliInstalled;
-            bool buttonEnabled = IsCliButtonEnabledForSetupWizard(
-                cliInstalled,
-                cliVersionMatched,
-                _needsCliPathSetup,
-                _isInstallingCli,
-                isChecking: false);
-
-            bool cliCompatible = cliInstalled && cliVersionMatched;
-            _cliStatusLabel.text = GetCliStatusTextForSetupWizard(
-                cliInstalled,
-                cliCompatible,
-                cliVersion,
-                requiredCliVersion);
-            ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--success", cliCompatible);
-            ViewDataBinder.ToggleClass(_cliStatusIcon, "setup-status-icon--pending", !cliCompatible);
-            _installCliButton.SetEnabled(buttonEnabled);
-            _installCliButton.text = buttonText;
-        }
-
-        internal static string GetCliStatusTextForSetupWizard(
-            bool cliInstalled,
-            bool cliCompatible,
-            string cliVersion,
-            string requiredCliVersion)
-        {
-            if (!cliInstalled)
-            {
-                return "Not installed";
-            }
-
-            if (cliCompatible)
-            {
-                return $"v{cliVersion}";
-            }
-
-            if (CliSetupLabelFormatter.ShouldShowRequiredVersionText(cliVersion, requiredCliVersion))
-            {
-                return $"v{cliVersion} (update required)";
-            }
-
-            return $"v{cliVersion} (requires v{requiredCliVersion})";
-        }
-
-        internal static string GetCliButtonTextForSetupWizard(
-            bool cliInstalled,
-            bool isInstallingCli,
-            bool isChecking,
-            bool needsUpdate,
-            bool needsCliPathSetup,
-            string cliVersion,
-            string requiredCliVersion)
-        {
-            if (isChecking)
-            {
-                return "Checking...";
-            }
-
-            if (isInstallingCli)
-            {
-                if (CliSetupPrimaryActionPolicy.ShouldRepairCliPath(needsCliPathSetup, needsUpdate))
-                {
-                    return "Fixing PATH...";
-                }
-
-                return "Installing...";
-            }
-
-            if (needsUpdate)
-            {
-                return CliSetupLabelFormatter.GetCliReplacementButtonText("Update", cliVersion, requiredCliVersion);
-            }
-
-            if (needsCliPathSetup)
-            {
-                return "Fix PATH";
-            }
-
-            if (!cliInstalled)
-            {
-                return "Install CLI";
-            }
-
-            return "Installed";
-        }
-
-        internal static bool IsCliButtonEnabledForSetupWizard(
-            bool cliInstalled,
-            bool cliVersionMatched,
-            bool needsCliPathSetup,
-            bool isInstallingCli,
-            bool isChecking)
-        {
-            return !isInstallingCli && !isChecking && (!cliInstalled || !cliVersionMatched || needsCliPathSetup);
         }
 
         private static async Task<bool> ShouldRepairCliPathSetupAsync(CancellationToken ct)
@@ -1004,7 +888,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool wasCliInstalledBeforeInstall = _cliSetupApplicationService.IsCliInstalled();
             _needsCliPathSetup = false;
             _isInstallingCli = true;
-            UpdateCliStep(false, null, false, GetMinimumRequiredCliVersion());
+            _cliStepPresenter.Update(
+                cliInstalled: false,
+                cliVersion: null,
+                cliIsDispatcher: false,
+                requiredCliVersion: GetMinimumRequiredCliVersion(),
+                isInstallingCli: _isInstallingCli,
+                needsCliPathSetup: _needsCliPathSetup);
 
             try
             {
@@ -1041,8 +931,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private async Task RefreshCliPrimaryActionStateAsync(CancellationToken ct)
         {
-            _installCliButton.SetEnabled(false);
-            _installCliButton.text = "Checking...";
+            _cliStepPresenter.ShowRefreshingPrimaryAction();
 
             try
             {
@@ -1061,7 +950,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
             string requiredCliVersion = GetMinimumRequiredCliVersion();
             bool cliInstalled = IsCliInstalled(cliVersion);
-            UpdateCliStep(cliInstalled, cliVersion, cliIsDispatcher, requiredCliVersion);
+            _cliStepPresenter.Update(
+                cliInstalled,
+                cliVersion,
+                cliIsDispatcher,
+                requiredCliVersion,
+                _isInstallingCli,
+                _needsCliPathSetup);
         }
 
         internal static bool ShouldRepairCliPathFromPrimaryButton(
@@ -1074,11 +969,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private async Task HandleRepairCliPathSetup()
         {
             _isInstallingCli = true;
-            UpdateCliStep(
+            _cliStepPresenter.Update(
                 cliInstalled: true,
                 cliVersion: _cliSetupApplicationService.GetCachedCliVersion(),
                 cliIsDispatcher: _cliSetupApplicationService.GetCachedCliIsDispatcher(),
-                requiredCliVersion: GetMinimumRequiredCliVersion());
+                requiredCliVersion: GetMinimumRequiredCliVersion(),
+                isInstallingCli: _isInstallingCli,
+                needsCliPathSetup: _needsCliPathSetup);
 
             try
             {

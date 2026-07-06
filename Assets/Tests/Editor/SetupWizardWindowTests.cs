@@ -556,7 +556,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string requiredCliVersion,
             string expectedLabel)
         {
-            string label = SetupWizardWindow.GetCliButtonTextForSetupWizard(
+            string label = SetupWizardCliStepPresenter.GetCliButtonTextForSetupWizard(
                 cliInstalled,
                 isInstallingCli,
                 isChecking,
@@ -580,7 +580,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string expectedLabel)
         {
             // Verifies that same-version replacement prompts do not expose dispatcher internals.
-            string label = SetupWizardWindow.GetCliStatusTextForSetupWizard(
+            string label = SetupWizardCliStepPresenter.GetCliStatusTextForSetupWizard(
                 cliInstalled,
                 cliCompatible,
                 cliVersion,
@@ -603,7 +603,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool isChecking,
             bool expectedEnabled)
         {
-            bool enabled = SetupWizardWindow.IsCliButtonEnabledForSetupWizard(
+            bool enabled = SetupWizardCliStepPresenter.IsCliButtonEnabledForSetupWizard(
                 cliInstalled,
                 cliVersionMatched,
                 needsCliPathSetup,
