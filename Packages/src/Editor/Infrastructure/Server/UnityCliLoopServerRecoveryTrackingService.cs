@@ -87,8 +87,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (restoreTask.IsFaulted)
             {
+                string message = $"Failed to restore server: {restoreTask.Exception?.GetBaseException().Message}";
+                // Why: startup restore failures are awaited by UI-facing paths and must be visible
+                // in normal user builds where VibeLogger is compiled out without ULOOP_DEBUG.
+                Debug.LogError($"[{UnityCliLoopConstants.PROJECT_NAME}] {message}");
                 VibeLogger.LogError("server_startup_restore_failed",
-                    $"Failed to restore server: {restoreTask.Exception?.GetBaseException().Message}");
+                    message);
                 scheduledRecoveryCompletionSource.SetException(restoreTask.Exception.GetBaseException());
                 return;
             }

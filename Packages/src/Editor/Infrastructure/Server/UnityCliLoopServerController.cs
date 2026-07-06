@@ -31,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly ISessionFlagsRepository _sessionFlagsRepository;
         private readonly UnityCliLoopServerInitializationUseCase _initializationUseCase;
         private readonly UnityCliLoopServerShutdownUseCase _shutdownUseCase;
+        private readonly SessionRecoveryService _sessionRecoveryService;
         private readonly DomainReloadRecoveryUseCase _domainReloadRecoveryUseCase;
         private readonly UnityCliLoopServerReadinessService _readinessService;
         private readonly UnityCliLoopServerStartupProtectionService _startupProtectionService;
@@ -46,6 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             ISessionFlagsRepository sessionFlagsRepository,
             UnityCliLoopServerInitializationUseCase initializationUseCase,
             UnityCliLoopServerShutdownUseCase shutdownUseCase,
+            SessionRecoveryService sessionRecoveryService,
             DomainReloadRecoveryUseCase domainReloadRecoveryUseCase,
             UnityCliLoopServerReadinessService readinessService,
             UnityCliLoopServerStartupProtectionService startupProtectionService,
@@ -58,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             System.Diagnostics.Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
             System.Diagnostics.Debug.Assert(initializationUseCase != null, "initializationUseCase must not be null");
             System.Diagnostics.Debug.Assert(shutdownUseCase != null, "shutdownUseCase must not be null");
+            System.Diagnostics.Debug.Assert(sessionRecoveryService != null, "sessionRecoveryService must not be null");
             System.Diagnostics.Debug.Assert(domainReloadRecoveryUseCase != null, "domainReloadRecoveryUseCase must not be null");
             System.Diagnostics.Debug.Assert(readinessService != null, "readinessService must not be null");
             System.Diagnostics.Debug.Assert(startupProtectionService != null, "startupProtectionService must not be null");
@@ -70,6 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _sessionFlagsRepository = sessionFlagsRepository ?? throw new ArgumentNullException(nameof(sessionFlagsRepository));
             _initializationUseCase = initializationUseCase ?? throw new ArgumentNullException(nameof(initializationUseCase));
             _shutdownUseCase = shutdownUseCase ?? throw new ArgumentNullException(nameof(shutdownUseCase));
+            _sessionRecoveryService = sessionRecoveryService ?? throw new ArgumentNullException(nameof(sessionRecoveryService));
             _domainReloadRecoveryUseCase = domainReloadRecoveryUseCase ?? throw new ArgumentNullException(nameof(domainReloadRecoveryUseCase));
             _readinessService = readinessService ?? throw new ArgumentNullException(nameof(readinessService));
             _startupProtectionService = startupProtectionService ?? throw new ArgumentNullException(nameof(startupProtectionService));
@@ -296,29 +300,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            bool isAfterCompile = _sessionFlagsRepository.GetIsAfterCompile();
-
-            if (_bridgeServer?.IsRunning == true)
+            ValidationResult restoreResult =
+                await _sessionRecoveryService.RestoreServerStateIfNeededAsync(
+                    this,
+                    CancellationToken.None);
+            if (!restoreResult.IsValid)
             {
-                if (isAfterCompile)
-                {
-                    _sessionFlagsRepository.ClearAfterCompileFlag();
-                }
-
-                return;
+                throw new InvalidOperationException(restoreResult.ErrorMessage);
             }
-
-            if (isAfterCompile)
-            {
-                _sessionFlagsRepository.ClearAfterCompileFlag();
-            }
-
-            if (_sessionFlagsRepository.GetIsServerManuallyStopped())
-            {
-                return;
-            }
-
-            await StartRecoveryIfNeededAsync(isAfterCompile, CancellationToken.None);
         }
 
         /// <summary>

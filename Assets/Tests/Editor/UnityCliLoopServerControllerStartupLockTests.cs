@@ -65,6 +65,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ScheduleStartupRecovery_WhenRecoveryThrowsSynchronously_FaultsTaskAndClearsRecoveryTask()
         {
             // Tests that synchronous startup recovery failures fault and clear the tracked task.
+            UnityEngine.TestTools.LogAssert.Expect(
+                UnityEngine.LogType.Error,
+                "[UnityCliLoop] Failed to restore server: restore failed");
             System.Action scheduledAction = null;
             UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService();
 
@@ -323,6 +326,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void RestoreServerStateIfNeeded_WhenStartupProtectionActiveWithoutServer_ShouldSurfaceRecoveryFailure()
+        {
+            // Tests that startup recovery reports failure when protection suppresses recovery without a server.
+            TestServerInstanceFactory serverInstanceFactory = new();
+            UnityCliLoopServerStartupProtectionService startupProtectionService = new();
+            startupProtectionService.ActivateStartupProtection(60000);
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                serverInstanceFactory: serverInstanceFactory,
+                startupProtectionService: startupProtectionService);
+
+            System.InvalidOperationException exception =
+                Assert.ThrowsAsync<System.InvalidOperationException>(
+                    async () => await service.RestoreServerStateIfNeeded());
+
+            Assert.That(
+                exception.Message,
+                Is.EqualTo("Unity CLI Loop server recovery finished, but no running server instance is available."));
+            Assert.That(serverInstanceFactory.LastCreated, Is.Null);
+        }
+
+        [Test]
         public async Task StopServerWithUseCaseAsync_WhenStoppedByUser_ShouldMarkManualStop()
         {
             // Tests that the manual Stop Server path records explicit user stop intent.
@@ -391,7 +415,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry = null,
             System.Func<bool> isReadinessProbeBlocked = null,
             System.Func<int, CancellationToken, Task> waitBeforeReadinessRetryAsync = null,
-            int readinessIdleTimeoutMilliseconds = UnityCliLoopServerConfig.READINESS_PROBE_TIMEOUT_MS)
+            int readinessIdleTimeoutMilliseconds = UnityCliLoopServerConfig.READINESS_PROBE_TIMEOUT_MS,
+            UnityCliLoopServerStartupProtectionService startupProtectionService = null)
         {
             TestServerInstanceFactory effectiveServerInstanceFactory =
                 serverInstanceFactory ?? new TestServerInstanceFactory();
@@ -420,7 +445,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isReadinessProbeBlocked,
                 waitBeforeReadinessRetryAsync,
                 readinessIdleTimeoutMilliseconds);
-            UnityCliLoopServerStartupProtectionService startupProtectionService = new();
+            UnityCliLoopServerStartupProtectionService effectiveStartupProtectionService =
+                startupProtectionService ?? new UnityCliLoopServerStartupProtectionService();
             UnityCliLoopServerRecoveryTrackingService recoveryTrackingService = CreateRecoveryTrackingService(
                 waitBeforeRecoveryRetryAsync);
             return new UnityCliLoopServerControllerService(
@@ -430,9 +456,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _sessionFlagsRepository,
                 initializationUseCase,
                 shutdownUseCase,
+                sessionRecoveryService,
                 domainReloadRecoveryUseCase,
                 readinessService,
-                startupProtectionService,
+                effectiveStartupProtectionService,
                 recoveryTrackingService,
                 new TestDomainReloadLifecycle());
         }
