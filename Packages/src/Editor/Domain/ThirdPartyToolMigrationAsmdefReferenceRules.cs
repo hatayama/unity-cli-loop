@@ -14,7 +14,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public static string[] GetMigratedAsmdefReferences(
             string reference,
             bool hasLegacyCSharpSource,
-            bool requiresToolContractsReference,
             bool requiresApplicationReference,
             bool requiresDomainReference,
             bool requiresFirstPartyScreenshotReference)
