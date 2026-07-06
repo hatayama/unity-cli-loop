@@ -118,7 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "compile_controller_validation_failed",
                     validation.ErrorMessage,
                     new { force_recompile = forceRecompile });
-                return new CompileResult(
+                CompileResult result = new CompileResult(
                     success: false,
                     errorCount: 0,
                     warningCount: 0,
@@ -129,6 +129,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     isIndeterminate: true,
                     message: validation.ErrorMessage
                 );
+                RecordCompileResultIfNeeded(
+                    result,
+                    BuildCompileControllerStateContext(new Dictionary<string, object>
+                    {
+                        ["validation_failed_before_request"] = true
+                    }));
+                return result;
             }
 
             (bool CanProceed, string Message, string[] ScenePaths) sceneChangeResult =
@@ -143,7 +150,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         reload_external_scene_changes = _reloadExternalSceneChanges,
                         scene_paths = sceneChangeResult.ScenePaths
                     });
-                return CompileResultFactory.CreateExternalSceneChangeFailureResult(sceneChangeResult);
+                CompileResult result =
+                    CompileResultFactory.CreateExternalSceneChangeFailureResult(sceneChangeResult);
+                RecordCompileResultIfNeeded(
+                    result,
+                    BuildCompileControllerStateContext(new Dictionary<string, object>
+                    {
+                        ["external_scene_change_failed_before_request"] = true
+                    }));
+                return result;
             }
 
             _isCompiling = true;
@@ -523,14 +538,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            CompileResponse response =
-                CompileResponseFactory.CreateResponse(result, _resultRecordingContext.ForceRecompile);
-            CompileSessionResultStore.StoreCompileResult(
+            CompileResultSessionRecorder.RecordCompileResult(
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository,
                 _resultRecordingContext.RequestId,
                 _resultRecordingContext.ForceRecompile,
-                response,
+                result,
                 _resultRecordingContext.RequestId);
             completionContext["result_recorded_in_session_state"] = true;
             completionContext["request_id"] = _resultRecordingContext.RequestId;
