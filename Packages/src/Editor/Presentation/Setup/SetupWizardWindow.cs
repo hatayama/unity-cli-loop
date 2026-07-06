@@ -199,14 +199,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         // Step 2
         private VisualElement _groupSkillsRow;
-        private VisualElement _skillsTargetRow;
         private EnumField _skillsTargetField;
         private Toggle _groupSkillsToggle;
         private Label _groupSkillsLabel;
-        private VisualElement _skillsTargetList;
-        private VisualElement _skillsStatusDivider;
-        private Label _skillsStatusLabel;
-        private Button _installSkillsButton;
 
         // Footer
         private Toggle _suppressAutoShowToggle;
@@ -217,6 +212,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private Image _githubLinkIcon;
         private ScrollView _mainScrollView;
         private SetupWizardCliStepPresenter _cliStepPresenter;
+        private SetupWizardSkillsStepPresenter _skillsStepPresenter;
 
         // State
         private bool _isInstallingCli;
@@ -311,14 +307,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 HandleInstallCli);
 
             _groupSkillsRow = rootVisualElement.Q<VisualElement>("group-skills-row");
-            _skillsTargetRow = rootVisualElement.Q<VisualElement>("skills-target-row");
             _skillsTargetField = rootVisualElement.Q<EnumField>("skills-target-field");
             _groupSkillsToggle = rootVisualElement.Q<Toggle>("group-skills-toggle");
             _groupSkillsLabel = rootVisualElement.Q<Label>("group-skills-label");
-            _skillsTargetList = rootVisualElement.Q<VisualElement>("skills-target-list");
-            _skillsStatusDivider = rootVisualElement.Q<VisualElement>("skills-status-divider");
-            _skillsStatusLabel = rootVisualElement.Q<Label>("skills-status-label");
-            _installSkillsButton = rootVisualElement.Q<Button>("install-skills-button");
+            VisualElement skillsTargetRow = rootVisualElement.Q<VisualElement>("skills-target-row");
+            VisualElement skillsTargetList = rootVisualElement.Q<VisualElement>("skills-target-list");
+            VisualElement skillsStatusDivider = rootVisualElement.Q<VisualElement>("skills-status-divider");
+            Label skillsStatusLabel = rootVisualElement.Q<Label>("skills-status-label");
+            Button installSkillsButton = rootVisualElement.Q<Button>("install-skills-button");
+            _skillsStepPresenter = new SetupWizardSkillsStepPresenter(
+                skillsTargetRow,
+                skillsTargetList,
+                skillsStatusDivider,
+                skillsStatusLabel,
+                installSkillsButton,
+                HandleInstallSkills);
 
             _suppressAutoShowToggle = rootVisualElement.Q<Toggle>("suppress-auto-show-toggle");
             _openSettingsButton = rootVisualElement.Q<Button>("open-settings-button");
@@ -332,7 +335,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void BindEvents()
         {
             _refreshButton.clicked += () => RefreshUI();
-            _installSkillsButton.clicked += HandleInstallSkills;
             InitializeSkillsTargetField();
             InitializeGroupSkillsToggle();
             _suppressAutoShowToggle.RegisterValueChangedCallback(evt => HandleSuppressAutoShowChanged(evt.newValue));
@@ -408,20 +410,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _cliStepPresenter.ShowChecking();
             ViewDataBinder.SetVisible(_groupSkillsRow, false);
             _groupSkillsToggle.SetEnabled(false);
-            UpdateSkillsStatusLabel("Checking installed skills...");
-            _installSkillsButton.SetEnabled(false);
-            _installSkillsButton.text = "Checking...";
-            ViewDataBinder.SetVisible(_skillsTargetRow, _shouldUseFirstInstallSkillsUi);
-            ViewDataBinder.SetVisible(_skillsTargetList, !_shouldUseFirstInstallSkillsUi);
-            _skillsTargetList.Clear();
-        }
-
-        private void UpdateSkillsStatusLabel(string text)
-        {
-            _skillsStatusLabel.text = text;
-            bool isVisible = !string.IsNullOrEmpty(text);
-            ViewDataBinder.SetVisible(_skillsStatusDivider, isVisible);
-            ViewDataBinder.SetVisible(_skillsStatusLabel, isVisible);
+            _skillsStepPresenter.ShowChecking(_shouldUseFirstInstallSkillsUi);
         }
 
         private void ScheduleInitialRefresh()
@@ -453,12 +442,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 ViewDataBinder.SetVisible(_groupSkillsRow, false);
                 _groupSkillsToggle.SetEnabled(false);
-                UpdateSkillsStatusLabel("Checking installed skills...");
-                _installSkillsButton.SetEnabled(false);
-                _installSkillsButton.text = "Checking...";
-                ViewDataBinder.SetVisible(_skillsTargetRow, _shouldUseFirstInstallSkillsUi);
-                ViewDataBinder.SetVisible(_skillsTargetList, !_shouldUseFirstInstallSkillsUi);
-                _skillsTargetList.Clear();
+                _skillsStepPresenter.ShowChecking(_shouldUseFirstInstallSkillsUi);
             }
 
             await Task.Yield();
@@ -545,15 +529,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _skillInstallStateRefreshCts = null;
         }
 
-        internal static List<SkillSetupTargetInfo> FilterInstallableSkillTargets(
-            IEnumerable<SkillSetupTargetInfo> targets)
-        {
-            Debug.Assert(targets != null, "targets must not be null");
-            return targets
-                .Where(target => target.HasSkillsDirectory)
-                .ToList();
-        }
-
         internal static bool ShouldShowSkillsInstalledDialog(
             IEnumerable<SkillSetupTargetInfo> targets)
         {
@@ -571,67 +546,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static bool CanManageSkills(bool cliInstalled)
         {
             return cliInstalled;
-        }
-
-        internal static bool ShouldShowSkillsTargetRowForSetupWizard(bool shouldUseFirstInstallSkillsUi)
-        {
-            return shouldUseFirstInstallSkillsUi;
-        }
-
-        internal static bool ShouldShowSkillsTargetListForSetupWizard(
-            bool canManageSkills,
-            bool shouldUseFirstInstallSkillsUi)
-        {
-            return canManageSkills && !shouldUseFirstInstallSkillsUi;
-        }
-
-        internal static SkillSetupTargetInfo CreateFirstInstallSkillTarget(
-            SkillsTarget target,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            SkillsTargetSelection selection = SkillsTargetSelectionResolver.Resolve(
-                target,
-                groupSkillsUnderUnityCliLoop);
-            return new(
-                selection.DisplayName,
-                selection.DirectoryName,
-                selection.InstallFlag,
-                hasSkillsDirectory: false,
-                hasExistingSkills: false,
-                hasDifferentLayoutSkills: false,
-                SkillInstallState.Missing);
-        }
-
-        internal static SkillSetupTargetInfo GetSelectedSkillTargetInfo(
-            IEnumerable<SkillSetupTargetInfo> targets,
-            SkillsTarget target,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            Debug.Assert(targets != null, "targets must not be null");
-
-            SkillsTargetSelection selection = SkillsTargetSelectionResolver.Resolve(
-                target,
-                groupSkillsUnderUnityCliLoop);
-            SkillSetupTargetInfo selectedTargetInfo = targets
-                .FirstOrDefault(info => info.DirName == selection.DirectoryName);
-            return string.IsNullOrEmpty(selectedTargetInfo.DirName)
-                ? CreateFirstInstallSkillTarget(target, groupSkillsUnderUnityCliLoop)
-                : selectedTargetInfo;
-        }
-
-        internal static List<SkillSetupTargetInfo> GetFirstInstallableSkillTargets(
-            IEnumerable<SkillSetupTargetInfo> targets,
-            SkillsTarget target,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            SkillSetupTargetInfo selectedTargetInfo = GetSelectedSkillTargetInfo(
-                targets,
-                target,
-                groupSkillsUnderUnityCliLoop);
-            return selectedTargetInfo.InstallState == SkillInstallState.Installed
-                   || selectedTargetInfo.InstallState == SkillInstallState.Checking
-                ? new List<SkillSetupTargetInfo>()
-                : new List<SkillSetupTargetInfo> { selectedTargetInfo };
         }
 
         private static async Task<bool> ShouldRepairCliPathSetupAsync(CancellationToken ct)
@@ -684,190 +598,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool canManageSkills,
             List<SkillSetupTargetInfo> targets)
         {
-            _skillsTargetList.Clear();
-            bool useFirstInstallSkillsUi = _shouldUseFirstInstallSkillsUi;
-            ViewDataBinder.SetVisible(
-                _skillsTargetRow,
-                ShouldShowSkillsTargetRowForSetupWizard(useFirstInstallSkillsUi));
-            ViewDataBinder.SetVisible(
-                _skillsTargetList,
-                ShouldShowSkillsTargetListForSetupWizard(canManageSkills, useFirstInstallSkillsUi));
-
-            if (!canManageSkills)
-            {
-                UpdateSkillsStatusLabel(string.Empty);
-                _installSkillsButton.SetEnabled(false);
-                _installSkillsButton.text = GetSkillsButtonTextForSetupWizard(
-                    cliInstalled: false,
-                    _isInstallingSkills,
-                    hasOutdatedSkills: false);
-                _groupSkillsToggle.SetEnabled(false);
-                return;
-            }
-
-            _groupSkillsToggle.SetEnabled(!_isInstallingSkills);
-
-            if (useFirstInstallSkillsUi)
-            {
-                SkillSetupTargetInfo selectedTargetInfo = GetSelectedSkillTargetInfo(
-                    targets,
-                    _skillsTarget,
-                    !_installSkillsFlat);
-                UpdateSkillsStatusLabel(string.Empty);
-                _installSkillsButton.text = CliSetupSection.GetInstallSkillsButtonText(
-                    isCliInstalled: true,
-                    _isInstallingSkills,
-                    selectedTargetInfo.InstallState);
-                _installSkillsButton.SetEnabled(CliSetupSection.IsInstallSkillsButtonEnabled(
-                    isCliInstalled: true,
-                    _isInstallingSkills,
-                    selectedTargetInfo.InstallState));
-                return;
-            }
-
-            List<SkillSetupTargetInfo> installableTargets = FilterInstallableSkillTargets(targets);
-
-            foreach (SkillSetupTargetInfo target in installableTargets)
-            {
-                VisualElement item = new();
-                item.AddToClassList("setup-target-item");
-
-                Label nameLabel = new($"{target.DisplayName} ({target.DirName}/)");
-                nameLabel.AddToClassList("setup-target-item__label");
-                item.Add(nameLabel);
-
-                Label statusLabel = new(GetSkillInstallStatusText(
-                    target.InstallState,
-                    target.HasDifferentLayoutSkills,
-                    !_installSkillsFlat));
-                statusLabel.AddToClassList("setup-target-item__status");
-                statusLabel.AddToClassList(GetSkillInstallStatusClass(
-                    target.InstallState,
-                    target.HasDifferentLayoutSkills,
-                    !_installSkillsFlat));
-                item.Add(statusLabel);
-
-                _skillsTargetList.Add(item);
-            }
-
-            if (installableTargets.Count == 0)
-            {
-                UpdateSkillsStatusLabel(
-                    "Create a tool folder to enable skill installation (.claude/, .agents/, etc.)");
-                _installSkillsButton.SetEnabled(false);
-                _installSkillsButton.text = "Install Skills";
-                return;
-            }
-
-            bool isCheckingSkills = installableTargets.Any(
-                t => t.InstallState == SkillInstallState.Checking);
-            if (isCheckingSkills)
-            {
-                UpdateSkillsStatusLabel("Checking installed skills...");
-                _installSkillsButton.SetEnabled(false);
-                _installSkillsButton.text = "Checking...";
-                return;
-            }
-
-            bool allSkillsInstalled = installableTargets.All(
-                t => t.InstallState == SkillInstallState.Installed);
-            if (allSkillsInstalled)
-            {
-                UpdateSkillsStatusLabel($"Installed for {installableTargets.Count} targets");
-                _installSkillsButton.SetEnabled(false);
-                _installSkillsButton.text = "Installed";
-            }
-            else
-            {
-                bool hasOutdatedSkills = installableTargets.Any(
-                    t => t.InstallState == SkillInstallState.Outdated);
-                UpdateSkillsStatusLabel(string.Empty);
-                _installSkillsButton.SetEnabled(!_isInstallingSkills);
-                _installSkillsButton.text = GetSkillsButtonTextForSetupWizard(
-                    cliInstalled: true,
-                    _isInstallingSkills,
-                    hasOutdatedSkills);
-            }
-        }
-
-        internal static string GetSkillsButtonTextForSetupWizard(
-            bool cliInstalled,
-            bool isInstallingSkills,
-            bool hasOutdatedSkills)
-        {
-            return !cliInstalled
-                ? "Install Skills"
-                : GetInstallSkillsButtonText(isInstallingSkills, hasOutdatedSkills);
-        }
-
-        internal static string GetInstallSkillsButtonText(
-            bool isInstallingSkills,
-            bool hasOutdatedSkills)
-        {
-            if (isInstallingSkills)
-            {
-                return "Installing...";
-            }
-
-            return hasOutdatedSkills ? "Update Skills" : "Install Skills";
-        }
-
-        internal static string GetSkillInstallStatusText(
-            SkillInstallState installState,
-            bool hasDifferentLayoutSkills,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            if (installState == SkillInstallState.Checking)
-            {
-                return "Checking...";
-            }
-
-            if (installState == SkillInstallState.Installed)
-            {
-                return "Installed";
-            }
-
-            if (installState == SkillInstallState.Outdated)
-            {
-                return "Outdated";
-            }
-
-            if (!hasDifferentLayoutSkills)
-            {
-                return "Missing";
-            }
-
-            return groupSkillsUnderUnityCliLoop ? "Not grouped" : "Grouped";
-        }
-
-        internal static string GetSkillInstallStatusClass(
-            SkillInstallState installState,
-            bool hasDifferentLayoutSkills,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            if (installState == SkillInstallState.Checking)
-            {
-                return "setup-target-item__status--checking";
-            }
-
-            if (installState == SkillInstallState.Installed)
-            {
-                return "setup-target-item__status--installed";
-            }
-
-            if (installState == SkillInstallState.Outdated)
-            {
-                return "setup-target-item__status--outdated";
-            }
-
-            if (!hasDifferentLayoutSkills)
-            {
-                return "setup-target-item__status--missing";
-            }
-
-            return groupSkillsUnderUnityCliLoop
-                ? "setup-target-item__status--different-layout"
-                : "setup-target-item__status--different-layout";
+            _groupSkillsToggle.SetEnabled(canManageSkills && !_isInstallingSkills);
+            _skillsStepPresenter.Update(
+                canManageSkills,
+                targets,
+                _shouldUseFirstInstallSkillsUi,
+                _skillsTarget,
+                !_installSkillsFlat,
+                _isInstallingSkills);
         }
 
         private async void HandleInstallCli()
@@ -998,8 +736,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             List<SkillSetupTargetInfo> targets = DetectDisplayedSkillTargets(projectRoot);
             List<SkillSetupTargetInfo> installableTargets = _shouldUseFirstInstallSkillsUi
-                ? GetFirstInstallableSkillTargets(targets, _skillsTarget, !_installSkillsFlat)
-                : FilterInstallableSkillTargets(targets);
+                ? SetupWizardSkillsStepPresenter.GetFirstInstallableSkillTargets(
+                    targets,
+                    _skillsTarget,
+                    !_installSkillsFlat)
+                : SetupWizardSkillsStepPresenter.FilterInstallableSkillTargets(targets);
             if (installableTargets.Count == 0) return;
 
             bool shouldShowSkillsInstalledDialog = ShouldShowSkillsInstalledDialog(installableTargets);
