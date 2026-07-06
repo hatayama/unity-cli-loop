@@ -97,7 +97,6 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 recoveryTrackingService,
                 firstPartyServerLifecycle);
             UnityCliLoopServerApplicationService applicationService = new(controllerService);
-            UnityCliLoopServerApplicationFacade.RegisterService(applicationService);
             controllerService.InitializeForEditorStartup();
 
             return new UnityCliLoopApplicationServices(
