@@ -16,10 +16,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         public static async Task<CliPathSetupFlowResult> EnsureVisibleAndShowResultAsync(
             RuntimePlatform platform,
+            CliSetupApplicationService cliSetupApplicationService,
             CancellationToken ct)
         {
+            System.Diagnostics.Debug.Assert(
+                cliSetupApplicationService != null,
+                "cliSetupApplicationService must not be null");
+
             CliPathSetupFlowResult result =
-                await CliSetupApplicationFacade.EnsureCliVisibleFromShellAsync(platform, ct);
+                await cliSetupApplicationService.EnsureCliVisibleFromShellAsync(platform, ct);
             ShowResult(result);
             return result;
         }

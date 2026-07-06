@@ -46,7 +46,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
-            SetupWizardWindow.InitializeEditorServices(_editorSettingsPort, _sessionFlagsRepository);
+            SetupWizardWindow.InitializeEditorServices(
+                _editorSettingsPort,
+                _sessionFlagsRepository,
+                CreateCliSetupApplicationService());
             _editorSettingsRepository.InvalidateCache();
         }
 
@@ -938,6 +941,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 File.Delete(path);
             }
+        }
+
+        private static CliSetupApplicationService CreateCliSetupApplicationService()
+        {
+            CliPinReaderService cliPinReaderService = new();
+            return new CliSetupApplicationService(
+                new CliInstallationDetector(cliPinReaderService),
+                new NativeCliInstallerService(),
+                cliPinReaderService);
         }
     }
 }
