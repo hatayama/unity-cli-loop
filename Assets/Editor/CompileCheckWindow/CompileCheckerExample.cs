@@ -4,6 +4,7 @@ using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Dev
 {
@@ -21,6 +22,11 @@ namespace io.github.hatayama.UnityCliLoop.Dev
 
             try
             {
+                if (!ValidateCompilationStateBeforeControllerExecution())
+                {
+                    return;
+                }
+
                 // How Masamichi requested to use it
                 CompileResult result = await compileController.TryCompileAsync();
                 CompilerMessage[] err = result.Errors;
@@ -57,6 +63,11 @@ namespace io.github.hatayama.UnityCliLoop.Dev
 
             try
             {
+                if (!ValidateCompilationStateBeforeControllerExecution())
+                {
+                    return;
+                }
+
                 // Example of forced re-compilation
                 CompileResult result = await compileController.TryCompileAsync(forceRecompile: true);
                 CompilerMessage[] err = result.Errors;
@@ -69,6 +80,19 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             {
                 compileController.Dispose();
             }
+        }
+
+        private static bool ValidateCompilationStateBeforeControllerExecution()
+        {
+            CompilationStateValidationService validationService = new();
+            ValidationResult validation = validationService.ValidateCompilationState();
+            if (validation.IsValid)
+            {
+                return true;
+            }
+
+            Debug.LogWarning(validation.ErrorMessage);
+            return false;
         }
     }
 }

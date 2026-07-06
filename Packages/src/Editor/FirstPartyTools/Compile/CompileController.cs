@@ -86,11 +86,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <param name="forceRecompile">Whether to force a recompile.</param>
         /// <returns>The compilation result.</returns>
         /// <exception cref="InvalidOperationException">Thrown when the task is not found during compilation.</exception>
+        /// <remarks>
+        /// Callers must validate editor compilation state before invoking compile execution;
+        /// the production pipeline does this in CompileUseCase.
+        /// </remarks>
         public async Task<CompileResult> TryCompileAsync(bool forceRecompile = false)
         {
             return await TryCompileAsync(forceRecompile, CancellationToken.None);
         }
 
+        /// <summary>
+        /// Executes compilation asynchronously.
+        /// </summary>
+        /// <param name="forceRecompile">Whether to force a recompile.</param>
+        /// <param name="ct">Cancellation token for the compile execution.</param>
+        /// <returns>The compilation result.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when the task is not found during compilation.</exception>
+        /// <remarks>
+        /// Callers must validate editor compilation state before invoking compile execution;
+        /// the production pipeline does this in CompileUseCase.
+        /// </remarks>
         public async Task<CompileResult> TryCompileAsync(bool forceRecompile, CancellationToken ct)
         {
             if (_isCompiling)
@@ -108,34 +123,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return await _currentCompileTask.Task;
                 }
                 throw new InvalidOperationException("Compilation is in progress, but the task could not be found.");
-            }
-
-            CompilationStateValidationService validationService = new();
-            ValidationResult validation = validationService.ValidateCompilationState();
-            if (!validation.IsValid)
-            {
-                VibeLogger.LogWarning(
-                    "compile_controller_validation_failed",
-                    validation.ErrorMessage,
-                    new { force_recompile = forceRecompile });
-                CompileResult result = new CompileResult(
-                    success: false,
-                    errorCount: 0,
-                    warningCount: 0,
-                    completedAt: DateTime.Now,
-                    messages: new CompilerMessage[0],
-                    errors: new CompilerMessage[0],
-                    warnings: new CompilerMessage[0],
-                    isIndeterminate: true,
-                    message: validation.ErrorMessage
-                );
-                RecordCompileResultIfNeeded(
-                    result,
-                    BuildCompileControllerStateContext(new Dictionary<string, object>
-                    {
-                        ["validation_failed_before_request"] = true
-                    }));
-                return result;
             }
 
             (bool CanProceed, string Message, string[] ScenePaths) sceneChangeResult =
