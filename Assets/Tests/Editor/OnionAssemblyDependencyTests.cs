@@ -541,6 +541,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void CompileToolAsmdef_WhenLoaded_DoesNotReferenceInfrastructure()
+        {
+            // Tests that compile result storage keeps its wire serializer contract without depending on infrastructure.
+            string[] references = ReadResolvedReferences("Packages/src/Editor/FirstPartyTools/Compile/UnityCLILoop.FirstPartyTools.Compile.Editor.asmdef");
+
+            Assert.That(references, Does.Not.Contain(InfrastructureAssemblyName));
+        }
+
+        [Test]
         public void ApplicationToolSources_WhenLoaded_DoNotDeclarePublicToolEntryPoints()
         {
             // Tests that bundled tool entry points stay outside the application layer.
