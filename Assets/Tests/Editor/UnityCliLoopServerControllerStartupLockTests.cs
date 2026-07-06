@@ -197,7 +197,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that readiness probing fails fast instead of leaving startup state stuck forever.
             TestReadinessProbe readinessProbe = new(neverCompletes: true);
-            UnityCliLoopServerControllerService service = CreateControllerService(readinessProbe);
+            UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
+                new UnityCliLoopServerLifecycleRegistryService();
+            UnityCliLoopServerReadinessService service = new(
+                lifecycleRegistry,
+                readinessProbe);
 
             System.TimeoutException exception = null;
             try
@@ -412,6 +416,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 sessionRecoveryService,
                 domainReloadDetectionService,
                 _sessionFlagsRepository);
+            TestReadinessProbe effectiveReadinessProbe = readinessProbe ?? new TestReadinessProbe();
+            UnityCliLoopServerReadinessService readinessService = new(
+                effectiveLifecycleRegistry,
+                effectiveReadinessProbe,
+                isReadinessProbeBlocked,
+                waitBeforeReadinessRetryAsync,
+                readinessIdleTimeoutMilliseconds);
+            UnityCliLoopServerStartupProtectionService startupProtectionService = new();
             return new UnityCliLoopServerControllerService(
                 effectiveServerInstanceFactory,
                 effectiveLifecycleRegistry,
@@ -420,12 +432,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 initializationUseCase,
                 shutdownUseCase,
                 domainReloadRecoveryUseCase,
-                readinessProbe ?? new TestReadinessProbe(),
+                readinessService,
+                startupProtectionService,
                 new TestDomainReloadLifecycle(),
-                isReadinessProbeBlocked,
-                waitBeforeReadinessRetryAsync,
-                waitBeforeRecoveryRetryAsync,
-                readinessIdleTimeoutMilliseconds);
+                waitBeforeRecoveryRetryAsync);
         }
 
         private DomainReloadDetectionFileService CreateDomainReloadDetectionService()
