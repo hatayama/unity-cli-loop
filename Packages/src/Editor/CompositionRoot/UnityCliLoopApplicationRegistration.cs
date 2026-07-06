@@ -58,7 +58,9 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 new CliInstallationDetector(cliPinReaderService),
                 new NativeCliInstallerService(),
                 cliPinReaderService));
-            UnityCliLoopBridgeServerInstanceFactory serverFactory = new(domainReloadDetectionService);
+            UnityCliLoopBridgeServerInstanceFactory serverFactory = new(
+                domainReloadDetectionService,
+                toolRegistrarService);
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry = new();
             lifecycleRegistry.RegisterSource(serverFactory);
             UnityCliLoopServerStartupService serverStartupService = new(
@@ -89,6 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 serverShutdownUseCase,
                 sessionRecoveryService,
                 domainReloadRecoveryUseCase,
+                toolRegistrarService,
                 serverReadinessService,
                 startupProtectionService,
                 recoveryTrackingService,

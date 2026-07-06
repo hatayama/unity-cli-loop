@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -137,10 +138,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 shutdownUseCase,
                 sessionRecoveryService,
                 domainReloadRecoveryUseCase,
+                CreateToolRegistrarService(),
                 readinessService,
                 startupProtectionService ?? new UnityCliLoopServerStartupProtectionService(),
                 recoveryTrackingService,
                 domainReloadLifecycle ?? new TestDomainReloadLifecycle());
+        }
+
+        private static UnityCliLoopToolRegistrarService CreateToolRegistrarService()
+        {
+            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
+            return new UnityCliLoopToolRegistrarService(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsPort,
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
+                () => System.Array.Empty<IUnityCliLoopTool>());
         }
 
         /// <summary>

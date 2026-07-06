@@ -8,7 +8,6 @@ using UnityEngine;
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
-using ApplicationRegistrar = io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -33,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly UnityCliLoopServerShutdownUseCase _shutdownUseCase;
         private readonly SessionRecoveryService _sessionRecoveryService;
         private readonly DomainReloadRecoveryUseCase _domainReloadRecoveryUseCase;
+        private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
         private readonly UnityCliLoopServerReadinessService _readinessService;
         private readonly UnityCliLoopServerStartupProtectionService _startupProtectionService;
         private readonly UnityCliLoopServerRecoveryTrackingService _recoveryTrackingService;
@@ -49,6 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopServerShutdownUseCase shutdownUseCase,
             SessionRecoveryService sessionRecoveryService,
             DomainReloadRecoveryUseCase domainReloadRecoveryUseCase,
+            UnityCliLoopToolRegistrarService toolRegistrarService,
             UnityCliLoopServerReadinessService readinessService,
             UnityCliLoopServerStartupProtectionService startupProtectionService,
             UnityCliLoopServerRecoveryTrackingService recoveryTrackingService,
@@ -62,6 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             System.Diagnostics.Debug.Assert(shutdownUseCase != null, "shutdownUseCase must not be null");
             System.Diagnostics.Debug.Assert(sessionRecoveryService != null, "sessionRecoveryService must not be null");
             System.Diagnostics.Debug.Assert(domainReloadRecoveryUseCase != null, "domainReloadRecoveryUseCase must not be null");
+            System.Diagnostics.Debug.Assert(toolRegistrarService != null, "toolRegistrarService must not be null");
             System.Diagnostics.Debug.Assert(readinessService != null, "readinessService must not be null");
             System.Diagnostics.Debug.Assert(startupProtectionService != null, "startupProtectionService must not be null");
             System.Diagnostics.Debug.Assert(recoveryTrackingService != null, "recoveryTrackingService must not be null");
@@ -75,6 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _shutdownUseCase = shutdownUseCase ?? throw new ArgumentNullException(nameof(shutdownUseCase));
             _sessionRecoveryService = sessionRecoveryService ?? throw new ArgumentNullException(nameof(sessionRecoveryService));
             _domainReloadRecoveryUseCase = domainReloadRecoveryUseCase ?? throw new ArgumentNullException(nameof(domainReloadRecoveryUseCase));
+            _toolRegistrarService = toolRegistrarService ?? throw new ArgumentNullException(nameof(toolRegistrarService));
             _readinessService = readinessService ?? throw new ArgumentNullException(nameof(readinessService));
             _startupProtectionService = startupProtectionService ?? throw new ArgumentNullException(nameof(startupProtectionService));
             _recoveryTrackingService = recoveryTrackingService ?? throw new ArgumentNullException(nameof(recoveryTrackingService));
@@ -186,7 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // for compatibility with existing code
             _bridgeServer = result.ServerInstance;
 
-            ApplicationRegistrar.WarmupRegistry();
+            _toolRegistrarService.WarmupRegistry();
             await _readinessService.MarkServerReadyAsync("manual-start", cancellationToken);
         }
 
@@ -435,7 +438,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 // Clear reconnection-related flags on successful recovery
                 _sessionFlagsRepository.ClearReconnectingFlags();
                 _sessionFlagsRepository.ClearPostCompileReconnectingUI();
-                ApplicationRegistrar.WarmupRegistry();
+                _toolRegistrarService.WarmupRegistry();
                 await _readinessService.MarkServerReadyAsync("server-recovery", cancellationToken);
 
                 _startupProtectionService.ActivateStartupProtection(5000);
