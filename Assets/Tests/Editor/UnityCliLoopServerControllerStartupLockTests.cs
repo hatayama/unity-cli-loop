@@ -113,13 +113,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TestReadinessProbe readinessProbe = new();
             int serverStartedCount = 0;
             lifecycleRegistry.ServerStarted += () => serverStartedCount++;
-            UnityCliLoopServerControllerService service = new(
-                serverInstanceFactory,
-                lifecycleRegistry,
-                CreateDomainReloadDetectionService(),
-                _sessionFlagsRepository,
-                readinessProbe,
-                new TestDomainReloadLifecycle());
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                readinessProbe: readinessProbe,
+                serverInstanceFactory: serverInstanceFactory,
+                lifecycleRegistry: lifecycleRegistry,
+                isReadinessProbeBlocked: () => false);
 
             await service.StartRecoveryIfNeededAsync(isAfterCompile: false, CancellationToken.None);
 
@@ -139,15 +137,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TestReadinessProbe readinessProbe = new();
             int serverStartedCount = 0;
             lifecycleRegistry.ServerStarted += () => serverStartedCount++;
-            UnityCliLoopServerControllerService service = new(
-                serverInstanceFactory,
-                lifecycleRegistry,
-                CreateDomainReloadDetectionService(),
-                _sessionFlagsRepository,
-                readinessProbe,
-                new TestDomainReloadLifecycle(),
-                () => editorIsBusy,
-                (delayMilliseconds, ct) =>
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                readinessProbe: readinessProbe,
+                serverInstanceFactory: serverInstanceFactory,
+                lifecycleRegistry: lifecycleRegistry,
+                isReadinessProbeBlocked: () => editorIsBusy,
+                waitBeforeReadinessRetryAsync: (delayMilliseconds, ct) =>
                 {
                     delayCallCount++;
                     Assert.That(readinessProbe.CallCount, Is.EqualTo(0));
@@ -173,15 +168,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TestReadinessProbe readinessProbe = new();
             int serverStartedCount = 0;
             lifecycleRegistry.ServerStarted += () => serverStartedCount++;
-            UnityCliLoopServerControllerService service = new(
-                serverInstanceFactory,
-                lifecycleRegistry,
-                CreateDomainReloadDetectionService(),
-                _sessionFlagsRepository,
-                readinessProbe,
-                new TestDomainReloadLifecycle(),
-                () => true,
-                (delayMilliseconds, ct) =>
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                readinessProbe: readinessProbe,
+                serverInstanceFactory: serverInstanceFactory,
+                lifecycleRegistry: lifecycleRegistry,
+                isReadinessProbeBlocked: () => true,
+                waitBeforeReadinessRetryAsync: (delayMilliseconds, ct) =>
                 {
                     delayCallCount++;
                     return Task.CompletedTask;
@@ -270,6 +262,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     recordedWaits.Add(delayMilliseconds);
                     return Task.CompletedTask;
                 });
+            UnityEngine.TestTools.LogAssert.Expect(
+                UnityEngine.LogType.Error,
+                "[UnityCliLoop] Unity CLI Loop server recovery failed before the bridge became ready. readiness probe timed out");
 
             System.InvalidOperationException exception =
                 Assert.ThrowsAsync<System.InvalidOperationException>(async () =>
@@ -317,13 +312,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
-            UnityCliLoopServerControllerService service = new(
-                serverInstanceFactory,
-                lifecycleRegistry,
-                CreateDomainReloadDetectionService(),
-                _sessionFlagsRepository,
-                new TestReadinessProbe(),
-                new TestDomainReloadLifecycle());
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                serverInstanceFactory: serverInstanceFactory,
+                lifecycleRegistry: lifecycleRegistry);
 
             await service.RestoreServerStateIfNeeded();
 
@@ -355,13 +346,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TestServerInstanceFactory serverInstanceFactory = new(throwOnCreate: true);
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
-            UnityCliLoopServerControllerService service = new(
-                serverInstanceFactory,
-                lifecycleRegistry,
-                CreateDomainReloadDetectionService(),
-                _sessionFlagsRepository,
-                new TestReadinessProbe(),
-                new TestDomainReloadLifecycle());
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                serverInstanceFactory: serverInstanceFactory,
+                lifecycleRegistry: lifecycleRegistry);
             TestServerInstance runningServer = new();
             runningServer.StartServer();
             service.RegisterRecoveredServer(runningServer);
@@ -382,13 +369,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
-            UnityCliLoopServerControllerService service = new(
-                serverInstanceFactory,
-                lifecycleRegistry,
-                CreateDomainReloadDetectionService(),
-                _sessionFlagsRepository,
-                new TestReadinessProbe(),
-                new TestDomainReloadLifecycle());
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                serverInstanceFactory: serverInstanceFactory,
+                lifecycleRegistry: lifecycleRegistry);
             TestServerInstance runningServer = new(throwOnDispose: true);
             runningServer.StartServer();
             service.RegisterRecoveredServer(runningServer);
@@ -402,19 +385,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private UnityCliLoopServerControllerService CreateControllerService(
             TestReadinessProbe readinessProbe = null,
-            System.Func<int, CancellationToken, Task> waitBeforeRecoveryRetryAsync = null)
+            System.Func<int, CancellationToken, Task> waitBeforeRecoveryRetryAsync = null,
+            TestServerInstanceFactory serverInstanceFactory = null,
+            UnityCliLoopServerLifecycleRegistryService lifecycleRegistry = null,
+            System.Func<bool> isReadinessProbeBlocked = null,
+            System.Func<int, CancellationToken, Task> waitBeforeReadinessRetryAsync = null,
+            int readinessIdleTimeoutMilliseconds = UnityCliLoopServerConfig.READINESS_PROBE_TIMEOUT_MS)
         {
-            TestServerInstanceFactory serverInstanceFactory = new();
-            UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
-                new UnityCliLoopServerLifecycleRegistryService();
+            TestServerInstanceFactory effectiveServerInstanceFactory =
+                serverInstanceFactory ?? new TestServerInstanceFactory();
+            UnityCliLoopServerLifecycleRegistryService effectiveLifecycleRegistry =
+                lifecycleRegistry ?? new UnityCliLoopServerLifecycleRegistryService();
+            DomainReloadDetectionFileService domainReloadDetectionService =
+                CreateDomainReloadDetectionService();
+            UnityCliLoopServerStartupService startupService = new(
+                effectiveServerInstanceFactory,
+                _sessionFlagsRepository);
+            UnityCliLoopServerInitializationUseCase initializationUseCase = new(
+                new EditorSecurityValidationService(),
+                startupService);
+            UnityCliLoopServerShutdownUseCase shutdownUseCase = new(startupService);
+            SessionRecoveryService sessionRecoveryService = new(
+                domainReloadDetectionService,
+                _sessionFlagsRepository);
+            DomainReloadRecoveryUseCase domainReloadRecoveryUseCase = new(
+                sessionRecoveryService,
+                domainReloadDetectionService,
+                _sessionFlagsRepository);
             return new UnityCliLoopServerControllerService(
-                serverInstanceFactory,
-                lifecycleRegistry,
-                CreateDomainReloadDetectionService(),
+                effectiveServerInstanceFactory,
+                effectiveLifecycleRegistry,
+                domainReloadDetectionService,
                 _sessionFlagsRepository,
+                initializationUseCase,
+                shutdownUseCase,
+                domainReloadRecoveryUseCase,
                 readinessProbe ?? new TestReadinessProbe(),
                 new TestDomainReloadLifecycle(),
-                waitBeforeRecoveryRetryAsync: waitBeforeRecoveryRetryAsync);
+                isReadinessProbeBlocked,
+                waitBeforeReadinessRetryAsync,
+                waitBeforeRecoveryRetryAsync,
+                readinessIdleTimeoutMilliseconds);
         }
 
         private DomainReloadDetectionFileService CreateDomainReloadDetectionService()

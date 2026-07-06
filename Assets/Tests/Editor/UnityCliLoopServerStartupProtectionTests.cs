@@ -103,14 +103,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
-            return new UnityCliLoopServerControllerService(
-                serverInstanceFactory,
-                lifecycleRegistry,
+            DomainReloadDetectionFileService domainReloadDetectionService =
                 new DomainReloadDetectionFileService(
                     _sessionFlagsRepository,
                     new UnityCliLoopPendingCompileSessionRepository(),
-                    _sessionStateService),
+                    _sessionStateService);
+            UnityCliLoopServerStartupService startupService = new(
+                serverInstanceFactory,
+                _sessionFlagsRepository);
+            UnityCliLoopServerInitializationUseCase initializationUseCase = new(
+                new EditorSecurityValidationService(),
+                startupService);
+            UnityCliLoopServerShutdownUseCase shutdownUseCase = new(startupService);
+            SessionRecoveryService sessionRecoveryService = new(
+                domainReloadDetectionService,
+                _sessionFlagsRepository);
+            DomainReloadRecoveryUseCase domainReloadRecoveryUseCase = new(
+                sessionRecoveryService,
+                domainReloadDetectionService,
+                _sessionFlagsRepository);
+            return new UnityCliLoopServerControllerService(
+                serverInstanceFactory,
+                lifecycleRegistry,
+                domainReloadDetectionService,
                 _sessionFlagsRepository,
+                initializationUseCase,
+                shutdownUseCase,
+                domainReloadRecoveryUseCase,
                 new TestReadinessProbe(),
                 domainReloadLifecycle);
         }
