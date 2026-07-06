@@ -8,12 +8,10 @@ using TypeReplacementRule = io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToo
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationAliasRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationApplicationDetectionRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationCodeTextDetectionRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationEditorDelayRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationParsingRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationRuleCatalog;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationScreenshotDetectionRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationToolContractDetectionRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTypeReplacementRules;
 
 namespace io.github.hatayama.UnityCliLoop.Domain
 {
