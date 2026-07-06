@@ -107,6 +107,165 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ScheduleTrackedRecovery_WhenRecoveryAlreadyRunning_ReturnsCurrentTaskWithoutStartingAnotherRecovery()
+        {
+            // Tests that duplicate tracked recovery triggers join the active recovery instead of starting a second loop.
+            int recoveryStartCount = 0;
+            TaskCompletionSource<bool> firstRecoveryCompletionSource = new();
+            UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService();
+
+            Task firstTask = service.ScheduleTrackedRecovery(() =>
+            {
+                recoveryStartCount++;
+                return firstRecoveryCompletionSource.Task;
+            });
+            Task secondTask = service.ScheduleTrackedRecovery(() =>
+            {
+                recoveryStartCount++;
+                return Task.CompletedTask;
+            });
+
+            Assert.That(secondTask, Is.SameAs(firstTask));
+            Assert.That(recoveryStartCount, Is.EqualTo(1));
+
+            firstRecoveryCompletionSource.SetResult(true);
+            await firstTask;
+        }
+
+        [Test]
+        public async Task ScheduleStartupRecovery_WhenTrackedRecoveryIsRunning_ReturnsCurrentTaskWithoutSchedulingStartupRecovery()
+        {
+            // Tests that startup recovery joins an active tracked recovery without registering a delay call.
+            int scheduledActionCount = 0;
+            TaskCompletionSource<bool> trackedRecoveryCompletionSource = new();
+            UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService();
+
+            Task trackedTask = service.ScheduleTrackedRecovery(() => trackedRecoveryCompletionSource.Task);
+            Task startupTask = service.ScheduleStartupRecovery(
+                action => scheduledActionCount++,
+                () => Task.CompletedTask);
+
+            Assert.That(startupTask, Is.SameAs(trackedTask));
+            Assert.That(scheduledActionCount, Is.EqualTo(0));
+
+            trackedRecoveryCompletionSource.SetResult(true);
+            await trackedTask;
+        }
+
+        [Test]
+        public void ScheduleStartupRecovery_WhenStartupRecoveryIsPending_ReturnsCurrentTaskWithoutSchedulingAnotherRecovery()
+        {
+            // Tests that duplicate startup recovery triggers join the active startup placeholder.
+            int scheduledActionCount = 0;
+            UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService();
+
+            Task firstTask = service.ScheduleStartupRecovery(
+                action => scheduledActionCount++,
+                () => Task.CompletedTask);
+            Task secondTask = service.ScheduleStartupRecovery(
+                action => scheduledActionCount++,
+                () => Task.CompletedTask);
+
+            Assert.That(secondTask, Is.SameAs(firstTask));
+            Assert.That(scheduledActionCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task ScheduleTrackedRecovery_WhenStartupRecoveryIsPending_ReplacesStartupPlaceholderWithTrackedRecovery()
+        {
+            // Tests that after-domain-reload recovery is not dropped behind startup recovery.
+            System.Action scheduledAction = null;
+            int trackedRecoveryStartCount = 0;
+            TaskCompletionSource<bool> startupRecoveryCompletionSource = new();
+            TaskCompletionSource<bool> trackedRecoveryCompletionSource = new();
+            UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService();
+
+            Task startupTask = service.ScheduleStartupRecovery(
+                action => scheduledAction = action,
+                () => startupRecoveryCompletionSource.Task);
+            Task trackedTask = service.ScheduleTrackedRecovery(() =>
+            {
+                trackedRecoveryStartCount++;
+                return trackedRecoveryCompletionSource.Task;
+            });
+
+            Assert.That(trackedTask, Is.Not.SameAs(startupTask));
+            Assert.That(trackedTask, Is.SameAs(service.RecoveryTask));
+            Assert.That(trackedRecoveryStartCount, Is.EqualTo(1));
+
+            scheduledAction();
+            startupRecoveryCompletionSource.SetResult(true);
+            await startupTask;
+            Assert.That(service.RecoveryTask, Is.SameAs(trackedTask));
+
+            trackedRecoveryCompletionSource.SetResult(true);
+            await trackedTask;
+            Assert.That(service.RecoveryTask, Is.Null);
+        }
+
+        [Test]
+        public async Task ScheduleTrackedRecovery_WhenPreviousRecoveryCompleted_StartsNewRecovery()
+        {
+            // Tests that completed recoveries do not block a later recovery trigger.
+            int recoveryStartCount = 0;
+            TaskCompletionSource<bool> firstCompletionSource = new();
+            TaskCompletionSource<bool> secondCompletionSource = new();
+            UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService();
+
+            Task firstTask = service.ScheduleTrackedRecovery(() =>
+            {
+                recoveryStartCount++;
+                return firstCompletionSource.Task;
+            });
+            firstCompletionSource.SetResult(true);
+            await firstTask;
+            Task secondTask = service.ScheduleTrackedRecovery(() =>
+            {
+                recoveryStartCount++;
+                return secondCompletionSource.Task;
+            });
+            secondCompletionSource.SetResult(true);
+            await secondTask;
+
+            Assert.That(secondTask, Is.Not.SameAs(firstTask));
+            Assert.That(recoveryStartCount, Is.EqualTo(2));
+        }
+
+        [Test]
+        public async Task ScheduleTrackedRecovery_WhenPreviousRecoveryFaulted_StartsNewRecovery()
+        {
+            // Tests that a faulted recovery does not block a later recovery trigger.
+            UnityEngine.TestTools.LogAssert.Expect(
+                UnityEngine.LogType.Error,
+                "[UnityCliLoop] Unity CLI Loop server recovery failed before the bridge became ready. first failure");
+            int firstRecoveryAttempts = 0;
+            bool secondRecoveryStarted = false;
+            UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService(
+                (delayMilliseconds, ct) => Task.CompletedTask);
+
+            Task firstTask = service.ScheduleTrackedRecovery(() =>
+            {
+                firstRecoveryAttempts++;
+                throw new System.TimeoutException("first failure");
+            });
+            Assert.ThrowsAsync<System.InvalidOperationException>(async () => await firstTask);
+            Task secondTask = service.ScheduleTrackedRecovery(() =>
+            {
+                secondRecoveryStarted = true;
+                TaskCompletionSource<bool> completionSource = new();
+                completionSource.SetResult(true);
+                return completionSource.Task;
+            });
+            await secondTask;
+
+            Assert.That(secondTask, Is.Not.SameAs(firstTask));
+            Assert.That(
+                firstRecoveryAttempts,
+                Is.EqualTo(UnityCliLoopServerConfig.RECOVERY_RETRY_DELAYS_MS.Length + 1));
+            Assert.That(secondRecoveryStarted, Is.True);
+        }
+
+        [Test]
         public async Task StartRecoveryIfNeededAsync_WhenReadinessSucceeds_ShouldPublishServerStartedEvent()
         {
             // Tests that recovery publishes startup only after the readiness probe succeeds.
