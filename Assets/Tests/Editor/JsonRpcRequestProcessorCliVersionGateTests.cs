@@ -14,20 +14,21 @@ using io.github.hatayama.UnityCliLoop.CompositionRoot;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
-using ApplicationRegistrar = io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
     /// Verifies the JSON-RPC CLI compatibility gate before Unity tool execution.
     /// </summary>
-    public class JsonRpcProcessorCliVersionGateTests
+    public class JsonRpcRequestProcessorCliVersionGateTests
     {
         [Test]
         public async Task ProcessRequest_WhenProtocolVersionMatches_AllowsRequest()
         {
             // Verifies CLI clients that speak the required IPC protocol can execute bridge commands.
-            string response = await JsonRpcProcessor.ProcessRequest(
+            JsonRpcRequestProcessor processor = CreateProcessor();
+
+            string response = await processor.ProcessRequest(
                 BuildGetVersionRequest(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION),
                 CancellationToken.None);
             JObject parsed = JObject.Parse(response);
@@ -42,7 +43,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenProtocolVersionIsNewer_ReturnsCliProtocolMismatchError()
         {
             // Verifies future protocol clients are rejected because IPC compatibility is exact-match.
-            string response = await JsonRpcProcessor.ProcessRequest(
+            JsonRpcRequestProcessor processor = CreateProcessor();
+
+            string response = await processor.ProcessRequest(
                 BuildGetVersionRequest(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION + 1),
                 CancellationToken.None);
             JObject error = ParseError(response);
@@ -63,7 +66,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenProtocolVersionIsTooOld_ReturnsCliUpdateRequiredError()
         {
             // Verifies CLIs on an older IPC protocol receive CLI update instructions before any tool runs.
-            string response = await JsonRpcProcessor.ProcessRequest(
+            JsonRpcRequestProcessor processor = CreateProcessor();
+
+            string response = await processor.ProcessRequest(
                 BuildGetVersionRequest(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION - 1),
                 CancellationToken.None);
             JObject data = ParseErrorData(response);
@@ -85,8 +90,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies the request metadata drives the accepted response and heartbeat frame contract.
             string acceptedResponse = null;
             Func<string> createHeartbeatJson = null;
+            JsonRpcRequestProcessor processor = CreateProcessor();
 
-            string response = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+            string response = await processor.ProcessRequestWithEarlyResponseAsync(
                 BuildHeartbeatNegotiatedToolRequest(UnityCliLoopConstants.COMMAND_NAME_GET_VERSION, 1),
                 CancellationToken.None,
                 (earlyResponse, _, heartbeatFactory) =>
@@ -112,7 +118,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenCliMetadataIsMissing_ReturnsCliUpdateRequiredError()
         {
             // Verifies legacy clients without metadata are stopped with upgrade instructions.
-            string response = await JsonRpcProcessor.ProcessRequest(
+            JsonRpcRequestProcessor processor = CreateProcessor();
+
+            string response = await processor.ProcessRequest(
                 "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1}",
                 CancellationToken.None);
             JObject data = ParseErrorData(response);
@@ -127,7 +135,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenProtocolVersionIsNotAnInteger_ReturnsCliUpdateRequiredError()
         {
             // Verifies malformed protocol values cannot bypass the compatibility gate.
-            string response = await JsonRpcProcessor.ProcessRequest(
+            JsonRpcRequestProcessor processor = CreateProcessor();
+
+            string response = await processor.ProcessRequest(
                 "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1," +
                 "\"uloop\":{\"protocolVersion\":\"not-a-number\"}}",
                 CancellationToken.None);
@@ -142,7 +152,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenProtocolVersionIsOutsideIntRange_ReturnsCliUpdateRequiredError()
         {
             // Verifies oversized protocol values are treated as missing metadata instead of parser failures.
-            string response = await JsonRpcProcessor.ProcessRequest(
+            JsonRpcRequestProcessor processor = CreateProcessor();
+
+            string response = await processor.ProcessRequest(
                 "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1," +
                 "\"uloop\":{\"protocolVersion\":2147483648}}",
                 CancellationToken.None);
@@ -161,28 +173,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             MainThreadSwitcher.RegisterService(dispatcher);
             UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(isPlaying: false, isPaused: false);
 
-            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
-            UnityCliLoopToolRegistrarService service = new(
-                new EmptyInternalToolNameProvider(),
-                toolSettingsPort,
-                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
-                UnityCliLoopToolDiscovery.DiscoverTools);
-            ApplicationRegistrar.RegisterService(service);
+            UnityCliLoopToolRegistrarService service = CreateRegistrarService();
             service.RegisterCustomTool(new SingleFlightTestTool());
+            JsonRpcRequestProcessor processor = CreateProcessor(service);
 
             Task<string> firstResponseTask = null;
             Task<string> secondResponseTask = null;
             try
             {
-                firstResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                firstResponseTask = processor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(SingleFlightTestTool.Name, 1),
                     CancellationToken.None,
                     (_, _, _) => Task.CompletedTask);
 
                 Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
 
-                secondResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                secondResponseTask = processor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(SingleFlightTestTool.Name, 2),
                     CancellationToken.None,
                     (_, _, _) => Task.CompletedTask);
@@ -205,7 +211,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await DrainTaskIfNeeded(firstResponseTask);
                 await DrainTaskIfNeeded(secondResponseTask);
                 UnityCliLoopEditorStateSnapshot.ClearForTesting();
-                ApplicationRegistrar.RegisterService(previousService);
                 RestoreEditorMainThreadDispatcher();
             }
         }
@@ -218,30 +223,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             MainThreadSwitcher.RegisterService(dispatcher);
             UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(isPlaying: false, isPaused: false);
 
-            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
-            UnityCliLoopToolRegistrarService service = new(
-                new EmptyInternalToolNameProvider(),
-                toolSettingsPort,
-                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
-                UnityCliLoopToolDiscovery.DiscoverTools);
-            ApplicationRegistrar.RegisterService(service);
+            UnityCliLoopToolRegistrarService service = CreateRegistrarService();
             service.RegisterCustomTool(new ExecuteDynamicCodeTestTool());
             service.RegisterCustomTool(new SingleFlightTestTool());
+            JsonRpcRequestProcessor processor = CreateProcessor(service);
 
             Task<string> firstDynamicCodeTask = null;
             Task<string> secondDynamicCodeTask = null;
             Task<string> otherToolTask = null;
             try
             {
-                firstDynamicCodeTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                firstDynamicCodeTask = processor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE, 1),
                     CancellationToken.None,
                     (_, _, _) => Task.CompletedTask);
 
                 Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(1));
 
-                secondDynamicCodeTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                secondDynamicCodeTask = processor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE, 2),
                     CancellationToken.None,
                     (_, _, _) => Task.CompletedTask);
@@ -249,7 +248,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(2));
                 Assert.That(secondDynamicCodeTask.IsCompleted, Is.False);
 
-                otherToolTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                otherToolTask = processor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(SingleFlightTestTool.Name, 3),
                     CancellationToken.None,
                     (_, _, _) => Task.CompletedTask);
@@ -274,7 +273,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await DrainTaskIfNeeded(secondDynamicCodeTask);
                 await DrainTaskIfNeeded(otherToolTask);
                 UnityCliLoopEditorStateSnapshot.ClearForTesting();
-                ApplicationRegistrar.RegisterService(previousService);
                 RestoreEditorMainThreadDispatcher();
             }
         }
@@ -283,197 +281,132 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenCompileWaitsForDomainReload_KeepsAcceptedRequestAliveAfterDisconnect()
         {
             // Verifies long compile waits are allowed to persist their result after the CLI response deadline closes.
-            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
-            UnityCliLoopToolRegistrarService service = new(
-                new EmptyInternalToolNameProvider(),
-                toolSettingsPort,
-                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
-                UnityCliLoopToolDiscovery.DiscoverTools);
-            ApplicationRegistrar.RegisterService(service);
+            UnityCliLoopToolRegistrarService service = CreateRegistrarService();
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
+            JsonRpcRequestProcessor processor = CreateProcessor(service);
 
             bool cancelOnClientDisconnect = true;
-            try
-            {
-                string response = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
-                    BuildToolRequestWithParams(
-                        UnityCliLoopConstants.TOOL_NAME_COMPILE,
-                        "{\"WaitForDomainReload\":true}",
-                        1),
-                    CancellationToken.None,
-                    (_, shouldCancelOnClientDisconnect, _) =>
-                    {
-                        cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
-                        return Task.CompletedTask;
-                    });
-                JObject parsed = JObject.Parse(response);
+            string response = await processor.ProcessRequestWithEarlyResponseAsync(
+                BuildToolRequestWithParams(
+                    UnityCliLoopConstants.TOOL_NAME_COMPILE,
+                    "{\"WaitForDomainReload\":true}",
+                    1),
+                CancellationToken.None,
+                (_, shouldCancelOnClientDisconnect, _) =>
+                {
+                    cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
+                    return Task.CompletedTask;
+                });
+            JObject parsed = JObject.Parse(response);
 
-                Assert.That(parsed["error"], Is.Null);
-                Assert.That(parsed["result"], Is.Not.Null);
-                Assert.That(cancelOnClientDisconnect, Is.False);
-            }
-            finally
-            {
-                ApplicationRegistrar.RegisterService(previousService);
-            }
+            Assert.That(parsed["error"], Is.Null);
+            Assert.That(parsed["result"], Is.Not.Null);
+            Assert.That(cancelOnClientDisconnect, Is.False);
         }
 
         [Test]
         public async Task ProcessRequest_WhenCompileOmitsReloadWait_KeepsAcceptedRequestAliveAfterDisconnect()
         {
             // Verifies missing compile reload-wait params preserve the default wait contract.
-            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
-            UnityCliLoopToolRegistrarService service = new(
-                new EmptyInternalToolNameProvider(),
-                toolSettingsPort,
-                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
-                UnityCliLoopToolDiscovery.DiscoverTools);
-            ApplicationRegistrar.RegisterService(service);
+            UnityCliLoopToolRegistrarService service = CreateRegistrarService();
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
+            JsonRpcRequestProcessor processor = CreateProcessor(service);
 
             bool cancelOnClientDisconnect = true;
-            try
-            {
-                string response = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
-                    BuildToolRequest(UnityCliLoopConstants.TOOL_NAME_COMPILE, 1),
-                    CancellationToken.None,
-                    (_, shouldCancelOnClientDisconnect, _) =>
-                    {
-                        cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
-                        return Task.CompletedTask;
-                    });
-                JObject parsed = JObject.Parse(response);
+            string response = await processor.ProcessRequestWithEarlyResponseAsync(
+                BuildToolRequest(UnityCliLoopConstants.TOOL_NAME_COMPILE, 1),
+                CancellationToken.None,
+                (_, shouldCancelOnClientDisconnect, _) =>
+                {
+                    cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
+                    return Task.CompletedTask;
+                });
+            JObject parsed = JObject.Parse(response);
 
-                Assert.That(parsed["error"], Is.Null);
-                Assert.That(parsed["result"], Is.Not.Null);
-                Assert.That(cancelOnClientDisconnect, Is.False);
-            }
-            finally
-            {
-                ApplicationRegistrar.RegisterService(previousService);
-            }
+            Assert.That(parsed["error"], Is.Null);
+            Assert.That(parsed["result"], Is.Not.Null);
+            Assert.That(cancelOnClientDisconnect, Is.False);
         }
 
         [Test]
         public async Task ProcessRequest_WhenCompileReloadWaitIsNotBoolean_KeepsAcceptedRequestAliveAfterDisconnect()
         {
             // Verifies malformed compile reload-wait params preserve the default wait contract.
-            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
-            UnityCliLoopToolRegistrarService service = new(
-                new EmptyInternalToolNameProvider(),
-                toolSettingsPort,
-                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
-                UnityCliLoopToolDiscovery.DiscoverTools);
-            ApplicationRegistrar.RegisterService(service);
+            UnityCliLoopToolRegistrarService service = CreateRegistrarService();
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
+            JsonRpcRequestProcessor processor = CreateProcessor(service);
 
             bool cancelOnClientDisconnect = true;
-            try
-            {
-                string response = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
-                    BuildToolRequestWithParams(
-                        UnityCliLoopConstants.TOOL_NAME_COMPILE,
-                        "{\"WaitForDomainReload\":\"false\"}",
-                        1),
-                    CancellationToken.None,
-                    (_, shouldCancelOnClientDisconnect, _) =>
-                    {
-                        cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
-                        return Task.CompletedTask;
-                    });
-                JObject parsed = JObject.Parse(response);
+            string response = await processor.ProcessRequestWithEarlyResponseAsync(
+                BuildToolRequestWithParams(
+                    UnityCliLoopConstants.TOOL_NAME_COMPILE,
+                    "{\"WaitForDomainReload\":\"false\"}",
+                    1),
+                CancellationToken.None,
+                (_, shouldCancelOnClientDisconnect, _) =>
+                {
+                    cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
+                    return Task.CompletedTask;
+                });
+            JObject parsed = JObject.Parse(response);
 
-                Assert.That(parsed["error"], Is.Null);
-                Assert.That(parsed["result"], Is.Not.Null);
-                Assert.That(cancelOnClientDisconnect, Is.False);
-            }
-            finally
-            {
-                ApplicationRegistrar.RegisterService(previousService);
-            }
+            Assert.That(parsed["error"], Is.Null);
+            Assert.That(parsed["result"], Is.Not.Null);
+            Assert.That(cancelOnClientDisconnect, Is.False);
         }
 
         [Test]
         public async Task ProcessRequest_WhenCompileDoesNotWaitForDomainReload_CancelsOnClientDisconnect()
         {
             // Verifies fire-and-forget compile requests still cancel when the CLI connection goes away.
-            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
-            UnityCliLoopToolRegistrarService service = new(
-                new EmptyInternalToolNameProvider(),
-                toolSettingsPort,
-                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
-                UnityCliLoopToolDiscovery.DiscoverTools);
-            ApplicationRegistrar.RegisterService(service);
+            UnityCliLoopToolRegistrarService service = CreateRegistrarService();
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
+            JsonRpcRequestProcessor processor = CreateProcessor(service);
 
             bool cancelOnClientDisconnect = false;
-            try
-            {
-                string response = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
-                    BuildToolRequestWithParams(
-                        UnityCliLoopConstants.TOOL_NAME_COMPILE,
-                        "{\"WaitForDomainReload\":false}",
-                        1),
-                    CancellationToken.None,
-                    (_, shouldCancelOnClientDisconnect, _) =>
-                    {
-                        cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
-                        return Task.CompletedTask;
-                    });
-                JObject parsed = JObject.Parse(response);
+            string response = await processor.ProcessRequestWithEarlyResponseAsync(
+                BuildToolRequestWithParams(
+                    UnityCliLoopConstants.TOOL_NAME_COMPILE,
+                    "{\"WaitForDomainReload\":false}",
+                    1),
+                CancellationToken.None,
+                (_, shouldCancelOnClientDisconnect, _) =>
+                {
+                    cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
+                    return Task.CompletedTask;
+                });
+            JObject parsed = JObject.Parse(response);
 
-                Assert.That(parsed["error"], Is.Null);
-                Assert.That(parsed["result"], Is.Not.Null);
-                Assert.That(cancelOnClientDisconnect, Is.True);
-            }
-            finally
-            {
-                ApplicationRegistrar.RegisterService(previousService);
-            }
+            Assert.That(parsed["error"], Is.Null);
+            Assert.That(parsed["result"], Is.Not.Null);
+            Assert.That(cancelOnClientDisconnect, Is.True);
         }
 
         [Test]
         public async Task ProcessRequest_WhenCompileUsesCamelCaseNoReloadWait_CancelsOnClientDisconnect()
         {
             // Verifies JSON-RPC compile dispatch policy matches the camelCase tool deserializer contract.
-            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
-            UnityCliLoopToolRegistrarService service = new(
-                new EmptyInternalToolNameProvider(),
-                toolSettingsPort,
-                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
-                UnityCliLoopToolDiscovery.DiscoverTools);
-            ApplicationRegistrar.RegisterService(service);
+            UnityCliLoopToolRegistrarService service = CreateRegistrarService();
             service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
+            JsonRpcRequestProcessor processor = CreateProcessor(service);
 
             bool cancelOnClientDisconnect = false;
-            try
-            {
-                string response = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
-                    BuildToolRequestWithParams(
-                        UnityCliLoopConstants.TOOL_NAME_COMPILE,
-                        "{\"waitForDomainReload\":false}",
-                        1),
-                    CancellationToken.None,
-                    (_, shouldCancelOnClientDisconnect, _) =>
-                    {
-                        cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
-                        return Task.CompletedTask;
-                    });
-                JObject parsed = JObject.Parse(response);
+            string response = await processor.ProcessRequestWithEarlyResponseAsync(
+                BuildToolRequestWithParams(
+                    UnityCliLoopConstants.TOOL_NAME_COMPILE,
+                    "{\"waitForDomainReload\":false}",
+                    1),
+                CancellationToken.None,
+                (_, shouldCancelOnClientDisconnect, _) =>
+                {
+                    cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
+                    return Task.CompletedTask;
+                });
+            JObject parsed = JObject.Parse(response);
 
-                Assert.That(parsed["error"], Is.Null);
-                Assert.That(parsed["result"], Is.Not.Null);
-                Assert.That(cancelOnClientDisconnect, Is.True);
-            }
-            finally
-            {
-                ApplicationRegistrar.RegisterService(previousService);
-            }
+            Assert.That(parsed["error"], Is.Null);
+            Assert.That(parsed["result"], Is.Not.Null);
+            Assert.That(cancelOnClientDisconnect, Is.True);
         }
 
         [Test]
@@ -483,21 +416,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CapturingMainThreadDispatcher dispatcher = new();
             MainThreadSwitcher.RegisterService(dispatcher);
 
-            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
-            UnityCliLoopToolRegistrarService service = new(
-                new EmptyInternalToolNameProvider(),
-                toolSettingsPort,
-                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
-                UnityCliLoopToolDiscovery.DiscoverTools);
-            ApplicationRegistrar.RegisterService(service);
+            JsonRpcRequestProcessor processor = CreateProcessor();
 
             string hierarchyResponse = null;
             Task<string> hierarchyResponseTask = null;
             Task<string> logsResponseTask = null;
             try
             {
-                hierarchyResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                hierarchyResponseTask = processor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequestWithParams(
                         UnityCliLoopConstants.TOOL_NAME_GET_HIERARCHY,
                         "{\"MaxDepth\":0,\"IncludeComponents\":false}",
@@ -513,7 +439,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(parsedHierarchy["error"], Is.Null);
                 Assert.That(parsedHierarchy["result"]?["HierarchyFilePath"]?.ToString(), Is.Not.Empty);
 
-                logsResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                logsResponseTask = processor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequestWithParams(
                         UnityCliLoopConstants.TOOL_NAME_GET_LOGS,
                         "{\"MaxCount\":0}",
@@ -535,7 +461,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await DrainTaskIfNeeded(hierarchyResponseTask);
                 await DrainTaskIfNeeded(logsResponseTask);
                 DeleteHierarchyFileFromResponse(hierarchyResponse);
-                ApplicationRegistrar.RegisterService(previousService);
                 RestoreEditorMainThreadDispatcher();
             }
         }
@@ -546,11 +471,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies CLI-only bridge commands keep Unity API access on the editor thread.
             CapturingMainThreadDispatcher dispatcher = new();
             MainThreadSwitcher.RegisterService(dispatcher);
+            JsonRpcRequestProcessor processor = CreateProcessor();
 
             Task<string> responseTask = null;
             try
             {
-                responseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                responseTask = processor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(UnityCliLoopConstants.COMMAND_NAME_GET_VERSION, 1),
                     CancellationToken.None,
                     (_, _, _) => Task.CompletedTask);
@@ -580,22 +506,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CapturingMainThreadDispatcher dispatcher = new();
             MainThreadSwitcher.RegisterService(dispatcher);
 
-            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
-            UnityCliLoopToolRegistrarService service = new(
-                new EmptyInternalToolNameProvider(),
-                toolSettingsPort,
-                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
-                UnityCliLoopToolDiscovery.DiscoverTools);
-            ApplicationRegistrar.RegisterService(service);
+            UnityCliLoopToolRegistrarService service = CreateRegistrarService();
             service.RegisterCustomTool(new SingleFlightTestTool());
+            JsonRpcRequestProcessor processor = CreateProcessor(service);
 
             using CancellationTokenSource cancellationSource = new CancellationTokenSource();
             Task<string> canceledResponseTask = null;
             Task<string> secondResponseTask = null;
             try
             {
-                canceledResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                canceledResponseTask = processor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(SingleFlightTestTool.Name, 1),
                     cancellationSource.Token,
                     (_, _, _) => Task.CompletedTask);
@@ -605,7 +525,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 cancellationSource.Cancel();
                 await AwaitCancellationWithTimeout(canceledResponseTask, TimeSpan.FromMilliseconds(200));
 
-                secondResponseTask = JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                secondResponseTask = processor.ProcessRequestWithEarlyResponseAsync(
                     BuildToolRequest(SingleFlightTestTool.Name, 2),
                     CancellationToken.None,
                     (_, _, _) => Task.CompletedTask);
@@ -624,9 +544,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 dispatcher.RunContinuations();
                 await DrainTaskIfNeeded(canceledResponseTask);
                 await DrainTaskIfNeeded(secondResponseTask);
-                ApplicationRegistrar.RegisterService(previousService);
                 RestoreEditorMainThreadDispatcher();
             }
+        }
+
+        private static UnityCliLoopToolRegistrarService CreateRegistrarService()
+        {
+            return UnityCliLoopToolRegistrarTestFactory.Create(UnityCliLoopToolDiscovery.DiscoverTools);
+        }
+
+        private static JsonRpcRequestProcessor CreateProcessor()
+        {
+            UnityCliLoopToolRegistrarService service = CreateRegistrarService();
+            return CreateProcessor(service);
+        }
+
+        private static JsonRpcRequestProcessor CreateProcessor(UnityCliLoopToolRegistrarService service)
+        {
+            UnityCliLoopExecutionRouter executionRouter = new(service);
+            return new JsonRpcRequestProcessor(executionRouter);
         }
 
         private static string BuildGetVersionRequest(int protocolVersion)
