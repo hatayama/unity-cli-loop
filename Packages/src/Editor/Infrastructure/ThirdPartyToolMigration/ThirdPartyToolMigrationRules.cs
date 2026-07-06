@@ -60,17 +60,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static bool ContainsLegacyCSharpApi(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsLegacyCSharpApi(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsLegacyCSharpApi(source);
         }
 
         internal static bool ContainsMigrationCandidateText(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsMigrationCandidateText(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsMigrationCandidateText(source);
         }
 
         internal static bool ContainsLegacyMigrationCandidateText(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsLegacyMigrationCandidateText(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsLegacyMigrationCandidateText(source);
         }
 
         internal static bool ContainsLegacyAsmdefNameReference(string source)
@@ -239,82 +239,82 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static bool ContainsLegacyAssemblyScopedApi(string source, string[] legacyAssemblyAliases)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsLegacyAssemblyScopedApi(source, legacyAssemblyAliases);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsLegacyAssemblyScopedApi(source, legacyAssemblyAliases);
         }
 
         internal static bool ContainsLegacyGlobalUsing(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsLegacyGlobalUsing(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsLegacyGlobalUsing(source);
         }
 
         internal static bool ContainsCurrentDomainGlobalUsing(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsCurrentDomainGlobalUsing(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsCurrentDomainGlobalUsing(source);
         }
 
         internal static bool ContainsCurrentDomainUsing(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsCurrentDomainUsing(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsCurrentDomainUsing(source);
         }
 
         internal static bool ContainsCurrentDomainNamespaceAlias(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsCurrentDomainNamespaceAlias(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsCurrentDomainNamespaceAlias(source);
         }
 
         internal static bool ContainsCurrentToolContractsGlobalUsing(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsCurrentToolContractsGlobalUsing(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsCurrentToolContractsGlobalUsing(source);
         }
 
         internal static bool ContainsCurrentApplicationGlobalUsing(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsCurrentApplicationGlobalUsing(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsCurrentApplicationGlobalUsing(source);
         }
 
         internal static bool ContainsCurrentApplicationUsing(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsCurrentApplicationUsing(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsCurrentApplicationUsing(source);
         }
 
         internal static bool ContainsCurrentApplicationNamespaceAlias(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsCurrentApplicationNamespaceAlias(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsCurrentApplicationNamespaceAlias(source);
         }
 
         internal static bool ContainsCurrentFirstPartyToolsGlobalUsing(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsCurrentFirstPartyToolsGlobalUsing(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsCurrentFirstPartyToolsGlobalUsing(source);
         }
 
         internal static bool ContainsCurrentFirstPartyToolsNamespaceAlias(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsCurrentFirstPartyToolsNamespaceAlias(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsCurrentFirstPartyToolsNamespaceAlias(source);
         }
 
         internal static string[] GetLegacyGlobalNamespaceAliases(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.GetLegacyGlobalNamespaceAliases(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.GetLegacyGlobalNamespaceAliases(source);
         }
 
         internal static string[] GetLegacyGlobalToolInfoTypeAliases(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.GetLegacyGlobalToolInfoTypeAliases(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.GetLegacyGlobalToolInfoTypeAliases(source);
         }
 
         internal static string[] GetCurrentApplicationGlobalNamespaceAliases(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.GetCurrentApplicationGlobalNamespaceAliases(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.GetCurrentApplicationGlobalNamespaceAliases(source);
         }
 
         internal static string[] GetCurrentDomainGlobalNamespaceAliases(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.GetCurrentDomainGlobalNamespaceAliases(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.GetCurrentDomainGlobalNamespaceAliases(source);
         }
 
         internal static string[] GetCurrentFirstPartyToolsGlobalNamespaceAliases(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.GetCurrentFirstPartyToolsGlobalNamespaceAliases(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.GetCurrentFirstPartyToolsGlobalNamespaceAliases(source);
         }
 
         internal static string[] GetDeclaredTypeNames(string source)
@@ -324,22 +324,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static bool ContainsLegacyGlobalToolInfoTypeAlias(string source)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsLegacyGlobalToolInfoTypeAlias(source);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsLegacyGlobalToolInfoTypeAlias(source);
         }
 
         internal static bool ContainsLegacyTypeAliasReference(string source, string[] aliases)
         {
-            return ThirdPartyToolMigrationDetectionRules.ContainsLegacyTypeAliasReference(source, aliases);
+            return ThirdPartyToolMigrationSourceDetectionRules.ContainsLegacyTypeAliasReference(source, aliases);
         }
 
         internal static bool IsExcludedDirectoryName(string directoryName)
         {
-            return ThirdPartyToolMigrationDetectionRules.IsExcludedDirectoryName(directoryName);
+            return ThirdPartyToolMigrationSourceDetectionRules.IsExcludedDirectoryName(directoryName);
         }
 
         internal static string[] GetExcludedDirectoryNames()
         {
-            return ThirdPartyToolMigrationDetectionRules.GetExcludedDirectoryNames();
+            return ThirdPartyToolMigrationSourceDetectionRules.GetExcludedDirectoryNames();
         }
 
         internal static ThirdPartyToolMigrationContentResult RemoveLegacyPlayerLoopTimingCallerArgumentsForLegacyAssembly(
