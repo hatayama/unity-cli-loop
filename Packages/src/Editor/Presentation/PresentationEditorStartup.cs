@@ -1,4 +1,5 @@
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.Application;
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
@@ -9,9 +10,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         internal static void Initialize(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
-            ISessionFlagsRepository sessionFlagsRepository)
+            ISessionFlagsRepository sessionFlagsRepository,
+            UnityCliLoopServerApplicationService serverApplicationService)
         {
-            UnityCliLoopSettingsWindow.InitializeEditorServices(editorSettingsPort, sessionFlagsRepository);
+            UnityCliLoopSettingsWindow.InitializeEditorServices(
+                editorSettingsPort,
+                sessionFlagsRepository,
+                serverApplicationService);
+            ServerEditorWindow.InitializeEditorServices(serverApplicationService);
             ThirdPartyToolMigrationWizardWindow.InitializeEditorServices(sessionFlagsRepository);
             SetupWizardWindow.InitializeForEditorStartup(editorSettingsPort, sessionFlagsRepository);
         }

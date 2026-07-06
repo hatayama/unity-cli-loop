@@ -25,6 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private static IUnityCliLoopEditorSettingsPort RegisteredEditorSettingsPort;
         private static ISessionFlagsRepository RegisteredSessionFlagsRepository;
+        private static UnityCliLoopServerApplicationService RegisteredServerApplicationService;
 
         private UnityCliLoopSettingsWindowUI _view;
         private UnityCliLoopSettingsModel _model;
@@ -33,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private ToolSettingsUseCase _toolSettingsUseCase;
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private ISessionFlagsRepository _sessionFlagsRepository;
+        private UnityCliLoopServerApplicationService _serverApplicationService;
 
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private bool _installSkillsFlat;
@@ -60,15 +62,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static void InitializeEditorServices(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
-            ISessionFlagsRepository sessionFlagsRepository)
+            ISessionFlagsRepository sessionFlagsRepository,
+            UnityCliLoopServerApplicationService serverApplicationService)
         {
             System.Diagnostics.Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
             System.Diagnostics.Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
+            System.Diagnostics.Debug.Assert(
+                serverApplicationService != null,
+                "serverApplicationService must not be null");
 
             RegisteredEditorSettingsPort = editorSettingsPort
                 ?? throw new ArgumentNullException(nameof(editorSettingsPort));
             RegisteredSessionFlagsRepository = sessionFlagsRepository
                 ?? throw new ArgumentNullException(nameof(sessionFlagsRepository));
+            RegisteredServerApplicationService = serverApplicationService
+                ?? throw new ArgumentNullException(nameof(serverApplicationService));
         }
 
         private void OnEnable()
@@ -116,6 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _toolSettingsUseCase = ToolSettingsUseCaseRegistry.GetRegisteredUseCase();
             _editorSettingsPort = GetEditorSettingsPort();
             _sessionFlagsRepository = GetSessionFlagsRepository();
+            _serverApplicationService = GetServerApplicationService();
         }
 
         private void InitializeView()
@@ -147,7 +156,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _eventHandler = new UnityCliLoopSettingsWindowEventHandler(
                 _model,
                 this,
-                _toolSettingsUseCase);
+                _toolSettingsUseCase,
+                _serverApplicationService);
             _eventHandler.Initialize();
         }
 
@@ -167,7 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _model.EnablePostCompileMode();
             _sessionFlagsRepository.SetShowReconnectingUI(false);
 
-            Task recoveryTask = UnityCliLoopServerApplicationFacade.RecoveryTask;
+            Task recoveryTask = _serverApplicationService.RecoveryTask;
             if (recoveryTask != null && !recoveryTask.IsCompleted)
             {
                 await recoveryTask;
@@ -1072,6 +1082,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             return RegisteredSessionFlagsRepository;
+        }
+
+        private static UnityCliLoopServerApplicationService GetServerApplicationService()
+        {
+            if (RegisteredServerApplicationService == null)
+            {
+                throw new InvalidOperationException(
+                    "Unity CLI Loop server application service is not registered.");
+            }
+
+            return RegisteredServerApplicationService;
         }
 
         private void HandleRefreshSkillsState()
