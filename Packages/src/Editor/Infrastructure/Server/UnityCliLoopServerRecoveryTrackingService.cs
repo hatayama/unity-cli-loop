@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly ISessionFlagsRepository _sessionFlagsRepository;
         private readonly Func<int, CancellationToken, Task> _waitBeforeRecoveryRetryAsync;
         private Task _currentRecoveryTask;
+        private bool _isCurrentRecoveryTracked;
 
         internal UnityCliLoopServerRecoveryTrackingService(
             ISessionFlagsRepository sessionFlagsRepository,
@@ -39,8 +40,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(scheduleDelayCall != null, "scheduleDelayCall must not be null");
             Debug.Assert(restoreServerState != null, "restoreServerState must not be null");
 
-            TaskCompletionSource<bool> scheduledRecoveryCompletionSource = new();
-            _currentRecoveryTask = scheduledRecoveryCompletionSource.Task;
+            TaskCompletionSource<bool> scheduledRecoveryCompletionSource = null;
+            Task scheduledRecoveryTask = ScheduleRecoveryTask(() =>
+            {
+                scheduledRecoveryCompletionSource = new TaskCompletionSource<bool>();
+                return scheduledRecoveryCompletionSource.Task;
+            }, isTrackedRecovery: false);
+            if (scheduledRecoveryCompletionSource == null)
+            {
+                return scheduledRecoveryTask;
+            }
 
             scheduleDelayCall(() =>
             {
@@ -67,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.FromCurrentSynchronizationContext());
             });
 
-            return scheduledRecoveryCompletionSource.Task;
+            return scheduledRecoveryTask;
         }
 
         private void CompleteScheduledStartupRecovery(
@@ -77,6 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (ReferenceEquals(_currentRecoveryTask, scheduledRecoveryCompletionSource.Task))
             {
                 _currentRecoveryTask = null;
+                _isCurrentRecoveryTracked = false;
             }
 
             if (restoreTask.IsCanceled)
@@ -104,10 +114,61 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(recoveryAction != null, "recoveryAction must not be null");
 
-            Task recoveryTask = ExecuteTrackedRecoveryAsync(recoveryAction);
-            _currentRecoveryTask = recoveryTask;
-            _ = ClearTrackedRecoveryWhenCompleteAsync(recoveryTask);
+            Task trackedRecoveryTask = null;
+            Task recoveryTask = ScheduleRecoveryTask(() =>
+            {
+                trackedRecoveryTask = ExecuteTrackedRecoveryAsync(recoveryAction);
+                return trackedRecoveryTask;
+            }, isTrackedRecovery: true);
+            if (trackedRecoveryTask != null)
+            {
+                _ = ClearTrackedRecoveryWhenCompleteAsync(trackedRecoveryTask);
+            }
+
             return recoveryTask;
+        }
+
+        private Task ScheduleRecoveryTask(Func<Task> createRecoveryTask, bool isTrackedRecovery)
+        {
+            Debug.Assert(createRecoveryTask != null, "createRecoveryTask must not be null");
+
+            Task activeRecoveryTask = GetActiveRecoveryTask();
+            if (activeRecoveryTask != null && ShouldJoinActiveRecovery(isTrackedRecovery))
+            {
+                // Why: startup recovery has no domain-reload bookkeeping, and duplicate tracked
+                // recovery loops recheck current server state, so these triggers add no new work.
+                return activeRecoveryTask;
+            }
+
+            Task recoveryTask = createRecoveryTask();
+            _currentRecoveryTask = recoveryTask;
+            _isCurrentRecoveryTracked = isTrackedRecovery;
+            return recoveryTask;
+        }
+
+        private bool ShouldJoinActiveRecovery(bool isTrackedRecovery)
+        {
+            if (!isTrackedRecovery)
+            {
+                // Why: startup restore is an idempotent IfNeeded recovery path, so any active
+                // recovery task already owns the same server-state restoration work.
+                return true;
+            }
+
+            // Why: after-domain-reload tracked recovery carries CompleteDomainReload bookkeeping,
+            // so it must supersede a startup placeholder instead of joining it.
+            return _isCurrentRecoveryTracked;
+        }
+
+        private Task GetActiveRecoveryTask()
+        {
+            Task currentRecoveryTask = _currentRecoveryTask;
+            if (currentRecoveryTask == null || currentRecoveryTask.IsCompleted)
+            {
+                return null;
+            }
+
+            return currentRecoveryTask;
         }
 
         /// <summary>
@@ -176,6 +237,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (ReferenceEquals(_currentRecoveryTask, recoveryTask))
                 {
                     _currentRecoveryTask = null;
+                    _isCurrentRecoveryTracked = false;
                 }
             }
         }
