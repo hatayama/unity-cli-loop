@@ -135,6 +135,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _sessionFlagsRepository,
                 initializationUseCase,
                 shutdownUseCase,
+                sessionRecoveryService,
                 domainReloadRecoveryUseCase,
                 readinessService,
                 startupProtectionService ?? new UnityCliLoopServerStartupProtectionService(),
