@@ -352,7 +352,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 contentSize = new(350f, 280f);
             Vector2 frameSize = new(18f, 28f);
 
-            Rect resizedRect = SetupWizardWindow.WithContentSize(initialRect, contentSize, frameSize);
+            Rect resizedRect = SetupWizardWindowResizer.WithContentSize(initialRect, contentSize, frameSize);
 
             Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
             Assert.That(resizedRect.size, Is.EqualTo(new Vector2(368f, 380f)));
@@ -365,7 +365,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 contentSize = new(120f, 140f);
             Vector2 frameSize = new(18f, 28f);
 
-            Rect resizedRect = SetupWizardWindow.WithContentSize(initialRect, contentSize, frameSize);
+            Rect resizedRect = SetupWizardWindowResizer.WithContentSize(initialRect, contentSize, frameSize);
 
             Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
             Assert.That(resizedRect.size, Is.EqualTo(new Vector2(360f, 380f)));
@@ -377,7 +377,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Rect bounds = new(100f, 200f, 900f, 700f);
             Vector2 size = new(300f, 250f);
 
-            Rect centeredRect = SetupWizardWindow.CreateCenteredRect(bounds, size);
+            Rect centeredRect = SetupWizardWindowResizer.CreateCenteredRect(bounds, size);
 
             Assert.That(centeredRect.center, Is.EqualTo(bounds.center));
             Assert.That(centeredRect.size, Is.EqualTo(size));
@@ -857,7 +857,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void EstimateWrappedLineCount_WithPositiveHeight_ReturnsRoundedLineCount()
         {
-            int lineCount = SetupWizardWindow.EstimateWrappedLineCount(35f, 12f);
+            int lineCount = SetupWizardWindowResizer.EstimateWrappedLineCount(35f, 12f);
 
             Assert.That(lineCount, Is.EqualTo(3));
         }
@@ -865,7 +865,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void SelectPreferredTextWidth_WhenWrappedAcrossManyLines_UsesTwoLineTarget()
         {
-            float preferredWidth = SetupWizardWindow.SelectPreferredTextWidth(120f, 320f, 4, WhiteSpace.Normal);
+            float preferredWidth = SetupWizardWindowResizer.SelectPreferredTextWidth(120f, 320f, 4, WhiteSpace.Normal);
 
             Assert.That(preferredWidth, Is.EqualTo(160f));
         }
@@ -873,7 +873,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void SelectPreferredTextWidth_WhenWrappedAcrossTwoLines_KeepsLaidOutWidth()
         {
-            float preferredWidth = SetupWizardWindow.SelectPreferredTextWidth(180f, 320f, 2, WhiteSpace.Normal);
+            float preferredWidth = SetupWizardWindowResizer.SelectPreferredTextWidth(180f, 320f, 2, WhiteSpace.Normal);
 
             Assert.That(preferredWidth, Is.EqualTo(180f));
         }
@@ -881,7 +881,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void SelectPreferredTextWidth_WhenShorterTextFitsWithinCurrentWidth_ShrinksToMeasuredWidth()
         {
-            float preferredWidth = SetupWizardWindow.SelectPreferredTextWidth(420f, 180f, 1, WhiteSpace.Normal);
+            float preferredWidth = SetupWizardWindowResizer.SelectPreferredTextWidth(420f, 180f, 1, WhiteSpace.Normal);
 
             Assert.That(preferredWidth, Is.EqualTo(180f));
         }
@@ -889,7 +889,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void SelectPreferredTextWidth_WhenTextDoesNotWrap_UsesMeasuredWidth()
         {
-            float preferredWidth = SetupWizardWindow.SelectPreferredTextWidth(180f, 320f, 1, WhiteSpace.NoWrap);
+            float preferredWidth = SetupWizardWindowResizer.SelectPreferredTextWidth(180f, 320f, 1, WhiteSpace.NoWrap);
 
             Assert.That(preferredWidth, Is.EqualTo(320f));
         }
@@ -897,7 +897,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void HasFiniteSize_WhenVectorContainsNaN_ReturnsFalse()
         {
-            bool hasFiniteSize = SetupWizardWindow.HasFiniteSize(new Vector2(float.NaN, 120f));
+            bool hasFiniteSize = SetupWizardWindowResizer.HasFiniteSize(new Vector2(float.NaN, 120f));
 
             Assert.That(hasFiniteSize, Is.False);
         }
@@ -905,7 +905,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void HasFiniteSize_WhenVectorContainsFiniteValues_ReturnsTrue()
         {
-            bool hasFiniteSize = SetupWizardWindow.HasFiniteSize(new Vector2(240f, 120f));
+            bool hasFiniteSize = SetupWizardWindowResizer.HasFiniteSize(new Vector2(240f, 120f));
 
             Assert.That(hasFiniteSize, Is.True);
         }
