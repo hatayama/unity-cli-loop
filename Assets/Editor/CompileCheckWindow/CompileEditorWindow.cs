@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEditor;
 using UnityEditor.Compilation;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
@@ -129,6 +130,11 @@ namespace io.github.hatayama.UnityCliLoop.Dev
 
         private async Task ExecuteCompileAsync()
         {
+            if (!ValidateCompilationStateBeforeControllerExecution())
+            {
+                return;
+            }
+
             CompileResult result = await _compileController.TryCompileAsync(_forceRecompile, CancellationToken.None);
             if (ShouldRunExecuteDynamicCodeReadinessAfterCompile(result))
             {
@@ -159,6 +165,31 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             }
 
             UnityEngine.Debug.Log(logMessage);
+        }
+
+        private bool ValidateCompilationStateBeforeControllerExecution()
+        {
+            CompilationStateValidationService validationService = new();
+            ValidationResult validation = validationService.ValidateCompilationState();
+            if (validation.IsValid)
+            {
+                return true;
+            }
+
+            CompileResult result = new CompileResult(
+                success: false,
+                errorCount: 0,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: new CompilerMessage[0],
+                errors: new CompilerMessage[0],
+                warnings: new CompilerMessage[0],
+                isIndeterminate: true,
+                message: validation.ErrorMessage);
+            _logDisplay.AppendCompletionMessage(result);
+            Repaint();
+            UnityEngine.Debug.LogWarning(validation.ErrorMessage);
+            return false;
         }
 
         private static bool ShouldRunExecuteDynamicCodeReadinessAfterCompile(CompileResult result)
