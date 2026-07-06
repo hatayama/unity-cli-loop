@@ -1,8 +1,6 @@
 using NUnit.Framework;
-using UnityEngine;
 
-using io.github.hatayama.UnityCliLoop.Application;
-using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -16,7 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that zsh setup honors the explicit ZDOTDIR environment root without probing login hooks.
             CliPathSetupPlan plan = CliPathSetupProfileResolver.ResolvePlan(
-                RuntimePlatform.OSXEditor,
+                CliPathSetupPlatform.Posix,
                 "/bin/zsh",
                 "/Users/ExampleUser",
                 "/Users/ExampleUser/.config/zsh",
@@ -34,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that bash setup avoids creating .bash_profile when a login profile already exists.
             CliPathSetupPlan plan = CliPathSetupProfileResolver.ResolvePlan(
-                RuntimePlatform.OSXEditor,
+                CliPathSetupPlatform.Posix,
                 "/bin/bash",
                 "/Users/ExampleUser",
                 null,
@@ -52,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that fish setup writes config.fish under XDG_CONFIG_HOME.
             CliPathSetupPlan plan = CliPathSetupProfileResolver.ResolvePlan(
-                RuntimePlatform.OSXEditor,
+                CliPathSetupPlatform.Posix,
                 "/opt/homebrew/bin/fish",
                 "/Users/ExampleUser",
                 null,
@@ -72,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that unknown shells do not expose a command written for a different shell syntax.
             CliPathSetupPlan plan = CliPathSetupProfileResolver.ResolvePlan(
-                RuntimePlatform.OSXEditor,
+                CliPathSetupPlatform.Posix,
                 "/bin/tcsh",
                 "/Users/ExampleUser",
                 null,
@@ -90,7 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that missing install roots do not produce misleading PATH directory guidance.
             CliPathSetupPlan plan = CliPathSetupProfileResolver.ResolvePlan(
-                RuntimePlatform.OSXEditor,
+                CliPathSetupPlatform.Posix,
                 "/bin/zsh",
                 "/Users/ExampleUser",
                 null,
@@ -102,6 +100,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(plan.CanApplyAutomatically, Is.False);
             Assert.That(plan.InstallDirectory, Is.Empty);
             Assert.That(plan.ProfileInstallDirectory, Is.Empty);
+            Assert.That(plan.ManualCommand, Is.Empty);
+        }
+
+        [Test]
+        public void ResolvePlan_WhenPlatformIsWindowsDisablesAutomaticApply()
+        {
+            // Verifies the domain resolver keeps Windows unsupported without shell-specific profile guidance.
+            CliPathSetupPlan plan = CliPathSetupProfileResolver.ResolvePlan(
+                CliPathSetupPlatform.Windows,
+                "/bin/zsh",
+                "/Users/ExampleUser",
+                null,
+                null,
+                "/Users/ExampleUser/.local/bin",
+                path => false);
+
+            Assert.That(plan.ShellKind, Is.EqualTo(CliPathSetupShellKind.Unsupported));
+            Assert.That(plan.ShellName, Is.EqualTo("windows"));
+            Assert.That(plan.CanApplyAutomatically, Is.False);
             Assert.That(plan.ManualCommand, Is.Empty);
         }
     }
