@@ -147,41 +147,47 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
         private ErrorSeverity DetermineSeverity(string errorMessage, Exception exception)
         {
+            ErrorSeverityCategory category = DetermineSeverityCategory(errorMessage, exception);
+            return ErrorSeverityClassificationPolicy.DetermineSeverity(category);
+        }
+
+        private ErrorSeverityCategory DetermineSeverityCategory(string errorMessage, Exception exception)
+        {
             if (exception != null)
             {
                 if (exception is UnityCliLoopSecurityException)
                 {
-                    return ErrorSeverity.High;
+                    return ErrorSeverityCategory.SecurityViolation;
                 }
                 if (exception is UnityCliLoopToolBusyException)
                 {
-                    return ErrorSeverity.Medium;
+                    return ErrorSeverityCategory.RecoverableExecutionState;
                 }
                 if (exception is TimeoutException)
                 {
-                    return ErrorSeverity.Medium;
+                    return ErrorSeverityCategory.RecoverableExecutionState;
                 }
                 if (exception is ToolDisabledException)
                 {
-                    return ErrorSeverity.Medium;
+                    return ErrorSeverityCategory.RecoverableExecutionState;
                 }
                 if (exception is UnityCliLoopToolParameterValidationException)
                 {
-                    return ErrorSeverity.Low;
+                    return ErrorSeverityCategory.ParameterValidation;
                 }
-                return ErrorSeverity.High;
+                return ErrorSeverityCategory.UnknownException;
             }
 
             string msg = errorMessage ?? string.Empty;
             if (msg.Contains("Top-level statements") || msg.Contains("not all code paths"))
             {
-                return ErrorSeverity.High;
+                return ErrorSeverityCategory.BlockingCompilerMessage;
             }
             if (msg.Contains("ambiguous reference"))
             {
-                return ErrorSeverity.Medium;
+                return ErrorSeverityCategory.AmbiguousCompilerMessage;
             }
-            return ErrorSeverity.Low;
+            return ErrorSeverityCategory.UserMessage;
         }
     }
 
@@ -214,7 +220,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
                     Example = string.Empty,
                     SuggestedSolutions = new List<string>(),
                     LearningTips = new List<string>(),
-                    Severity = ErrorSeverity.High
+                    Severity = ErrorSeverityClassificationPolicy.DetermineSeverity(
+                        ErrorSeverityCategory.UnknownException)
                 };
             }
 
@@ -237,13 +244,4 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public ErrorSeverity Severity { get; set; }
     }
 
-    /// <summary>
-    /// Error Severity
-    /// </summary>
-    public enum ErrorSeverity
-    {
-        Low,
-        Medium,
-        High
-    }
 }
