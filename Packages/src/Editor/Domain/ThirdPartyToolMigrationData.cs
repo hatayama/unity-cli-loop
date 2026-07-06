@@ -96,7 +96,12 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     {
         internal static string[] Copy(string[] filePaths)
         {
-            if (filePaths == null || filePaths.Length == 0)
+            if (filePaths == null)
+            {
+                throw new ArgumentNullException(nameof(filePaths));
+            }
+
+            if (filePaths.Length == 0)
             {
                 return Array.Empty<string>();
             }
