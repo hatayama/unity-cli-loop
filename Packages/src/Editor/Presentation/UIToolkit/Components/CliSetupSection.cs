@@ -257,7 +257,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool needsUpdate,
             bool canUninstallCli)
         {
-            return canUninstallCli && isCliInstalled && !needsUpdate;
+            return CliSetupPrimaryActionPolicy.ShouldUninstallCli(
+                isCliInstalled,
+                needsUpdate,
+                canUninstallCli);
         }
 
         internal static string GetInstallSkillsButtonText(
