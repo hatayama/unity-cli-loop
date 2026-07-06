@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenProtocolVersionMatches_AllowsRequest()
         {
             // Verifies CLI clients that speak the required IPC protocol can execute bridge commands.
-            JsonRpcRequestProcessor processor = CreateProcessor();
+            JsonRpcRequestProcessor processor = CreateProcessor(CreateRegistrarService());
 
             string response = await processor.ProcessRequest(
                 BuildGetVersionRequest(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION),
@@ -43,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenProtocolVersionIsNewer_ReturnsCliProtocolMismatchError()
         {
             // Verifies future protocol clients are rejected because IPC compatibility is exact-match.
-            JsonRpcRequestProcessor processor = CreateProcessor();
+            JsonRpcRequestProcessor processor = CreateProcessor(CreateRegistrarService());
 
             string response = await processor.ProcessRequest(
                 BuildGetVersionRequest(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION + 1),
@@ -66,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenProtocolVersionIsTooOld_ReturnsCliUpdateRequiredError()
         {
             // Verifies CLIs on an older IPC protocol receive CLI update instructions before any tool runs.
-            JsonRpcRequestProcessor processor = CreateProcessor();
+            JsonRpcRequestProcessor processor = CreateProcessor(CreateRegistrarService());
 
             string response = await processor.ProcessRequest(
                 BuildGetVersionRequest(CliConstants.REQUIRED_CLI_PROTOCOL_VERSION - 1),
@@ -90,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies the request metadata drives the accepted response and heartbeat frame contract.
             string acceptedResponse = null;
             Func<string> createHeartbeatJson = null;
-            JsonRpcRequestProcessor processor = CreateProcessor();
+            JsonRpcRequestProcessor processor = CreateProcessor(CreateRegistrarService());
 
             string response = await processor.ProcessRequestWithEarlyResponseAsync(
                 BuildHeartbeatNegotiatedToolRequest(UnityCliLoopConstants.COMMAND_NAME_GET_VERSION, 1),
@@ -118,7 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenCliMetadataIsMissing_ReturnsCliUpdateRequiredError()
         {
             // Verifies legacy clients without metadata are stopped with upgrade instructions.
-            JsonRpcRequestProcessor processor = CreateProcessor();
+            JsonRpcRequestProcessor processor = CreateProcessor(CreateRegistrarService());
 
             string response = await processor.ProcessRequest(
                 "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1}",
@@ -135,7 +135,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenProtocolVersionIsNotAnInteger_ReturnsCliUpdateRequiredError()
         {
             // Verifies malformed protocol values cannot bypass the compatibility gate.
-            JsonRpcRequestProcessor processor = CreateProcessor();
+            JsonRpcRequestProcessor processor = CreateProcessor(CreateRegistrarService());
 
             string response = await processor.ProcessRequest(
                 "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1," +
@@ -152,7 +152,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ProcessRequest_WhenProtocolVersionIsOutsideIntRange_ReturnsCliUpdateRequiredError()
         {
             // Verifies oversized protocol values are treated as missing metadata instead of parser failures.
-            JsonRpcRequestProcessor processor = CreateProcessor();
+            JsonRpcRequestProcessor processor = CreateProcessor(CreateRegistrarService());
 
             string response = await processor.ProcessRequest(
                 "{\"jsonrpc\":\"2.0\",\"method\":\"get-version\",\"params\":{},\"id\":1," +
@@ -416,7 +416,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CapturingMainThreadDispatcher dispatcher = new();
             MainThreadSwitcher.RegisterService(dispatcher);
 
-            JsonRpcRequestProcessor processor = CreateProcessor();
+            JsonRpcRequestProcessor processor = CreateProcessor(CreateRegistrarService());
 
             string hierarchyResponse = null;
             Task<string> hierarchyResponseTask = null;
@@ -471,7 +471,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies CLI-only bridge commands keep Unity API access on the editor thread.
             CapturingMainThreadDispatcher dispatcher = new();
             MainThreadSwitcher.RegisterService(dispatcher);
-            JsonRpcRequestProcessor processor = CreateProcessor();
+            JsonRpcRequestProcessor processor = CreateProcessor(CreateRegistrarService());
 
             Task<string> responseTask = null;
             try
@@ -551,12 +551,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static UnityCliLoopToolRegistrarService CreateRegistrarService()
         {
             return UnityCliLoopToolRegistrarTestFactory.Create(UnityCliLoopToolDiscovery.DiscoverTools);
-        }
-
-        private static JsonRpcRequestProcessor CreateProcessor()
-        {
-            UnityCliLoopToolRegistrarService service = CreateRegistrarService();
-            return CreateProcessor(service);
         }
 
         private static JsonRpcRequestProcessor CreateProcessor(UnityCliLoopToolRegistrarService service)
