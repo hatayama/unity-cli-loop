@@ -188,10 +188,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static void RegisterCliSetupService(ICliPinReader cliPinReader)
         {
-            CliSetupApplicationFacade.RegisterService(new CliSetupApplicationService(
-                new CliInstallationDetector(cliPinReader),
-                new NativeCliInstallerService(),
-                cliPinReader));
+            IUnityCliLoopEditorSettingsPort editorSettingsPort =
+                UnityCliLoopEditorSettingsTestFactory.CreatePortWithRepository(
+                    out UnityCliLoopEditorSettingsRepository _);
+            ISessionFlagsRepository sessionFlagsRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
+            UnityCliLoopSettingsWindow.InitializeEditorServices(
+                editorSettingsPort,
+                sessionFlagsRepository,
+                new UnityCliLoopServerApplicationService(new TestServerController()),
+                new CliSetupApplicationService(
+                    new CliInstallationDetector(cliPinReader),
+                    new NativeCliInstallerService(),
+                    cliPinReader));
         }
 
         private sealed class TestCliPinReader : ICliPinReader
@@ -212,6 +221,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public string LoadMinimumDispatcherVersionOrThrow()
             {
                 return _minimumDispatcherVersion;
+            }
+        }
+
+        private sealed class TestServerController : IUnityCliLoopServerController
+        {
+            public bool IsServerRunning => false;
+
+            public System.Threading.Tasks.Task RecoveryTask => System.Threading.Tasks.Task.CompletedTask;
+
+            public void StartServer()
+            {
+            }
+
+            public void StopServer()
+            {
+            }
+
+            public void AddServerStateChangedHandler(System.Action handler)
+            {
+            }
+
+            public void RemoveServerStateChangedHandler(System.Action handler)
+            {
+            }
+
+            public void AddServerStartedHandler(System.Action handler)
+            {
+            }
+
+            public void RemoveServerStartedHandler(System.Action handler)
+            {
             }
         }
     }
