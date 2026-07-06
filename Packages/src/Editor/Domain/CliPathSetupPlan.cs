@@ -1,6 +1,6 @@
-using UnityEngine;
+using System.Diagnostics;
 
-namespace io.github.hatayama.UnityCliLoop.Application
+namespace io.github.hatayama.UnityCliLoop.Domain
 {
     /// <summary>
     /// Carries the shell-specific target needed to add the native CLI install directory to PATH.

@@ -5,7 +5,7 @@ using System.Security;
 
 using UnityEngine;
 
-using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
