@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.IO;
 
+using io.github.hatayama.UnityCliLoop.Domain;
+
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>

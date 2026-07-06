@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationAssemblyReferenceResolver;
 using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationAssemblyScopedNameMap;
 
+using io.github.hatayama.UnityCliLoop.Domain;
+
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
