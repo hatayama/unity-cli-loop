@@ -33,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private UnityCliLoopSettingsWindowUI _view;
         private UnityCliLoopSettingsModel _model;
         private UnityCliLoopSettingsWindowEventHandler _eventHandler;
+        private UnityCliLoopSettingsCliSetupPresenter _cliSetupPresenter;
         private SkillSetupUseCase _skillSetupUseCase;
         private ToolSettingsUseCase _toolSettingsUseCase;
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
@@ -110,6 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             CancelSkillInstallStateRefresh();
             _view?.Dispose();
             _view = null;
+            _cliSetupPresenter = null;
         }
 
         private void CreateGUI()
@@ -149,6 +151,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void InitializeView()
         {
             _view = new UnityCliLoopSettingsWindowUI(rootVisualElement);
+            _cliSetupPresenter = new UnityCliLoopSettingsCliSetupPresenter(
+                _view,
+                _cliSetupApplicationService);
             SetupViewCallbacks();
         }
 
@@ -223,6 +228,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SaveSessionState();
             _view?.Dispose();
             _view = null;
+            _cliSetupPresenter = null;
         }
 
         private void CleanupEventHandler()
@@ -622,63 +628,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void RefreshCliSetupSection(bool includeSkillDirectoryChecks = true)
         {
-            if (_view == null)
+            if (_cliSetupPresenter == null)
             {
                 return;
             }
 
-            CliSetupData cliData = CreateCliSetupData(includeSkillDirectoryChecks);
-            _view.UpdateCliSetup(cliData);
-        }
-
-        private CliSetupData CreateCliSetupData(bool includeSkillDirectoryChecks = true)
-        {
-            string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
-            bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
-            string cliExecutablePath = _cliSetupApplicationService.GetCachedCliExecutablePath();
-            string requiredCliVersion = GetMinimumRequiredCliVersion();
-
-            bool isCliInstalled = cliVersion != null || _needsCliPathSetup;
-            bool canUninstallCli = _cliSetupApplicationService.IsPackageOwnedCurrentUserInstallPath(
-                cliExecutablePath,
-                UnityEngine.Application.platform);
-            bool isChecking = !_cliSetupApplicationService.IsCliCheckCompleted()
-                || _isRefreshingVersion
-                || _isRefreshingCliPathSetup
-                || !includeSkillDirectoryChecks;
-            CliSetupCompatibilityState state = CliSetupCompatibility.Evaluate(
-                cliVersion,
-                cliIsDispatcher,
-                requiredCliVersion);
-            bool groupSkillsUnderUnityCliLoop = !_installSkillsFlat;
-            SkillInstallState selectedTargetInstallState = includeSkillDirectoryChecks
-                ? _selectedTargetInstallState
-                : SkillInstallState.Checking;
-
-            return new CliSetupData(
-                isCliInstalled,
-                cliVersion,
-                requiredCliVersion,
-                state.NeedsUpdate,
-                canUninstallCli,
+            _cliSetupPresenter.Update(
                 _needsCliPathSetup,
                 _isInstallingCli,
-                isChecking,
-                isClaudeSkillsInstalled: false,
-                isAgentsSkillsInstalled: false,
-                isCursorSkillsInstalled: false,
-                isGeminiSkillsInstalled: false,
-                isCodexSkillsInstalled: false,
-                isAntigravitySkillsInstalled: false,
-                selectedTargetInstallState,
+                _isRefreshingVersion,
+                _isRefreshingCliPathSetup,
+                includeSkillDirectoryChecks,
+                _installSkillsFlat,
+                _selectedTargetInstallState,
                 _skillsTarget,
-                groupSkillsUnderUnityCliLoop,
                 _isInstallingSkills);
-        }
-
-        private static string GetMinimumRequiredCliVersion()
-        {
-            return GetCliSetupApplicationService().GetMinimumRequiredCliVersion();
         }
 
         private bool ShouldCheckCliPathSetup()
