@@ -365,7 +365,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             if (RegisteredEditorSettingsPort == null)
             {
-                throw new System.InvalidOperationException("Unity CLI Loop editor settings service is not registered.");
+                throw new System.InvalidOperationException("Unity CLI Loop editor settings port is not registered.");
             }
 
             return RegisteredEditorSettingsPort;
