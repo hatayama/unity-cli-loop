@@ -118,7 +118,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 lifecycleRegistry,
                 CreateDomainReloadDetectionService(),
                 _sessionFlagsRepository,
-                _sessionStateService,
                 readinessProbe,
                 new TestDomainReloadLifecycle());
 
@@ -145,7 +144,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 lifecycleRegistry,
                 CreateDomainReloadDetectionService(),
                 _sessionFlagsRepository,
-                _sessionStateService,
                 readinessProbe,
                 new TestDomainReloadLifecycle(),
                 () => editorIsBusy,
@@ -180,7 +178,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 lifecycleRegistry,
                 CreateDomainReloadDetectionService(),
                 _sessionFlagsRepository,
-                _sessionStateService,
                 readinessProbe,
                 new TestDomainReloadLifecycle(),
                 () => true,
@@ -325,7 +322,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 lifecycleRegistry,
                 CreateDomainReloadDetectionService(),
                 _sessionFlagsRepository,
-                _sessionStateService,
                 new TestReadinessProbe(),
                 new TestDomainReloadLifecycle());
 
@@ -364,7 +360,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 lifecycleRegistry,
                 CreateDomainReloadDetectionService(),
                 _sessionFlagsRepository,
-                _sessionStateService,
                 new TestReadinessProbe(),
                 new TestDomainReloadLifecycle());
             TestServerInstance runningServer = new();
@@ -392,7 +387,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 lifecycleRegistry,
                 CreateDomainReloadDetectionService(),
                 _sessionFlagsRepository,
-                _sessionStateService,
                 new TestReadinessProbe(),
                 new TestDomainReloadLifecycle());
             TestServerInstance runningServer = new(throwOnDispose: true);
@@ -418,7 +412,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 lifecycleRegistry,
                 CreateDomainReloadDetectionService(),
                 _sessionFlagsRepository,
-                _sessionStateService,
                 readinessProbe ?? new TestReadinessProbe(),
                 new TestDomainReloadLifecycle(),
                 waitBeforeRecoveryRetryAsync: waitBeforeRecoveryRetryAsync);

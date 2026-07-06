@@ -129,7 +129,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     }
 
     /// <summary>
-    /// Coordinates Unity Editor session-scoped runtime flags through the storage port owned by Infrastructure.
+    /// Coordinates compile-result and pending-compile session repositories during compile recovery.
     /// </summary>
     public sealed class UnityCliLoopEditorSessionStateService
     {

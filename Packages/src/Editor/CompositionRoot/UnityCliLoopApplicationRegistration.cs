@@ -64,7 +64,6 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 lifecycleRegistry,
                 domainReloadDetectionService,
                 sessionFlagsRepository,
-                sessionStateService,
                 firstPartyServerLifecycle,
                 firstPartyServerLifecycle);
             UnityCliLoopServerApplicationService applicationService = new(controllerService);
@@ -74,8 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             return new UnityCliLoopApplicationServices(
                 domainReloadDetectionService,
                 editorSettingsPort,
-                sessionFlagsRepository,
-                sessionStateService);
+                sessionFlagsRepository);
         }
     }
 
@@ -84,18 +82,15 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
         internal UnityCliLoopApplicationServices(
             IDomainReloadDetectionService domainReloadDetectionService,
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
-            ISessionFlagsRepository sessionFlagsRepository,
-            UnityCliLoopEditorSessionStateService sessionStateService)
+            ISessionFlagsRepository sessionFlagsRepository)
         {
             DomainReloadDetectionService = domainReloadDetectionService;
             EditorSettingsPort = editorSettingsPort;
             SessionFlagsRepository = sessionFlagsRepository;
-            SessionStateService = sessionStateService;
         }
 
         internal IDomainReloadDetectionService DomainReloadDetectionService { get; }
         internal IUnityCliLoopEditorSettingsPort EditorSettingsPort { get; }
         internal ISessionFlagsRepository SessionFlagsRepository { get; }
-        internal UnityCliLoopEditorSessionStateService SessionStateService { get; }
     }
 }

@@ -1,5 +1,3 @@
-using UnityEditor;
-
 using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -21,82 +19,88 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             KeyPrefix + "shouldAutoScanThirdPartyToolMigration";
         public bool GetIsServerRunning()
         {
-            return GetBool(IsServerRunningKey);
+            return UnityCliLoopEditorSessionStateStorage.GetBool(IsServerRunningKey);
         }
 
         public void SetIsServerRunning(bool isServerRunning)
         {
-            SetBool(IsServerRunningKey, isServerRunning);
+            UnityCliLoopEditorSessionStateStorage.SetBool(IsServerRunningKey, isServerRunning);
         }
 
         public bool GetIsServerManuallyStopped()
         {
-            return GetBool(IsServerManuallyStoppedKey);
+            return UnityCliLoopEditorSessionStateStorage.GetBool(IsServerManuallyStoppedKey);
         }
 
         public void SetIsServerManuallyStopped(bool isServerManuallyStopped)
         {
-            SetBool(IsServerManuallyStoppedKey, isServerManuallyStopped);
+            UnityCliLoopEditorSessionStateStorage.SetBool(IsServerManuallyStoppedKey, isServerManuallyStopped);
         }
 
         public bool GetIsAfterCompile()
         {
-            return GetBool(IsAfterCompileKey);
+            return UnityCliLoopEditorSessionStateStorage.GetBool(IsAfterCompileKey);
         }
 
         public void SetIsAfterCompile(bool isAfterCompile)
         {
-            SetBool(IsAfterCompileKey, isAfterCompile);
+            UnityCliLoopEditorSessionStateStorage.SetBool(IsAfterCompileKey, isAfterCompile);
         }
 
         public bool GetIsDomainReloadInProgress()
         {
-            return GetBool(IsDomainReloadInProgressKey);
+            return UnityCliLoopEditorSessionStateStorage.GetBool(IsDomainReloadInProgressKey);
         }
 
         public void SetIsDomainReloadInProgress(bool isDomainReloadInProgress)
         {
-            SetBool(IsDomainReloadInProgressKey, isDomainReloadInProgress);
+            UnityCliLoopEditorSessionStateStorage.SetBool(
+                IsDomainReloadInProgressKey,
+                isDomainReloadInProgress);
         }
 
         public bool GetIsReconnecting()
         {
-            return GetBool(IsReconnectingKey);
+            return UnityCliLoopEditorSessionStateStorage.GetBool(IsReconnectingKey);
         }
 
         public void SetIsReconnecting(bool isReconnecting)
         {
-            SetBool(IsReconnectingKey, isReconnecting);
+            UnityCliLoopEditorSessionStateStorage.SetBool(IsReconnectingKey, isReconnecting);
         }
 
         public bool GetShowReconnectingUI()
         {
-            return GetBool(ShowReconnectingUIKey);
+            return UnityCliLoopEditorSessionStateStorage.GetBool(ShowReconnectingUIKey);
         }
 
         public void SetShowReconnectingUI(bool showReconnectingUI)
         {
-            SetBool(ShowReconnectingUIKey, showReconnectingUI);
+            UnityCliLoopEditorSessionStateStorage.SetBool(ShowReconnectingUIKey, showReconnectingUI);
         }
 
         public bool GetShowPostCompileReconnectingUI()
         {
-            return GetBool(ShowPostCompileReconnectingUIKey);
+            return UnityCliLoopEditorSessionStateStorage.GetBool(ShowPostCompileReconnectingUIKey);
         }
 
         public void SetShowPostCompileReconnectingUI(bool showPostCompileReconnectingUI)
         {
-            SetBool(ShowPostCompileReconnectingUIKey, showPostCompileReconnectingUI);
+            UnityCliLoopEditorSessionStateStorage.SetBool(
+                ShowPostCompileReconnectingUIKey,
+                showPostCompileReconnectingUI);
         }
 
         public bool GetShouldAutoScanThirdPartyToolMigration()
         {
-            return GetBool(ShouldAutoScanThirdPartyToolMigrationKey);
+            return UnityCliLoopEditorSessionStateStorage.GetBool(ShouldAutoScanThirdPartyToolMigrationKey);
         }
 
         public void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration)
         {
-            SetBool(ShouldAutoScanThirdPartyToolMigrationKey, shouldAutoScanThirdPartyToolMigration);
+            UnityCliLoopEditorSessionStateStorage.SetBool(
+                ShouldAutoScanThirdPartyToolMigrationKey,
+                shouldAutoScanThirdPartyToolMigration);
         }
 
         public bool ConsumeShouldAutoScanThirdPartyToolMigration()
@@ -157,14 +161,5 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             SetShowPostCompileReconnectingUI(false);
         }
 
-        private static bool GetBool(string key)
-        {
-            return SessionState.GetBool(key, false);
-        }
-
-        private static void SetBool(string key, bool value)
-        {
-            SessionState.SetBool(key, value);
-        }
     }
 }

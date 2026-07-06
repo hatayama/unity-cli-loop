@@ -32,7 +32,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly UnityCliLoopServerLifecycleRegistryService _serverLifecycleRegistry;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
         private readonly ISessionFlagsRepository _sessionFlagsRepository;
-        private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
         private readonly SessionRecoveryService _sessionRecoveryService;
         private readonly IUnityCliLoopServerReadinessProbe _readinessProbe;
         private readonly IUnityCliLoopServerDomainReloadLifecycle _domainReloadLifecycle;
@@ -50,7 +49,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopServerLifecycleRegistryService serverLifecycleRegistry,
             IDomainReloadDetectionService domainReloadDetectionService,
             ISessionFlagsRepository sessionFlagsRepository,
-            UnityCliLoopEditorSessionStateService sessionStateService,
             IUnityCliLoopServerReadinessProbe readinessProbe,
             IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle,
             Func<bool> isReadinessProbeBlocked = null,
@@ -62,7 +60,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             System.Diagnostics.Debug.Assert(serverLifecycleRegistry != null, "serverLifecycleRegistry must not be null");
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
             System.Diagnostics.Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
-            System.Diagnostics.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
             System.Diagnostics.Debug.Assert(readinessProbe != null, "readinessProbe must not be null");
             System.Diagnostics.Debug.Assert(domainReloadLifecycle != null, "domainReloadLifecycle must not be null");
             System.Diagnostics.Debug.Assert(readinessIdleTimeoutMilliseconds > 0, "readinessIdleTimeoutMilliseconds must be positive");
@@ -71,7 +68,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _serverLifecycleRegistry = serverLifecycleRegistry ?? throw new ArgumentNullException(nameof(serverLifecycleRegistry));
             _domainReloadDetectionService = domainReloadDetectionService ?? throw new ArgumentNullException(nameof(domainReloadDetectionService));
             _sessionFlagsRepository = sessionFlagsRepository ?? throw new ArgumentNullException(nameof(sessionFlagsRepository));
-            _sessionStateService = sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
             _readinessProbe = readinessProbe ?? throw new ArgumentNullException(nameof(readinessProbe));
             _domainReloadLifecycle = domainReloadLifecycle ?? throw new ArgumentNullException(nameof(domainReloadLifecycle));
             _isReadinessProbeBlocked = isReadinessProbeBlocked ?? IsEditorBusyForReadinessProbe;

@@ -111,7 +111,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     new UnityCliLoopPendingCompileSessionRepository(),
                     _sessionStateService),
                 _sessionFlagsRepository,
-                _sessionStateService,
                 new TestReadinessProbe(),
                 domainReloadLifecycle);
         }
