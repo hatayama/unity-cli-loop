@@ -64,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             // Why: a corrupt pin must surface as a structured failure like every other unreadable-pin
             // case, not as a raw parse exception; mirrors the JsonReaderException handling in
-            // JsonRpcProcessor and keeps LoadMinimumDispatcherVersionOrThrow's fail-closed message useful.
+            // JsonRpcRequestProcessor and keeps LoadMinimumDispatcherVersionOrThrow's fail-closed message useful.
             JObject parsed;
             try
             {
