@@ -87,6 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 sessionFlagsRepository,
                 serverInitializationUseCase,
                 serverShutdownUseCase,
+                sessionRecoveryService,
                 domainReloadRecoveryUseCase,
                 serverReadinessService,
                 startupProtectionService,
