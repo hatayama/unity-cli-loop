@@ -312,7 +312,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             public List<MigrationFileChange> Changes { get; } = new();
 
-            public Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+            public Dictionary<string, List<RemovedLegacyPlayerLoopTimingSignature>>
                 RemovedPlayerLoopTimingSignaturesByAssemblyDirectory { get; } = new(StringComparer.Ordinal);
 
             private int ReplacementCount { get; set; }
