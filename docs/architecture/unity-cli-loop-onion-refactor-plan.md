@@ -148,7 +148,7 @@
   - the sample extension asmdef references only `UnityCLILoop.ToolContracts`.
   - the sample `hello-world` extension executes through the same typed contract path as bundled tools.
   - `UnityCLILoop.FirstPartyTools.Editor` references only `UnityCLILoop.ToolContracts`.
-  - settings/setup UI code no longer reaches CLI setup internals directly and goes through `CliSetupApplicationFacade`.
+  - settings/setup UI code no longer reaches CLI setup internals directly and receives `CliSetupApplicationService` through editor startup.
   - settings/setup UI code no longer reaches skill setup internals directly and goes through `SkillSetupApplicationFacade`.
   - settings-window UI code no longer reaches tool settings or registry internals directly and goes through `ToolSettingsApplicationFacade`.
   - settings-window UI source uses `UnityCliLoopSettingsWindow` naming instead of the legacy MCP settings-window name.

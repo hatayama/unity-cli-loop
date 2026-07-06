@@ -26,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static IUnityCliLoopEditorSettingsPort RegisteredEditorSettingsPort;
         private static ISessionFlagsRepository RegisteredSessionFlagsRepository;
         private static UnityCliLoopServerApplicationService RegisteredServerApplicationService;
+        private static CliSetupApplicationService RegisteredCliSetupApplicationService;
 
         private UnityCliLoopSettingsWindowUI _view;
         private UnityCliLoopSettingsModel _model;
@@ -35,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private ISessionFlagsRepository _sessionFlagsRepository;
         private UnityCliLoopServerApplicationService _serverApplicationService;
+        private CliSetupApplicationService _cliSetupApplicationService;
 
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private bool _installSkillsFlat;
@@ -63,13 +65,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static void InitializeEditorServices(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
-            UnityCliLoopServerApplicationService serverApplicationService)
+            UnityCliLoopServerApplicationService serverApplicationService,
+            CliSetupApplicationService cliSetupApplicationService)
         {
             System.Diagnostics.Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
             System.Diagnostics.Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
             System.Diagnostics.Debug.Assert(
                 serverApplicationService != null,
                 "serverApplicationService must not be null");
+            System.Diagnostics.Debug.Assert(
+                cliSetupApplicationService != null,
+                "cliSetupApplicationService must not be null");
 
             RegisteredEditorSettingsPort = editorSettingsPort
                 ?? throw new ArgumentNullException(nameof(editorSettingsPort));
@@ -77,6 +83,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new ArgumentNullException(nameof(sessionFlagsRepository));
             RegisteredServerApplicationService = serverApplicationService
                 ?? throw new ArgumentNullException(nameof(serverApplicationService));
+            RegisteredCliSetupApplicationService = cliSetupApplicationService
+                ?? throw new ArgumentNullException(nameof(cliSetupApplicationService));
         }
 
         private void OnEnable()
@@ -125,6 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _editorSettingsPort = GetEditorSettingsPort();
             _sessionFlagsRepository = GetSessionFlagsRepository();
             _serverApplicationService = GetServerApplicationService();
+            _cliSetupApplicationService = GetCliSetupApplicationService();
         }
 
         private void InitializeView()
@@ -311,12 +320,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private async void RefreshCliVersionInBackground()
         {
-            if (CliSetupApplicationFacade.IsCliCheckCompleted())
+            if (_cliSetupApplicationService.IsCliCheckCompleted())
             {
                 return;
             }
 
-            await CliSetupApplicationFacade.RefreshCliVersionAsync(CancellationToken.None);
+            await _cliSetupApplicationService.RefreshCliVersionAsync(CancellationToken.None);
             RefreshCliPathSetupInBackground();
             RefreshCliSetupSection();
             RefreshSelectedTargetInstallStateInBackground();
@@ -340,7 +349,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             try
             {
-                bool isCliVisibleFromShell = await CliSetupApplicationFacade.IsCliVisibleFromShellAsync(
+                bool isCliVisibleFromShell = await _cliSetupApplicationService.IsCliVisibleFromShellAsync(
                     UnityEngine.Application.platform,
                     CancellationToken.None);
                 _needsCliPathSetup = !isCliVisibleFromShell;
@@ -364,7 +373,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             try
             {
-                Task forceRefresh = CliSetupApplicationFacade.ForceRefreshCliVersionAsync(CancellationToken.None);
+                Task forceRefresh = _cliSetupApplicationService.ForceRefreshCliVersionAsync(CancellationToken.None);
                 Task minimumDelay = Task.Delay(500);
                 await Task.WhenAll(forceRefresh, minimumDelay);
                 RefreshCliPathSetupInBackground();
@@ -614,16 +623,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private CliSetupData CreateCliSetupData(bool includeSkillDirectoryChecks = true)
         {
-            string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
-            bool cliIsDispatcher = CliSetupApplicationFacade.GetCachedCliIsDispatcher();
-            string cliExecutablePath = CliSetupApplicationFacade.GetCachedCliExecutablePath();
+            string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
+            bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
+            string cliExecutablePath = _cliSetupApplicationService.GetCachedCliExecutablePath();
             string requiredCliVersion = GetMinimumRequiredCliVersion();
 
             bool isCliInstalled = cliVersion != null || _needsCliPathSetup;
-            bool canUninstallCli = CliSetupApplicationFacade.IsPackageOwnedCurrentUserInstallPath(
+            bool canUninstallCli = _cliSetupApplicationService.IsPackageOwnedCurrentUserInstallPath(
                 cliExecutablePath,
                 UnityEngine.Application.platform);
-            bool isChecking = !CliSetupApplicationFacade.IsCliCheckCompleted()
+            bool isChecking = !_cliSetupApplicationService.IsCliCheckCompleted()
                 || _isRefreshingVersion
                 || _isRefreshingCliPathSetup
                 || !includeSkillDirectoryChecks;
@@ -659,14 +668,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private static string GetMinimumRequiredCliVersion()
         {
-            return CliSetupApplicationFacade.GetMinimumRequiredCliVersion();
+            return GetCliSetupApplicationService().GetMinimumRequiredCliVersion();
         }
 
-        private static bool ShouldCheckCliPathSetup()
+        private bool ShouldCheckCliPathSetup()
         {
             return ShouldCheckCliPathSetupForPlatform(
                 UnityEngine.Application.platform,
-                CliSetupApplicationFacade.HasPackageOwnedCurrentUserInstall(UnityEngine.Application.platform));
+                _cliSetupApplicationService.HasPackageOwnedCurrentUserInstall(UnityEngine.Application.platform));
         }
 
         internal static bool ShouldCheckCliPathSetupForPlatform(
@@ -678,7 +687,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void RefreshSelectedTargetInstallStateFast()
         {
-            if (!CliSetupApplicationFacade.IsCliInstalled())
+            if (!_cliSetupApplicationService.IsCliInstalled())
             {
                 _selectedTargetInstallState = SkillInstallState.Missing;
                 RefreshCliSetupSection();
@@ -692,7 +701,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void RefreshSelectedTargetInstallStateInBackground(bool allowDuringCliRefresh = false)
         {
             CancelSkillInstallStateRefresh();
-            bool isCliInstalled = CliSetupApplicationFacade.IsCliInstalled();
+            bool isCliInstalled = _cliSetupApplicationService.IsCliInstalled();
             if (!UnityCliLoopSettingsWindowRefreshPolicy.ShouldStartSkillInstallStateRefresh(
                     isCliInstalled,
                     _isRefreshingVersion,
@@ -800,20 +809,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            bool wasCliInstalledBeforeInstall = CliSetupApplicationFacade.IsCliInstalled();
+            bool wasCliInstalledBeforeInstall = _cliSetupApplicationService.IsCliInstalled();
             _needsCliPathSetup = false;
             _isInstallingCli = true;
             RefreshCliSetupSection();
 
             try
             {
-                CliInstallResult result = await CliSetupApplicationFacade.InstallGlobalCliAsync(
+                CliInstallResult result = await _cliSetupApplicationService.InstallGlobalCliAsync(
                     UnityEngine.Application.platform,
                     CancellationToken.None);
 
                 if (!result.Success)
                 {
-                    NativeCliInstallCommand command = CliSetupApplicationFacade.GetGlobalCliInstallCommand(
+                    NativeCliInstallCommand command = _cliSetupApplicationService.GetGlobalCliInstallCommand(
                         UnityEngine.Application.platform,
                         true);
                     EditorUtility.DisplayDialog(
@@ -825,6 +834,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
                 await CliPathSetupPrompt.EnsureVisibleAndShowResultAsync(
                     UnityEngine.Application.platform,
+                    _cliSetupApplicationService,
                     CancellationToken.None);
                 await RefreshCliPathSetupAsync(CancellationToken.None);
             }
@@ -839,10 +849,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private CliSetupPrimaryAction GetCurrentCliPrimaryButtonAction()
         {
-            string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
-            bool cliIsDispatcher = CliSetupApplicationFacade.GetCachedCliIsDispatcher();
-            string cliExecutablePath = CliSetupApplicationFacade.GetCachedCliExecutablePath();
-            bool canUninstallCli = CliSetupApplicationFacade.IsPackageOwnedCurrentUserInstallPath(
+            string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
+            bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
+            string cliExecutablePath = _cliSetupApplicationService.GetCachedCliExecutablePath();
+            bool canUninstallCli = _cliSetupApplicationService.IsPackageOwnedCurrentUserInstallPath(
                 cliExecutablePath,
                 UnityEngine.Application.platform);
             return ResolveCliPrimaryButtonAction(
@@ -903,7 +913,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             try
             {
-                await CliSetupApplicationFacade.ForceRefreshCliVersionAsync(ct);
+                await _cliSetupApplicationService.ForceRefreshCliVersionAsync(ct);
                 await RefreshCliPathSetupAsync(ct);
             }
             finally
@@ -921,7 +931,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            bool isCliVisibleFromShell = await CliSetupApplicationFacade.IsCliVisibleFromShellAsync(
+            bool isCliVisibleFromShell = await _cliSetupApplicationService.IsCliVisibleFromShellAsync(
                 UnityEngine.Application.platform,
                 ct);
             _needsCliPathSetup = !isCliVisibleFromShell;
@@ -936,6 +946,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 await CliPathSetupPrompt.EnsureVisibleAndShowResultAsync(
                     UnityEngine.Application.platform,
+                    _cliSetupApplicationService,
                     CancellationToken.None);
                 await RefreshCliPathSetupAsync(CancellationToken.None);
             }
@@ -961,12 +972,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string cliVersion,
             bool cliIsDispatcher)
         {
-            // Why: route through the setup facade so the pin JSON stays the single source for the minimum
+            // Why: route through the setup service so the pin JSON stays the single source for the minimum
             // dispatcher version instead of duplicating the constant in the presentation layer.
             return CliSetupCompatibility.Evaluate(
                 cliVersion,
                 cliIsDispatcher,
-                CliSetupApplicationFacade.GetMinimumRequiredCliVersion());
+                GetCliSetupApplicationService().GetMinimumRequiredCliVersion());
         }
 
         private async Task HandleUninstallCli()
@@ -981,7 +992,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             try
             {
-                CliInstallResult result = await CliSetupApplicationFacade.UninstallGlobalCliAsync(
+                CliInstallResult result = await _cliSetupApplicationService.UninstallGlobalCliAsync(
                     UnityEngine.Application.platform,
                     CancellationToken.None);
                 if (!result.Success)
@@ -1002,7 +1013,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private async void HandleInstallSkills()
         {
-            if (!CliSetupApplicationFacade.IsCliInstalled())
+            if (!_cliSetupApplicationService.IsCliInstalled())
             {
                 EditorUtility.DisplayDialog(
                     "CLI Not Found",
@@ -1093,6 +1104,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             return RegisteredServerApplicationService;
+        }
+
+        private static CliSetupApplicationService GetCliSetupApplicationService()
+        {
+            if (RegisteredCliSetupApplicationService == null)
+            {
+                throw new InvalidOperationException(
+                    "Unity CLI Loop CLI setup application service is not registered.");
+            }
+
+            return RegisteredCliSetupApplicationService;
         }
 
         private void HandleRefreshSkillsState()
