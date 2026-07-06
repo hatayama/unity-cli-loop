@@ -221,6 +221,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void CompileResultSessionRepositoryPort_WhenLoaded_CompilesUnderDomainAssembly()
+        {
+            // Tests that compile-result session persistence stays behind a domain-owned repository port.
+            string repositoryAssemblyName = typeof(ICompileResultSessionRepository).Assembly.GetName().Name;
+
+            Assert.That(repositoryAssemblyName, Is.EqualTo(DomainAssemblyName));
+        }
+
+        [Test]
         public void ToolCorePolicy_WhenLoaded_CompilesUnderDomainAssembly()
         {
             // Tests that tool catalog and assembly classification rules stay in the domain layer.

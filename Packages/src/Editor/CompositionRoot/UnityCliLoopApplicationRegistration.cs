@@ -18,7 +18,11 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
             IUnityCliLoopEditorSettingsPort editorSettingsPort = new UnityCliLoopEditorSettingsRepository();
             UnityCliLoopEditorSessionStateRepository sessionStateRepository = new();
-            UnityCliLoopEditorSessionStateService sessionStateService = new(sessionStateRepository);
+            ICompileResultSessionRepository compileResultSessionRepository =
+                new UnityCliLoopCompileResultSessionRepository();
+            UnityCliLoopEditorSessionStateService sessionStateService = new(
+                sessionStateRepository,
+                compileResultSessionRepository);
             UnityCliLoopEditorSessionStateFacade.RegisterService(sessionStateService);
             UnityCliLoopFirstPartyServerLifecycleBinding firstPartyServerLifecycle = new(new ProjectIpcWarmupClient());
             DomainReloadDetectionFileService domainReloadDetectionService = new(
