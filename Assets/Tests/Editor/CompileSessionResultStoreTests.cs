@@ -68,9 +68,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void StoreCompileResult_WhenSameNormalResultIsStoredTwice_WritesByteIdenticalJson()
+        public void StoreCompileResult_WhenEquivalentNormalResponsesAreStored_WritesByteIdenticalJson()
         {
-            // Verifies the current controller-store and usecase-store paths serialize the same normal result bytes.
+            // Verifies equivalent normal responses keep stable bytes after duplicate execution-result storage is removed.
             UnityCliLoopCompileResultSessionRepository compileResultSessionRepository =
                 UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
             UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
