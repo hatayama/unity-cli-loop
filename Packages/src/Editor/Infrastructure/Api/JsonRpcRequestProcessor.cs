@@ -263,7 +263,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
             catch (JsonSerializationException ex)
             {
-                UnityEngine.Debug.LogError($"[JsonRpcProcessor] JSON serialization error: {ex.Message}\nStack trace: {ex.StackTrace}");
+                UnityEngine.Debug.LogError($"[JsonRpcRequestProcessor] JSON serialization error: {ex.Message}\nStack trace: {ex.StackTrace}");
                 return CreateErrorResponse(request.Id, ex);
             }
             catch (UnityCliLoopToolParameterValidationException ex)
@@ -285,7 +285,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            UnityEngine.Debug.LogError($"[JsonRpcProcessor] Error: {ex.Message}\nStack trace: {ex.StackTrace}");
+            UnityEngine.Debug.LogError($"[JsonRpcRequestProcessor] Error: {ex.Message}\nStack trace: {ex.StackTrace}");
         }
 
         private static bool ShouldCancelAcceptedRequestOnClientDisconnect(JsonRpcRequest request)
@@ -438,7 +438,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static void LogUnityCliLoopToolParameterValidationException(UnityCliLoopToolParameterValidationException exception)
         {
             UnityEngine.Debug.LogError(
-                $"[JsonRpcProcessor] Parameter validation error: {exception.Message}\nStack trace: {exception.StackTrace}");
+                $"[JsonRpcRequestProcessor] Parameter validation error: {exception.Message}\nStack trace: {exception.StackTrace}");
         }
 
         /// <summary>

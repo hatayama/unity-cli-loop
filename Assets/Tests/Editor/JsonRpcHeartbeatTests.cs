@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void CreateDispatchAcceptedResponse_WhenHeartbeatNegotiated_AdvertisesInterval()
         {
             // Tests that the dispatch ack tells a heartbeat-capable CLI which interval to expect.
-            string response = JsonRpcProcessor.CreateDispatchAcceptedResponse(1, 10);
+            string response = JsonRpcRequestProcessor.CreateDispatchAcceptedResponse(1, 10);
 
             JObject parsed = JObject.Parse(response);
             Assert.That(parsed["uloop"]["phase"].ToString(), Is.EqualTo(JsonRpcResponsePhases.Accepted));
@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that older CLIs that did not negotiate heartbeats get the legacy ack shape,
             // because they would treat unexpected extra frames as the final response.
-            string response = JsonRpcProcessor.CreateDispatchAcceptedResponse(1, 0);
+            string response = JsonRpcRequestProcessor.CreateDispatchAcceptedResponse(1, 0);
 
             JObject parsed = JObject.Parse(response);
             Assert.That(parsed["uloop"]["phase"].ToString(), Is.EqualTo(JsonRpcResponsePhases.Accepted));
@@ -40,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void CreateHeartbeatResponse_WhenSerialized_CarriesPhaseAndStallSeconds()
         {
             // Tests the heartbeat frame shape the CLI parses for freeze diagnosis.
-            string response = JsonRpcProcessor.CreateHeartbeatResponse(7, 12.5);
+            string response = JsonRpcRequestProcessor.CreateHeartbeatResponse(7, 12.5);
 
             JObject parsed = JObject.Parse(response);
             Assert.That(parsed["uloop"]["phase"].ToString(), Is.EqualTo(JsonRpcResponsePhases.Heartbeat));
