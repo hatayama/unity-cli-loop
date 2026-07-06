@@ -29,13 +29,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static readonly char[] VersionMajorSeparators = { '.', '-' };
         private static readonly Vector2 MinimumWindowSize = new(360f, 380f);
         private static IUnityCliLoopEditorSettingsPort RegisteredEditorSettingsPort;
-        private static UnityCliLoopEditorSessionStateService RegisteredSessionStateService;
+        private static ISessionFlagsRepository RegisteredSessionFlagsRepository;
 
         internal static void InitializeForEditorStartup(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
-            UnityCliLoopEditorSessionStateService sessionStateService)
+            ISessionFlagsRepository sessionFlagsRepository)
         {
-            InitializeEditorServices(editorSettingsPort, sessionStateService);
+            InitializeEditorServices(editorSettingsPort, sessionFlagsRepository);
 
             if (AssetDatabase.IsAssetImportWorkerProcess()) return;
             if (UnityEngine.Application.isBatchMode) return;
@@ -45,15 +45,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static void InitializeEditorServices(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
-            UnityCliLoopEditorSessionStateService sessionStateService)
+            ISessionFlagsRepository sessionFlagsRepository)
         {
             Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
-            Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+            Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
 
             RegisteredEditorSettingsPort = editorSettingsPort
                 ?? throw new System.ArgumentNullException(nameof(editorSettingsPort));
-            RegisteredSessionStateService = sessionStateService
-                ?? throw new System.ArgumentNullException(nameof(sessionStateService));
+            RegisteredSessionFlagsRepository = sessionFlagsRepository
+                ?? throw new System.ArgumentNullException(nameof(sessionFlagsRepository));
         }
 
         [MenuItem("Window/Unity CLI Loop/Setup Wizard", priority = 3)]
@@ -111,7 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            GetSessionStateService().SetShouldAutoScanThirdPartyToolMigration(true);
+            GetSessionFlagsRepository().SetShouldAutoScanThirdPartyToolMigration(true);
         }
 
         internal static void MaybeRecordLastSeenSetupWizardState(
@@ -371,14 +371,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return RegisteredEditorSettingsPort;
         }
 
-        private static UnityCliLoopEditorSessionStateService GetSessionStateService()
+        private static ISessionFlagsRepository GetSessionFlagsRepository()
         {
-            if (RegisteredSessionStateService == null)
+            if (RegisteredSessionFlagsRepository == null)
             {
-                throw new System.InvalidOperationException("Setup Wizard session-state service is not initialized.");
+                throw new System.InvalidOperationException("Setup Wizard session flags repository is not initialized.");
             }
 
-            return RegisteredSessionStateService;
+            return RegisteredSessionFlagsRepository;
         }
 
         private static void MaybeScheduleThirdPartyToolMigrationAutoScan(bool shouldAutoScan)

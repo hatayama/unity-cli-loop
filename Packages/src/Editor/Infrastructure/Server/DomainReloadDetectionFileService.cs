@@ -12,15 +12,25 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public sealed class DomainReloadDetectionFileService : IDomainReloadDetectionService
     {
+        private readonly ISessionFlagsRepository _sessionFlagsRepository;
+        private readonly IPendingCompileSessionRepository _pendingCompileSessionRepository;
         private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
         private readonly IUnityCliLoopEditorLegacySessionStateReader _legacySessionStateReader;
 
         internal DomainReloadDetectionFileService(
+            ISessionFlagsRepository sessionFlagsRepository,
+            IPendingCompileSessionRepository pendingCompileSessionRepository,
             UnityCliLoopEditorSessionStateService sessionStateService,
             IUnityCliLoopEditorLegacySessionStateReader legacySessionStateReader = null)
         {
+            UnityEngine.Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
+            UnityEngine.Debug.Assert(pendingCompileSessionRepository != null, "pendingCompileSessionRepository must not be null");
             UnityEngine.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
 
+            _sessionFlagsRepository = sessionFlagsRepository ??
+                throw new ArgumentNullException(nameof(sessionFlagsRepository));
+            _pendingCompileSessionRepository = pendingCompileSessionRepository ??
+                throw new ArgumentNullException(nameof(pendingCompileSessionRepository));
             _sessionStateService = sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
             _legacySessionStateReader =
                 legacySessionStateReader ?? new UnityCliLoopEditorLegacySessionStateReader();
@@ -54,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             UnityCliLoopPendingCompileRequest[] pendingCompileRequests =
-                _sessionStateService.GetPendingCompileRequests();
+                _pendingCompileSessionRepository.GetPendingCompileRequests();
             _sessionStateService.MarkDomainReloadStarted(serverIsRunning);
 
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(true);
@@ -86,12 +96,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             MigrateLegacySessionStateIfNeeded();
-            bool serverWillRecover = !_sessionStateService.GetIsServerManuallyStopped();
+            bool serverWillRecover = !_sessionFlagsRepository.GetIsServerManuallyStopped();
             UnityCliLoopPendingCompileRequest[] pendingCompileRequests =
-                _sessionStateService.GetPendingCompileRequests();
+                _pendingCompileSessionRepository.GetPendingCompileRequests();
 
             // Clear Domain Reload completion flag
-            _sessionStateService.ClearDomainReloadFlag();
+            _sessionFlagsRepository.ClearDomainReloadFlag();
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
 
             // Log recording
@@ -118,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            _sessionStateService.ClearDomainReloadRecoveryFlags();
+            _sessionFlagsRepository.ClearDomainReloadRecoveryFlags();
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
 
             VibeLogger.LogWarning(
@@ -134,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <returns>True if reconnection UI display is required</returns>
         public bool ShouldShowReconnectingUI()
         {
-            return _sessionStateService.GetShowReconnectingUI();
+            return _sessionFlagsRepository.GetShowReconnectingUI();
         }
 
         private void MigrateLegacySessionStateIfNeeded()
@@ -147,32 +157,32 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (legacySessionState.IsServerRunning)
             {
-                _sessionStateService.MarkServerStarted();
+                _sessionFlagsRepository.MarkServerStarted();
             }
 
             if (legacySessionState.IsAfterCompile)
             {
-                _sessionStateService.SetIsAfterCompile(true);
+                _sessionFlagsRepository.SetIsAfterCompile(true);
             }
 
             if (legacySessionState.IsDomainReloadInProgress)
             {
-                _sessionStateService.SetIsDomainReloadInProgress(true);
+                _sessionFlagsRepository.SetIsDomainReloadInProgress(true);
             }
 
             if (legacySessionState.IsReconnecting)
             {
-                _sessionStateService.SetIsReconnecting(true);
+                _sessionFlagsRepository.SetIsReconnecting(true);
             }
 
             if (legacySessionState.ShowReconnectingUI)
             {
-                _sessionStateService.SetShowReconnectingUI(true);
+                _sessionFlagsRepository.SetShowReconnectingUI(true);
             }
 
             if (legacySessionState.ShowPostCompileReconnectingUI)
             {
-                _sessionStateService.SetShowPostCompileReconnectingUI(true);
+                _sessionFlagsRepository.SetShowPostCompileReconnectingUI(true);
             }
 
             _legacySessionStateReader.Clear();

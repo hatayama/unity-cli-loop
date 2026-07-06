@@ -11,15 +11,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class UnityCliLoopServerStartupProtectionTests
     {
+        private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
         private UnityCliLoopEditorSessionStateService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
 
         [SetUp]
         public void SetUp()
         {
+            _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
             _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
-            _sessionStateService.ClearAll();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
         }
 
         [TearDown]
@@ -104,8 +106,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(_sessionStateService),
-                _sessionStateService,
+                new DomainReloadDetectionFileService(
+                    _sessionFlagsRepository,
+                    new UnityCliLoopPendingCompileSessionRepository(),
+                    _sessionStateService),
+                _sessionFlagsRepository,
                 new TestReadinessProbe(),
                 domainReloadLifecycle);
         }

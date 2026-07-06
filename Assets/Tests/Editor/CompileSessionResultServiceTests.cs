@@ -178,7 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UnityCliLoopEditorSessionStateTestFactory.CreateService();
             UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
                 UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(sessionStateService);
-            sessionStateService.ClearAll();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
 
             try
             {

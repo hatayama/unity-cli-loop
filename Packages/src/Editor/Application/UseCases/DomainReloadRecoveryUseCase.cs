@@ -15,23 +15,23 @@ namespace io.github.hatayama.UnityCliLoop.Application
     {
         private readonly SessionRecoveryService _sessionRecoveryService;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
-        private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
+        private readonly ISessionFlagsRepository _sessionFlagsRepository;
 
         public DomainReloadRecoveryUseCase(
             SessionRecoveryService sessionRecoveryService,
             IDomainReloadDetectionService domainReloadDetectionService,
-            UnityCliLoopEditorSessionStateService sessionStateService)
+            ISessionFlagsRepository sessionFlagsRepository)
         {
             System.Diagnostics.Debug.Assert(sessionRecoveryService != null, "sessionRecoveryService must not be null");
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
-            System.Diagnostics.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+            System.Diagnostics.Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
 
             _sessionRecoveryService = sessionRecoveryService
                 ?? throw new System.ArgumentNullException(nameof(sessionRecoveryService));
             _domainReloadDetectionService = domainReloadDetectionService
                 ?? throw new System.ArgumentNullException(nameof(domainReloadDetectionService));
-            _sessionStateService = sessionStateService
-                ?? throw new System.ArgumentNullException(nameof(sessionStateService));
+            _sessionFlagsRepository = sessionFlagsRepository
+                ?? throw new System.ArgumentNullException(nameof(sessionFlagsRepository));
         }
 
         /// <summary>
@@ -49,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             // 3. Fallback to session state if instance is null but session says server was running
             // Handles case where bridge server instance became null unexpectedly
-            if (currentServer == null && _sessionStateService.GetIsServerRunning())
+            if (currentServer == null && _sessionFlagsRepository.GetIsServerRunning())
             {
                 serverRunning = true;
                 VibeLogger.LogWarning(

@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly IUnityCliLoopServerInstanceFactory _serverInstanceFactory;
         private readonly UnityCliLoopServerLifecycleRegistryService _serverLifecycleRegistry;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
-        private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
+        private readonly ISessionFlagsRepository _sessionFlagsRepository;
         private readonly SessionRecoveryService _sessionRecoveryService;
         private readonly IUnityCliLoopServerReadinessProbe _readinessProbe;
         private readonly IUnityCliLoopServerDomainReloadLifecycle _domainReloadLifecycle;
@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             IUnityCliLoopServerInstanceFactory serverInstanceFactory,
             UnityCliLoopServerLifecycleRegistryService serverLifecycleRegistry,
             IDomainReloadDetectionService domainReloadDetectionService,
-            UnityCliLoopEditorSessionStateService sessionStateService,
+            ISessionFlagsRepository sessionFlagsRepository,
             IUnityCliLoopServerReadinessProbe readinessProbe,
             IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle,
             Func<bool> isReadinessProbeBlocked = null,
@@ -59,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             System.Diagnostics.Debug.Assert(serverInstanceFactory != null, "serverInstanceFactory must not be null");
             System.Diagnostics.Debug.Assert(serverLifecycleRegistry != null, "serverLifecycleRegistry must not be null");
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
-            System.Diagnostics.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+            System.Diagnostics.Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
             System.Diagnostics.Debug.Assert(readinessProbe != null, "readinessProbe must not be null");
             System.Diagnostics.Debug.Assert(domainReloadLifecycle != null, "domainReloadLifecycle must not be null");
             System.Diagnostics.Debug.Assert(readinessIdleTimeoutMilliseconds > 0, "readinessIdleTimeoutMilliseconds must be positive");
@@ -67,7 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _serverInstanceFactory = serverInstanceFactory ?? throw new ArgumentNullException(nameof(serverInstanceFactory));
             _serverLifecycleRegistry = serverLifecycleRegistry ?? throw new ArgumentNullException(nameof(serverLifecycleRegistry));
             _domainReloadDetectionService = domainReloadDetectionService ?? throw new ArgumentNullException(nameof(domainReloadDetectionService));
-            _sessionStateService = sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
+            _sessionFlagsRepository = sessionFlagsRepository ?? throw new ArgumentNullException(nameof(sessionFlagsRepository));
             _readinessProbe = readinessProbe ?? throw new ArgumentNullException(nameof(readinessProbe));
             _domainReloadLifecycle = domainReloadLifecycle ?? throw new ArgumentNullException(nameof(domainReloadLifecycle));
             _isReadinessProbeBlocked = isReadinessProbeBlocked ?? IsEditorBusyForReadinessProbe;
@@ -77,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _sessionRecoveryService = new SessionRecoveryService(
                 this,
                 _domainReloadDetectionService,
-                _sessionStateService);
+                _sessionFlagsRepository);
         }
 
         private static bool IsEditorBusyForReadinessProbe()
@@ -241,7 +241,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             UnityCliLoopServerStartupService startupService =
-                new UnityCliLoopServerStartupService(_serverInstanceFactory, _sessionStateService);
+                new UnityCliLoopServerStartupService(_serverInstanceFactory, _sessionFlagsRepository);
             UnityCliLoopServerInitializationUseCase useCase =
                 new UnityCliLoopServerInitializationUseCase(
                     new EditorSecurityValidationService(),
@@ -303,7 +303,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             PrepareForServerShutdown();
 
             UnityCliLoopServerStartupService startupService =
-                new UnityCliLoopServerStartupService(_serverInstanceFactory, _sessionStateService);
+                new UnityCliLoopServerStartupService(_serverInstanceFactory, _sessionFlagsRepository);
             UnityCliLoopServerShutdownUseCase useCase =
                 new UnityCliLoopServerShutdownUseCase(startupService, this);
 
@@ -316,11 +316,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 if (stopIntent == ServerStopIntent.ManualStop)
                 {
-                    _sessionStateService.MarkServerManuallyStopped();
+                    _sessionFlagsRepository.MarkServerManuallyStopped();
                 }
                 else
                 {
-                    _sessionStateService.ClearServerSession();
+                    _sessionFlagsRepository.ClearServerSession();
                 }
 
                 return true;
@@ -345,7 +345,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 new DomainReloadRecoveryUseCase(
                     _sessionRecoveryService,
                     _domainReloadDetectionService,
-                    _sessionStateService);
+                    _sessionFlagsRepository);
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(_bridgeServer);
             
             // Clear instance if server shutdown succeeded
@@ -370,7 +370,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 new DomainReloadRecoveryUseCase(
                     _sessionRecoveryService,
                     _domainReloadDetectionService,
-                    _sessionStateService);
+                    _sessionFlagsRepository);
             ServiceResult<string> result =
                 await useCase.ExecuteAfterDomainReloadAsync(cancellationToken);
             if (!result.Success)
@@ -391,13 +391,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            bool isAfterCompile = _sessionStateService.GetIsAfterCompile();
+            bool isAfterCompile = _sessionFlagsRepository.GetIsAfterCompile();
 
             if (_bridgeServer?.IsRunning == true)
             {
                 if (isAfterCompile)
                 {
-                    _sessionStateService.ClearAfterCompileFlag();
+                    _sessionFlagsRepository.ClearAfterCompileFlag();
                 }
 
                 return;
@@ -405,10 +405,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (isAfterCompile)
             {
-                _sessionStateService.ClearAfterCompileFlag();
+                _sessionFlagsRepository.ClearAfterCompileFlag();
             }
 
-            if (_sessionStateService.GetIsServerManuallyStopped())
+            if (_sessionFlagsRepository.GetIsServerManuallyStopped())
             {
                 return;
             }
@@ -433,7 +433,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     _bridgeServer = null;
                 }
             }
-            _sessionStateService.ClearServerSession();
+            _sessionFlagsRepository.ClearServerSession();
         }
 
         /// <summary>
@@ -504,7 +504,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         VibeLogger.LogError(
                             "server_recovery_failed",
                             message);
-                        _sessionStateService.ClearServerSession();
+                        _sessionFlagsRepository.ClearServerSession();
                         throw new InvalidOperationException(message, ex);
                     }
 
@@ -517,7 +517,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                     // Why: an explicit Stop Server issued during the backoff must win over
                     // automatic recovery, otherwise the retry would silently restart the server.
-                    if (_sessionStateService.GetIsServerManuallyStopped())
+                    if (_sessionFlagsRepository.GetIsServerManuallyStopped())
                     {
                         VibeLogger.LogInfo(
                             "server_recovery_retry_abandoned",
@@ -634,8 +634,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (!started)
                 {
                     // Ensure session reflects stopped state on failure
-                    _sessionStateService.ClearServerSession();
-                    _sessionStateService.ClearReconnectingFlags();
+                    _sessionFlagsRepository.ClearServerSession();
+                    _sessionFlagsRepository.ClearReconnectingFlags();
                     string message = "Unity CLI Loop server recovery failed because the project IPC endpoint could not be bound within 5000ms.";
                     Debug.LogError($"[{UnityCliLoopConstants.PROJECT_NAME}] {message}");
                     throw new InvalidOperationException(message);
@@ -645,8 +645,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 SaveRunningServerState();
 
                 // Clear reconnection-related flags on successful recovery
-                _sessionStateService.ClearReconnectingFlags();
-                _sessionStateService.ClearPostCompileReconnectingUI();
+                _sessionFlagsRepository.ClearReconnectingFlags();
+                _sessionFlagsRepository.ClearPostCompileReconnectingUI();
                 ApplicationRegistrar.WarmupRegistry();
                 await MarkServerReadyAsync("server-recovery", cancellationToken);
 
@@ -731,7 +731,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private void SaveRunningServerState()
         {
-            _sessionStateService.MarkServerStarted();
+            _sessionFlagsRepository.MarkServerStarted();
         }
 
         private async Task MarkServerReadyAsync(
