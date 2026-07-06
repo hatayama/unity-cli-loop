@@ -52,13 +52,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void OnEnable()
         {
             EditorApplication.update += OnEditorUpdate;
-            UnityCliLoopServerApplicationFacade.AddServerStateChangedHandler(OnServerStateChanged);
+            GetServerApplicationService().AddServerStateChangedHandler(OnServerStateChanged);
         }
 
         private void OnDisable()
         {
             EditorApplication.update -= OnEditorUpdate;
-            UnityCliLoopServerApplicationFacade.RemoveServerStateChangedHandler(OnServerStateChanged);
+            GetServerApplicationService().RemoveServerStateChangedHandler(OnServerStateChanged);
         }
 
         private void CreateGUI()
@@ -110,7 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private ServerStatusData CreateServerStatusData()
         {
-            bool isRunning = UnityCliLoopServerApplicationFacade.IsServerRunning;
+            bool isRunning = GetServerApplicationService().IsServerRunning;
             string status = isRunning ? "Running" : "Stopped";
             Color statusColor = isRunning ? Color.green : Color.red;
 
@@ -119,15 +119,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private ServerControlsData CreateServerControlsData()
         {
-            bool isRunning = UnityCliLoopServerApplicationFacade.IsServerRunning;
+            bool isRunning = GetServerApplicationService().IsServerRunning;
             return new ServerControlsData(isRunning);
         }
 
         private void ToggleServer()
         {
-            if (UnityCliLoopServerApplicationFacade.IsServerRunning)
+            UnityCliLoopServerApplicationService serverApplicationService = GetServerApplicationService();
+            if (serverApplicationService.IsServerRunning)
             {
-                UnityCliLoopServerApplicationFacade.StopServer();
+                serverApplicationService.StopServer();
             }
             else
             {
@@ -139,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void StartServer()
         {
-            UnityCliLoopServerApplicationFacade.StartServer();
+            GetServerApplicationService().StartServer();
         }
 
         private void OnServerStateChanged()

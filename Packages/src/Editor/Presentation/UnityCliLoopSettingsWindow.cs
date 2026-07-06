@@ -156,7 +156,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _eventHandler = new UnityCliLoopSettingsWindowEventHandler(
                 _model,
                 this,
-                _toolSettingsUseCase);
+                _toolSettingsUseCase,
+                _serverApplicationService);
             _eventHandler.Initialize();
         }
 
@@ -176,7 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _model.EnablePostCompileMode();
             _sessionFlagsRepository.SetShowReconnectingUI(false);
 
-            Task recoveryTask = UnityCliLoopServerApplicationFacade.RecoveryTask;
+            Task recoveryTask = _serverApplicationService.RecoveryTask;
             if (recoveryTask != null && !recoveryTask.IsCompleted)
             {
                 await recoveryTask;
