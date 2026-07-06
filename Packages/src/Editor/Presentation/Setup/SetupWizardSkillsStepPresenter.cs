@@ -120,8 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 statusLabel.AddToClassList("setup-target-item__status");
                 statusLabel.AddToClassList(GetSkillInstallStatusClass(
                     target.InstallState,
-                    target.HasDifferentLayoutSkills,
-                    groupSkillsUnderUnityCliLoop));
+                    target.HasDifferentLayoutSkills));
                 item.Add(statusLabel);
 
                 _skillsTargetList.Add(item);
@@ -289,8 +288,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static string GetSkillInstallStatusClass(
             SkillInstallState installState,
-            bool hasDifferentLayoutSkills,
-            bool groupSkillsUnderUnityCliLoop)
+            bool hasDifferentLayoutSkills)
         {
             if (installState == SkillInstallState.Checking)
             {
@@ -312,9 +310,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return "setup-target-item__status--missing";
             }
 
-            return groupSkillsUnderUnityCliLoop
-                ? "setup-target-item__status--different-layout"
-                : "setup-target-item__status--different-layout";
+            return "setup-target-item__status--different-layout";
         }
 
         private void UpdateSkillsStatusLabel(string text)
