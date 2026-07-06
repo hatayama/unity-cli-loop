@@ -34,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private UnityCliLoopSettingsModel _model;
         private UnityCliLoopSettingsWindowEventHandler _eventHandler;
         private UnityCliLoopSettingsCliSetupPresenter _cliSetupPresenter;
+        private UnityCliLoopSettingsToolSettingsPresenter _toolSettingsPresenter;
         private SkillSetupUseCase _skillSetupUseCase;
         private ToolSettingsUseCase _toolSettingsUseCase;
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
@@ -112,6 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _view?.Dispose();
             _view = null;
             _cliSetupPresenter = null;
+            _toolSettingsPresenter = null;
         }
 
         private void CreateGUI()
@@ -154,6 +156,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _cliSetupPresenter = new UnityCliLoopSettingsCliSetupPresenter(
                 _view,
                 _cliSetupApplicationService);
+            _toolSettingsPresenter = new UnityCliLoopSettingsToolSettingsPresenter(
+                _view,
+                _toolSettingsUseCase);
             SetupViewCallbacks();
         }
 
@@ -229,6 +234,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _view?.Dispose();
             _view = null;
             _cliSetupPresenter = null;
+            _toolSettingsPresenter = null;
         }
 
         private void CleanupEventHandler()
@@ -408,14 +414,23 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void RefreshToolSettingsHeader()
         {
-            ToolSettingsSectionData toolSettingsData = CreateToolSettingsHeaderData();
-            _view.UpdateToolSettings(toolSettingsData);
+            if (_toolSettingsPresenter == null)
+            {
+                return;
+            }
+
+            _toolSettingsPresenter.UpdateHeader(_model.UI.ShowToolSettings);
         }
 
         private void RefreshToolSettingsCatalog()
         {
-            ToolSettingsSectionData toolSettingsData = CreateToolSettingsData();
-            _view.UpdateToolSettings(toolSettingsData);
+            if (_toolSettingsPresenter == null)
+            {
+                return;
+            }
+
+            ToolSettingsSectionData toolSettingsData =
+                _toolSettingsPresenter.UpdateCatalog(_model.UI.ShowToolSettings);
 
             if (UnityCliLoopSettingsWindowRefreshPolicy.ShouldKeepToolSettingsCatalogDirty(toolSettingsData))
             {
@@ -447,71 +462,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             RefreshToolSettingsCatalog();
-        }
-
-        private ToolSettingsSectionData CreateToolSettingsHeaderData()
-        {
-            return new ToolSettingsSectionData(
-                _model.UI.ShowToolSettings,
-                System.Array.Empty<ToolToggleItem>(),
-                System.Array.Empty<ToolToggleItem>(),
-                true,
-                false);
-        }
-
-        private ToolSettingsSectionData CreateToolSettingsData()
-        {
-            bool isRegistryAvailable =
-                _toolSettingsUseCase.TryGetToolCatalog(
-                    out ToolSettingsUseCase.ToolCatalogItem[] allTools);
-            if (!isRegistryAvailable)
-            {
-                return new ToolSettingsSectionData(
-                    _model.UI.ShowToolSettings,
-                    System.Array.Empty<ToolToggleItem>(),
-                    System.Array.Empty<ToolToggleItem>(),
-                    false,
-                    true);
-            }
-
-            List<ToolToggleItem> builtIn = new();
-            List<ToolToggleItem> thirdParty = new();
-
-            foreach (ToolSettingsUseCase.ToolCatalogItem tool in allTools)
-            {
-                if (tool.DisplayDevelopmentOnly)
-                {
-                    continue;
-                }
-
-                bool isEnabled = _toolSettingsUseCase.IsToolEnabled(tool.Name);
-                bool isThirdPartyTool = tool.IsThirdParty;
-
-                ToolToggleItem item = new(
-                    tool.Name,
-                    isEnabled,
-                    isThirdPartyTool,
-                    tool.SkillDescription);
-                if (isThirdPartyTool)
-                {
-                    thirdParty.Add(item);
-                }
-                else
-                {
-                    builtIn.Add(item);
-                }
-            }
-
-            Comparison<ToolToggleItem> compareByName = (a, b) => string.Compare(a.ToolName, b.ToolName, StringComparison.Ordinal);
-            builtIn.Sort(compareByName);
-            thirdParty.Sort(compareByName);
-
-            return new ToolSettingsSectionData(
-                _model.UI.ShowToolSettings,
-                builtIn.ToArray(),
-                thirdParty.ToArray(),
-                true,
-                true);
         }
 
         private void UpdateShowToolSettings(bool show)
