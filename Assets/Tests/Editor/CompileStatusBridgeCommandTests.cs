@@ -131,7 +131,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.False);
             Assert.That(response.Result, Is.Null);
-            Assert.That(GetPendingCompileRequest().HasRequest, Is.True);
+            Assert.That(
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
+                    _pendingCompileSessionRepository).HasRequest,
+                Is.True);
         }
 
         [Test]
@@ -159,7 +162,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Result["ErrorCount"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(response.Result["Warnings"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(response.Result["Message"]?.ToString(), Does.Contain("reloaded scripts"));
-            Assert.That(GetPendingCompileRequest().HasRequest, Is.False);
+            Assert.That(
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
+                    _pendingCompileSessionRepository).HasRequest,
+                Is.False);
         }
 
         [Test]
@@ -183,7 +189,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Ready, Is.False);
             Assert.That(response.HasResult, Is.False);
             Assert.That(response.Result, Is.Null);
-            Assert.That(GetPendingCompileRequest().HasRequest, Is.True);
+            Assert.That(
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
+                    _pendingCompileSessionRepository).HasRequest,
+                Is.True);
         }
 
         [Test]
@@ -214,16 +223,5 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(ForceCompileUnknownResult.MessageText));
         }
 
-        private UnityCliLoopPendingCompileRequest GetPendingCompileRequest()
-        {
-            UnityCliLoopPendingCompileRequest[] pendingRequests =
-                _pendingCompileSessionRepository.GetPendingCompileRequests();
-            if (pendingRequests.Length == 0)
-            {
-                return UnityCliLoopPendingCompileRequest.None();
-            }
-
-            return pendingRequests[0];
-        }
     }
 }

@@ -31,6 +31,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return new UnityCliLoopPendingCompileSessionRepository();
         }
 
+        internal static UnityCliLoopPendingCompileRequest GetSinglePendingCompileRequest(
+            IPendingCompileSessionRepository pendingCompileSessionRepository)
+        {
+            UnityCliLoopPendingCompileRequest[] pendingRequests =
+                pendingCompileSessionRepository.GetPendingCompileRequests();
+            if (pendingRequests.Length == 0)
+            {
+                return UnityCliLoopPendingCompileRequest.None();
+            }
+
+            return pendingRequests[0];
+        }
+
         internal static void ClearAll()
         {
             UnityCliLoopSessionFlagsRepository sessionFlagsRepository = CreateSessionFlagsRepository();

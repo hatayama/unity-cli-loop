@@ -180,7 +180,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopPendingCompileSessionRepository recreatedRepository =
                 UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
             UnityCliLoopPendingCompileRequest pendingRequest =
-                GetPendingCompileRequest(recreatedRepository);
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(recreatedRepository);
 
             Assert.That(pendingRequest.HasRequest, Is.True);
             Assert.That(pendingRequest.RequestId, Is.EqualTo("compile_test_request"));
@@ -248,7 +248,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _compileSessionLifecycleService.MarkDomainReloadStarted(serverIsRunning: true);
 
             UnityCliLoopPendingCompileRequest pendingRequest =
-                GetPendingCompileRequest(_pendingCompileSessionRepository);
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
+                    _pendingCompileSessionRepository);
             Assert.That(pendingRequest.HasRequest, Is.True);
             Assert.That(pendingRequest.ReloadObserved, Is.True);
         }
@@ -267,7 +268,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool cleared = _compileSessionLifecycleService.ClearExpiredPendingCompileRequest(now);
 
             Assert.That(cleared, Is.True);
-            Assert.That(GetPendingCompileRequest(_pendingCompileSessionRepository).HasRequest, Is.False);
+            Assert.That(
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
+                    _pendingCompileSessionRepository).HasRequest,
+                Is.False);
         }
 
         [Test]
@@ -282,7 +286,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool cleared = _pendingCompileSessionRepository.ClearPendingCompileRequestIfMatches("compile_test_request");
 
             Assert.That(cleared, Is.True);
-            Assert.That(GetPendingCompileRequest(_pendingCompileSessionRepository).HasRequest, Is.False);
+            Assert.That(
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
+                    _pendingCompileSessionRepository).HasRequest,
+                Is.False);
         }
 
         [Test]
@@ -378,7 +385,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
             Assert.That(_sessionFlagsRepository.GetIsServerManuallyStopped(), Is.False);
             Assert.That(_compileResultSessionRepository.GetStoredCompileResult().HasResult, Is.False);
-            Assert.That(GetPendingCompileRequest(_pendingCompileSessionRepository).HasRequest, Is.False);
+            Assert.That(
+                UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
+                    _pendingCompileSessionRepository).HasRequest,
+                Is.False);
         }
 
         [Test]
@@ -394,17 +404,5 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(recreatedFlagsRepository.GetIsServerManuallyStopped(), Is.True);
         }
 
-        private static UnityCliLoopPendingCompileRequest GetPendingCompileRequest(
-            IPendingCompileSessionRepository pendingCompileSessionRepository)
-        {
-            UnityCliLoopPendingCompileRequest[] pendingRequests =
-                pendingCompileSessionRepository.GetPendingCompileRequests();
-            if (pendingRequests.Length == 0)
-            {
-                return UnityCliLoopPendingCompileRequest.None();
-            }
-
-            return pendingRequests[0];
-        }
     }
 }
