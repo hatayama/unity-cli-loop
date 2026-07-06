@@ -134,9 +134,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _sessionFlagsRepository = GetSessionFlagsRepository();
             _serverApplicationService = GetServerApplicationService();
             _cliSetupApplicationService = GetCliSetupApplicationService();
-            System.Diagnostics.Debug.Assert(
-                _cliSetupApplicationService != null,
-                "_cliSetupApplicationService must not be null");
         }
 
         private void InitializeView()

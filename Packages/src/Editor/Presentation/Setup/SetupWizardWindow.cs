@@ -495,9 +495,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
             _editorSettingsPort = GetEditorSettingsPort();
             _cliSetupApplicationService = GetCliSetupApplicationService();
-            Debug.Assert(
-                _cliSetupApplicationService != null,
-                "_cliSetupApplicationService must not be null");
         }
 
         private void InitializeFirstInstallSkillsUiState()
