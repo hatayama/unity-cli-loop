@@ -458,6 +458,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 shutdownUseCase,
                 sessionRecoveryService,
                 domainReloadRecoveryUseCase,
+                UnityCliLoopToolRegistrarTestFactory.Create(() => System.Array.Empty<IUnityCliLoopTool>()),
                 readinessService,
                 effectiveStartupProtectionService,
                 recoveryTrackingService,

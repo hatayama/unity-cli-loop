@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -137,6 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 shutdownUseCase,
                 sessionRecoveryService,
                 domainReloadRecoveryUseCase,
+                UnityCliLoopToolRegistrarTestFactory.Create(() => System.Array.Empty<IUnityCliLoopTool>()),
                 readinessService,
                 startupProtectionService ?? new UnityCliLoopServerStartupProtectionService(),
                 recoveryTrackingService,

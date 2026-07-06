@@ -24,21 +24,30 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         public event Action ServerLoopExited;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
+        private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
 
-        internal UnityCliLoopBridgeServerInstanceFactory(IDomainReloadDetectionService domainReloadDetectionService)
+        internal UnityCliLoopBridgeServerInstanceFactory(
+            IDomainReloadDetectionService domainReloadDetectionService,
+            UnityCliLoopToolRegistrarService toolRegistrarService)
         {
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
+            System.Diagnostics.Debug.Assert(toolRegistrarService != null, "toolRegistrarService must not be null");
 
             _domainReloadDetectionService = domainReloadDetectionService
                 ?? throw new ArgumentNullException(nameof(domainReloadDetectionService));
+            _toolRegistrarService = toolRegistrarService
+                ?? throw new ArgumentNullException(nameof(toolRegistrarService));
         }
 
         public IUnityCliLoopServerInstance Create()
         {
             UnityCliLoopBridgeHeartbeatService heartbeatService = new();
             UnityCliLoopBridgeClientDisconnectMonitor clientDisconnectMonitor = new();
+            UnityCliLoopExecutionRouter executionRouter = new(_toolRegistrarService);
+            JsonRpcRequestProcessor jsonRpcRequestProcessor = new(executionRouter);
             UnityCliLoopBridgeServer server = new(
                 _domainReloadDetectionService,
+                jsonRpcRequestProcessor,
                 heartbeatService,
                 clientDisconnectMonitor);
             server.ServerLoopExited += NotifyServerLoopExited;
@@ -62,6 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         // Subscribers must marshal to main thread before accessing Unity APIs.
         public event Action ServerLoopExited;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
+        private readonly JsonRpcRequestProcessor _jsonRpcRequestProcessor;
         private readonly UnityCliLoopBridgeHeartbeatService _heartbeatService;
         private readonly UnityCliLoopBridgeClientDisconnectMonitor _clientDisconnectMonitor;
         
@@ -89,15 +99,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal UnityCliLoopBridgeServer(
             IDomainReloadDetectionService domainReloadDetectionService,
+            JsonRpcRequestProcessor jsonRpcRequestProcessor,
             UnityCliLoopBridgeHeartbeatService heartbeatService,
             UnityCliLoopBridgeClientDisconnectMonitor clientDisconnectMonitor)
         {
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
+            System.Diagnostics.Debug.Assert(jsonRpcRequestProcessor != null, "jsonRpcRequestProcessor must not be null");
             System.Diagnostics.Debug.Assert(heartbeatService != null, "heartbeatService must not be null");
             System.Diagnostics.Debug.Assert(clientDisconnectMonitor != null, "clientDisconnectMonitor must not be null");
 
             _domainReloadDetectionService = domainReloadDetectionService
                 ?? throw new ArgumentNullException(nameof(domainReloadDetectionService));
+            _jsonRpcRequestProcessor = jsonRpcRequestProcessor
+                ?? throw new ArgumentNullException(nameof(jsonRpcRequestProcessor));
             _heartbeatService = heartbeatService
                 ?? throw new ArgumentNullException(nameof(heartbeatService));
             _clientDisconnectMonitor = clientDisconnectMonitor
@@ -615,7 +629,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CancellationTokenSource heartbeatCancellationSource = null;
                 try
                 {
-                    string responseJson = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    string responseJson = await _jsonRpcRequestProcessor.ProcessRequestWithEarlyResponseAsync(
                         requestJson,
                         requestCancellationTokenSource.Token,
                         async (responseJsonValue, cancelOnClientDisconnect, createHeartbeatJson) =>
