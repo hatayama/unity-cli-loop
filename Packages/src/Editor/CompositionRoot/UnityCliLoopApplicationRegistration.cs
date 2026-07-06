@@ -58,7 +58,6 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 new CliInstallationDetector(cliPinReaderService),
                 new NativeCliInstallerService(),
                 cliPinReaderService);
-            CliSetupApplicationFacade.RegisterService(cliSetupApplicationService);
             UnityCliLoopBridgeServerInstanceFactory serverFactory = new(
                 domainReloadDetectionService,
                 toolRegistrarService);
