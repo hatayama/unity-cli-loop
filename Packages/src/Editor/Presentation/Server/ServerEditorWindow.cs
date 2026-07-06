@@ -19,12 +19,34 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private ServerStatusSection _serverStatusSection;
         private ServerControlsSection _serverControlsSection;
         private volatile bool _needsRepaint;
+        private static UnityCliLoopServerApplicationService RegisteredServerApplicationService;
 
         [MenuItem("Window/Unity CLI Loop/Server", priority = 2)]
         public static void ShowWindow()
         {
             ServerEditorWindow window = GetWindow<ServerEditorWindow>("Server");
             window.Show();
+        }
+
+        internal static void InitializeEditorServices(UnityCliLoopServerApplicationService serverApplicationService)
+        {
+            System.Diagnostics.Debug.Assert(
+                serverApplicationService != null,
+                "serverApplicationService must not be null");
+
+            RegisteredServerApplicationService = serverApplicationService
+                ?? throw new System.ArgumentNullException(nameof(serverApplicationService));
+        }
+
+        private static UnityCliLoopServerApplicationService GetServerApplicationService()
+        {
+            if (RegisteredServerApplicationService == null)
+            {
+                throw new System.InvalidOperationException(
+                    "Unity CLI Loop server application service is not registered.");
+            }
+
+            return RegisteredServerApplicationService;
         }
 
         private void OnEnable()

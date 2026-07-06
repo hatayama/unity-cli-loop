@@ -103,7 +103,8 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             return new UnityCliLoopApplicationServices(
                 domainReloadDetectionService,
                 editorSettingsPort,
-                sessionFlagsRepository);
+                sessionFlagsRepository,
+                applicationService);
         }
     }
 
@@ -112,15 +113,18 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
         internal UnityCliLoopApplicationServices(
             IDomainReloadDetectionService domainReloadDetectionService,
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
-            ISessionFlagsRepository sessionFlagsRepository)
+            ISessionFlagsRepository sessionFlagsRepository,
+            UnityCliLoopServerApplicationService serverApplicationService)
         {
             DomainReloadDetectionService = domainReloadDetectionService;
             EditorSettingsPort = editorSettingsPort;
             SessionFlagsRepository = sessionFlagsRepository;
+            ServerApplicationService = serverApplicationService;
         }
 
         internal IDomainReloadDetectionService DomainReloadDetectionService { get; }
         internal IUnityCliLoopEditorSettingsPort EditorSettingsPort { get; }
         internal ISessionFlagsRepository SessionFlagsRepository { get; }
+        internal UnityCliLoopServerApplicationService ServerApplicationService { get; }
     }
 }
