@@ -180,7 +180,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             AssemblyDefinitionConsoleErrorResult assemblyDefinitionResult = new(assemblyDefinitionErrors);
             CompilerMessage[] compilerMessages = new CompilerMessage[0];
 
-            CompileResult result = CompileController.CreateStoppedWithoutFinishResult(
+            CompileResult result = CompileResultFactory.CreateStoppedWithoutFinishResult(
                 assemblyDefinitionResult,
                 compilerMessages,
                 false,
@@ -210,7 +210,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 }
             };
 
-            CompileResult result = CompileController.CreateStoppedWithoutFinishResult(
+            CompileResult result = CompileResultFactory.CreateStoppedWithoutFinishResult(
                 assemblyDefinitionResult,
                 compilerMessages,
                 false,
