@@ -283,31 +283,29 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             System.Diagnostics.Debug.Assert(request != null, "request must not be null");
 
-            if (request.Method != UnityCliLoopConstants.TOOL_NAME_COMPILE)
-            {
-                return true;
-            }
-
-            return !CompileRequestWaitsForDomainReload(request.Params);
+            bool? compileWaitsForDomainReload = ReadCompileRequestWaitsForDomainReload(request.Params);
+            return JsonRpcAcceptedRequestCancellationPolicy.ShouldCancelOnClientDisconnect(
+                request.Method,
+                compileWaitsForDomainReload);
         }
 
-        private static bool CompileRequestWaitsForDomainReload(JToken paramsToken)
+        private static bool? ReadCompileRequestWaitsForDomainReload(JToken paramsToken)
         {
             if (paramsToken is not JObject paramsObject)
             {
-                return true;
+                return null;
             }
 
             JToken waitForDomainReloadToken =
                 paramsObject.GetValue(WaitForDomainReloadParamName, StringComparison.OrdinalIgnoreCase);
             if (waitForDomainReloadToken == null)
             {
-                return true;
+                return null;
             }
 
             if (waitForDomainReloadToken.Type != JTokenType.Boolean)
             {
-                return true;
+                return null;
             }
 
             return waitForDomainReloadToken.Value<bool>();
