@@ -1,6 +1,8 @@
 using NUnit.Framework;
+using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Domain;
+using InfrastructureCliPathSetupProfileResolver = io.github.hatayama.UnityCliLoop.Infrastructure.CliPathSetupProfileResolver;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -120,6 +122,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(plan.ShellName, Is.EqualTo("windows"));
             Assert.That(plan.CanApplyAutomatically, Is.False);
             Assert.That(plan.ManualCommand, Is.Empty);
+        }
+
+        [Test]
+        public void ResolvePlan_WhenAdapterReceivesWindowsPlatformMapsToUnsupportedPlan()
+        {
+            // Verifies that the Unity RuntimePlatform adapter maps WindowsEditor to the Domain Windows policy.
+            CliPathSetupPlan plan = InfrastructureCliPathSetupProfileResolver.ResolvePlan(
+                RuntimePlatform.WindowsEditor,
+                "/bin/zsh",
+                "/Users/ExampleUser",
+                null,
+                null,
+                "/Users/ExampleUser/.local/bin",
+                path => false);
+
+            Assert.That(plan.ShellKind, Is.EqualTo(CliPathSetupShellKind.Unsupported));
+            Assert.That(plan.ShellName, Is.EqualTo("windows"));
+            Assert.That(plan.CanApplyAutomatically, Is.False);
+            Assert.That(plan.ManualCommand, Is.Empty);
+        }
+
+        [Test]
+        public void ResolvePlan_WhenAdapterReceivesMacPlatformMapsToPosixZshPlan()
+        {
+            // Verifies that the Unity RuntimePlatform adapter maps macOS editor platforms to the Domain POSIX policy.
+            CliPathSetupPlan plan = InfrastructureCliPathSetupProfileResolver.ResolvePlan(
+                RuntimePlatform.OSXEditor,
+                "/bin/zsh",
+                "/Users/ExampleUser",
+                null,
+                null,
+                "/Users/ExampleUser/.local/bin",
+                path => false);
+
+            Assert.That(plan.ShellKind, Is.EqualTo(CliPathSetupShellKind.Zsh));
+            Assert.That(plan.ConfigurationFilePath, Is.EqualTo("/Users/ExampleUser/.zshrc"));
+            Assert.That(plan.ConfigurationLine, Is.EqualTo("export PATH=\"$HOME/.local/bin:$PATH\""));
         }
     }
 }

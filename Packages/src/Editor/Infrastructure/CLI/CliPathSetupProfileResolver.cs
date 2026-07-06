@@ -36,11 +36,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string installDirectory,
             Func<string, bool> fileExists)
         {
-            System.Diagnostics.Debug.Assert(fileExists != null, "fileExists must not be null");
+            Debug.Assert(fileExists != null, "fileExists must not be null");
 
-            string resolvedHomeDirectory = string.IsNullOrWhiteSpace(installDirectory)
-                ? string.Empty
-                : ResolveHomeDirectory(homeDirectory);
+            string resolvedHomeDirectory = ResolveHomeDirectory(homeDirectory);
             return io.github.hatayama.UnityCliLoop.Domain.CliPathSetupProfileResolver.ResolvePlan(
                 ToCliPathSetupPlatform(platform),
                 shellPath,
