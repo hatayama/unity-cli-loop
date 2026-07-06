@@ -116,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             ThirdPartyToolMigrationUseCase migrationUseCase =
-                ThirdPartyToolMigrationUseCaseRegistry.GetRegisteredUseCase();
+                GetThirdPartyToolMigrationUseCase();
             return await Task.Run(async () =>
                 await migrationUseCase.HasMigrationTargetsAsync(projectRoot, ct), ct);
         }
@@ -324,6 +324,28 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return RegisteredSessionFlagsRepository;
         }
 
+        private static SkillSetupUseCase GetSkillSetupUseCase()
+        {
+            if (RegisteredSkillSetupUseCase == null)
+            {
+                throw new System.InvalidOperationException(
+                    "Migration Wizard skill setup use case is not initialized.");
+            }
+
+            return RegisteredSkillSetupUseCase;
+        }
+
+        private static ThirdPartyToolMigrationUseCase GetThirdPartyToolMigrationUseCase()
+        {
+            if (RegisteredThirdPartyToolMigrationUseCase == null)
+            {
+                throw new System.InvalidOperationException(
+                    "Migration Wizard third-party tool migration use case is not initialized.");
+            }
+
+            return RegisteredThirdPartyToolMigrationUseCase;
+        }
+
         private static void FocusExistingWindow(bool shouldRefreshAfterCreateGui)
         {
             ThirdPartyToolMigrationWizardWindow[] windows =
@@ -366,8 +388,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void InitializeApplicationServices()
         {
-            _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
-            _thirdPartyToolMigrationUseCase = ThirdPartyToolMigrationUseCaseRegistry.GetRegisteredUseCase();
+            _skillSetupUseCase = GetSkillSetupUseCase();
+            _thirdPartyToolMigrationUseCase = GetThirdPartyToolMigrationUseCase();
         }
 
         private void OnDisable()

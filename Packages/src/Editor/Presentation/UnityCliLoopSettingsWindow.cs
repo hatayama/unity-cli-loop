@@ -138,8 +138,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void InitializeApplicationServices()
         {
-            _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
-            _toolSettingsUseCase = ToolSettingsUseCaseRegistry.GetRegisteredUseCase();
+            _skillSetupUseCase = GetSkillSetupUseCase();
+            _toolSettingsUseCase = GetToolSettingsUseCase();
             _editorSettingsPort = GetEditorSettingsPort();
             _sessionFlagsRepository = GetSessionFlagsRepository();
             _serverApplicationService = GetServerApplicationService();
@@ -1125,6 +1125,26 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             return RegisteredCliSetupApplicationService;
+        }
+
+        private static ToolSettingsUseCase GetToolSettingsUseCase()
+        {
+            if (RegisteredToolSettingsUseCase == null)
+            {
+                throw new InvalidOperationException("Unity CLI Loop tool settings use case is not registered.");
+            }
+
+            return RegisteredToolSettingsUseCase;
+        }
+
+        private static SkillSetupUseCase GetSkillSetupUseCase()
+        {
+            if (RegisteredSkillSetupUseCase == null)
+            {
+                throw new InvalidOperationException("Unity CLI Loop skill setup use case is not registered.");
+            }
+
+            return RegisteredSkillSetupUseCase;
         }
 
         private void HandleRefreshSkillsState()

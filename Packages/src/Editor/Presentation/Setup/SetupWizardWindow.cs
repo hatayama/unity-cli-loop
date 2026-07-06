@@ -267,7 +267,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static async Task<bool> HasSkillUpdateForSetupWizardAsync(CancellationToken ct)
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            SkillSetupUseCase skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
+            SkillSetupUseCase skillSetupUseCase = GetSkillSetupUseCase();
             List<SkillSetupTargetInfo> targets = await Task.Run(
                 () => skillSetupUseCase.DetectSkillTargetsForLayoutAtProjectRoot(
                     projectRoot,
@@ -409,6 +409,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return RegisteredCliSetupApplicationService;
         }
 
+        private static SkillSetupUseCase GetSkillSetupUseCase()
+        {
+            if (RegisteredSkillSetupUseCase == null)
+            {
+                throw new System.InvalidOperationException("Setup Wizard skill setup use case is not initialized.");
+            }
+
+            return RegisteredSkillSetupUseCase;
+        }
+
         private static void MaybeScheduleThirdPartyToolMigrationAutoScan(bool shouldAutoScan)
         {
             MaybeMarkThirdPartyToolMigrationAutoScan(shouldAutoScan);
@@ -499,7 +509,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void InitializeApplicationServices()
         {
-            _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
+            _skillSetupUseCase = GetSkillSetupUseCase();
             _editorSettingsPort = GetEditorSettingsPort();
             _cliSetupApplicationService = GetCliSetupApplicationService();
         }
