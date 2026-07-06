@@ -1,10 +1,9 @@
 using System;
 using System.Reflection;
 
-using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
-namespace io.github.hatayama.UnityCliLoop.Application
+namespace io.github.hatayama.UnityCliLoop.Domain
 {
     /// <summary>
     /// Runtime policy gate for tool execution.
