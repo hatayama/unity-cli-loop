@@ -5,7 +5,7 @@ using io.github.hatayama.UnityCliLoop.Domain;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Stores Unity CLI Loop runtime flags in Unity SessionState for the current Editor session.
+    /// Stores Unity CLI Loop runtime flags and pending compile markers for the current Editor session.
     /// </summary>
     public sealed class UnityCliLoopEditorSessionStateRepository : IUnityCliLoopEditorSessionStatePort
     {
@@ -19,16 +19,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string ShowPostCompileReconnectingUIKey = KeyPrefix + "showPostCompileReconnectingUI";
         private const string ShouldAutoScanThirdPartyToolMigrationKey =
             KeyPrefix + "shouldAutoScanThirdPartyToolMigration";
-        private const string CompileResultRequestIdsKey = KeyPrefix + "compileResultRequestIds";
-        private const string LegacyCompileResultRequestIdKey = KeyPrefix + "compileResultRequestId";
-        private const string LegacyCompileResultForceRecompileKey = KeyPrefix + "compileResultForceRecompile";
-        private const string LegacyCompileResultJsonKey = KeyPrefix + "compileResultJson";
-        private const string LegacyCompileResultCompletedAtUtcTicksKey =
-            KeyPrefix + "compileResultCompletedAtUtcTicks";
-        private const string CompileResultKeyPrefix = KeyPrefix + "compileResult.";
-        private const string CompileResultForceRecompileKeySuffix = ".forceRecompile";
-        private const string CompileResultJsonKeySuffix = ".json";
-        private const string CompileResultCompletedAtUtcTicksKeySuffix = ".completedAtUtcTicks";
         private const string PendingCompileRequestIdsKey = KeyPrefix + "pendingCompileRequestIds";
         private const string LegacyPendingCompileRequestIdKey = KeyPrefix + "pendingCompileRequestId";
         private const string LegacyPendingCompileForceRecompileKey = KeyPrefix + "pendingCompileForceRecompile";
@@ -120,86 +110,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             SetBool(ShouldAutoScanThirdPartyToolMigrationKey, shouldAutoScanThirdPartyToolMigration);
         }
 
-        public string GetCompileResultRequestIds()
-        {
-            return GetString(CompileResultRequestIdsKey);
-        }
-
-        public void SetCompileResultRequestIds(string compileResultRequestIds)
-        {
-            SetString(CompileResultRequestIdsKey, compileResultRequestIds);
-        }
-
-        public string GetLegacyCompileResultRequestId()
-        {
-            return GetString(LegacyCompileResultRequestIdKey);
-        }
-
-        public void SetLegacyCompileResultRequestId(string compileResultRequestId)
-        {
-            SetString(LegacyCompileResultRequestIdKey, compileResultRequestId);
-        }
-
-        public bool GetLegacyCompileResultForceRecompile()
-        {
-            return GetBool(LegacyCompileResultForceRecompileKey);
-        }
-
-        public void SetLegacyCompileResultForceRecompile(bool compileResultForceRecompile)
-        {
-            SetBool(LegacyCompileResultForceRecompileKey, compileResultForceRecompile);
-        }
-
-        public string GetLegacyCompileResultJson()
-        {
-            return GetString(LegacyCompileResultJsonKey);
-        }
-
-        public void SetLegacyCompileResultJson(string compileResultJson)
-        {
-            SetString(LegacyCompileResultJsonKey, compileResultJson);
-        }
-
-        public string GetLegacyCompileResultCompletedAtUtcTicks()
-        {
-            return GetString(LegacyCompileResultCompletedAtUtcTicksKey);
-        }
-
-        public void SetLegacyCompileResultCompletedAtUtcTicks(string compileResultCompletedAtUtcTicks)
-        {
-            SetString(LegacyCompileResultCompletedAtUtcTicksKey, compileResultCompletedAtUtcTicks);
-        }
-
-        public bool GetCompileResultForceRecompile(string requestId)
-        {
-            return GetBool(CreateCompileResultKey(requestId, CompileResultForceRecompileKeySuffix));
-        }
-
-        public void SetCompileResultForceRecompile(string requestId, bool compileResultForceRecompile)
-        {
-            SetBool(CreateCompileResultKey(requestId, CompileResultForceRecompileKeySuffix), compileResultForceRecompile);
-        }
-
-        public string GetCompileResultJson(string requestId)
-        {
-            return GetString(CreateCompileResultKey(requestId, CompileResultJsonKeySuffix));
-        }
-
-        public void SetCompileResultJson(string requestId, string compileResultJson)
-        {
-            SetString(CreateCompileResultKey(requestId, CompileResultJsonKeySuffix), compileResultJson);
-        }
-
-        public string GetCompileResultCompletedAtUtcTicks(string requestId)
-        {
-            return GetString(CreateCompileResultKey(requestId, CompileResultCompletedAtUtcTicksKeySuffix));
-        }
-
-        public void SetCompileResultCompletedAtUtcTicks(string requestId, string compileResultCompletedAtUtcTicks)
-        {
-            SetString(CreateCompileResultKey(requestId, CompileResultCompletedAtUtcTicksKeySuffix), compileResultCompletedAtUtcTicks);
-        }
-
         public string GetPendingCompileRequestIds()
         {
             return GetString(PendingCompileRequestIdsKey);
@@ -278,11 +188,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void SetPendingCompileReloadObserved(string requestId, bool pendingCompileReloadObserved)
         {
             SetBool(CreatePendingCompileKey(requestId, PendingCompileReloadObservedKeySuffix), pendingCompileReloadObserved);
-        }
-
-        private static string CreateCompileResultKey(string requestId, string suffix)
-        {
-            return CompileResultKeyPrefix + requestId + suffix;
         }
 
         private static string CreatePendingCompileKey(string requestId, string suffix)

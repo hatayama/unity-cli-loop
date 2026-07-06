@@ -141,21 +141,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetCompileResult_WhenLegacySingleSlotExists_ReturnsLegacyResult()
         {
             // Verifies an in-flight compile that started on the old storage key can finish after this assembly reloads.
-            UnityCliLoopEditorSessionStateRepository repository = new UnityCliLoopEditorSessionStateRepository();
             DateTime completedAtUtc = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
-            repository.SetLegacyCompileResultRequestId("compile_legacy_request");
-            repository.SetLegacyCompileResultForceRecompile(false);
-            repository.SetLegacyCompileResultJson("{\"Success\":true}");
-            repository.SetLegacyCompileResultCompletedAtUtcTicks(completedAtUtc.Ticks.ToString());
+            UnityCliLoopCompileResultSessionRepository.SetLegacyCompileResultRequestId("compile_legacy_request");
+            UnityCliLoopCompileResultSessionRepository.SetLegacyCompileResultForceRecompile(false);
+            UnityCliLoopCompileResultSessionRepository.SetLegacyCompileResultJson("{\"Success\":true}");
+            UnityCliLoopCompileResultSessionRepository.SetLegacyCompileResultCompletedAtUtcTicks(
+                completedAtUtc.Ticks.ToString());
             UnityCliLoopEditorSessionStateService recreatedService =
-                new UnityCliLoopEditorSessionStateService(repository);
+                UnityCliLoopEditorSessionStateTestFactory.CreateService();
 
             UnityCliLoopStoredCompileResult storedResult =
                 recreatedService.GetCompileResult("compile_legacy_request");
 
             Assert.That(storedResult.HasResult, Is.True);
             Assert.That(storedResult.ResultJson, Is.EqualTo("{\"Success\":true}"));
-            Assert.That(repository.GetLegacyCompileResultRequestId(), Is.Empty);
+            Assert.That(UnityCliLoopCompileResultSessionRepository.GetLegacyCompileResultRequestId(), Is.Empty);
         }
 
         [Test]
@@ -216,7 +216,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             repository.SetLegacyPendingCompileExpiresAtUtcTicks(expiresAtUtc.Ticks.ToString());
             repository.SetLegacyPendingCompileReloadObserved(true);
             UnityCliLoopEditorSessionStateService recreatedService =
-                new UnityCliLoopEditorSessionStateService(repository);
+                new UnityCliLoopEditorSessionStateService(
+                    repository,
+                    new UnityCliLoopCompileResultSessionRepository());
 
             UnityCliLoopPendingCompileRequest pendingRequest =
                 recreatedService.GetPendingCompileRequestForRequestId("compile_legacy_request");
@@ -280,13 +282,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetStoredCompileResult_WhenCompletedTicksAreMalformed_ClearsSessionValue()
         {
             // Verifies malformed stored compile results self-heal instead of breaking status polling.
-            UnityCliLoopEditorSessionStateRepository repository = new UnityCliLoopEditorSessionStateRepository();
-            repository.SetCompileResultRequestIds("compile_test_request");
-            repository.SetCompileResultForceRecompile("compile_test_request", false);
-            repository.SetCompileResultJson("compile_test_request", "{\"Success\":true}");
-            repository.SetCompileResultCompletedAtUtcTicks("compile_test_request", "not_ticks");
+            UnityCliLoopCompileResultSessionRepository.SetCompileResultRequestIds("compile_test_request");
+            UnityCliLoopCompileResultSessionRepository.SetCompileResultForceRecompile("compile_test_request", false);
+            UnityCliLoopCompileResultSessionRepository.SetCompileResultJson("compile_test_request", "{\"Success\":true}");
+            UnityCliLoopCompileResultSessionRepository.SetCompileResultCompletedAtUtcTicks(
+                "compile_test_request",
+                "not_ticks");
             UnityCliLoopEditorSessionStateService recreatedService =
-                new UnityCliLoopEditorSessionStateService(repository);
+                UnityCliLoopEditorSessionStateTestFactory.CreateService();
 
             UnityCliLoopStoredCompileResult storedResult =
                 recreatedService.GetStoredCompileResult();
@@ -299,19 +302,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetCompileResult_WhenLegacyCompletedTicksAreOutOfRange_ClearsLegacySessionValue()
         {
             // Verifies legacy compile result migration rejects ticks that cannot become a UTC DateTime.
-            UnityCliLoopEditorSessionStateRepository repository = new UnityCliLoopEditorSessionStateRepository();
-            repository.SetLegacyCompileResultRequestId("compile_legacy_request");
-            repository.SetLegacyCompileResultForceRecompile(false);
-            repository.SetLegacyCompileResultJson("{\"Success\":true}");
-            repository.SetLegacyCompileResultCompletedAtUtcTicks(long.MaxValue.ToString());
+            UnityCliLoopCompileResultSessionRepository.SetLegacyCompileResultRequestId("compile_legacy_request");
+            UnityCliLoopCompileResultSessionRepository.SetLegacyCompileResultForceRecompile(false);
+            UnityCliLoopCompileResultSessionRepository.SetLegacyCompileResultJson("{\"Success\":true}");
+            UnityCliLoopCompileResultSessionRepository.SetLegacyCompileResultCompletedAtUtcTicks(long.MaxValue.ToString());
             UnityCliLoopEditorSessionStateService recreatedService =
-                new UnityCliLoopEditorSessionStateService(repository);
+                UnityCliLoopEditorSessionStateTestFactory.CreateService();
 
             UnityCliLoopStoredCompileResult storedResult =
                 recreatedService.GetCompileResult("compile_legacy_request");
 
             Assert.That(storedResult.HasResult, Is.False);
-            Assert.That(repository.GetLegacyCompileResultRequestId(), Is.Empty);
+            Assert.That(UnityCliLoopCompileResultSessionRepository.GetLegacyCompileResultRequestId(), Is.Empty);
         }
 
         [Test]

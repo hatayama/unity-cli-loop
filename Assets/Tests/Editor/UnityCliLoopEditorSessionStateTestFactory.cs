@@ -10,7 +10,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         internal static UnityCliLoopEditorSessionStateService CreateService()
         {
-            return new UnityCliLoopEditorSessionStateService(new UnityCliLoopEditorSessionStateRepository());
+            return new UnityCliLoopEditorSessionStateService(
+                new UnityCliLoopEditorSessionStateRepository(),
+                new UnityCliLoopCompileResultSessionRepository());
         }
 
         internal static UnityCliLoopEditorSessionStateSnapshot CaptureSnapshot(
