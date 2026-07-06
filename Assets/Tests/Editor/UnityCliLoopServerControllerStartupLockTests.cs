@@ -323,6 +323,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task RestoreServerStateIfNeeded_WhenStartupProtectionActiveWithoutServer_ShouldCompleteWithoutRecovery()
+        {
+            // Tests the current startup-only gap where protection suppresses recovery without surfacing failure.
+            TestServerInstanceFactory serverInstanceFactory = new();
+            UnityCliLoopServerStartupProtectionService startupProtectionService = new();
+            startupProtectionService.ActivateStartupProtection(60000);
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                serverInstanceFactory: serverInstanceFactory,
+                startupProtectionService: startupProtectionService);
+
+            await service.RestoreServerStateIfNeeded();
+
+            Assert.That(serverInstanceFactory.LastCreated, Is.Null);
+        }
+
+        [Test]
         public async Task StopServerWithUseCaseAsync_WhenStoppedByUser_ShouldMarkManualStop()
         {
             // Tests that the manual Stop Server path records explicit user stop intent.
@@ -391,7 +407,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry = null,
             System.Func<bool> isReadinessProbeBlocked = null,
             System.Func<int, CancellationToken, Task> waitBeforeReadinessRetryAsync = null,
-            int readinessIdleTimeoutMilliseconds = UnityCliLoopServerConfig.READINESS_PROBE_TIMEOUT_MS)
+            int readinessIdleTimeoutMilliseconds = UnityCliLoopServerConfig.READINESS_PROBE_TIMEOUT_MS,
+            UnityCliLoopServerStartupProtectionService startupProtectionService = null)
         {
             TestServerInstanceFactory effectiveServerInstanceFactory =
                 serverInstanceFactory ?? new TestServerInstanceFactory();
@@ -420,7 +437,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isReadinessProbeBlocked,
                 waitBeforeReadinessRetryAsync,
                 readinessIdleTimeoutMilliseconds);
-            UnityCliLoopServerStartupProtectionService startupProtectionService = new();
+            UnityCliLoopServerStartupProtectionService effectiveStartupProtectionService =
+                startupProtectionService ?? new UnityCliLoopServerStartupProtectionService();
             UnityCliLoopServerRecoveryTrackingService recoveryTrackingService = CreateRecoveryTrackingService(
                 waitBeforeRecoveryRetryAsync);
             return new UnityCliLoopServerControllerService(
@@ -432,7 +450,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 shutdownUseCase,
                 domainReloadRecoveryUseCase,
                 readinessService,
-                startupProtectionService,
+                effectiveStartupProtectionService,
                 recoveryTrackingService,
                 new TestDomainReloadLifecycle());
         }
