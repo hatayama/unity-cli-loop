@@ -7,7 +7,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// <summary>
     /// Stores Unity CLI Loop runtime flags for the current Editor session.
     /// </summary>
-    public sealed class UnityCliLoopEditorSessionStateRepository : IUnityCliLoopEditorSessionStatePort
+    public sealed class UnityCliLoopSessionFlagsRepository : ISessionFlagsRepository
     {
         private const string KeyPrefix = UnityCliLoopEditorSessionStateStorage.KeyPrefix;
         private const string IsServerRunningKey = KeyPrefix + "isServerRunning";
@@ -97,6 +97,64 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration)
         {
             SetBool(ShouldAutoScanThirdPartyToolMigrationKey, shouldAutoScanThirdPartyToolMigration);
+        }
+
+        public bool ConsumeShouldAutoScanThirdPartyToolMigration()
+        {
+            if (!GetShouldAutoScanThirdPartyToolMigration())
+            {
+                return false;
+            }
+
+            SetShouldAutoScanThirdPartyToolMigration(false);
+            return true;
+        }
+
+        public void MarkServerStarted()
+        {
+            SetIsServerRunning(true);
+            SetIsServerManuallyStopped(false);
+        }
+
+        public void MarkServerManuallyStopped()
+        {
+            ClearServerSession();
+            SetIsServerManuallyStopped(true);
+        }
+
+        public void ClearServerSession()
+        {
+            SetIsServerRunning(false);
+        }
+
+        public void ClearAfterCompileFlag()
+        {
+            SetIsAfterCompile(false);
+        }
+
+        public void ClearReconnectingFlags()
+        {
+            SetIsReconnecting(false);
+            SetShowReconnectingUI(false);
+        }
+
+        public void ClearPostCompileReconnectingUI()
+        {
+            SetShowPostCompileReconnectingUI(false);
+        }
+
+        public void ClearDomainReloadFlag()
+        {
+            SetIsDomainReloadInProgress(false);
+        }
+
+        public void ClearDomainReloadRecoveryFlags()
+        {
+            SetIsDomainReloadInProgress(false);
+            SetIsAfterCompile(false);
+            SetIsReconnecting(false);
+            SetShowReconnectingUI(false);
+            SetShowPostCompileReconnectingUI(false);
         }
 
         private static bool GetBool(string key)

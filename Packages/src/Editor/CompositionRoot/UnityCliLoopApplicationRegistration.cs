@@ -17,18 +17,21 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             VibeLogger.InitializeForEditorStartup();
             IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
             IUnityCliLoopEditorSettingsPort editorSettingsPort = new UnityCliLoopEditorSettingsRepository();
-            UnityCliLoopEditorSessionStateRepository sessionStateRepository = new();
+            ISessionFlagsRepository sessionFlagsRepository = new UnityCliLoopSessionFlagsRepository();
             ICompileResultSessionRepository compileResultSessionRepository =
                 new UnityCliLoopCompileResultSessionRepository();
             IPendingCompileSessionRepository pendingCompileSessionRepository =
                 new UnityCliLoopPendingCompileSessionRepository();
             UnityCliLoopEditorSessionStateService sessionStateService = new(
-                sessionStateRepository,
+                sessionFlagsRepository,
                 compileResultSessionRepository,
                 pendingCompileSessionRepository);
+            UnityCliLoopSessionFlagsFacade.RegisterRepository(sessionFlagsRepository);
             UnityCliLoopEditorSessionStateFacade.RegisterService(sessionStateService);
             UnityCliLoopFirstPartyServerLifecycleBinding firstPartyServerLifecycle = new(new ProjectIpcWarmupClient());
             DomainReloadDetectionFileService domainReloadDetectionService = new(
+                sessionFlagsRepository,
+                pendingCompileSessionRepository,
                 sessionStateService);
             MainThreadSwitcher.RegisterService(new EditorMainThreadDispatcher());
             EditorRuntimeStateService editorRuntimeStateService = new();
@@ -60,6 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 serverFactory,
                 lifecycleRegistry,
                 domainReloadDetectionService,
+                sessionFlagsRepository,
                 sessionStateService,
                 firstPartyServerLifecycle,
                 firstPartyServerLifecycle);
@@ -70,6 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             return new UnityCliLoopApplicationServices(
                 domainReloadDetectionService,
                 editorSettingsPort,
+                sessionFlagsRepository,
                 sessionStateService);
         }
     }
@@ -79,15 +84,18 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
         internal UnityCliLoopApplicationServices(
             IDomainReloadDetectionService domainReloadDetectionService,
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
+            ISessionFlagsRepository sessionFlagsRepository,
             UnityCliLoopEditorSessionStateService sessionStateService)
         {
             DomainReloadDetectionService = domainReloadDetectionService;
             EditorSettingsPort = editorSettingsPort;
+            SessionFlagsRepository = sessionFlagsRepository;
             SessionStateService = sessionStateService;
         }
 
         internal IDomainReloadDetectionService DomainReloadDetectionService { get; }
         internal IUnityCliLoopEditorSettingsPort EditorSettingsPort { get; }
+        internal ISessionFlagsRepository SessionFlagsRepository { get; }
         internal UnityCliLoopEditorSessionStateService SessionStateService { get; }
     }
 }

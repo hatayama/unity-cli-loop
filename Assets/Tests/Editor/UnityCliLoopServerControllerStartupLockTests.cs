@@ -14,15 +14,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class UnityCliLoopServerControllerRecoveryTests
     {
+        private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
         private UnityCliLoopEditorSessionStateService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
 
         [SetUp]
         public void SetUp()
         {
+            _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
             _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
-            _sessionStateService.ClearAll();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
         }
 
         [TearDown]
@@ -114,7 +116,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopServerControllerService service = new(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(_sessionStateService),
+                CreateDomainReloadDetectionService(),
+                _sessionFlagsRepository,
                 _sessionStateService,
                 readinessProbe,
                 new TestDomainReloadLifecycle());
@@ -140,7 +143,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopServerControllerService service = new(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(_sessionStateService),
+                CreateDomainReloadDetectionService(),
+                _sessionFlagsRepository,
                 _sessionStateService,
                 readinessProbe,
                 new TestDomainReloadLifecycle(),
@@ -174,7 +178,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopServerControllerService service = new(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(_sessionStateService),
+                CreateDomainReloadDetectionService(),
+                _sessionFlagsRepository,
                 _sessionStateService,
                 readinessProbe,
                 new TestDomainReloadLifecycle(),
@@ -258,7 +263,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that persistent recovery failure exhausts the full backoff schedule before
             // surfacing the error and clearing the server session.
-            _sessionStateService.MarkServerStarted();
+            _sessionFlagsRepository.MarkServerStarted();
             System.Collections.Generic.List<int> recordedWaits = new();
             int recoveryAttempts = 0;
             UnityCliLoopServerControllerService service = CreateControllerService(
@@ -282,7 +287,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 recordedWaits,
                 Is.EqualTo(UnityCliLoopServerConfig.RECOVERY_RETRY_DELAYS_MS));
-            Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsServerRunning(), Is.False);
         }
 
         [Test]
@@ -294,7 +299,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestReadinessProbe(),
                 (delayMilliseconds, ct) =>
                 {
-                    _sessionStateService.MarkServerManuallyStopped();
+                    _sessionFlagsRepository.MarkServerManuallyStopped();
                     return Task.CompletedTask;
                 });
 
@@ -311,14 +316,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task RestoreServerStateIfNeeded_WhenServerWasManuallyStopped_ShouldSkipStartupRecovery()
         {
             // Tests that explicit Stop Server is preserved when startup recovery runs after Domain Reload.
-            _sessionStateService.MarkServerManuallyStopped();
+            _sessionFlagsRepository.MarkServerManuallyStopped();
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
                 new UnityCliLoopServerLifecycleRegistryService();
             UnityCliLoopServerControllerService service = new(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(_sessionStateService),
+                CreateDomainReloadDetectionService(),
+                _sessionFlagsRepository,
                 _sessionStateService,
                 new TestReadinessProbe(),
                 new TestDomainReloadLifecycle());
@@ -339,8 +345,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             await service.StopServerWithUseCaseAsync();
 
-            Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
-            Assert.That(_sessionStateService.GetIsServerManuallyStopped(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetIsServerRunning(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsServerManuallyStopped(), Is.True);
         }
 
         [Test]
@@ -356,7 +362,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopServerControllerService service = new(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(_sessionStateService),
+                CreateDomainReloadDetectionService(),
+                _sessionFlagsRepository,
                 _sessionStateService,
                 new TestReadinessProbe(),
                 new TestDomainReloadLifecycle());
@@ -366,8 +373,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             await service.StartServerWithUseCaseAsync();
 
-            Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
-            Assert.That(_sessionStateService.GetIsServerManuallyStopped(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsServerRunning(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsServerManuallyStopped(), Is.False);
         }
 
         [Test]
@@ -383,7 +390,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopServerControllerService service = new(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(_sessionStateService),
+                CreateDomainReloadDetectionService(),
+                _sessionFlagsRepository,
                 _sessionStateService,
                 new TestReadinessProbe(),
                 new TestDomainReloadLifecycle());
@@ -394,8 +402,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             await service.StartServerWithUseCaseAsync();
 
             Assert.That(serverInstanceFactory.LastCreated, Is.Null);
-            Assert.That(_sessionStateService.GetIsServerRunning(), Is.True);
-            Assert.That(_sessionStateService.GetIsServerManuallyStopped(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsServerRunning(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetIsServerManuallyStopped(), Is.False);
         }
 
         private UnityCliLoopServerControllerService CreateControllerService(
@@ -408,11 +416,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
                 lifecycleRegistry,
-                new DomainReloadDetectionFileService(_sessionStateService),
+                CreateDomainReloadDetectionService(),
+                _sessionFlagsRepository,
                 _sessionStateService,
                 readinessProbe ?? new TestReadinessProbe(),
                 new TestDomainReloadLifecycle(),
                 waitBeforeRecoveryRetryAsync: waitBeforeRecoveryRetryAsync);
+        }
+
+        private DomainReloadDetectionFileService CreateDomainReloadDetectionService()
+        {
+            return new DomainReloadDetectionFileService(
+                _sessionFlagsRepository,
+                new UnityCliLoopPendingCompileSessionRepository(),
+                _sessionStateService);
         }
 
         /// <summary>

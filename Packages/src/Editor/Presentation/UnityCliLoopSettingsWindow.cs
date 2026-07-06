@@ -32,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const int ToolSettingsRegistryWarmupMaxAttempts = 5;
 
         private static IUnityCliLoopEditorSettingsPort RegisteredEditorSettingsPort;
-        private static UnityCliLoopEditorSessionStateService RegisteredSessionStateService;
+        private static ISessionFlagsRepository RegisteredSessionFlagsRepository;
 
         private UnityCliLoopSettingsWindowUI _view;
         private UnityCliLoopSettingsModel _model;
@@ -40,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private SkillSetupUseCase _skillSetupUseCase;
         private ToolSettingsUseCase _toolSettingsUseCase;
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
-        private UnityCliLoopEditorSessionStateService _sessionStateService;
+        private ISessionFlagsRepository _sessionFlagsRepository;
 
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private bool _installSkillsFlat;
@@ -68,14 +68,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static void InitializeEditorServices(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
-            UnityCliLoopEditorSessionStateService sessionStateService)
+            ISessionFlagsRepository sessionFlagsRepository)
         {
             System.Diagnostics.Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
-            System.Diagnostics.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+            System.Diagnostics.Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
 
             RegisteredEditorSettingsPort = editorSettingsPort
                 ?? throw new ArgumentNullException(nameof(editorSettingsPort));
-            RegisteredSessionStateService = sessionStateService;
+            RegisteredSessionFlagsRepository = sessionFlagsRepository
+                ?? throw new ArgumentNullException(nameof(sessionFlagsRepository));
         }
 
         private void OnEnable()
@@ -122,7 +123,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
             _toolSettingsUseCase = ToolSettingsUseCaseRegistry.GetRegisteredUseCase();
             _editorSettingsPort = GetEditorSettingsPort();
-            _sessionStateService = GetSessionStateService();
+            _sessionFlagsRepository = GetSessionFlagsRepository();
         }
 
         private void InitializeView()
@@ -172,7 +173,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private async void HandlePostCompileMode()
         {
             _model.EnablePostCompileMode();
-            _sessionStateService.SetShowReconnectingUI(false);
+            _sessionFlagsRepository.SetShowReconnectingUI(false);
 
             Task recoveryTask = UnityCliLoopServerApplicationFacade.RecoveryTask;
             if (recoveryTask != null && !recoveryTask.IsCompleted)
@@ -180,11 +181,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 await recoveryTask;
             }
 
-            bool isAfterCompile = _sessionStateService.GetIsAfterCompile();
+            bool isAfterCompile = _sessionFlagsRepository.GetIsAfterCompile();
 
             if (isAfterCompile)
             {
-                _sessionStateService.ClearAfterCompileFlag();
+                _sessionFlagsRepository.ClearAfterCompileFlag();
                 return;
             }
 
@@ -1098,14 +1099,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return RegisteredEditorSettingsPort;
         }
 
-        private static UnityCliLoopEditorSessionStateService GetSessionStateService()
+        private static ISessionFlagsRepository GetSessionFlagsRepository()
         {
-            if (RegisteredSessionStateService == null)
+            if (RegisteredSessionFlagsRepository == null)
             {
-                throw new InvalidOperationException("Unity CLI Loop editor session state service is not registered.");
+                throw new InvalidOperationException("Unity CLI Loop editor session flags repository is not registered.");
             }
 
-            return RegisteredSessionStateService;
+            return RegisteredSessionFlagsRepository;
         }
 
         private void HandleRefreshSkillsState()

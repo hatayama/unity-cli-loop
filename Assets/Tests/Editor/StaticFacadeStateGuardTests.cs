@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/ToolContracts/MainThreadSwitcher.cs",
             "Packages/src/Editor/ToolContracts/VibeLogger.cs",
             "Packages/src/Editor/Application/UnityCliLoopServerApplicationService.cs",
+            "Packages/src/Editor/Domain/UnityCliLoopSessionFlagsFacade.cs",
             "Packages/src/Runtime/RecordInput/RecordInputOverlayState.cs",
             "Packages/src/Runtime/ReplayInput/ReplayInputOverlayState.cs",
             "Packages/src/Runtime/SimulateKeyboard/SimulateKeyboardOverlayState.cs",

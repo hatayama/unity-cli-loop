@@ -26,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private string _settingsFileContent;
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private UnityCliLoopEditorSettingsRepository _editorSettingsRepository;
+        private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
         private UnityCliLoopEditorSessionStateService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
 
@@ -43,10 +44,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             DeleteIfExists(SettingsFilePath);
             _editorSettingsPort =
                 UnityCliLoopEditorSettingsTestFactory.CreatePortWithRepository(out _editorSettingsRepository);
+            _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
             _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
-            _sessionStateService.ClearAll();
-            SetupWizardWindow.InitializeEditorServices(_editorSettingsPort, _sessionStateService);
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+            SetupWizardWindow.InitializeEditorServices(_editorSettingsPort, _sessionFlagsRepository);
             _editorSettingsRepository.InvalidateCache();
         }
 
@@ -186,7 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that the V2-to-V3 upgrade signal is stored only in the current Editor session.
             SetupWizardWindow.MaybeMarkThirdPartyToolMigrationAutoScan(true);
 
-            Assert.That(_sessionStateService.GetShouldAutoScanThirdPartyToolMigration(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.True);
         }
 
         [Test]
@@ -195,7 +197,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that non-upgrade version checks do not request migration scans.
             SetupWizardWindow.MaybeMarkThirdPartyToolMigrationAutoScan(false);
 
-            Assert.That(_sessionStateService.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
         }
 
         [Test]

@@ -12,14 +12,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class UnityCliLoopEditorSessionStateRepositoryTests
     {
         private UnityCliLoopEditorSessionStateSnapshot _originalSnapshot;
+        private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
         private UnityCliLoopEditorSessionStateService _sessionStateService;
 
         [SetUp]
         public void SetUp()
         {
+            _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
             _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
             _originalSnapshot = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
-            _sessionStateService.ClearAll();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
         }
 
         [TearDown]
@@ -32,14 +34,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetFlags_WhenSessionStateIsEmpty_ReturnsFalseDefaults()
         {
             // Verifies that transient runtime flags do not opt into stale recovery by default.
-            Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
-            Assert.That(_sessionStateService.GetIsServerManuallyStopped(), Is.False);
-            Assert.That(_sessionStateService.GetIsAfterCompile(), Is.False);
-            Assert.That(_sessionStateService.GetIsDomainReloadInProgress(), Is.False);
-            Assert.That(_sessionStateService.GetIsReconnecting(), Is.False);
-            Assert.That(_sessionStateService.GetShowReconnectingUI(), Is.False);
-            Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.False);
-            Assert.That(_sessionStateService.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsServerRunning(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsServerManuallyStopped(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsAfterCompile(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsDomainReloadInProgress(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsReconnecting(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetShowReconnectingUI(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetShowPostCompileReconnectingUI(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
         }
 
         [Test]
@@ -50,26 +52,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             UnityCliLoopEditorSessionStateService recreatedService =
                 UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            UnityCliLoopSessionFlagsRepository recreatedFlagsRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
 
-            Assert.That(recreatedService.GetIsServerRunning(), Is.True);
-            Assert.That(recreatedService.GetIsServerManuallyStopped(), Is.False);
-            Assert.That(recreatedService.GetIsAfterCompile(), Is.True);
-            Assert.That(recreatedService.GetIsDomainReloadInProgress(), Is.True);
-            Assert.That(recreatedService.GetIsReconnecting(), Is.True);
-            Assert.That(recreatedService.GetShowReconnectingUI(), Is.True);
-            Assert.That(recreatedService.GetShowPostCompileReconnectingUI(), Is.True);
+            Assert.That(recreatedFlagsRepository.GetIsServerRunning(), Is.True);
+            Assert.That(recreatedFlagsRepository.GetIsServerManuallyStopped(), Is.False);
+            Assert.That(recreatedFlagsRepository.GetIsAfterCompile(), Is.True);
+            Assert.That(recreatedFlagsRepository.GetIsDomainReloadInProgress(), Is.True);
+            Assert.That(recreatedFlagsRepository.GetIsReconnecting(), Is.True);
+            Assert.That(recreatedFlagsRepository.GetShowReconnectingUI(), Is.True);
+            Assert.That(recreatedFlagsRepository.GetShowPostCompileReconnectingUI(), Is.True);
         }
 
         [Test]
         public void GetShouldAutoScanThirdPartyToolMigration_WhenServiceIsRecreated_ReadsExistingSessionValue()
         {
             // Verifies that the one-session migration scan request survives Domain Reload service recreation.
-            _sessionStateService.SetShouldAutoScanThirdPartyToolMigration(true);
+            _sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(true);
 
             UnityCliLoopEditorSessionStateService recreatedService =
                 UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            UnityCliLoopSessionFlagsRepository recreatedFlagsRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
 
-            Assert.That(recreatedService.GetShouldAutoScanThirdPartyToolMigration(), Is.True);
+            Assert.That(recreatedFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.True);
         }
 
         [Test]
@@ -217,7 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopPendingCompileSessionRepository.SetLegacyPendingCompileReloadObserved(true);
             UnityCliLoopEditorSessionStateService recreatedService =
                 new UnityCliLoopEditorSessionStateService(
-                    new UnityCliLoopEditorSessionStateRepository(),
+                    new UnityCliLoopSessionFlagsRepository(),
                     new UnityCliLoopCompileResultSessionRepository(),
                     new UnityCliLoopPendingCompileSessionRepository());
 
@@ -338,14 +344,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ConsumeShouldAutoScanThirdPartyToolMigration_WhenFlagIsSet_ReturnsTrueOnce()
         {
             // Verifies that the startup migration scan request is consumed exactly once.
-            _sessionStateService.SetShouldAutoScanThirdPartyToolMigration(true);
+            _sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(true);
 
-            bool firstConsume = _sessionStateService.ConsumeShouldAutoScanThirdPartyToolMigration();
-            bool secondConsume = _sessionStateService.ConsumeShouldAutoScanThirdPartyToolMigration();
+            bool firstConsume = _sessionFlagsRepository.ConsumeShouldAutoScanThirdPartyToolMigration();
+            bool secondConsume = _sessionFlagsRepository.ConsumeShouldAutoScanThirdPartyToolMigration();
 
             Assert.That(firstConsume, Is.True);
             Assert.That(secondConsume, Is.False);
-            Assert.That(_sessionStateService.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
         }
 
         [Test]
@@ -353,24 +359,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that test and shutdown cleanup can reset all runtime SessionState flags together.
             _sessionStateService.MarkDomainReloadStarted(serverIsRunning: true);
-            _sessionStateService.SetShouldAutoScanThirdPartyToolMigration(true);
-            _sessionStateService.SetIsServerManuallyStopped(true);
+            _sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(true);
+            _sessionFlagsRepository.SetIsServerManuallyStopped(true);
             _sessionStateService.StoreCompileResult(
                 "compile_test_request",
                 forceRecompile: false,
                 resultJson: "{\"Success\":true}",
                 completedAtUtc: DateTime.UtcNow);
 
-            _sessionStateService.ClearAll();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
 
-            Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
-            Assert.That(_sessionStateService.GetIsAfterCompile(), Is.False);
-            Assert.That(_sessionStateService.GetIsDomainReloadInProgress(), Is.False);
-            Assert.That(_sessionStateService.GetIsReconnecting(), Is.False);
-            Assert.That(_sessionStateService.GetShowReconnectingUI(), Is.False);
-            Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.False);
-            Assert.That(_sessionStateService.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
-            Assert.That(_sessionStateService.GetIsServerManuallyStopped(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsServerRunning(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsAfterCompile(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsDomainReloadInProgress(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsReconnecting(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetShowReconnectingUI(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetShowPostCompileReconnectingUI(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsServerManuallyStopped(), Is.False);
             Assert.That(_sessionStateService.GetStoredCompileResult().HasResult, Is.False);
             Assert.That(_sessionStateService.GetPendingCompileRequest().HasRequest, Is.False);
         }
@@ -379,13 +385,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void MarkServerManuallyStopped_WhenServiceIsRecreated_PreservesManualStop()
         {
             // Verifies that explicit Stop Server survives Domain Reload service recreation.
-            _sessionStateService.MarkServerManuallyStopped();
+            _sessionFlagsRepository.MarkServerManuallyStopped();
 
             UnityCliLoopEditorSessionStateService recreatedService =
                 UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            UnityCliLoopSessionFlagsRepository recreatedFlagsRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
 
-            Assert.That(recreatedService.GetIsServerRunning(), Is.False);
-            Assert.That(recreatedService.GetIsServerManuallyStopped(), Is.True);
+            Assert.That(recreatedFlagsRepository.GetIsServerRunning(), Is.False);
+            Assert.That(recreatedFlagsRepository.GetIsServerManuallyStopped(), Is.True);
         }
     }
 }

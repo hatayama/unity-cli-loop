@@ -239,6 +239,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void SessionFlagsRepositoryPort_WhenLoaded_CompilesUnderDomainAssembly()
+        {
+            // Tests that runtime session flags stay behind a domain-owned repository port.
+            string repositoryAssemblyName = typeof(ISessionFlagsRepository).Assembly.GetName().Name;
+
+            Assert.That(repositoryAssemblyName, Is.EqualTo(DomainAssemblyName));
+        }
+
+        [Test]
         public void ToolCorePolicy_WhenLoaded_CompilesUnderDomainAssembly()
         {
             // Tests that tool catalog and assembly classification rules stay in the domain layer.
@@ -882,7 +891,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 presentationStartupSource,
-                Does.Contain("ThirdPartyToolMigrationWizardWindow.InitializeEditorServices(sessionStateService);"));
+                Does.Contain("ThirdPartyToolMigrationWizardWindow.InitializeEditorServices(sessionFlagsRepository);"));
             Assert.That(
                 presentationStartupSource,
                 Does.Not.Contain("ThirdPartyToolMigrationWizardWindow.InitializeForEditorStartup"));
