@@ -9,7 +9,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public sealed class UnityCliLoopEditorSessionStateRepository : IUnityCliLoopEditorSessionStatePort
     {
-        private const string KeyPrefix = "io.github.hatayama.uloopmcp.editorSession.";
+        private const string KeyPrefix = UnityCliLoopEditorSessionStateStorage.KeyPrefix;
         private const string IsServerRunningKey = KeyPrefix + "isServerRunning";
         private const string IsServerManuallyStoppedKey = KeyPrefix + "isServerManuallyStopped";
         private const string IsAfterCompileKey = KeyPrefix + "isAfterCompile";
@@ -107,16 +107,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static void SetBool(string key, bool value)
         {
             SessionState.SetBool(key, value);
-        }
-
-        private static string GetString(string key)
-        {
-            return SessionState.GetString(key, "");
-        }
-
-        private static void SetString(string key, string value)
-        {
-            SessionState.SetString(key, value ?? "");
         }
     }
 }

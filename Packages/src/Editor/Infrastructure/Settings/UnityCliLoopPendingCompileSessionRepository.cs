@@ -30,30 +30,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void StorePendingCompileRequest(
             string requestId,
             bool forceRecompile,
-            long expiresAtUtcTicks,
+            DateTime expiresAtUtc,
             bool reloadObserved)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
-            Debug.Assert(expiresAtUtcTicks > 0, "expiresAtUtcTicks must be positive");
+            Debug.Assert(expiresAtUtc.Kind == DateTimeKind.Utc, "expiresAtUtc must be UTC");
+            Debug.Assert(expiresAtUtc.Ticks > 0, "expiresAtUtc ticks must be positive");
 
             SetPendingCompileRequestIds(
                 UnityCliLoopEditorSessionStateStorage.AddRequestIdToIndex(
                     GetPendingCompileRequestIds(),
                     requestId));
             SetPendingCompileForceRecompile(requestId, forceRecompile);
-            SetPendingCompileExpiresAtUtcTicks(requestId, expiresAtUtcTicks.ToString());
+            SetPendingCompileExpiresAtUtcTicks(requestId, expiresAtUtc.Ticks.ToString());
             SetPendingCompileReloadObserved(requestId, reloadObserved);
-        }
-
-        public UnityCliLoopPendingCompileRequest GetPendingCompileRequest()
-        {
-            UnityCliLoopPendingCompileRequest[] pendingRequests = GetPendingCompileRequests();
-            if (pendingRequests.Length == 0)
-            {
-                return UnityCliLoopPendingCompileRequest.None();
-            }
-
-            return pendingRequests[0];
         }
 
         public UnityCliLoopPendingCompileRequest[] GetPendingCompileRequests()
@@ -94,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 StorePendingCompileRequest(
                     pendingRequest.RequestId,
                     pendingRequest.ForceRecompile,
-                    pendingRequest.ExpiresAtUtcTicks,
+                    new DateTime(pendingRequest.ExpiresAtUtcTicks, DateTimeKind.Utc),
                     reloadObserved: true);
             }
 
@@ -347,7 +337,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             StorePendingCompileRequest(
                 requestId,
                 forceRecompile,
-                expiresAtUtcTicks,
+                new DateTime(expiresAtUtcTicks, DateTimeKind.Utc),
                 reloadObserved);
             ClearLegacyPendingCompileRequest();
             return UnityCliLoopPendingCompileRequest.Create(

@@ -10,10 +10,9 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         void StorePendingCompileRequest(
             string requestId,
             bool forceRecompile,
-            long expiresAtUtcTicks,
+            DateTime expiresAtUtc,
             bool reloadObserved);
 
-        UnityCliLoopPendingCompileRequest GetPendingCompileRequest();
         UnityCliLoopPendingCompileRequest[] GetPendingCompileRequests();
         bool MarkPendingCompileRequestReloadObserved();
         UnityCliLoopPendingCompileRequest GetPendingCompileRequestForRequestId(string requestId);

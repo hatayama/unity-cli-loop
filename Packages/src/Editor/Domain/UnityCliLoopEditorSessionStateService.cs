@@ -305,26 +305,33 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             StorePendingCompileRequest(
                 requestId,
                 forceRecompile,
-                markedAtUtc.Add(CompileResultLifetime).Ticks,
+                markedAtUtc.Add(CompileResultLifetime),
                 reloadObserved: false);
         }
 
         public void StorePendingCompileRequest(
             string requestId,
             bool forceRecompile,
-            long expiresAtUtcTicks,
+            DateTime expiresAtUtc,
             bool reloadObserved)
         {
             _pendingCompileSessionRepository.StorePendingCompileRequest(
                 requestId,
                 forceRecompile,
-                expiresAtUtcTicks,
+                expiresAtUtc,
                 reloadObserved);
         }
 
         public UnityCliLoopPendingCompileRequest GetPendingCompileRequest()
         {
-            return _pendingCompileSessionRepository.GetPendingCompileRequest();
+            UnityCliLoopPendingCompileRequest[] pendingRequests =
+                _pendingCompileSessionRepository.GetPendingCompileRequests();
+            if (pendingRequests.Length == 0)
+            {
+                return UnityCliLoopPendingCompileRequest.None();
+            }
+
+            return pendingRequests[0];
         }
 
         public UnityCliLoopPendingCompileRequest[] GetPendingCompileRequests()
