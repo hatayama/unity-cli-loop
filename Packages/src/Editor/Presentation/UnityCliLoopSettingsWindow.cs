@@ -842,20 +842,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 canUninstallCli);
         }
 
-        private bool ShouldUninstallCliFromPrimaryButton()
-        {
-            string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
-            bool cliIsDispatcher = CliSetupApplicationFacade.GetCachedCliIsDispatcher();
-            string cliExecutablePath = CliSetupApplicationFacade.GetCachedCliExecutablePath();
-            bool canUninstallCli = CliSetupApplicationFacade.IsPackageOwnedCurrentUserInstallPath(
-                cliExecutablePath,
-                UnityEngine.Application.platform);
-            return ShouldUninstallCliFromPrimaryButton(
-                cliVersion,
-                cliIsDispatcher,
-                canUninstallCli);
-        }
-
         internal static bool ShouldUninstallCliFromPrimaryButton(
             string cliVersion,
             bool cliIsDispatcher,
