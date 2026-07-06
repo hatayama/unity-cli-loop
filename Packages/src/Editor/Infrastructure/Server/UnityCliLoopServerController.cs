@@ -343,6 +343,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // OnServerLoopExited fires from thread pool — marshal to main thread for Unity API safety
             EditorApplication.delayCall += () =>
             {
+                // The server just crashed — startup protection blocks recovery if the crash happens
+                // within the 5-second protection window after a successful start
                 _startupProtectionService.ClearStartupProtection();
 
                 VibeLogger.LogWarning(
@@ -353,11 +355,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 // Resources already cleaned up by CleanupAfterUnexpectedLoopExit — just clear the reference
                 _bridgeServer = null;
-
-                // The server just crashed — startup protection blocks recovery if the crash happens
-                // within the 5-second protection window after a successful start
-                _startupProtectionService.ClearStartupProtection();
-
                 _recoveryTrackingService.ScheduleTrackedRecovery(() => StartRecoveryIfNeededAsync(false, CancellationToken.None));
             };
         }
