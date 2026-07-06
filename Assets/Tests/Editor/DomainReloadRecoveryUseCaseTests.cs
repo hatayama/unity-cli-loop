@@ -107,11 +107,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _sessionFlagsRepository.SetIsAfterCompile(false);
             TestRecoveryCoordinator recoveryCoordinator = new();
             SessionRecoveryService service = new(
-                recoveryCoordinator,
                 _domainReloadDetectionService,
                 _sessionFlagsRepository);
 
-            ValidationResult result = await service.RestoreServerStateIfNeededAsync(CancellationToken.None);
+            ValidationResult result = await service.RestoreServerStateIfNeededAsync(
+                recoveryCoordinator,
+                CancellationToken.None);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(
@@ -127,11 +128,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _sessionFlagsRepository.SetIsAfterCompile(false);
             TestRecoveryCoordinator recoveryCoordinator = new(recoverServer: true);
             SessionRecoveryService service = new(
-                recoveryCoordinator,
                 _domainReloadDetectionService,
                 _sessionFlagsRepository);
 
-            ValidationResult result = await service.RestoreServerStateIfNeededAsync(CancellationToken.None);
+            ValidationResult result = await service.RestoreServerStateIfNeededAsync(
+                recoveryCoordinator,
+                CancellationToken.None);
 
             Assert.That(result.IsValid, Is.True);
             Assert.That(recoveryCoordinator.StartRecoveryCallCount, Is.EqualTo(1));
@@ -144,11 +146,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _sessionFlagsRepository.MarkServerManuallyStopped();
             TestRecoveryCoordinator recoveryCoordinator = new(recoverServer: true);
             SessionRecoveryService service = new(
-                recoveryCoordinator,
                 _domainReloadDetectionService,
                 _sessionFlagsRepository);
 
-            ValidationResult result = await service.RestoreServerStateIfNeededAsync(CancellationToken.None);
+            ValidationResult result = await service.RestoreServerStateIfNeededAsync(
+                recoveryCoordinator,
+                CancellationToken.None);
 
             Assert.That(result.IsValid, Is.True);
             Assert.That(recoveryCoordinator.StartRecoveryCallCount, Is.EqualTo(0));
@@ -158,10 +161,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             IDomainReloadDetectionService domainReloadDetectionService,
             ISessionFlagsRepository sessionFlagsRepository)
         {
-            TestRecoveryCoordinator recoveryCoordinator = new();
             SessionRecoveryService sessionRecoveryService =
                 new SessionRecoveryService(
-                    recoveryCoordinator,
                     domainReloadDetectionService,
                     sessionFlagsRepository);
             return new DomainReloadRecoveryUseCase(

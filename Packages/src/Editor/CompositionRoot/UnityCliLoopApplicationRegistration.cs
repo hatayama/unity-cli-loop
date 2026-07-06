@@ -61,11 +61,28 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             UnityCliLoopBridgeServerInstanceFactory serverFactory = new(domainReloadDetectionService);
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry = new();
             lifecycleRegistry.RegisterSource(serverFactory);
+            UnityCliLoopServerStartupService serverStartupService = new(
+                serverFactory,
+                sessionFlagsRepository);
+            UnityCliLoopServerInitializationUseCase serverInitializationUseCase = new(
+                new EditorSecurityValidationService(),
+                serverStartupService);
+            UnityCliLoopServerShutdownUseCase serverShutdownUseCase = new(serverStartupService);
+            SessionRecoveryService sessionRecoveryService = new(
+                domainReloadDetectionService,
+                sessionFlagsRepository);
+            DomainReloadRecoveryUseCase domainReloadRecoveryUseCase = new(
+                sessionRecoveryService,
+                domainReloadDetectionService,
+                sessionFlagsRepository);
             UnityCliLoopServerControllerService controllerService = new(
                 serverFactory,
                 lifecycleRegistry,
                 domainReloadDetectionService,
                 sessionFlagsRepository,
+                serverInitializationUseCase,
+                serverShutdownUseCase,
+                domainReloadRecoveryUseCase,
                 firstPartyServerLifecycle,
                 firstPartyServerLifecycle);
             UnityCliLoopServerApplicationService applicationService = new(controllerService);

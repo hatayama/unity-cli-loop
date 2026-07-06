@@ -7,34 +7,23 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Application
 {
     /// <summary>
-    /// Defines read access to Unity CLI Loop Server State state for callers that should not own it.
-    /// </summary>
-    public interface IUnityCliLoopServerStateReader
-    {
-        IUnityCliLoopServerInstance CurrentServer { get; }
-    }
-
-    /// <summary>
     /// Coordinates server shutdown while leaving lifecycle result semantics to the domain layer.
     /// </summary>
     public class UnityCliLoopServerShutdownUseCase
     {
         private readonly UnityCliLoopServerStartupService _startupService;
-        private readonly IUnityCliLoopServerStateReader _serverStateReader;
 
-        public UnityCliLoopServerShutdownUseCase(
-            UnityCliLoopServerStartupService startupService,
-            IUnityCliLoopServerStateReader serverStateReader)
+        public UnityCliLoopServerShutdownUseCase(UnityCliLoopServerStartupService startupService)
         {
             _startupService = startupService ?? throw new System.ArgumentNullException(nameof(startupService));
-            _serverStateReader = serverStateReader ?? throw new System.ArgumentNullException(nameof(serverStateReader));
         }
 
-        public Task<ServerShutdownResult> ExecuteAsync(CancellationToken ct)
+        public Task<ServerShutdownResult> ExecuteAsync(
+            IUnityCliLoopServerInstance currentServer,
+            CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
 
-            IUnityCliLoopServerInstance currentServer = _serverStateReader.CurrentServer;
             if (currentServer == null)
             {
                 return Task.FromResult(ServerShutdownResult.AlreadyStopped());

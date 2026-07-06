@@ -21,34 +21,31 @@ namespace io.github.hatayama.UnityCliLoop.Application
     /// </summary>
     public sealed class SessionRecoveryService
     {
-        private readonly IUnityCliLoopServerRecoveryCoordinator _recoveryCoordinator;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
         private readonly ISessionFlagsRepository _sessionFlagsRepository;
 
         public SessionRecoveryService(
-            IUnityCliLoopServerRecoveryCoordinator recoveryCoordinator,
             IDomainReloadDetectionService domainReloadDetectionService,
             ISessionFlagsRepository sessionFlagsRepository)
         {
-            System.Diagnostics.Debug.Assert(recoveryCoordinator != null, "recoveryCoordinator must not be null");
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
             System.Diagnostics.Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
 
-            _recoveryCoordinator = recoveryCoordinator
-                ?? throw new System.ArgumentNullException(nameof(recoveryCoordinator));
             _domainReloadDetectionService = domainReloadDetectionService
                 ?? throw new System.ArgumentNullException(nameof(domainReloadDetectionService));
             _sessionFlagsRepository = sessionFlagsRepository
                 ?? throw new System.ArgumentNullException(nameof(sessionFlagsRepository));
         }
 
-        public async Task<ValidationResult> RestoreServerStateIfNeededAsync(CancellationToken ct)
+        public async Task<ValidationResult> RestoreServerStateIfNeededAsync(
+            IUnityCliLoopServerRecoveryCoordinator recoveryCoordinator,
+            CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
 
             bool isAfterCompile = _sessionFlagsRepository.GetIsAfterCompile();
 
-            IUnityCliLoopServerInstance currentServer = _recoveryCoordinator.CurrentServer;
+            IUnityCliLoopServerInstance currentServer = recoveryCoordinator.CurrentServer;
             if (currentServer?.IsRunning == true)
             {
                 if (isAfterCompile)
@@ -68,8 +65,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 return ValidationResult.Success();
             }
 
-            await _recoveryCoordinator.StartRecoveryIfNeededAsync(isAfterCompile, ct);
-            IUnityCliLoopServerInstance recoveredServer = _recoveryCoordinator.CurrentServer;
+            await recoveryCoordinator.StartRecoveryIfNeededAsync(isAfterCompile, ct);
+            IUnityCliLoopServerInstance recoveredServer = recoveryCoordinator.CurrentServer;
             if (recoveredServer?.IsRunning != true)
             {
                 return ValidationResult.Failure(
