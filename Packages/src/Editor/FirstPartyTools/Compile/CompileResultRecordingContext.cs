@@ -27,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(request != null, "request must not be null");
 
-            if (!request.WaitForDomainReload || string.IsNullOrWhiteSpace(request.RequestId))
+            if (!CanRecord(request))
             {
                 return Disabled();
             }
@@ -36,6 +36,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 true,
                 request.RequestId,
                 request.ForceRecompile);
+        }
+
+        internal static bool CanRecord(CompileSchema request)
+        {
+            Debug.Assert(request != null, "request must not be null");
+            return request.WaitForDomainReload && !string.IsNullOrWhiteSpace(request.RequestId);
         }
     }
 }

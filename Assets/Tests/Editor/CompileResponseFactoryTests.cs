@@ -111,6 +111,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void CreateResponse_WhenIndeterminateNonForceCompileHasCounts_PreservesCountsWithoutIssues()
+        {
+            // Verifies indeterminate non-force results keep observed counts while withholding unreliable issue lists.
+            CompilerMessage error = new CompilerMessage
+            {
+                type = CompilerMessageType.Error,
+                message = "error",
+                file = "Assets/Test.cs",
+                line = 12
+            };
+            CompilerMessage warning = new CompilerMessage
+            {
+                type = CompilerMessageType.Warning,
+                message = "warning",
+                file = "Assets/Test.cs",
+                line = 15
+            };
+            CompileResult result = new CompileResult(
+                success: null,
+                errorCount: 1,
+                warningCount: 1,
+                completedAt: DateTime.Now,
+                messages: new[] { error, warning },
+                errors: new[] { error },
+                warnings: new[] { warning },
+                isIndeterminate: true,
+                message: null);
+
+            CompileResponse response =
+                CompileResponseFactory.CreateResponse(result, forceRecompile: false);
+
+            Assert.That(response.Success, Is.Null);
+            Assert.That(response.ErrorCount, Is.EqualTo(1));
+            Assert.That(response.WarningCount, Is.EqualTo(1));
+            Assert.That(response.Errors, Is.Null);
+            Assert.That(response.Warnings, Is.Null);
+            Assert.That(
+                response.Message,
+                Is.EqualTo("Compilation status is unknown. Use get-logs to inspect the compiler output."));
+        }
+
+        [Test]
         public void CreateResponse_WhenForceCompileHasPreservedFailure_MapsDetailedIssues()
         {
             // Verifies preflight failures keep actionable details even during force compile.
