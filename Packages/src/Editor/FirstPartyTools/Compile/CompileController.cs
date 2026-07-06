@@ -1,7 +1,6 @@
 using UnityEditor;
 using UnityEditor.Compilation;
 using System.Collections.Generic;
-using System.Linq;
 using System;
 using System.Threading.Tasks;
 using System.Threading;
@@ -144,7 +143,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         reload_external_scene_changes = _reloadExternalSceneChanges,
                         scene_paths = sceneChangeResult.ScenePaths
                     });
-                return CreateExternalSceneChangeFailureResult(sceneChangeResult);
+                return CompileResultFactory.CreateExternalSceneChangeFailureResult(sceneChangeResult);
             }
 
             _isCompiling = true;
@@ -166,7 +165,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     assemblyDefinitionValidationService.FindCurrentErrors();
                 if (assemblyDefinitionErrors.HasErrors)
                 {
-                    CompileResult result = CreateAssemblyDefinitionFailureResult(assemblyDefinitionErrors);
+                    CompileResult result =
+                        CompileResultFactory.CreateAssemblyDefinitionFailureResult(assemblyDefinitionErrors);
                     VibeLogger.LogWarning(
                         "compile_asset_refresh_assembly_definition_error",
                         assemblyDefinitionErrors.Message,
@@ -341,7 +341,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     {
                         ["waited_ms"] = waitedMs
                     }));
-                AbortCompileWithResult(CreateAssemblyDefinitionFailureResult(assemblyDefinitionErrors));
+                AbortCompileWithResult(
+                    CompileResultFactory.CreateAssemblyDefinitionFailureResult(assemblyDefinitionErrors));
                 return;
             }
 
@@ -380,7 +381,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
             AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
                 assemblyDefinitionValidationService.FindCurrentErrors();
-            CompileResult result = CreateStoppedWithoutFinishResult(
+            CompileResult result = CompileResultFactory.CreateStoppedWithoutFinishResult(
                 assemblyDefinitionErrors,
                 _compileMessages.ToArray(),
                 _isForceCompile,
@@ -618,172 +619,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <returns>The compilation result.</returns>
         private CompileResult CreateCompileResult()
         {
-            int errorCount = _compileMessages.Count(m => m.type == CompilerMessageType.Error);
-            int warningCount = _compileMessages.Count(m => m.type == CompilerMessageType.Warning);
-
-            // Why: Unity does not expose reliable detailed issue data for this clean compile path.
-            if (_isForceCompile)
-            {
-                return new CompileResult(
-                    success: null,
-                    errorCount: errorCount,
-                    warningCount: warningCount,
-                    completedAt: DateTime.Now,
-                    messages: new CompilerMessage[0],
-                    errors: new CompilerMessage[0],
-                    warnings: new CompilerMessage[0],
-                    isIndeterminate: true,
-                    message: null
-                );
-            }
-
-            CompilerMessage[] errors = _compileMessages.Where(m => m.type == CompilerMessageType.Error).ToArray();
-            CompilerMessage[] warnings = _compileMessages.Where(m => m.type == CompilerMessageType.Warning).ToArray();
-
-            return new CompileResult(
-                success: errorCount == 0,
-                errorCount: errorCount,
-                warningCount: warningCount,
-                completedAt: DateTime.Now,
-                messages: _compileMessages.ToArray(),
-                errors: errors,
-                warnings: warnings
-            );
-        }
-
-        /// <summary>
-        /// Creates the result used when Unity stops compiling before the finish callback is received.
-        /// </summary>
-        internal static CompileResult CreateStoppedWithoutFinishResult(
-            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors,
-            CompilerMessage[] compileMessages,
-            bool isForceCompile,
-            string message)
-        {
-            UnityEngine.Debug.Assert(assemblyDefinitionErrors != null, "assemblyDefinitionErrors must not be null");
-            UnityEngine.Debug.Assert(compileMessages != null, "compileMessages must not be null");
-
-            if (assemblyDefinitionErrors.HasErrors)
-            {
-                return CreateAssemblyDefinitionFailureResult(assemblyDefinitionErrors);
-            }
-
-            return CreateIndeterminateCompileResultFromMessages(compileMessages, isForceCompile, message);
-        }
-
-        /// <summary>
-        /// Creates an unknown compile result from the compiler messages already observed by this request.
-        /// </summary>
-        private static CompileResult CreateIndeterminateCompileResultFromMessages(
-            CompilerMessage[] compileMessages,
-            bool isForceCompile,
-            string message)
-        {
-            UnityEngine.Debug.Assert(compileMessages != null, "compileMessages must not be null");
-
-            CompilerMessage[] errors = compileMessages.Where(m => m.type == CompilerMessageType.Error).ToArray();
-            CompilerMessage[] warnings = compileMessages.Where(m => m.type == CompilerMessageType.Warning).ToArray();
-            CompilerMessage[] messages = isForceCompile ? Array.Empty<CompilerMessage>() : compileMessages;
-            CompilerMessage[] resultErrors = isForceCompile ? Array.Empty<CompilerMessage>() : errors;
-            CompilerMessage[] resultWarnings = isForceCompile ? Array.Empty<CompilerMessage>() : warnings;
-            return new CompileResult(
-                success: null,
-                errorCount: errors.Length,
-                warningCount: warnings.Length,
-                completedAt: DateTime.Now,
-                messages: messages,
-                errors: resultErrors,
-                warnings: resultWarnings,
-                isIndeterminate: true,
-                message: message
-            );
-        }
-
-        /// <summary>
-        /// Creates a failed compile result from Assembly Definition and Assembly Reference Console errors.
-        /// </summary>
-        private static CompileResult CreateAssemblyDefinitionFailureResult(
-            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors)
-        {
-            CompilerMessage[] errors = CreateAssemblyDefinitionCompilerMessages(assemblyDefinitionErrors.Errors);
-            return new CompileResult(
-                success: false,
-                errorCount: errors.Length,
-                warningCount: 0,
-                completedAt: DateTime.Now,
-                messages: errors,
-                errors: errors,
-                warnings: Array.Empty<CompilerMessage>(),
-                message: assemblyDefinitionErrors.Message
-            );
-        }
-
-        /// <summary>
-        /// Creates a failed compile result for external Scene changes that cannot be auto-resolved.
-        /// </summary>
-        private static CompileResult CreateExternalSceneChangeFailureResult(
-            (bool CanProceed, string Message, string[] ScenePaths) sceneChangeResult)
-        {
-            UnityEngine.Debug.Assert(!sceneChangeResult.CanProceed, "sceneChangeResult must be a failure");
-
-            CompilerMessage[] errors = CreateExternalSceneChangeCompilerMessages(sceneChangeResult);
-            return new CompileResult(
-                success: false,
-                errorCount: errors.Length,
-                warningCount: 0,
-                completedAt: DateTime.Now,
-                messages: errors,
-                errors: errors,
-                warnings: Array.Empty<CompilerMessage>(),
-                message: sceneChangeResult.Message,
-                preserveDetailsWhenForceRecompile: true
-            );
-        }
-
-        /// <summary>
-        /// Converts unresolved external Scene changes into compiler-shaped errors for compile responses.
-        /// </summary>
-        private static CompilerMessage[] CreateExternalSceneChangeCompilerMessages(
-            (bool CanProceed, string Message, string[] ScenePaths) sceneChangeResult)
-        {
-            UnityEngine.Debug.Assert(sceneChangeResult.ScenePaths != null, "scene paths must not be null");
-            UnityEngine.Debug.Assert(sceneChangeResult.ScenePaths.Length > 0, "scene paths must not be empty");
-
-            CompilerMessage[] errors = new CompilerMessage[sceneChangeResult.ScenePaths.Length];
-            for (int i = 0; i < sceneChangeResult.ScenePaths.Length; i++)
-            {
-                errors[i] = new CompilerMessage
-                {
-                    type = CompilerMessageType.Error,
-                    message = sceneChangeResult.Message,
-                    file = sceneChangeResult.ScenePaths[i],
-                    line = 0
-                };
-            }
-
-            return errors;
-        }
-
-        /// <summary>
-        /// Converts Assembly Definition and Assembly Reference Console errors into compiler messages.
-        /// </summary>
-        private static CompilerMessage[] CreateAssemblyDefinitionCompilerMessages(
-            AssemblyDefinitionConsoleError[] assemblyDefinitionErrors)
-        {
-            CompilerMessage[] messages = new CompilerMessage[assemblyDefinitionErrors.Length];
-            for (int i = 0; i < assemblyDefinitionErrors.Length; i++)
-            {
-                AssemblyDefinitionConsoleError error = assemblyDefinitionErrors[i];
-                messages[i] = new CompilerMessage
-                {
-                    type = CompilerMessageType.Error,
-                    message = error.Message,
-                    file = error.File,
-                    line = error.Line
-                };
-            }
-
-            return messages;
+            return CompileResultFactory.CreateCompileResult(_compileMessages.ToArray(), _isForceCompile);
         }
 
         /// <summary>
@@ -821,99 +657,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             OnCompileCompleted = null;
             OnCompileStarted = null;
             OnAssemblyCompiled = null;
-        }
-    }
-
-    /// <summary>
-    /// A class that represents the result of a compilation.
-    /// Includes information on errors, warnings, and the completion time.
-    /// </summary>
-    public class CompileResult
-    {
-        /// <summary>
-        /// Whether the compilation was successful. Null indicates indeterminate status.
-        /// </summary>
-        public bool? Success { get; }
-        
-        /// <summary>
-        /// The number of errors.
-        /// </summary>
-        public int ErrorCount { get; }
-        
-        /// <summary>
-        /// The number of warnings.
-        /// </summary>
-        public int WarningCount { get; }
-        
-        /// <summary>
-        /// The time of compilation completion.
-        /// </summary>
-        public DateTime CompletedAt { get; }
-        
-        /// <summary>
-        /// All compiler messages.
-        /// </summary>
-        public CompilerMessage[] Messages { get; }
-        
-        /// <summary>
-        /// Error messages only.
-        /// </summary>
-        public CompilerMessage[] Errors { get; }
-        
-        /// <summary>
-        /// Warning messages only.
-        /// </summary>
-        public CompilerMessage[] Warnings { get; }
-
-        /// <summary>
-        /// Whether the compilation result is indeterminate (cannot be determined).
-        /// </summary>
-        public bool IsIndeterminate { get; }
-
-        /// <summary>
-        /// Optional message for additional information
-        /// </summary>
-        public string Message { get; }
-
-        /// <summary>
-        /// Whether force-compile response shaping must keep detailed non-compiler preflight errors.
-        /// </summary>
-        internal bool PreserveDetailsWhenForceRecompile { get; }
-
-        /// <summary>
-        /// Initializes the compilation result.
-        /// </summary>
-        /// <param name="success">The compilation success flag. Null indicates indeterminate status.</param>
-        /// <param name="errorCount">The number of errors.</param>
-        /// <param name="warningCount">The number of warnings.</param>
-        /// <param name="completedAt">The completion time.</param>
-        /// <param name="messages">All messages.</param>
-        /// <param name="errors">The error messages.</param>
-        /// <param name="warnings">The warning messages.</param>
-        /// <param name="isIndeterminate">Whether the result is indeterminate.</param>
-        public CompileResult(
-            bool? success,
-            int errorCount,
-            int warningCount,
-            DateTime completedAt,
-            CompilerMessage[] messages,
-            CompilerMessage[] errors,
-            CompilerMessage[] warnings,
-            bool isIndeterminate = false,
-            string message = null,
-            bool preserveDetailsWhenForceRecompile = false
-        )
-        {
-            Success = success;
-            ErrorCount = errorCount;
-            WarningCount = warningCount;
-            CompletedAt = completedAt;
-            Messages = messages;
-            Errors = errors;
-            Warnings = warnings;
-            IsIndeterminate = isIndeterminate;
-            Message = message;
-            PreserveDetailsWhenForceRecompile = preserveDetailsWhenForceRecompile;
         }
     }
 }
