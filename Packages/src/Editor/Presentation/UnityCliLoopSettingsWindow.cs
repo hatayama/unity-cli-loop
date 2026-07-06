@@ -17,14 +17,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// </summary>
     public class UnityCliLoopSettingsWindow : EditorWindow
     {
-        internal enum CliPrimaryButtonAction
-        {
-            None,
-            InstallOrUpdate,
-            RepairPath,
-            Uninstall
-        }
-
         private const bool ForceFlatSkillInstall = true;
         private const double DeferredInitialRefreshDelaySeconds = 0.05;
         private const double ToolSettingsRegistryWarmupInitialDelaySeconds = 0.05;
@@ -774,25 +766,25 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private async void HandleInstallCli()
         {
-            CliPrimaryButtonAction clickedAction = GetCurrentCliPrimaryButtonAction();
+            CliSetupPrimaryAction clickedAction = GetCurrentCliPrimaryButtonAction();
 
             await RefreshCliPrimaryActionStateAsync(CancellationToken.None);
-            CliPrimaryButtonAction refreshedAction = GetCurrentCliPrimaryButtonAction();
-            CliPrimaryButtonAction executableAction = ResolveExecutableCliPrimaryButtonAction(
+            CliSetupPrimaryAction refreshedAction = GetCurrentCliPrimaryButtonAction();
+            CliSetupPrimaryAction executableAction = ResolveExecutableCliPrimaryButtonAction(
                 clickedAction,
                 refreshedAction);
-            if (executableAction == CliPrimaryButtonAction.None)
+            if (executableAction == CliSetupPrimaryAction.None)
             {
                 return;
             }
 
-            if (executableAction == CliPrimaryButtonAction.RepairPath)
+            if (executableAction == CliSetupPrimaryAction.RepairPath)
             {
                 await HandleRepairCliPathSetup();
                 return;
             }
 
-            if (executableAction == CliPrimaryButtonAction.Uninstall)
+            if (executableAction == CliSetupPrimaryAction.Uninstall)
             {
                 await HandleUninstallCli();
                 return;
@@ -835,7 +827,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
         }
 
-        private CliPrimaryButtonAction GetCurrentCliPrimaryButtonAction()
+        private CliSetupPrimaryAction GetCurrentCliPrimaryButtonAction()
         {
             string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
             bool cliIsDispatcher = CliSetupApplicationFacade.GetCachedCliIsDispatcher();
@@ -850,20 +842,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 canUninstallCli);
         }
 
-        private bool ShouldUninstallCliFromPrimaryButton()
-        {
-            string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
-            bool cliIsDispatcher = CliSetupApplicationFacade.GetCachedCliIsDispatcher();
-            string cliExecutablePath = CliSetupApplicationFacade.GetCachedCliExecutablePath();
-            bool canUninstallCli = CliSetupApplicationFacade.IsPackageOwnedCurrentUserInstallPath(
-                cliExecutablePath,
-                UnityEngine.Application.platform);
-            return ShouldUninstallCliFromPrimaryButton(
-                cliVersion,
-                cliIsDispatcher,
-                canUninstallCli);
-        }
-
         internal static bool ShouldUninstallCliFromPrimaryButton(
             string cliVersion,
             bool cliIsDispatcher,
@@ -871,54 +849,41 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             bool isCliInstalled = cliVersion != null;
             bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher);
-            return CliSetupSection.IsUninstallCliAction(isCliInstalled, needsUpdate, canUninstallCli);
+            return CliSetupPrimaryActionPolicy.ShouldUninstallCli(
+                isCliInstalled,
+                needsUpdate,
+                canUninstallCli);
         }
 
-        internal static CliPrimaryButtonAction ResolveCliPrimaryButtonAction(
+        internal static CliSetupPrimaryAction ResolveCliPrimaryButtonAction(
             bool needsCliPathSetup,
             string cliVersion,
             bool cliIsDispatcher,
             bool canUninstallCli)
         {
             bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher);
-            if (ShouldRepairCliPathFromPrimaryButton(
-                    needsCliPathSetup,
-                    needsUpdate))
-            {
-                return CliPrimaryButtonAction.RepairPath;
-            }
-
-            if (ShouldUninstallCliFromPrimaryButton(cliVersion, cliIsDispatcher, canUninstallCli))
-            {
-                return CliPrimaryButtonAction.Uninstall;
-            }
-
-            return CliPrimaryButtonAction.InstallOrUpdate;
+            bool isCliInstalled = cliVersion != null;
+            return CliSetupPrimaryActionPolicy.ResolveSettingsPrimaryAction(
+                needsCliPathSetup,
+                needsUpdate,
+                isCliInstalled,
+                canUninstallCli);
         }
 
-        internal static CliPrimaryButtonAction ResolveExecutableCliPrimaryButtonAction(
-            CliPrimaryButtonAction clickedAction,
-            CliPrimaryButtonAction refreshedAction)
+        internal static CliSetupPrimaryAction ResolveExecutableCliPrimaryButtonAction(
+            CliSetupPrimaryAction clickedAction,
+            CliSetupPrimaryAction refreshedAction)
         {
-            if (clickedAction == refreshedAction)
-            {
-                return clickedAction;
-            }
-
-            if (clickedAction == CliPrimaryButtonAction.InstallOrUpdate
-                && refreshedAction == CliPrimaryButtonAction.RepairPath)
-            {
-                return CliPrimaryButtonAction.RepairPath;
-            }
-
-            return CliPrimaryButtonAction.None;
+            return CliSetupPrimaryActionPolicy.ResolveExecutableSettingsAction(
+                clickedAction,
+                refreshedAction);
         }
 
         internal static bool ShouldRepairCliPathFromPrimaryButton(
             bool needsCliPathSetup,
             bool needsUpdate)
         {
-            return needsCliPathSetup && !needsUpdate;
+            return CliSetupPrimaryActionPolicy.ShouldRepairCliPath(needsCliPathSetup, needsUpdate);
         }
 
         private async Task RefreshCliPrimaryActionStateAsync(CancellationToken ct)

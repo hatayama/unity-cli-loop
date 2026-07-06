@@ -219,7 +219,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isUninstallAction = IsUninstallCliAction(isCliInstalled, needsUpdate, canUninstallCli);
             if (isInstallingCli)
             {
-                if (needsCliPathSetup && !needsUpdate)
+                if (CliSetupPrimaryActionPolicy.ShouldRepairCliPath(needsCliPathSetup, needsUpdate))
                 {
                     return "Fixing PATH...";
                 }
@@ -257,7 +257,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool needsUpdate,
             bool canUninstallCli)
         {
-            return canUninstallCli && isCliInstalled && !needsUpdate;
+            return CliSetupPrimaryActionPolicy.ShouldUninstallCli(
+                isCliInstalled,
+                needsUpdate,
+                canUninstallCli);
         }
 
         internal static string GetInstallSkillsButtonText(

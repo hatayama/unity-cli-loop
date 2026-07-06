@@ -1,8 +1,6 @@
-using UnityEngine;
+using System.Diagnostics;
 
-using io.github.hatayama.UnityCliLoop.Domain;
-
-namespace io.github.hatayama.UnityCliLoop.Application
+namespace io.github.hatayama.UnityCliLoop.Domain
 {
     /// <summary>
     /// Describes the setup action required for the global uloop command.
