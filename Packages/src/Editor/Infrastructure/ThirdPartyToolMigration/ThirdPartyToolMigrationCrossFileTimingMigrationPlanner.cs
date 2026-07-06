@@ -5,6 +5,8 @@ using System.Linq;
 
 using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationAssemblyReferenceResolver;
 
+using io.github.hatayama.UnityCliLoop.Domain;
+
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
@@ -13,10 +15,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     internal static class ThirdPartyToolMigrationCrossFileTimingMigrationPlanner
     {
         internal static void AddRemovedPlayerLoopTimingSignatures(
-            Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+            Dictionary<string, List<RemovedLegacyPlayerLoopTimingSignature>>
                 removedSignaturesByAssemblyDirectory,
             string assemblyDirectory,
-            ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature[] removedSignatures)
+            RemovedLegacyPlayerLoopTimingSignature[] removedSignatures)
         {
             Debug.Assert(
                 removedSignaturesByAssemblyDirectory != null,
@@ -31,9 +33,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (!removedSignaturesByAssemblyDirectory.TryGetValue(
                     assemblyDirectory,
-                    out List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature> signatures))
+                    out List<RemovedLegacyPlayerLoopTimingSignature> signatures))
             {
-                signatures = new List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>();
+                signatures = new List<RemovedLegacyPlayerLoopTimingSignature>();
                 removedSignaturesByAssemblyDirectory.Add(assemblyDirectory, signatures);
             }
 
@@ -45,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string projectRoot,
             MigrationAssemblyUsage assemblyUsage,
             List<MigrationFileChange> changes,
-            Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+            Dictionary<string, List<RemovedLegacyPlayerLoopTimingSignature>>
                 removedSignaturesByAssemblyDirectory,
             Func<string, string> readAllText)
         {
@@ -65,7 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Dictionary<string, string[]> referencedAssemblyDirectoriesByDirectory =
                 CreateReferencedAssemblyDirectoriesByDirectory(assemblyUsage.AsmdefDirectories);
             HashSet<string> asmdefDirectorySet = new(assemblyUsage.AsmdefDirectories, StringComparer.Ordinal);
-            Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+            Dictionary<string, List<RemovedLegacyPlayerLoopTimingSignature>>
                 activeRemovedSignaturesByAssemblyDirectory =
                     CloneRemovedPlayerLoopTimingSignatures(removedSignaturesByAssemblyDirectory);
             if (!HasRemovedPlayerLoopTimingSignatures(activeRemovedSignaturesByAssemblyDirectory))
@@ -76,7 +78,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             int replacementCount = 0;
             while (HasRemovedPlayerLoopTimingSignatures(activeRemovedSignaturesByAssemblyDirectory))
             {
-                Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+                Dictionary<string, List<RemovedLegacyPlayerLoopTimingSignature>>
                     nextRemovedSignaturesByAssemblyDirectory = new(StringComparer.Ordinal);
                 foreach (string csharpFilePath in csharpFilePaths)
                 {
@@ -90,7 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     string[] legacyAssemblyAliases = GetAssemblyScopedNameArray(
                         assemblyUsage.AssemblyScopedLegacyAliasesByDirectory,
                         assemblyDirectory);
-                    List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature> activeRemovedSignatures =
+                    List<RemovedLegacyPlayerLoopTimingSignature> activeRemovedSignatures =
                         asmdefDirectorySet.Contains(assemblyDirectory)
                             ? GetReachableRemovedPlayerLoopTimingSignatures(
                                 assemblyDirectory,
@@ -167,7 +169,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         internal static bool HasRemovedPlayerLoopTimingSignatures(
-            Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+            Dictionary<string, List<RemovedLegacyPlayerLoopTimingSignature>>
                 removedSignaturesByAssemblyDirectory)
         {
             Debug.Assert(
@@ -175,7 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 "removedSignaturesByAssemblyDirectory must not be null");
 
             foreach (
-                KeyValuePair<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+                KeyValuePair<string, List<RemovedLegacyPlayerLoopTimingSignature>>
                     signaturesByAssemblyDirectory in removedSignaturesByAssemblyDirectory)
             {
                 if (signaturesByAssemblyDirectory.Value.Count > 0)
@@ -187,42 +189,42 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return false;
         }
 
-        internal static Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+        internal static Dictionary<string, List<RemovedLegacyPlayerLoopTimingSignature>>
             CloneRemovedPlayerLoopTimingSignatures(
-                Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+                Dictionary<string, List<RemovedLegacyPlayerLoopTimingSignature>>
                     removedSignaturesByAssemblyDirectory)
         {
             Debug.Assert(
                 removedSignaturesByAssemblyDirectory != null,
                 "removedSignaturesByAssemblyDirectory must not be null");
 
-            Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>> clone =
+            Dictionary<string, List<RemovedLegacyPlayerLoopTimingSignature>> clone =
                 new(StringComparer.Ordinal);
             foreach (
-                KeyValuePair<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+                KeyValuePair<string, List<RemovedLegacyPlayerLoopTimingSignature>>
                     signaturesByAssemblyDirectory in removedSignaturesByAssemblyDirectory)
             {
                 clone.Add(
                     signaturesByAssemblyDirectory.Key,
-                    new List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>(
+                    new List<RemovedLegacyPlayerLoopTimingSignature>(
                         signaturesByAssemblyDirectory.Value));
             }
 
             return clone;
         }
 
-        internal static List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>
+        internal static List<RemovedLegacyPlayerLoopTimingSignature>
             GetAllRemovedPlayerLoopTimingSignatures(
-                Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+                Dictionary<string, List<RemovedLegacyPlayerLoopTimingSignature>>
                     removedSignaturesByAssemblyDirectory)
         {
             Debug.Assert(
                 removedSignaturesByAssemblyDirectory != null,
                 "removedSignaturesByAssemblyDirectory must not be null");
 
-            List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature> signatures = new();
+            List<RemovedLegacyPlayerLoopTimingSignature> signatures = new();
             foreach (
-                KeyValuePair<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+                KeyValuePair<string, List<RemovedLegacyPlayerLoopTimingSignature>>
                     signaturesByAssemblyDirectory in removedSignaturesByAssemblyDirectory)
             {
                 signatures.AddRange(signaturesByAssemblyDirectory.Value);
@@ -231,10 +233,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return signatures;
         }
 
-        internal static List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>
+        internal static List<RemovedLegacyPlayerLoopTimingSignature>
             GetReachableRemovedPlayerLoopTimingSignatures(
                 string assemblyDirectory,
-                Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+                Dictionary<string, List<RemovedLegacyPlayerLoopTimingSignature>>
                     removedSignaturesByAssemblyDirectory,
                 Dictionary<string, string[]> referencedAssemblyDirectoriesByDirectory)
         {
@@ -246,7 +248,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 referencedAssemblyDirectoriesByDirectory != null,
                 "referencedAssemblyDirectoriesByDirectory must not be null");
 
-            List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature> signatures = new();
+            List<RemovedLegacyPlayerLoopTimingSignature> signatures = new();
             AddRemovedPlayerLoopTimingSignaturesForDirectory(
                 signatures,
                 removedSignaturesByAssemblyDirectory,
@@ -270,8 +272,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         internal static void AddRemovedPlayerLoopTimingSignaturesForDirectory(
-            List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature> targetSignatures,
-            Dictionary<string, List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature>>
+            List<RemovedLegacyPlayerLoopTimingSignature> targetSignatures,
+            Dictionary<string, List<RemovedLegacyPlayerLoopTimingSignature>>
                 removedSignaturesByAssemblyDirectory,
             string assemblyDirectory)
         {
@@ -283,7 +285,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (!removedSignaturesByAssemblyDirectory.TryGetValue(
                     assemblyDirectory,
-                    out List<ThirdPartyToolMigrationRules.RemovedLegacyPlayerLoopTimingSignature> signatures))
+                    out List<RemovedLegacyPlayerLoopTimingSignature> signatures))
             {
                 return;
             }
