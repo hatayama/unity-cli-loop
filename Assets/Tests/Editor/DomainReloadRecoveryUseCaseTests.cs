@@ -103,12 +103,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task RestoreServerStateIfNeededAsync_WhenRecoveryDoesNotStartServer_ShouldFail()
         {
             // Verifies that recovery is only reported as successful after a running server instance exists.
-            _sessionFlagsRepository.SetIsServerRunning(true);
-            _sessionFlagsRepository.SetIsAfterCompile(false);
+            InMemorySessionFlagsRepository sessionFlagsRepository = new();
             TestRecoveryCoordinator recoveryCoordinator = new();
-            SessionRecoveryService service = new(
-                _domainReloadDetectionService,
-                _sessionFlagsRepository);
+            SessionRecoveryService service = CreatePureSessionRecoveryService(sessionFlagsRepository);
 
             ValidationResult result = await service.RestoreServerStateIfNeededAsync(
                 recoveryCoordinator,
@@ -124,12 +121,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task RestoreServerStateIfNeededAsync_WhenNoServerWasRunning_ShouldStillStartRecovery()
         {
             // Verifies launch-time reload recovery starts the server even when no previous bridge session existed.
-            _sessionFlagsRepository.SetIsServerRunning(false);
-            _sessionFlagsRepository.SetIsAfterCompile(false);
+            InMemorySessionFlagsRepository sessionFlagsRepository = new();
             TestRecoveryCoordinator recoveryCoordinator = new(recoverServer: true);
-            SessionRecoveryService service = new(
-                _domainReloadDetectionService,
-                _sessionFlagsRepository);
+            SessionRecoveryService service = CreatePureSessionRecoveryService(sessionFlagsRepository);
 
             ValidationResult result = await service.RestoreServerStateIfNeededAsync(
                 recoveryCoordinator,
@@ -163,7 +157,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies the running-server branch consumes AfterCompile without starting recovery.
             InMemorySessionFlagsRepository sessionFlagsRepository = new();
             sessionFlagsRepository.SetIsAfterCompile(true);
-            PureRecoveryCoordinator recoveryCoordinator = new(currentServerRunning: true);
+            TestRecoveryCoordinator recoveryCoordinator = new(currentServerRunning: true);
             SessionRecoveryService service = CreatePureSessionRecoveryService(sessionFlagsRepository);
 
             ValidationResult result = await service.RestoreServerStateIfNeededAsync(
@@ -181,7 +175,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies AfterCompile is cleared from storage while its original value is passed to recovery.
             InMemorySessionFlagsRepository sessionFlagsRepository = new();
             sessionFlagsRepository.SetIsAfterCompile(true);
-            PureRecoveryCoordinator recoveryCoordinator = new(recoverServer: true);
+            TestRecoveryCoordinator recoveryCoordinator = new(recoverServer: true);
             SessionRecoveryService service = CreatePureSessionRecoveryService(sessionFlagsRepository);
 
             ValidationResult result = await service.RestoreServerStateIfNeededAsync(
@@ -201,7 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             InMemorySessionFlagsRepository sessionFlagsRepository = new();
             sessionFlagsRepository.SetIsAfterCompile(true);
             sessionFlagsRepository.MarkServerManuallyStopped();
-            PureRecoveryCoordinator recoveryCoordinator = new(recoverServer: true);
+            TestRecoveryCoordinator recoveryCoordinator = new(recoverServer: true);
             SessionRecoveryService service = CreatePureSessionRecoveryService(sessionFlagsRepository);
 
             ValidationResult result = await service.RestoreServerStateIfNeededAsync(
@@ -211,40 +205,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.IsValid, Is.True);
             Assert.That(sessionFlagsRepository.GetIsAfterCompile(), Is.False);
             Assert.That(recoveryCoordinator.StartRecoveryCallCount, Is.EqualTo(0));
-        }
-
-        [Test]
-        public async Task RestoreServerStateIfNeededAsync_WhenNoPersistedServerState_ShouldStartRecoveryAndSucceedWhenServerStarts()
-        {
-            // Verifies a clean startup still starts recovery instead of treating missing state as a no-op.
-            InMemorySessionFlagsRepository sessionFlagsRepository = new();
-            PureRecoveryCoordinator recoveryCoordinator = new(recoverServer: true);
-            SessionRecoveryService service = CreatePureSessionRecoveryService(sessionFlagsRepository);
-
-            ValidationResult result = await service.RestoreServerStateIfNeededAsync(
-                recoveryCoordinator,
-                CancellationToken.None);
-
-            Assert.That(result.IsValid, Is.True);
-            Assert.That(recoveryCoordinator.StartRecoveryCallCount, Is.EqualTo(1));
-        }
-
-        [Test]
-        public async Task RestoreServerStateIfNeededAsync_WhenRecoveryDoesNotStartServer_ShouldFailWithExactMessage()
-        {
-            // Verifies recovery is invalid when no running server exists after the recovery attempt.
-            InMemorySessionFlagsRepository sessionFlagsRepository = new();
-            PureRecoveryCoordinator recoveryCoordinator = new();
-            SessionRecoveryService service = CreatePureSessionRecoveryService(sessionFlagsRepository);
-
-            ValidationResult result = await service.RestoreServerStateIfNeededAsync(
-                recoveryCoordinator,
-                CancellationToken.None);
-
-            Assert.That(result.IsValid, Is.False);
-            Assert.That(
-                result.ErrorMessage,
-                Is.EqualTo("Unity CLI Loop server recovery finished, but no running server instance is available."));
         }
 
         private static DomainReloadRecoveryUseCase CreateUseCase(
@@ -425,16 +385,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Test support type used by pure SessionRecoveryService tests.
+        /// Test support type used by editor and play mode fixtures.
         /// </summary>
-        private sealed class PureRecoveryCoordinator : IUnityCliLoopServerRecoveryCoordinator
+        private sealed class TestRecoveryCoordinator : IUnityCliLoopServerRecoveryCoordinator
         {
             private readonly bool _recoverServer;
             private readonly TestServerInstance _server = new();
 
-            public PureRecoveryCoordinator(
-                bool currentServerRunning = false,
-                bool recoverServer = false)
+            public TestRecoveryCoordinator(
+                bool recoverServer = false,
+                bool currentServerRunning = false)
             {
                 _recoverServer = recoverServer;
                 if (currentServerRunning)
@@ -453,35 +413,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 StartRecoveryCallCount++;
                 LastIsAfterCompile = isAfterCompile;
-                if (_recoverServer)
-                {
-                    _server.StartServer();
-                }
-
-                return Task.CompletedTask;
-            }
-        }
-
-        /// <summary>
-        /// Test support type used by editor and play mode fixtures.
-        /// </summary>
-        private sealed class TestRecoveryCoordinator : IUnityCliLoopServerRecoveryCoordinator
-        {
-            private readonly bool _recoverServer;
-            private readonly TestServerInstance _server = new();
-
-            public TestRecoveryCoordinator(bool recoverServer = false)
-            {
-                _recoverServer = recoverServer;
-            }
-
-            public int StartRecoveryCallCount { get; private set; }
-
-            public IUnityCliLoopServerInstance CurrentServer => _server.IsRunning ? _server : null;
-
-            public Task StartRecoveryIfNeededAsync(bool isAfterCompile, CancellationToken cancellationToken)
-            {
-                StartRecoveryCallCount++;
                 if (_recoverServer)
                 {
                     _server.StartServer();

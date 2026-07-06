@@ -65,6 +65,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ScheduleStartupRecovery_WhenRecoveryThrowsSynchronously_FaultsTaskAndClearsRecoveryTask()
         {
             // Tests that synchronous startup recovery failures fault and clear the tracked task.
+            UnityEngine.TestTools.LogAssert.Expect(
+                UnityEngine.LogType.Error,
+                "[UnityCliLoop] Failed to restore server: restore failed");
             System.Action scheduledAction = null;
             UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService();
 
