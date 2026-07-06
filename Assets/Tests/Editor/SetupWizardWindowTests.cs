@@ -854,21 +854,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldShowDialog, Is.False);
         }
 
-        [TestCase(SkillInstallState.Installed, false, true, "setup-target-item__status--installed")]
-        [TestCase(SkillInstallState.Checking, false, true, "setup-target-item__status--checking")]
-        [TestCase(SkillInstallState.Outdated, false, true, "setup-target-item__status--outdated")]
-        [TestCase(SkillInstallState.Missing, false, true, "setup-target-item__status--missing")]
-        [TestCase(SkillInstallState.Missing, true, true, "setup-target-item__status--different-layout")]
+        [TestCase(SkillInstallState.Installed, false, "setup-target-item__status--installed")]
+        [TestCase(SkillInstallState.Checking, false, "setup-target-item__status--checking")]
+        [TestCase(SkillInstallState.Outdated, false, "setup-target-item__status--outdated")]
+        [TestCase(SkillInstallState.Missing, false, "setup-target-item__status--missing")]
+        [TestCase(SkillInstallState.Missing, true, "setup-target-item__status--different-layout")]
         public void GetSkillInstallStatusClass_ReturnsExpectedClass(
             SkillInstallState installState,
             bool hasDifferentLayoutSkills,
-            bool groupSkillsUnderUnityCliLoop,
             string expectedClass)
         {
+            // Verifies that each skill install state maps to the expected status style class.
             string className = SetupWizardSkillsStepPresenter.GetSkillInstallStatusClass(
                 installState,
-                hasDifferentLayoutSkills,
-                groupSkillsUnderUnityCliLoop);
+                hasDifferentLayoutSkills);
 
             Assert.That(className, Is.EqualTo(expectedClass));
         }
