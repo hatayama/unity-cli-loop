@@ -15,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class CompileResponseFactoryTests
     {
         [Test]
-        public void CreateCompileResult_WhenNormalCompileCompletes_MapsDetailedIssues()
+        public void CreateResponse_WhenNormalCompileCompletes_MapsDetailedIssues()
         {
             // Verifies normal compile results keep detailed error and warning entries.
             CompilerMessage error = new CompilerMessage
@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 warnings: new[] { warning });
 
             CompileResponse response =
-                CompileResponseFactory.CreateCompileResult(result, forceRecompile: false);
+                CompileResponseFactory.CreateResponse(result, forceRecompile: false);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCount, Is.EqualTo(1));
@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void CreateCompileResult_WhenForceCompileIsUnknown_ExplainsNullDetails()
+        public void CreateResponse_WhenForceCompileIsUnknown_ExplainsNullDetails()
         {
             // Verifies force compile results do not pretend Unity returned detailed issue content.
             CompilerMessage error = new CompilerMessage
@@ -75,7 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 message: null);
 
             CompileResponse response =
-                CompileResponseFactory.CreateCompileResult(result, forceRecompile: true);
+                CompileResponseFactory.CreateResponse(result, forceRecompile: true);
 
             Assert.That(response.Success, Is.Null);
             Assert.That(response.ErrorCount, Is.Null);
@@ -86,7 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void CreateCompileResult_WhenForceCompileHasOutcome_ExplainsNullDetails()
+        public void CreateResponse_WhenForceCompileHasOutcome_ExplainsNullDetails()
         {
             // Verifies force compile does not report counts or issue lists even when a high-level outcome exists.
             CompileResult result = new CompileResult(
@@ -100,7 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 message: "Internal force compile status message.");
 
             CompileResponse response =
-                CompileResponseFactory.CreateCompileResult(result, forceRecompile: true);
+                CompileResponseFactory.CreateResponse(result, forceRecompile: true);
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.ErrorCount, Is.Null);
@@ -111,7 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void CreateCompileResult_WhenForceCompileHasPreservedFailure_MapsDetailedIssues()
+        public void CreateResponse_WhenForceCompileHasPreservedFailure_MapsDetailedIssues()
         {
             // Verifies preflight failures keep actionable details even during force compile.
             CompilerMessage error = new CompilerMessage
@@ -133,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 preserveDetailsWhenForceRecompile: true);
 
             CompileResponse response =
-                CompileResponseFactory.CreateCompileResult(result, forceRecompile: true);
+                CompileResponseFactory.CreateResponse(result, forceRecompile: true);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCount, Is.EqualTo(1));
@@ -143,7 +143,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void CreateCompileResult_WhenUnityTestFrameworkSymbolIsMissing_AddsTestAsmdefHint()
+        public void CreateResponse_WhenUnityTestFrameworkSymbolIsMissing_AddsTestAsmdefHint()
         {
             // Verifies compile failures from unmarked test asmdefs include the TestAssemblies fix.
             CompilerMessage error = new CompilerMessage
@@ -163,7 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 warnings: Array.Empty<CompilerMessage>());
 
             CompileResponse response =
-                CompileResponseFactory.CreateCompileResult(result, forceRecompile: false);
+                CompileResponseFactory.CreateResponse(result, forceRecompile: false);
 
             Assert.That(response.Message, Does.Contain("TestAssemblies"));
             Assert.That(response.Message, Does.Contain("com.unity.test-framework"));

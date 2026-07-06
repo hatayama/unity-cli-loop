@@ -146,7 +146,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // 4. Result formatting
             CompileResponse successResponse =
-                CompileResponseFactory.CreateCompileResult(result, request.ForceRecompile);
+                CompileResponseFactory.CreateResponse(result, request.ForceRecompile);
             CompileResponse persistedSuccessResponse =
                 StoreResponseIfNeeded(request, successResponse, correlationId);
             return persistedSuccessResponse;

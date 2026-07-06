@@ -15,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string MissingTestFrameworkReferenceHint =
             "Possible test asmdef issue: Unity test framework symbols are missing. Make sure com.unity.test-framework is installed and add optionalUnityReferences: [\"TestAssemblies\"] or enable testAssemblies on the test asmdef.";
 
-        internal static CompileResponse CreateCompileResult(
+        internal static CompileResponse CreateResponse(
             CompileResult result,
             bool forceRecompile)
         {

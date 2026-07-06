@@ -524,7 +524,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             CompileResponse response =
-                CompileResponseFactory.CreateCompileResult(result, _resultRecordingContext.ForceRecompile);
+                CompileResponseFactory.CreateResponse(result, _resultRecordingContext.ForceRecompile);
             CompileSessionResultStore.StoreCompileResult(
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository,
