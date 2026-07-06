@@ -220,7 +220,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
                     Example = string.Empty,
                     SuggestedSolutions = new List<string>(),
                     LearningTips = new List<string>(),
-                    Severity = ErrorSeverity.High
+                    Severity = ErrorSeverityClassificationPolicy.DetermineSeverity(
+                        ErrorSeverityCategory.UnknownException)
                 };
             }
 

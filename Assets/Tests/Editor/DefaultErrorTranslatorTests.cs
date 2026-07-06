@@ -132,5 +132,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.AreEqual("Internal error", result.FriendlyMessage);
         }
+
+        [Test]
+        public void ProcessException_WhenExceptionIsNull_ShouldUseHighSeverity()
+        {
+            // Verifies null exception conversion uses the same domain severity policy as formatted exceptions.
+            UserFriendlyErrorConverter converter = new();
+
+            UserFriendlyErrorDto dto = converter.ProcessException(null);
+
+            Assert.AreEqual(ErrorSeverity.High, dto.Severity);
+        }
     }
 }
