@@ -48,13 +48,10 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 toolSettingsPort,
                 toolRegistrarService,
                 new SkillInstallLayoutToolSkillDescriptionProvider());
-            ToolSettingsUseCaseRegistry.Register(toolSettingsUseCase);
             ISkillSetupPort skillSetupPort = new ToolSkillSetupService(toolSettingsPort);
             SkillSetupUseCase skillSetupUseCase = new(skillSetupPort);
-            SkillSetupUseCaseRegistry.Register(skillSetupUseCase);
             ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase =
                 new(new ThirdPartyToolMigrationFileService());
-            ThirdPartyToolMigrationUseCaseRegistry.Register(thirdPartyToolMigrationUseCase);
             CliPinReaderService cliPinReaderService = new();
             CliSetupApplicationService cliSetupApplicationService = new(
                 new CliInstallationDetector(cliPinReaderService),
