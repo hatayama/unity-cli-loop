@@ -779,20 +779,23 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool canUninstallCli = _cliSetupApplicationService.IsPackageOwnedCurrentUserInstallPath(
                 cliExecutablePath,
                 UnityEngine.Application.platform);
+            string requiredCliVersion = _cliSetupApplicationService.GetMinimumRequiredCliVersion();
             return ResolveCliPrimaryButtonAction(
                 _needsCliPathSetup,
                 cliVersion,
                 cliIsDispatcher,
-                canUninstallCli);
+                canUninstallCli,
+                requiredCliVersion);
         }
 
         internal static bool ShouldUninstallCliFromPrimaryButton(
             string cliVersion,
             bool cliIsDispatcher,
-            bool canUninstallCli)
+            bool canUninstallCli,
+            string requiredCliVersion)
         {
             bool isCliInstalled = cliVersion != null;
-            bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher);
+            bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher, requiredCliVersion);
             return CliSetupPrimaryActionPolicy.ShouldUninstallCli(
                 isCliInstalled,
                 needsUpdate,
@@ -803,9 +806,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool needsCliPathSetup,
             string cliVersion,
             bool cliIsDispatcher,
-            bool canUninstallCli)
+            bool canUninstallCli,
+            string requiredCliVersion)
         {
-            bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher);
+            bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher, requiredCliVersion);
             bool isCliInstalled = cliVersion != null;
             return CliSetupPrimaryActionPolicy.ResolveSettingsPrimaryAction(
                 needsCliPathSetup,
@@ -881,9 +885,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
         }
 
-        internal static bool IsCliUpdateNeeded(string cliVersion, bool cliIsDispatcher)
+        internal static bool IsCliUpdateNeeded(
+            string cliVersion,
+            bool cliIsDispatcher,
+            string requiredCliVersion)
         {
-            return EvaluateCliSetupCompatibility(cliVersion, cliIsDispatcher).NeedsUpdate;
+            return EvaluateCliSetupCompatibility(
+                cliVersion,
+                cliIsDispatcher,
+                requiredCliVersion).NeedsUpdate;
         }
 
         internal static bool ShouldShowSkillsInstalledDialog(SkillSetupTargetInfo targetInfo)
@@ -894,14 +904,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private static CliSetupCompatibilityState EvaluateCliSetupCompatibility(
             string cliVersion,
-            bool cliIsDispatcher)
+            bool cliIsDispatcher,
+            string requiredCliVersion)
         {
-            // Why: route through the setup service so the pin JSON stays the single source for the minimum
-            // dispatcher version instead of duplicating the constant in the presentation layer.
             return CliSetupCompatibility.Evaluate(
                 cliVersion,
                 cliIsDispatcher,
-                GetCliSetupApplicationService().GetMinimumRequiredCliVersion());
+                requiredCliVersion);
         }
 
         private async Task HandleUninstallCli()
