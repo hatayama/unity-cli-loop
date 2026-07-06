@@ -1,7 +1,9 @@
 using NUnit.Framework;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.Presentation;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -11,6 +13,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class UnityCliLoopSettingsWindowCliActionTests
     {
+        private const string TestProjectRunnerVersion = "3.0.0";
+        private const string TestMinimumDispatcherVersion = "3.0.0";
+
+        [SetUp]
+        public void SetUp()
+        {
+            RegisterCliSetupService(new TestCliPinReader(TestMinimumDispatcherVersion));
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            CliPinReaderService cliPinReaderService = new();
+            RegisterCliSetupService(cliPinReaderService);
+        }
+
         [TestCase(null, false, true, false)]
         [TestCase("2.9.0", false, true, false)]
         [TestCase("3.0.0", false, true, false)]
@@ -166,6 +184,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             return (CliSetupPrimaryAction)
                 System.Enum.Parse(typeof(CliSetupPrimaryAction), action);
+        }
+
+        private static void RegisterCliSetupService(ICliPinReader cliPinReader)
+        {
+            CliSetupApplicationFacade.RegisterService(new CliSetupApplicationService(
+                new CliInstallationDetector(cliPinReader),
+                new NativeCliInstallerService(),
+                cliPinReader));
+        }
+
+        private sealed class TestCliPinReader : ICliPinReader
+        {
+            private readonly string _minimumDispatcherVersion;
+
+            public TestCliPinReader(string minimumDispatcherVersion)
+            {
+                _minimumDispatcherVersion = minimumDispatcherVersion;
+            }
+
+            public CliPinLoadResult LoadPackagePin()
+            {
+                return CliPinLoadResult.FromSuccess(
+                    new CliPin(TestProjectRunnerVersion, _minimumDispatcherVersion));
+            }
+
+            public string LoadMinimumDispatcherVersionOrThrow()
+            {
+                return _minimumDispatcherVersion;
+            }
         }
     }
 }
