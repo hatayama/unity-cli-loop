@@ -35,7 +35,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public IUnityCliLoopServerInstance Create()
         {
-            UnityCliLoopBridgeServer server = new(_domainReloadDetectionService);
+            UnityCliLoopBridgeHeartbeatService heartbeatService = new();
+            UnityCliLoopBridgeClientDisconnectMonitor clientDisconnectMonitor = new();
+            UnityCliLoopBridgeServer server = new(
+                _domainReloadDetectionService,
+                heartbeatService,
+                clientDisconnectMonitor);
             server.ServerLoopExited += NotifyServerLoopExited;
 
             return server;
@@ -57,6 +62,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         // Subscribers must marshal to main thread before accessing Unity APIs.
         public event Action ServerLoopExited;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
+        private readonly UnityCliLoopBridgeHeartbeatService _heartbeatService;
+        private readonly UnityCliLoopBridgeClientDisconnectMonitor _clientDisconnectMonitor;
         
         // HResult error codes for normal disconnection detection
         private static readonly HashSet<int> NormalDisconnectionHResults = new()
@@ -79,14 +86,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly ConcurrentDictionary<string, Stream> _clientStreams = new();
         private readonly ConcurrentDictionary<int, Task> _clientTasks = new();
         private int _nextClientTaskId;
-        private const int ClientDisconnectMonitorPollMilliseconds = 100;
 
-        internal UnityCliLoopBridgeServer(IDomainReloadDetectionService domainReloadDetectionService)
+        internal UnityCliLoopBridgeServer(
+            IDomainReloadDetectionService domainReloadDetectionService,
+            UnityCliLoopBridgeHeartbeatService heartbeatService,
+            UnityCliLoopBridgeClientDisconnectMonitor clientDisconnectMonitor)
         {
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
+            System.Diagnostics.Debug.Assert(heartbeatService != null, "heartbeatService must not be null");
+            System.Diagnostics.Debug.Assert(clientDisconnectMonitor != null, "clientDisconnectMonitor must not be null");
 
             _domainReloadDetectionService = domainReloadDetectionService
                 ?? throw new ArgumentNullException(nameof(domainReloadDetectionService));
+            _heartbeatService = heartbeatService
+                ?? throw new ArgumentNullException(nameof(heartbeatService));
+            _clientDisconnectMonitor = clientDisconnectMonitor
+                ?? throw new ArgumentNullException(nameof(clientDisconnectMonitor));
         }
         
         /// <summary>
@@ -616,7 +631,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                                 // server token an in-flight write could ignore StopHeartbeatsAsync
                                 // and stall the final response behind a slow client.
                                 CancellationToken heartbeatToken = heartbeatCancellationSource.Token;
-                                heartbeatTask = SendHeartbeatsAsync(
+                                heartbeatTask = _heartbeatService.SendHeartbeatsAsync(
                                     createHeartbeatJson,
                                     heartbeatJson => WriteJsonResponseLockedAsync(
                                         stream, streamWriteLock, heartbeatJson, heartbeatToken),
@@ -630,70 +645,27 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                             }
 
                             clientDisconnectMonitorTask =
-                                MonitorClientDisconnectAsync(client, requestCancellationTokenSource);
+                                _clientDisconnectMonitor.MonitorClientDisconnectAsync(
+                                    client,
+                                    requestCancellationTokenSource);
                         });
 
                     // Stop heartbeats before the final response so no heartbeat frame can be
                     // queued after the response the CLI stops reading at.
-                    await StopHeartbeatsAsync(heartbeatTask, heartbeatCancellationSource);
+                    await _heartbeatService.StopHeartbeatsAsync(heartbeatTask, heartbeatCancellationSource);
                     heartbeatTask = null;
 
                     await WriteJsonResponseLockedAsync(stream, streamWriteLock, responseJson, serverCancellationToken);
                 }
                 finally
                 {
-                    await StopHeartbeatsAsync(heartbeatTask, heartbeatCancellationSource);
+                    await _heartbeatService.StopHeartbeatsAsync(heartbeatTask, heartbeatCancellationSource);
                     heartbeatCancellationSource?.Dispose();
-                    await StopClientDisconnectMonitorAsync(
+                    await _clientDisconnectMonitor.StopClientDisconnectMonitorAsync(
                         clientDisconnectMonitorTask,
                         requestCancellationTokenSource);
                 }
             }
-        }
-
-        /// <summary>
-        /// Sends heartbeat frames at the given interval until cancelled. Write failures end
-        /// the loop silently because the connection teardown is owned by the read loop.
-        /// </summary>
-        internal static async Task SendHeartbeatsAsync(
-            Func<string> createHeartbeatJson,
-            Func<string, Task> writeFrameAsync,
-            TimeSpan interval,
-            CancellationToken ct)
-        {
-            while (true)
-            {
-                try
-                {
-                    await Task.Delay(interval, ct);
-                    await writeFrameAsync(createHeartbeatJson());
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
-                catch (IOException)
-                {
-                    return;
-                }
-                catch (ObjectDisposedException)
-                {
-                    return;
-                }
-            }
-        }
-
-        private static async Task StopHeartbeatsAsync(
-            Task heartbeatTask,
-            CancellationTokenSource heartbeatCancellationSource)
-        {
-            if (heartbeatTask == null)
-            {
-                return;
-            }
-
-            heartbeatCancellationSource?.Cancel();
-            await heartbeatTask;
         }
 
         private async Task WriteJsonResponseLockedAsync(
@@ -714,45 +686,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 streamWriteLock.Release();
             }
-        }
-
-        private static async Task MonitorClientDisconnectAsync(
-            BridgeClientConnection client,
-            CancellationTokenSource requestCancellationTokenSource)
-        {
-            while (!requestCancellationTokenSource.IsCancellationRequested)
-            {
-                if (!client.IsConnected)
-                {
-                    requestCancellationTokenSource.Cancel();
-                    return;
-                }
-
-                try
-                {
-                    await Task.Delay(ClientDisconnectMonitorPollMilliseconds, requestCancellationTokenSource.Token);
-                }
-                catch (OperationCanceledException)
-                {
-                    // Cancellation is the normal stop signal from StopClientDisconnectMonitorAsync.
-                    // Without the token the delay always ran to completion, adding one poll
-                    // interval of tail latency to every request teardown and server shutdown.
-                    return;
-                }
-            }
-        }
-
-        private static async Task StopClientDisconnectMonitorAsync(
-            Task clientDisconnectMonitorTask,
-            CancellationTokenSource requestCancellationTokenSource)
-        {
-            if (clientDisconnectMonitorTask == null)
-            {
-                return;
-            }
-
-            requestCancellationTokenSource.Cancel();
-            await clientDisconnectMonitorTask;
         }
 
         /// <summary>
