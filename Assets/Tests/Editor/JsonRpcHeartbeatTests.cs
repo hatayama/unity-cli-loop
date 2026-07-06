@@ -55,8 +55,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // without leaving background work behind.
             int writtenFrameCount = 0;
             using CancellationTokenSource cancellationSource = new();
+            UnityCliLoopBridgeHeartbeatService heartbeatService = new();
 
-            Task heartbeatTask = UnityCliLoopBridgeServer.SendHeartbeatsAsync(
+            Task heartbeatTask = heartbeatService.SendHeartbeatsAsync(
                 () => "{}",
                 _ =>
                 {
@@ -79,8 +80,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that a broken connection ends the heartbeat loop silently; teardown is
             // owned by the read loop, not the heartbeat writer.
             using CancellationTokenSource cancellationSource = new();
+            UnityCliLoopBridgeHeartbeatService heartbeatService = new();
 
-            Task heartbeatTask = UnityCliLoopBridgeServer.SendHeartbeatsAsync(
+            Task heartbeatTask = heartbeatService.SendHeartbeatsAsync(
                 () => "{}",
                 _ => throw new System.IO.IOException("broken pipe"),
                 TimeSpan.FromMilliseconds(1),
