@@ -937,7 +937,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (isInstallingCli)
             {
-                if (needsCliPathSetup && !needsUpdate)
+                if (CliSetupPrimaryActionPolicy.ShouldRepairCliPath(needsCliPathSetup, needsUpdate))
                 {
                     return "Fixing PATH...";
                 }
@@ -1289,7 +1289,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool needsCliPathSetup,
             bool needsUpdate)
         {
-            return needsCliPathSetup && !needsUpdate;
+            return CliSetupPrimaryActionPolicy.ShouldRepairCliPath(needsCliPathSetup, needsUpdate);
         }
 
         private async Task HandleRepairCliPathSetup()
