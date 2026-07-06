@@ -138,21 +138,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 shutdownUseCase,
                 sessionRecoveryService,
                 domainReloadRecoveryUseCase,
-                CreateToolRegistrarService(),
+                UnityCliLoopToolRegistrarTestFactory.Create(() => System.Array.Empty<IUnityCliLoopTool>()),
                 readinessService,
                 startupProtectionService ?? new UnityCliLoopServerStartupProtectionService(),
                 recoveryTrackingService,
                 domainReloadLifecycle ?? new TestDomainReloadLifecycle());
-        }
-
-        private static UnityCliLoopToolRegistrarService CreateToolRegistrarService()
-        {
-            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
-            return new UnityCliLoopToolRegistrarService(
-                new EmptyInternalToolNameProvider(),
-                toolSettingsPort,
-                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
-                () => System.Array.Empty<IUnityCliLoopTool>());
         }
 
         /// <summary>

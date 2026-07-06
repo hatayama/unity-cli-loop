@@ -11,7 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
 
     /// <summary>
-    /// Routes JSON-RPC execution requests received by JsonRpcProcessor to either the
+    /// Routes JSON-RPC execution requests received by JsonRpcRequestProcessor to either the
     /// internal bridge command router or the registered tools in the Application layer.
     /// Terminology for "tool" vs "internal bridge command" is defined in docs/glossary.md.
     /// </summary>
