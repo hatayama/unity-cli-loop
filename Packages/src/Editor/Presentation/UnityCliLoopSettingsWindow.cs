@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const double ToolSettingsRegistryWarmupMaxDelaySeconds = 0.8;
         private const int ToolSettingsRegistryWarmupMaxAttempts = 5;
 
-        private static UnityCliLoopEditorSettingsService RegisteredEditorSettingsService;
+        private static IUnityCliLoopEditorSettingsPort RegisteredEditorSettingsPort;
         private static UnityCliLoopEditorSessionStateService RegisteredSessionStateService;
 
         private UnityCliLoopSettingsWindowUI _view;
@@ -39,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private UnityCliLoopSettingsWindowEventHandler _eventHandler;
         private SkillSetupUseCase _skillSetupUseCase;
         private ToolSettingsUseCase _toolSettingsUseCase;
-        private UnityCliLoopEditorSettingsService _editorSettingsService;
+        private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private UnityCliLoopEditorSessionStateService _sessionStateService;
 
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
@@ -67,14 +67,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         }
 
         internal static void InitializeEditorServices(
-            UnityCliLoopEditorSettingsService editorSettingsService,
+            IUnityCliLoopEditorSettingsPort editorSettingsPort,
             UnityCliLoopEditorSessionStateService sessionStateService)
         {
-            System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+            System.Diagnostics.Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
             System.Diagnostics.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
 
-            RegisteredEditorSettingsService = editorSettingsService
-                ?? throw new ArgumentNullException(nameof(editorSettingsService));
+            RegisteredEditorSettingsPort = editorSettingsPort
+                ?? throw new ArgumentNullException(nameof(editorSettingsPort));
             RegisteredSessionStateService = sessionStateService;
         }
 
@@ -114,14 +114,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             _model = new UnityCliLoopSettingsModel(
                 _toolSettingsUseCase,
-                _editorSettingsService);
+                _editorSettingsPort);
         }
 
         private void InitializeApplicationServices()
         {
             _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
             _toolSettingsUseCase = ToolSettingsUseCaseRegistry.GetRegisteredUseCase();
-            _editorSettingsService = GetEditorSettingsService();
+            _editorSettingsPort = GetEditorSettingsPort();
             _sessionStateService = GetSessionStateService();
         }
 
@@ -1085,17 +1085,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             // Claude Code does not resolve nested skill folders, so editor-driven installs stay flat for every target.
             _installSkillsFlat = ForceFlatSkillInstall;
-            _editorSettingsService.SetInstallSkillsFlat(_installSkillsFlat);
+            _editorSettingsPort.SetInstallSkillsFlat(_installSkillsFlat);
         }
 
-        private static UnityCliLoopEditorSettingsService GetEditorSettingsService()
+        private static IUnityCliLoopEditorSettingsPort GetEditorSettingsPort()
         {
-            if (RegisteredEditorSettingsService == null)
+            if (RegisteredEditorSettingsPort == null)
             {
-                throw new InvalidOperationException("Unity CLI Loop editor settings service is not registered.");
+                throw new InvalidOperationException("Unity CLI Loop editor settings port is not registered.");
             }
 
-            return RegisteredEditorSettingsService;
+            return RegisteredEditorSettingsPort;
         }
 
         private static UnityCliLoopEditorSessionStateService GetSessionStateService()

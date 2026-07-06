@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private bool _settingsFileExisted;
         private string _settingsFileContent;
-        private UnityCliLoopEditorSettingsService _editorSettingsService;
+        private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private UnityCliLoopEditorSettingsRepository _editorSettingsRepository;
         private UnityCliLoopEditorSessionStateService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
@@ -41,12 +41,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             DeleteIfExists(SettingsFilePath);
-            _editorSettingsService =
-                UnityCliLoopEditorSettingsTestFactory.CreateServiceWithRepository(out _editorSettingsRepository);
+            _editorSettingsPort =
+                UnityCliLoopEditorSettingsTestFactory.CreatePortWithRepository(out _editorSettingsRepository);
             _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
             _sessionStateService.ClearAll();
-            SetupWizardWindow.InitializeEditorServices(_editorSettingsService, _sessionStateService);
+            SetupWizardWindow.InitializeEditorServices(_editorSettingsPort, _sessionStateService);
             _editorSettingsRepository.InvalidateCache();
         }
 
@@ -201,7 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void MaybeRecordLastSeenSetupWizardState_WhenAutoShow_UpdatesStoredState()
         {
-            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2",
                 lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
@@ -209,16 +209,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             SetupWizardWindow.MaybeRecordLastSeenSetupWizardState(true, "1.7.3", "3.0.2");
 
-            Assert.That(_editorSettingsService.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
             Assert.That(
-                _editorSettingsService.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
+                _editorSettingsPort.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
                 Is.EqualTo("3.0.2"));
         }
 
         [Test]
         public void MaybeRecordLastSeenSetupWizardState_WhenManualShow_KeepsStoredState()
         {
-            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2",
                 lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
@@ -226,16 +226,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             SetupWizardWindow.MaybeRecordLastSeenSetupWizardState(false, "1.7.3", "3.0.2");
 
-            Assert.That(_editorSettingsService.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
             Assert.That(
-                _editorSettingsService.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
+                _editorSettingsPort.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
                 Is.EqualTo("3.0.1"));
         }
 
         [Test]
         public void MaybeRecordSuppressedSetupWizardState_WhenAutoShowSuppressed_UpdatesStoredState()
         {
-            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2",
                 lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
@@ -243,16 +243,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             SetupWizardWindow.MaybeRecordSuppressedSetupWizardState(true, "1.7.3", "3.0.2");
 
-            Assert.That(_editorSettingsService.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
             Assert.That(
-                _editorSettingsService.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
+                _editorSettingsPort.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
                 Is.EqualTo("3.0.2"));
         }
 
         [Test]
         public void MaybeRecordSuppressedSetupWizardState_WhenAutoShowAllowed_KeepsStoredState()
         {
-            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2",
                 lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
@@ -260,9 +260,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             SetupWizardWindow.MaybeRecordSuppressedSetupWizardState(false, "1.7.3", "3.0.2");
 
-            Assert.That(_editorSettingsService.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
             Assert.That(
-                _editorSettingsService.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
+                _editorSettingsPort.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
                 Is.EqualTo("3.0.1"));
         }
 
@@ -270,7 +270,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void TryReuseOpenWindow_WhenExistingWindowAndAutoShow_FocusesWindowAndRecordsVersion()
         {
             bool focusedExistingWindow = false;
-            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2",
                 lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
@@ -285,9 +285,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(reused, Is.True);
             Assert.That(focusedExistingWindow, Is.True);
-            Assert.That(_editorSettingsService.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
             Assert.That(
-                _editorSettingsService.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
+                _editorSettingsPort.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
                 Is.EqualTo("3.0.2"));
         }
 
@@ -295,7 +295,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void TryReuseOpenWindow_WhenExistingWindowAndManualShow_FocusesWindowWithoutRecordingVersion()
         {
             bool focusedExistingWindow = false;
-            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2",
                 lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
@@ -310,9 +310,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(reused, Is.True);
             Assert.That(focusedExistingWindow, Is.True);
-            Assert.That(_editorSettingsService.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
             Assert.That(
-                _editorSettingsService.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
+                _editorSettingsPort.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
                 Is.EqualTo("3.0.1"));
         }
 
@@ -320,7 +320,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void TryReuseOpenWindow_WhenNoExistingWindow_DoesNotFocusOrRecordVersion()
         {
             bool focusedExistingWindow = false;
-            _editorSettingsService.SaveSettings(new UnityCliLoopEditorSettingsData
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2",
                 lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
@@ -335,9 +335,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(reused, Is.False);
             Assert.That(focusedExistingWindow, Is.False);
-            Assert.That(_editorSettingsService.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
             Assert.That(
-                _editorSettingsService.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
+                _editorSettingsPort.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
                 Is.EqualTo("3.0.1"));
         }
 

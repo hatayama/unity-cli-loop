@@ -28,9 +28,9 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             ApplicationEditorStartup.Initialize(applicationServices.DomainReloadDetectionService);
             EditorRuntimeStateSnapshotSubscriber.InitializeForEditorStartup();
             FirstPartyToolsEditorStartup.Initialize();
-            InfrastructureEditorStartup.Initialize(applicationServices.EditorSettingsService);
+            InfrastructureEditorStartup.Initialize(applicationServices.EditorSettingsPort);
             PresentationEditorStartup.Initialize(
-                applicationServices.EditorSettingsService,
+                applicationServices.EditorSettingsPort,
                 applicationServices.SessionStateService);
         }
     }

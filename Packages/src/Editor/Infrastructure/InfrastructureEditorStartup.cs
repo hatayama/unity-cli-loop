@@ -8,11 +8,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal static class InfrastructureEditorStartup
     {
-        internal static void Initialize(UnityCliLoopEditorSettingsService editorSettingsService)
+        internal static void Initialize(IUnityCliLoopEditorSettingsPort editorSettingsPort)
         {
-            UnityCliLoopPackageRemovalSettingsResetter packageRemovalSettingsResetter = new(editorSettingsService);
+            UnityCliLoopPackageRemovalSettingsResetter packageRemovalSettingsResetter = new(editorSettingsPort);
             packageRemovalSettingsResetter.RegisterForEditorStartup();
-            UnityCliLoopEditorSettingsRecoveryScheduler.ScheduleForEditorStartup(editorSettingsService);
+            UnityCliLoopEditorSettingsRecoveryScheduler.ScheduleForEditorStartup(editorSettingsPort);
             EditorMainThreadLivenessTracker.RegisterForEditorStartup();
         }
     }

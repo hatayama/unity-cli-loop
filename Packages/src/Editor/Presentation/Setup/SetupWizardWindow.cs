@@ -28,14 +28,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const bool ForceFlatSkillInstall = true;
         private static readonly char[] VersionMajorSeparators = { '.', '-' };
         private static readonly Vector2 MinimumWindowSize = new(360f, 380f);
-        private static UnityCliLoopEditorSettingsService RegisteredEditorSettingsService;
+        private static IUnityCliLoopEditorSettingsPort RegisteredEditorSettingsPort;
         private static UnityCliLoopEditorSessionStateService RegisteredSessionStateService;
 
         internal static void InitializeForEditorStartup(
-            UnityCliLoopEditorSettingsService editorSettingsService,
+            IUnityCliLoopEditorSettingsPort editorSettingsPort,
             UnityCliLoopEditorSessionStateService sessionStateService)
         {
-            InitializeEditorServices(editorSettingsService, sessionStateService);
+            InitializeEditorServices(editorSettingsPort, sessionStateService);
 
             if (AssetDatabase.IsAssetImportWorkerProcess()) return;
             if (UnityEngine.Application.isBatchMode) return;
@@ -44,14 +44,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         }
 
         internal static void InitializeEditorServices(
-            UnityCliLoopEditorSettingsService editorSettingsService,
+            IUnityCliLoopEditorSettingsPort editorSettingsPort,
             UnityCliLoopEditorSessionStateService sessionStateService)
         {
-            Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+            Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
             Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
 
-            RegisteredEditorSettingsService = editorSettingsService
-                ?? throw new System.ArgumentNullException(nameof(editorSettingsService));
+            RegisteredEditorSettingsPort = editorSettingsPort
+                ?? throw new System.ArgumentNullException(nameof(editorSettingsPort));
             RegisteredSessionStateService = sessionStateService
                 ?? throw new System.ArgumentNullException(nameof(sessionStateService));
         }
@@ -126,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 !string.IsNullOrEmpty(minimumDispatcherVersion),
                 "minimumDispatcherVersion must not be null or empty");
 
-            GetEditorSettingsService().UpdateSettings((UnityCliLoopEditorSettingsData settings) => settings with
+            GetEditorSettingsPort().UpdateSettings((UnityCliLoopEditorSettingsData settings) => settings with
             {
                 lastSeenSetupWizardVersion = version,
                 lastSeenSetupWizardMinimumDispatcherVersion = minimumDispatcherVersion
@@ -152,8 +152,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             string currentVersion = UnityCliLoopConstants.PackageInfo.version;
             string currentMinimumDispatcherVersion = GetMinimumRequiredCliVersion();
-            UnityCliLoopEditorSettingsService editorSettingsService = GetEditorSettingsService();
-            UnityCliLoopEditorSettingsData settings = editorSettingsService.GetSettings();
+            IUnityCliLoopEditorSettingsPort editorSettingsPort = GetEditorSettingsPort();
+            UnityCliLoopEditorSettingsData settings = editorSettingsPort.GetSettings();
             bool suppressAutoShow = settings.suppressSetupWizardAutoShow;
             string lastSeenVersion = settings.lastSeenSetupWizardVersion ?? string.Empty;
             string lastSeenMinimumDispatcherVersion =
@@ -284,7 +284,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             string lastSeenSetupWizardVersionBeforeOpen =
-                GetEditorSettingsService().GetLastSeenSetupWizardVersion();
+                GetEditorSettingsPort().GetLastSeenSetupWizardVersion();
             Rect windowPosition = CreateCenteredRect(EditorGUIUtility.GetMainWindowPosition(), MinimumWindowSize);
             SetupWizardWindow window = CreateInstance<SetupWizardWindow>();
             PrepareForOpen(
@@ -361,14 +361,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             FocusWindowIfItsOpen<SetupWizardWindow>();
         }
 
-        private static UnityCliLoopEditorSettingsService GetEditorSettingsService()
+        private static IUnityCliLoopEditorSettingsPort GetEditorSettingsPort()
         {
-            if (RegisteredEditorSettingsService == null)
+            if (RegisteredEditorSettingsPort == null)
             {
-                throw new System.InvalidOperationException("Unity CLI Loop editor settings service is not registered.");
+                throw new System.InvalidOperationException("Unity CLI Loop editor settings port is not registered.");
             }
 
-            return RegisteredEditorSettingsService;
+            return RegisteredEditorSettingsPort;
         }
 
         private static UnityCliLoopEditorSessionStateService GetSessionStateService()
@@ -452,7 +452,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private CancellationTokenSource _skillInstallStateRefreshCts;
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private SkillSetupUseCase _skillSetupUseCase;
-        private UnityCliLoopEditorSettingsService _editorSettingsService;
+        private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
 
         private void CreateGUI()
         {
@@ -471,7 +471,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void InitializeApplicationServices()
         {
             _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
-            _editorSettingsService = GetEditorSettingsService();
+            _editorSettingsPort = GetEditorSettingsPort();
         }
 
         private void InitializeFirstInstallSkillsUiState()
@@ -610,7 +610,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void RefreshAutoShowToggle()
         {
-            _suppressAutoShowToggle.SetValueWithoutNotify(_editorSettingsService.GetSuppressSetupWizardAutoShow());
+            _suppressAutoShowToggle.SetValueWithoutNotify(_editorSettingsPort.GetSuppressSetupWizardAutoShow());
         }
 
         private void ApplyInitialCheckingState()
@@ -1354,7 +1354,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void HandleSuppressAutoShowChanged(bool suppressAutoShow)
         {
-            _editorSettingsService.SetSuppressSetupWizardAutoShow(suppressAutoShow);
+            _editorSettingsPort.SetSuppressSetupWizardAutoShow(suppressAutoShow);
             MaybeRecordSuppressedSetupWizardState(
                 suppressAutoShow,
                 UnityCliLoopConstants.PackageInfo.version,
@@ -1402,7 +1402,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             // Claude Code does not resolve nested skill folders, so setup keeps every editor target on the flat layout.
             _installSkillsFlat = ForceFlatSkillInstall;
-            _editorSettingsService.SetInstallSkillsFlat(_installSkillsFlat);
+            _editorSettingsPort.SetInstallSkillsFlat(_installSkillsFlat);
         }
 
         private void ScheduleResizeToContent()

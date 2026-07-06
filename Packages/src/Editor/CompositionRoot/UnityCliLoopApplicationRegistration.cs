@@ -16,8 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
         {
             VibeLogger.InitializeForEditorStartup();
             IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
-            UnityCliLoopEditorSettingsRepository editorSettingsRepository = new();
-            UnityCliLoopEditorSettingsService editorSettingsService = new(editorSettingsRepository);
+            IUnityCliLoopEditorSettingsPort editorSettingsPort = new UnityCliLoopEditorSettingsRepository();
             UnityCliLoopEditorSessionStateRepository sessionStateRepository = new();
             UnityCliLoopEditorSessionStateService sessionStateService = new(sessionStateRepository);
             UnityCliLoopEditorSessionStateFacade.RegisterService(sessionStateService);
@@ -63,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 
             return new UnityCliLoopApplicationServices(
                 domainReloadDetectionService,
-                editorSettingsService,
+                editorSettingsPort,
                 sessionStateService);
         }
     }
@@ -72,16 +71,16 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
     {
         internal UnityCliLoopApplicationServices(
             IDomainReloadDetectionService domainReloadDetectionService,
-            UnityCliLoopEditorSettingsService editorSettingsService,
+            IUnityCliLoopEditorSettingsPort editorSettingsPort,
             UnityCliLoopEditorSessionStateService sessionStateService)
         {
             DomainReloadDetectionService = domainReloadDetectionService;
-            EditorSettingsService = editorSettingsService;
+            EditorSettingsPort = editorSettingsPort;
             SessionStateService = sessionStateService;
         }
 
         internal IDomainReloadDetectionService DomainReloadDetectionService { get; }
-        internal UnityCliLoopEditorSettingsService EditorSettingsService { get; }
+        internal IUnityCliLoopEditorSettingsPort EditorSettingsPort { get; }
         internal UnityCliLoopEditorSessionStateService SessionStateService { get; }
     }
 }
