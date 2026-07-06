@@ -559,7 +559,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <param name="context">The compilation context.</param>
         private void HandleCompileFinished(object context)
         {
-            CompileResult result = CreateCompileResult();
+            CompileResult result = CompileResultFactory.CreateCompileResult(_compileMessages.ToArray(), _isForceCompile);
             LogCompileFinishCallbackReceived(result);
             CompleteCompileRequest(result, unregisterEvents: true);
         }
@@ -611,15 +611,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             OnAssemblyCompiled?.Invoke(assemblyName, messages);
-        }
-
-        /// <summary>
-        /// Creates the compilation result.
-        /// </summary>
-        /// <returns>The compilation result.</returns>
-        private CompileResult CreateCompileResult()
-        {
-            return CompileResultFactory.CreateCompileResult(_compileMessages.ToArray(), _isForceCompile);
         }
 
         /// <summary>

@@ -5,7 +5,7 @@ using UnityEditor.Compilation;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Creates CompileResult instances from Unity compiler events before CompileResponse shaping or storage.
+    /// Creates raw CompileResult instances before CompileSessionResultService shapes them into CompileResponse DTOs.
     /// </summary>
     internal static class CompileResultFactory
     {
@@ -13,8 +13,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CompilerMessage[] compileMessages,
             bool isForceCompile)
         {
-            UnityEngine.Debug.Assert(compileMessages != null, "compileMessages must not be null");
-
             int errorCount = compileMessages.Count(m => m.type == CompilerMessageType.Error);
             int warningCount = compileMessages.Count(m => m.type == CompilerMessageType.Warning);
 
