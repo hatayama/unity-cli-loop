@@ -48,7 +48,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
             SetupWizardWindow.InitializeEditorServices(
                 _editorSettingsPort,
-                _sessionFlagsRepository,
                 CreateCliSetupApplicationService(),
                 CreateSkillSetupUseCase());
             _editorSettingsRepository.InvalidateCache();
@@ -85,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that package and dispatcher requirement changes auto-show only for actionable updates.
             bool shouldAutoShow =
-                SetupWizardWindow.ShouldAutoShowForVersion(
+                SetupWizardStartupFlow.ShouldAutoShowForVersion(
                     currentVersion,
                     lastSeenVersion,
                     currentMinimumDispatcherVersion,
@@ -108,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     installState: SkillInstallState.Outdated)
             };
 
-            bool hasSkillUpdate = SetupWizardWindow.HasSkillUpdateForSetupWizard(targets);
+            bool hasSkillUpdate = SetupWizardStartupFlow.HasSkillUpdateForSetupWizard(targets);
 
             Assert.That(hasSkillUpdate, Is.True);
         }
@@ -127,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     installState)
             };
 
-            bool hasSkillUpdate = SetupWizardWindow.HasSkillUpdateForSetupWizard(targets);
+            bool hasSkillUpdate = SetupWizardStartupFlow.HasSkillUpdateForSetupWizard(targets);
 
             Assert.That(hasSkillUpdate, Is.False);
         }
@@ -143,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     installState: SkillInstallState.Outdated)
             };
 
-            bool hasSkillUpdate = SetupWizardWindow.HasSkillUpdateForSetupWizard(targets);
+            bool hasSkillUpdate = SetupWizardStartupFlow.HasSkillUpdateForSetupWizard(targets);
 
             Assert.That(hasSkillUpdate, Is.False);
         }
@@ -160,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     hasDifferentLayoutSkills: true)
             };
 
-            bool hasSkillUpdate = SetupWizardWindow.HasSkillUpdateForSetupWizard(targets);
+            bool hasSkillUpdate = SetupWizardStartupFlow.HasSkillUpdateForSetupWizard(targets);
 
             Assert.That(hasSkillUpdate, Is.True);
         }
@@ -179,7 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that V3 startup scans run for V2 upgrades or missing prior setup state.
             bool shouldAutoScan =
-                SetupWizardWindow.ShouldAutoScanThirdPartyToolMigration(currentVersion, lastSeenVersion);
+                SetupWizardStartupFlow.ShouldAutoScanThirdPartyToolMigration(currentVersion, lastSeenVersion);
 
             Assert.That(shouldAutoScan, Is.EqualTo(expected));
         }
@@ -188,7 +187,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void MaybeMarkThirdPartyToolMigrationAutoScan_WhenEnabled_SetsSessionFlag()
         {
             // Verifies that the V2-to-V3 upgrade signal is stored only in the current Editor session.
-            SetupWizardWindow.MaybeMarkThirdPartyToolMigrationAutoScan(true);
+            SetupWizardStartupFlow.MaybeMarkThirdPartyToolMigrationAutoScan(_sessionFlagsRepository, true);
 
             Assert.That(_sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.True);
         }
@@ -197,7 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void MaybeMarkThirdPartyToolMigrationAutoScan_WhenDisabled_KeepsSessionFlagFalse()
         {
             // Verifies that non-upgrade version checks do not request migration scans.
-            SetupWizardWindow.MaybeMarkThirdPartyToolMigrationAutoScan(false);
+            SetupWizardStartupFlow.MaybeMarkThirdPartyToolMigrationAutoScan(_sessionFlagsRepository, false);
 
             Assert.That(_sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
         }
@@ -205,13 +204,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void MaybeRecordLastSeenSetupWizardState_WhenAutoShow_UpdatesStoredState()
         {
+            // Verifies that auto-show records the setup wizard version state.
             _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2",
                 lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
             });
 
-            SetupWizardWindow.MaybeRecordLastSeenSetupWizardState(true, "1.7.3", "3.0.2");
+            SetupWizardStartupFlow.MaybeRecordLastSeenSetupWizardState(
+                _editorSettingsPort,
+                true,
+                "1.7.3",
+                "3.0.2");
 
             Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
             Assert.That(
@@ -222,13 +226,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void MaybeRecordLastSeenSetupWizardState_WhenManualShow_KeepsStoredState()
         {
+            // Verifies that manual opens do not update the setup wizard version state.
             _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2",
                 lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
             });
 
-            SetupWizardWindow.MaybeRecordLastSeenSetupWizardState(false, "1.7.3", "3.0.2");
+            SetupWizardStartupFlow.MaybeRecordLastSeenSetupWizardState(
+                _editorSettingsPort,
+                false,
+                "1.7.3",
+                "3.0.2");
 
             Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
             Assert.That(
@@ -239,13 +248,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void MaybeRecordSuppressedSetupWizardState_WhenAutoShowSuppressed_UpdatesStoredState()
         {
+            // Verifies that suppressing auto-show records the current setup wizard state.
             _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2",
                 lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
             });
 
-            SetupWizardWindow.MaybeRecordSuppressedSetupWizardState(true, "1.7.3", "3.0.2");
+            SetupWizardStartupFlow.MaybeRecordSuppressedSetupWizardState(
+                _editorSettingsPort,
+                true,
+                "1.7.3",
+                "3.0.2");
 
             Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
             Assert.That(
@@ -256,13 +270,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void MaybeRecordSuppressedSetupWizardState_WhenAutoShowAllowed_KeepsStoredState()
         {
+            // Verifies that allowing auto-show leaves the stored setup wizard state unchanged.
             _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
             {
                 lastSeenSetupWizardVersion = "1.7.2",
                 lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
             });
 
-            SetupWizardWindow.MaybeRecordSuppressedSetupWizardState(false, "1.7.3", "3.0.2");
+            SetupWizardStartupFlow.MaybeRecordSuppressedSetupWizardState(
+                _editorSettingsPort,
+                false,
+                "1.7.3",
+                "3.0.2");
 
             Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
             Assert.That(

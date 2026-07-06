@@ -24,10 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const string UXML_RELATIVE_PATH = "Editor/Presentation/Setup/SetupWizardWindow.uxml";
         private const string USS_RELATIVE_PATH = "Editor/Presentation/Setup/SetupWizardWindow.uss";
         private const string GITHUB_ICON_RELATIVE_PATH = "Editor/Presentation/Setup/GitHub_Invertocat_White.png";
-        private const bool ForceFlatSkillInstall = true;
-        private static readonly char[] VersionMajorSeparators = { '.', '-' };
+        internal const bool ForceFlatSkillInstall = true;
         private static IUnityCliLoopEditorSettingsPort RegisteredEditorSettingsPort;
-        private static ISessionFlagsRepository RegisteredSessionFlagsRepository;
         private static CliSetupApplicationService RegisteredCliSetupApplicationService;
         private static SkillSetupUseCase RegisteredSkillSetupUseCase;
 
@@ -39,31 +37,33 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             InitializeEditorServices(
                 editorSettingsPort,
-                sessionFlagsRepository,
                 cliSetupApplicationService,
                 skillSetupUseCase);
 
             if (AssetDatabase.IsAssetImportWorkerProcess()) return;
             if (UnityEngine.Application.isBatchMode) return;
 
-            EditorApplication.delayCall += TryShowOnVersionChange;
+            SetupWizardStartupFlow startupFlow = new(
+                editorSettingsPort,
+                sessionFlagsRepository,
+                cliSetupApplicationService,
+                skillSetupUseCase,
+                ShowWindowOnVersionChange,
+                ThirdPartyToolMigrationWizardWindow.ShowWindowForAutoScan);
+            EditorApplication.delayCall += startupFlow.TryShowOnVersionChange;
         }
 
         internal static void InitializeEditorServices(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
-            ISessionFlagsRepository sessionFlagsRepository,
             CliSetupApplicationService cliSetupApplicationService,
             SkillSetupUseCase skillSetupUseCase)
         {
             Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
-            Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
             Debug.Assert(cliSetupApplicationService != null, "cliSetupApplicationService must not be null");
             Debug.Assert(skillSetupUseCase != null, "skillSetupUseCase must not be null");
 
             RegisteredEditorSettingsPort = editorSettingsPort
                 ?? throw new System.ArgumentNullException(nameof(editorSettingsPort));
-            RegisteredSessionFlagsRepository = sessionFlagsRepository
-                ?? throw new System.ArgumentNullException(nameof(sessionFlagsRepository));
             RegisteredCliSetupApplicationService = cliSetupApplicationService
                 ?? throw new System.ArgumentNullException(nameof(cliSetupApplicationService));
             RegisteredSkillSetupUseCase = skillSetupUseCase
@@ -74,209 +74,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         public static void ShowWindow()
         {
             ShowWindowInternal(false);
-        }
-
-        internal static bool ShouldAutoShowForVersion(
-            string currentVersion,
-            string lastSeenVersion,
-            string currentMinimumDispatcherVersion,
-            string lastSeenMinimumDispatcherVersion,
-            bool suppressAutoShow,
-            bool needsCliUpdate,
-            bool hasSkillUpdate)
-        {
-            bool versionChanged = !string.Equals(currentVersion, lastSeenVersion, System.StringComparison.Ordinal);
-            bool minimumDispatcherVersionChanged = !string.Equals(
-                currentMinimumDispatcherVersion,
-                lastSeenMinimumDispatcherVersion,
-                System.StringComparison.Ordinal);
-            if (!versionChanged && !minimumDispatcherVersionChanged) return false;
-            if (suppressAutoShow) return false;
-
-            return string.IsNullOrEmpty(lastSeenVersion)
-                || needsCliUpdate
-                || (versionChanged && hasSkillUpdate);
-        }
-
-        internal static bool ShouldAutoScanThirdPartyToolMigration(string currentVersion, string lastSeenVersion)
-        {
-            if (!TryGetMajorVersion(currentVersion, out int currentMajorVersion))
-            {
-                return false;
-            }
-
-            if (string.IsNullOrEmpty(lastSeenVersion))
-            {
-                return currentMajorVersion == 3;
-            }
-
-            if (!TryGetMajorVersion(lastSeenVersion, out int lastSeenMajorVersion))
-            {
-                return false;
-            }
-
-            return lastSeenMajorVersion < 3 && currentMajorVersion == 3;
-        }
-
-        internal static void MaybeMarkThirdPartyToolMigrationAutoScan(bool shouldAutoScan)
-        {
-            if (!shouldAutoScan)
-            {
-                return;
-            }
-
-            GetSessionFlagsRepository().SetShouldAutoScanThirdPartyToolMigration(true);
-        }
-
-        internal static void MaybeRecordLastSeenSetupWizardState(
-            bool shouldRecordState,
-            string version,
-            string minimumDispatcherVersion)
-        {
-            if (!shouldRecordState) return;
-
-            Debug.Assert(!string.IsNullOrEmpty(version), "version must not be null or empty");
-            Debug.Assert(
-                !string.IsNullOrEmpty(minimumDispatcherVersion),
-                "minimumDispatcherVersion must not be null or empty");
-
-            GetEditorSettingsPort().UpdateSettings((UnityCliLoopEditorSettingsData settings) => settings with
-            {
-                lastSeenSetupWizardVersion = version,
-                lastSeenSetupWizardMinimumDispatcherVersion = minimumDispatcherVersion
-            });
-        }
-
-        internal static void MaybeRecordSuppressedSetupWizardState(
-            bool suppressAutoShow,
-            string version,
-            string minimumDispatcherVersion)
-        {
-            if (!suppressAutoShow) return;
-
-            MaybeRecordLastSeenSetupWizardState(true, version, minimumDispatcherVersion);
-        }
-
-        private static void TryShowOnVersionChange()
-        {
-            EvaluateVersionChange(CancellationToken.None);
-        }
-
-        private static async void EvaluateVersionChange(CancellationToken ct)
-        {
-            string currentVersion = UnityCliLoopConstants.PackageInfo.version;
-            string currentMinimumDispatcherVersion = GetMinimumRequiredCliVersion();
-            IUnityCliLoopEditorSettingsPort editorSettingsPort = GetEditorSettingsPort();
-            UnityCliLoopEditorSettingsData settings = editorSettingsPort.GetSettings();
-            bool suppressAutoShow = settings.suppressSetupWizardAutoShow;
-            string lastSeenVersion = settings.lastSeenSetupWizardVersion ?? string.Empty;
-            string lastSeenMinimumDispatcherVersion =
-                settings.lastSeenSetupWizardMinimumDispatcherVersion ?? string.Empty;
-            if (ct.IsCancellationRequested)
-            {
-                return;
-            }
-
-            bool shouldAutoScanThirdPartyToolMigration = ShouldAutoScanThirdPartyToolMigration(
-                currentVersion,
-                lastSeenVersion);
-            MaybeScheduleThirdPartyToolMigrationAutoScan(shouldAutoScanThirdPartyToolMigration);
-
-            bool versionChanged = !string.Equals(
-                currentVersion,
-                lastSeenVersion,
-                System.StringComparison.Ordinal);
-            bool minimumDispatcherVersionChanged = !string.Equals(
-                currentMinimumDispatcherVersion,
-                lastSeenMinimumDispatcherVersion,
-                System.StringComparison.Ordinal);
-            if (suppressAutoShow)
-            {
-                MaybeRecordSuppressedSetupWizardState(
-                    suppressAutoShow,
-                    currentVersion,
-                    currentMinimumDispatcherVersion);
-                return;
-            }
-
-            if (!versionChanged && !minimumDispatcherVersionChanged)
-            {
-                return;
-            }
-
-            bool needsCliUpdate = false;
-            bool hasSkillUpdate = false;
-            if (!string.IsNullOrEmpty(lastSeenVersion))
-            {
-                needsCliUpdate = await NeedsCliUpdateForSetupWizardAsync(ct);
-                if (ct.IsCancellationRequested)
-                {
-                    return;
-                }
-
-                if (versionChanged && !needsCliUpdate)
-                {
-                    hasSkillUpdate = await HasSkillUpdateForSetupWizardAsync(ct);
-                    if (ct.IsCancellationRequested)
-                    {
-                        return;
-                    }
-                }
-            }
-
-            bool shouldAutoShow = ShouldAutoShowForVersion(
-                currentVersion,
-                lastSeenVersion,
-                currentMinimumDispatcherVersion,
-                lastSeenMinimumDispatcherVersion,
-                suppressAutoShow,
-                needsCliUpdate,
-                hasSkillUpdate);
-
-            if (!shouldAutoShow)
-            {
-                MaybeRecordLastSeenSetupWizardState(
-                    true,
-                    currentVersion,
-                    currentMinimumDispatcherVersion);
-                return;
-            }
-
-            EditorApplication.delayCall += ShowWindowOnVersionChange;
-        }
-
-        private static async Task<bool> NeedsCliUpdateForSetupWizardAsync(CancellationToken ct)
-        {
-            CliSetupApplicationService cliSetupApplicationService = GetCliSetupApplicationService();
-            await cliSetupApplicationService.ForceRefreshCliVersionAsync(ct);
-            string cliVersion = cliSetupApplicationService.GetCachedCliVersion();
-            bool cliIsDispatcher = cliSetupApplicationService.GetCachedCliIsDispatcher();
-            if (string.IsNullOrEmpty(cliVersion))
-            {
-                return false;
-            }
-
-            CliSetupCompatibilityState state = EvaluateCliSetupCompatibilityForSetupWizard(
-                cliVersion,
-                cliIsDispatcher);
-            return state.NeedsUpdate;
-        }
-
-        private static async Task<bool> HasSkillUpdateForSetupWizardAsync(CancellationToken ct)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            SkillSetupUseCase skillSetupUseCase = GetSkillSetupUseCase();
-            List<SkillSetupTargetInfo> targets = await Task.Run(
-                () => skillSetupUseCase.DetectSkillTargetsForLayoutAtProjectRoot(
-                    projectRoot,
-                    !ForceFlatSkillInstall),
-                ct);
-            if (ct.IsCancellationRequested)
-            {
-                return false;
-            }
-
-            return HasSkillUpdateForSetupWizard(targets);
         }
 
         private static void ShowWindowOnVersionChange()
@@ -334,7 +131,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 !string.IsNullOrEmpty(currentMinimumDispatcherVersion),
                 "currentMinimumDispatcherVersion must not be null or empty");
             focusExistingWindow();
-            MaybeRecordLastSeenSetupWizardState(
+            SetupWizardStartupFlow.MaybeRecordLastSeenSetupWizardState(
+                GetEditorSettingsPort(),
                 shouldRecordVersion,
                 currentVersion,
                 currentMinimumDispatcherVersion);
@@ -373,16 +171,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return RegisteredEditorSettingsPort;
         }
 
-        private static ISessionFlagsRepository GetSessionFlagsRepository()
-        {
-            if (RegisteredSessionFlagsRepository == null)
-            {
-                throw new System.InvalidOperationException("Setup Wizard session flags repository is not initialized.");
-            }
-
-            return RegisteredSessionFlagsRepository;
-        }
-
         private static CliSetupApplicationService GetCliSetupApplicationService()
         {
             if (RegisteredCliSetupApplicationService == null)
@@ -402,30 +190,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             return RegisteredSkillSetupUseCase;
-        }
-
-        private static void MaybeScheduleThirdPartyToolMigrationAutoScan(bool shouldAutoScan)
-        {
-            MaybeMarkThirdPartyToolMigrationAutoScan(shouldAutoScan);
-            if (!shouldAutoScan)
-            {
-                return;
-            }
-
-            EditorApplication.delayCall += ThirdPartyToolMigrationWizardWindow.ShowWindowForAutoScan;
-        }
-
-        private static bool TryGetMajorVersion(string version, out int majorVersion)
-        {
-            majorVersion = 0;
-            if (string.IsNullOrWhiteSpace(version))
-            {
-                return false;
-            }
-
-            int separatorIndex = version.IndexOfAny(VersionMajorSeparators);
-            string majorText = separatorIndex < 0 ? version : version.Substring(0, separatorIndex);
-            return int.TryParse(majorText, out majorVersion);
         }
 
         // Prerequisite
@@ -507,7 +271,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void RecordLastSeenSetupWizardStateAfterSuccessfulCreateGui()
         {
-            MaybeRecordLastSeenSetupWizardState(
+            SetupWizardStartupFlow.MaybeRecordLastSeenSetupWizardState(
+                _editorSettingsPort,
                 _shouldRecordLastSeenVersionAfterCreateGui,
                 UnityCliLoopConstants.PackageInfo.version,
                 GetMinimumRequiredCliVersion());
@@ -789,16 +554,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return targets
                 .Where(target => target.HasSkillsDirectory)
                 .ToList();
-        }
-
-        internal static bool HasSkillUpdateForSetupWizard(
-            IEnumerable<SkillSetupTargetInfo> targets)
-        {
-            Debug.Assert(targets != null, "targets must not be null");
-            return targets.Any(
-                target => target.HasSkillsDirectory
-                    && (target.InstallState == SkillInstallState.Outdated
-                        || target.HasDifferentLayoutSkills));
         }
 
         internal static bool ShouldShowSkillsInstalledDialog(
@@ -1380,7 +1135,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void HandleSuppressAutoShowChanged(bool suppressAutoShow)
         {
             _editorSettingsPort.SetSuppressSetupWizardAutoShow(suppressAutoShow);
-            MaybeRecordSuppressedSetupWizardState(
+            SetupWizardStartupFlow.MaybeRecordSuppressedSetupWizardState(
+                _editorSettingsPort,
                 suppressAutoShow,
                 UnityCliLoopConstants.PackageInfo.version,
                 GetMinimumRequiredCliVersion());
