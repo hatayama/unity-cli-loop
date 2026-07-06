@@ -2,6 +2,7 @@ using System;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -20,9 +21,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                    commandName == UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS;
         }
 
-        public static UnityCliLoopToolResponse Execute(string commandName, JToken paramsToken)
+        public static UnityCliLoopToolResponse Execute(
+            string commandName,
+            JToken paramsToken,
+            UnityCliLoopToolRegistrarService toolRegistrarService)
         {
             Debug.Assert(IsInternalCommand(commandName), $"Unknown internal bridge command: {commandName}");
+            Debug.Assert(toolRegistrarService != null, "toolRegistrarService must not be null");
 
             if (commandName == UnityCliLoopConstants.COMMAND_NAME_GET_VERSION)
             {
@@ -31,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (commandName == UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS)
             {
-                return GetToolDetailsBridgeCommand.Execute(paramsToken);
+                return GetToolDetailsBridgeCommand.Execute(paramsToken, toolRegistrarService);
             }
 
             if (commandName == UnityCliLoopConstants.COMMAND_NAME_GET_COMPILE_STATUS)

@@ -303,7 +303,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ExecuteCommandAsync_WhenCommandIsGetVersion_ReturnsBridgeVersionPayload()
         {
             // Tests that get-version still works as a CLI-only bridge command after leaving the tool registry.
-            UnityCliLoopToolResponse response = await UnityApiHandler.ExecuteCommandAsync(
+            UnityCliLoopExecutionRouter executionRouter = CreateExecutionRouter();
+
+            UnityCliLoopToolResponse response = await executionRouter.ExecuteAsync(
                 UnityCliLoopConstants.COMMAND_NAME_GET_VERSION,
                 new JObject(),
                 CancellationToken.None);
@@ -327,7 +329,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ExecuteCommandAsync_WhenCommandIsGetToolDetails_ReturnsCatalogWithoutInternalCommands()
         {
             // Tests that CLI catalog access still works without registering the catalog command as a tool.
-            UnityCliLoopToolResponse response = await UnityApiHandler.ExecuteCommandAsync(
+            UnityCliLoopExecutionRouter executionRouter = CreateExecutionRouter();
+
+            UnityCliLoopToolResponse response = await executionRouter.ExecuteAsync(
                 UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS,
                 new JObject(),
                 CancellationToken.None);
@@ -354,7 +358,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ExecuteCommandAsync_WhenCommandIsGetCompileStatus_ReturnsBridgeStatusPayload()
         {
             // Tests that compile status polling routes as a CLI-only bridge command, not a public tool.
-            UnityCliLoopToolResponse response = await UnityApiHandler.ExecuteCommandAsync(
+            UnityCliLoopExecutionRouter executionRouter = CreateExecutionRouter();
+
+            UnityCliLoopToolResponse response = await executionRouter.ExecuteAsync(
                 UnityCliLoopConstants.COMMAND_NAME_GET_COMPILE_STATUS,
                 new JObject(),
                 CancellationToken.None);
@@ -454,12 +460,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that extension-facing static registrar APIs still delegate to the shared registry.
             UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
-            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
-            UnityCliLoopToolRegistrarService service = new(
-                new EmptyInternalToolNameProvider(),
-                toolSettingsPort,
-                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
-                UnityCliLoopToolDiscovery.DiscoverTools);
+            UnityCliLoopToolRegistrarService service =
+                UnityCliLoopToolRegistrarTestFactory.Create(UnityCliLoopToolDiscovery.DiscoverTools);
             ManualRegistrationTool tool = new();
 
             ApplicationRegistrar.RegisterService(service);
@@ -481,6 +483,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 ApplicationRegistrar.RegisterService(previousService);
             }
+        }
+
+        private static UnityCliLoopExecutionRouter CreateExecutionRouter()
+        {
+            UnityCliLoopToolRegistrarService toolRegistrarService =
+                UnityCliLoopToolRegistrarTestFactory.Create(UnityCliLoopToolDiscovery.DiscoverTools);
+            return new UnityCliLoopExecutionRouter(toolRegistrarService);
         }
 
         [Test]

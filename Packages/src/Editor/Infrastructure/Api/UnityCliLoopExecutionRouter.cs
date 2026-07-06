@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
@@ -5,23 +6,26 @@ using Newtonsoft.Json.Linq;
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
-using ApplicationRegistrar = io.github.hatayama.UnityCliLoop.Application.UnityCliLoopToolRegistrar;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
 
     /// <summary>
-    /// Routes JSON-RPC execution requests received by JsonRpcProcessor to either the
+    /// Routes JSON-RPC execution requests received by JsonRpcRequestProcessor to either the
     /// internal bridge command router or the registered tools in the Application layer.
     /// Terminology for "tool" vs "internal bridge command" is defined in docs/glossary.md.
     /// </summary>
-    public static class UnityApiHandler
+    internal sealed class UnityCliLoopExecutionRouter
     {
-        /// <summary>
-        /// Get command registry
-        /// Use this registry when adding new commands
-        /// </summary>
-        public static UnityCliLoopToolRegistry CommandRegistry => ApplicationRegistrar.GetRegistry();
+        private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
+
+        internal UnityCliLoopExecutionRouter(UnityCliLoopToolRegistrarService toolRegistrarService)
+        {
+            System.Diagnostics.Debug.Assert(toolRegistrarService != null, "toolRegistrarService must not be null");
+
+            _toolRegistrarService = toolRegistrarService
+                ?? throw new ArgumentNullException(nameof(toolRegistrarService));
+        }
 
         /// <summary>
         /// Generic command execution method
@@ -30,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <param name="commandName">Command name</param>
         /// <param name="paramsToken">Parameters</param>
         /// <returns>Execution result</returns>
-        public static async Task<UnityCliLoopToolResponse> ExecuteCommandAsync(
+        public async Task<UnityCliLoopToolResponse> ExecuteAsync(
             string commandName,
             JToken paramsToken,
             CancellationToken ct)
@@ -40,11 +44,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 await MainThreadSwitcher.SwitchToMainThread(ct);
                 ct.ThrowIfCancellationRequested();
-                response = InternalBridgeCommandRouter.Execute(commandName, paramsToken);
+                response = InternalBridgeCommandRouter.Execute(commandName, paramsToken, _toolRegistrarService);
                 return response;
             }
 
-            response = await ApplicationRegistrar.ExecuteToolAsync(
+            response = await _toolRegistrarService.ExecuteToolAsync(
                 commandName,
                 paramsToken,
                 ct);
