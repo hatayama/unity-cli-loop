@@ -323,9 +323,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task RestoreServerStateIfNeeded_WhenStartupProtectionActiveWithoutServer_ShouldCompleteWithoutRecovery()
+        public void RestoreServerStateIfNeeded_WhenStartupProtectionActiveWithoutServer_ShouldSurfaceRecoveryFailure()
         {
-            // Tests the current startup-only gap where protection suppresses recovery without surfacing failure.
+            // Tests that startup recovery reports failure when protection suppresses recovery without a server.
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerStartupProtectionService startupProtectionService = new();
             startupProtectionService.ActivateStartupProtection(60000);
@@ -333,8 +333,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 serverInstanceFactory: serverInstanceFactory,
                 startupProtectionService: startupProtectionService);
 
-            await service.RestoreServerStateIfNeeded();
+            System.InvalidOperationException exception =
+                Assert.ThrowsAsync<System.InvalidOperationException>(
+                    async () => await service.RestoreServerStateIfNeeded());
 
+            Assert.That(
+                exception.Message,
+                Is.EqualTo("Unity CLI Loop server recovery finished, but no running server instance is available."));
             Assert.That(serverInstanceFactory.LastCreated, Is.Null);
         }
 
