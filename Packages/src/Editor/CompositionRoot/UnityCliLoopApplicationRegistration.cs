@@ -54,10 +54,11 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             ThirdPartyToolMigrationUseCaseRegistry.Register(
                 new ThirdPartyToolMigrationUseCase(new ThirdPartyToolMigrationFileService()));
             CliPinReaderService cliPinReaderService = new();
-            CliSetupApplicationFacade.RegisterService(new CliSetupApplicationService(
+            CliSetupApplicationService cliSetupApplicationService = new(
                 new CliInstallationDetector(cliPinReaderService),
                 new NativeCliInstallerService(),
-                cliPinReaderService));
+                cliPinReaderService);
+            CliSetupApplicationFacade.RegisterService(cliSetupApplicationService);
             UnityCliLoopBridgeServerInstanceFactory serverFactory = new(
                 domainReloadDetectionService,
                 toolRegistrarService);
@@ -103,7 +104,8 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 domainReloadDetectionService,
                 editorSettingsPort,
                 sessionFlagsRepository,
-                applicationService);
+                applicationService,
+                cliSetupApplicationService);
         }
     }
 
@@ -113,17 +115,20 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             IDomainReloadDetectionService domainReloadDetectionService,
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
-            UnityCliLoopServerApplicationService serverApplicationService)
+            UnityCliLoopServerApplicationService serverApplicationService,
+            CliSetupApplicationService cliSetupApplicationService)
         {
             DomainReloadDetectionService = domainReloadDetectionService;
             EditorSettingsPort = editorSettingsPort;
             SessionFlagsRepository = sessionFlagsRepository;
             ServerApplicationService = serverApplicationService;
+            CliSetupApplicationService = cliSetupApplicationService;
         }
 
         internal IDomainReloadDetectionService DomainReloadDetectionService { get; }
         internal IUnityCliLoopEditorSettingsPort EditorSettingsPort { get; }
         internal ISessionFlagsRepository SessionFlagsRepository { get; }
         internal UnityCliLoopServerApplicationService ServerApplicationService { get; }
+        internal CliSetupApplicationService CliSetupApplicationService { get; }
     }
 }

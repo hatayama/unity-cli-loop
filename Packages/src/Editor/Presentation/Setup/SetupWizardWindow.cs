@@ -30,12 +30,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static readonly Vector2 MinimumWindowSize = new(360f, 380f);
         private static IUnityCliLoopEditorSettingsPort RegisteredEditorSettingsPort;
         private static ISessionFlagsRepository RegisteredSessionFlagsRepository;
+        private static CliSetupApplicationService RegisteredCliSetupApplicationService;
 
         internal static void InitializeForEditorStartup(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
-            ISessionFlagsRepository sessionFlagsRepository)
+            ISessionFlagsRepository sessionFlagsRepository,
+            CliSetupApplicationService cliSetupApplicationService)
         {
-            InitializeEditorServices(editorSettingsPort, sessionFlagsRepository);
+            InitializeEditorServices(
+                editorSettingsPort,
+                sessionFlagsRepository,
+                cliSetupApplicationService);
 
             if (AssetDatabase.IsAssetImportWorkerProcess()) return;
             if (UnityEngine.Application.isBatchMode) return;
@@ -45,15 +50,19 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static void InitializeEditorServices(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
-            ISessionFlagsRepository sessionFlagsRepository)
+            ISessionFlagsRepository sessionFlagsRepository,
+            CliSetupApplicationService cliSetupApplicationService)
         {
             Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
             Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
+            Debug.Assert(cliSetupApplicationService != null, "cliSetupApplicationService must not be null");
 
             RegisteredEditorSettingsPort = editorSettingsPort
                 ?? throw new System.ArgumentNullException(nameof(editorSettingsPort));
             RegisteredSessionFlagsRepository = sessionFlagsRepository
                 ?? throw new System.ArgumentNullException(nameof(sessionFlagsRepository));
+            RegisteredCliSetupApplicationService = cliSetupApplicationService
+                ?? throw new System.ArgumentNullException(nameof(cliSetupApplicationService));
         }
 
         [MenuItem("Window/Unity CLI Loop/Setup Wizard", priority = 3)]
@@ -381,6 +390,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return RegisteredSessionFlagsRepository;
         }
 
+        private static CliSetupApplicationService GetCliSetupApplicationService()
+        {
+            if (RegisteredCliSetupApplicationService == null)
+            {
+                throw new System.InvalidOperationException(
+                    "Setup Wizard CLI setup application service is not initialized.");
+            }
+
+            return RegisteredCliSetupApplicationService;
+        }
+
         private static void MaybeScheduleThirdPartyToolMigrationAutoScan(bool shouldAutoScan)
         {
             MaybeMarkThirdPartyToolMigrationAutoScan(shouldAutoScan);
@@ -453,6 +473,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private SkillSetupUseCase _skillSetupUseCase;
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
+        private CliSetupApplicationService _cliSetupApplicationService;
 
         private void CreateGUI()
         {
@@ -472,6 +493,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
             _editorSettingsPort = GetEditorSettingsPort();
+            _cliSetupApplicationService = GetCliSetupApplicationService();
+            Debug.Assert(
+                _cliSetupApplicationService != null,
+                "_cliSetupApplicationService must not be null");
         }
 
         private void InitializeFirstInstallSkillsUiState()

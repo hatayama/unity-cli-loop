@@ -11,15 +11,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static void Initialize(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
-            UnityCliLoopServerApplicationService serverApplicationService)
+            UnityCliLoopServerApplicationService serverApplicationService,
+            CliSetupApplicationService cliSetupApplicationService)
         {
             UnityCliLoopSettingsWindow.InitializeEditorServices(
                 editorSettingsPort,
                 sessionFlagsRepository,
-                serverApplicationService);
+                serverApplicationService,
+                cliSetupApplicationService);
             ServerEditorWindow.InitializeEditorServices(serverApplicationService);
             ThirdPartyToolMigrationWizardWindow.InitializeEditorServices(sessionFlagsRepository);
-            SetupWizardWindow.InitializeForEditorStartup(editorSettingsPort, sessionFlagsRepository);
+            SetupWizardWindow.InitializeForEditorStartup(
+                editorSettingsPort,
+                sessionFlagsRepository,
+                cliSetupApplicationService);
         }
     }
 }
