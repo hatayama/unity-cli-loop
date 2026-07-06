@@ -31,16 +31,19 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static IUnityCliLoopEditorSettingsPort RegisteredEditorSettingsPort;
         private static ISessionFlagsRepository RegisteredSessionFlagsRepository;
         private static CliSetupApplicationService RegisteredCliSetupApplicationService;
+        private static SkillSetupUseCase RegisteredSkillSetupUseCase;
 
         internal static void InitializeForEditorStartup(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
-            CliSetupApplicationService cliSetupApplicationService)
+            CliSetupApplicationService cliSetupApplicationService,
+            SkillSetupUseCase skillSetupUseCase)
         {
             InitializeEditorServices(
                 editorSettingsPort,
                 sessionFlagsRepository,
-                cliSetupApplicationService);
+                cliSetupApplicationService,
+                skillSetupUseCase);
 
             if (AssetDatabase.IsAssetImportWorkerProcess()) return;
             if (UnityEngine.Application.isBatchMode) return;
@@ -51,11 +54,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static void InitializeEditorServices(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
-            CliSetupApplicationService cliSetupApplicationService)
+            CliSetupApplicationService cliSetupApplicationService,
+            SkillSetupUseCase skillSetupUseCase)
         {
             Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
             Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
             Debug.Assert(cliSetupApplicationService != null, "cliSetupApplicationService must not be null");
+            Debug.Assert(skillSetupUseCase != null, "skillSetupUseCase must not be null");
 
             RegisteredEditorSettingsPort = editorSettingsPort
                 ?? throw new System.ArgumentNullException(nameof(editorSettingsPort));
@@ -63,6 +68,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new System.ArgumentNullException(nameof(sessionFlagsRepository));
             RegisteredCliSetupApplicationService = cliSetupApplicationService
                 ?? throw new System.ArgumentNullException(nameof(cliSetupApplicationService));
+            RegisteredSkillSetupUseCase = skillSetupUseCase
+                ?? throw new System.ArgumentNullException(nameof(skillSetupUseCase));
         }
 
         [MenuItem("Window/Unity CLI Loop/Setup Wizard", priority = 3)]
@@ -260,7 +267,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static async Task<bool> HasSkillUpdateForSetupWizardAsync(CancellationToken ct)
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            SkillSetupUseCase skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
+            SkillSetupUseCase skillSetupUseCase = GetSkillSetupUseCase();
             List<SkillSetupTargetInfo> targets = await Task.Run(
                 () => skillSetupUseCase.DetectSkillTargetsForLayoutAtProjectRoot(
                     projectRoot,
@@ -402,6 +409,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return RegisteredCliSetupApplicationService;
         }
 
+        private static SkillSetupUseCase GetSkillSetupUseCase()
+        {
+            if (RegisteredSkillSetupUseCase == null)
+            {
+                throw new System.InvalidOperationException("Setup Wizard skill setup use case is not initialized.");
+            }
+
+            return RegisteredSkillSetupUseCase;
+        }
+
         private static void MaybeScheduleThirdPartyToolMigrationAutoScan(bool shouldAutoScan)
         {
             MaybeMarkThirdPartyToolMigrationAutoScan(shouldAutoScan);
@@ -492,7 +509,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void InitializeApplicationServices()
         {
-            _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
+            _skillSetupUseCase = GetSkillSetupUseCase();
             _editorSettingsPort = GetEditorSettingsPort();
             _cliSetupApplicationService = GetCliSetupApplicationService();
         }

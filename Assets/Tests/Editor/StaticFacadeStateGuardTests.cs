@@ -17,7 +17,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static readonly string[] MigratedFacadePaths = new string[]
         {
             "Packages/src/Editor/Application/CliSetupApplicationService.cs",
-            "Packages/src/Editor/Application/UseCases/SkillSetupUseCaseRegistry.cs",
             "Packages/src/Editor/Application/UnityCliLoopToolRegistrar.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCodeServices.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/Execution/DynamicCodeForegroundWarmupState.cs",

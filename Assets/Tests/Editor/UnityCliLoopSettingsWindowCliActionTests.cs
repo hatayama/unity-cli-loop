@@ -5,6 +5,7 @@ using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.Presentation;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -200,7 +201,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new CliSetupApplicationService(
                     new CliInstallationDetector(cliPinReader),
                     new NativeCliInstallerService(),
-                    cliPinReader));
+                    cliPinReader),
+                CreateToolSettingsUseCase(),
+                CreateSkillSetupUseCase());
+        }
+
+        private static ToolSettingsUseCase CreateToolSettingsUseCase()
+        {
+            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
+            UnityCliLoopToolRegistrarService toolRegistrarService =
+                UnityCliLoopToolRegistrarTestFactory.Create(() => System.Array.Empty<IUnityCliLoopTool>());
+            return new ToolSettingsUseCase(
+                toolSettingsPort,
+                toolRegistrarService,
+                new SkillInstallLayoutToolSkillDescriptionProvider());
+        }
+
+        private static SkillSetupUseCase CreateSkillSetupUseCase()
+        {
+            return new SkillSetupUseCase(new ToolSkillSetupService(new ToolSettingsRepository()));
         }
 
         private sealed class TestCliPinReader : ICliPinReader

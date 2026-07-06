@@ -27,6 +27,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static ISessionFlagsRepository RegisteredSessionFlagsRepository;
         private static UnityCliLoopServerApplicationService RegisteredServerApplicationService;
         private static CliSetupApplicationService RegisteredCliSetupApplicationService;
+        private static ToolSettingsUseCase RegisteredToolSettingsUseCase;
+        private static SkillSetupUseCase RegisteredSkillSetupUseCase;
 
         private UnityCliLoopSettingsWindowUI _view;
         private UnityCliLoopSettingsModel _model;
@@ -66,7 +68,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
             UnityCliLoopServerApplicationService serverApplicationService,
-            CliSetupApplicationService cliSetupApplicationService)
+            CliSetupApplicationService cliSetupApplicationService,
+            ToolSettingsUseCase toolSettingsUseCase,
+            SkillSetupUseCase skillSetupUseCase)
         {
             System.Diagnostics.Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
             System.Diagnostics.Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
@@ -76,6 +80,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             System.Diagnostics.Debug.Assert(
                 cliSetupApplicationService != null,
                 "cliSetupApplicationService must not be null");
+            System.Diagnostics.Debug.Assert(toolSettingsUseCase != null, "toolSettingsUseCase must not be null");
+            System.Diagnostics.Debug.Assert(skillSetupUseCase != null, "skillSetupUseCase must not be null");
 
             RegisteredEditorSettingsPort = editorSettingsPort
                 ?? throw new ArgumentNullException(nameof(editorSettingsPort));
@@ -85,6 +91,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new ArgumentNullException(nameof(serverApplicationService));
             RegisteredCliSetupApplicationService = cliSetupApplicationService
                 ?? throw new ArgumentNullException(nameof(cliSetupApplicationService));
+            RegisteredToolSettingsUseCase = toolSettingsUseCase
+                ?? throw new ArgumentNullException(nameof(toolSettingsUseCase));
+            RegisteredSkillSetupUseCase = skillSetupUseCase
+                ?? throw new ArgumentNullException(nameof(skillSetupUseCase));
         }
 
         private void OnEnable()
@@ -128,8 +138,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void InitializeApplicationServices()
         {
-            _skillSetupUseCase = SkillSetupUseCaseRegistry.GetRegisteredUseCase();
-            _toolSettingsUseCase = ToolSettingsUseCaseRegistry.GetRegisteredUseCase();
+            _skillSetupUseCase = GetSkillSetupUseCase();
+            _toolSettingsUseCase = GetToolSettingsUseCase();
             _editorSettingsPort = GetEditorSettingsPort();
             _sessionFlagsRepository = GetSessionFlagsRepository();
             _serverApplicationService = GetServerApplicationService();
@@ -1115,6 +1125,26 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             return RegisteredCliSetupApplicationService;
+        }
+
+        private static ToolSettingsUseCase GetToolSettingsUseCase()
+        {
+            if (RegisteredToolSettingsUseCase == null)
+            {
+                throw new InvalidOperationException("Unity CLI Loop tool settings use case is not registered.");
+            }
+
+            return RegisteredToolSettingsUseCase;
+        }
+
+        private static SkillSetupUseCase GetSkillSetupUseCase()
+        {
+            if (RegisteredSkillSetupUseCase == null)
+            {
+                throw new InvalidOperationException("Unity CLI Loop skill setup use case is not registered.");
+            }
+
+            return RegisteredSkillSetupUseCase;
         }
 
         private void HandleRefreshSkillsState()

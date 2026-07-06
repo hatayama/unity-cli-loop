@@ -33,7 +33,10 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 applicationServices.EditorSettingsPort,
                 applicationServices.SessionFlagsRepository,
                 applicationServices.ServerApplicationService,
-                applicationServices.CliSetupApplicationService);
+                applicationServices.CliSetupApplicationService,
+                applicationServices.ToolSettingsUseCase,
+                applicationServices.SkillSetupUseCase,
+                applicationServices.ThirdPartyToolMigrationUseCase);
         }
     }
 }
