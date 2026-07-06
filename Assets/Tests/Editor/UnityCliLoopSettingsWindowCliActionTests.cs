@@ -1,11 +1,8 @@
 using NUnit.Framework;
 using UnityEngine;
 
-using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
-using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.Presentation;
-using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -14,21 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class UnityCliLoopSettingsWindowCliActionTests
     {
-        private const string TestProjectRunnerVersion = "3.0.0";
         private const string TestMinimumDispatcherVersion = "3.0.0";
-
-        [SetUp]
-        public void SetUp()
-        {
-            RegisterCliSetupService(new TestCliPinReader(TestMinimumDispatcherVersion));
-        }
-
-        [TearDown]
-        public void TearDown()
-        {
-            CliPinReaderService cliPinReaderService = new();
-            RegisterCliSetupService(cliPinReaderService);
-        }
 
         [TestCase(null, false, true, false)]
         [TestCase("2.9.0", false, true, false)]
@@ -47,7 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool result = UnityCliLoopSettingsWindow.ShouldUninstallCliFromPrimaryButton(
                 cliVersion,
                 cliIsDispatcher,
-                canUninstallCli);
+                canUninstallCli,
+                TestMinimumDispatcherVersion);
 
             Assert.That(result, Is.EqualTo(expected));
         }
@@ -90,7 +74,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     needsCliPathSetup,
                     cliVersion,
                     cliIsDispatcher,
-                    canUninstallCli);
+                    canUninstallCli,
+                    TestMinimumDispatcherVersion);
 
             Assert.That(result.ToString(), Is.EqualTo(expected));
         }
@@ -146,7 +131,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool expected)
         {
             // Verifies that the settings UI updates non-dispatcher or older dispatcher installs.
-            bool result = UnityCliLoopSettingsWindow.IsCliUpdateNeeded(cliVersion, cliIsDispatcher);
+            bool result = UnityCliLoopSettingsWindow.IsCliUpdateNeeded(
+                cliVersion,
+                cliIsDispatcher,
+                TestMinimumDispatcherVersion);
 
             Assert.That(result, Is.EqualTo(expected));
         }
@@ -185,93 +173,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             return (CliSetupPrimaryAction)
                 System.Enum.Parse(typeof(CliSetupPrimaryAction), action);
-        }
-
-        private static void RegisterCliSetupService(ICliPinReader cliPinReader)
-        {
-            IUnityCliLoopEditorSettingsPort editorSettingsPort =
-                UnityCliLoopEditorSettingsTestFactory.CreatePortWithRepository(
-                    out UnityCliLoopEditorSettingsRepository _);
-            ISessionFlagsRepository sessionFlagsRepository =
-                UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
-            UnityCliLoopSettingsWindow.InitializeEditorServices(
-                editorSettingsPort,
-                sessionFlagsRepository,
-                new UnityCliLoopServerApplicationService(new TestServerController()),
-                new CliSetupApplicationService(
-                    new CliInstallationDetector(cliPinReader),
-                    new NativeCliInstallerService(),
-                    cliPinReader),
-                CreateToolSettingsUseCase(),
-                CreateSkillSetupUseCase());
-        }
-
-        private static ToolSettingsUseCase CreateToolSettingsUseCase()
-        {
-            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
-            UnityCliLoopToolRegistrarService toolRegistrarService =
-                UnityCliLoopToolRegistrarTestFactory.Create(() => System.Array.Empty<IUnityCliLoopTool>());
-            return new ToolSettingsUseCase(
-                toolSettingsPort,
-                toolRegistrarService,
-                new SkillInstallLayoutToolSkillDescriptionProvider());
-        }
-
-        private static SkillSetupUseCase CreateSkillSetupUseCase()
-        {
-            return new SkillSetupUseCase(new ToolSkillSetupService(new ToolSettingsRepository()));
-        }
-
-        private sealed class TestCliPinReader : ICliPinReader
-        {
-            private readonly string _minimumDispatcherVersion;
-
-            public TestCliPinReader(string minimumDispatcherVersion)
-            {
-                _minimumDispatcherVersion = minimumDispatcherVersion;
-            }
-
-            public CliPinLoadResult LoadPackagePin()
-            {
-                return CliPinLoadResult.FromSuccess(
-                    new CliPin(TestProjectRunnerVersion, _minimumDispatcherVersion));
-            }
-
-            public string LoadMinimumDispatcherVersionOrThrow()
-            {
-                return _minimumDispatcherVersion;
-            }
-        }
-
-        private sealed class TestServerController : IUnityCliLoopServerController
-        {
-            public bool IsServerRunning => false;
-
-            public System.Threading.Tasks.Task RecoveryTask => System.Threading.Tasks.Task.CompletedTask;
-
-            public void StartServer()
-            {
-            }
-
-            public void StopServer()
-            {
-            }
-
-            public void AddServerStateChangedHandler(System.Action handler)
-            {
-            }
-
-            public void RemoveServerStateChangedHandler(System.Action handler)
-            {
-            }
-
-            public void AddServerStartedHandler(System.Action handler)
-            {
-            }
-
-            public void RemoveServerStartedHandler(System.Action handler)
-            {
-            }
         }
     }
 }
