@@ -357,6 +357,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ProcessRequest_WhenCompileReloadWaitIsNotBoolean_KeepsAcceptedRequestAliveAfterDisconnect()
+        {
+            // Verifies malformed compile reload-wait params preserve the default wait contract.
+            UnityCliLoopToolRegistrarService previousService = ApplicationRegistrar.Service;
+            IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
+            UnityCliLoopToolRegistrarService service = new(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsPort,
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
+                UnityCliLoopToolDiscovery.DiscoverTools);
+            ApplicationRegistrar.RegisterService(service);
+            service.RegisterCustomTool(new CompileDispatchPolicyTestTool());
+
+            bool cancelOnClientDisconnect = true;
+            try
+            {
+                string response = await JsonRpcProcessor.ProcessRequestWithEarlyResponseAsync(
+                    BuildToolRequestWithParams(
+                        UnityCliLoopConstants.TOOL_NAME_COMPILE,
+                        "{\"WaitForDomainReload\":\"false\"}",
+                        1),
+                    CancellationToken.None,
+                    (_, shouldCancelOnClientDisconnect, _) =>
+                    {
+                        cancelOnClientDisconnect = shouldCancelOnClientDisconnect;
+                        return Task.CompletedTask;
+                    });
+                JObject parsed = JObject.Parse(response);
+
+                Assert.That(parsed["error"], Is.Null);
+                Assert.That(parsed["result"], Is.Not.Null);
+                Assert.That(cancelOnClientDisconnect, Is.False);
+            }
+            finally
+            {
+                ApplicationRegistrar.RegisterService(previousService);
+            }
+        }
+
+        [Test]
         public async Task ProcessRequest_WhenCompileDoesNotWaitForDomainReload_CancelsOnClientDisconnect()
         {
             // Verifies fire-and-forget compile requests still cancel when the CLI connection goes away.
