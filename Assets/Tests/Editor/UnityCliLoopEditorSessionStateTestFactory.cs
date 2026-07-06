@@ -11,15 +11,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         internal static UnityCliLoopEditorSessionStateService CreateService()
         {
             return new UnityCliLoopEditorSessionStateService(
-                new UnityCliLoopEditorSessionStateRepository(),
+                CreateSessionFlagsRepository(),
                 new UnityCliLoopCompileResultSessionRepository(),
                 new UnityCliLoopPendingCompileSessionRepository());
+        }
+
+        internal static UnityCliLoopSessionFlagsRepository CreateSessionFlagsRepository()
+        {
+            return new UnityCliLoopSessionFlagsRepository();
+        }
+
+        internal static void ClearAll()
+        {
+            UnityCliLoopSessionFlagsRepository sessionFlagsRepository = CreateSessionFlagsRepository();
+            UnityCliLoopEditorSessionStateService service = CreateService();
+
+            sessionFlagsRepository.ClearServerSession();
+            sessionFlagsRepository.ClearDomainReloadRecoveryFlags();
+            sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(false);
+            sessionFlagsRepository.SetIsServerManuallyStopped(false);
+            service.ClearCompileResult();
+            service.ClearPendingCompileRequest();
         }
 
         internal static UnityCliLoopEditorSessionStateSnapshot CaptureSnapshot(
             UnityCliLoopEditorSessionStateService service)
         {
-            return UnityCliLoopEditorSessionStateSnapshot.Capture(service);
+            return UnityCliLoopEditorSessionStateSnapshot.Capture(CreateSessionFlagsRepository(), service);
         }
     }
 
@@ -39,36 +57,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private readonly UnityCliLoopStoredCompileResult[] _compileResults;
         private readonly UnityCliLoopPendingCompileRequest[] _pendingCompileRequests;
 
-        private UnityCliLoopEditorSessionStateSnapshot(UnityCliLoopEditorSessionStateService service)
+        private UnityCliLoopEditorSessionStateSnapshot(
+            UnityCliLoopSessionFlagsRepository sessionFlagsRepository,
+            UnityCliLoopEditorSessionStateService service)
         {
-            _isServerRunning = service.GetIsServerRunning();
-            _isServerManuallyStopped = service.GetIsServerManuallyStopped();
-            _isAfterCompile = service.GetIsAfterCompile();
-            _isDomainReloadInProgress = service.GetIsDomainReloadInProgress();
-            _isReconnecting = service.GetIsReconnecting();
-            _showReconnectingUI = service.GetShowReconnectingUI();
-            _showPostCompileReconnectingUI = service.GetShowPostCompileReconnectingUI();
-            _shouldAutoScanThirdPartyToolMigration = service.GetShouldAutoScanThirdPartyToolMigration();
+            _isServerRunning = sessionFlagsRepository.GetIsServerRunning();
+            _isServerManuallyStopped = sessionFlagsRepository.GetIsServerManuallyStopped();
+            _isAfterCompile = sessionFlagsRepository.GetIsAfterCompile();
+            _isDomainReloadInProgress = sessionFlagsRepository.GetIsDomainReloadInProgress();
+            _isReconnecting = sessionFlagsRepository.GetIsReconnecting();
+            _showReconnectingUI = sessionFlagsRepository.GetShowReconnectingUI();
+            _showPostCompileReconnectingUI = sessionFlagsRepository.GetShowPostCompileReconnectingUI();
+            _shouldAutoScanThirdPartyToolMigration =
+                sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration();
             _compileResults = service.GetStoredCompileResults();
             _pendingCompileRequests = service.GetPendingCompileRequests();
         }
 
         internal static UnityCliLoopEditorSessionStateSnapshot Capture(
+            UnityCliLoopSessionFlagsRepository sessionFlagsRepository,
             UnityCliLoopEditorSessionStateService service)
         {
-            return new UnityCliLoopEditorSessionStateSnapshot(service);
+            return new UnityCliLoopEditorSessionStateSnapshot(sessionFlagsRepository, service);
         }
 
         internal void Restore(UnityCliLoopEditorSessionStateService service)
         {
-            service.SetIsServerRunning(_isServerRunning);
-            service.SetIsServerManuallyStopped(_isServerManuallyStopped);
-            service.SetIsAfterCompile(_isAfterCompile);
-            service.SetIsDomainReloadInProgress(_isDomainReloadInProgress);
-            service.SetIsReconnecting(_isReconnecting);
-            service.SetShowReconnectingUI(_showReconnectingUI);
-            service.SetShowPostCompileReconnectingUI(_showPostCompileReconnectingUI);
-            service.SetShouldAutoScanThirdPartyToolMigration(_shouldAutoScanThirdPartyToolMigration);
+            UnityCliLoopSessionFlagsRepository sessionFlagsRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
+            sessionFlagsRepository.SetIsServerRunning(_isServerRunning);
+            sessionFlagsRepository.SetIsServerManuallyStopped(_isServerManuallyStopped);
+            sessionFlagsRepository.SetIsAfterCompile(_isAfterCompile);
+            sessionFlagsRepository.SetIsDomainReloadInProgress(_isDomainReloadInProgress);
+            sessionFlagsRepository.SetIsReconnecting(_isReconnecting);
+            sessionFlagsRepository.SetShowReconnectingUI(_showReconnectingUI);
+            sessionFlagsRepository.SetShowPostCompileReconnectingUI(_showPostCompileReconnectingUI);
+            sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(
+                _shouldAutoScanThirdPartyToolMigration);
             service.ClearCompileResult();
             foreach (UnityCliLoopStoredCompileResult compileResult in _compileResults)
             {

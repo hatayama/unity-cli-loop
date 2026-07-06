@@ -9,17 +9,17 @@ namespace io.github.hatayama.UnityCliLoop.Application
     public class UnityCliLoopServerStartupService
     {
         private readonly IUnityCliLoopServerInstanceFactory _serverInstanceFactory;
-        private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
+        private readonly ISessionFlagsRepository _sessionFlagsRepository;
 
         public UnityCliLoopServerStartupService(
             IUnityCliLoopServerInstanceFactory serverInstanceFactory,
-            UnityCliLoopEditorSessionStateService sessionStateService)
+            ISessionFlagsRepository sessionFlagsRepository)
         {
             System.Diagnostics.Debug.Assert(serverInstanceFactory != null, "serverInstanceFactory must not be null");
-            System.Diagnostics.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+            System.Diagnostics.Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
 
             _serverInstanceFactory = serverInstanceFactory ?? throw new System.ArgumentNullException(nameof(serverInstanceFactory));
-            _sessionStateService = sessionStateService ?? throw new System.ArgumentNullException(nameof(sessionStateService));
+            _sessionFlagsRepository = sessionFlagsRepository ?? throw new System.ArgumentNullException(nameof(sessionFlagsRepository));
         }
 
         public ServiceResult<IUnityCliLoopServerInstance> StartServer()
@@ -61,11 +61,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             if (!isRunning)
             {
-                _sessionStateService.ClearServerSession();
+                _sessionFlagsRepository.ClearServerSession();
                 return ServiceResult<bool>.SuccessResult(true);
             }
 
-            _sessionStateService.MarkServerStarted();
+            _sessionFlagsRepository.MarkServerStarted();
             return ServiceResult<bool>.SuccessResult(true);
         }
     }

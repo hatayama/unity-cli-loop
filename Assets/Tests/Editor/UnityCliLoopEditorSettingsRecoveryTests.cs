@@ -34,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private string _tempFileContent;
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private UnityCliLoopEditorSettingsRepository _editorSettingsRepository;
+        private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
         private UnityCliLoopEditorSessionStateService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
 
@@ -64,9 +65,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _editorSettingsPort =
                 UnityCliLoopEditorSettingsTestFactory.CreatePortWithRepository(out _editorSettingsRepository);
             _editorSettingsRepository.InvalidateCache();
+            _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
             _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
-            _sessionStateService.ClearAll();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
         }
 
         [TearDown]
@@ -296,12 +298,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopServerStartupService service =
                 new UnityCliLoopServerStartupService(
                     new TestServerInstanceFactory(),
-                    _sessionStateService);
+                    _sessionFlagsRepository);
 
             ServiceResult<bool> result = service.UpdateSessionState(true);
 
             Assert.IsTrue(result.Success, "Session update should succeed");
-            Assert.IsTrue(_sessionStateService.GetIsServerRunning(), "Server running state should be kept for this Editor session");
+            Assert.IsTrue(_sessionFlagsRepository.GetIsServerRunning(), "Server running state should be kept for this Editor session");
             string savedJson = File.ReadAllText(SettingsFilePath);
             StringAssert.DoesNotContain("isServerRunning", savedJson);
             StringAssert.DoesNotContain("projectRootPath", savedJson);

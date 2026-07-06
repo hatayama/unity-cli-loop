@@ -25,10 +25,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopEditorSessionStateService sessionStateService =
                 UnityCliLoopEditorSessionStateFacade.Service;
             sessionStateService.ClearExpiredCompileResult(DateTime.UtcNow);
+            ISessionFlagsRepository sessionFlagsRepository =
+                UnityCliLoopSessionFlagsFacade.Repository;
             bool isCompiling = EditorApplication.isCompiling;
             bool isUpdating = EditorApplication.isUpdating;
             bool isDomainReloadInProgress =
-                sessionStateService.GetIsDomainReloadInProgress() ||
+                sessionFlagsRepository.GetIsDomainReloadInProgress() ||
                 DomainReloadStateRegistry.IsDomainReloadInProgress();
             GetCompileStatusResponse response = BuildResponse(
                 requestId,

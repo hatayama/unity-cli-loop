@@ -15,6 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public class DomainReloadRecoveryUseCaseTests
     {
+        private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
         private UnityCliLoopEditorSessionStateService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
         private IDomainReloadDetectionService _domainReloadDetectionService;
@@ -22,10 +23,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [SetUp]
         public void SetUp()
         {
+            _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
             _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
-            _sessionStateService.ClearAll();
-            _domainReloadDetectionService = new DomainReloadDetectionFileService(_sessionStateService);
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(
+                _sessionFlagsRepository,
+                new UnityCliLoopPendingCompileSessionRepository(),
+                _sessionStateService);
         }
 
         [TearDown]
@@ -38,51 +43,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ExecuteBeforeDomainReload_ShouldUseSessionState_WhenServerInstanceIsNull()
         {
             // Arrange
-            _sessionStateService.SetIsServerRunning(true);
+            _sessionFlagsRepository.SetIsServerRunning(true);
 
             DomainReloadRecoveryUseCase useCase = CreateUseCase(
                 _domainReloadDetectionService,
-                _sessionStateService);
+                _sessionFlagsRepository);
 
             // Act
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(null);
 
             // Assert
             Assert.IsTrue(result.Success, "ExecuteBeforeDomainReload should succeed");
-            Assert.IsTrue(_sessionStateService.GetIsAfterCompile(), "IsAfterCompile should be set to true");
+            Assert.IsTrue(_sessionFlagsRepository.GetIsAfterCompile(), "IsAfterCompile should be set to true");
         }
 
         [Test]
         public void ExecuteBeforeDomainReload_ShouldNotSaveState_WhenBothInstanceAndSessionAreNotRunning()
         {
             // Arrange
-            _sessionStateService.SetIsServerRunning(false);
-            _sessionStateService.SetIsAfterCompile(false);
+            _sessionFlagsRepository.SetIsServerRunning(false);
+            _sessionFlagsRepository.SetIsAfterCompile(false);
 
             DomainReloadRecoveryUseCase useCase = CreateUseCase(
                 _domainReloadDetectionService,
-                _sessionStateService);
+                _sessionFlagsRepository);
 
             // Act
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(null);
 
             // Assert
             Assert.IsTrue(result.Success, "ExecuteBeforeDomainReload should succeed");
-            Assert.IsFalse(_sessionStateService.GetIsAfterCompile(), "IsAfterCompile should remain false when server was not running");
+            Assert.IsFalse(_sessionFlagsRepository.GetIsAfterCompile(), "IsAfterCompile should remain false when server was not running");
         }
 
         [Test]
         public void ExecuteBeforeDomainReload_ShouldPreferInstanceState_WhenInstanceIsRunning()
         {
             // Arrange
-            _sessionStateService.SetIsServerRunning(true);
+            _sessionFlagsRepository.SetIsServerRunning(true);
 
             TestServerInstance server = new TestServerInstance();
             server.StartServer();
 
             DomainReloadRecoveryUseCase useCase = CreateUseCase(
                 _domainReloadDetectionService,
-                _sessionStateService);
+                _sessionFlagsRepository);
 
             // Act
             ServiceResult<string> result = useCase.ExecuteBeforeDomainReload(server);
@@ -98,13 +103,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task RestoreServerStateIfNeededAsync_WhenRecoveryDoesNotStartServer_ShouldFail()
         {
             // Verifies that recovery is only reported as successful after a running server instance exists.
-            _sessionStateService.SetIsServerRunning(true);
-            _sessionStateService.SetIsAfterCompile(false);
+            _sessionFlagsRepository.SetIsServerRunning(true);
+            _sessionFlagsRepository.SetIsAfterCompile(false);
             TestRecoveryCoordinator recoveryCoordinator = new();
             SessionRecoveryService service = new(
                 recoveryCoordinator,
                 _domainReloadDetectionService,
-                _sessionStateService);
+                _sessionFlagsRepository);
 
             ValidationResult result = await service.RestoreServerStateIfNeededAsync(CancellationToken.None);
 
@@ -118,13 +123,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task RestoreServerStateIfNeededAsync_WhenNoServerWasRunning_ShouldStillStartRecovery()
         {
             // Verifies launch-time reload recovery starts the server even when no previous bridge session existed.
-            _sessionStateService.SetIsServerRunning(false);
-            _sessionStateService.SetIsAfterCompile(false);
+            _sessionFlagsRepository.SetIsServerRunning(false);
+            _sessionFlagsRepository.SetIsAfterCompile(false);
             TestRecoveryCoordinator recoveryCoordinator = new(recoverServer: true);
             SessionRecoveryService service = new(
                 recoveryCoordinator,
                 _domainReloadDetectionService,
-                _sessionStateService);
+                _sessionFlagsRepository);
 
             ValidationResult result = await service.RestoreServerStateIfNeededAsync(CancellationToken.None);
 
@@ -136,12 +141,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task RestoreServerStateIfNeededAsync_WhenServerWasManuallyStopped_ShouldSkipRecovery()
         {
             // Verifies explicit Stop Server is preserved across Domain Reload.
-            _sessionStateService.MarkServerManuallyStopped();
+            _sessionFlagsRepository.MarkServerManuallyStopped();
             TestRecoveryCoordinator recoveryCoordinator = new(recoverServer: true);
             SessionRecoveryService service = new(
                 recoveryCoordinator,
                 _domainReloadDetectionService,
-                _sessionStateService);
+                _sessionFlagsRepository);
 
             ValidationResult result = await service.RestoreServerStateIfNeededAsync(CancellationToken.None);
 
@@ -151,18 +156,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static DomainReloadRecoveryUseCase CreateUseCase(
             IDomainReloadDetectionService domainReloadDetectionService,
-            UnityCliLoopEditorSessionStateService sessionStateService)
+            ISessionFlagsRepository sessionFlagsRepository)
         {
             TestRecoveryCoordinator recoveryCoordinator = new();
             SessionRecoveryService sessionRecoveryService =
                 new SessionRecoveryService(
                     recoveryCoordinator,
                     domainReloadDetectionService,
-                    sessionStateService);
+                    sessionFlagsRepository);
             return new DomainReloadRecoveryUseCase(
                 sessionRecoveryService,
                 domainReloadDetectionService,
-                sessionStateService);
+                sessionFlagsRepository);
         }
 
         /// <summary>

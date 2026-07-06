@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static readonly string SettingsFilePath =
             Path.Combine(UnityCliLoopConstants.USER_SETTINGS_FOLDER, UnityCliLoopConstants.SETTINGS_FILE_NAME);
 
+        private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
         private UnityCliLoopEditorSessionStateService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
         private IDomainReloadDetectionService _domainReloadDetectionService;
@@ -34,10 +35,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             DeleteIfExists(SettingsFilePath);
+            _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
             _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
-            _sessionStateService.ClearAll();
-            _domainReloadDetectionService = new DomainReloadDetectionFileService(_sessionStateService);
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+            _domainReloadDetectionService = new DomainReloadDetectionFileService(
+                _sessionFlagsRepository,
+                new UnityCliLoopPendingCompileSessionRepository(),
+                _sessionStateService);
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(false);
         }
 
@@ -58,22 +63,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             _domainReloadDetectionService.StartDomainReload(correlationId, true);
 
-            Assert.That(_sessionStateService.GetIsServerRunning(), Is.True);
-            Assert.That(_sessionStateService.GetIsAfterCompile(), Is.True);
-            Assert.That(_sessionStateService.GetIsDomainReloadInProgress(), Is.True);
-            Assert.That(_sessionStateService.GetIsReconnecting(), Is.True);
-            Assert.That(_sessionStateService.GetShowReconnectingUI(), Is.True);
-            Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetIsServerRunning(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetIsAfterCompile(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetIsDomainReloadInProgress(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetIsReconnecting(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetShowReconnectingUI(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetShowPostCompileReconnectingUI(), Is.True);
             Assert.That(provider.IsDomainReloadInProgress(), Is.True);
 
             _domainReloadDetectionService.RollbackDomainReloadStart(correlationId);
 
-            Assert.That(_sessionStateService.GetIsServerRunning(), Is.True);
-            Assert.That(_sessionStateService.GetIsAfterCompile(), Is.False);
-            Assert.That(_sessionStateService.GetIsDomainReloadInProgress(), Is.False);
-            Assert.That(_sessionStateService.GetIsReconnecting(), Is.False);
-            Assert.That(_sessionStateService.GetShowReconnectingUI(), Is.False);
-            Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsServerRunning(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetIsAfterCompile(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsDomainReloadInProgress(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsReconnecting(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetShowReconnectingUI(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetShowPostCompileReconnectingUI(), Is.False);
             Assert.That(provider.IsDomainReloadInProgress(), Is.False);
         }
 
@@ -89,17 +94,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 showReconnectingUI: true,
                 showPostCompileReconnectingUI: true);
             _domainReloadDetectionService = new DomainReloadDetectionFileService(
+                _sessionFlagsRepository,
+                new UnityCliLoopPendingCompileSessionRepository(),
                 _sessionStateService,
                 new TestLegacySessionStateReader(legacySessionState));
 
             _domainReloadDetectionService.CompleteDomainReload("test-correlation");
 
-            Assert.That(_sessionStateService.GetIsServerRunning(), Is.True);
-            Assert.That(_sessionStateService.GetIsAfterCompile(), Is.True);
-            Assert.That(_sessionStateService.GetIsDomainReloadInProgress(), Is.False);
-            Assert.That(_sessionStateService.GetIsReconnecting(), Is.True);
-            Assert.That(_sessionStateService.GetShowReconnectingUI(), Is.True);
-            Assert.That(_sessionStateService.GetShowPostCompileReconnectingUI(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetIsServerRunning(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetIsAfterCompile(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetIsDomainReloadInProgress(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsReconnecting(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetShowReconnectingUI(), Is.True);
+            Assert.That(_sessionFlagsRepository.GetShowPostCompileReconnectingUI(), Is.True);
         }
 
         [Test]
@@ -114,12 +121,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 showReconnectingUI: false,
                 showPostCompileReconnectingUI: false);
             _domainReloadDetectionService = new DomainReloadDetectionFileService(
+                _sessionFlagsRepository,
+                new UnityCliLoopPendingCompileSessionRepository(),
                 _sessionStateService,
                 new TestLegacySessionStateReader(legacySessionState));
 
             _domainReloadDetectionService.CompleteDomainReload("test-correlation");
 
-            Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsServerRunning(), Is.False);
         }
 
         [Test]
@@ -137,17 +146,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "\"showPostCompileReconnectingUI\":true" +
                 "}");
             _domainReloadDetectionService = new DomainReloadDetectionFileService(
+                _sessionFlagsRepository,
+                new UnityCliLoopPendingCompileSessionRepository(),
                 _sessionStateService,
                 new UnityCliLoopEditorLegacySessionStateReader());
 
             _domainReloadDetectionService.CompleteDomainReload("first-correlation");
-            _sessionStateService.ClearAll();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
 
             _domainReloadDetectionService.CompleteDomainReload("second-correlation");
 
-            Assert.That(_sessionStateService.GetIsServerRunning(), Is.False);
-            Assert.That(_sessionStateService.GetIsAfterCompile(), Is.False);
-            Assert.That(_sessionStateService.GetIsReconnecting(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsServerRunning(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsAfterCompile(), Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsReconnecting(), Is.False);
         }
 
         private static void RestoreFile(string path, bool existed, string content)

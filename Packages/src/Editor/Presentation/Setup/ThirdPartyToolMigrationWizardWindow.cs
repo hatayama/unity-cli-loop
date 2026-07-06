@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ThirdPartyToolMigrationWizardWindowResizer.InitialWindowSize;
         private static readonly Vector2 MinimumWindowSize =
             ThirdPartyToolMigrationWizardWindowResizer.MinimumWindowSize;
-        private static UnityCliLoopEditorSessionStateService RegisteredSessionStateService;
+        private static ISessionFlagsRepository RegisteredSessionFlagsRepository;
 
         [SerializeField]
         private bool _shouldRefreshAfterCreateGui;
@@ -37,12 +37,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private ThirdPartyToolMigrationWizardView _view;
         private ThirdPartyToolMigrationWizardWindowResizer _resizer;
 
-        internal static void InitializeEditorServices(UnityCliLoopEditorSessionStateService sessionStateService)
+        internal static void InitializeEditorServices(ISessionFlagsRepository sessionFlagsRepository)
         {
-            Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+            Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
 
-            RegisteredSessionStateService = sessionStateService
-                ?? throw new System.ArgumentNullException(nameof(sessionStateService));
+            RegisteredSessionFlagsRepository = sessionFlagsRepository
+                ?? throw new System.ArgumentNullException(nameof(sessionFlagsRepository));
         }
 
         [MenuItem("Window/Unity CLI Loop/Custom Tool Migration", priority = 4)]
@@ -125,7 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private static void ConsumeAutoScanSessionState()
         {
-            GetSessionStateService().ConsumeShouldAutoScanThirdPartyToolMigration();
+            GetSessionFlagsRepository().ConsumeShouldAutoScanThirdPartyToolMigration();
         }
 
         private static void LogAutoScanException(System.Exception ex)
@@ -300,15 +300,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             window.ScheduleResizeToContent();
         }
 
-        private static UnityCliLoopEditorSessionStateService GetSessionStateService()
+        private static ISessionFlagsRepository GetSessionFlagsRepository()
         {
-            if (RegisteredSessionStateService == null)
+            if (RegisteredSessionFlagsRepository == null)
             {
                 throw new System.InvalidOperationException(
-                    "Migration Wizard session-state service is not initialized.");
+                    "Migration Wizard session flags repository is not initialized.");
             }
 
-            return RegisteredSessionStateService;
+            return RegisteredSessionFlagsRepository;
         }
 
         private static void FocusExistingWindow(bool shouldRefreshAfterCreateGui)
@@ -631,7 +631,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             _shouldRefreshAfterCreateGui = false;
             bool shouldAutoScanThirdPartyToolMigration =
-                GetSessionStateService().ConsumeShouldAutoScanThirdPartyToolMigration();
+                GetSessionFlagsRepository().ConsumeShouldAutoScanThirdPartyToolMigration();
             return ShouldStartInitialRefresh(true, shouldAutoScanThirdPartyToolMigration);
         }
 

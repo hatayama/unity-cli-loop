@@ -23,47 +23,47 @@ namespace io.github.hatayama.UnityCliLoop.Application
     {
         private readonly IUnityCliLoopServerRecoveryCoordinator _recoveryCoordinator;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
-        private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
+        private readonly ISessionFlagsRepository _sessionFlagsRepository;
 
         public SessionRecoveryService(
             IUnityCliLoopServerRecoveryCoordinator recoveryCoordinator,
             IDomainReloadDetectionService domainReloadDetectionService,
-            UnityCliLoopEditorSessionStateService sessionStateService)
+            ISessionFlagsRepository sessionFlagsRepository)
         {
             System.Diagnostics.Debug.Assert(recoveryCoordinator != null, "recoveryCoordinator must not be null");
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
-            System.Diagnostics.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+            System.Diagnostics.Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
 
             _recoveryCoordinator = recoveryCoordinator
                 ?? throw new System.ArgumentNullException(nameof(recoveryCoordinator));
             _domainReloadDetectionService = domainReloadDetectionService
                 ?? throw new System.ArgumentNullException(nameof(domainReloadDetectionService));
-            _sessionStateService = sessionStateService
-                ?? throw new System.ArgumentNullException(nameof(sessionStateService));
+            _sessionFlagsRepository = sessionFlagsRepository
+                ?? throw new System.ArgumentNullException(nameof(sessionFlagsRepository));
         }
 
         public async Task<ValidationResult> RestoreServerStateIfNeededAsync(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
 
-            bool isAfterCompile = _sessionStateService.GetIsAfterCompile();
+            bool isAfterCompile = _sessionFlagsRepository.GetIsAfterCompile();
 
             IUnityCliLoopServerInstance currentServer = _recoveryCoordinator.CurrentServer;
             if (currentServer?.IsRunning == true)
             {
                 if (isAfterCompile)
                 {
-                    _sessionStateService.ClearAfterCompileFlag();
+                    _sessionFlagsRepository.ClearAfterCompileFlag();
                 }
                 return ValidationResult.Success();
             }
 
             if (isAfterCompile)
             {
-                _sessionStateService.ClearAfterCompileFlag();
+                _sessionFlagsRepository.ClearAfterCompileFlag();
             }
 
-            if (_sessionStateService.GetIsServerManuallyStopped())
+            if (_sessionFlagsRepository.GetIsServerManuallyStopped())
             {
                 return ValidationResult.Success();
             }
@@ -85,10 +85,10 @@ namespace io.github.hatayama.UnityCliLoop.Application
             await TimerDelay.Wait(timeoutMilliseconds, ct);
             ct.ThrowIfCancellationRequested();
 
-            bool isStillShowingUI = _sessionStateService.GetShowReconnectingUI();
+            bool isStillShowingUI = _sessionFlagsRepository.GetShowReconnectingUI();
             if (isStillShowingUI)
             {
-                _sessionStateService.ClearReconnectingFlags();
+                _sessionFlagsRepository.ClearReconnectingFlags();
             }
         }
     }
