@@ -23,6 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static readonly Vector2 MinimumWindowSize =
             ThirdPartyToolMigrationWizardWindowResizer.MinimumWindowSize;
         private static ISessionFlagsRepository RegisteredSessionFlagsRepository;
+        private static SkillSetupUseCase RegisteredSkillSetupUseCase;
+        private static ThirdPartyToolMigrationUseCase RegisteredThirdPartyToolMigrationUseCase;
 
         [SerializeField]
         private bool _shouldRefreshAfterCreateGui;
@@ -37,12 +39,23 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private ThirdPartyToolMigrationWizardView _view;
         private ThirdPartyToolMigrationWizardWindowResizer _resizer;
 
-        internal static void InitializeEditorServices(ISessionFlagsRepository sessionFlagsRepository)
+        internal static void InitializeEditorServices(
+            ISessionFlagsRepository sessionFlagsRepository,
+            SkillSetupUseCase skillSetupUseCase,
+            ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase)
         {
             Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
+            Debug.Assert(skillSetupUseCase != null, "skillSetupUseCase must not be null");
+            Debug.Assert(
+                thirdPartyToolMigrationUseCase != null,
+                "thirdPartyToolMigrationUseCase must not be null");
 
             RegisteredSessionFlagsRepository = sessionFlagsRepository
                 ?? throw new System.ArgumentNullException(nameof(sessionFlagsRepository));
+            RegisteredSkillSetupUseCase = skillSetupUseCase
+                ?? throw new System.ArgumentNullException(nameof(skillSetupUseCase));
+            RegisteredThirdPartyToolMigrationUseCase = thirdPartyToolMigrationUseCase
+                ?? throw new System.ArgumentNullException(nameof(thirdPartyToolMigrationUseCase));
         }
 
         [MenuItem("Window/Unity CLI Loop/Custom Tool Migration", priority = 4)]

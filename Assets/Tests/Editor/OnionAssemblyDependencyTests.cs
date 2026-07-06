@@ -900,7 +900,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 presentationStartupSource,
-                Does.Contain("ThirdPartyToolMigrationWizardWindow.InitializeEditorServices(sessionFlagsRepository);"));
+                Does.Contain("ThirdPartyToolMigrationWizardWindow.InitializeEditorServices("));
             Assert.That(
                 presentationStartupSource,
                 Does.Not.Contain("ThirdPartyToolMigrationWizardWindow.InitializeForEditorStartup"));

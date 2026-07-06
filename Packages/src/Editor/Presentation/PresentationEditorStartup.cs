@@ -12,19 +12,28 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
             UnityCliLoopServerApplicationService serverApplicationService,
-            CliSetupApplicationService cliSetupApplicationService)
+            CliSetupApplicationService cliSetupApplicationService,
+            ToolSettingsUseCase toolSettingsUseCase,
+            SkillSetupUseCase skillSetupUseCase,
+            ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase)
         {
             UnityCliLoopSettingsWindow.InitializeEditorServices(
                 editorSettingsPort,
                 sessionFlagsRepository,
                 serverApplicationService,
-                cliSetupApplicationService);
+                cliSetupApplicationService,
+                toolSettingsUseCase,
+                skillSetupUseCase);
             ServerEditorWindow.InitializeEditorServices(serverApplicationService);
-            ThirdPartyToolMigrationWizardWindow.InitializeEditorServices(sessionFlagsRepository);
+            ThirdPartyToolMigrationWizardWindow.InitializeEditorServices(
+                sessionFlagsRepository,
+                skillSetupUseCase,
+                thirdPartyToolMigrationUseCase);
             SetupWizardWindow.InitializeForEditorStartup(
                 editorSettingsPort,
                 sessionFlagsRepository,
-                cliSetupApplicationService);
+                cliSetupApplicationService,
+                skillSetupUseCase);
         }
     }
 }

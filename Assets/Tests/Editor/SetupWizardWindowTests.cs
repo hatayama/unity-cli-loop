@@ -49,7 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SetupWizardWindow.InitializeEditorServices(
                 _editorSettingsPort,
                 _sessionFlagsRepository,
-                CreateCliSetupApplicationService());
+                CreateCliSetupApplicationService(),
+                CreateSkillSetupUseCase());
             _editorSettingsRepository.InvalidateCache();
         }
 
@@ -950,6 +951,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new CliInstallationDetector(cliPinReaderService),
                 new NativeCliInstallerService(),
                 cliPinReaderService);
+        }
+
+        private static SkillSetupUseCase CreateSkillSetupUseCase()
+        {
+            return new SkillSetupUseCase(new ToolSkillSetupService(new ToolSettingsRepository()));
         }
     }
 }
