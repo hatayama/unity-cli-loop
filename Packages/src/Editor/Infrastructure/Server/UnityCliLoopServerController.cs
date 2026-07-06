@@ -34,11 +34,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly DomainReloadRecoveryUseCase _domainReloadRecoveryUseCase;
         private readonly UnityCliLoopServerReadinessService _readinessService;
         private readonly UnityCliLoopServerStartupProtectionService _startupProtectionService;
+        private readonly UnityCliLoopServerRecoveryTrackingService _recoveryTrackingService;
         private readonly IUnityCliLoopServerDomainReloadLifecycle _domainReloadLifecycle;
-        private readonly Func<int, CancellationToken, Task> _waitBeforeRecoveryRetryAsync;
         private IUnityCliLoopServerInstance _bridgeServer;
         private readonly SemaphoreSlim _startupSemaphore = new SemaphoreSlim(1, 1);
-        private Task _currentRecoveryTask;
 
         internal UnityCliLoopServerControllerService(
             IUnityCliLoopServerInstanceFactory serverInstanceFactory,
@@ -50,8 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             DomainReloadRecoveryUseCase domainReloadRecoveryUseCase,
             UnityCliLoopServerReadinessService readinessService,
             UnityCliLoopServerStartupProtectionService startupProtectionService,
-            IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle,
-            Func<int, CancellationToken, Task> waitBeforeRecoveryRetryAsync = null)
+            UnityCliLoopServerRecoveryTrackingService recoveryTrackingService,
+            IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle)
         {
             System.Diagnostics.Debug.Assert(serverInstanceFactory != null, "serverInstanceFactory must not be null");
             System.Diagnostics.Debug.Assert(serverLifecycleRegistry != null, "serverLifecycleRegistry must not be null");
@@ -62,6 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             System.Diagnostics.Debug.Assert(domainReloadRecoveryUseCase != null, "domainReloadRecoveryUseCase must not be null");
             System.Diagnostics.Debug.Assert(readinessService != null, "readinessService must not be null");
             System.Diagnostics.Debug.Assert(startupProtectionService != null, "startupProtectionService must not be null");
+            System.Diagnostics.Debug.Assert(recoveryTrackingService != null, "recoveryTrackingService must not be null");
             System.Diagnostics.Debug.Assert(domainReloadLifecycle != null, "domainReloadLifecycle must not be null");
 
             _serverInstanceFactory = serverInstanceFactory ?? throw new ArgumentNullException(nameof(serverInstanceFactory));
@@ -73,8 +73,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _domainReloadRecoveryUseCase = domainReloadRecoveryUseCase ?? throw new ArgumentNullException(nameof(domainReloadRecoveryUseCase));
             _readinessService = readinessService ?? throw new ArgumentNullException(nameof(readinessService));
             _startupProtectionService = startupProtectionService ?? throw new ArgumentNullException(nameof(startupProtectionService));
+            _recoveryTrackingService = recoveryTrackingService ?? throw new ArgumentNullException(nameof(recoveryTrackingService));
             _domainReloadLifecycle = domainReloadLifecycle ?? throw new ArgumentNullException(nameof(domainReloadLifecycle));
-            _waitBeforeRecoveryRetryAsync = waitBeforeRecoveryRetryAsync ?? TimerDelay.Wait;
         }
 
         private bool IsBackgroundUnityProcess()
@@ -104,7 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <summary>
         /// Current recovery task. Can be awaited by other components to ensure recovery completes first.
         /// </summary>
-        public Task RecoveryTask => _currentRecoveryTask;
+        public Task RecoveryTask => _recoveryTrackingService.RecoveryTask;
 
         public void InitializeForEditorStartup()
         {
@@ -132,73 +132,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             // Recovery binds the project IPC endpoint and may touch config files, so keep it off the
             // synchronous Editor startup path while preserving automatic startup.
-            ScheduleStartupRecovery(
+            _recoveryTrackingService.ScheduleStartupRecovery(
                 action => EditorApplication.delayCall += () => action(),
                 RestoreServerStateIfNeeded);
-        }
-
-        internal Task ScheduleStartupRecovery(
-            Action<Action> scheduleDelayCall,
-            Func<Task> restoreServerState)
-        {
-            Debug.Assert(scheduleDelayCall != null, "scheduleDelayCall must not be null");
-            Debug.Assert(restoreServerState != null, "restoreServerState must not be null");
-
-            TaskCompletionSource<bool> scheduledRecoveryCompletionSource = new();
-            _currentRecoveryTask = scheduledRecoveryCompletionSource.Task;
-
-            scheduleDelayCall(() =>
-            {
-                Task restoreTask;
-                try
-                {
-                    restoreTask = restoreServerState();
-                }
-                catch (Exception ex)
-                {
-                    CompleteScheduledStartupRecovery(Task.FromException(ex), scheduledRecoveryCompletionSource);
-                    return;
-                }
-
-                if (restoreTask.IsCompleted)
-                {
-                    CompleteScheduledStartupRecovery(restoreTask, scheduledRecoveryCompletionSource);
-                    return;
-                }
-
-                _ = restoreTask.ContinueWith(task =>
-                {
-                    CompleteScheduledStartupRecovery(task, scheduledRecoveryCompletionSource);
-                }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.FromCurrentSynchronizationContext());
-            });
-
-            return scheduledRecoveryCompletionSource.Task;
-        }
-
-        private void CompleteScheduledStartupRecovery(
-            Task restoreTask,
-            TaskCompletionSource<bool> scheduledRecoveryCompletionSource)
-        {
-            if (ReferenceEquals(_currentRecoveryTask, scheduledRecoveryCompletionSource.Task))
-            {
-                _currentRecoveryTask = null;
-            }
-
-            if (restoreTask.IsCanceled)
-            {
-                scheduledRecoveryCompletionSource.SetCanceled();
-                return;
-            }
-
-            if (restoreTask.IsFaulted)
-            {
-                VibeLogger.LogError("server_startup_restore_failed",
-                    $"Failed to restore server: {restoreTask.Exception?.GetBaseException().Message}");
-                scheduledRecoveryCompletionSource.SetException(restoreTask.Exception.GetBaseException());
-                return;
-            }
-
-            scheduledRecoveryCompletionSource.SetResult(true);
         }
 
         public void StartServer()
@@ -335,7 +271,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         private void OnAfterAssemblyReload()
         {
-            ScheduleTrackedRecovery(() => ExecuteAfterDomainReloadRecoveryAsync(CancellationToken.None));
+            _recoveryTrackingService.ScheduleTrackedRecovery(() => ExecuteAfterDomainReloadRecoveryAsync(CancellationToken.None));
         }
 
         private async Task ExecuteAfterDomainReloadRecoveryAsync(CancellationToken cancellationToken)
@@ -430,88 +366,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 // within the 5-second protection window after a successful start
                 _startupProtectionService.ClearStartupProtection();
 
-                ScheduleTrackedRecovery(() => StartRecoveryIfNeededAsync(false, CancellationToken.None));
+                _recoveryTrackingService.ScheduleTrackedRecovery(() => StartRecoveryIfNeededAsync(false, CancellationToken.None));
             };
-        }
-
-        private Task ScheduleTrackedRecovery(Func<Task> recoveryAction)
-        {
-            Debug.Assert(recoveryAction != null, "recoveryAction must not be null");
-
-            Task recoveryTask = ExecuteTrackedRecoveryAsync(recoveryAction);
-            _currentRecoveryTask = recoveryTask;
-            _ = ClearTrackedRecoveryWhenCompleteAsync(recoveryTask);
-            return recoveryTask;
-        }
-
-        /// <summary>
-        /// Runs a recovery action, retrying with backoff so one transient failure
-        /// (e.g. readiness timeout during a heavy import) does not leave the server
-        /// down until the next domain reload.
-        /// </summary>
-        internal async Task ExecuteTrackedRecoveryAsync(Func<Task> recoveryAction)
-        {
-            Debug.Assert(recoveryAction != null, "recoveryAction must not be null");
-
-            int failedAttemptCount = 0;
-            while (true)
-            {
-                try
-                {
-                    await recoveryAction();
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    if (failedAttemptCount >= UnityCliLoopServerConfig.RECOVERY_RETRY_DELAYS_MS.Length)
-                    {
-                        string message = $"Unity CLI Loop server recovery failed before the bridge became ready. {ex.GetBaseException().Message}";
-                        // Why: the thrown exception ends in an unobserved task and VibeLogger is
-                        // compiled out without ULOOP_DEBUG, so without this console entry an
-                        // unrecoverable server (uloop unreachable) would be completely silent.
-                        Debug.LogError($"[{UnityCliLoopConstants.PROJECT_NAME}] {message}");
-                        VibeLogger.LogError(
-                            "server_recovery_failed",
-                            message);
-                        _sessionFlagsRepository.ClearServerSession();
-                        throw new InvalidOperationException(message, ex);
-                    }
-
-                    int delayMilliseconds = UnityCliLoopServerConfig.RECOVERY_RETRY_DELAYS_MS[failedAttemptCount];
-                    failedAttemptCount++;
-                    VibeLogger.LogWarning(
-                        "server_recovery_retry_scheduled",
-                        $"Recovery attempt {failedAttemptCount} failed; retrying in {delayMilliseconds}ms. {ex.GetBaseException().Message}");
-                    await _waitBeforeRecoveryRetryAsync(delayMilliseconds, CancellationToken.None);
-
-                    // Why: an explicit Stop Server issued during the backoff must win over
-                    // automatic recovery, otherwise the retry would silently restart the server.
-                    if (_sessionFlagsRepository.GetIsServerManuallyStopped())
-                    {
-                        VibeLogger.LogInfo(
-                            "server_recovery_retry_abandoned",
-                            "Recovery retry abandoned because the server was manually stopped.");
-                        return;
-                    }
-                }
-            }
-        }
-
-        private async Task ClearTrackedRecoveryWhenCompleteAsync(Task recoveryTask)
-        {
-            Debug.Assert(recoveryTask != null, "recoveryTask must not be null");
-
-            try
-            {
-                await recoveryTask;
-            }
-            finally
-            {
-                if (ReferenceEquals(_currentRecoveryTask, recoveryTask))
-                {
-                    _currentRecoveryTask = null;
-                }
-            }
         }
 
         /// <summary>

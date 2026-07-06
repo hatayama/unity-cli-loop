@@ -39,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that deferred startup recovery exposes its pending task before execution.
             System.Action scheduledAction = null;
             bool recoveryExecuted = false;
-            UnityCliLoopServerControllerService service = CreateControllerService();
+            UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService();
 
             Task recoveryTask = service.ScheduleStartupRecovery(
                 action => scheduledAction = action,
@@ -66,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that synchronous startup recovery failures fault and clear the tracked task.
             System.Action scheduledAction = null;
-            UnityCliLoopServerControllerService service = CreateControllerService();
+            UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService();
 
             Task recoveryTask = service.ScheduleStartupRecovery(
                 action => scheduledAction = action,
@@ -85,7 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that asynchronous startup recovery remains pending until its restore task completes.
             System.Action scheduledAction = null;
             TaskCompletionSource<bool> recoveryCompletionSource = new();
-            UnityCliLoopServerControllerService service = CreateControllerService();
+            UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService();
 
             Task recoveryTask = service.ScheduleStartupRecovery(
                 action => scheduledAction = action,
@@ -225,8 +225,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // is retried with backoff instead of leaving the server down until the next domain reload.
             System.Collections.Generic.List<int> recordedWaits = new();
             int recoveryAttempts = 0;
-            UnityCliLoopServerControllerService service = CreateControllerService(
-                new TestReadinessProbe(),
+            UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService(
                 (delayMilliseconds, ct) =>
                 {
                     recordedWaits.Add(delayMilliseconds);
@@ -259,8 +258,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _sessionFlagsRepository.MarkServerStarted();
             System.Collections.Generic.List<int> recordedWaits = new();
             int recoveryAttempts = 0;
-            UnityCliLoopServerControllerService service = CreateControllerService(
-                new TestReadinessProbe(),
+            UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService(
                 (delayMilliseconds, ct) =>
                 {
                     recordedWaits.Add(delayMilliseconds);
@@ -291,8 +289,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that an explicit Stop Server during the retry backoff wins over automatic recovery.
             int recoveryAttempts = 0;
-            UnityCliLoopServerControllerService service = CreateControllerService(
-                new TestReadinessProbe(),
+            UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService(
                 (delayMilliseconds, ct) =>
                 {
                     _sessionFlagsRepository.MarkServerManuallyStopped();
@@ -424,6 +421,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 waitBeforeReadinessRetryAsync,
                 readinessIdleTimeoutMilliseconds);
             UnityCliLoopServerStartupProtectionService startupProtectionService = new();
+            UnityCliLoopServerRecoveryTrackingService recoveryTrackingService = CreateRecoveryTrackingService(
+                waitBeforeRecoveryRetryAsync);
             return new UnityCliLoopServerControllerService(
                 effectiveServerInstanceFactory,
                 effectiveLifecycleRegistry,
@@ -434,7 +433,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 domainReloadRecoveryUseCase,
                 readinessService,
                 startupProtectionService,
-                new TestDomainReloadLifecycle(),
+                recoveryTrackingService,
+                new TestDomainReloadLifecycle());
+        }
+
+        private UnityCliLoopServerRecoveryTrackingService CreateRecoveryTrackingService(
+            System.Func<int, CancellationToken, Task> waitBeforeRecoveryRetryAsync = null)
+        {
+            return new UnityCliLoopServerRecoveryTrackingService(
+                _sessionFlagsRepository,
                 waitBeforeRecoveryRetryAsync);
         }
 

@@ -79,6 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 lifecycleRegistry,
                 firstPartyServerLifecycle);
             UnityCliLoopServerStartupProtectionService startupProtectionService = new();
+            UnityCliLoopServerRecoveryTrackingService recoveryTrackingService = new(sessionFlagsRepository);
             UnityCliLoopServerControllerService controllerService = new(
                 serverFactory,
                 lifecycleRegistry,
@@ -89,6 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 domainReloadRecoveryUseCase,
                 serverReadinessService,
                 startupProtectionService,
+                recoveryTrackingService,
                 firstPartyServerLifecycle);
             UnityCliLoopServerApplicationService applicationService = new(controllerService);
             UnityCliLoopServerApplicationFacade.RegisterService(applicationService);
