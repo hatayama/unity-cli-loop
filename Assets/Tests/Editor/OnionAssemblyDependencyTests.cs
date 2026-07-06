@@ -726,12 +726,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ServerApplicationFacade_WhenLoaded_CompilesUnderApplicationAssembly()
+        public void ServerApplicationService_WhenLoaded_CompilesUnderApplicationAssembly()
         {
-            // Tests that Presentation sees server lifecycle through an application boundary.
-            string facadeAssemblyName = typeof(UnityCliLoopServerApplicationFacade).Assembly.GetName().Name;
+            // Tests that Presentation sees server lifecycle through an application service boundary.
+            string serviceAssemblyName = typeof(UnityCliLoopServerApplicationService).Assembly.GetName().Name;
 
-            Assert.That(facadeAssemblyName, Is.EqualTo(ApplicationAssemblyName));
+            Assert.That(serviceAssemblyName, Is.EqualTo(ApplicationAssemblyName));
         }
 
         [Test]

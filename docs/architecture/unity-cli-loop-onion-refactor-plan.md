@@ -74,6 +74,7 @@
 - Removed `uLoopMCP.Editor.Shared` as a production assembly after moving its remaining constants, logging, and domain-reload registry types into `UnityCLILoop.Application`.
 - Removed stale references to the deleted shared assembly GUID from dev and editor test asmdefs.
 - Added `UnityCliLoopServerApplicationFacade` so Presentation code observes and controls server lifecycle through Application instead of depending on server/controller internals.
+- Removed `UnityCliLoopServerApplicationFacade` in C4-6 after Presentation received `UnityCliLoopServerApplicationService` through the bootstrap service graph.
 - Added `IUnityCliLoopServerInstance` so Application use cases expose an application-owned server handle instead of returning the project IPC bridge implementation.
 - Added server instance factory and lifecycle registries in `UnityCLILoop.Application`; `UnityCLILoop.CompositionRoot.Editor` registers the concrete bridge implementation.
 - Moved project IPC implementation into `UnityCLILoop.Infrastructure`:

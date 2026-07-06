@@ -22,17 +22,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly UnityCliLoopSettingsModel _model;
         private readonly UnityCliLoopSettingsWindow _window;
         private readonly ToolSettingsUseCase _toolSettingsUseCase;
+        private readonly UnityCliLoopServerApplicationService _serverApplicationService;
 
         public UnityCliLoopSettingsWindowEventHandler(
             UnityCliLoopSettingsModel model,
             UnityCliLoopSettingsWindow window,
-            ToolSettingsUseCase toolSettingsUseCase)
+            ToolSettingsUseCase toolSettingsUseCase,
+            UnityCliLoopServerApplicationService serverApplicationService)
         {
             Debug.Assert(toolSettingsUseCase != null, "toolSettingsUseCase must not be null");
+            Debug.Assert(serverApplicationService != null, "serverApplicationService must not be null");
 
             _model = model;
             _window = window;
             _toolSettingsUseCase = toolSettingsUseCase;
+            _serverApplicationService = serverApplicationService;
         }
 
         /// <summary>
@@ -73,13 +77,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             UnsubscribeFromServerEvents();
 
-            UnityCliLoopServerApplicationFacade.AddServerStateChangedHandler(OnServerStateChanged);
+            _serverApplicationService.AddServerStateChangedHandler(OnServerStateChanged);
             _toolSettingsUseCase.AddToolsChangedHandler(OnToolsChanged);
         }
 
         private void UnsubscribeFromServerEvents()
         {
-            UnityCliLoopServerApplicationFacade.RemoveServerStateChangedHandler(OnServerStateChanged);
+            _serverApplicationService.RemoveServerStateChangedHandler(OnServerStateChanged);
             _toolSettingsUseCase.RemoveToolsChangedHandler(OnToolsChanged);
         }
 

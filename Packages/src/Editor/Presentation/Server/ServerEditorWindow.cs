@@ -19,6 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private ServerStatusSection _serverStatusSection;
         private ServerControlsSection _serverControlsSection;
         private volatile bool _needsRepaint;
+        private static UnityCliLoopServerApplicationService RegisteredServerApplicationService;
 
         [MenuItem("Window/Unity CLI Loop/Server", priority = 2)]
         public static void ShowWindow()
@@ -27,16 +28,37 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             window.Show();
         }
 
+        internal static void InitializeEditorServices(UnityCliLoopServerApplicationService serverApplicationService)
+        {
+            System.Diagnostics.Debug.Assert(
+                serverApplicationService != null,
+                "serverApplicationService must not be null");
+
+            RegisteredServerApplicationService = serverApplicationService
+                ?? throw new System.ArgumentNullException(nameof(serverApplicationService));
+        }
+
+        private static UnityCliLoopServerApplicationService GetServerApplicationService()
+        {
+            if (RegisteredServerApplicationService == null)
+            {
+                throw new System.InvalidOperationException(
+                    "Unity CLI Loop server application service is not registered.");
+            }
+
+            return RegisteredServerApplicationService;
+        }
+
         private void OnEnable()
         {
             EditorApplication.update += OnEditorUpdate;
-            UnityCliLoopServerApplicationFacade.AddServerStateChangedHandler(OnServerStateChanged);
+            GetServerApplicationService().AddServerStateChangedHandler(OnServerStateChanged);
         }
 
         private void OnDisable()
         {
             EditorApplication.update -= OnEditorUpdate;
-            UnityCliLoopServerApplicationFacade.RemoveServerStateChangedHandler(OnServerStateChanged);
+            GetServerApplicationService().RemoveServerStateChangedHandler(OnServerStateChanged);
         }
 
         private void CreateGUI()
@@ -88,7 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private ServerStatusData CreateServerStatusData()
         {
-            bool isRunning = UnityCliLoopServerApplicationFacade.IsServerRunning;
+            bool isRunning = GetServerApplicationService().IsServerRunning;
             string status = isRunning ? "Running" : "Stopped";
             Color statusColor = isRunning ? Color.green : Color.red;
 
@@ -97,15 +119,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private ServerControlsData CreateServerControlsData()
         {
-            bool isRunning = UnityCliLoopServerApplicationFacade.IsServerRunning;
+            bool isRunning = GetServerApplicationService().IsServerRunning;
             return new ServerControlsData(isRunning);
         }
 
         private void ToggleServer()
         {
-            if (UnityCliLoopServerApplicationFacade.IsServerRunning)
+            UnityCliLoopServerApplicationService serverApplicationService = GetServerApplicationService();
+            if (serverApplicationService.IsServerRunning)
             {
-                UnityCliLoopServerApplicationFacade.StopServer();
+                serverApplicationService.StopServer();
             }
             else
             {
@@ -117,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void StartServer()
         {
-            UnityCliLoopServerApplicationFacade.StartServer();
+            GetServerApplicationService().StartServer();
         }
 
         private void OnServerStateChanged()
