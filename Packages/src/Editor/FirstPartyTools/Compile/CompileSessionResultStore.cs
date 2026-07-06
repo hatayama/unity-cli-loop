@@ -3,7 +3,6 @@ using System.Diagnostics;
 using Newtonsoft.Json;
 
 using io.github.hatayama.UnityCliLoop.Domain;
-using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -34,7 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string resultJson = JsonConvert.SerializeObject(
                 result,
                 Formatting.None,
-                JsonRpcResponseSerializer.Settings);
+                UnityCliLoopJsonResponseSerializerSettings.Settings);
             UnityCliLoopStoredCompileResult previousResult =
                 compileResultRepository.GetCompileResult(requestId);
             UnityCliLoopPendingCompileRequest pendingRequest =
