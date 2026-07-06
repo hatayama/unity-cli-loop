@@ -38,6 +38,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void ThirdPartyToolMigrationPreview_WhenFilePathsIsNull_Throws()
+        {
+            // Verifies that preview snapshots fail fast when file paths are missing.
+            Assert.Throws<ArgumentNullException>(() => new ThirdPartyToolMigrationPreview(0, 0, null));
+        }
+
+        [Test]
         public void ThirdPartyToolMigrationResult_WhenInputFilePathsMutate_KeepsSnapshot()
         {
             // Verifies that result file paths cannot be changed by mutating the constructor input array.
@@ -51,6 +58,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             result.FilePaths[0] = "Assets/ChangedAgain.cs";
 
             Assert.That(result.FilePaths, Is.EqualTo(new[] { "Assets/VendorTools/HelloTool.cs" }));
+        }
+
+        [Test]
+        public void ThirdPartyToolMigrationResult_WhenFilePathsIsNull_Throws()
+        {
+            // Verifies that result snapshots fail fast when file paths are missing.
+            Assert.Throws<ArgumentNullException>(() => new ThirdPartyToolMigrationResult(0, 0, null));
         }
 
         [Test]
