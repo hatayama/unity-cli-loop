@@ -44,15 +44,14 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(toolRegistrarService);
             ToolContractsRegistrar.RegisterService(toolRegistrarService);
-            ToolSettingsUseCaseRegistry.Register(new ToolSettingsUseCase(
+            ToolSettingsUseCase toolSettingsUseCase = new(
                 toolSettingsPort,
                 toolRegistrarService,
-                new SkillInstallLayoutToolSkillDescriptionProvider()));
+                new SkillInstallLayoutToolSkillDescriptionProvider());
             ISkillSetupPort skillSetupPort = new ToolSkillSetupService(toolSettingsPort);
             SkillSetupUseCase skillSetupUseCase = new(skillSetupPort);
-            SkillSetupUseCaseRegistry.Register(skillSetupUseCase);
-            ThirdPartyToolMigrationUseCaseRegistry.Register(
-                new ThirdPartyToolMigrationUseCase(new ThirdPartyToolMigrationFileService()));
+            ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase =
+                new(new ThirdPartyToolMigrationFileService());
             CliPinReaderService cliPinReaderService = new();
             CliSetupApplicationService cliSetupApplicationService = new(
                 new CliInstallationDetector(cliPinReaderService),
@@ -104,7 +103,10 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 editorSettingsPort,
                 sessionFlagsRepository,
                 applicationService,
-                cliSetupApplicationService);
+                cliSetupApplicationService,
+                toolSettingsUseCase,
+                skillSetupUseCase,
+                thirdPartyToolMigrationUseCase);
         }
     }
 
@@ -115,13 +117,19 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
             UnityCliLoopServerApplicationService serverApplicationService,
-            CliSetupApplicationService cliSetupApplicationService)
+            CliSetupApplicationService cliSetupApplicationService,
+            ToolSettingsUseCase toolSettingsUseCase,
+            SkillSetupUseCase skillSetupUseCase,
+            ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase)
         {
             DomainReloadDetectionService = domainReloadDetectionService;
             EditorSettingsPort = editorSettingsPort;
             SessionFlagsRepository = sessionFlagsRepository;
             ServerApplicationService = serverApplicationService;
             CliSetupApplicationService = cliSetupApplicationService;
+            ToolSettingsUseCase = toolSettingsUseCase;
+            SkillSetupUseCase = skillSetupUseCase;
+            ThirdPartyToolMigrationUseCase = thirdPartyToolMigrationUseCase;
         }
 
         internal IDomainReloadDetectionService DomainReloadDetectionService { get; }
@@ -129,5 +137,8 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
         internal ISessionFlagsRepository SessionFlagsRepository { get; }
         internal UnityCliLoopServerApplicationService ServerApplicationService { get; }
         internal CliSetupApplicationService CliSetupApplicationService { get; }
+        internal ToolSettingsUseCase ToolSettingsUseCase { get; }
+        internal SkillSetupUseCase SkillSetupUseCase { get; }
+        internal ThirdPartyToolMigrationUseCase ThirdPartyToolMigrationUseCase { get; }
     }
 }
