@@ -50,8 +50,6 @@ using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimin
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationToolContractDetectionRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTypeReplacementRules;
 
-using io.github.hatayama.UnityCliLoop.Domain;
-
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     internal static class ThirdPartyToolMigrationDetectionRules

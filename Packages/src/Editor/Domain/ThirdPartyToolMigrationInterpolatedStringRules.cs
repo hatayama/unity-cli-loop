@@ -5,7 +5,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     /// <summary>
     /// Finds literal boundaries inside regular interpolated strings used by migration argument parsing.
     /// </summary>
-    public static class ThirdPartyToolMigrationInterpolatedStringRules
+    internal static class ThirdPartyToolMigrationInterpolatedStringRules
     {
         public static int FindRegularInterpolatedStringEndIndex(string source, int startIndex)
         {

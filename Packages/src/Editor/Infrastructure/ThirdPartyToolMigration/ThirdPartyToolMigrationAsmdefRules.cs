@@ -15,6 +15,7 @@ using TypeReplacementRule = io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToo
 using LegacyPlayerLoopTimingParameterDeclaration = io.github.hatayama.UnityCliLoop.Domain.LegacyPlayerLoopTimingParameterDeclaration;
 using RemovedLegacyPlayerLoopTimingParameter = io.github.hatayama.UnityCliLoop.Domain.RemovedLegacyPlayerLoopTimingParameter;
 using RemovedLegacyPlayerLoopTimingSignature = io.github.hatayama.UnityCliLoop.Domain.RemovedLegacyPlayerLoopTimingSignature;
+using ThirdPartyToolMigrationContentResult = io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationContentResult;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationAliasRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationApiDetectionRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationApplicationDetectionRules;
@@ -48,8 +49,6 @@ using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimin
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingTypeScopeRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationToolContractDetectionRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTypeReplacementRules;
-
-using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
