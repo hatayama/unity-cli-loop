@@ -209,16 +209,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetPendingCompileRequestForRequestId_WhenLegacySingleSlotExists_ReturnsLegacyRequest()
         {
             // Verifies pending compile recovery can see a request marked before this assembly reloads.
-            UnityCliLoopEditorSessionStateRepository repository = new UnityCliLoopEditorSessionStateRepository();
             DateTime expiresAtUtc = new DateTime(2026, 5, 30, 0, 32, 0, DateTimeKind.Utc);
-            repository.SetLegacyPendingCompileRequestId("compile_legacy_request");
-            repository.SetLegacyPendingCompileForceRecompile(true);
-            repository.SetLegacyPendingCompileExpiresAtUtcTicks(expiresAtUtc.Ticks.ToString());
-            repository.SetLegacyPendingCompileReloadObserved(true);
+            UnityCliLoopPendingCompileSessionRepository.SetLegacyPendingCompileRequestId("compile_legacy_request");
+            UnityCliLoopPendingCompileSessionRepository.SetLegacyPendingCompileForceRecompile(true);
+            UnityCliLoopPendingCompileSessionRepository.SetLegacyPendingCompileExpiresAtUtcTicks(
+                expiresAtUtc.Ticks.ToString());
+            UnityCliLoopPendingCompileSessionRepository.SetLegacyPendingCompileReloadObserved(true);
             UnityCliLoopEditorSessionStateService recreatedService =
                 new UnityCliLoopEditorSessionStateService(
-                    repository,
-                    new UnityCliLoopCompileResultSessionRepository());
+                    new UnityCliLoopEditorSessionStateRepository(),
+                    new UnityCliLoopCompileResultSessionRepository(),
+                    new UnityCliLoopPendingCompileSessionRepository());
 
             UnityCliLoopPendingCompileRequest pendingRequest =
                 recreatedService.GetPendingCompileRequestForRequestId("compile_legacy_request");
@@ -226,7 +227,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(pendingRequest.HasRequest, Is.True);
             Assert.That(pendingRequest.ForceRecompile, Is.True);
             Assert.That(pendingRequest.ReloadObserved, Is.True);
-            Assert.That(repository.GetLegacyPendingCompileRequestId(), Is.Empty);
+            Assert.That(UnityCliLoopPendingCompileSessionRepository.GetLegacyPendingCompileRequestId(), Is.Empty);
         }
 
         [Test]

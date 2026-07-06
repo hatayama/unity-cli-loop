@@ -5,7 +5,7 @@ using io.github.hatayama.UnityCliLoop.Domain;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Stores Unity CLI Loop runtime flags and pending compile markers for the current Editor session.
+    /// Stores Unity CLI Loop runtime flags for the current Editor session.
     /// </summary>
     public sealed class UnityCliLoopEditorSessionStateRepository : IUnityCliLoopEditorSessionStatePort
     {
@@ -19,17 +19,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string ShowPostCompileReconnectingUIKey = KeyPrefix + "showPostCompileReconnectingUI";
         private const string ShouldAutoScanThirdPartyToolMigrationKey =
             KeyPrefix + "shouldAutoScanThirdPartyToolMigration";
-        private const string PendingCompileRequestIdsKey = KeyPrefix + "pendingCompileRequestIds";
-        private const string LegacyPendingCompileRequestIdKey = KeyPrefix + "pendingCompileRequestId";
-        private const string LegacyPendingCompileForceRecompileKey = KeyPrefix + "pendingCompileForceRecompile";
-        private const string LegacyPendingCompileExpiresAtUtcTicksKey =
-            KeyPrefix + "pendingCompileExpiresAtUtcTicks";
-        private const string LegacyPendingCompileReloadObservedKey = KeyPrefix + "pendingCompileReloadObserved";
-        private const string PendingCompileKeyPrefix = KeyPrefix + "pendingCompile.";
-        private const string PendingCompileForceRecompileKeySuffix = ".forceRecompile";
-        private const string PendingCompileExpiresAtUtcTicksKeySuffix = ".expiresAtUtcTicks";
-        private const string PendingCompileReloadObservedKeySuffix = ".reloadObserved";
-
         public bool GetIsServerRunning()
         {
             return GetBool(IsServerRunningKey);
@@ -108,91 +97,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration)
         {
             SetBool(ShouldAutoScanThirdPartyToolMigrationKey, shouldAutoScanThirdPartyToolMigration);
-        }
-
-        public string GetPendingCompileRequestIds()
-        {
-            return GetString(PendingCompileRequestIdsKey);
-        }
-
-        public void SetPendingCompileRequestIds(string pendingCompileRequestIds)
-        {
-            SetString(PendingCompileRequestIdsKey, pendingCompileRequestIds);
-        }
-
-        public string GetLegacyPendingCompileRequestId()
-        {
-            return GetString(LegacyPendingCompileRequestIdKey);
-        }
-
-        public void SetLegacyPendingCompileRequestId(string pendingCompileRequestId)
-        {
-            SetString(LegacyPendingCompileRequestIdKey, pendingCompileRequestId);
-        }
-
-        public bool GetLegacyPendingCompileForceRecompile()
-        {
-            return GetBool(LegacyPendingCompileForceRecompileKey);
-        }
-
-        public void SetLegacyPendingCompileForceRecompile(bool pendingCompileForceRecompile)
-        {
-            SetBool(LegacyPendingCompileForceRecompileKey, pendingCompileForceRecompile);
-        }
-
-        public string GetLegacyPendingCompileExpiresAtUtcTicks()
-        {
-            return GetString(LegacyPendingCompileExpiresAtUtcTicksKey);
-        }
-
-        public void SetLegacyPendingCompileExpiresAtUtcTicks(string pendingCompileExpiresAtUtcTicks)
-        {
-            SetString(LegacyPendingCompileExpiresAtUtcTicksKey, pendingCompileExpiresAtUtcTicks);
-        }
-
-        public bool GetLegacyPendingCompileReloadObserved()
-        {
-            return GetBool(LegacyPendingCompileReloadObservedKey);
-        }
-
-        public void SetLegacyPendingCompileReloadObserved(bool pendingCompileReloadObserved)
-        {
-            SetBool(LegacyPendingCompileReloadObservedKey, pendingCompileReloadObserved);
-        }
-
-        public bool GetPendingCompileForceRecompile(string requestId)
-        {
-            return GetBool(CreatePendingCompileKey(requestId, PendingCompileForceRecompileKeySuffix));
-        }
-
-        public void SetPendingCompileForceRecompile(string requestId, bool pendingCompileForceRecompile)
-        {
-            SetBool(CreatePendingCompileKey(requestId, PendingCompileForceRecompileKeySuffix), pendingCompileForceRecompile);
-        }
-
-        public string GetPendingCompileExpiresAtUtcTicks(string requestId)
-        {
-            return GetString(CreatePendingCompileKey(requestId, PendingCompileExpiresAtUtcTicksKeySuffix));
-        }
-
-        public void SetPendingCompileExpiresAtUtcTicks(string requestId, string pendingCompileExpiresAtUtcTicks)
-        {
-            SetString(CreatePendingCompileKey(requestId, PendingCompileExpiresAtUtcTicksKeySuffix), pendingCompileExpiresAtUtcTicks);
-        }
-
-        public bool GetPendingCompileReloadObserved(string requestId)
-        {
-            return GetBool(CreatePendingCompileKey(requestId, PendingCompileReloadObservedKeySuffix));
-        }
-
-        public void SetPendingCompileReloadObserved(string requestId, bool pendingCompileReloadObserved)
-        {
-            SetBool(CreatePendingCompileKey(requestId, PendingCompileReloadObservedKeySuffix), pendingCompileReloadObserved);
-        }
-
-        private static string CreatePendingCompileKey(string requestId, string suffix)
-        {
-            return PendingCompileKeyPrefix + requestId + suffix;
         }
 
         private static bool GetBool(string key)
