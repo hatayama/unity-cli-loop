@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Describes whether CompileSessionResultStore should persist a compile result for delayed CLI polling.
+    /// Describes whether a compile controller should record its result for delayed CLI polling.
     /// </summary>
     internal readonly struct CompileResultRecordingContext
     {
