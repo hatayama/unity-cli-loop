@@ -113,7 +113,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 string[] migratedReferenceItems = GetMigratedAsmdefReferences(
                     reference,
                     hasLegacyCSharpSource,
-                    requiresToolContractsReference,
                     requiresApplicationReference,
                     requiresDomainReference,
                     requiresFirstPartyScreenshotReference);
