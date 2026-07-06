@@ -79,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     errors: new[] { new CompileIssue(preparation.ErrorMessage, "", 0) },
                     warnings: Array.Empty<CompileIssue>());
                 CompileResponse persistedResponse =
-                    StoreResponseIfNeeded(request, response, correlationId);
+                    StorePreControllerResponseIfNeeded(request, response, correlationId);
                 return persistedResponse;
             }
 
@@ -110,7 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         errors: new[] { new CompileIssue("Play Mode did not exit within 5 seconds; compilation aborted.", "", 0) },
                         warnings: Array.Empty<CompileIssue>());
                     CompileResponse persistedResponse =
-                        StoreResponseIfNeeded(request, response, correlationId);
+                        StorePreControllerResponseIfNeeded(request, response, correlationId);
                     return persistedResponse;
                 }
             }
@@ -133,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     errors: new[] { new CompileIssue(validation.ErrorMessage, "", 0) },
                     warnings: Array.Empty<CompileIssue>());
                 CompileResponse persistedResponse =
-                    StoreResponseIfNeeded(request, response, correlationId);
+                    StorePreControllerResponseIfNeeded(request, response, correlationId);
                 return persistedResponse;
             }
 
@@ -147,9 +147,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // 4. Result formatting
             CompileResponse successResponse =
                 CompileResponseFactory.CreateResponse(result, request.ForceRecompile);
-            CompileResponse persistedSuccessResponse =
-                StoreResponseIfNeeded(request, successResponse, correlationId);
-            return persistedSuccessResponse;
+            return successResponse;
         }
 
         private async Task<bool> WaitForPlayModeExitAsync(CancellationToken ct)
@@ -183,7 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             request.RequestId = CreateRequestId();
         }
 
-        private CompileResponse StoreResponseIfNeeded(
+        private CompileResponse StorePreControllerResponseIfNeeded(
             CompileSchema request,
             CompileResponse response,
             string correlationId)
@@ -206,7 +204,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return response;
             }
 
-            CompileSessionResultStore.StoreCompileResult(
+            CompileResultSessionRecorder.RecordCompileResponse(
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository,
                 request.RequestId,
