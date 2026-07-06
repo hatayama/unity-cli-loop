@@ -22,8 +22,9 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             MethodName = methodName;
             DeclaringTypeName = declaringTypeName;
             OriginalParameters =
-                originalParameters ?? Array.Empty<LegacyPlayerLoopTimingParameterDeclaration>();
-            RemovedParameters = removedParameters ?? Array.Empty<RemovedLegacyPlayerLoopTimingParameter>();
+                originalParameters ?? throw new ArgumentNullException(nameof(originalParameters));
+            RemovedParameters =
+                removedParameters ?? throw new ArgumentNullException(nameof(removedParameters));
         }
 
         public string MethodName { get; }
@@ -93,11 +94,11 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 removedPlayerLoopTimingSignatures != null,
                 "removedPlayerLoopTimingSignatures must not be null");
 
-            Content = content ?? string.Empty;
+            Content = content ?? throw new ArgumentNullException(nameof(content));
             ReplacementCount = replacementCount;
             RemovedPlayerLoopTimingSignatures =
                 removedPlayerLoopTimingSignatures ??
-                Array.Empty<RemovedLegacyPlayerLoopTimingSignature>();
+                throw new ArgumentNullException(nameof(removedPlayerLoopTimingSignatures));
         }
 
         public string Content { get; }

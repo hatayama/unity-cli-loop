@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 
 using NUnit.Framework;
@@ -12,6 +13,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public sealed class ThirdPartyToolMigrationRulesTests
     {
+        [Test]
+        public void RemovedLegacyPlayerLoopTimingSignature_WhenOriginalParametersIsNull_Throws()
+        {
+            // Verifies that timing signatures fail fast when original parameter snapshots are missing.
+            Assert.Throws<ArgumentNullException>(() => new RemovedLegacyPlayerLoopTimingSignature(
+                "Run",
+                "SampleTool",
+                null,
+                Array.Empty<RemovedLegacyPlayerLoopTimingParameter>()));
+        }
+
+        [Test]
+        public void RemovedLegacyPlayerLoopTimingSignature_WhenRemovedParametersIsNull_Throws()
+        {
+            // Verifies that timing signatures fail fast when removed parameter snapshots are missing.
+            Assert.Throws<ArgumentNullException>(() => new RemovedLegacyPlayerLoopTimingSignature(
+                "Run",
+                "SampleTool",
+                Array.Empty<LegacyPlayerLoopTimingParameterDeclaration>(),
+                null));
+        }
+
+        [Test]
+        public void ThirdPartyToolMigrationContentResult_WhenContentIsNull_Throws()
+        {
+            // Verifies that migration content results fail fast when rewritten content is missing.
+            Assert.Throws<ArgumentNullException>(() => new ThirdPartyToolMigrationContentResult(
+                null,
+                0,
+                Array.Empty<RemovedLegacyPlayerLoopTimingSignature>()));
+        }
+
+        [Test]
+        public void ThirdPartyToolMigrationContentResult_WhenRemovedSignaturesIsNull_Throws()
+        {
+            // Verifies that migration content results fail fast when removed timing signatures are missing.
+            Assert.Throws<ArgumentNullException>(() => new ThirdPartyToolMigrationContentResult(
+                string.Empty,
+                0,
+                null));
+        }
+
         [Test]
         public void MigrateCSharpSource_WhenLegacyToolApiIsUsed_RewritesToV3Contracts()
         {
