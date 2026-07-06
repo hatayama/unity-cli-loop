@@ -21,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly UnityCliLoopCompileSessionLifecycleService _compileSessionLifecycleService;
         private readonly ICompileResultSessionRepository _compileResultSessionRepository;
         private readonly IPendingCompileSessionRepository _pendingCompileSessionRepository;
+        private Func<CompileSchema, CancellationToken, Task<CompileResult>> _executeCompilationAsync;
 
         public CompileUseCase(
             UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService,
@@ -37,6 +38,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(compileResultSessionRepository));
             _pendingCompileSessionRepository = pendingCompileSessionRepository ??
                 throw new ArgumentNullException(nameof(pendingCompileSessionRepository));
+            _executeCompilationAsync = ExecuteCompilationWithDefaultServiceAsync;
+        }
+
+        /// <summary>
+        /// Replaces compilation execution for tests that must not start Unity's real compilation pipeline.
+        /// </summary>
+        internal void SetCompilationExecutionForTesting(Func<CompileSchema, CancellationToken, Task<CompileResult>> executeCompilationAsync)
+        {
+            Debug.Assert(executeCompilationAsync != null, "executeCompilationAsync must not be null");
+            _executeCompilationAsync = executeCompilationAsync ??
+                throw new ArgumentNullException(nameof(executeCompilationAsync));
         }
 
         /// <summary>
@@ -139,14 +151,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // 3. Compilation execution
             ct.ThrowIfCancellationRequested();
-            CompilationExecutionService executionService = new(
-                _compileResultSessionRepository,
-                _pendingCompileSessionRepository);
-            CompileResult result = await executionService.ExecuteCompilationAsync(request, ct);
+            CompileResult result = await _executeCompilationAsync(request, ct);
 
             // 4. Result formatting
             CompileResponse successResponse =
                 CompileResponseFactory.CreateResponse(result, request.ForceRecompile);
+            StampProjectRootForDelayedResponseIfNeeded(request, successResponse);
             return successResponse;
         }
 
@@ -189,18 +199,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(request != null, "request must not be null");
             Debug.Assert(response != null, "response must not be null");
 
-            if (!request.WaitForDomainReload)
+            if (!CompileResultRecordingContext.CanRecord(request))
             {
-                return response;
-            }
-
-            if (string.IsNullOrWhiteSpace(request.RequestId))
-            {
-                VibeLogger.LogWarning(
-                    "compile_result_not_stored",
-                    "Compile result was not stored because the request ID is empty.",
-                    null,
-                    correlationId);
+                LogMissingRecordableRequestIfNeeded(request, correlationId);
                 return response;
             }
 
@@ -212,6 +213,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 response,
                 correlationId);
             return response;
+        }
+
+        private void StampProjectRootForDelayedResponseIfNeeded(
+            CompileSchema request,
+            CompileResponse response)
+        {
+            Debug.Assert(request != null, "request must not be null");
+            Debug.Assert(response != null, "response must not be null");
+
+            if (!CompileResultRecordingContext.CanRecord(request))
+            {
+                return;
+            }
+
+            CompileSessionResultStore.StampProjectRoot(response);
+        }
+
+        private static void LogMissingRecordableRequestIfNeeded(
+            CompileSchema request,
+            string correlationId)
+        {
+            Debug.Assert(request != null, "request must not be null");
+
+            if (!request.WaitForDomainReload)
+            {
+                return;
+            }
+
+            VibeLogger.LogWarning(
+                "compile_result_not_stored",
+                "Compile result was not stored because the request ID is empty.",
+                null,
+                correlationId);
         }
 
         private void MarkPendingCompileRequestIfNeeded(
@@ -301,6 +335,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             long unixTimeMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
             return $"compile_{unixTimeMilliseconds}_{correlationId}";
+        }
+
+        private Task<CompileResult> ExecuteCompilationWithDefaultServiceAsync(CompileSchema request, CancellationToken ct)
+        {
+            Debug.Assert(request != null, "request must not be null");
+
+            CompilationExecutionService executionService = new(
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
+            return executionService.ExecuteCompilationAsync(request, ct);
         }
     }
 }

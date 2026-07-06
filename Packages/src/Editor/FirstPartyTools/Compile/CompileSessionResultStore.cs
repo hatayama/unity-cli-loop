@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(compileResultSessionRepository));
             IPendingCompileSessionRepository pendingCompileRepository = pendingCompileSessionRepository ??
                 throw new ArgumentNullException(nameof(pendingCompileSessionRepository));
-            result.ProjectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            StampProjectRoot(result);
             string resultJson = JsonConvert.SerializeObject(
                 result,
                 Formatting.None,
@@ -62,6 +62,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     duplicate_result_for_request = previousResult.HasResult
                 },
                 correlationId);
+        }
+
+        internal static void StampProjectRoot(CompileResponse result)
+        {
+            Debug.Assert(result != null, "result must not be null");
+            result.ProjectRoot = UnityCliLoopPathResolver.GetProjectRoot();
         }
     }
 }
