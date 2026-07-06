@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
@@ -194,9 +195,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void RuntimeSources_WhenScanned_AreEditorOnly()
         {
-            // Verifies that Runtime assembly sources cannot compile into Player assemblies.
+            // Verifies that root UnityCLILoop.Runtime sources cannot compile into Player assemblies.
             string runtimeSourceDirectory = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), RuntimeSourceDirectoryPath);
-            string[] runtimeSourcePaths = Directory.GetFiles(runtimeSourceDirectory, "*.cs", SearchOption.AllDirectories);
+            string[] runtimeSourcePaths = GetRootRuntimeAssemblySourcePaths(runtimeSourceDirectory);
             System.Array.Sort(runtimeSourcePaths);
 
             for (int pathIndex = 0; pathIndex < runtimeSourcePaths.Length; pathIndex++)
@@ -208,6 +209,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     Does.StartWith("#if UNITY_EDITOR"),
                     runtimeSourcePaths[pathIndex]);
             }
+        }
+
+        private static string[] GetRootRuntimeAssemblySourcePaths(string runtimeSourceDirectory)
+        {
+            string[] runtimeSourcePaths = Directory.GetFiles(runtimeSourceDirectory, "*.cs", SearchOption.AllDirectories);
+            string[] assemblyDefinitionPaths = Directory.GetFiles(runtimeSourceDirectory, "*.asmdef", SearchOption.AllDirectories);
+            HashSet<string> nestedAssemblyDirectories = new();
+
+            for (int pathIndex = 0; pathIndex < assemblyDefinitionPaths.Length; pathIndex++)
+            {
+                string assemblyDefinitionDirectory = Path.GetDirectoryName(assemblyDefinitionPaths[pathIndex]);
+                if (assemblyDefinitionDirectory == runtimeSourceDirectory)
+                {
+                    continue;
+                }
+
+                nestedAssemblyDirectories.Add(assemblyDefinitionDirectory);
+            }
+
+            List<string> rootRuntimeSourcePaths = new();
+            for (int pathIndex = 0; pathIndex < runtimeSourcePaths.Length; pathIndex++)
+            {
+                if (IsUnderNestedAssemblyDirectory(runtimeSourcePaths[pathIndex], nestedAssemblyDirectories))
+                {
+                    continue;
+                }
+
+                rootRuntimeSourcePaths.Add(runtimeSourcePaths[pathIndex]);
+            }
+
+            return rootRuntimeSourcePaths.ToArray();
+        }
+
+        private static bool IsUnderNestedAssemblyDirectory(
+            string sourcePath,
+            HashSet<string> nestedAssemblyDirectories)
+        {
+            foreach (string nestedAssemblyDirectory in nestedAssemblyDirectories)
+            {
+                string nestedAssemblyPrefix = nestedAssemblyDirectory + Path.DirectorySeparatorChar;
+                if (sourcePath.StartsWith(nestedAssemblyPrefix, System.StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static void AssertEditorOnlyTags(GameObject root, string prefabPath)
