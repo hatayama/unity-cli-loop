@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
-using UnityEditor;
-
 using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -13,14 +11,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public sealed class UnityCliLoopCompileResultSessionRepository : ICompileResultSessionRepository
     {
-        private const string KeyPrefix = "io.github.hatayama.uloopmcp.editorSession.";
-        private const string CompileResultRequestIdsKey = KeyPrefix + "compileResultRequestIds";
-        private const string LegacyCompileResultRequestIdKey = KeyPrefix + "compileResultRequestId";
-        private const string LegacyCompileResultForceRecompileKey = KeyPrefix + "compileResultForceRecompile";
-        private const string LegacyCompileResultJsonKey = KeyPrefix + "compileResultJson";
+        private const string CompileResultRequestIdsKey =
+            UnityCliLoopEditorSessionStateStorage.KeyPrefix + "compileResultRequestIds";
+        private const string LegacyCompileResultRequestIdKey =
+            UnityCliLoopEditorSessionStateStorage.KeyPrefix + "compileResultRequestId";
+        private const string LegacyCompileResultForceRecompileKey =
+            UnityCliLoopEditorSessionStateStorage.KeyPrefix + "compileResultForceRecompile";
+        private const string LegacyCompileResultJsonKey =
+            UnityCliLoopEditorSessionStateStorage.KeyPrefix + "compileResultJson";
         private const string LegacyCompileResultCompletedAtUtcTicksKey =
-            KeyPrefix + "compileResultCompletedAtUtcTicks";
-        private const string CompileResultKeyPrefix = KeyPrefix + "compileResult.";
+            UnityCliLoopEditorSessionStateStorage.KeyPrefix + "compileResultCompletedAtUtcTicks";
+        private const string CompileResultKeyPrefix =
+            UnityCliLoopEditorSessionStateStorage.KeyPrefix + "compileResult.";
         private const string CompileResultForceRecompileKeySuffix = ".forceRecompile";
         private const string CompileResultJsonKeySuffix = ".json";
         private const string CompileResultCompletedAtUtcTicksKeySuffix = ".completedAtUtcTicks";
@@ -35,7 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrWhiteSpace(resultJson), "resultJson must not be null or whitespace");
             Debug.Assert(completedAtUtc.Kind == DateTimeKind.Utc, "completedAtUtc must be UTC");
 
-            SetCompileResultRequestIds(AddRequestIdToIndex(GetCompileResultRequestIds(), requestId));
+            SetCompileResultRequestIds(
+                UnityCliLoopEditorSessionStateStorage.AddRequestIdToIndex(GetCompileResultRequestIds(), requestId));
             SetCompileResultForceRecompile(requestId, forceRecompile);
             SetCompileResultJson(requestId, resultJson);
             SetCompileResultCompletedAtUtcTicks(requestId, completedAtUtc.Ticks.ToString());
@@ -61,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             string completedAtUtcTicksText = GetCompileResultCompletedAtUtcTicks(requestId);
             (bool isValid, long completedAtUtcTicks) =
-                ParseUtcTicks(completedAtUtcTicksText);
+                UnityCliLoopEditorSessionStateStorage.ParseUtcTicks(completedAtUtcTicksText);
             if (!isValid || completedAtUtcTicks <= 0)
             {
                 ClearCompileResultForRequestId(requestId);
@@ -88,7 +91,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public UnityCliLoopStoredCompileResult[] GetStoredCompileResults()
         {
-            string[] requestIds = ParseRequestIdIndex(GetCompileResultRequestIds());
+            string[] requestIds =
+                UnityCliLoopEditorSessionStateStorage.ParseRequestIdIndex(GetCompileResultRequestIds());
             List<UnityCliLoopStoredCompileResult> storedResults =
                 new List<UnityCliLoopStoredCompileResult>();
             foreach (string requestId in requestIds)
@@ -111,7 +115,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public void ClearCompileResult()
         {
-            foreach (string requestId in ParseRequestIdIndex(GetCompileResultRequestIds()))
+            foreach (string requestId in UnityCliLoopEditorSessionStateStorage.ParseRequestIdIndex(
+                GetCompileResultRequestIds()))
             {
                 ClearCompileResultValues(requestId);
             }
@@ -144,82 +149,97 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         // Tests and legacy migration use these helpers without widening the aggregate port.
         internal static void SetLegacyCompileResultRequestId(string compileResultRequestId)
         {
-            SetString(LegacyCompileResultRequestIdKey, compileResultRequestId);
+            UnityCliLoopEditorSessionStateStorage.SetString(
+                LegacyCompileResultRequestIdKey,
+                compileResultRequestId);
         }
 
         internal static string GetLegacyCompileResultRequestId()
         {
-            return GetString(LegacyCompileResultRequestIdKey);
+            return UnityCliLoopEditorSessionStateStorage.GetString(LegacyCompileResultRequestIdKey);
         }
 
         internal static void SetLegacyCompileResultForceRecompile(bool compileResultForceRecompile)
         {
-            SetBool(LegacyCompileResultForceRecompileKey, compileResultForceRecompile);
+            UnityCliLoopEditorSessionStateStorage.SetBool(
+                LegacyCompileResultForceRecompileKey,
+                compileResultForceRecompile);
         }
 
         internal static void SetLegacyCompileResultJson(string compileResultJson)
         {
-            SetString(LegacyCompileResultJsonKey, compileResultJson);
+            UnityCliLoopEditorSessionStateStorage.SetString(LegacyCompileResultJsonKey, compileResultJson);
         }
 
         internal static void SetLegacyCompileResultCompletedAtUtcTicks(string compileResultCompletedAtUtcTicks)
         {
-            SetString(LegacyCompileResultCompletedAtUtcTicksKey, compileResultCompletedAtUtcTicks);
+            UnityCliLoopEditorSessionStateStorage.SetString(
+                LegacyCompileResultCompletedAtUtcTicksKey,
+                compileResultCompletedAtUtcTicks);
         }
 
         internal static void SetCompileResultRequestIds(string compileResultRequestIds)
         {
-            SetString(CompileResultRequestIdsKey, compileResultRequestIds);
+            UnityCliLoopEditorSessionStateStorage.SetString(CompileResultRequestIdsKey, compileResultRequestIds);
         }
 
         internal static void SetCompileResultForceRecompile(string requestId, bool compileResultForceRecompile)
         {
-            SetBool(CreateCompileResultKey(requestId, CompileResultForceRecompileKeySuffix), compileResultForceRecompile);
+            UnityCliLoopEditorSessionStateStorage.SetBool(
+                CreateCompileResultKey(requestId, CompileResultForceRecompileKeySuffix),
+                compileResultForceRecompile);
         }
 
         internal static void SetCompileResultJson(string requestId, string compileResultJson)
         {
-            SetString(CreateCompileResultKey(requestId, CompileResultJsonKeySuffix), compileResultJson);
+            UnityCliLoopEditorSessionStateStorage.SetString(
+                CreateCompileResultKey(requestId, CompileResultJsonKeySuffix),
+                compileResultJson);
         }
 
         internal static void SetCompileResultCompletedAtUtcTicks(string requestId, string compileResultCompletedAtUtcTicks)
         {
-            SetString(CreateCompileResultKey(requestId, CompileResultCompletedAtUtcTicksKeySuffix), compileResultCompletedAtUtcTicks);
+            UnityCliLoopEditorSessionStateStorage.SetString(
+                CreateCompileResultKey(requestId, CompileResultCompletedAtUtcTicksKeySuffix),
+                compileResultCompletedAtUtcTicks);
         }
 
         private static string GetCompileResultRequestIds()
         {
-            return GetString(CompileResultRequestIdsKey);
+            return UnityCliLoopEditorSessionStateStorage.GetString(CompileResultRequestIdsKey);
         }
 
         private static bool GetLegacyCompileResultForceRecompile()
         {
-            return GetBool(LegacyCompileResultForceRecompileKey);
+            return UnityCliLoopEditorSessionStateStorage.GetBool(LegacyCompileResultForceRecompileKey);
         }
 
         private static string GetLegacyCompileResultJson()
         {
-            return GetString(LegacyCompileResultJsonKey);
+            return UnityCliLoopEditorSessionStateStorage.GetString(LegacyCompileResultJsonKey);
         }
 
         private static string GetLegacyCompileResultCompletedAtUtcTicks()
         {
-            return GetString(LegacyCompileResultCompletedAtUtcTicksKey);
+            return UnityCliLoopEditorSessionStateStorage.GetString(LegacyCompileResultCompletedAtUtcTicksKey);
         }
 
         private static bool GetCompileResultForceRecompile(string requestId)
         {
-            return GetBool(CreateCompileResultKey(requestId, CompileResultForceRecompileKeySuffix));
+            return UnityCliLoopEditorSessionStateStorage.GetBool(
+                CreateCompileResultKey(requestId, CompileResultForceRecompileKeySuffix));
         }
 
         private static string GetCompileResultJson(string requestId)
         {
-            return GetString(CreateCompileResultKey(requestId, CompileResultJsonKeySuffix));
+            return UnityCliLoopEditorSessionStateStorage.GetString(
+                CreateCompileResultKey(requestId, CompileResultJsonKeySuffix));
         }
 
         private static string GetCompileResultCompletedAtUtcTicks(string requestId)
         {
-            return GetString(CreateCompileResultKey(requestId, CompileResultCompletedAtUtcTicksKeySuffix));
+            return UnityCliLoopEditorSessionStateStorage.GetString(
+                CreateCompileResultKey(requestId, CompileResultCompletedAtUtcTicksKeySuffix));
         }
 
         private static void ClearCompileResultForRequestId(string requestId)
@@ -228,7 +248,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             ClearCompileResultValues(requestId);
             SetCompileResultRequestIds(
-                RemoveRequestIdFromIndex(GetCompileResultRequestIds(), requestId));
+                UnityCliLoopEditorSessionStateStorage.RemoveRequestIdFromIndex(
+                    GetCompileResultRequestIds(),
+                    requestId));
         }
 
         private static void ClearCompileResultValues(string requestId)
@@ -288,7 +310,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string completedAtUtcTicksText =
                 GetLegacyCompileResultCompletedAtUtcTicks();
             (bool isValid, long completedAtUtcTicks) =
-                ParseUtcTicks(completedAtUtcTicksText);
+                UnityCliLoopEditorSessionStateStorage.ParseUtcTicks(completedAtUtcTicksText);
             if (!isValid || completedAtUtcTicks <= 0)
             {
                 ClearLegacyCompileResult();
@@ -317,124 +339,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             SetLegacyCompileResultCompletedAtUtcTicks("");
         }
 
-        private static (bool IsValid, long Value) ParseUtcTicks(string utcTicksText)
-        {
-            if (string.IsNullOrWhiteSpace(utcTicksText))
-            {
-                return (true, 0);
-            }
-
-            string trimmedText = utcTicksText.Trim();
-            long value = 0;
-            foreach (char character in trimmedText)
-            {
-                if (character < '0' || character > '9')
-                {
-                    return (false, 0);
-                }
-
-                int digit = character - '0';
-                if (value > (long.MaxValue - digit) / 10)
-                {
-                    return (false, 0);
-                }
-
-                value = value * 10 + digit;
-            }
-
-            if (value > DateTime.MaxValue.Ticks)
-            {
-                return (false, 0);
-            }
-
-            return (true, value);
-        }
-
-        private static string[] ParseRequestIdIndex(string requestIdIndex)
-        {
-            if (string.IsNullOrWhiteSpace(requestIdIndex))
-            {
-                return Array.Empty<string>();
-            }
-
-            string[] rawRequestIds = requestIdIndex.Split(
-                new[] { '\n' },
-                StringSplitOptions.RemoveEmptyEntries);
-            List<string> requestIds = new List<string>();
-            foreach (string rawRequestId in rawRequestIds)
-            {
-                string requestId = rawRequestId.Trim();
-                if (string.IsNullOrWhiteSpace(requestId) || requestIds.Contains(requestId))
-                {
-                    continue;
-                }
-
-                requestIds.Add(requestId);
-            }
-
-            return requestIds.ToArray();
-        }
-
-        private static string FormatRequestIdIndex(List<string> requestIds)
-        {
-            Debug.Assert(requestIds != null, "requestIds must not be null");
-            return string.Join("\n", requestIds.ToArray());
-        }
-
-        private static string AddRequestIdToIndex(string requestIdIndex, string requestId)
-        {
-            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
-
-            List<string> requestIds = new List<string>(ParseRequestIdIndex(requestIdIndex));
-            if (!requestIds.Contains(requestId))
-            {
-                requestIds.Add(requestId);
-            }
-
-            return FormatRequestIdIndex(requestIds);
-        }
-
-        private static string RemoveRequestIdFromIndex(string requestIdIndex, string requestId)
-        {
-            Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
-
-            List<string> requestIds = new List<string>();
-            foreach (string indexedRequestId in ParseRequestIdIndex(requestIdIndex))
-            {
-                if (indexedRequestId == requestId)
-                {
-                    continue;
-                }
-
-                requestIds.Add(indexedRequestId);
-            }
-
-            return FormatRequestIdIndex(requestIds);
-        }
-
         private static string CreateCompileResultKey(string requestId, string suffix)
         {
-            return CompileResultKeyPrefix + requestId + suffix;
-        }
-
-        private static bool GetBool(string key)
-        {
-            return SessionState.GetBool(key, false);
-        }
-
-        private static void SetBool(string key, bool value)
-        {
-            SessionState.SetBool(key, value);
-        }
-
-        private static string GetString(string key)
-        {
-            return SessionState.GetString(key, "");
-        }
-
-        private static void SetString(string key, string value)
-        {
-            SessionState.SetString(key, value ?? "");
+            return UnityCliLoopEditorSessionStateStorage.CreateRequestScopedKey(
+                CompileResultKeyPrefix,
+                requestId,
+                suffix);
         }
     }
 }

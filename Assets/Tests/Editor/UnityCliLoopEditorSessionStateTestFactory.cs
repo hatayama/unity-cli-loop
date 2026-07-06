@@ -12,7 +12,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             return new UnityCliLoopEditorSessionStateService(
                 new UnityCliLoopEditorSessionStateRepository(),
-                new UnityCliLoopCompileResultSessionRepository());
+                new UnityCliLoopCompileResultSessionRepository(),
+                new UnityCliLoopPendingCompileSessionRepository());
         }
 
         internal static UnityCliLoopEditorSessionStateSnapshot CaptureSnapshot(
@@ -84,7 +85,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 service.StorePendingCompileRequest(
                     pendingCompileRequest.RequestId,
                     pendingCompileRequest.ForceRecompile,
-                    pendingCompileRequest.ExpiresAtUtcTicks,
+                    new System.DateTime(
+                        pendingCompileRequest.ExpiresAtUtcTicks,
+                        System.DateTimeKind.Utc),
                     pendingCompileRequest.ReloadObserved);
             }
         }
