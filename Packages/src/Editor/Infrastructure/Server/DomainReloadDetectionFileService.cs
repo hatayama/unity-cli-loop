@@ -14,24 +14,25 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private readonly ISessionFlagsRepository _sessionFlagsRepository;
         private readonly IPendingCompileSessionRepository _pendingCompileSessionRepository;
-        private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
+        private readonly UnityCliLoopCompileSessionLifecycleService _compileSessionLifecycleService;
         private readonly IUnityCliLoopEditorLegacySessionStateReader _legacySessionStateReader;
 
         internal DomainReloadDetectionFileService(
             ISessionFlagsRepository sessionFlagsRepository,
             IPendingCompileSessionRepository pendingCompileSessionRepository,
-            UnityCliLoopEditorSessionStateService sessionStateService,
+            UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService,
             IUnityCliLoopEditorLegacySessionStateReader legacySessionStateReader = null)
         {
             UnityEngine.Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
             UnityEngine.Debug.Assert(pendingCompileSessionRepository != null, "pendingCompileSessionRepository must not be null");
-            UnityEngine.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+            UnityEngine.Debug.Assert(compileSessionLifecycleService != null, "compileSessionLifecycleService must not be null");
 
             _sessionFlagsRepository = sessionFlagsRepository ??
                 throw new ArgumentNullException(nameof(sessionFlagsRepository));
             _pendingCompileSessionRepository = pendingCompileSessionRepository ??
                 throw new ArgumentNullException(nameof(pendingCompileSessionRepository));
-            _sessionStateService = sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
+            _compileSessionLifecycleService = compileSessionLifecycleService ??
+                throw new ArgumentNullException(nameof(compileSessionLifecycleService));
             _legacySessionStateReader =
                 legacySessionStateReader ?? new UnityCliLoopEditorLegacySessionStateReader();
         }
@@ -65,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             UnityCliLoopPendingCompileRequest[] pendingCompileRequests =
                 _pendingCompileSessionRepository.GetPendingCompileRequests();
-            _sessionStateService.MarkDomainReloadStarted(serverIsRunning);
+            _compileSessionLifecycleService.MarkDomainReloadStarted(serverIsRunning);
 
             UnityCliLoopEditorDomainReloadStateProvider.SetDomainReloadInProgressFromMainThread(true);
 

@@ -17,7 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class CompileController : IDisposable
     {
-        private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
+        private readonly ICompileResultSessionRepository _compileResultSessionRepository;
+        private readonly IPendingCompileSessionRepository _pendingCompileSessionRepository;
         private bool _isCompiling = false;
         private List<CompilerMessage> _compileMessages = new();
         private TaskCompletionSource<CompileResult> _currentCompileTask;
@@ -26,12 +27,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private CompileResultRecordingContext _resultRecordingContext = CompileResultRecordingContext.Disabled();
         private DateTime _compileStartedAtUtc = DateTime.MinValue;
 
-        public CompileController(UnityCliLoopEditorSessionStateService sessionStateService)
+        public CompileController(
+            ICompileResultSessionRepository compileResultSessionRepository,
+            IPendingCompileSessionRepository pendingCompileSessionRepository)
         {
-            UnityEngine.Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+            UnityEngine.Debug.Assert(compileResultSessionRepository != null, "compileResultSessionRepository must not be null");
+            UnityEngine.Debug.Assert(pendingCompileSessionRepository != null, "pendingCompileSessionRepository must not be null");
 
-            _sessionStateService =
-                sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
+            _compileResultSessionRepository = compileResultSessionRepository ??
+                throw new ArgumentNullException(nameof(compileResultSessionRepository));
+            _pendingCompileSessionRepository = pendingCompileSessionRepository ??
+                throw new ArgumentNullException(nameof(pendingCompileSessionRepository));
         }
 
         /// <summary>
@@ -519,7 +525,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CompileResponse response =
                 CompileSessionResultService.CreateCompileResult(result, _resultRecordingContext.ForceRecompile);
             CompileSessionResultService.StoreCompileResult(
-                _sessionStateService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository,
                 _resultRecordingContext.RequestId,
                 _resultRecordingContext.ForceRecompile,
                 response,

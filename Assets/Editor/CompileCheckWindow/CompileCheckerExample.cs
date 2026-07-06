@@ -15,8 +15,10 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         [MenuItem("UnityCliLoop/Debug/Compile Tests/Compile Checker Usage Example")]
         public static async void TestCompileChecker()
         {
-            CompileController compileController = new(UnityCliLoopEditorSessionStateFacade.Service);
-            
+            CompileController compileController = new(
+                UnityCliLoopCompileResultSessionRepositoryFacade.Repository,
+                UnityCliLoopPendingCompileSessionRepositoryFacade.Repository);
+
             try
             {
                 // How Masamichi requested to use it
@@ -49,8 +51,10 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         [MenuItem("UnityCliLoop/Debug/Compile Tests/Force Compile Checker Usage Example")]
         public static async void TestForceCompileChecker()
         {
-            CompileController compileController = new(UnityCliLoopEditorSessionStateFacade.Service);
-            
+            CompileController compileController = new(
+                UnityCliLoopCompileResultSessionRepositoryFacade.Repository,
+                UnityCliLoopPendingCompileSessionRepositoryFacade.Repository);
+
             try
             {
                 // Example of forced re-compilation
@@ -67,4 +71,4 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             }
         }
     }
-} 
+}

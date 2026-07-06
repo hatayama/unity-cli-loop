@@ -18,14 +18,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private const int MAX_WAIT_MS = 5000;
         private const int POLL_INTERVAL_MS = 50;
-        private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
+        private readonly UnityCliLoopCompileSessionLifecycleService _compileSessionLifecycleService;
+        private readonly ICompileResultSessionRepository _compileResultSessionRepository;
+        private readonly IPendingCompileSessionRepository _pendingCompileSessionRepository;
 
-        public CompileUseCase(UnityCliLoopEditorSessionStateService sessionStateService)
+        public CompileUseCase(
+            UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService,
+            ICompileResultSessionRepository compileResultSessionRepository,
+            IPendingCompileSessionRepository pendingCompileSessionRepository)
         {
-            Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+            Debug.Assert(compileSessionLifecycleService != null, "compileSessionLifecycleService must not be null");
+            Debug.Assert(compileResultSessionRepository != null, "compileResultSessionRepository must not be null");
+            Debug.Assert(pendingCompileSessionRepository != null, "pendingCompileSessionRepository must not be null");
 
-            _sessionStateService =
-                sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
+            _compileSessionLifecycleService = compileSessionLifecycleService ??
+                throw new ArgumentNullException(nameof(compileSessionLifecycleService));
+            _compileResultSessionRepository = compileResultSessionRepository ??
+                throw new ArgumentNullException(nameof(compileResultSessionRepository));
+            _pendingCompileSessionRepository = pendingCompileSessionRepository ??
+                throw new ArgumentNullException(nameof(pendingCompileSessionRepository));
         }
 
         /// <summary>
@@ -46,8 +57,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             LogCompileRequestReceived(request, correlationId);
 
             DateTime utcNow = DateTime.UtcNow;
-            _sessionStateService.ClearExpiredCompileResult(utcNow);
-            _sessionStateService.ClearExpiredPendingCompileRequest(utcNow);
+            _compileSessionLifecycleService.ClearExpiredCompileResult(utcNow);
+            _compileSessionLifecycleService.ClearExpiredPendingCompileRequest(utcNow);
             MarkPendingCompileRequestIfNeeded(request, utcNow, correlationId);
 
             // 1. Play Mode preparation check
@@ -128,7 +139,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // 3. Compilation execution
             ct.ThrowIfCancellationRequested();
-            CompilationExecutionService executionService = new(_sessionStateService);
+            CompilationExecutionService executionService = new(
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
             CompileResult result = await executionService.ExecuteCompilationAsync(request, ct);
 
             // 4. Result formatting
@@ -194,7 +207,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             CompileSessionResultService.StoreCompileResult(
-                _sessionStateService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository,
                 request.RequestId,
                 request.ForceRecompile,
                 response,
@@ -217,8 +231,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Debug.Assert(!string.IsNullOrWhiteSpace(request.RequestId), "request.RequestId must not be null or whitespace");
             UnityCliLoopPendingCompileRequest[] previousPendingRequests =
-                _sessionStateService.GetPendingCompileRequests();
-            _sessionStateService.MarkPendingCompileRequest(
+                _pendingCompileSessionRepository.GetPendingCompileRequests();
+            _compileSessionLifecycleService.MarkPendingCompileRequest(
                 request.RequestId,
                 request.ForceRecompile,
                 markedAtUtc);

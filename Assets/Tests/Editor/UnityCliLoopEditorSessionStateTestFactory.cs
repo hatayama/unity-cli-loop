@@ -4,16 +4,16 @@ using io.github.hatayama.UnityCliLoop.Infrastructure;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Creates editor session-state services and snapshots for tests that touch live Unity SessionState.
+    /// Creates editor session-state collaborators and snapshots for tests that touch live Unity SessionState.
     /// </summary>
     internal static class UnityCliLoopEditorSessionStateTestFactory
     {
-        internal static UnityCliLoopEditorSessionStateService CreateService()
+        internal static UnityCliLoopCompileSessionLifecycleService CreateCompileSessionLifecycleService()
         {
-            return new UnityCliLoopEditorSessionStateService(
+            return new UnityCliLoopCompileSessionLifecycleService(
                 CreateSessionFlagsRepository(),
-                new UnityCliLoopCompileResultSessionRepository(),
-                new UnityCliLoopPendingCompileSessionRepository());
+                CreateCompileResultSessionRepository(),
+                CreatePendingCompileSessionRepository());
         }
 
         internal static UnityCliLoopSessionFlagsRepository CreateSessionFlagsRepository()
@@ -21,23 +21,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return new UnityCliLoopSessionFlagsRepository();
         }
 
+        internal static UnityCliLoopCompileResultSessionRepository CreateCompileResultSessionRepository()
+        {
+            return new UnityCliLoopCompileResultSessionRepository();
+        }
+
+        internal static UnityCliLoopPendingCompileSessionRepository CreatePendingCompileSessionRepository()
+        {
+            return new UnityCliLoopPendingCompileSessionRepository();
+        }
+
         internal static void ClearAll()
         {
             UnityCliLoopSessionFlagsRepository sessionFlagsRepository = CreateSessionFlagsRepository();
-            UnityCliLoopEditorSessionStateService service = CreateService();
+            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository =
+                CreateCompileResultSessionRepository();
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
+                CreatePendingCompileSessionRepository();
 
             sessionFlagsRepository.ClearServerSession();
             sessionFlagsRepository.ClearDomainReloadRecoveryFlags();
             sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(false);
             sessionFlagsRepository.SetIsServerManuallyStopped(false);
-            service.ClearCompileResult();
-            service.ClearPendingCompileRequest();
+            compileResultSessionRepository.ClearCompileResult();
+            pendingCompileSessionRepository.ClearPendingCompileRequest();
         }
 
-        internal static UnityCliLoopEditorSessionStateSnapshot CaptureSnapshot(
-            UnityCliLoopEditorSessionStateService service)
+        internal static UnityCliLoopEditorSessionStateSnapshot CaptureSnapshot()
         {
-            return UnityCliLoopEditorSessionStateSnapshot.Capture(CreateSessionFlagsRepository(), service);
+            return UnityCliLoopEditorSessionStateSnapshot.Capture(
+                CreateSessionFlagsRepository(),
+                CreateCompileResultSessionRepository(),
+                CreatePendingCompileSessionRepository());
         }
     }
 
@@ -59,7 +74,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private UnityCliLoopEditorSessionStateSnapshot(
             UnityCliLoopSessionFlagsRepository sessionFlagsRepository,
-            UnityCliLoopEditorSessionStateService service)
+            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository,
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository)
         {
             _isServerRunning = sessionFlagsRepository.GetIsServerRunning();
             _isServerManuallyStopped = sessionFlagsRepository.GetIsServerManuallyStopped();
@@ -70,21 +86,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _showPostCompileReconnectingUI = sessionFlagsRepository.GetShowPostCompileReconnectingUI();
             _shouldAutoScanThirdPartyToolMigration =
                 sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration();
-            _compileResults = service.GetStoredCompileResults();
-            _pendingCompileRequests = service.GetPendingCompileRequests();
+            _compileResults = compileResultSessionRepository.GetStoredCompileResults();
+            _pendingCompileRequests = pendingCompileSessionRepository.GetPendingCompileRequests();
         }
 
         internal static UnityCliLoopEditorSessionStateSnapshot Capture(
             UnityCliLoopSessionFlagsRepository sessionFlagsRepository,
-            UnityCliLoopEditorSessionStateService service)
+            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository,
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository)
         {
-            return new UnityCliLoopEditorSessionStateSnapshot(sessionFlagsRepository, service);
+            return new UnityCliLoopEditorSessionStateSnapshot(
+                sessionFlagsRepository,
+                compileResultSessionRepository,
+                pendingCompileSessionRepository);
         }
 
-        internal void Restore(UnityCliLoopEditorSessionStateService service)
+        internal void Restore()
         {
             UnityCliLoopSessionFlagsRepository sessionFlagsRepository =
                 UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
+            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
             sessionFlagsRepository.SetIsServerRunning(_isServerRunning);
             sessionFlagsRepository.SetIsServerManuallyStopped(_isServerManuallyStopped);
             sessionFlagsRepository.SetIsAfterCompile(_isAfterCompile);
@@ -94,20 +118,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             sessionFlagsRepository.SetShowPostCompileReconnectingUI(_showPostCompileReconnectingUI);
             sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(
                 _shouldAutoScanThirdPartyToolMigration);
-            service.ClearCompileResult();
+            compileResultSessionRepository.ClearCompileResult();
             foreach (UnityCliLoopStoredCompileResult compileResult in _compileResults)
             {
-                service.StoreCompileResult(
+                compileResultSessionRepository.StoreCompileResult(
                     compileResult.RequestId,
                     compileResult.ForceRecompile,
                     compileResult.ResultJson,
                     new System.DateTime(compileResult.CompletedAtUtcTicks, System.DateTimeKind.Utc));
             }
 
-            service.ClearPendingCompileRequest();
+            pendingCompileSessionRepository.ClearPendingCompileRequest();
             foreach (UnityCliLoopPendingCompileRequest pendingCompileRequest in _pendingCompileRequests)
             {
-                service.StorePendingCompileRequest(
+                pendingCompileSessionRepository.StorePendingCompileRequest(
                     pendingCompileRequest.RequestId,
                     pendingCompileRequest.ForceRecompile,
                     new System.DateTime(
