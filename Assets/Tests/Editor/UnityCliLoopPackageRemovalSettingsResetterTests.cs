@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private bool _settingsFileExisted;
         private string _settingsFileContent;
-        private UnityCliLoopEditorSettingsService _editorSettingsService;
+        private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private UnityCliLoopEditorSettingsRepository _editorSettingsRepository;
 
         [SetUp]
@@ -32,8 +32,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             DeleteIfExists(SettingsFilePath);
-            _editorSettingsService =
-                UnityCliLoopEditorSettingsTestFactory.CreateServiceWithRepository(out _editorSettingsRepository);
+            _editorSettingsPort =
+                UnityCliLoopEditorSettingsTestFactory.CreatePortWithRepository(out _editorSettingsRepository);
             _editorSettingsRepository.InvalidateCache();
         }
 
@@ -108,14 +108,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that the removal handler persists the setup wizard reset.
             UnityCliLoopEditorSettingsData settings = CreateSettingsWithNonWizardPreferences();
-            _editorSettingsService.SaveSettings(settings);
+            _editorSettingsPort.SaveSettings(settings);
 
             UnityCliLoopPackageRemovalSettingsResetter.ResetSetupWizardStateIfPackageRemoved(
-                _editorSettingsService,
+                _editorSettingsPort,
                 new List<string> { UnityCliLoopConstants.PACKAGE_NAME },
                 UnityCliLoopConstants.PACKAGE_NAME);
 
-            UnityCliLoopEditorSettingsData updatedSettings = _editorSettingsService.GetSettings();
+            UnityCliLoopEditorSettingsData updatedSettings = _editorSettingsPort.GetSettings();
             Assert.That(updatedSettings.lastSeenSetupWizardVersion, Is.Empty);
             Assert.That(updatedSettings.lastSeenSetupWizardMinimumDispatcherVersion, Is.Empty);
             Assert.That(updatedSettings.suppressSetupWizardAutoShow, Is.False);

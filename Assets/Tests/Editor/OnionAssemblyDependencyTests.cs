@@ -212,12 +212,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string toolSettingsDataAssemblyName = typeof(ToolSettingsData).Assembly.GetName().Name;
             string editorSettingsDataAssemblyName = typeof(UnityCliLoopEditorSettingsData).Assembly.GetName().Name;
             string toolSettingsPortAssemblyName = typeof(IToolSettingsPort).Assembly.GetName().Name;
-            string editorSettingsServiceAssemblyName = typeof(UnityCliLoopEditorSettingsService).Assembly.GetName().Name;
+            string editorSettingsPortAssemblyName = typeof(IUnityCliLoopEditorSettingsPort).Assembly.GetName().Name;
 
             Assert.That(toolSettingsDataAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(editorSettingsDataAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(toolSettingsPortAssemblyName, Is.EqualTo(DomainAssemblyName));
-            Assert.That(editorSettingsServiceAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(editorSettingsPortAssemblyName, Is.EqualTo(DomainAssemblyName));
         }
 
         [Test]
@@ -818,7 +818,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 startupSource,
-                Does.Contain("UnityCliLoopEditorSettingsRecoveryScheduler.ScheduleForEditorStartup(editorSettingsService);"));
+                Does.Contain("UnityCliLoopEditorSettingsRecoveryScheduler.ScheduleForEditorStartup(editorSettingsPort);"));
             Assert.That(startupSource, Does.Not.Contain("RecoverSettingsFileForEditorStartup"));
         }
 

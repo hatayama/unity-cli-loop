@@ -4,20 +4,20 @@ using io.github.hatayama.UnityCliLoop.Infrastructure;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Creates editor settings services backed by the real test project settings files.
+    /// Creates editor settings ports backed by the real test project settings files.
     /// </summary>
     internal static class UnityCliLoopEditorSettingsTestFactory
     {
-        internal static UnityCliLoopEditorSettingsService CreateService()
+        internal static IUnityCliLoopEditorSettingsPort CreatePort()
         {
-            return new UnityCliLoopEditorSettingsService(new UnityCliLoopEditorSettingsRepository());
+            return new UnityCliLoopEditorSettingsRepository();
         }
 
-        internal static UnityCliLoopEditorSettingsService CreateServiceWithRepository(
+        internal static IUnityCliLoopEditorSettingsPort CreatePortWithRepository(
             out UnityCliLoopEditorSettingsRepository repository)
         {
             repository = new UnityCliLoopEditorSettingsRepository();
-            return new UnityCliLoopEditorSettingsService(repository);
+            return repository;
         }
     }
 }

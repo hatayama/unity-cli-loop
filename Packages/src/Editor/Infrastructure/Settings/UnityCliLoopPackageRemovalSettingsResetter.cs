@@ -16,14 +16,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal sealed class UnityCliLoopPackageRemovalSettingsResetter
     {
-        private readonly UnityCliLoopEditorSettingsService _editorSettingsService;
+        private readonly IUnityCliLoopEditorSettingsPort _editorSettingsPort;
 
-        internal UnityCliLoopPackageRemovalSettingsResetter(UnityCliLoopEditorSettingsService editorSettingsService)
+        internal UnityCliLoopPackageRemovalSettingsResetter(IUnityCliLoopEditorSettingsPort editorSettingsPort)
         {
-            Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+            Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
 
-            _editorSettingsService = editorSettingsService
-                ?? throw new ArgumentNullException(nameof(editorSettingsService));
+            _editorSettingsPort = editorSettingsPort
+                ?? throw new ArgumentNullException(nameof(editorSettingsPort));
         }
 
         internal void RegisterForEditorStartup()
@@ -68,11 +68,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         internal static void ResetSetupWizardStateIfPackageRemoved(
-            UnityCliLoopEditorSettingsService editorSettingsService,
+            IUnityCliLoopEditorSettingsPort editorSettingsPort,
             IEnumerable<string> removedPackageNames,
             string packageName)
         {
-            Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+            Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
             Debug.Assert(removedPackageNames != null, "removedPackageNames must not be null");
             Debug.Assert(!string.IsNullOrEmpty(packageName), "packageName must not be null or empty");
 
@@ -81,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            editorSettingsService.UpdateSettings(ResetSetupWizardState);
+            editorSettingsPort.UpdateSettings(ResetSetupWizardState);
         }
 
         private void HandleRegisteringPackages(PackageRegistrationEventArgs args)
@@ -90,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             IEnumerable<string> removedPackageNames = GetRemovedPackageNames(args);
             ResetSetupWizardStateIfPackageRemoved(
-                _editorSettingsService,
+                _editorSettingsPort,
                 removedPackageNames,
                 UnityCliLoopConstants.PACKAGE_NAME);
         }

@@ -10,16 +10,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal static class UnityCliLoopEditorSettingsRecoveryScheduler
     {
-        internal static void ScheduleForEditorStartup(UnityCliLoopEditorSettingsService editorSettingsService)
+        internal static void ScheduleForEditorStartup(IUnityCliLoopEditorSettingsPort editorSettingsPort)
         {
-            System.Diagnostics.Debug.Assert(editorSettingsService != null, "editorSettingsService must not be null");
+            System.Diagnostics.Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
 
             if (AssetDatabase.IsAssetImportWorkerProcess())
             {
                 return;
             }
 
-            EditorApplication.delayCall += editorSettingsService.RecoverSettingsFileIfNeeded;
+            EditorApplication.delayCall += editorSettingsPort.RecoverSettingsFileIfNeeded;
         }
     }
 }
