@@ -25,8 +25,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             RestartCleanup,
         }
 
-        private const int READINESS_IDLE_POLL_INTERVAL_MS = 250;
-
         private readonly IUnityCliLoopServerInstanceFactory _serverInstanceFactory;
         private readonly UnityCliLoopServerLifecycleRegistryService _serverLifecycleRegistry;
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
@@ -34,15 +32,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly UnityCliLoopServerInitializationUseCase _initializationUseCase;
         private readonly UnityCliLoopServerShutdownUseCase _shutdownUseCase;
         private readonly DomainReloadRecoveryUseCase _domainReloadRecoveryUseCase;
-        private readonly IUnityCliLoopServerReadinessProbe _readinessProbe;
+        private readonly UnityCliLoopServerReadinessService _readinessService;
+        private readonly UnityCliLoopServerStartupProtectionService _startupProtectionService;
         private readonly IUnityCliLoopServerDomainReloadLifecycle _domainReloadLifecycle;
-        private readonly Func<bool> _isReadinessProbeBlocked;
-        private readonly Func<int, CancellationToken, Task> _waitBeforeReadinessRetryAsync;
         private readonly Func<int, CancellationToken, Task> _waitBeforeRecoveryRetryAsync;
-        private readonly int _readinessIdleTimeoutMilliseconds;
         private IUnityCliLoopServerInstance _bridgeServer;
         private readonly SemaphoreSlim _startupSemaphore = new SemaphoreSlim(1, 1);
-        private long _startupProtectionUntilTicks = 0;
         private Task _currentRecoveryTask;
 
         internal UnityCliLoopServerControllerService(
@@ -53,12 +48,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopServerInitializationUseCase initializationUseCase,
             UnityCliLoopServerShutdownUseCase shutdownUseCase,
             DomainReloadRecoveryUseCase domainReloadRecoveryUseCase,
-            IUnityCliLoopServerReadinessProbe readinessProbe,
+            UnityCliLoopServerReadinessService readinessService,
+            UnityCliLoopServerStartupProtectionService startupProtectionService,
             IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle,
-            Func<bool> isReadinessProbeBlocked = null,
-            Func<int, CancellationToken, Task> waitBeforeReadinessRetryAsync = null,
-            Func<int, CancellationToken, Task> waitBeforeRecoveryRetryAsync = null,
-            int readinessIdleTimeoutMilliseconds = UnityCliLoopServerConfig.READINESS_PROBE_TIMEOUT_MS)
+            Func<int, CancellationToken, Task> waitBeforeRecoveryRetryAsync = null)
         {
             System.Diagnostics.Debug.Assert(serverInstanceFactory != null, "serverInstanceFactory must not be null");
             System.Diagnostics.Debug.Assert(serverLifecycleRegistry != null, "serverLifecycleRegistry must not be null");
@@ -67,9 +60,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             System.Diagnostics.Debug.Assert(initializationUseCase != null, "initializationUseCase must not be null");
             System.Diagnostics.Debug.Assert(shutdownUseCase != null, "shutdownUseCase must not be null");
             System.Diagnostics.Debug.Assert(domainReloadRecoveryUseCase != null, "domainReloadRecoveryUseCase must not be null");
-            System.Diagnostics.Debug.Assert(readinessProbe != null, "readinessProbe must not be null");
+            System.Diagnostics.Debug.Assert(readinessService != null, "readinessService must not be null");
+            System.Diagnostics.Debug.Assert(startupProtectionService != null, "startupProtectionService must not be null");
             System.Diagnostics.Debug.Assert(domainReloadLifecycle != null, "domainReloadLifecycle must not be null");
-            System.Diagnostics.Debug.Assert(readinessIdleTimeoutMilliseconds > 0, "readinessIdleTimeoutMilliseconds must be positive");
 
             _serverInstanceFactory = serverInstanceFactory ?? throw new ArgumentNullException(nameof(serverInstanceFactory));
             _serverLifecycleRegistry = serverLifecycleRegistry ?? throw new ArgumentNullException(nameof(serverLifecycleRegistry));
@@ -78,19 +71,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _initializationUseCase = initializationUseCase ?? throw new ArgumentNullException(nameof(initializationUseCase));
             _shutdownUseCase = shutdownUseCase ?? throw new ArgumentNullException(nameof(shutdownUseCase));
             _domainReloadRecoveryUseCase = domainReloadRecoveryUseCase ?? throw new ArgumentNullException(nameof(domainReloadRecoveryUseCase));
-            _readinessProbe = readinessProbe ?? throw new ArgumentNullException(nameof(readinessProbe));
+            _readinessService = readinessService ?? throw new ArgumentNullException(nameof(readinessService));
+            _startupProtectionService = startupProtectionService ?? throw new ArgumentNullException(nameof(startupProtectionService));
             _domainReloadLifecycle = domainReloadLifecycle ?? throw new ArgumentNullException(nameof(domainReloadLifecycle));
-            _isReadinessProbeBlocked = isReadinessProbeBlocked ?? IsEditorBusyForReadinessProbe;
-            _waitBeforeReadinessRetryAsync = waitBeforeReadinessRetryAsync ?? TimerDelay.Wait;
             _waitBeforeRecoveryRetryAsync = waitBeforeRecoveryRetryAsync ?? TimerDelay.Wait;
-            _readinessIdleTimeoutMilliseconds = readinessIdleTimeoutMilliseconds;
-        }
-
-        private static bool IsEditorBusyForReadinessProbe()
-        {
-            return EditorApplication.isCompiling ||
-                   EditorApplication.isUpdating ||
-                   DomainReloadStateRegistry.IsDomainReloadInProgress();
         }
 
         private bool IsBackgroundUnityProcess()
@@ -263,7 +247,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _bridgeServer = result.ServerInstance;
 
             ApplicationRegistrar.WarmupRegistry();
-            await MarkServerReadyAsync("manual-start", cancellationToken);
+            await _readinessService.MarkServerReadyAsync("manual-start", cancellationToken);
         }
 
         /// <summary>
@@ -300,7 +284,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             _serverLifecycleRegistry.PublishServerStopping();
-            PrepareForServerShutdown();
+            _startupProtectionService.ClearStartupProtection();
 
             ServerShutdownResult result = await _shutdownUseCase.ExecuteAsync(_bridgeServer, ct);
 
@@ -333,7 +317,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         internal void OnBeforeAssemblyReload()
         {
-            ClearStartupProtection();
+            _startupProtectionService.ClearStartupProtection();
             _domainReloadLifecycle.PrepareForDomainReload();
 
             ServiceResult<string> result = _domainReloadRecoveryUseCase.ExecuteBeforeDomainReload(_bridgeServer);
@@ -431,7 +415,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // OnServerLoopExited fires from thread pool — marshal to main thread for Unity API safety
             EditorApplication.delayCall += () =>
             {
-                ClearStartupProtection();
+                _startupProtectionService.ClearStartupProtection();
 
                 VibeLogger.LogWarning(
                     "server_loop_exit_detected",
@@ -444,7 +428,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 // The server just crashed — startup protection blocks recovery if the crash happens
                 // within the 5-second protection window after a successful start
-                System.Threading.Volatile.Write(ref _startupProtectionUntilTicks, 0L);
+                _startupProtectionService.ClearStartupProtection();
 
                 ScheduleTrackedRecovery(() => StartRecoveryIfNeededAsync(false, CancellationToken.None));
             };
@@ -530,32 +514,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        public bool IsStartupProtectionActive()
-        {
-            long nowTicks = DateTime.UtcNow.Ticks;
-            return nowTicks < System.Threading.Volatile.Read(ref _startupProtectionUntilTicks);
-        }
-
-        internal void ActivateStartupProtection(int milliseconds)
-        {
-            long untilTicks = DateTime.UtcNow.AddMilliseconds(milliseconds).Ticks;
-            System.Threading.Volatile.Write(ref _startupProtectionUntilTicks, untilTicks);
-            VibeLogger.LogInfo("startup_protection_active", $"window={milliseconds}ms");
-        }
-
-        internal void PrepareForServerShutdown()
-        {
-            ClearStartupProtection();
-        }
-
-        /// <summary>
-        /// Clears startup protection so recovery paths can restart the server immediately.
-        /// </summary>
-        internal void ClearStartupProtection()
-        {
-            System.Threading.Volatile.Write(ref _startupProtectionUntilTicks, 0L);
-        }
-
         /// <summary>
         /// Centralized, coalesced recovery start.
         /// Attempts recovery on the project IPC endpoint for up to 5 seconds.
@@ -568,12 +526,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            if (IsStartupProtectionActive())
+            if (_startupProtectionService.IsStartupProtectionActive())
             {
                 VibeLogger.LogInfo("server_start_ignored", "startup_protection_active");
                 if (_bridgeServer?.IsRunning == true)
                 {
-                    await MarkServerReadyAsync("startup-protection-active", cancellationToken);
+                    await _readinessService.MarkServerReadyAsync("startup-protection-active", cancellationToken);
                     return;
                 }
 
@@ -589,7 +547,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (_bridgeServer != null && _bridgeServer.IsRunning)
                 {
                     VibeLogger.LogInfo("server_start_ignored", $"already_running endpoint={_bridgeServer.Endpoint}");
-                    await MarkServerReadyAsync("already-running", cancellationToken);
+                    await _readinessService.MarkServerReadyAsync("already-running", cancellationToken);
                     return;
                 }
 
@@ -633,9 +591,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 _sessionFlagsRepository.ClearReconnectingFlags();
                 _sessionFlagsRepository.ClearPostCompileReconnectingUI();
                 ApplicationRegistrar.WarmupRegistry();
-                await MarkServerReadyAsync("server-recovery", cancellationToken);
+                await _readinessService.MarkServerReadyAsync("server-recovery", cancellationToken);
 
-                ActivateStartupProtection(5000);
+                _startupProtectionService.ActivateStartupProtection(5000);
             }
             finally
             {
@@ -717,93 +675,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private void SaveRunningServerState()
         {
             _sessionFlagsRepository.MarkServerStarted();
-        }
-
-        private async Task MarkServerReadyAsync(
-            string reason,
-            CancellationToken cancellationToken)
-        {
-            try
-            {
-                await WaitForEditorIdleBeforeReadinessProbeAsync(
-                    cancellationToken,
-                    _readinessIdleTimeoutMilliseconds);
-                await ProbeReadinessWithTimeoutAsync(cancellationToken, UnityCliLoopServerConfig.READINESS_PROBE_TIMEOUT_MS);
-            }
-            catch (Exception ex)
-            {
-                string message = $"Unity CLI Loop server bound its project IPC endpoint, but readiness probe failed during {reason}. {ex.GetBaseException().Message}";
-                throw new InvalidOperationException(message, ex);
-            }
-
-            _serverLifecycleRegistry.PublishServerStarted();
-        }
-
-        /// <summary>
-        /// Waits until Unity is ready for a main-thread IPC readiness probe.
-        /// </summary>
-        private async Task WaitForEditorIdleBeforeReadinessProbeAsync(
-            CancellationToken cancellationToken,
-            int timeoutMilliseconds)
-        {
-            Debug.Assert(timeoutMilliseconds > 0, "timeoutMilliseconds must be positive");
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            int remainingMilliseconds = timeoutMilliseconds;
-            while (_isReadinessProbeBlocked())
-            {
-                if (remainingMilliseconds <= 0)
-                {
-                    throw new TimeoutException(
-                        $"Readiness probe timed out after {timeoutMilliseconds}ms while waiting for Unity editor idle.");
-                }
-
-                int delayMilliseconds = Math.Min(READINESS_IDLE_POLL_INTERVAL_MS, remainingMilliseconds);
-                // Why: compile, import, and domain reload work can hold the editor thread after the
-                // endpoint is bound, so readiness timeout must start only after Unity can answer IPC.
-                await _waitBeforeReadinessRetryAsync(
-                    delayMilliseconds,
-                    cancellationToken);
-                remainingMilliseconds -= delayMilliseconds;
-                cancellationToken.ThrowIfCancellationRequested();
-            }
-        }
-
-        internal async Task ProbeReadinessWithTimeoutAsync(
-            CancellationToken cancellationToken,
-            int timeoutMilliseconds)
-        {
-            Debug.Assert(timeoutMilliseconds > 0, "timeoutMilliseconds must be positive");
-
-            using (CancellationTokenSource probeCancellation =
-                   CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
-            {
-                Task probeTask = _readinessProbe.ProbeAsync(probeCancellation.Token);
-                Task timeoutTask = TimerDelay.Wait(timeoutMilliseconds, cancellationToken);
-                Task completedTask = await Task.WhenAny(probeTask, timeoutTask).ConfigureAwait(false);
-                if (completedTask == probeTask)
-                {
-                    await probeTask.ConfigureAwait(false);
-                    return;
-                }
-
-                probeCancellation.Cancel();
-                ObserveTimedOutReadinessProbe(probeTask);
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            throw new TimeoutException(
-                $"Readiness probe timed out after {timeoutMilliseconds}ms while waiting for project IPC warmup.");
-        }
-
-        private static void ObserveTimedOutReadinessProbe(Task probeTask)
-        {
-            _ = probeTask.ContinueWith(
-                completedTask => _ = completedTask.Exception,
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted,
-                TaskScheduler.Default);
         }
 
         public void AddServerStateChangedHandler(Action handler)

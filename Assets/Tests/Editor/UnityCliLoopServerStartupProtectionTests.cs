@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using System.Threading.Tasks;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
@@ -34,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ClearStartupProtection_ResetsProtectionWindow()
         {
             // Tests that the startup protection window can be cleared by recovery code.
-            UnityCliLoopServerControllerService service = CreateControllerService();
+            UnityCliLoopServerStartupProtectionService service = new();
 
             service.ActivateStartupProtection(60000);
 
@@ -49,16 +50,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void OnBeforeAssemblyReload_ShouldClearStartupProtectionBeforeRecovery()
         {
             // Tests that assembly-reload recovery clears the startup protection window before shutdown.
-            UnityCliLoopServerControllerService service = CreateControllerService();
+            UnityCliLoopServerStartupProtectionService startupProtectionService = new();
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                startupProtectionService: startupProtectionService);
             service.RegisterRecoveredServer(new TestServerInstance());
-            service.ActivateStartupProtection(60000);
+            startupProtectionService.ActivateStartupProtection(60000);
 
-            Assert.IsTrue(service.IsStartupProtectionActive(), "Startup protection should be active before reload");
+            Assert.IsTrue(startupProtectionService.IsStartupProtectionActive(), "Startup protection should be active before reload");
 
             service.OnBeforeAssemblyReload();
 
             Assert.IsFalse(
-                service.IsStartupProtectionActive(),
+                startupProtectionService.IsStartupProtectionActive(),
                 "Assembly reload recovery should clear startup protection so the server can restart"
             );
         }
@@ -76,29 +79,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void PrepareForServerShutdown_ShouldClearStartupProtectionBeforeShutdown()
+        public async Task StopServerWithUseCaseAsync_ShouldClearStartupProtectionBeforeShutdown()
         {
             // Tests that explicit shutdown clears the startup protection window before stopping.
-            UnityCliLoopServerControllerService service = CreateControllerService();
+            UnityCliLoopServerStartupProtectionService startupProtectionService = new();
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                startupProtectionService: startupProtectionService);
 
-            service.ActivateStartupProtection(60000);
+            startupProtectionService.ActivateStartupProtection(60000);
 
-            Assert.IsTrue(service.IsStartupProtectionActive(), "Startup protection should be active before shutdown");
+            Assert.IsTrue(startupProtectionService.IsStartupProtectionActive(), "Startup protection should be active before shutdown");
 
-            service.PrepareForServerShutdown();
+            await service.StopServerWithUseCaseAsync();
 
             Assert.IsFalse(
-                service.IsStartupProtectionActive(),
+                startupProtectionService.IsStartupProtectionActive(),
                 "Shutdown path should clear startup protection so recovery can restart the server"
             );
         }
 
-        private UnityCliLoopServerControllerService CreateControllerService()
-        {
-            return CreateControllerService(new TestDomainReloadLifecycle());
-        }
-
-        private UnityCliLoopServerControllerService CreateControllerService(TestDomainReloadLifecycle domainReloadLifecycle)
+        private UnityCliLoopServerControllerService CreateControllerService(
+            TestDomainReloadLifecycle domainReloadLifecycle = null,
+            UnityCliLoopServerStartupProtectionService startupProtectionService = null)
         {
             TestServerInstanceFactory serverInstanceFactory = new();
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
@@ -122,6 +124,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 sessionRecoveryService,
                 domainReloadDetectionService,
                 _sessionFlagsRepository);
+            UnityCliLoopServerReadinessService readinessService = new(
+                lifecycleRegistry,
+                new TestReadinessProbe());
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
                 lifecycleRegistry,
@@ -130,8 +135,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 initializationUseCase,
                 shutdownUseCase,
                 domainReloadRecoveryUseCase,
-                new TestReadinessProbe(),
-                domainReloadLifecycle);
+                readinessService,
+                startupProtectionService ?? new UnityCliLoopServerStartupProtectionService(),
+                domainReloadLifecycle ?? new TestDomainReloadLifecycle());
         }
 
         /// <summary>
