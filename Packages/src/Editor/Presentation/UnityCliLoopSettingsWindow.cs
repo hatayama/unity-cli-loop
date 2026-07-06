@@ -17,14 +17,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// </summary>
     public class UnityCliLoopSettingsWindow : EditorWindow
     {
-        internal enum CliPrimaryButtonAction
-        {
-            None,
-            InstallOrUpdate,
-            RepairPath,
-            Uninstall
-        }
-
         private const bool ForceFlatSkillInstall = true;
         private const double DeferredInitialRefreshDelaySeconds = 0.05;
         private const double ToolSettingsRegistryWarmupInitialDelaySeconds = 0.05;
@@ -774,25 +766,25 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private async void HandleInstallCli()
         {
-            CliPrimaryButtonAction clickedAction = GetCurrentCliPrimaryButtonAction();
+            CliSetupPrimaryAction clickedAction = GetCurrentCliPrimaryButtonAction();
 
             await RefreshCliPrimaryActionStateAsync(CancellationToken.None);
-            CliPrimaryButtonAction refreshedAction = GetCurrentCliPrimaryButtonAction();
-            CliPrimaryButtonAction executableAction = ResolveExecutableCliPrimaryButtonAction(
+            CliSetupPrimaryAction refreshedAction = GetCurrentCliPrimaryButtonAction();
+            CliSetupPrimaryAction executableAction = ResolveExecutableCliPrimaryButtonAction(
                 clickedAction,
                 refreshedAction);
-            if (executableAction == CliPrimaryButtonAction.None)
+            if (executableAction == CliSetupPrimaryAction.None)
             {
                 return;
             }
 
-            if (executableAction == CliPrimaryButtonAction.RepairPath)
+            if (executableAction == CliSetupPrimaryAction.RepairPath)
             {
                 await HandleRepairCliPathSetup();
                 return;
             }
 
-            if (executableAction == CliPrimaryButtonAction.Uninstall)
+            if (executableAction == CliSetupPrimaryAction.Uninstall)
             {
                 await HandleUninstallCli();
                 return;
@@ -835,7 +827,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
         }
 
-        private CliPrimaryButtonAction GetCurrentCliPrimaryButtonAction()
+        private CliSetupPrimaryAction GetCurrentCliPrimaryButtonAction()
         {
             string cliVersion = CliSetupApplicationFacade.GetCachedCliVersion();
             bool cliIsDispatcher = CliSetupApplicationFacade.GetCachedCliIsDispatcher();
@@ -877,7 +869,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 canUninstallCli);
         }
 
-        internal static CliPrimaryButtonAction ResolveCliPrimaryButtonAction(
+        internal static CliSetupPrimaryAction ResolveCliPrimaryButtonAction(
             bool needsCliPathSetup,
             string cliVersion,
             bool cliIsDispatcher,
@@ -885,22 +877,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher);
             bool isCliInstalled = cliVersion != null;
-            CliSetupPrimaryAction action = CliSetupPrimaryActionPolicy.ResolveSettingsPrimaryAction(
-                    needsCliPathSetup,
-                    needsUpdate,
-                    isCliInstalled,
-                    canUninstallCli);
-            return FromDomainCliPrimaryAction(action);
+            return CliSetupPrimaryActionPolicy.ResolveSettingsPrimaryAction(
+                needsCliPathSetup,
+                needsUpdate,
+                isCliInstalled,
+                canUninstallCli);
         }
 
-        internal static CliPrimaryButtonAction ResolveExecutableCliPrimaryButtonAction(
-            CliPrimaryButtonAction clickedAction,
-            CliPrimaryButtonAction refreshedAction)
+        internal static CliSetupPrimaryAction ResolveExecutableCliPrimaryButtonAction(
+            CliSetupPrimaryAction clickedAction,
+            CliSetupPrimaryAction refreshedAction)
         {
-            CliSetupPrimaryAction action = CliSetupPrimaryActionPolicy.ResolveExecutableSettingsAction(
-                ToDomainCliPrimaryAction(clickedAction),
-                ToDomainCliPrimaryAction(refreshedAction));
-            return FromDomainCliPrimaryAction(action);
+            return CliSetupPrimaryActionPolicy.ResolveExecutableSettingsAction(
+                clickedAction,
+                refreshedAction);
         }
 
         internal static bool ShouldRepairCliPathFromPrimaryButton(
@@ -908,28 +898,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool needsUpdate)
         {
             return CliSetupPrimaryActionPolicy.ShouldRepairCliPath(needsCliPathSetup, needsUpdate);
-        }
-
-        private static CliSetupPrimaryAction ToDomainCliPrimaryAction(CliPrimaryButtonAction action)
-        {
-            return action switch
-            {
-                CliPrimaryButtonAction.InstallOrUpdate => CliSetupPrimaryAction.InstallOrUpdate,
-                CliPrimaryButtonAction.RepairPath => CliSetupPrimaryAction.RepairPath,
-                CliPrimaryButtonAction.Uninstall => CliSetupPrimaryAction.Uninstall,
-                _ => CliSetupPrimaryAction.None
-            };
-        }
-
-        private static CliPrimaryButtonAction FromDomainCliPrimaryAction(CliSetupPrimaryAction action)
-        {
-            return action switch
-            {
-                CliSetupPrimaryAction.InstallOrUpdate => CliPrimaryButtonAction.InstallOrUpdate,
-                CliSetupPrimaryAction.RepairPath => CliPrimaryButtonAction.RepairPath,
-                CliSetupPrimaryAction.Uninstall => CliPrimaryButtonAction.Uninstall,
-                _ => CliPrimaryButtonAction.None
-            };
         }
 
         private async Task RefreshCliPrimaryActionStateAsync(CancellationToken ct)

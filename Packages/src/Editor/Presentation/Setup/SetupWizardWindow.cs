@@ -937,7 +937,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (isInstallingCli)
             {
-                if (needsCliPathSetup && !needsUpdate)
+                if (CliSetupPrimaryActionPolicy.ShouldRepairCliPath(needsCliPathSetup, needsUpdate))
                 {
                     return "Fixing PATH...";
                 }

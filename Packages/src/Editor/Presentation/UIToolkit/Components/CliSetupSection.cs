@@ -219,7 +219,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isUninstallAction = IsUninstallCliAction(isCliInstalled, needsUpdate, canUninstallCli);
             if (isInstallingCli)
             {
-                if (needsCliPathSetup && !needsUpdate)
+                if (CliSetupPrimaryActionPolicy.ShouldRepairCliPath(needsCliPathSetup, needsUpdate))
                 {
                     return "Fixing PATH...";
                 }

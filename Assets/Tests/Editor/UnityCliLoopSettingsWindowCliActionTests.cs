@@ -66,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string expected)
         {
             // Verifies that the Settings window chooses repair only when dispatcher replacement is unnecessary.
-            UnityCliLoopSettingsWindow.CliPrimaryButtonAction result =
+            CliSetupPrimaryAction result =
                 UnityCliLoopSettingsWindow.ResolveCliPrimaryButtonAction(
                     needsCliPathSetup,
                     cliVersion,
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string expected)
         {
             // Verifies that a refreshed Settings state cannot turn a stale click into a destructive action.
-            UnityCliLoopSettingsWindow.CliPrimaryButtonAction result =
+            CliSetupPrimaryAction result =
                 UnityCliLoopSettingsWindow.ResolveExecutableCliPrimaryButtonAction(
                     ParseAction(clickedAction),
                     ParseAction(refreshedAction));
@@ -162,10 +162,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 installState);
         }
 
-        private static UnityCliLoopSettingsWindow.CliPrimaryButtonAction ParseAction(string action)
+        private static CliSetupPrimaryAction ParseAction(string action)
         {
-            return (UnityCliLoopSettingsWindow.CliPrimaryButtonAction)
-                System.Enum.Parse(typeof(UnityCliLoopSettingsWindow.CliPrimaryButtonAction), action);
+            return (CliSetupPrimaryAction)
+                System.Enum.Parse(typeof(CliSetupPrimaryAction), action);
         }
     }
 }
