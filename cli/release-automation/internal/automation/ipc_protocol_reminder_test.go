@@ -26,7 +26,7 @@ func TestAnalyzeIPCProtocolReminder_WhenIPCFilesChangedWithoutProtocolDeclaratio
 	// Verifies IPC-facing changes surface a non-blocking protocol bump review reminder.
 	result := AnalyzeIPCProtocolReminder([]string{
 		"cli/common/unityipc/client.go",
-		"Packages/src/Editor/Infrastructure/Api/JsonRpcProcessor.cs",
+		"Packages/src/Editor/Infrastructure/Api/JsonRpcRequestProcessor.cs",
 	})
 
 	if !result.NeedsProtocolBumpReview {
@@ -57,7 +57,7 @@ func TestAppendIPCProtocolReminderSummary_WritesChangedFilesAndGuidance(t *testi
 	// Verifies the GitHub step summary contains enough context for reviewers.
 	summaryPath := filepath.Join(t.TempDir(), "summary.md")
 	result := AnalyzeIPCProtocolReminder([]string{
-		"Packages/src/Editor/Infrastructure/Api/JsonRpcProcessor.cs",
+		"Packages/src/Editor/Infrastructure/Api/JsonRpcRequestProcessor.cs",
 	})
 
 	if err := AppendIPCProtocolReminderSummary(summaryPath, result); err != nil {
@@ -71,7 +71,7 @@ func TestAppendIPCProtocolReminderSummary_WritesChangedFilesAndGuidance(t *testi
 	if !strings.Contains(text, "IPC protocol version reminder") {
 		t.Fatalf("summary misses heading:\n%s", text)
 	}
-	if !strings.Contains(text, "JsonRpcProcessor.cs") {
+	if !strings.Contains(text, "JsonRpcRequestProcessor.cs") {
 		t.Fatalf("summary misses changed file:\n%s", text)
 	}
 	if !strings.Contains(text, "REQUIRED_CLI_PROTOCOL_VERSION") {
