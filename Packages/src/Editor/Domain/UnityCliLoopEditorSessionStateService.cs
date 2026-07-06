@@ -129,7 +129,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     }
 
     /// <summary>
-    /// Coordinates compile-result and pending-compile session repositories during compile recovery.
+    /// Coordinates compile-result and pending-compile repositories, including reload transitions that span session flags.
     /// </summary>
     public sealed class UnityCliLoopEditorSessionStateService
     {
