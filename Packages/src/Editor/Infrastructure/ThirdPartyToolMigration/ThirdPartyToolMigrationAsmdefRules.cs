@@ -1,133 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Text.RegularExpressions;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-using CodeTextMask = io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationParsingRules.CodeTextMask;
-using ReplacementRule = io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationParsingRules.ReplacementRule;
-using TypeReplacementRule = io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationParsingRules.TypeReplacementRule;
-using LegacyPlayerLoopTimingParameterDeclaration = io.github.hatayama.UnityCliLoop.Domain.LegacyPlayerLoopTimingParameterDeclaration;
-using RemovedLegacyPlayerLoopTimingParameter = io.github.hatayama.UnityCliLoop.Domain.RemovedLegacyPlayerLoopTimingParameter;
 using RemovedLegacyPlayerLoopTimingSignature = io.github.hatayama.UnityCliLoop.Domain.RemovedLegacyPlayerLoopTimingSignature;
 using ThirdPartyToolMigrationContentResult = io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationContentResult;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationAliasRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationApiDetectionRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationApplicationDetectionRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationArgumentRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationAttributeRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationCSharpRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationCodeTextMaskBuilder;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationCodeTextMaskInterpolationRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationConstructorArgumentRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationDelayRules;
-using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationDetectionRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationDomainDetectionRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationEditorDelayRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationMetadataConstructorRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationParsingRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationRegexRewriteRules;
+using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationAsmdefReferenceRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationRuleCatalog;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationScreenshotArgumentRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationScreenshotDeconstructionRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationScreenshotDetectionRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationScreenshotRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingArgumentRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingCallerRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingCleanupRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingDeclarationRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingInvocationRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingMethodBodyRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingMethodDeclarationRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingTypeNameRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingTypeResolutionRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingTypeScopeRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationToolContractDetectionRules;
-using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTypeReplacementRules;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     internal static class ThirdPartyToolMigrationAsmdefRules
     {
-        internal static string[] GetMigratedAsmdefReferences(
-            string reference,
-            bool hasLegacyCSharpSource,
-            bool requiresToolContractsReference,
-            bool requiresApplicationReference,
-            bool requiresDomainReference,
-            bool requiresFirstPartyScreenshotReference)
-        {
-            if (string.Equals(reference, LegacyEditorAssemblyName, StringComparison.Ordinal))
-            {
-                return GetMigratedLegacyEditorReferences(
-                    requiresApplicationReference,
-                    requiresDomainReference,
-                    requiresFirstPartyScreenshotReference);
-            }
-
-            if (string.Equals(reference, LegacyRuntimeAssemblyName, StringComparison.Ordinal))
-            {
-                return new[] { CurrentRuntimeGuidReference };
-            }
-
-            if (hasLegacyCSharpSource &&
-                string.Equals(reference, LegacyEditorAssemblyGuidReference, StringComparison.Ordinal))
-            {
-                return GetMigratedLegacyEditorReferences(
-                    requiresApplicationReference,
-                    requiresDomainReference,
-                    requiresFirstPartyScreenshotReference);
-            }
-
-            return new[] { reference };
-        }
-
-        internal static string[] GetMigratedLegacyEditorReferences(
-            bool requiresApplicationReference,
-            bool requiresDomainReference,
-            bool requiresFirstPartyScreenshotReference)
-        {
-            List<string> references = new()
-            {
-                CurrentToolContractsGuidReference
-            };
-            AddRequiredMigratedLegacyEditorReference(
-                references,
-                requiresApplicationReference,
-                CurrentApplicationGuidReference);
-            AddRequiredMigratedLegacyEditorReference(
-                references,
-                requiresDomainReference,
-                CurrentDomainGuidReference);
-            AddRequiredMigratedLegacyEditorReference(
-                references,
-                requiresFirstPartyScreenshotReference,
-                CurrentFirstPartyToolsScreenshotGuidReference);
-
-            return references.ToArray();
-        }
-
-        internal static void AddRequiredMigratedLegacyEditorReference(
-            List<string> references,
-            bool isRequired,
-            string reference)
-        {
-            Debug.Assert(references != null, "references must not be null");
-            Debug.Assert(!string.IsNullOrEmpty(reference), "reference must not be null or empty");
-
-            if (!isRequired)
-            {
-                return;
-            }
-
-            references.Add(reference);
-        }
-
         internal static void AddRequiredCurrentAsmdefReferences(
             JArray references,
             HashSet<string> addedReferences,
@@ -197,65 +83,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             replacementCount++;
         }
 
-        internal static string GetCurrentAsmdefReferenceKey(string reference)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(reference), "reference must not be null or empty");
-
-            if (IsCurrentAsmdefReference(
-                    reference,
-                    CurrentRuntimeAssemblyName,
-                    CurrentRuntimeGuidReference))
-            {
-                return CurrentRuntimeAssemblyName;
-            }
-
-            if (IsCurrentAsmdefReference(
-                    reference,
-                    CurrentToolContractsAssemblyName,
-                    CurrentToolContractsGuidReference))
-            {
-                return CurrentToolContractsAssemblyName;
-            }
-
-            if (IsCurrentAsmdefReference(
-                    reference,
-                    CurrentApplicationAssemblyName,
-                    CurrentApplicationGuidReference))
-            {
-                return CurrentApplicationAssemblyName;
-            }
-
-            if (IsCurrentAsmdefReference(
-                    reference,
-                    CurrentDomainAssemblyName,
-                    CurrentDomainGuidReference))
-            {
-                return CurrentDomainAssemblyName;
-            }
-
-            if (IsCurrentAsmdefReference(
-                    reference,
-                    CurrentFirstPartyToolsScreenshotAssemblyName,
-                    CurrentFirstPartyToolsScreenshotGuidReference))
-            {
-                return CurrentFirstPartyToolsScreenshotAssemblyName;
-            }
-
-            return reference;
-        }
-
-        internal static bool IsCurrentAsmdefReference(
-            string reference,
-            string assemblyName,
-            string guidReference)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(reference), "reference must not be null or empty");
-            Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty");
-            Debug.Assert(!string.IsNullOrEmpty(guidReference), "guidReference must not be null or empty");
-
-            return string.Equals(reference, assemblyName, StringComparison.Ordinal) ||
-                string.Equals(reference, guidReference, StringComparison.Ordinal);
-        }
         internal static ThirdPartyToolMigrationContentResult MigrateAsmdefSource(
             string source,
             bool hasLegacyCSharpSource,
