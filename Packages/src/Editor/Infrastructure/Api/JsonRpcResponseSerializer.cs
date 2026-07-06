@@ -1,4 +1,3 @@
-using Newtonsoft.Json;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -8,10 +7,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public static class JsonRpcResponseSerializer
     {
-        public static readonly JsonSerializerSettings Settings = new JsonSerializerSettings
-        {
-            ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-            MaxDepth = UnityCliLoopServerConfig.DEFAULT_JSON_MAX_DEPTH
-        };
+        public static readonly Newtonsoft.Json.JsonSerializerSettings Settings =
+            UnityCliLoopJsonResponseSerializerSettings.Settings;
     }
 }
