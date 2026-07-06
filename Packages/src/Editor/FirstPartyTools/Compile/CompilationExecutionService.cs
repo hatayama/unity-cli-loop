@@ -14,14 +14,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class CompilationExecutionService
     {
-        private readonly UnityCliLoopEditorSessionStateService _sessionStateService;
+        private readonly ICompileResultSessionRepository _compileResultSessionRepository;
+        private readonly IPendingCompileSessionRepository _pendingCompileSessionRepository;
 
-        public CompilationExecutionService(UnityCliLoopEditorSessionStateService sessionStateService)
+        public CompilationExecutionService(
+            ICompileResultSessionRepository compileResultSessionRepository,
+            IPendingCompileSessionRepository pendingCompileSessionRepository)
         {
-            Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+            Debug.Assert(compileResultSessionRepository != null, "compileResultSessionRepository must not be null");
+            Debug.Assert(pendingCompileSessionRepository != null, "pendingCompileSessionRepository must not be null");
 
-            _sessionStateService =
-                sessionStateService ?? throw new ArgumentNullException(nameof(sessionStateService));
+            _compileResultSessionRepository = compileResultSessionRepository ??
+                throw new ArgumentNullException(nameof(compileResultSessionRepository));
+            _pendingCompileSessionRepository = pendingCompileSessionRepository ??
+                throw new ArgumentNullException(nameof(pendingCompileSessionRepository));
         }
 
         /// <summary>
@@ -36,7 +42,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new System.ArgumentNullException(nameof(request));
             }
 
-            using CompileController compileController = new(_sessionStateService);
+            using CompileController compileController = new(
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
             compileController.SetResultRecordingContext(CompileResultRecordingContext.Create(request));
             compileController.SetExternalSceneChangePolicy(request.ReloadExternalSceneChanges);
             return await compileController.TryCompileAsync(request.ForceRecompile, ct);

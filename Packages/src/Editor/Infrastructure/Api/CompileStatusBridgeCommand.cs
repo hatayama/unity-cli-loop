@@ -22,11 +22,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public static GetCompileStatusResponse Execute(JToken paramsToken)
         {
             string requestId = ReadRequestId(paramsToken);
-            UnityCliLoopEditorSessionStateService sessionStateService =
-                UnityCliLoopEditorSessionStateFacade.Service;
-            sessionStateService.ClearExpiredCompileResult(DateTime.UtcNow);
+            UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService =
+                UnityCliLoopCompileSessionLifecycleFacade.Service;
+            compileSessionLifecycleService.ClearExpiredCompileResult(DateTime.UtcNow);
             ISessionFlagsRepository sessionFlagsRepository =
                 UnityCliLoopSessionFlagsFacade.Repository;
+            ICompileResultSessionRepository compileResultSessionRepository =
+                UnityCliLoopCompileResultSessionRepositoryFacade.Repository;
+            IPendingCompileSessionRepository pendingCompileSessionRepository =
+                UnityCliLoopPendingCompileSessionRepositoryFacade.Repository;
             bool isCompiling = EditorApplication.isCompiling;
             bool isUpdating = EditorApplication.isUpdating;
             bool isDomainReloadInProgress =
@@ -37,7 +41,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 isCompiling,
                 isUpdating,
                 isDomainReloadInProgress,
-                sessionStateService);
+                compileSessionLifecycleService,
+                compileResultSessionRepository,
+                pendingCompileSessionRepository);
             LogCompileStatusQueryReceived(requestId, response);
             return response;
         }
@@ -47,18 +53,25 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool isCompiling,
             bool isUpdating,
             bool isDomainReloadInProgress,
-            UnityCliLoopEditorSessionStateService sessionStateService)
+            UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService,
+            ICompileResultSessionRepository compileResultSessionRepository,
+            IPendingCompileSessionRepository pendingCompileSessionRepository)
         {
-            Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+            Debug.Assert(compileSessionLifecycleService != null, "compileSessionLifecycleService must not be null");
+            Debug.Assert(compileResultSessionRepository != null, "compileResultSessionRepository must not be null");
+            Debug.Assert(pendingCompileSessionRepository != null, "pendingCompileSessionRepository must not be null");
 
             bool ready = !isCompiling && !isUpdating && !isDomainReloadInProgress;
-            sessionStateService.ClearExpiredPendingCompileRequest(DateTime.UtcNow);
+            compileSessionLifecycleService.ClearExpiredPendingCompileRequest(DateTime.UtcNow);
             UnityCliLoopStoredCompileResult storedResult = string.IsNullOrWhiteSpace(requestId)
                 ? UnityCliLoopStoredCompileResult.None()
-                : sessionStateService.GetCompileResult(requestId);
+                : compileResultSessionRepository.GetCompileResult(requestId);
             if (ready && !storedResult.HasResult)
             {
-                storedResult = RecoverPendingCompileResult(requestId, sessionStateService);
+                storedResult = RecoverPendingCompileResult(
+                    requestId,
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
             }
 
             JToken result = storedResult.HasResult ? JToken.Parse(storedResult.ResultJson) : null;
@@ -109,9 +122,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static UnityCliLoopStoredCompileResult RecoverPendingCompileResult(
             string requestId,
-            UnityCliLoopEditorSessionStateService sessionStateService)
+            ICompileResultSessionRepository compileResultSessionRepository,
+            IPendingCompileSessionRepository pendingCompileSessionRepository)
         {
-            Debug.Assert(sessionStateService != null, "sessionStateService must not be null");
+            Debug.Assert(compileResultSessionRepository != null, "compileResultSessionRepository must not be null");
+            Debug.Assert(pendingCompileSessionRepository != null, "pendingCompileSessionRepository must not be null");
 
             if (string.IsNullOrWhiteSpace(requestId))
             {
@@ -119,7 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             UnityCliLoopPendingCompileRequest pendingRequest =
-                sessionStateService.GetPendingCompileRequestForRequestId(requestId);
+                pendingCompileSessionRepository.GetPendingCompileRequestForRequestId(requestId);
             if (!pendingRequest.HasRequest)
             {
                 return UnityCliLoopStoredCompileResult.None();
@@ -131,13 +146,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             JObject recoveredResult = CreateRecoveredCompileResult(pendingRequest);
-            sessionStateService.StoreCompileResult(
+            compileResultSessionRepository.StoreCompileResult(
                 requestId,
                 pendingRequest.ForceRecompile,
                 recoveredResult.ToString(Formatting.None),
                 DateTime.UtcNow);
-            sessionStateService.ClearPendingCompileRequestIfMatches(requestId);
-            return sessionStateService.GetCompileResult(requestId);
+            pendingCompileSessionRepository.ClearPendingCompileRequestIfMatches(requestId);
+            return compileResultSessionRepository.GetCompileResult(requestId);
         }
 
         private static JObject CreateRecoveredCompileResult(

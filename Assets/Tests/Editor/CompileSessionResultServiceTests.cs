@@ -174,10 +174,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void StoreCompileResult_WhenResultIsPersisted_UsesPascalCaseJson()
         {
             // Verifies delayed compile polling reads the same PascalCase response contract as immediate tool responses.
-            UnityCliLoopEditorSessionStateService sessionStateService =
-                UnityCliLoopEditorSessionStateTestFactory.CreateService();
+            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
             UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
-                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(sessionStateService);
+                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
 
             try
@@ -193,14 +195,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 };
 
                 CompileSessionResultService.StoreCompileResult(
-                    sessionStateService,
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository,
                     "compile_test_request",
                     forceRecompile: false,
                     response,
                     "compile_test_request");
 
                 UnityCliLoopStoredCompileResult storedResult =
-                    sessionStateService.GetCompileResult("compile_test_request");
+                    compileResultSessionRepository.GetCompileResult("compile_test_request");
 
                 // Pins every property name of the stored payload because the CLI parses this JSON
                 // and CompileResponse no longer has a dedicated storage DTO guarding the shape.
@@ -215,7 +218,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                originalSnapshot.Restore(sessionStateService);
+                originalSnapshot.Restore();
             }
         }
     }

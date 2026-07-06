@@ -27,7 +27,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private UnityCliLoopEditorSettingsRepository _editorSettingsRepository;
         private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
-        private UnityCliLoopEditorSessionStateService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
 
         [SetUp]
@@ -45,8 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _editorSettingsPort =
                 UnityCliLoopEditorSettingsTestFactory.CreatePortWithRepository(out _editorSettingsRepository);
             _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
-            _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
-            _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
+            _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
             SetupWizardWindow.InitializeEditorServices(_editorSettingsPort, _sessionFlagsRepository);
             _editorSettingsRepository.InvalidateCache();
@@ -57,7 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             RestoreFile(SettingsFilePath, _settingsFileExisted, _settingsFileContent);
             _editorSettingsRepository.InvalidateCache();
-            _originalSessionState.Restore(_sessionStateService);
+            _originalSessionState.Restore();
         }
 
         [TestCase("", "1.7.3", "", "3.0.1", false, false, false, true)]

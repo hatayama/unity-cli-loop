@@ -33,6 +33,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/ToolContracts/VibeLogger.cs",
             "Packages/src/Editor/Application/UnityCliLoopServerApplicationService.cs",
             "Packages/src/Editor/Domain/UnityCliLoopSessionFlagsFacade.cs",
+            "Packages/src/Editor/Domain/UnityCliLoopCompileResultSessionRepositoryFacade.cs",
+            "Packages/src/Editor/Domain/UnityCliLoopPendingCompileSessionRepositoryFacade.cs",
+            "Packages/src/Editor/Domain/UnityCliLoopCompileSessionLifecycleFacade.cs",
             "Packages/src/Runtime/RecordInput/RecordInputOverlayState.cs",
             "Packages/src/Runtime/ReplayInput/ReplayInputOverlayState.cs",
             "Packages/src/Runtime/SimulateKeyboard/SimulateKeyboardOverlayState.cs",
@@ -49,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             "Packages/src/Editor/Application/SessionRecoveryService.cs",
             "Packages/src/Editor/Application/UseCases/SkillSetupUseCase.cs",
-            "Packages/src/Editor/Domain/UnityCliLoopEditorSessionStateService.cs",
+            "Packages/src/Editor/Domain/UnityCliLoopCompileSessionLifecycleService.cs",
             "Packages/src/Editor/Infrastructure/Server/DomainReloadDetectionFileService.cs"
         };
 

@@ -12,22 +12,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class UnityCliLoopServerStartupProtectionTests
     {
         private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
-        private UnityCliLoopEditorSessionStateService _sessionStateService;
+        private UnityCliLoopCompileSessionLifecycleService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
 
         [SetUp]
         public void SetUp()
         {
             _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
-            _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateService();
-            _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot(_sessionStateService);
+            _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateCompileSessionLifecycleService();
+            _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
         }
 
         [TearDown]
         public void TearDown()
         {
-            _originalSessionState.Restore(_sessionStateService);
+            _originalSessionState.Restore();
         }
 
         [Test]
