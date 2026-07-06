@@ -37,7 +37,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             InitializeEditorServices(
                 editorSettingsPort,
-                sessionFlagsRepository,
                 cliSetupApplicationService,
                 skillSetupUseCase);
 
@@ -56,12 +55,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static void InitializeEditorServices(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
-            ISessionFlagsRepository sessionFlagsRepository,
             CliSetupApplicationService cliSetupApplicationService,
             SkillSetupUseCase skillSetupUseCase)
         {
             Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
-            Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
             Debug.Assert(cliSetupApplicationService != null, "cliSetupApplicationService must not be null");
             Debug.Assert(skillSetupUseCase != null, "skillSetupUseCase must not be null");
 

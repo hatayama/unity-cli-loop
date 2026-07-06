@@ -48,7 +48,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
             SetupWizardWindow.InitializeEditorServices(
                 _editorSettingsPort,
-                _sessionFlagsRepository,
                 CreateCliSetupApplicationService(),
                 CreateSkillSetupUseCase());
             _editorSettingsRepository.InvalidateCache();

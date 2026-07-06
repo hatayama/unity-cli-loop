@@ -893,10 +893,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 setupWizardStartupFlowSource,
                 Does.Contain("EditorApplication.delayCall += () => _showWindowOnVersionChange();"));
+            Assert.That(setupWizardSource, Does.Not.Contain("\n            startupFlow.TryShowOnVersionChange();"));
+        }
+
+        [Test]
+        public void SetupWizardStartup_WhenMigrationAutoScanIsRequested_SchedulesAutoScanThroughDelayCall()
+        {
+            // Tests that startup migration auto-scan runs through a delayed Editor callback.
+            string setupWizardStartupFlowSource = ReadProductionSource(
+                "Packages/src/Editor/Presentation/Setup/SetupWizardStartupFlow.cs");
+
             Assert.That(
                 setupWizardStartupFlowSource,
                 Does.Contain("EditorApplication.delayCall += () => _showThirdPartyMigrationAutoScan();"));
-            Assert.That(setupWizardSource, Does.Not.Contain("\n            startupFlow.TryShowOnVersionChange();"));
         }
 
         [Test]
