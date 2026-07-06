@@ -93,7 +93,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 removedPlayerLoopTimingSignatures != null,
                 "removedPlayerLoopTimingSignatures must not be null");
 
-            Content = content ?? string.Empty;
+            Content = content;
             ReplacementCount = replacementCount;
             RemovedPlayerLoopTimingSignatures =
                 removedPlayerLoopTimingSignatures ??
