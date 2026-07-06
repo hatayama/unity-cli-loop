@@ -24,10 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const string UXML_RELATIVE_PATH = "Editor/Presentation/Setup/SetupWizardWindow.uxml";
         private const string USS_RELATIVE_PATH = "Editor/Presentation/Setup/SetupWizardWindow.uss";
         private const string GITHUB_ICON_RELATIVE_PATH = "Editor/Presentation/Setup/GitHub_Invertocat_White.png";
-        private const int PreferredWrappedTextLineCount = 2;
         private const bool ForceFlatSkillInstall = true;
         private static readonly char[] VersionMajorSeparators = { '.', '-' };
-        private static readonly Vector2 MinimumWindowSize = new(360f, 380f);
         private static IUnityCliLoopEditorSettingsPort RegisteredEditorSettingsPort;
         private static ISessionFlagsRepository RegisteredSessionFlagsRepository;
         private static CliSetupApplicationService RegisteredCliSetupApplicationService;
@@ -302,7 +300,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             string lastSeenSetupWizardVersionBeforeOpen =
                 GetEditorSettingsPort().GetLastSeenSetupWizardVersion();
-            Rect windowPosition = CreateCenteredRect(EditorGUIUtility.GetMainWindowPosition(), MinimumWindowSize);
+            Rect windowPosition = SetupWizardWindowResizer.CreateCenteredRect(
+                EditorGUIUtility.GetMainWindowPosition(),
+                SetupWizardWindowResizer.MinimumWindowSize);
             SetupWizardWindow window = CreateInstance<SetupWizardWindow>();
             PrepareForOpen(
                 window,
@@ -312,21 +312,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 shouldRecordVersion);
             window.ShowUtility();
             window.ScheduleResizeToContent();
-        }
-
-        internal static Rect WithContentSize(Rect currentRect, Vector2 contentSize, Vector2 frameSize)
-        {
-            Vector2 measuredSize = contentSize + frameSize;
-            Vector2 targetSize = new(
-                Mathf.Max(measuredSize.x, MinimumWindowSize.x),
-                Mathf.Max(measuredSize.y, MinimumWindowSize.y));
-            return CreateCenteredRect(currentRect, targetSize);
-        }
-
-        internal static Rect CreateCenteredRect(Rect bounds, Vector2 size)
-        {
-            Vector2 centeredPosition = bounds.center - (size * 0.5f);
-            return new Rect(centeredPosition, size);
         }
 
         internal static string GetGitHubRepositoryUrl()
@@ -477,7 +462,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private bool _isInstallingCli;
         private bool _isInstallingSkills;
         private bool _needsCliPathSetup;
-        private bool _isApplyingContentSize;
         private bool _isSkillsTargetFieldInitialized;
         private bool _shouldUseFirstInstallSkillsUi;
         private bool _installSkillsFlat;
@@ -486,12 +470,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         [SerializeField]
         private bool _shouldRecordLastSeenVersionAfterCreateGui;
         private IVisualElementScheduledItem _initialRefreshScheduledItem;
-        private IVisualElementScheduledItem _resizeScheduledItem;
         private CancellationTokenSource _skillInstallStateRefreshCts;
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private SkillSetupUseCase _skillSetupUseCase;
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private CliSetupApplicationService _cliSetupApplicationService;
+        private SetupWizardWindowResizer _resizer;
 
         private void CreateGUI()
         {
@@ -499,6 +483,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             InitializeFirstInstallSkillsUiState();
             LoadLayout();
             BindElements();
+            _resizer = new SetupWizardWindowResizer(this, _mainScrollView);
             BindEvents();
             BindSizeUpdates();
             ApplyInitialCheckingState();
@@ -532,6 +517,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void OnDisable()
         {
             _initialRefreshScheduledItem?.Pause();
+            _resizer?.Pause();
             CancelSkillInstallStateRefresh();
         }
 
@@ -641,11 +627,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void BindSizeUpdates()
         {
-            rootVisualElement.RegisterCallback<GeometryChangedEvent>(_ =>
-            {
-                if (_isApplyingContentSize) return;
-                ScheduleResizeToContent();
-            });
+            _resizer.BindSizeUpdates();
         }
 
         private void RefreshAutoShowToggle()
@@ -1450,158 +1432,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void ScheduleResizeToContent()
         {
-            _resizeScheduledItem?.Pause();
-            _resizeScheduledItem = rootVisualElement.schedule.Execute(ResizeToContent).StartingIn(0);
-        }
-
-        private void ResizeToContent()
-        {
-            ScrollView mainContainer = rootVisualElement.Q<ScrollView>();
-            if (mainContainer == null) return;
-            if (rootVisualElement.layout.width <= 0f || rootVisualElement.layout.height <= 0f) return;
-
-            Vector2 contentSize = MeasureContentSize(mainContainer);
-            if (!HasFiniteSize(contentSize)) return;
-            if (contentSize.x <= 0f || contentSize.y <= 0f) return;
-
-            Vector2 frameSize = position.size - rootVisualElement.layout.size;
-            if (!HasFiniteSize(frameSize)) return;
-            Rect targetRect = WithContentSize(position, contentSize, frameSize);
-            if (!HasFiniteSize(targetRect.size)) return;
-            if (Approximately(position.size, targetRect.size))
-            {
-                minSize = targetRect.size;
-                maxSize = targetRect.size;
-                return;
-            }
-
-            _isApplyingContentSize = true;
-            minSize = targetRect.size;
-            maxSize = targetRect.size;
-            position = targetRect;
-            _isApplyingContentSize = false;
-        }
-
-        private static Vector2 MeasureContentSize(ScrollView mainContainer)
-        {
-            VisualElement contentContainer = mainContainer.contentContainer;
-            float width = MeasurePreferredContentWidth(mainContainer, contentContainer);
-            float height = MeasurePreferredContentHeight(mainContainer, contentContainer);
-            return new Vector2(width, height);
-        }
-
-        private static float MeasurePreferredContentWidth(VisualElement mainContainer, VisualElement contentContainer)
-        {
-            float maxRight = 0f;
-            foreach (TextElement textElement in contentContainer.Query<TextElement>().Build())
-            {
-                if (!textElement.visible) continue;
-                if (string.IsNullOrEmpty(textElement.text)) continue;
-                if (!HasFiniteRect(textElement.worldBound)) continue;
-
-                float left = textElement.worldBound.xMin - contentContainer.worldBound.xMin;
-                float horizontalChrome =
-                    textElement.resolvedStyle.paddingLeft
-                    + textElement.resolvedStyle.paddingRight
-                    + textElement.resolvedStyle.borderLeftWidth
-                    + textElement.resolvedStyle.borderRightWidth;
-                float verticalChrome =
-                    textElement.resolvedStyle.paddingTop
-                    + textElement.resolvedStyle.paddingBottom
-                    + textElement.resolvedStyle.borderTopWidth
-                    + textElement.resolvedStyle.borderBottomWidth;
-                float laidOutWidth = textElement.worldBound.width;
-                Vector2 measuredTextSize = textElement.MeasureTextSize(
-                    textElement.text,
-                    0f,
-                    VisualElement.MeasureMode.Undefined,
-                    0f,
-                    VisualElement.MeasureMode.Undefined);
-                if (!IsFinite(left)) continue;
-                if (!IsFinite(horizontalChrome) || !IsFinite(verticalChrome)) continue;
-                if (!HasFiniteSize(measuredTextSize)) continue;
-                if (!IsFinite(laidOutWidth)) continue;
-                float measuredWidth = measuredTextSize.x + horizontalChrome;
-                int lineCount = EstimateWrappedLineCount(
-                    textElement.worldBound.height - verticalChrome,
-                    measuredTextSize.y);
-                float preferredWidth = SelectPreferredTextWidth(
-                    laidOutWidth,
-                    measuredWidth,
-                    lineCount,
-                    textElement.resolvedStyle.whiteSpace);
-                if (!IsFinite(preferredWidth)) continue;
-                float right = left + preferredWidth;
-                maxRight = Mathf.Max(maxRight, right);
-            }
-
-            float width =
-                mainContainer.resolvedStyle.paddingLeft
-                + maxRight
-                + mainContainer.resolvedStyle.paddingRight;
-            return IsFinite(width) ? Mathf.Ceil(width) : 0f;
-        }
-
-        internal static int EstimateWrappedLineCount(float laidOutTextHeight, float singleLineTextHeight)
-        {
-            if (singleLineTextHeight <= 0f) return 1;
-
-            return Mathf.Max(1, Mathf.RoundToInt(laidOutTextHeight / singleLineTextHeight));
-        }
-
-        internal static float SelectPreferredTextWidth(
-            float laidOutWidth,
-            float measuredWidth,
-            int lineCount,
-            WhiteSpace whiteSpace)
-        {
-            if (whiteSpace != WhiteSpace.Normal) return measuredWidth;
-            if (lineCount <= PreferredWrappedTextLineCount) return Mathf.Min(laidOutWidth, measuredWidth);
-
-            return Mathf.Max(laidOutWidth, measuredWidth / PreferredWrappedTextLineCount);
-        }
-
-        private static float MeasurePreferredContentHeight(VisualElement mainContainer, VisualElement contentContainer)
-        {
-            float maxBottom = 0f;
-            foreach (VisualElement child in contentContainer.Children())
-            {
-                if (!child.visible) continue;
-                if (!HasFiniteRect(child.worldBound)) continue;
-                float bottom = child.worldBound.yMax - contentContainer.worldBound.yMin;
-                if (!IsFinite(bottom)) continue;
-                maxBottom = Mathf.Max(maxBottom, bottom);
-            }
-
-            float height =
-                mainContainer.resolvedStyle.paddingTop
-                + maxBottom
-                + mainContainer.resolvedStyle.paddingBottom;
-            return IsFinite(height) ? Mathf.Ceil(height) : 0f;
-        }
-
-        private static bool Approximately(Vector2 left, Vector2 right)
-        {
-            const float Tolerance = 0.5f;
-            return Mathf.Abs(left.x - right.x) < Tolerance && Mathf.Abs(left.y - right.y) < Tolerance;
-        }
-
-        internal static bool HasFiniteSize(Vector2 size)
-        {
-            return IsFinite(size.x) && IsFinite(size.y);
-        }
-
-        private static bool HasFiniteRect(Rect rect)
-        {
-            return IsFinite(rect.xMin)
-                && IsFinite(rect.xMax)
-                && IsFinite(rect.yMin)
-                && IsFinite(rect.yMax);
-        }
-
-        private static bool IsFinite(float value)
-        {
-            return !float.IsNaN(value) && !float.IsInfinity(value);
+            _resizer?.ScheduleResizeToContent();
         }
 
     }
