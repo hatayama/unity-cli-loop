@@ -141,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return cleared;
         }
 
-        // Tests seed pre-refactor and corrupt values through these helpers without widening the aggregate port.
+        // Tests and legacy migration use these helpers without widening the aggregate port.
         internal static void SetLegacyCompileResultRequestId(string compileResultRequestId)
         {
             SetString(LegacyCompileResultRequestIdKey, compileResultRequestId);
@@ -257,7 +257,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return false;
         }
 
-        private static UnityCliLoopStoredCompileResult GetLegacyCompileResult()
+        private UnityCliLoopStoredCompileResult GetLegacyCompileResult()
         {
             string requestId = GetLegacyCompileResultRequestId();
             if (string.IsNullOrWhiteSpace(requestId))
@@ -268,7 +268,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return GetLegacyCompileResultForRequestId(requestId);
         }
 
-        private static UnityCliLoopStoredCompileResult GetLegacyCompileResultForRequestId(string requestId)
+        private UnityCliLoopStoredCompileResult GetLegacyCompileResultForRequestId(string requestId)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
 
@@ -296,7 +296,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             bool forceRecompile = GetLegacyCompileResultForceRecompile();
-            StoreMigratedCompileResult(
+            StoreCompileResult(
                 requestId,
                 forceRecompile,
                 resultJson,
@@ -309,24 +309,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 completedAtUtcTicks);
         }
 
-        private static void StoreMigratedCompileResult(
-            string requestId,
-            bool forceRecompile,
-            string resultJson,
-            DateTime completedAtUtc)
-        {
-            SetCompileResultRequestIds(AddRequestIdToIndex(GetCompileResultRequestIds(), requestId));
-            SetCompileResultForceRecompile(requestId, forceRecompile);
-            SetCompileResultJson(requestId, resultJson);
-            SetCompileResultCompletedAtUtcTicks(requestId, completedAtUtc.Ticks.ToString());
-        }
-
         private static void ClearLegacyCompileResult()
         {
             SetLegacyCompileResultRequestId("");
-            SetBool(LegacyCompileResultForceRecompileKey, false);
-            SetString(LegacyCompileResultJsonKey, "");
-            SetString(LegacyCompileResultCompletedAtUtcTicksKey, "");
+            SetLegacyCompileResultForceRecompile(false);
+            SetLegacyCompileResultJson("");
+            SetLegacyCompileResultCompletedAtUtcTicks("");
         }
 
         private static (bool IsValid, long Value) ParseUtcTicks(string utcTicksText)
