@@ -5,7 +5,7 @@ using UnityEditor.Compilation;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Creates raw CompileResult instances before CompileSessionResultService shapes them into CompileResponse DTOs.
+    /// Creates raw CompileResult instances before CompileResponseFactory shapes them into CompileResponse DTOs.
     /// </summary>
     internal static class CompileResultFactory
     {

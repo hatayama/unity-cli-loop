@@ -146,7 +146,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // 4. Result formatting
             CompileResponse successResponse =
-                CompileSessionResultService.CreateCompileResult(result, request.ForceRecompile);
+                CompileResponseFactory.CreateCompileResult(result, request.ForceRecompile);
             CompileResponse persistedSuccessResponse =
                 StoreResponseIfNeeded(request, successResponse, correlationId);
             return persistedSuccessResponse;
@@ -206,7 +206,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return response;
             }
 
-            CompileSessionResultService.StoreCompileResult(
+            CompileSessionResultStore.StoreCompileResult(
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository,
                 request.RequestId,

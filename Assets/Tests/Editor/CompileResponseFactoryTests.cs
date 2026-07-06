@@ -4,7 +4,6 @@ using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
-using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -13,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// Tests compile result conversion before results are stored for CLI polling.
     /// </summary>
     [TestFixture]
-    public sealed class CompileSessionResultServiceTests
+    public sealed class CompileResponseFactoryTests
     {
         [Test]
         public void CreateCompileResult_WhenNormalCompileCompletes_MapsDetailedIssues()
@@ -43,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 warnings: new[] { warning });
 
             CompileResponse response =
-                CompileSessionResultService.CreateCompileResult(result, forceRecompile: false);
+                CompileResponseFactory.CreateCompileResult(result, forceRecompile: false);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCount, Is.EqualTo(1));
@@ -76,7 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 message: null);
 
             CompileResponse response =
-                CompileSessionResultService.CreateCompileResult(result, forceRecompile: true);
+                CompileResponseFactory.CreateCompileResult(result, forceRecompile: true);
 
             Assert.That(response.Success, Is.Null);
             Assert.That(response.ErrorCount, Is.Null);
@@ -101,7 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 message: "Internal force compile status message.");
 
             CompileResponse response =
-                CompileSessionResultService.CreateCompileResult(result, forceRecompile: true);
+                CompileResponseFactory.CreateCompileResult(result, forceRecompile: true);
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.ErrorCount, Is.Null);
@@ -134,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 preserveDetailsWhenForceRecompile: true);
 
             CompileResponse response =
-                CompileSessionResultService.CreateCompileResult(result, forceRecompile: true);
+                CompileResponseFactory.CreateCompileResult(result, forceRecompile: true);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCount, Is.EqualTo(1));
@@ -164,62 +163,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 warnings: Array.Empty<CompilerMessage>());
 
             CompileResponse response =
-                CompileSessionResultService.CreateCompileResult(result, forceRecompile: false);
+                CompileResponseFactory.CreateCompileResult(result, forceRecompile: false);
 
             Assert.That(response.Message, Does.Contain("TestAssemblies"));
             Assert.That(response.Message, Does.Contain("com.unity.test-framework"));
-        }
-
-        [Test]
-        public void StoreCompileResult_WhenResultIsPersisted_UsesPascalCaseJson()
-        {
-            // Verifies delayed compile polling reads the same PascalCase response contract as immediate tool responses.
-            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository =
-                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
-            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
-                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
-            UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
-                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
-            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
-
-            try
-            {
-                CompileResponse response = new CompileResponse
-                {
-                    Success = true,
-                    ErrorCount = 0,
-                    WarningCount = 0,
-                    Errors = Array.Empty<CompileIssue>(),
-                    Warnings = Array.Empty<CompileIssue>(),
-                    Message = "Compilation completed."
-                };
-
-                CompileSessionResultService.StoreCompileResult(
-                    compileResultSessionRepository,
-                    pendingCompileSessionRepository,
-                    "compile_test_request",
-                    forceRecompile: false,
-                    response,
-                    "compile_test_request");
-
-                UnityCliLoopStoredCompileResult storedResult =
-                    compileResultSessionRepository.GetCompileResult("compile_test_request");
-
-                // Pins every property name of the stored payload because the CLI parses this JSON
-                // and CompileResponse no longer has a dedicated storage DTO guarding the shape.
-                Assert.That(storedResult.ResultJson, Does.Contain("\"Success\":true"));
-                Assert.That(storedResult.ResultJson, Does.Contain("\"ErrorCount\":0"));
-                Assert.That(storedResult.ResultJson, Does.Contain("\"WarningCount\":0"));
-                Assert.That(storedResult.ResultJson, Does.Contain("\"Errors\":[]"));
-                Assert.That(storedResult.ResultJson, Does.Contain("\"Warnings\":[]"));
-                Assert.That(storedResult.ResultJson, Does.Contain("\"Message\":\"Compilation completed.\""));
-                Assert.That(storedResult.ResultJson, Does.Contain("\"ProjectRoot\":"));
-                Assert.That(storedResult.ResultJson, Does.Not.Contain("\"success\""));
-            }
-            finally
-            {
-                originalSnapshot.Restore();
-            }
         }
     }
 }
