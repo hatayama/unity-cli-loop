@@ -127,6 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopServerReadinessService readinessService = new(
                 lifecycleRegistry,
                 new TestReadinessProbe());
+            UnityCliLoopServerRecoveryTrackingService recoveryTrackingService = new(_sessionFlagsRepository);
             return new UnityCliLoopServerControllerService(
                 serverInstanceFactory,
                 lifecycleRegistry,
@@ -137,6 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 domainReloadRecoveryUseCase,
                 readinessService,
                 startupProtectionService ?? new UnityCliLoopServerStartupProtectionService(),
+                recoveryTrackingService,
                 domainReloadLifecycle ?? new TestDomainReloadLifecycle());
         }
 
