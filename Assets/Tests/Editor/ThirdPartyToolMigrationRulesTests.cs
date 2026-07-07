@@ -56,6 +56,86 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void ThirdPartyToolMigrationAsmdefReferenceMigrationResult_WhenReferencesIsNull_Throws()
+        {
+            // Verifies that asmdef migration results fail fast when migrated references are missing.
+            Assert.Throws<ArgumentNullException>(() => new ThirdPartyToolMigrationAsmdefReferenceMigrationResult(
+                null,
+                0));
+        }
+
+        [Test]
+        public void MigrateAsmdefReferences_WhenLegacyEditorReferenceNeedsDomain_AddsRequiredReferences()
+        {
+            // Verifies that pure asmdef reference policy expands legacy editor references with required V3 assemblies.
+            ThirdPartyToolMigrationAsmdefReferenceMigrationResult result =
+                ThirdPartyToolMigrationAsmdefReferenceRules.MigrateAsmdefReferences(
+                    new[] { ThirdPartyToolMigrationRuleCatalog.LegacyEditorAssemblyName },
+                    hasLegacyCSharpSource: false,
+                    requiresToolContractsReference: false,
+                    requiresApplicationReference: false,
+                    requiresDomainReference: true,
+                    requiresFirstPartyScreenshotReference: false);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.ReplacementCount, Is.EqualTo(1));
+            Assert.That(result.References, Is.EqualTo(new[]
+            {
+                ThirdPartyToolMigrationRuleCatalog.CurrentToolContractsGuidReference,
+                ThirdPartyToolMigrationRuleCatalog.CurrentDomainGuidReference
+            }));
+        }
+
+        [Test]
+        public void MigrateAsmdefReferences_WhenRequiredReferenceIsMissing_AddsReferenceWithoutJson()
+        {
+            // Verifies that pure asmdef reference policy can add required references without JSON mutation.
+            ThirdPartyToolMigrationAsmdefReferenceMigrationResult result =
+                ThirdPartyToolMigrationAsmdefReferenceRules.MigrateAsmdefReferences(
+                    Array.Empty<string>(),
+                    hasLegacyCSharpSource: false,
+                    requiresToolContractsReference: true,
+                    requiresApplicationReference: false,
+                    requiresDomainReference: false,
+                    requiresFirstPartyScreenshotReference: false);
+
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.ReplacementCount, Is.EqualTo(1));
+            Assert.That(result.References, Is.EqualTo(new[]
+            {
+                ThirdPartyToolMigrationRuleCatalog.CurrentToolContractsGuidReference
+            }));
+        }
+
+        [Test]
+        public void MigrateAsmdefReferences_WhenCurrentNamesAlreadyExist_DoesNotAddDuplicateGuids()
+        {
+            // Verifies that pure asmdef reference policy deduplicates name and GUID forms of current references.
+            ThirdPartyToolMigrationAsmdefReferenceMigrationResult result =
+                ThirdPartyToolMigrationAsmdefReferenceRules.MigrateAsmdefReferences(
+                    new[]
+                    {
+                        ThirdPartyToolMigrationRuleCatalog.CurrentToolContractsAssemblyName,
+                        ThirdPartyToolMigrationRuleCatalog.CurrentApplicationAssemblyName,
+                        ThirdPartyToolMigrationRuleCatalog.CurrentDomainAssemblyName
+                    },
+                    hasLegacyCSharpSource: false,
+                    requiresToolContractsReference: true,
+                    requiresApplicationReference: true,
+                    requiresDomainReference: true,
+                    requiresFirstPartyScreenshotReference: false);
+
+            Assert.That(result.Changed, Is.False);
+            Assert.That(result.ReplacementCount, Is.EqualTo(0));
+            Assert.That(result.References, Is.EqualTo(new[]
+            {
+                ThirdPartyToolMigrationRuleCatalog.CurrentToolContractsAssemblyName,
+                ThirdPartyToolMigrationRuleCatalog.CurrentApplicationAssemblyName,
+                ThirdPartyToolMigrationRuleCatalog.CurrentDomainAssemblyName
+            }));
+        }
+
+        [Test]
         public void MigrateCSharpSource_WhenLegacyToolApiIsUsed_RewritesToV3Contracts()
         {
             // Verifies that V2 custom tool source is rewritten to the V3 public contract names.
