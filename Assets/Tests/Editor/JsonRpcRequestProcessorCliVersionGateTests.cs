@@ -806,6 +806,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        // The enum currently has only None, so an undefined value is the only way to exercise security-blocked handling.
         [UnityCliLoopTool(RequiredSecuritySetting = (UnityCliLoopSecuritySetting)999)]
         private sealed class SecurityBlockedTestTool : IUnityCliLoopTool
         {
