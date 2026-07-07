@@ -35,26 +35,10 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             ct.ThrowIfCancellationRequested();
 
-            if (!registry.TryGetTool(toolName, out IUnityCliLoopTool tool))
+            ToolExecutionSessionBeginResult beginResult = _executionSession.Begin(registry, toolName);
+            if (!beginResult.IsEntered)
             {
-                throw new ArgumentException($"Unknown tool: {toolName}");
-            }
-
-            if (!registry.IsToolEnabled(toolName)
-                && !ToolExecutionAvailability.ShouldReportDependencyUnavailableBeforeDisabled(toolName))
-            {
-                throw new ToolDisabledException(toolName);
-            }
-
-            if (!UnityCliLoopSecurityChecker.IsToolAllowed(registry, toolName))
-            {
-                throw new UnityCliLoopSecurityException(toolName, "Tool is blocked by security settings");
-            }
-
-            ToolExecutionSessionEnterResult enterResult = _executionSession.TryEnter(toolName);
-            if (!enterResult.IsEntered)
-            {
-                throw CreateBusyException(enterResult.RunningToolName, toolName, _editorRuntimeStatePort);
+                throw CreateBusyException(beginResult.RunningToolName, toolName, _editorRuntimeStatePort);
             }
 
             try
@@ -63,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 ct.ThrowIfCancellationRequested();
                 UnityCliLoopEditorStateGuard.Validate(toolName, _editorRuntimeStatePort);
 
-                UnityCliLoopToolResponse response = await tool.ExecuteAsync(paramsToken, ct).ConfigureAwait(false);
+                UnityCliLoopToolResponse response = await beginResult.Tool.ExecuteAsync(paramsToken, ct).ConfigureAwait(false);
                 if (response == null)
                 {
                     throw new InvalidOperationException($"Tool returned null response: {toolName}");
@@ -108,6 +92,5 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
             return new UnityCliLoopToolBusyException(runningToolName, requestedToolName);
         }
-
     }
 }
