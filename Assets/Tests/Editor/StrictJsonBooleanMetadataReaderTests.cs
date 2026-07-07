@@ -65,5 +65,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(value, Is.Null);
         }
+
+        [Test]
+        public void ReadOptionalBoolean_WhenMetadataIsNull_ReturnsNull()
+        {
+            // Verifies absent metadata stays unknown for callers that choose their own default.
+            bool? value = StrictJsonBooleanMetadataReader.ReadOptionalBoolean(
+                null,
+                "enabled",
+                System.StringComparison.Ordinal);
+
+            Assert.That(value, Is.Null);
+        }
     }
 }
