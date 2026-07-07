@@ -13,26 +13,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             Debug.Assert(editorRuntimeStatePort != null, "editorRuntimeStatePort must not be null");
 
-            ValidateForState(
-                toolName: toolName,
-                isCompiling: editorRuntimeStatePort.IsCompiling,
-                isUpdating: editorRuntimeStatePort.IsUpdating,
-                isPlaying: editorRuntimeStatePort.IsPlaying,
-                isPaused: editorRuntimeStatePort.IsPaused);
-        }
-
-        internal static void ValidateForState(
-            string toolName,
-            bool isCompiling,
-            bool isUpdating,
-            bool isPlaying,
-            bool isPaused)
-        {
             ToolExecutionEditorState editorState = new ToolExecutionEditorState(
-                isCompiling,
-                isUpdating,
-                isPlaying,
-                isPaused);
+                editorRuntimeStatePort.IsCompiling,
+                editorRuntimeStatePort.IsUpdating,
+                editorRuntimeStatePort.IsPlaying,
+                editorRuntimeStatePort.IsPaused);
             ToolExecutionEditorReadyDecision decision =
                 ToolExecutionEditorReadyPolicy.Evaluate(toolName, editorState);
             if (decision.IsReady)
