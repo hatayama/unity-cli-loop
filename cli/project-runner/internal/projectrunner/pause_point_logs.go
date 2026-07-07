@@ -24,11 +24,13 @@ type pausePointMatchingLog struct {
 }
 
 type pausePointMatchingLogsResult struct {
-	SearchText     string                  `json:"SearchText"`
-	TotalCount     int                     `json:"TotalCount"`
-	DisplayedCount int                     `json:"DisplayedCount"`
-	MaxCount       int                     `json:"MaxCount"`
-	Logs           []pausePointMatchingLog `json:"Logs"`
+	SearchText        string                  `json:"SearchText"`
+	TotalCount        int                     `json:"TotalCount"`
+	DisplayedCount    int                     `json:"DisplayedCount"`
+	LogType           string                  `json:"LogType"`
+	MaxCount          int                     `json:"MaxCount"`
+	IncludeStackTrace bool                    `json:"IncludeStackTrace"`
+	Logs              []pausePointMatchingLog `json:"Logs"`
 }
 
 type pausePointEvidenceSummary struct {
@@ -54,7 +56,9 @@ type pausePointEvidenceLogs struct {
 	SearchText                   string `json:"SearchText"`
 	MatchingLogCount             int    `json:"MatchingLogCount"`
 	ReturnedLogCount             int    `json:"ReturnedLogCount"`
+	LogType                      string `json:"LogType"`
 	MaxCount                     int    `json:"MaxCount"`
+	IncludeStackTrace            bool   `json:"IncludeStackTrace"`
 	MayBeTruncated               bool   `json:"MayBeTruncated"`
 	MultipleMatchingLogsObserved bool   `json:"MultipleMatchingLogsObserved"`
 }
@@ -119,11 +123,13 @@ func fetchMatchingLogsFromUnity(
 	}
 
 	return pausePointMatchingLogsResult{
-		SearchText:     response.SearchText,
-		TotalCount:     response.TotalCount,
-		DisplayedCount: response.DisplayedCount,
-		MaxCount:       response.MaxCount,
-		Logs:           response.Logs,
+		SearchText:        response.SearchText,
+		TotalCount:        response.TotalCount,
+		DisplayedCount:    response.DisplayedCount,
+		LogType:           response.LogType,
+		MaxCount:          response.MaxCount,
+		IncludeStackTrace: response.IncludeStackTrace,
+		Logs:              response.Logs,
 	}, nil
 }
 
@@ -159,7 +165,9 @@ func buildPausePointEvidenceLogs(logs pausePointMatchingLogsResult) pausePointEv
 		SearchText:                   logs.SearchText,
 		MatchingLogCount:             matchingLogCount,
 		ReturnedLogCount:             returnedLogCount,
+		LogType:                      logs.LogType,
 		MaxCount:                     logs.MaxCount,
+		IncludeStackTrace:            logs.IncludeStackTrace,
 		MayBeTruncated:               matchingLogCount > returnedLogCount,
 		MultipleMatchingLogsObserved: matchingLogCount > 1,
 	}
