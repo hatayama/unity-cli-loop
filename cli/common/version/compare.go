@@ -43,7 +43,10 @@ func Compare(left string, right string) (int, bool) {
 
 func parseSemanticVersion(value string) (semanticVersion, bool) {
 	trimmed := trimVersionPrefix(value)
-	withoutBuildMetadata, _, _ := strings.Cut(trimmed, "+")
+	withoutBuildMetadata, buildMetadata, hasBuildMetadata := strings.Cut(trimmed, "+")
+	if hasBuildMetadata && !isValidBuildMetadata(buildMetadata) {
+		return semanticVersion{}, false
+	}
 	versionPart, prerelease, hasPrerelease := strings.Cut(withoutBuildMetadata, "-")
 	parts := strings.Split(versionPart, ".")
 	if len(parts) != 3 {
@@ -111,6 +114,21 @@ func isValidPrerelease(value string) bool {
 			return false
 		}
 		if containsOnlyDigits(identifier) && hasLeadingZero(identifier) {
+			return false
+		}
+	}
+	return true
+}
+
+func isValidBuildMetadata(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, identifier := range strings.Split(value, ".") {
+		if identifier == "" {
+			return false
+		}
+		if !containsOnlyPrereleaseCharacters(identifier) {
 			return false
 		}
 	}

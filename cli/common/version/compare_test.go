@@ -69,6 +69,9 @@ func TestIsValidMatchesCompareValidity(t *testing.T) {
 		{value: "not-a-version", expected: false},
 		{value: "3.00.1", expected: false},
 		{value: "3.0.0-01", expected: false},
+		{value: "3.0.0+../../payload", expected: false},
+		{value: "3.0.0+", expected: false},
+		{value: "3.0.0+build..7", expected: false},
 	}
 
 	for _, tt := range cases {
@@ -89,6 +92,7 @@ func TestCompareRejectsInvalidVersion(t *testing.T) {
 		"1.02.3",
 		"1.2.03",
 		"1.2.3-alpha.01",
+		"1.2.3+../../payload",
 	}
 
 	for _, value := range cases {
