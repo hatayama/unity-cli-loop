@@ -62,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 bool hasULoopSkills = hasSkillsDirectory
-                    && SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot);
+                    && SkillInstallLayout.HasInstalledSkillsInAnyLayout(projectRoot, targetRoot);
                 targets.Add(new ToolSkillSynchronizer.SkillTargetInfo(
                     target.DisplayName,
                     target.DirName,
@@ -111,7 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     || installState == SkillInstallState.Checking
                     || installState == SkillInstallState.Outdated;
                 bool hasDifferentLayoutSkills = hasSkillsDirectory
-                    && SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot, !groupSkillsUnderUnityCliLoop);
+                    && SkillInstallLayout.HasInstalledSkillsForLayout(projectRoot, targetRoot, !groupSkillsUnderUnityCliLoop);
                 targets.Add(new ToolSkillSynchronizer.SkillTargetInfo(
                     target.DisplayName,
                     target.DirName,
@@ -167,7 +167,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (!includeFreshnessCheck)
             {
-                return SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop)
+                return SkillInstallLayout.HasInstalledSkillsForLayout(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop)
                     ? SkillInstallState.Checking
                     : SkillInstallState.Missing;
             }

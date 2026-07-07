@@ -1,3 +1,4 @@
+using System.Threading;
 using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
@@ -27,8 +28,9 @@ namespace io.github.hatayama.UnityCliLoop.Dev
                     return;
                 }
 
-                // How Masamichi requested to use it
-                CompileResult result = await compileController.TryCompileAsync();
+                CompileResult result = await compileController.TryCompileAsync(
+                    forceRecompile: false,
+                    ct: CancellationToken.None);
                 CompilerMessage[] err = result.Errors;
                 CompilerMessage[] warning = result.Warnings;
 
@@ -36,14 +38,12 @@ namespace io.github.hatayama.UnityCliLoop.Dev
                 Debug.Log($"Number of errors: {err.Length}");
                 Debug.Log($"Number of warnings: {warning.Length}");
 
-                // Display error details
-                foreach (var error in err)
+                foreach (CompilerMessage error in err)
                 {
                     Debug.LogError($"Error: {error.message} at {error.file}:{error.line}");
                 }
 
-                // Display warning details
-                foreach (var warn in warning)
+                foreach (CompilerMessage warn in warning)
                 {
                     Debug.LogWarning($"Warning: {warn.message} at {warn.file}:{warn.line}");
                 }
@@ -69,7 +69,9 @@ namespace io.github.hatayama.UnityCliLoop.Dev
                 }
 
                 // Example of forced re-compilation
-                CompileResult result = await compileController.TryCompileAsync(forceRecompile: true);
+                CompileResult result = await compileController.TryCompileAsync(
+                    forceRecompile: true,
+                    ct: CancellationToken.None);
                 CompilerMessage[] err = result.Errors;
                 CompilerMessage[] warning = result.Warnings;
 
