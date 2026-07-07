@@ -29,12 +29,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return disabledTools.Contains(toolName);
         }
 
-        internal static string[] GetCurrentDisabledTools()
-        {
-            ToolSettingsRepository repository = new ToolSettingsRepository();
-            return repository.GetDisabledTools();
-        }
-
         internal static bool IsSkillForTool(
             SkillInstallLayout.SkillSourceInfo skill,
             string toolName)
