@@ -234,6 +234,33 @@ func TestFindToolForCommandUsesProjectCacheForRegularTools(t *testing.T) {
 	}
 }
 
+func TestFindToolForCommandPrefersProjectCacheForDefaultToolNames(t *testing.T) {
+	// Verifies synced tool catalogs override embedded defaults when both define a regular command.
+	projectRoot := t.TempDir()
+	writeToolCache(t, projectRoot, `{
+  "version": "test",
+  "tools": [
+    {
+      "name": "compile",
+      "description": "cached compile",
+      "inputSchema": {"type": "object", "properties": {}}
+    }
+  ]
+}`)
+
+	tool, _, ok, err := FindToolForCommand(projectRoot, "compile")
+	if err != nil {
+		t.Fatalf("findToolForCommand failed: %v", err)
+	}
+
+	if !ok {
+		t.Fatal("compile tool was not loaded")
+	}
+	if tool.Description != "cached compile" {
+		t.Fatalf("project cache definition was not used: %s", tool.Description)
+	}
+}
+
 // Tests that internal skills without frontmatter names are filtered by their directory-derived tool names.
 func TestLoadToolsFiltersDerivedInternalSkillToolNameFromCache(t *testing.T) {
 	projectRoot := t.TempDir()

@@ -13,13 +13,15 @@ func tryHandleCommandHelp(command string, startPath string, projectPath string, 
 		printNativeSingleCommandHelp(command, stdout)
 		return true, 0
 	}
-	if tool, ok := clicore.FindDefaultTool(command); ok {
-		printToolHelp(tool, stdout)
-		return true, 0
-	}
 
 	connection, err := project.ResolveConnection(startPath, projectPath)
 	if err != nil {
+		if projectPath == "" {
+			if tool, ok := clicore.FindDefaultTool(command); ok {
+				printToolHelp(tool, stdout)
+				return true, 0
+			}
+		}
 		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: command})
 		return true, 1
 	}

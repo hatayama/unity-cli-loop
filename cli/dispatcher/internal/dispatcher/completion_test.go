@@ -60,8 +60,8 @@ func TestCompletionListOptionsUsesToolSchema(t *testing.T) {
 	}
 }
 
-func TestCompletionListOptionsUsesEmbeddedFirstPartyToolSchema(t *testing.T) {
-	// Verifies stale project caches do not re-expose removed first-party options.
+func TestCompletionListOptionsPrefersProjectCacheForDefaultToolNames(t *testing.T) {
+	// Verifies synced project tool metadata overrides embedded defaults for regular commands.
 	var stdout bytes.Buffer
 	cache := clicore.ToolsCache{
 		Tools: []clicore.ToolDefinition{
@@ -70,8 +70,7 @@ func TestCompletionListOptionsUsesEmbeddedFirstPartyToolSchema(t *testing.T) {
 				InputSchema: clicore.InputSchema{
 					Type: "object",
 					Properties: map[string]clicore.ToolProperty{
-						"ForceRecompile":      {Type: "boolean"},
-						"WaitForDomainReload": {Type: "boolean", Default: false},
+						"CachedOnly": {Type: "boolean"},
 					},
 				},
 			},
@@ -93,14 +92,11 @@ func TestCompletionListOptionsUsesEmbeddedFirstPartyToolSchema(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "--no-wait-for-domain-reload") {
-		t.Fatalf("embedded compile options were not used: %s", output)
+	if !strings.Contains(output, "--cached-only") {
+		t.Fatalf("cached compile options were not used: %s", output)
 	}
-	if !strings.Contains(output, "--stop-on-external-scene-changes") {
-		t.Fatalf("embedded compile external Scene option was not used: %s", output)
-	}
-	if strings.Contains(output, "--wait-for-domain-reload") {
-		t.Fatalf("stale wait option should not be listed: %s", output)
+	if strings.Contains(output, "--stop-on-external-scene-changes") {
+		t.Fatalf("embedded compile option should not be listed when cache exists: %s", output)
 	}
 }
 
