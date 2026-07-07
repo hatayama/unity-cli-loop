@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -275,6 +276,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UnityCliLoopEditorStateSnapshot.ClearForTesting();
                 RestoreEditorMainThreadDispatcher();
             }
+        }
+
+        [Test]
+        public async Task ProcessRequest_WhenToolIsDisabled_ReturnsInternalErrorShape()
+        {
+            // Verifies disabled tools keep the JSON-RPC internal_error data shape before PR3 folds gates together.
+            InMemoryToolSettingsPort toolSettingsPort = new InMemoryToolSettingsPort();
+            toolSettingsPort.SetToolEnabled(SingleFlightTestTool.Name, false);
+            UnityCliLoopToolRegistrarService service = CreateRegistrarServiceWithToolSettings(toolSettingsPort);
+            service.RegisterCustomTool(new SingleFlightTestTool());
+            JsonRpcRequestProcessor processor = CreateProcessor(service);
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[JsonRpcRequestProcessor\] Error: Tool 'single-flight-test' is disabled"));
+            string response = await processor.ProcessRequest(
+                BuildToolRequest(SingleFlightTestTool.Name, 1),
+                CancellationToken.None);
+            JObject error = ParseError(response);
+            JObject data = ParseErrorData(response);
+
+            Assert.That(error["message"]?.ToString(), Does.Contain(SingleFlightTestTool.Name));
+            Assert.That(data["type"]?.ToString(), Is.EqualTo("internal_error"));
+        }
+
+        [Test]
+        public async Task ProcessRequest_WhenToolRequiresBlockedSecuritySetting_ReturnsSecurityBlockedShape()
+        {
+            // Verifies security-blocked tools keep their machine-readable JSON-RPC error data.
+            UnityCliLoopToolRegistrarService service = CreateRegistrarService();
+            service.RegisterCustomTool(new SecurityBlockedTestTool());
+            JsonRpcRequestProcessor processor = CreateProcessor(service);
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[JsonRpcRequestProcessor\] Error: Tool 'security-blocked-test' is blocked by security settings"));
+            string response = await processor.ProcessRequest(
+                BuildToolRequest(SecurityBlockedTestTool.Name, 1),
+                CancellationToken.None);
+            JObject data = ParseErrorData(response);
+
+            Assert.That(data["type"]?.ToString(), Is.EqualTo("security_blocked"));
+            Assert.That(data["command"]?.ToString(), Is.EqualTo(SecurityBlockedTestTool.Name));
+            Assert.That(data["reason"]?.ToString(), Does.Contain("security settings"));
         }
 
         [Test]
@@ -553,6 +594,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return UnityCliLoopToolRegistrarTestFactory.Create(UnityCliLoopToolDiscovery.DiscoverTools);
         }
 
+        private static UnityCliLoopToolRegistrarService CreateRegistrarServiceWithToolSettings(IToolSettingsPort toolSettingsPort)
+        {
+            return new UnityCliLoopToolRegistrarService(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsPort,
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
+                UnityCliLoopToolDiscovery.DiscoverTools);
+        }
+
         private static JsonRpcRequestProcessor CreateProcessor(UnityCliLoopToolRegistrarService service)
         {
             UnityCliLoopExecutionRouter executionRouter = new(service);
@@ -753,6 +803,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
             {
                 return Task.FromResult<UnityCliLoopToolResponse>(new SingleFlightTestResponse());
+            }
+        }
+
+        [UnityCliLoopTool(RequiredSecuritySetting = (UnityCliLoopSecuritySetting)999)]
+        private sealed class SecurityBlockedTestTool : IUnityCliLoopTool
+        {
+            public const string Name = "security-blocked-test";
+
+            public string ToolName => Name;
+
+            public ToolParameterSchema ParameterSchema => new();
+
+            public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
+            {
+                return Task.FromResult<UnityCliLoopToolResponse>(new SingleFlightTestResponse());
+            }
+        }
+
+        private sealed class InMemoryToolSettingsPort : IToolSettingsPort
+        {
+            private readonly HashSet<string> _disabledTools = new();
+
+            public bool IsToolEnabled(string toolName)
+            {
+                return !_disabledTools.Contains(toolName);
+            }
+
+            public void SetToolEnabled(string toolName, bool enabled)
+            {
+                if (enabled)
+                {
+                    _disabledTools.Remove(toolName);
+                    return;
+                }
+
+                _disabledTools.Add(toolName);
+            }
+
+            public string[] GetDisabledTools()
+            {
+                string[] disabledTools = new string[_disabledTools.Count];
+                _disabledTools.CopyTo(disabledTools);
+                return disabledTools;
+            }
+
+            public void InvalidateCache()
+            {
             }
         }
 
