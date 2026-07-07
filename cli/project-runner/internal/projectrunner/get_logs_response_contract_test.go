@@ -87,7 +87,15 @@ func normalizeJSONFieldShape(value any) any {
 			return []any{}
 		}
 		return []any{normalizeJSONFieldShape(typedValue[0])}
+	case nil:
+		return "null"
+	case bool:
+		return "boolean"
+	case float64:
+		return "number"
+	case string:
+		return "string"
 	default:
-		return true
+		return "unknown"
 	}
 }

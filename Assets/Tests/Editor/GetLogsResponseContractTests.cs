@@ -78,7 +78,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return arrayShape;
             }
 
-            return new JValue(true);
+            return new JValue(NormalizeScalarType(value.Type));
+        }
+
+        private static string NormalizeScalarType(JTokenType type)
+        {
+            return type switch
+            {
+                JTokenType.Boolean => "boolean",
+                JTokenType.Float => "number",
+                JTokenType.Integer => "number",
+                JTokenType.Null => "null",
+                JTokenType.String => "string",
+                _ => "unknown"
+            };
         }
     }
 }
