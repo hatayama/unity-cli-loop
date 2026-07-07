@@ -62,9 +62,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ScheduleStartupRecovery_WhenRecoveryThrowsSynchronously_FaultsTaskAndClearsRecoveryTask()
+        public async Task ScheduleStartupRecovery_WhenRecoveryThrowsSynchronously_CompletesTaskAndClearsRecoveryTask()
         {
-            // Tests that synchronous startup recovery failures fault and clear the tracked task.
+            // Tests that synchronous startup recovery failures log, complete, and clear the tracked task.
             UnityEngine.TestTools.LogAssert.Expect(
                 UnityEngine.LogType.Error,
                 "[UnityCliLoop] Failed to restore server: restore failed");
@@ -77,9 +77,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             scheduledAction();
 
-            Assert.That(recoveryTask.IsFaulted, Is.True);
+            Assert.That(recoveryTask.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+            Assert.That(recoveryTask.IsFaulted, Is.False);
+            Assert.That(recoveryTask.IsCanceled, Is.False);
             Assert.That(service.RecoveryTask, Is.Null);
-            Assert.ThrowsAsync<System.InvalidOperationException>(async () => await recoveryTask);
+            await recoveryTask;
         }
 
         [Test]
@@ -104,6 +106,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(recoveryTask.IsCompleted, Is.True);
             Assert.That(service.RecoveryTask, Is.Null);
+        }
+
+        [Test]
+        public async Task ScheduleStartupRecovery_WhenRecoveryIsCanceled_CompletesTaskAndClearsRecoveryTask()
+        {
+            // Tests that startup recovery cancellation completes as an activity-finished signal.
+            System.Action scheduledAction = null;
+            UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService();
+
+            Task recoveryTask = service.ScheduleStartupRecovery(
+                action => scheduledAction = action,
+                () => Task.FromCanceled(new CancellationToken(true)));
+
+            scheduledAction();
+
+            Assert.That(recoveryTask.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+            Assert.That(recoveryTask.IsFaulted, Is.False);
+            Assert.That(recoveryTask.IsCanceled, Is.False);
+            Assert.That(service.RecoveryTask, Is.Null);
+            await recoveryTask;
         }
 
         [Test]
@@ -232,12 +254,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task ScheduleTrackedRecovery_WhenPreviousRecoveryFaulted_StartsNewRecovery()
+        public async Task ScheduleTrackedRecovery_WhenPreviousRecoveryGaveUp_CompletesTaskAndStartsNewRecovery()
         {
-            // Tests that a faulted recovery does not block a later recovery trigger.
+            // Tests that public recovery tracking completes after give-up and does not block later recovery.
             UnityEngine.TestTools.LogAssert.Expect(
                 UnityEngine.LogType.Error,
                 "[UnityCliLoop] Unity CLI Loop server recovery failed before the bridge became ready. first failure");
+            _sessionFlagsRepository.MarkServerStarted();
             int firstRecoveryAttempts = 0;
             bool secondRecoveryStarted = false;
             UnityCliLoopServerRecoveryTrackingService service = CreateRecoveryTrackingService(
@@ -248,7 +271,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 firstRecoveryAttempts++;
                 throw new System.TimeoutException("first failure");
             });
-            Assert.ThrowsAsync<System.InvalidOperationException>(async () => await firstTask);
+            await firstTask;
             Task secondTask = service.ScheduleTrackedRecovery(() =>
             {
                 secondRecoveryStarted = true;
@@ -258,6 +281,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             });
             await secondTask;
 
+            Assert.That(firstTask.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+            Assert.That(firstTask.IsFaulted, Is.False);
+            Assert.That(firstTask.IsCanceled, Is.False);
+            Assert.That(_sessionFlagsRepository.GetIsServerRunning(), Is.False);
             Assert.That(secondTask, Is.Not.SameAs(firstTask));
             Assert.That(
                 firstRecoveryAttempts,
