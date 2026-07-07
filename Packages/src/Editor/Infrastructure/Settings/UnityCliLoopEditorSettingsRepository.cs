@@ -86,7 +86,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Directory.CreateDirectory(directory);
             }
             
-            string json = JsonUtility.ToJson(settings, true);
+            UnityCliLoopEditorSettingsJsonData jsonData =
+                UnityCliLoopEditorSettingsJsonData.FromDomain(settings);
+            string json = JsonUtility.ToJson(jsonData, true);
             
             // Security: Validate JSON content size
             if (json.Length > UnityCliLoopConstants.MAX_SETTINGS_SIZE_BYTES)
@@ -192,7 +194,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         throw new InvalidDataException("Settings file contains invalid JSON content");
                     }
 
-                    _cachedSettings = JsonUtility.FromJson<UnityCliLoopEditorSettingsData>(json);
+                    UnityCliLoopEditorSettingsJsonData loadedSettings =
+                        JsonUtility.FromJson<UnityCliLoopEditorSettingsJsonData>(json);
+                    _cachedSettings = loadedSettings.ToDomain();
                 }
                 else
                 {

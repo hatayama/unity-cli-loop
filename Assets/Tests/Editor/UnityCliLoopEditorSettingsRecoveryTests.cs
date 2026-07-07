@@ -84,15 +84,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void RecoverSettingsFileIfNeeded_WhenPrimaryMissingAndBackupExists_ShouldRestoreBackup()
         {
             UnityCliLoopEditorSettingsData backupData = new() { showDeveloperTools = true };
-            File.WriteAllText(BackupFilePath, JsonUtility.ToJson(backupData, true));
+            File.WriteAllText(BackupFilePath, SerializeSettingsData(backupData));
 
             _editorSettingsPort.RecoverSettingsFileIfNeeded();
 
             Assert.IsTrue(File.Exists(SettingsFilePath), "Primary settings file should be restored from backup");
             Assert.IsFalse(File.Exists(BackupFilePath), "Backup should be consumed after recovery");
 
-            UnityCliLoopEditorSettingsData restored = JsonUtility.FromJson<UnityCliLoopEditorSettingsData>(
-                File.ReadAllText(SettingsFilePath));
+            UnityCliLoopEditorSettingsJsonData restored = DeserializeSettingsJson(File.ReadAllText(SettingsFilePath));
             Assert.AreEqual(backupData.showDeveloperTools, restored.showDeveloperTools);
         }
 
@@ -101,8 +100,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             UnityCliLoopEditorSettingsData oldData = new() { showDeveloperTools = false };
             UnityCliLoopEditorSettingsData newData = new() { showDeveloperTools = true };
-            File.WriteAllText(BackupFilePath, JsonUtility.ToJson(oldData, true));
-            File.WriteAllText(TempFilePath, JsonUtility.ToJson(newData, true));
+            File.WriteAllText(BackupFilePath, SerializeSettingsData(oldData));
+            File.WriteAllText(TempFilePath, SerializeSettingsData(newData));
 
             _editorSettingsPort.RecoverSettingsFileIfNeeded();
 
@@ -110,8 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.IsFalse(File.Exists(BackupFilePath), "Backup should be removed after temp recovery");
             Assert.IsFalse(File.Exists(TempFilePath), "Temp file should be consumed after recovery");
 
-            UnityCliLoopEditorSettingsData restored = JsonUtility.FromJson<UnityCliLoopEditorSettingsData>(
-                File.ReadAllText(SettingsFilePath));
+            UnityCliLoopEditorSettingsJsonData restored = DeserializeSettingsJson(File.ReadAllText(SettingsFilePath));
             Assert.AreEqual(newData.showDeveloperTools, restored.showDeveloperTools);
         }
 
@@ -119,17 +117,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void RecoverSettingsFileIfNeeded_WhenPrimaryExists_ShouldCleanStaleSidecars()
         {
             UnityCliLoopEditorSettingsData primaryData = new() { showDeveloperTools = true };
-            File.WriteAllText(SettingsFilePath, JsonUtility.ToJson(primaryData, true));
-            File.WriteAllText(BackupFilePath, JsonUtility.ToJson(new UnityCliLoopEditorSettingsData { showDeveloperTools = false }, true));
-            File.WriteAllText(TempFilePath, JsonUtility.ToJson(new UnityCliLoopEditorSettingsData { showDeveloperTools = false }, true));
+            File.WriteAllText(SettingsFilePath, SerializeSettingsData(primaryData));
+            File.WriteAllText(BackupFilePath, SerializeSettingsData(new UnityCliLoopEditorSettingsData { showDeveloperTools = false }));
+            File.WriteAllText(TempFilePath, SerializeSettingsData(new UnityCliLoopEditorSettingsData { showDeveloperTools = false }));
 
             _editorSettingsPort.RecoverSettingsFileIfNeeded();
 
             Assert.IsFalse(File.Exists(BackupFilePath), "Backup should not linger once primary exists");
             Assert.IsFalse(File.Exists(TempFilePath), "Temp should not linger once primary exists");
 
-            UnityCliLoopEditorSettingsData restored = JsonUtility.FromJson<UnityCliLoopEditorSettingsData>(
-                File.ReadAllText(SettingsFilePath));
+            UnityCliLoopEditorSettingsJsonData restored = DeserializeSettingsJson(File.ReadAllText(SettingsFilePath));
             Assert.AreEqual(primaryData.showDeveloperTools, restored.showDeveloperTools);
         }
 
@@ -142,7 +139,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 lastSeenSetupWizardVersion = "2.1.1",
                 suppressSetupWizardAutoShow = false
             };
-            File.WriteAllText(LegacySettingsFilePath, JsonUtility.ToJson(legacyData, true));
+            File.WriteAllText(LegacySettingsFilePath, SerializeSettingsData(legacyData));
 
             string lastSeenVersion = _editorSettingsPort.GetLastSeenSetupWizardVersion();
             bool suppressAutoShow = _editorSettingsPort.GetSuppressSetupWizardAutoShow();
@@ -162,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 lastSeenSetupWizardVersion = "2.1.1",
                 suppressSetupWizardAutoShow = true
             };
-            File.WriteAllText(LegacySettingsFilePath, JsonUtility.ToJson(legacyData, true));
+            File.WriteAllText(LegacySettingsFilePath, SerializeSettingsData(legacyData));
 
             bool suppressAutoShow = _editorSettingsPort.GetSuppressSetupWizardAutoShow();
 
@@ -184,8 +181,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 lastSeenSetupWizardVersion = "2.1.1",
                 suppressSetupWizardAutoShow = false
             };
-            File.WriteAllText(SettingsFilePath, JsonUtility.ToJson(currentData, true));
-            File.WriteAllText(LegacySettingsFilePath, JsonUtility.ToJson(legacyData, true));
+            File.WriteAllText(SettingsFilePath, SerializeSettingsData(currentData));
+            File.WriteAllText(LegacySettingsFilePath, SerializeSettingsData(legacyData));
 
             string lastSeenVersion = _editorSettingsPort.GetLastSeenSetupWizardVersion();
             bool suppressAutoShow = _editorSettingsPort.GetSuppressSetupWizardAutoShow();
@@ -210,8 +207,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 lastSeenSetupWizardVersion = "2.1.1",
                 suppressSetupWizardAutoShow = true
             };
-            File.WriteAllText(SettingsFilePath, JsonUtility.ToJson(currentData, true));
-            File.WriteAllText(LegacySettingsFilePath, JsonUtility.ToJson(legacyData, true));
+            File.WriteAllText(SettingsFilePath, SerializeSettingsData(currentData));
+            File.WriteAllText(LegacySettingsFilePath, SerializeSettingsData(legacyData));
 
             string lastSeenVersion = _editorSettingsPort.GetLastSeenSetupWizardVersion();
             bool suppressAutoShow = _editorSettingsPort.GetSuppressSetupWizardAutoShow();
@@ -230,6 +227,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool installSkillsFlat = _editorSettingsPort.GetSettings().installSkillsFlat;
 
             Assert.IsTrue(installSkillsFlat);
+        }
+
+        [Test]
+        public void GetSettings_WhenStringFieldIsExplicitNull_ShouldPreserveJsonUtilityEmptyStringMaterializationAndApplyMissingDefaults()
+        {
+            // Verifies that DTO-to-VO conversion preserves JsonUtility's empty-string materialization.
+            File.WriteAllText(SettingsFilePath, "{\"lastSeenSetupWizardVersion\":null}");
+            _editorSettingsRepository.InvalidateCache();
+
+            UnityCliLoopEditorSettingsData settings = _editorSettingsPort.GetSettings();
+
+            Assert.That(settings.lastSeenSetupWizardVersion, Is.Empty);
+            Assert.That(settings.lastSeenSetupWizardMinimumDispatcherVersion, Is.Empty);
+            Assert.That(settings.showUnityCliLoopSecuritySetting, Is.True);
+            Assert.That(settings.showToolSettings, Is.True);
+            Assert.That(settings.installSkillsFlat, Is.True);
         }
 
         [Test]
@@ -325,6 +338,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 File.Delete(path);
             }
+        }
+
+        private static string SerializeSettingsData(UnityCliLoopEditorSettingsData settings)
+        {
+            return JsonUtility.ToJson(UnityCliLoopEditorSettingsJsonData.FromDomain(settings), true);
+        }
+
+        private static UnityCliLoopEditorSettingsJsonData DeserializeSettingsJson(string json)
+        {
+            return JsonUtility.FromJson<UnityCliLoopEditorSettingsJsonData>(json);
         }
 
         /// <summary>
