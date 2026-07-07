@@ -19,99 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// Synchronizes skill files when tools are enabled/disabled.
     /// Removes skill directories on disable, re-installs on enable.
     /// </summary>
-    public static class ToolSkillSynchronizer
+    public static partial class ToolSkillSynchronizer
     {
-        public readonly struct SkillTargetDefinition
-        {
-            public readonly string DirName;
-            public readonly string Flag;
-            public readonly string DisplayName;
-
-            public SkillTargetDefinition(string dirName, string flag, string displayName)
-            {
-                DirName = dirName;
-                Flag = flag;
-                DisplayName = displayName;
-            }
-        }
-
-        public readonly struct SkillInstallResult
-        {
-            public readonly int AttemptedTargets;
-            public readonly int SucceededTargets;
-
-            public SkillInstallResult(int attemptedTargets, int succeededTargets)
-            {
-                AttemptedTargets = attemptedTargets;
-                SucceededTargets = succeededTargets;
-            }
-
-            public int FailedTargets => AttemptedTargets - SucceededTargets;
-            public bool IsSuccessful => FailedTargets == 0;
-        }
-
-        public readonly struct SkillTargetInfo
-        {
-            public readonly string DisplayName;
-            public readonly string DirName;
-            public readonly string InstallFlag;
-            public readonly bool HasSkillsDirectory;
-            public readonly bool HasExistingSkills;
-            public readonly bool HasDifferentLayoutSkills;
-            public readonly SkillInstallState InstallState;
-
-            public SkillTargetInfo(
-                string displayName,
-                string dirName,
-                string installFlag,
-                bool hasSkillsDirectory,
-                bool hasExistingSkills,
-                bool hasDifferentLayoutSkills = false,
-                SkillInstallState installState = SkillInstallState.Missing)
-            {
-                DisplayName = displayName;
-                DirName = dirName;
-                InstallFlag = installFlag;
-                HasSkillsDirectory = hasSkillsDirectory;
-                HasExistingSkills = hasExistingSkills;
-                HasDifferentLayoutSkills = hasDifferentLayoutSkills;
-                InstallState = installState;
-            }
-        }
-
-        private static readonly SkillTargetDefinition[] SkillTargets =
-        {
-            new(".claude", "--claude", "Claude Code"),
-            new(".cursor", "--cursor", "Cursor"),
-            new(".gemini", "--gemini", "Gemini CLI"),
-            new(".codex", "--codex", "Codex CLI"),
-            new(".agents", "--agents", "Other (.agents)"),
-            new(".agent", "--antigravity", "Antigravity")
-        };
-
-        private static readonly string[] DeprecatedSkillNames =
-        {
-            "uloop-capture-window",
-            "uloop-get-provider-details",
-            "uloop-unity-search",
-            "uloop-get-menu-items",
-            "uloop-get-unity-search-providers",
-            "uloop-execute-menu-item"
-        };
-        private static readonly string[] ExcludedSkillFileNames =
-        {
-            ".meta",
-            ".DS_Store",
-            ".gitkeep"
-        };
-        private static readonly string V3MigrationSkillSourceDirectory = Path.Combine(
-            UnityCliLoopConstants.PackageResolvedPath,
-            CliConstants.TEMPORARY_SKILLS_DIR_NAME,
-            CliConstants.V3_CLI_INVOCATION_MIGRATION_SKILL_NAME,
-            "Skill");
-
-        internal static readonly string[] SkillTargetDirs = SkillTargets.Select(t => t.DirName).ToArray();
-
         public static void RemoveSkillFiles(string toolName)
         {
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
@@ -125,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
 
-            foreach (string targetDir in SkillTargetDirs)
+            foreach (string targetDir in SkillTargetDetector.SkillTargetDirs)
             {
                 string targetRoot = Path.Combine(projectRoot, targetDir);
                 if (!Directory.Exists(targetRoot))
@@ -150,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
 
-            foreach (string targetDir in SkillTargetDirs)
+            foreach (string targetDir in SkillTargetDetector.SkillTargetDirs)
             {
                 string targetRoot = Path.Combine(projectRoot, targetDir);
                 if (!Directory.Exists(targetRoot))
@@ -168,11 +77,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return false;
-        }
-
-        public static List<SkillTargetInfo> DetectTargets()
-        {
-            return DetectTargets(requireSkillsDirectory: false);
         }
 
         public static List<SkillTargetInfo> DetectTargetsForLayout(bool groupSkillsUnderUnityCliLoop)
@@ -197,7 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            return DetectTargets(
+            return SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                 projectRoot,
                 requireSkillsDirectory: false,
                 groupSkillsUnderUnityCliLoop,
@@ -210,199 +114,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            return DetectTargets(
+            return SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                 projectRoot,
                 requireSkillsDirectory: false,
                 groupSkillsUnderUnityCliLoop,
                 includeFreshnessCheck: false);
         }
 
-        internal static List<SkillTargetInfo> DetectTargets(bool requireSkillsDirectory)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            return DetectTargets(projectRoot, requireSkillsDirectory);
-        }
-
-        internal static List<SkillTargetInfo> DetectTargets(
-            bool requireSkillsDirectory,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            return DetectTargets(
-                projectRoot,
-                requireSkillsDirectory,
-                groupSkillsUnderUnityCliLoop,
-                includeFreshnessCheck: true);
-        }
-
-        internal static List<SkillTargetInfo> DetectTargets(
-            bool requireSkillsDirectory,
-            bool groupSkillsUnderUnityCliLoop,
-            bool includeFreshnessCheck)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            return DetectTargets(
-                projectRoot,
-                requireSkillsDirectory,
-                groupSkillsUnderUnityCliLoop,
-                includeFreshnessCheck);
-        }
-
-        internal static List<SkillTargetInfo> DetectTargets(string projectRoot, bool requireSkillsDirectory)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            List<SkillTargetInfo> targets = new();
-
-            foreach (SkillTargetDefinition target in SkillTargets)
-            {
-                string targetRoot = Path.Combine(projectRoot, target.DirName);
-                if (!Directory.Exists(targetRoot))
-                {
-                    continue;
-                }
-
-                bool hasSkillsDirectory = SkillInstallLayout.HasOptedInSkillsDirectory(targetRoot);
-                if (requireSkillsDirectory && !hasSkillsDirectory)
-                {
-                    continue;
-                }
-
-                bool hasULoopSkills = hasSkillsDirectory
-                    && SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot);
-                targets.Add(new SkillTargetInfo(
-                    target.DisplayName,
-                    target.DirName,
-                    target.Flag,
-                    hasSkillsDirectory,
-                    hasULoopSkills,
-                    installState: hasULoopSkills
-                        ? SkillInstallState.Installed
-                        : SkillInstallState.Missing));
-            }
-
-            return targets;
-        }
-
-        internal static List<SkillTargetInfo> DetectTargets(
-            string projectRoot,
-            bool requireSkillsDirectory,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            return DetectTargets(
-                projectRoot,
-                requireSkillsDirectory,
-                groupSkillsUnderUnityCliLoop,
-                includeFreshnessCheck: true);
-        }
-
-        internal static List<SkillTargetInfo> DetectTargets(
-            string projectRoot,
-            bool requireSkillsDirectory,
-            bool groupSkillsUnderUnityCliLoop,
-            bool includeFreshnessCheck)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            List<SkillTargetInfo> targets = new();
-
-            foreach (SkillTargetDefinition target in SkillTargets)
-            {
-                string targetRoot = Path.Combine(projectRoot, target.DirName);
-                if (!Directory.Exists(targetRoot))
-                {
-                    continue;
-                }
-
-                bool hasSkillsDirectory = SkillInstallLayout.HasOptedInSkillsDirectory(targetRoot);
-                if (requireSkillsDirectory && !hasSkillsDirectory)
-                {
-                    continue;
-                }
-
-                SkillInstallState installState = ResolveInstallState(
-                    projectRoot,
-                    targetRoot,
-                    hasSkillsDirectory,
-                    groupSkillsUnderUnityCliLoop,
-                    includeFreshnessCheck);
-                bool hasULoopSkills = installState == SkillInstallState.Installed
-                    || installState == SkillInstallState.Checking
-                    || installState == SkillInstallState.Outdated;
-                bool hasDifferentLayoutSkills = hasSkillsDirectory
-                    && SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot, !groupSkillsUnderUnityCliLoop);
-                targets.Add(new SkillTargetInfo(
-                    target.DisplayName,
-                    target.DirName,
-                    target.Flag,
-                    hasSkillsDirectory,
-                    hasULoopSkills,
-                    hasDifferentLayoutSkills,
-                    installState));
-            }
-
-            return targets;
-        }
-
-        private static SkillInstallState ResolveInstallState(
-            string projectRoot,
-            string targetRoot,
-            bool hasSkillsDirectory,
-            bool groupSkillsUnderUnityCliLoop,
-            bool includeFreshnessCheck)
-        {
-            if (!hasSkillsDirectory)
-            {
-                return SkillInstallState.Missing;
-            }
-
-            if (!includeFreshnessCheck)
-            {
-                return SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop)
-                    ? SkillInstallState.Checking
-                    : SkillInstallState.Missing;
-            }
-
-            return SkillInstallLayout.GetInstalledState(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop);
-        }
-
-        /// <summary>
-        /// Re-installs skills only for targets that already opted in via an existing skills directory.
-        /// </summary>
-        public static async Task<SkillInstallResult> InstallSkillFiles()
-        {
-            return await InstallSkillFiles(groupSkillsUnderUnityCliLoop: false);
-        }
-
-        public static async Task<SkillInstallResult> InstallSkillFiles(bool groupSkillsUnderUnityCliLoop)
-        {
-            List<SkillTargetInfo> targets = DetectTargets(requireSkillsDirectory: true);
-            return await InstallSkillFiles(targets, groupSkillsUnderUnityCliLoop);
-        }
-
-        public static async Task<SkillInstallResult> InstallSkillFilesForTool(
-            string toolName,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            return await InstallSkillFilesForTool(
-                toolName,
-                groupSkillsUnderUnityCliLoop,
-                GetCurrentDisabledTools());
-        }
-
-        internal static async Task<SkillInstallResult> InstallSkillFilesForTool(
+        internal static async Task<SkillInstallResult> InstallSkillFilesForToolWithDisabledTools(
             string toolName,
             bool groupSkillsUnderUnityCliLoop,
-            string[] disabledTools)
+            string[] disabledTools,
+            CancellationToken ct)
         {
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
             Debug.Assert(disabledTools != null, "disabledTools must not be null");
+            ct.ThrowIfCancellationRequested();
 
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
@@ -411,31 +138,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 projectRoot,
                 toolName,
                 groupSkillsUnderUnityCliLoop,
-                disabledTools);
-        }
-
-        public static async Task<SkillInstallResult> InstallSkillFiles(List<SkillTargetInfo> targets)
-        {
-            return await InstallSkillFiles(targets, groupSkillsUnderUnityCliLoop: false);
-        }
-
-        public static async Task<SkillInstallResult> InstallSkillFiles(
-            List<SkillTargetInfo> targets,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            return await InstallSkillFiles(
-                targets,
-                groupSkillsUnderUnityCliLoop,
-                GetCurrentDisabledTools());
+                disabledTools,
+                ct);
         }
 
         internal static async Task<SkillInstallResult> InstallSkillFiles(
             List<SkillTargetInfo> targets,
             bool groupSkillsUnderUnityCliLoop,
-            string[] disabledTools)
+            string[] disabledTools,
+            CancellationToken ct)
         {
             Debug.Assert(targets != null, "targets must not be null");
             Debug.Assert(disabledTools != null, "disabledTools must not be null");
+            ct.ThrowIfCancellationRequested();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
@@ -443,37 +158,28 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 projectRoot,
                 targets,
                 groupSkillsUnderUnityCliLoop,
-                disabledTools);
-        }
-
-        internal static async Task<SkillInstallResult> InstallSkillFilesAtProjectRoot(
-            string projectRoot,
-            IEnumerable<SkillTargetInfo> targets,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            return await InstallSkillFilesAtProjectRoot(
-                projectRoot,
-                targets,
-                groupSkillsUnderUnityCliLoop,
-                Array.Empty<string>());
+                disabledTools,
+                ct);
         }
 
         internal static async Task<SkillInstallResult> InstallSkillFilesAtProjectRoot(
             string projectRoot,
             IEnumerable<SkillTargetInfo> targets,
             bool groupSkillsUnderUnityCliLoop,
-            string[] disabledTools)
+            string[] disabledTools,
+            CancellationToken ct)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(targets != null, "targets must not be null");
             Debug.Assert(disabledTools != null, "disabledTools must not be null");
+            ct.ThrowIfCancellationRequested();
 
             SkillTargetInfo[] targetArray = targets.ToArray();
             return await Task.Run(() =>
             {
                 List<SkillInstallLayout.SkillSourceInfo> allSkills = SkillInstallLayout.GetSkillSourceInfos(projectRoot);
                 List<SkillInstallLayout.SkillSourceInfo> disabledSkills = allSkills
-                    .Where(skill => IsSkillDisabledByToolSettings(
+                    .Where(skill => SkillDisabledToolFilter.IsSkillDisabledByToolSettings(
                         skill,
                         disabledTools))
                     .ToList();
@@ -484,57 +190,49 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 int succeeded = 0;
                 foreach (SkillTargetInfo target in targetArray)
                 {
-                    InstallSkillsForTarget(
+                    ct.ThrowIfCancellationRequested();
+                    SkillTargetInstaller.InstallSkillsForTarget(
                         projectRoot,
                         target,
                         disabledSkills,
                         enabledSkills,
-                        groupSkillsUnderUnityCliLoop);
+                        groupSkillsUnderUnityCliLoop,
+                        ct);
                     succeeded++;
                 }
 
                 return new SkillInstallResult(targetArray.Length, succeeded);
-            });
-        }
-
-        internal static async Task<SkillInstallResult> InstallSkillFilesForToolAtProjectRoot(
-            string projectRoot,
-            string toolName,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            return await InstallSkillFilesForToolAtProjectRoot(
-                projectRoot,
-                toolName,
-                groupSkillsUnderUnityCliLoop,
-                Array.Empty<string>());
+            }, ct);
         }
 
         internal static async Task<SkillInstallResult> InstallSkillFilesForToolAtProjectRoot(
             string projectRoot,
             string toolName,
             bool groupSkillsUnderUnityCliLoop,
-            string[] disabledTools)
+            string[] disabledTools,
+            CancellationToken ct)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
             Debug.Assert(disabledTools != null, "disabledTools must not be null");
+            ct.ThrowIfCancellationRequested();
 
             if (disabledTools.Contains(toolName))
             {
                 return new SkillInstallResult(0, 0);
             }
 
-            SkillTargetInfo[] targetArray = DetectTargetsWithSkillsDirectory(projectRoot).ToArray();
+            SkillTargetInfo[] targetArray = SkillTargetDetector.DetectTargetsWithSkillsDirectory(projectRoot).ToArray();
             return await Task.Run(() =>
             {
                 List<SkillInstallLayout.SkillSourceInfo> allSkills = SkillInstallLayout.GetSkillSourceInfos(projectRoot);
                 List<SkillInstallLayout.SkillSourceInfo> disabledSkills = allSkills
-                    .Where(skill => IsSkillDisabledByToolSettings(
+                    .Where(skill => SkillDisabledToolFilter.IsSkillDisabledByToolSettings(
                         skill,
                         disabledTools))
                     .ToList();
                 List<SkillInstallLayout.SkillSourceInfo> toolSkills = allSkills
-                    .Where(skill => IsSkillForTool(skill, toolName))
+                    .Where(skill => SkillDisabledToolFilter.IsSkillForTool(skill, toolName))
                     .ToList();
                 if (toolSkills.Count == 0)
                 {
@@ -544,17 +242,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 int succeeded = 0;
                 foreach (SkillTargetInfo target in targetArray)
                 {
-                    InstallSpecificSkillsForTarget(
+                    ct.ThrowIfCancellationRequested();
+                    SkillTargetInstaller.InstallSpecificSkillsForTarget(
                         projectRoot,
                         target,
                         disabledSkills,
                         toolSkills,
-                        groupSkillsUnderUnityCliLoop);
+                        groupSkillsUnderUnityCliLoop,
+                        ct);
                     succeeded++;
                 }
 
                 return new SkillInstallResult(targetArray.Length, succeeded);
-            });
+            }, ct);
         }
 
         internal static SkillInstallState GetV3MigrationSkillInstallStateAtProjectRoot(
@@ -562,624 +262,37 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             SkillTargetInfo target,
             bool groupSkillsUnderUnityCliLoop)
         {
-            SkillInstallLayout.SkillSourceInfo skill = GetV3MigrationSkillSourceInfo();
-            SkillInstallState preferredLayoutState = GetSkillInstallStateAtProjectRoot(
+            return V3MigrationSkillInstaller.GetV3MigrationSkillInstallStateAtProjectRoot(
                 projectRoot,
                 target,
-                skill,
                 groupSkillsUnderUnityCliLoop);
-            if (preferredLayoutState != SkillInstallState.Missing)
-            {
-                return preferredLayoutState;
-            }
-
-            return GetSkillInstallStateAtProjectRoot(
-                projectRoot,
-                target,
-                skill,
-                !groupSkillsUnderUnityCliLoop);
         }
 
         internal static async Task<SkillInstallResult> InstallV3MigrationSkillFilesAtProjectRoot(
             string projectRoot,
             IEnumerable<SkillTargetInfo> targets,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
-            SkillInstallLayout.SkillSourceInfo skill = GetV3MigrationSkillSourceInfo();
-            return await InstallSpecificSkillFilesAtProjectRoot(
+            return await V3MigrationSkillInstaller.InstallV3MigrationSkillFilesAtProjectRoot(
                 projectRoot,
                 targets,
-                skill,
-                groupSkillsUnderUnityCliLoop);
+                groupSkillsUnderUnityCliLoop,
+                ct);
         }
 
         internal static async Task<SkillInstallResult> RemoveV3MigrationSkillFilesAtProjectRoot(
             string projectRoot,
             IEnumerable<SkillTargetInfo> targets,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-            Debug.Assert(targets != null, "targets must not be null");
-
-            SkillInstallLayout.SkillSourceInfo skill = GetV3MigrationSkillSourceInfo();
-            SkillTargetInfo[] targetArray = targets.ToArray();
-            return await Task.Run(() =>
-            {
-                int succeeded = 0;
-                foreach (SkillTargetInfo target in targetArray)
-                {
-                    string targetRoot = Path.Combine(projectRoot, target.DirName);
-                    DeleteSkillDirectoryIfExists(
-                        targetRoot,
-                        skill.Name,
-                        groupSkillsUnderUnityCliLoop);
-                    DeleteSkillDirectoryIfExists(
-                        targetRoot,
-                        skill.Name,
-                        !groupSkillsUnderUnityCliLoop);
-                    succeeded++;
-                }
-
-                return new SkillInstallResult(targetArray.Length, succeeded);
-            });
+            return await V3MigrationSkillInstaller.RemoveV3MigrationSkillFilesAtProjectRoot(
+                projectRoot,
+                targets,
+                groupSkillsUnderUnityCliLoop,
+                ct);
         }
 
-        internal static SkillInstallState GetSkillInstallStateAtProjectRoot(
-            string projectRoot,
-            SkillTargetInfo target,
-            SkillInstallLayout.SkillSourceInfo skill,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-            Debug.Assert(!string.IsNullOrEmpty(target.DirName), "target dir name must not be null or empty");
-
-            string targetRoot = Path.Combine(projectRoot, target.DirName);
-            if (!Directory.Exists(targetRoot))
-            {
-                return SkillInstallState.Missing;
-            }
-
-            return SkillInstallLayout.GetInstalledStateForSkillSource(
-                targetRoot,
-                skill,
-                groupSkillsUnderUnityCliLoop);
-        }
-
-        internal static async Task<SkillInstallResult> InstallSpecificSkillFilesAtProjectRoot(
-            string projectRoot,
-            IEnumerable<SkillTargetInfo> targets,
-            SkillInstallLayout.SkillSourceInfo skill,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-            Debug.Assert(targets != null, "targets must not be null");
-
-            SkillTargetInfo[] targetArray = targets.ToArray();
-            return await Task.Run(() =>
-            {
-                int succeeded = 0;
-                foreach (SkillTargetInfo target in targetArray)
-                {
-                    InstallSpecificSkillsForTarget(
-                        projectRoot,
-                        target,
-                        Array.Empty<SkillInstallLayout.SkillSourceInfo>(),
-                        new[] { skill },
-                        groupSkillsUnderUnityCliLoop);
-                    succeeded++;
-                }
-
-                return new SkillInstallResult(targetArray.Length, succeeded);
-            });
-        }
-
-        internal static async Task<SkillInstallResult> RemoveSpecificSkillFilesAtProjectRoot(
-            string projectRoot,
-            IEnumerable<SkillTargetInfo> targets,
-            string skillName,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-            Debug.Assert(targets != null, "targets must not be null");
-            Debug.Assert(!string.IsNullOrEmpty(skillName), "skillName must not be null or empty");
-
-            SkillTargetInfo[] targetArray = targets.ToArray();
-            return await Task.Run(() =>
-            {
-                int succeeded = 0;
-                foreach (SkillTargetInfo target in targetArray)
-                {
-                    string targetRoot = Path.Combine(projectRoot, target.DirName);
-                    DeleteSkillDirectoryIfExists(
-                        targetRoot,
-                        skillName,
-                        groupSkillsUnderUnityCliLoop);
-                    succeeded++;
-                }
-
-                return new SkillInstallResult(targetArray.Length, succeeded);
-            });
-        }
-
-        private static SkillInstallLayout.SkillSourceInfo GetV3MigrationSkillSourceInfo()
-        {
-            return SkillInstallLayout.GetSkillSourceInfoFromDirectory(V3MigrationSkillSourceDirectory);
-        }
-
-        private static void InstallSkillsForTarget(
-            string projectRoot,
-            SkillTargetInfo target,
-            IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> disabledSkills,
-            IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> enabledSkills,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            string targetRoot = Path.Combine(projectRoot, target.DirName);
-            string skillsRoot = SkillInstallLayout.GetSkillsRoot(targetRoot);
-            HashSet<string> managedSkillNames = new(
-                enabledSkills.Select(skill => skill.Name),
-                StringComparer.Ordinal);
-            managedSkillNames.UnionWith(disabledSkills.Select(skill => skill.Name));
-            managedSkillNames.UnionWith(DeprecatedSkillNames);
-            Directory.CreateDirectory(skillsRoot);
-
-            if (groupSkillsUnderUnityCliLoop)
-            {
-                Directory.CreateDirectory(SkillInstallLayout.GetManagedSkillsRoot(targetRoot));
-            }
-
-            DeleteDeprecatedSkillDirectoriesFromAllLayouts(targetRoot);
-            DeleteDisabledSkillDirectoriesFromAllLayouts(targetRoot, disabledSkills);
-
-            foreach (SkillInstallLayout.SkillSourceInfo skill in enabledSkills)
-            {
-                string installedSkillDirectory = SkillInstallLayout.GetInstalledSkillDirectoryPathForLayout(
-                    targetRoot,
-                    skill.Name,
-                    groupSkillsUnderUnityCliLoop);
-                SyncInstalledSkillDirectory(installedSkillDirectory, skill.SkillFiles);
-                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, !groupSkillsUnderUnityCliLoop);
-            }
-
-            DeleteUnexpectedInstalledSkillDirectories(
-                targetRoot,
-                enabledSkills.Select(skill => skill.Name),
-                managedSkillNames,
-                groupSkillsUnderUnityCliLoop);
-
-            if (!groupSkillsUnderUnityCliLoop)
-            {
-                DeleteUnexpectedInstalledSkillDirectories(
-                    targetRoot,
-                    enabledSkills.Select(skill => skill.Name),
-                    managedSkillNames,
-                    groupSkillsUnderUnityCliLoop: true);
-                DeleteEmptyManagedSkillsParentDirectoryIfNeeded(
-                    targetRoot,
-                    groupSkillsUnderUnityCliLoop: true);
-            }
-        }
-
-        private static void InstallSpecificSkillsForTarget(
-            string projectRoot,
-            SkillTargetInfo target,
-            IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> disabledSkills,
-            IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> skills,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            string targetRoot = Path.Combine(projectRoot, target.DirName);
-            string skillsRoot = SkillInstallLayout.GetSkillsRoot(targetRoot);
-            Directory.CreateDirectory(skillsRoot);
-
-            if (groupSkillsUnderUnityCliLoop)
-            {
-                Directory.CreateDirectory(SkillInstallLayout.GetManagedSkillsRoot(targetRoot));
-            }
-
-            DeleteDeprecatedSkillDirectoriesForLayout(targetRoot, groupSkillsUnderUnityCliLoop);
-            DeleteDisabledSkillDirectoriesForLayout(targetRoot, disabledSkills, groupSkillsUnderUnityCliLoop);
-
-            foreach (SkillInstallLayout.SkillSourceInfo skill in skills)
-            {
-                string installedSkillDirectory = SkillInstallLayout.GetInstalledSkillDirectoryPathForLayout(
-                    targetRoot,
-                    skill.Name,
-                    groupSkillsUnderUnityCliLoop);
-                SyncInstalledSkillDirectory(installedSkillDirectory, skill.SkillFiles);
-                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, !groupSkillsUnderUnityCliLoop);
-            }
-
-            if (!groupSkillsUnderUnityCliLoop)
-            {
-                DeleteEmptyManagedSkillsParentDirectoryIfNeeded(
-                    targetRoot,
-                    groupSkillsUnderUnityCliLoop: true);
-            }
-        }
-
-        internal static bool IsSkillDisabledByToolSettings(
-            SkillInstallLayout.SkillSourceInfo skill,
-            IReadOnlyCollection<string> disabledTools)
-        {
-            if (disabledTools.Count == 0)
-            {
-                return false;
-            }
-
-            string toolName = GetToolNameForSkill(skill);
-            if (string.IsNullOrEmpty(toolName))
-            {
-                return false;
-            }
-
-            return disabledTools.Contains(toolName);
-        }
-
-        private static string[] GetCurrentDisabledTools()
-        {
-            ToolSettingsRepository repository = new ToolSettingsRepository();
-            return repository.GetDisabledTools();
-        }
-
-        private static bool IsSkillForTool(
-            SkillInstallLayout.SkillSourceInfo skill,
-            string toolName)
-        {
-            string skillToolName = GetToolNameForSkill(skill);
-            return string.Equals(skillToolName, toolName, StringComparison.Ordinal);
-        }
-
-        private static string GetToolNameForSkill(SkillInstallLayout.SkillSourceInfo skill)
-        {
-            string toolName = skill.ToolName;
-            if (string.IsNullOrEmpty(toolName) && skill.Name.StartsWith(CliConstants.SKILL_DIR_PREFIX, StringComparison.Ordinal))
-            {
-                toolName = skill.Name.Substring(CliConstants.SKILL_DIR_PREFIX.Length);
-            }
-
-            return toolName;
-        }
-
-        private static List<SkillTargetInfo> DetectTargetsWithSkillsDirectory(string projectRoot)
-        {
-            List<SkillTargetInfo> targets = new();
-            foreach (SkillTargetDefinition target in SkillTargets)
-            {
-                string targetRoot = Path.Combine(projectRoot, target.DirName);
-                if (!Directory.Exists(targetRoot))
-                {
-                    continue;
-                }
-
-                bool hasSkillsDirectory = SkillInstallLayout.HasOptedInSkillsDirectory(targetRoot);
-                if (!hasSkillsDirectory)
-                {
-                    continue;
-                }
-
-                targets.Add(new SkillTargetInfo(
-                    target.DisplayName,
-                    target.DirName,
-                    target.Flag,
-                    hasSkillsDirectory,
-                    hasExistingSkills: false));
-            }
-
-            return targets;
-        }
-
-        private static void DeleteUnexpectedInstalledSkillDirectories(
-            string targetRoot,
-            IEnumerable<string> expectedSkillNames,
-            IEnumerable<string> removableSkillNames,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            HashSet<string> expectedSkillNameSet = new(expectedSkillNames, StringComparer.Ordinal);
-            HashSet<string> removableSkillNameSet = new(removableSkillNames, StringComparer.Ordinal);
-            foreach (string installedSkillName in SkillInstallLayout.EnumerateInstalledSkillDirectoryNamesForLayout(
-                         targetRoot,
-                         groupSkillsUnderUnityCliLoop))
-            {
-                if (expectedSkillNameSet.Contains(installedSkillName))
-                {
-                    continue;
-                }
-
-                if (!removableSkillNameSet.Contains(installedSkillName))
-                {
-                    continue;
-                }
-
-                DeleteSkillDirectoryIfExists(targetRoot, installedSkillName, groupSkillsUnderUnityCliLoop);
-            }
-        }
-
-        private static void SyncInstalledSkillDirectory(
-            string skillDirectory,
-            IReadOnlyDictionary<string, byte[]> skillFiles)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(skillDirectory), "skillDirectory must not be null or empty");
-            Debug.Assert(skillFiles != null, "skillFiles must not be null");
-            Debug.Assert(skillFiles.ContainsKey(SkillInstallLayout.SkillFileName),
-                "skillFiles must contain SKILL.md");
-
-            string parentDirectory = Path.GetDirectoryName(skillDirectory);
-            Debug.Assert(!string.IsNullOrEmpty(parentDirectory), "parentDirectory must not be null or empty");
-            Directory.CreateDirectory(parentDirectory);
-            bool skillDirectoryExisted = Directory.Exists(skillDirectory);
-            Dictionary<string, byte[]> backupFiles = skillDirectoryExisted
-                ? ReadSkillFilesForRollback(skillDirectory)
-                : new Dictionary<string, byte[]>(StringComparer.Ordinal);
-            Directory.CreateDirectory(skillDirectory);
-
-            bool syncCompleted = false;
-            try
-            {
-                WriteSkillFiles(skillDirectory, skillFiles);
-                DeleteUnexpectedSkillFiles(skillDirectory, skillFiles.Keys);
-                DeleteEmptyDirectories(skillDirectory);
-                syncCompleted = true;
-            }
-            finally
-            {
-                if (!syncCompleted)
-                {
-                    RollbackSkillDirectory(skillDirectory, backupFiles, skillDirectoryExisted);
-                }
-            }
-        }
-
-        private static void DeleteDeprecatedSkillDirectoriesFromAllLayouts(string targetRoot)
-        {
-            foreach (string deprecatedSkillName in DeprecatedSkillNames)
-            {
-                DeleteSkillDirectoryIfExists(targetRoot, deprecatedSkillName, groupSkillsUnderUnityCliLoop: true);
-                DeleteSkillDirectoryIfExists(targetRoot, deprecatedSkillName, groupSkillsUnderUnityCliLoop: false);
-            }
-        }
-
-        private static void DeleteDisabledSkillDirectoriesFromAllLayouts(
-            string targetRoot,
-            IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> disabledSkills)
-        {
-            foreach (SkillInstallLayout.SkillSourceInfo skill in disabledSkills)
-            {
-                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, groupSkillsUnderUnityCliLoop: true);
-                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, groupSkillsUnderUnityCliLoop: false);
-            }
-        }
-
-        private static void DeleteDeprecatedSkillDirectoriesForLayout(
-            string targetRoot,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            foreach (string deprecatedSkillName in DeprecatedSkillNames)
-            {
-                DeleteSkillDirectoryIfExists(targetRoot, deprecatedSkillName, groupSkillsUnderUnityCliLoop);
-            }
-        }
-
-        private static void DeleteDisabledSkillDirectoriesForLayout(
-            string targetRoot,
-            IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> disabledSkills,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            foreach (SkillInstallLayout.SkillSourceInfo skill in disabledSkills)
-            {
-                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, groupSkillsUnderUnityCliLoop);
-            }
-        }
-
-        private static void WriteSkillFiles(
-            string skillDirectory,
-            IReadOnlyDictionary<string, byte[]> skillFiles)
-        {
-            foreach (KeyValuePair<string, byte[]> skillFile in skillFiles)
-            {
-                string fullPath = Path.Combine(skillDirectory, skillFile.Key);
-                string fileDirectory = Path.GetDirectoryName(fullPath);
-                Debug.Assert(!string.IsNullOrEmpty(fileDirectory), "fileDirectory must not be null or empty");
-                Directory.CreateDirectory(fileDirectory);
-                if (File.Exists(fullPath) && File.ReadAllBytes(fullPath).SequenceEqual(skillFile.Value))
-                {
-                    continue;
-                }
-
-                WriteFileAtomically(fullPath, skillFile.Value);
-            }
-        }
-
-        internal static Dictionary<string, byte[]> ReadSkillFilesForRollback(string skillDirectory)
-        {
-            Dictionary<string, byte[]> files = new(StringComparer.Ordinal);
-            foreach (string filePath in Directory.EnumerateFiles(skillDirectory, "*", SearchOption.AllDirectories))
-            {
-                string fileName = Path.GetFileName(filePath);
-                if (IsExcludedSkillFile(fileName))
-                {
-                    continue;
-                }
-
-                string relativePath = Path.GetRelativePath(skillDirectory, filePath);
-                files[relativePath] = File.ReadAllBytes(filePath);
-            }
-
-            return files;
-        }
-
-        private static void WriteFileAtomically(string fullPath, byte[] content)
-        {
-            string fileDirectory = Path.GetDirectoryName(fullPath);
-            Debug.Assert(!string.IsNullOrEmpty(fileDirectory), "fileDirectory must not be null or empty");
-
-            string tempPath = Path.Combine(
-                fileDirectory,
-                $"{Path.GetFileName(fullPath)}.tmp-{Guid.NewGuid():N}");
-            File.WriteAllBytes(tempPath, content);
-
-            try
-            {
-                if (File.Exists(fullPath))
-                {
-                    File.Replace(tempPath, fullPath, null, true);
-                    return;
-                }
-
-                File.Move(tempPath, fullPath);
-            }
-            finally
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-            }
-        }
-
-        private static void DeleteUnexpectedSkillFiles(
-            string skillDirectory,
-            IEnumerable<string> expectedRelativePaths)
-        {
-            HashSet<string> expectedPaths = new(expectedRelativePaths, StringComparer.Ordinal);
-            foreach (string filePath in Directory.EnumerateFiles(skillDirectory, "*", SearchOption.AllDirectories))
-            {
-                string fileName = Path.GetFileName(filePath);
-                if (IsExcludedSkillFile(fileName))
-                {
-                    continue;
-                }
-
-                string relativePath = Path.GetRelativePath(skillDirectory, filePath);
-                if (expectedPaths.Contains(relativePath))
-                {
-                    continue;
-                }
-
-                File.Delete(filePath);
-            }
-        }
-
-        private static void DeleteEmptyDirectories(string skillDirectory)
-        {
-            foreach (string directoryPath in Directory.EnumerateDirectories(skillDirectory, "*", SearchOption.AllDirectories)
-                         .OrderByDescending(path => path.Length))
-            {
-                if (Directory.EnumerateFileSystemEntries(directoryPath).Any())
-                {
-                    continue;
-                }
-
-                Directory.Delete(directoryPath);
-            }
-        }
-
-        private static void RollbackSkillDirectory(
-            string skillDirectory,
-            IReadOnlyDictionary<string, byte[]> backupFiles,
-            bool skillDirectoryExisted)
-        {
-            if (!skillDirectoryExisted)
-            {
-                if (Directory.Exists(skillDirectory))
-                {
-                    Directory.Delete(skillDirectory, true);
-                }
-
-                return;
-            }
-
-            Directory.CreateDirectory(skillDirectory);
-            WriteSkillFiles(skillDirectory, backupFiles);
-            DeleteUnexpectedSkillFiles(skillDirectory, backupFiles.Keys);
-            DeleteEmptyDirectories(skillDirectory);
-        }
-
-        private static bool IsExcludedSkillFile(string fileName)
-        {
-            if (ExcludedSkillFileNames.Contains(fileName))
-            {
-                return true;
-            }
-
-            foreach (string excludedPattern in ExcludedSkillFileNames)
-            {
-                if (fileName.EndsWith(excludedPattern, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static void DeleteSkillDirectoryIfExists(
-            string targetRoot,
-            string skillName,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            string installedSkillDirectory = SkillInstallLayout.GetInstalledSkillDirectoryPathForLayout(
-                targetRoot,
-                skillName,
-                groupSkillsUnderUnityCliLoop);
-            if (!Directory.Exists(installedSkillDirectory))
-            {
-                return;
-            }
-
-            Directory.Delete(installedSkillDirectory, true);
-            DeleteEmptyManagedSkillsParentDirectoryIfNeeded(targetRoot, groupSkillsUnderUnityCliLoop);
-        }
-
-        private static void DeleteEmptyManagedSkillsParentDirectoryIfNeeded(
-            string targetRoot,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            if (!groupSkillsUnderUnityCliLoop)
-            {
-                return;
-            }
-
-            string managedSkillsRoot = SkillInstallLayout.GetManagedSkillsRoot(targetRoot);
-            if (!Directory.Exists(managedSkillsRoot))
-            {
-                return;
-            }
-
-            DeleteExcludedFilesAtRoot(managedSkillsRoot);
-            DeleteEmptyDirectoriesAtRoot(managedSkillsRoot);
-            if (Directory.EnumerateFileSystemEntries(managedSkillsRoot).Any())
-            {
-                return;
-            }
-
-            Directory.Delete(managedSkillsRoot);
-        }
-
-        private static void DeleteExcludedFilesAtRoot(string directoryPath)
-        {
-            foreach (string filePath in Directory.EnumerateFiles(directoryPath))
-            {
-                string fileName = Path.GetFileName(filePath);
-                if (!IsExcludedSkillFile(fileName))
-                {
-                    continue;
-                }
-
-                File.Delete(filePath);
-            }
-        }
-
-        private static void DeleteEmptyDirectoriesAtRoot(string directoryPath)
-        {
-            foreach (string childDirectoryPath in Directory.EnumerateDirectories(directoryPath))
-            {
-                DeleteEmptyDirectories(childDirectoryPath);
-                if (Directory.EnumerateFileSystemEntries(childDirectoryPath).Any())
-                {
-                    continue;
-                }
-
-                Directory.Delete(childDirectoryPath);
-            }
-        }
     }
 }

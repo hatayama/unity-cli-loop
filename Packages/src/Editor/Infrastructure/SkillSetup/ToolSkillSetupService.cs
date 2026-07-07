@@ -69,7 +69,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             await ToolSkillSynchronizer.InstallSkillFiles(
                 synchronizerTargets,
                 groupSkillsUnderUnityCliLoop,
-                _toolSettingsPort.GetDisabledTools());
+                _toolSettingsPort.GetDisabledTools(),
+                ct);
         }
 
         public async Task InstallSkillFilesForToolAsync(
@@ -80,10 +81,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
             ct.ThrowIfCancellationRequested();
 
-            await ToolSkillSynchronizer.InstallSkillFilesForTool(
+            await ToolSkillSynchronizer.InstallSkillFilesForToolWithDisabledTools(
                 toolName,
                 groupSkillsUnderUnityCliLoop,
-                _toolSettingsPort.GetDisabledTools());
+                _toolSettingsPort.GetDisabledTools(),
+                ct);
         }
 
         public SkillInstallState GetV3MigrationSkillInstallStateAtProjectRoot(
@@ -115,7 +117,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             await ToolSkillSynchronizer.InstallV3MigrationSkillFilesAtProjectRoot(
                 projectRoot,
                 synchronizerTargets,
-                groupSkillsUnderUnityCliLoop);
+                groupSkillsUnderUnityCliLoop,
+                ct);
         }
 
         public async Task RemoveV3MigrationSkillFilesAsync(
@@ -134,7 +137,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             await ToolSkillSynchronizer.RemoveV3MigrationSkillFilesAtProjectRoot(
                 projectRoot,
                 synchronizerTargets,
-                groupSkillsUnderUnityCliLoop);
+                groupSkillsUnderUnityCliLoop,
+                ct);
         }
 
         private static SkillSetupTargetInfo ToDomainInfo(ToolSkillSynchronizer.SkillTargetInfo target)
