@@ -28,28 +28,27 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         /// <summary>
-        /// Generic command execution method
-        /// Uses new command-based structure
+        /// Routes one JSON-RPC method to either an internal bridge command or a registered tool.
         /// </summary>
-        /// <param name="commandName">Command name</param>
+        /// <param name="methodName">JSON-RPC method name</param>
         /// <param name="paramsToken">Parameters</param>
         /// <returns>Execution result</returns>
         public async Task<UnityCliLoopToolResponse> ExecuteAsync(
-            string commandName,
+            string methodName,
             JToken paramsToken,
             CancellationToken ct)
         {
             UnityCliLoopToolResponse response;
-            if (InternalBridgeCommandRouter.IsInternalCommand(commandName))
+            if (InternalBridgeCommandRouter.IsInternalCommand(methodName))
             {
                 await MainThreadSwitcher.SwitchToMainThread(ct);
                 ct.ThrowIfCancellationRequested();
-                response = InternalBridgeCommandRouter.Execute(commandName, paramsToken, _toolRegistrarService);
+                response = InternalBridgeCommandRouter.Execute(methodName, paramsToken, _toolRegistrarService);
                 return response;
             }
 
             response = await _toolRegistrarService.ExecuteToolAsync(
-                commandName,
+                methodName,
                 paramsToken,
                 ct);
             return response;
