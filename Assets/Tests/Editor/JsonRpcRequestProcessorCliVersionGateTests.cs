@@ -116,6 +116,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ProcessRequest_WhenDispatchAckFlagIsNotBoolean_DoesNotWriteAcceptedHandshake()
+        {
+            // Verifies metadata feature flags are strict booleans and malformed values fail closed.
+            string acceptedResponse = null;
+            JsonRpcRequestProcessor processor = CreateProcessor(CreateRegistrarService());
+
+            string response = await processor.ProcessRequestWithEarlyResponseAsync(
+                BuildToolRequestWithMetadata(
+                    UnityCliLoopConstants.COMMAND_NAME_GET_VERSION,
+                    1,
+                    "\"acceptsDispatchAck\":\"true\""),
+                CancellationToken.None,
+                (earlyResponse, _, _) =>
+                {
+                    acceptedResponse = earlyResponse;
+                    return Task.CompletedTask;
+                });
+            JObject parsed = JObject.Parse(response);
+
+            Assert.That(parsed["error"], Is.Null);
+            Assert.That(acceptedResponse, Is.Null);
+        }
+
+        [Test]
+        public async Task ProcessRequest_WhenHeartbeatFlagIsNotBoolean_DoesNotNegotiateHeartbeat()
+        {
+            // Verifies malformed heartbeat metadata is treated as unsupported without failing the request.
+            string acceptedResponse = null;
+            Func<string> createHeartbeatJson = () => "";
+            JsonRpcRequestProcessor processor = CreateProcessor(CreateRegistrarService());
+
+            string response = await processor.ProcessRequestWithEarlyResponseAsync(
+                BuildToolRequestWithMetadata(
+                    UnityCliLoopConstants.COMMAND_NAME_GET_VERSION,
+                    1,
+                    "\"acceptsDispatchAck\":true,\"acceptsHeartbeat\":\"true\""),
+                CancellationToken.None,
+                (earlyResponse, _, heartbeatFactory) =>
+                {
+                    acceptedResponse = earlyResponse;
+                    createHeartbeatJson = heartbeatFactory;
+                    return Task.CompletedTask;
+                });
+            JObject parsed = JObject.Parse(response);
+            JObject accepted = JObject.Parse(acceptedResponse);
+
+            Assert.That(parsed["error"], Is.Null);
+            Assert.That(accepted["uloop"]?["phase"]?.ToString(), Is.EqualTo(JsonRpcResponsePhases.Accepted));
+            Assert.That(accepted["uloop"]?["heartbeatIntervalSeconds"], Is.Null);
+            Assert.That(createHeartbeatJson, Is.Null);
+        }
+
+        [Test]
         public async Task ProcessRequest_WhenCliMetadataIsMissing_ReturnsCliUpdateRequiredError()
         {
             // Verifies legacy clients without metadata are stopped with upgrade instructions.
@@ -658,6 +711,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ",\"uloop\":{\"protocolVersion\":" +
                 CliConstants.REQUIRED_CLI_PROTOCOL_VERSION +
                 ",\"acceptsDispatchAck\":true,\"acceptsHeartbeat\":true}}";
+        }
+
+        private static string BuildToolRequestWithMetadata(string toolName, int id, string metadataJson)
+        {
+            return
+                "{\"jsonrpc\":\"2.0\",\"method\":\"" +
+                toolName +
+                "\",\"params\":{},\"id\":" +
+                id +
+                ",\"uloop\":{\"protocolVersion\":" +
+                CliConstants.REQUIRED_CLI_PROTOCOL_VERSION +
+                "," +
+                metadataJson +
+                "}}";
         }
 
         private static JObject ParseErrorData(string response)

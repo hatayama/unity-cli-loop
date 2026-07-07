@@ -31,7 +31,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal sealed class JsonRpcRequestProcessor
     {
-        private const string WaitForDomainReloadParamName = "WaitForDomainReload";
         private readonly UnityCliLoopExecutionRouter _executionRouter;
 
         // Shared by every response path; JsonConvert only reads the settings, so a single
@@ -93,85 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         private static JsonRpcRequest ParseRequest(string jsonRequest)
         {
-            JObject request = JObject.Parse(jsonRequest);
-            return new JsonRpcRequest
-            {
-                Method = request["method"]?.ToString(),
-                Params = request["params"],
-                ClientProjectRunnerVersion = ReadClientProjectRunnerVersion(request),
-                ClientProtocolVersion = ReadClientProtocolVersion(request),
-                AcceptsDispatchAck = ReadAcceptsDispatchAck(request),
-                AcceptsHeartbeat = ReadAcceptsHeartbeat(request),
-                Id = request["id"]?.ToObject<object>()
-            };
-        }
-
-        private static string ReadClientProjectRunnerVersion(JObject request)
-        {
-            JObject metadata = request["uloop"] as JObject;
-            if (metadata == null)
-            {
-                return null;
-            }
-
-            string projectRunnerVersion = metadata["projectRunnerVersion"]?.ToString();
-            return string.IsNullOrWhiteSpace(projectRunnerVersion) ? null : projectRunnerVersion;
-        }
-
-        private static int? ReadClientProtocolVersion(JObject request)
-        {
-            JObject metadata = request["uloop"] as JObject;
-            if (metadata == null)
-            {
-                return null;
-            }
-
-            JToken protocolVersionToken = metadata["protocolVersion"];
-            if (protocolVersionToken == null || protocolVersionToken.Type != JTokenType.Integer)
-            {
-                return null;
-            }
-
-            JValue protocolVersionValue = protocolVersionToken as JValue;
-            object rawProtocolVersion = protocolVersionValue?.Value;
-            if (rawProtocolVersion is int protocolVersion)
-            {
-                return protocolVersion;
-            }
-
-            if (!(rawProtocolVersion is long longProtocolVersion))
-            {
-                return null;
-            }
-
-            if (longProtocolVersion < int.MinValue || longProtocolVersion > int.MaxValue)
-            {
-                return null;
-            }
-
-            return (int)longProtocolVersion;
-        }
-
-        private static bool ReadAcceptsDispatchAck(JObject request)
-        {
-            JObject metadata = request["uloop"] as JObject;
-            if (metadata == null)
-            {
-                return false;
-            }
-
-            return metadata["acceptsDispatchAck"]?.Value<bool>() ?? false;
-        }
-
-        private static bool ReadAcceptsHeartbeat(JObject request)
-        {
-            JObject metadata = request["uloop"] as JObject;
-            if (metadata == null)
-            {
-                return false;
-            }
-
-            return metadata["acceptsHeartbeat"]?.Value<bool>() ?? false;
+            return UloopEnvelope.ParseJsonRpcRequest(jsonRequest);
         }
 
         /// <summary>
@@ -292,32 +213,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             System.Diagnostics.Debug.Assert(request != null, "request must not be null");
 
-            bool? compileWaitsForDomainReload = ReadCompileRequestWaitsForDomainReload(request.Params);
+            bool? compileWaitsForDomainReload =
+                JsonRpcCompileRequestMetadataReader.ReadWaitsForDomainReload(request.Params);
             return JsonRpcAcceptedRequestCancellationPolicy.ShouldCancelOnClientDisconnect(
                 request.Method,
                 compileWaitsForDomainReload);
-        }
-
-        private static bool? ReadCompileRequestWaitsForDomainReload(JToken paramsToken)
-        {
-            if (paramsToken is not JObject paramsObject)
-            {
-                return null;
-            }
-
-            JToken waitForDomainReloadToken =
-                paramsObject.GetValue(WaitForDomainReloadParamName, StringComparison.OrdinalIgnoreCase);
-            if (waitForDomainReloadToken == null)
-            {
-                return null;
-            }
-
-            if (waitForDomainReloadToken.Type != JTokenType.Boolean)
-            {
-                return null;
-            }
-
-            return waitForDomainReloadToken.Value<bool>();
         }
 
         private static bool IsCliProtocolMismatch(int? currentProtocolVersion)
