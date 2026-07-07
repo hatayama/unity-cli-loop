@@ -237,7 +237,11 @@ func printOptionsForCommand(command string, cache clicore.ToolsCache, stdout io.
 		clicore.WriteLine(stdout, "")
 		return
 	}
-	if tool, ok := clicore.FindDefaultTool(command); ok {
+	if command == clicore.ExecuteDynamicCodeCommandName {
+		tool, ok := clicore.FindDefaultTool(command)
+		if !ok {
+			return
+		}
 		printOptionsForTool(tool, stdout)
 		return
 	}

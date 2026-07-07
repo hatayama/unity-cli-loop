@@ -234,6 +234,43 @@ func TestRunDispatcherCompileHelpDoesNotRequireUnityProject(t *testing.T) {
 	}
 }
 
+func TestCommandHelpPrefersProjectCacheForDefaultToolNames(t *testing.T) {
+	// Verifies command help uses synced project tool metadata before embedded defaults.
+	projectRoot := createLaunchTestProject(t)
+	writeToolCache(t, projectRoot, `{
+  "tools": [
+    {
+      "name": "compile",
+      "description": "Cached compile help",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "CachedOnly": {"type": "boolean", "description": "Cached-only option"}
+        }
+      }
+    }
+  ]
+}`)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	handled, code := tryHandleCommandHelp("compile", projectRoot, projectRoot, &stdout, &stderr)
+
+	if !handled {
+		t.Fatal("compile help request was not handled")
+	}
+	if code != 0 {
+		t.Fatalf("compile help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "Cached compile help") {
+		t.Fatalf("cached compile help was not used:\n%s", output)
+	}
+	if !strings.Contains(output, "--cached-only") {
+		t.Fatalf("cached compile option was not listed:\n%s", output)
+	}
+}
+
 // Tests that execute-dynamic-code help includes CLI-side code-file support without resolving a Unity project.
 func TestRunDispatcherExecuteDynamicCodeHelpDoesNotRequireUnityProject(t *testing.T) {
 	t.Chdir(t.TempDir())
