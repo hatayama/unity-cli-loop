@@ -54,37 +54,160 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 return false;
             }
 
-            string normalized = version.Trim().TrimStart('v', 'V');
+            string normalized = TrimVersionPrefix(version.Trim());
             string[] buildParts = normalized.Split(new[] { '+' }, 2);
             string versionWithoutBuildMetadata = buildParts[0];
-            string[] prereleaseParts = versionWithoutBuildMetadata.Split(new[] { '-' }, 2);
-            string coreVersion = prereleaseParts[0];
+            int prereleaseSeparatorIndex = versionWithoutBuildMetadata.IndexOf('-');
+            string coreVersion = prereleaseSeparatorIndex >= 0
+                ? versionWithoutBuildMetadata.Substring(0, prereleaseSeparatorIndex)
+                : versionWithoutBuildMetadata;
             string[] coreParts = coreVersion.Split('.');
             if (coreParts.Length != 3)
             {
                 return false;
             }
 
-            bool hasMajor = int.TryParse(coreParts[0], out int major);
-            bool hasMinor = int.TryParse(coreParts[1], out int minor);
-            bool hasPatch = int.TryParse(coreParts[2], out int patch);
+            (bool hasMajor, int major) = ParseVersionPart(coreParts[0]);
+            (bool hasMinor, int minor) = ParseVersionPart(coreParts[1]);
+            (bool hasPatch, int patch) = ParseVersionPart(coreParts[2]);
             if (!hasMajor || !hasMinor || !hasPatch)
             {
                 return false;
             }
 
             string[] prereleaseIdentifiers = Array.Empty<string>();
-            if (prereleaseParts.Length == 2)
+            if (prereleaseSeparatorIndex >= 0)
             {
-                if (string.IsNullOrEmpty(prereleaseParts[1]))
+                string prerelease = versionWithoutBuildMetadata.Substring(prereleaseSeparatorIndex + 1);
+                if (!IsValidPrerelease(prerelease))
                 {
                     return false;
                 }
 
-                prereleaseIdentifiers = prereleaseParts[1].Split('.');
+                prereleaseIdentifiers = prerelease.Split('.');
             }
 
             parsedVersion = new ParsedCliVersion(major, minor, patch, prereleaseIdentifiers);
+            return true;
+        }
+
+        private static string TrimVersionPrefix(string version)
+        {
+            if (version.StartsWith("v", StringComparison.Ordinal) ||
+                version.StartsWith("V", StringComparison.Ordinal))
+            {
+                return version.Substring(1);
+            }
+
+            return version;
+        }
+
+        private static (bool IsParsed, int Parsed) ParseVersionPart(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return (false, 0);
+            }
+
+            if (HasLeadingZero(value))
+            {
+                return (false, 0);
+            }
+
+            if (!ContainsOnlyDigits(value))
+            {
+                return (false, 0);
+            }
+
+            int parsed = 0;
+            foreach (char character in value)
+            {
+                int digit = character - '0';
+                if (parsed > (int.MaxValue - digit) / 10)
+                {
+                    return (false, 0);
+                }
+
+                parsed = (parsed * 10) + digit;
+            }
+
+            return (true, parsed);
+        }
+
+        private static bool IsValidPrerelease(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return false;
+            }
+
+            string[] identifiers = value.Split('.');
+            foreach (string identifier in identifiers)
+            {
+                if (string.IsNullOrEmpty(identifier))
+                {
+                    return false;
+                }
+
+                if (!ContainsOnlyPrereleaseCharacters(identifier))
+                {
+                    return false;
+                }
+
+                if (ContainsOnlyDigits(identifier) && HasLeadingZero(identifier))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool HasLeadingZero(string value)
+        {
+            return value.Length > 1 && value.StartsWith("0", StringComparison.Ordinal);
+        }
+
+        private static bool ContainsOnlyDigits(string value)
+        {
+            foreach (char character in value)
+            {
+                if (character < '0' || character > '9')
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool ContainsOnlyPrereleaseCharacters(string value)
+        {
+            foreach (char character in value)
+            {
+                if (character >= '0' && character <= '9')
+                {
+                    continue;
+                }
+
+                if (character >= 'A' && character <= 'Z')
+                {
+                    continue;
+                }
+
+                if (character >= 'a' && character <= 'z')
+                {
+                    continue;
+                }
+
+                if (character == '-')
+                {
+                    continue;
+                }
+
+                return false;
+            }
+
             return true;
         }
 
@@ -147,8 +270,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
         private static int ComparePrereleaseIdentifiers(string leftIdentifier, string rightIdentifier)
         {
-            bool leftIsNumeric = int.TryParse(leftIdentifier, out int leftNumber);
-            bool rightIsNumeric = int.TryParse(rightIdentifier, out int rightNumber);
+            (bool leftIsNumeric, int leftNumber) = ParseVersionPart(leftIdentifier);
+            (bool rightIsNumeric, int rightNumber) = ParseVersionPart(rightIdentifier);
             if (leftIsNumeric && rightIsNumeric)
             {
                 return leftNumber.CompareTo(rightNumber);
@@ -164,7 +287,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 return 1;
             }
 
-            return string.CompareOrdinal(leftIdentifier, rightIdentifier);
+            return Math.Sign(string.CompareOrdinal(leftIdentifier, rightIdentifier));
         }
 
         private readonly struct ParsedCliVersion
