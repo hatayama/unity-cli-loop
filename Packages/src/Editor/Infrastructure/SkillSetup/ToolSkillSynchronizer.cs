@@ -98,12 +98,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             "uloop-get-unity-search-providers",
             "uloop-execute-menu-item"
         };
-        private static readonly string[] ExcludedSkillFileNames =
-        {
-            ".meta",
-            ".DS_Store",
-            ".gitkeep"
-        };
         private static readonly string V3MigrationSkillSourceDirectory = Path.Combine(
             UnityCliLoopConstants.PackageResolvedPath,
             CliConstants.TEMPORARY_SKILLS_DIR_NAME,
@@ -631,7 +625,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     targetRoot,
                     skill.Name,
                     groupSkillsUnderUnityCliLoop);
-                SyncInstalledSkillDirectory(installedSkillDirectory, skill.SkillFiles);
+                SkillDirectoryContentSynchronizer.SyncInstalledSkillDirectory(installedSkillDirectory, skill.SkillFiles);
                 DeleteSkillDirectoryIfExists(targetRoot, skill.Name, !groupSkillsUnderUnityCliLoop);
             }
 
@@ -679,7 +673,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     targetRoot,
                     skill.Name,
                     groupSkillsUnderUnityCliLoop);
-                SyncInstalledSkillDirectory(installedSkillDirectory, skill.SkillFiles);
+                SkillDirectoryContentSynchronizer.SyncInstalledSkillDirectory(installedSkillDirectory, skill.SkillFiles);
                 DeleteSkillDirectoryIfExists(targetRoot, skill.Name, !groupSkillsUnderUnityCliLoop);
             }
 
@@ -788,41 +782,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static void SyncInstalledSkillDirectory(
-            string skillDirectory,
-            IReadOnlyDictionary<string, byte[]> skillFiles)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(skillDirectory), "skillDirectory must not be null or empty");
-            Debug.Assert(skillFiles != null, "skillFiles must not be null");
-            Debug.Assert(skillFiles.ContainsKey(SkillInstallLayout.SkillFileName),
-                "skillFiles must contain SKILL.md");
-
-            string parentDirectory = Path.GetDirectoryName(skillDirectory);
-            Debug.Assert(!string.IsNullOrEmpty(parentDirectory), "parentDirectory must not be null or empty");
-            Directory.CreateDirectory(parentDirectory);
-            bool skillDirectoryExisted = Directory.Exists(skillDirectory);
-            Dictionary<string, byte[]> backupFiles = skillDirectoryExisted
-                ? ReadSkillFilesForRollback(skillDirectory)
-                : new Dictionary<string, byte[]>(StringComparer.Ordinal);
-            Directory.CreateDirectory(skillDirectory);
-
-            bool syncCompleted = false;
-            try
-            {
-                WriteSkillFiles(skillDirectory, skillFiles);
-                DeleteUnexpectedSkillFiles(skillDirectory, skillFiles.Keys);
-                DeleteEmptyDirectories(skillDirectory);
-                syncCompleted = true;
-            }
-            finally
-            {
-                if (!syncCompleted)
-                {
-                    RollbackSkillDirectory(skillDirectory, backupFiles, skillDirectoryExisted);
-                }
-            }
-        }
-
         private static void DeleteDeprecatedSkillDirectoriesFromAllLayouts(string targetRoot)
         {
             foreach (string deprecatedSkillName in DeprecatedSkillNames)
@@ -862,148 +821,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 DeleteSkillDirectoryIfExists(targetRoot, skill.Name, groupSkillsUnderUnityCliLoop);
             }
-        }
-
-        private static void WriteSkillFiles(
-            string skillDirectory,
-            IReadOnlyDictionary<string, byte[]> skillFiles)
-        {
-            foreach (KeyValuePair<string, byte[]> skillFile in skillFiles)
-            {
-                string fullPath = Path.Combine(skillDirectory, skillFile.Key);
-                string fileDirectory = Path.GetDirectoryName(fullPath);
-                Debug.Assert(!string.IsNullOrEmpty(fileDirectory), "fileDirectory must not be null or empty");
-                Directory.CreateDirectory(fileDirectory);
-                if (File.Exists(fullPath) && File.ReadAllBytes(fullPath).SequenceEqual(skillFile.Value))
-                {
-                    continue;
-                }
-
-                WriteFileAtomically(fullPath, skillFile.Value);
-            }
-        }
-
-        internal static Dictionary<string, byte[]> ReadSkillFilesForRollback(string skillDirectory)
-        {
-            Dictionary<string, byte[]> files = new(StringComparer.Ordinal);
-            foreach (string filePath in Directory.EnumerateFiles(skillDirectory, "*", SearchOption.AllDirectories))
-            {
-                string fileName = Path.GetFileName(filePath);
-                if (IsExcludedSkillFile(fileName))
-                {
-                    continue;
-                }
-
-                string relativePath = Path.GetRelativePath(skillDirectory, filePath);
-                files[relativePath] = File.ReadAllBytes(filePath);
-            }
-
-            return files;
-        }
-
-        private static void WriteFileAtomically(string fullPath, byte[] content)
-        {
-            string fileDirectory = Path.GetDirectoryName(fullPath);
-            Debug.Assert(!string.IsNullOrEmpty(fileDirectory), "fileDirectory must not be null or empty");
-
-            string tempPath = Path.Combine(
-                fileDirectory,
-                $"{Path.GetFileName(fullPath)}.tmp-{Guid.NewGuid():N}");
-            File.WriteAllBytes(tempPath, content);
-
-            try
-            {
-                if (File.Exists(fullPath))
-                {
-                    File.Replace(tempPath, fullPath, null, true);
-                    return;
-                }
-
-                File.Move(tempPath, fullPath);
-            }
-            finally
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-            }
-        }
-
-        private static void DeleteUnexpectedSkillFiles(
-            string skillDirectory,
-            IEnumerable<string> expectedRelativePaths)
-        {
-            HashSet<string> expectedPaths = new(expectedRelativePaths, StringComparer.Ordinal);
-            foreach (string filePath in Directory.EnumerateFiles(skillDirectory, "*", SearchOption.AllDirectories))
-            {
-                string fileName = Path.GetFileName(filePath);
-                if (IsExcludedSkillFile(fileName))
-                {
-                    continue;
-                }
-
-                string relativePath = Path.GetRelativePath(skillDirectory, filePath);
-                if (expectedPaths.Contains(relativePath))
-                {
-                    continue;
-                }
-
-                File.Delete(filePath);
-            }
-        }
-
-        private static void DeleteEmptyDirectories(string skillDirectory)
-        {
-            foreach (string directoryPath in Directory.EnumerateDirectories(skillDirectory, "*", SearchOption.AllDirectories)
-                         .OrderByDescending(path => path.Length))
-            {
-                if (Directory.EnumerateFileSystemEntries(directoryPath).Any())
-                {
-                    continue;
-                }
-
-                Directory.Delete(directoryPath);
-            }
-        }
-
-        private static void RollbackSkillDirectory(
-            string skillDirectory,
-            IReadOnlyDictionary<string, byte[]> backupFiles,
-            bool skillDirectoryExisted)
-        {
-            if (!skillDirectoryExisted)
-            {
-                if (Directory.Exists(skillDirectory))
-                {
-                    Directory.Delete(skillDirectory, true);
-                }
-
-                return;
-            }
-
-            Directory.CreateDirectory(skillDirectory);
-            WriteSkillFiles(skillDirectory, backupFiles);
-            DeleteUnexpectedSkillFiles(skillDirectory, backupFiles.Keys);
-            DeleteEmptyDirectories(skillDirectory);
-        }
-
-        private static bool IsExcludedSkillFile(string fileName)
-        {
-            if (ExcludedSkillFileNames.Contains(fileName))
-            {
-                return true;
-            }
-
-            foreach (string excludedPattern in ExcludedSkillFileNames)
-            {
-                if (fileName.EndsWith(excludedPattern, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private static void DeleteSkillDirectoryIfExists(
@@ -1054,7 +871,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             foreach (string filePath in Directory.EnumerateFiles(directoryPath))
             {
                 string fileName = Path.GetFileName(filePath);
-                if (!IsExcludedSkillFile(fileName))
+                if (!SkillDirectoryContentSynchronizer.IsExcludedSkillFile(fileName))
                 {
                     continue;
                 }
@@ -1067,7 +884,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             foreach (string childDirectoryPath in Directory.EnumerateDirectories(directoryPath))
             {
-                DeleteEmptyDirectories(childDirectoryPath);
+                SkillDirectoryContentSynchronizer.DeleteEmptyDirectories(childDirectoryPath);
                 if (Directory.EnumerateFileSystemEntries(childDirectoryPath).Any())
                 {
                     continue;

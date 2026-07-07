@@ -1483,7 +1483,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             File.WriteAllText(installedReferencePath, "line1\r\nline2\r\n");
             byte[] backupBytes = File.ReadAllBytes(installedReferencePath);
 
-            Dictionary<string, byte[]> backupFiles = ToolSkillSynchronizer.ReadSkillFilesForRollback(installedSkillDir);
+            Dictionary<string, byte[]> backupFiles =
+                SkillDirectoryContentSynchronizer.ReadSkillFilesForRollback(installedSkillDir);
 
             Assert.That(backupFiles["reference.md"], Is.EqualTo(backupBytes));
         }
