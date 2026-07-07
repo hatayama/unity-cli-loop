@@ -49,6 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string SimulateKeyboardAssemblyName = "UnityCLILoop.FirstPartyTools.SimulateKeyboard.Editor";
         private const string SimulateMouseInputAssemblyName = "UnityCLILoop.FirstPartyTools.SimulateMouseInput.Editor";
         private const string SimulateMouseUiAssemblyName = "UnityCLILoop.FirstPartyTools.SimulateMouseUi.Editor";
+        private const string DevelopmentOnlyCatalogTestToolName = "development-only-catalog-test";
 
         [Test]
         public void Constructor_WhenFirstPartyToolsUseToolAttribute_RegistersThem()
@@ -355,6 +356,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteCommandAsync_WhenGetToolDetailsIncludesDevelopmentOnly_ReturnsDevelopmentTools()
+        {
+            // Tests that real JSON booleans can opt into development-only catalog entries.
+            UnityCliLoopExecutionRouter executionRouter = CreateExecutionRouterWithDevelopmentOnlyTool();
+            JObject parameters = new()
+            {
+                ["includeDevelopmentOnly"] = true
+            };
+
+            UnityCliLoopToolResponse response = await executionRouter.ExecuteAsync(
+                UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS,
+                parameters,
+                CancellationToken.None);
+            GetToolDetailsResponse getToolDetailsResponse = response as GetToolDetailsResponse;
+            string[] toolNames = getToolDetailsResponse?.Tools
+                .Select(tool => tool.Name)
+                .ToArray() ?? new string[0];
+
+            Assert.That(toolNames, Does.Contain(DevelopmentOnlyCatalogTestToolName));
+        }
+
+        [Test]
+        public async Task ExecuteCommandAsync_WhenGetToolDetailsIncludeDevelopmentOnlyIsString_ExcludesDevelopmentTools()
+        {
+            // Tests that string values are not coerced into development-only catalog access.
+            UnityCliLoopExecutionRouter executionRouter = CreateExecutionRouterWithDevelopmentOnlyTool();
+            JObject parameters = new()
+            {
+                ["IncludeDevelopmentOnly"] = "true"
+            };
+
+            UnityCliLoopToolResponse response = await executionRouter.ExecuteAsync(
+                UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS,
+                parameters,
+                CancellationToken.None);
+            GetToolDetailsResponse getToolDetailsResponse = response as GetToolDetailsResponse;
+            string[] toolNames = getToolDetailsResponse?.Tools
+                .Select(tool => tool.Name)
+                .ToArray() ?? new string[0];
+
+            Assert.That(toolNames, Does.Not.Contain(DevelopmentOnlyCatalogTestToolName));
+        }
+
+        [Test]
         public async Task ExecuteCommandAsync_WhenCommandIsGetCompileStatus_ReturnsBridgeStatusPayload()
         {
             // Tests that compile status polling routes as a CLI-only bridge command, not a public tool.
@@ -492,6 +537,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return new UnityCliLoopExecutionRouter(toolRegistrarService);
         }
 
+        private static UnityCliLoopExecutionRouter CreateExecutionRouterWithDevelopmentOnlyTool()
+        {
+            UnityCliLoopToolRegistrarService toolRegistrarService =
+                UnityCliLoopToolRegistrarTestFactory.Create(UnityCliLoopToolDiscovery.DiscoverTools);
+            toolRegistrarService.RegisterCustomTool(new DevelopmentOnlyCatalogTestTool());
+            return new UnityCliLoopExecutionRouter(toolRegistrarService);
+        }
+
         [Test]
         public void CustomCommandSamplesAsmdef_ReferencesOnlyToolContracts()
         {
@@ -623,6 +676,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private sealed class ManualRegistrationResponse : UnityCliLoopToolResponse
         {
+        }
+
+        [UnityCliLoopTool(DisplayDevelopmentOnly = true)]
+        private sealed class DevelopmentOnlyCatalogTestTool : IUnityCliLoopTool
+        {
+            public string ToolName => DevelopmentOnlyCatalogTestToolName;
+            public ToolParameterSchema ParameterSchema { get; } = new();
+
+            public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
+            {
+                UnityCliLoopToolResponse response = new ManualRegistrationResponse();
+                return Task.FromResult(response);
+            }
         }
     }
 }

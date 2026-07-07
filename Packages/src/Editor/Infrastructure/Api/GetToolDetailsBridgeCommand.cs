@@ -13,7 +13,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     internal static class GetToolDetailsBridgeCommand
     {
         private const string IncludeDevelopmentOnlyPropertyName = "IncludeDevelopmentOnly";
-        private const string IncludeDevelopmentOnlyCamelCasePropertyName = "includeDevelopmentOnly";
 
         public static GetToolDetailsResponse Execute(
             JToken paramsToken,
@@ -46,9 +45,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return false;
             }
 
-            JToken valueToken = parameters[IncludeDevelopmentOnlyPropertyName] ??
-                                parameters[IncludeDevelopmentOnlyCamelCasePropertyName];
-            return valueToken?.Value<bool>() ?? false;
+            return StrictJsonBooleanMetadataReader.ReadOptionalBoolean(
+                parameters,
+                IncludeDevelopmentOnlyPropertyName,
+                System.StringComparison.OrdinalIgnoreCase) ?? false;
         }
     }
 }
