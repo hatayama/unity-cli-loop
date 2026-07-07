@@ -128,28 +128,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        internal static bool HasInstalledSkills(string targetRoot)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            return HasInstalledSkills(projectRoot, targetRoot);
-        }
-
-        internal static bool HasInstalledSkills(string targetRoot, bool groupSkillsUnderUnityCliLoop)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            return HasInstalledSkills(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop);
-        }
-
-        internal static bool HasInstalledSkills(string projectRoot, string targetRoot)
+        internal static bool HasInstalledSkillsInAnyLayout(string projectRoot, string targetRoot)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(!string.IsNullOrEmpty(targetRoot), "targetRoot must not be null or empty");
 
-            return HasInstalledSkills(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop: false)
-                || HasInstalledSkills(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop: true);
+            return HasInstalledSkillsForLayout(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop: false)
+                || HasInstalledSkillsForLayout(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop: true);
         }
 
-        internal static bool HasInstalledSkills(
+        internal static bool HasInstalledSkillsForLayout(
             string projectRoot,
             string targetRoot,
             bool groupSkillsUnderUnityCliLoop)
@@ -178,7 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool groupSkillsUnderUnityCliLoop)
         {
             Dictionary<string, SkillSourceDefinition> expectedSkills = GetSkillSources(projectRoot);
-            bool hasLayoutSkills = HasInstalledSkills(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop);
+            bool hasLayoutSkills = HasInstalledSkillsForLayout(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop);
             if (expectedSkills.Count == 0)
             {
                 return hasLayoutSkills ? SkillInstallState.Installed : SkillInstallState.Missing;

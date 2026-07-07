@@ -55,14 +55,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Path.Combine(manualTargetRoot, SkillInstallLayout.SkillsDirName, "find-orphaned-meta"),
                 "---\nname: find-orphaned-meta\n---\n");
             SkillInstallationDetector detector = new();
-            Assert.IsFalse(detector.AreSkillsInstalled(temporaryRoot, ".claude"),
+            Assert.IsFalse(detector.AreSkillsInstalledInAnyLayout(temporaryRoot, ".claude"),
                 "Manual local skills should not be treated as installed uLoop skills");
 
             string legacyTargetRoot = Path.Combine(temporaryRoot, ".codex");
             WriteSkillFile(
                 Path.Combine(legacyTargetRoot, SkillInstallLayout.SkillsDirName, "acme-third-party"),
                 "---\nname: acme-third-party\ntoolName: acme-third-party\n---\n");
-            Assert.IsTrue(detector.AreSkillsInstalled(temporaryRoot, ".codex"),
+            Assert.IsTrue(detector.AreSkillsInstalledInAnyLayout(temporaryRoot, ".codex"),
                 "Legacy third-party managed skills should be detected");
 
             string managedTargetRoot = Path.Combine(temporaryRoot, ".agents");
@@ -71,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 SkillInstallLayout.SkillsDirName,
                 SkillInstallLayout.ManagedSkillsDirName,
                 "uloop-compile"));
-            Assert.IsTrue(detector.AreSkillsInstalled(temporaryRoot, ".agents"),
+            Assert.IsTrue(detector.AreSkillsInstalledInAnyLayout(temporaryRoot, ".agents"),
                 "Namespaced managed skills should be detected");
         }
 
@@ -85,8 +85,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             string flatTargetRoot = Path.Combine(temporaryRoot, ".claude");
             WriteSkillFile(Path.Combine(flatTargetRoot, SkillInstallLayout.SkillsDirName, "uloop-compile"));
-            Assert.IsTrue(detector.AreSkillsInstalled(temporaryRoot, ".claude", false));
-            Assert.IsFalse(detector.AreSkillsInstalled(temporaryRoot, ".claude", true));
+            Assert.IsTrue(detector.AreSkillsInstalledForLayout(temporaryRoot, ".claude", false));
+            Assert.IsFalse(detector.AreSkillsInstalledForLayout(temporaryRoot, ".claude", true));
 
             string groupedTargetRoot = Path.Combine(temporaryRoot, ".codex");
             WriteSkillFile(Path.Combine(
@@ -94,8 +94,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 SkillInstallLayout.SkillsDirName,
                 SkillInstallLayout.ManagedSkillsDirName,
                 "uloop-compile"));
-            Assert.IsTrue(detector.AreSkillsInstalled(temporaryRoot, ".codex", true));
-            Assert.IsFalse(detector.AreSkillsInstalled(temporaryRoot, ".codex", false));
+            Assert.IsTrue(detector.AreSkillsInstalledForLayout(temporaryRoot, ".codex", true));
+            Assert.IsFalse(detector.AreSkillsInstalledForLayout(temporaryRoot, ".codex", false));
         }
 
         // Tests that an empty legacy managed directory still counts for flat layout migration state.
@@ -107,8 +107,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Directory.CreateDirectory(Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName, "uloop-compile"));
             SkillInstallationDetector detector = new();
 
-            Assert.IsTrue(detector.AreSkillsInstalled(temporaryRoot, ".cursor", false));
-            Assert.IsFalse(detector.AreSkillsInstalled(temporaryRoot, ".cursor", true));
+            Assert.IsTrue(detector.AreSkillsInstalledForLayout(temporaryRoot, ".cursor", false));
+            Assert.IsFalse(detector.AreSkillsInstalledForLayout(temporaryRoot, ".cursor", true));
         }
 
         // Tests that Unity-side discovery includes CLI-only skills from the packaged core CLI.

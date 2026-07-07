@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(targetDir), "targetDir must not be null or empty");
 
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            return AreSkillsInstalled(projectRoot, targetDir);
+            return AreSkillsInstalledInAnyLayout(projectRoot, targetDir);
         }
 
         public bool AreSkillsInstalled(string targetDir, bool groupSkillsUnderUnityCliLoop)
@@ -24,19 +24,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(targetDir), "targetDir must not be null or empty");
 
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            return AreSkillsInstalled(projectRoot, targetDir, groupSkillsUnderUnityCliLoop);
+            return AreSkillsInstalledForLayout(projectRoot, targetDir, groupSkillsUnderUnityCliLoop);
         }
 
-        internal bool AreSkillsInstalled(string projectRoot, string targetDir)
+        internal bool AreSkillsInstalledInAnyLayout(string projectRoot, string targetDir)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(!string.IsNullOrEmpty(targetDir), "targetDir must not be null or empty");
 
             string targetRoot = Path.Combine(projectRoot, targetDir);
-            return SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot);
+            return SkillInstallLayout.HasInstalledSkillsInAnyLayout(projectRoot, targetRoot);
         }
 
-        internal bool AreSkillsInstalled(
+        internal bool AreSkillsInstalledForLayout(
             string projectRoot,
             string targetDir,
             bool groupSkillsUnderUnityCliLoop)
@@ -45,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(targetDir), "targetDir must not be null or empty");
 
             string targetRoot = Path.Combine(projectRoot, targetDir);
-            return SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop);
+            return SkillInstallLayout.HasInstalledSkillsForLayout(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop);
         }
     }
 }
