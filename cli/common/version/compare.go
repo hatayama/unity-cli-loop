@@ -17,6 +17,11 @@ func IsLessThan(left string, right string) bool {
 	return ok && result < 0
 }
 
+func IsValid(value string) bool {
+	_, ok := parseSemanticVersion(value)
+	return ok
+}
+
 func Compare(left string, right string) (int, bool) {
 	leftVersion, leftOK := parseSemanticVersion(left)
 	rightVersion, rightOK := parseSemanticVersion(right)

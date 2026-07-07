@@ -771,6 +771,19 @@ func TestLoadDispatcherPinRejectsInvalidMinimumDispatcherVersion(t *testing.T) {
 	}
 }
 
+func TestLoadDispatcherPinRejectsMinimumDispatcherVersionWithLeadingZero(t *testing.T) {
+	// Verifies dispatcher pin validation rejects versions the shared comparator cannot order.
+	projectRoot := createDispatcherUnityProject(t)
+	pinPath := filepath.Join(projectRoot, dispatcherProjectPinRelativePath)
+	writeDispatcherPinFileWithMinimum(t, pinPath, "3.0.0-beta.58", "3.00.1")
+
+	_, err := loadDispatcherPin(projectRoot)
+
+	if err == nil {
+		t.Fatal("expected invalid minimumDispatcherVersion error")
+	}
+}
+
 func TestLoadDispatcherPinFailsWhenPinFileMissing(t *testing.T) {
 	// Verifies loadDispatcherPin now requires a pin JSON and does not fall back to CliConstants.cs.
 	projectRoot := createDispatcherUnityProject(t)
