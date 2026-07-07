@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
@@ -32,7 +34,7 @@ func waitForLaunchReadinessWithDeps(ctx context.Context, projectRoot string, dep
 	if ctx.Err() != nil || clicore.IsReadinessCLIUpdateRequiredError(err) {
 		return err
 	}
-	var notRespondingErr clicore.UnityServerNotRespondingError
+	var notRespondingErr clierrors.UnityServerNotRespondingError
 	if !errors.As(err, &notRespondingErr) {
 		return err
 	}
@@ -42,7 +44,7 @@ func waitForLaunchReadinessWithDeps(ctx context.Context, projectRoot string, dep
 	}
 }
 
-func (err launchStartupTimeoutError) ToCLIError(context clicore.ErrorContext) clicore.CLIError {
+func (err launchStartupTimeoutError) ToCLIError(context clierrors.ErrorContext) clierrors.CLIError {
 	projectRoot := clicore.FirstNonEmpty(context.ProjectRoot, err.projectRoot)
 	details := map[string]any{
 		"TimeoutSeconds": int(launchReadinessTimeout.Seconds()),
@@ -50,9 +52,9 @@ func (err launchStartupTimeoutError) ToCLIError(context clicore.ErrorContext) cl
 	if err.cause != nil {
 		details["Cause"] = err.cause.Error()
 	}
-	return clicore.CLIError{
-		ErrorCode:   clicore.ErrorCodeUnityStartupTimeout,
-		Phase:       clicore.ErrorPhaseConnection,
+	return clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeUnityStartupTimeout,
+		Phase:       clierrors.ErrorPhaseConnection,
 		Message:     "Unity is running, but the Editor did not finish startup before the launch timeout.",
 		Retryable:   true,
 		SafeToRetry: true,

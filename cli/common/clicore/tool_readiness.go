@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/project"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
@@ -81,7 +82,7 @@ func toolReadinessDoneErrorWithDeps(ctx context.Context, projectRoot string, cau
 	}
 	runningProcess, err := deps.findRunningUnityProcess(context.Background(), projectRoot)
 	if err == nil && runningProcess != nil {
-		return UnityServerNotRespondingError{
+		return clierrors.UnityServerNotRespondingError{
 			ProjectRoot: projectRoot,
 			Endpoint:    resolveProjectEndpointAddress(projectRoot),
 			Cause:       cause,
@@ -107,7 +108,7 @@ func IsReadinessCLIUpdateRequiredError(err error) bool {
 	if !ok {
 		return false
 	}
-	return RPCDataType(typedData) == "cli_update_required"
+	return clierrors.RPCDataType(typedData) == "cli_update_required"
 }
 
 func ProbeToolReadinessSequence(ctx context.Context, projectRoot string) error {

@@ -1,11 +1,14 @@
 package dispatcher
 
-import "github.com/hatayama/unity-cli-loop/common/clicore"
+import (
+	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
+)
 
 var nativeCommandOptions = map[string][]string{
 	clicore.CompletionCommand: {installCompletionFlag, shellFlag},
 	clicore.LaunchCommandName: {
-		"--" + clicore.ProjectPathFlagName,
+		"--" + tooldocs.ProjectPathFlagName,
 		"--delete-recovery",
 		"--editor-version",
 		"--max-depth",
@@ -19,10 +22,10 @@ var nativeCommandOptions = map[string][]string{
 		"--" + clicore.PausePointIDFlagName,
 		"--" + clicore.PausePointTimeoutFlagName,
 		"--" + clicore.PausePointLogsMaxCountFlagName,
-		"--" + clicore.ProjectPathFlagName,
+		"--" + tooldocs.ProjectPathFlagName,
 	},
 	clicore.PausePointStatusUserCommandName: {
 		"--" + clicore.PausePointIDFlagName,
-		"--" + clicore.ProjectPathFlagName,
+		"--" + tooldocs.ProjectPathFlagName,
 	},
 }

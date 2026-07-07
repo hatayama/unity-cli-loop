@@ -13,6 +13,9 @@ import (
 	"testing"
 	"time"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/vibelog"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
@@ -52,7 +55,7 @@ func TestSendWithTransientConnectionRetryReportsUnityServerNotResponding(t *test
 		0,
 		deps)
 
-	var notRespondingErr clicore.UnityServerNotRespondingError
+	var notRespondingErr clierrors.UnityServerNotRespondingError
 	if !errors.As(err, &notRespondingErr) {
 		t.Fatalf("expected unityServerNotRespondingError, got %v", err)
 	}
@@ -184,7 +187,7 @@ func TestSendWithTransientConnectionRetryClassifiesProcessProbeTimeout(t *testin
 		0,
 		deps)
 
-	var notRespondingErr clicore.UnityServerNotRespondingError
+	var notRespondingErr clierrors.UnityServerNotRespondingError
 	if !errors.As(err, &notRespondingErr) {
 		t.Fatalf("expected unityServerNotRespondingError, got %v", err)
 	}
@@ -192,7 +195,7 @@ func TestSendWithTransientConnectionRetryClassifiesProcessProbeTimeout(t *testin
 
 func readOnlyCliVibeLog(t *testing.T, projectRoot string) string {
 	t.Helper()
-	logFiles, err := filepath.Glob(filepath.Join(projectRoot, clicore.CLIVibeLogDirectory, clicore.CLIVibeLogPrefix+"_*.json"))
+	logFiles, err := filepath.Glob(filepath.Join(projectRoot, vibelog.CLIVibeLogDirectory, vibelog.CLIVibeLogPrefix+"_*.json"))
 	if err != nil {
 		t.Fatalf("failed to glob CLI Vibe logs: %v", err)
 	}
@@ -208,7 +211,7 @@ func readOnlyCliVibeLog(t *testing.T, projectRoot string) string {
 
 func enableCliVibeLog(t *testing.T) {
 	t.Helper()
-	t.Setenv(clicore.CLIVibeLogEnvName, "1")
+	t.Setenv(vibelog.CLIVibeLogEnvName, "1")
 }
 
 // timeoutOnlyError is duplicated from internal/clicore's test helper of the

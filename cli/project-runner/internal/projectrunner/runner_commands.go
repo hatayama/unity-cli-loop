@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/project"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
@@ -20,7 +22,7 @@ func runResolvedProjectCommand(
 ) int {
 	if isSettingsManagedNativeToolCommand(command) &&
 		clicore.IsToolDisabledByToolSettings(command, clicore.LoadDisabledTools(connection.ProjectRoot)) {
-		clicore.WriteErrorEnvelope(stderr, nativeToolDisabledError(connection.ProjectRoot, command))
+		clierrors.WriteErrorEnvelope(stderr, nativeToolDisabledError(connection.ProjectRoot, command))
 		return 1
 	}
 	switch command {
@@ -50,11 +52,11 @@ func runDynamicProjectTool(
 ) int {
 	tool, cache, ok, err := clicore.FindToolForCommand(connection.ProjectRoot, command)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: command})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: command})
 		return 1
 	}
 	if !ok {
-		clicore.WriteErrorEnvelope(stderr, clicore.UnknownCommandError(command, cache, clicore.ErrorContext{
+		clierrors.WriteErrorEnvelope(stderr, clicore.UnknownCommandError(command, cache, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     command,
 		}))
@@ -73,13 +75,13 @@ func runDynamicProjectTool(
 		return 1
 	}
 	if nestedProjectPath != "" && nestedProjectPath != connection.ProjectRoot {
-		clicore.WriteErrorEnvelope(stderr, (&clicore.ArgumentError{
+		clierrors.WriteErrorEnvelope(stderr, (&clierrors.ArgumentError{
 			Message:      "--project-path must target the same Unity project for this command",
 			Option:       "--project-path",
 			ExpectedType: "path",
 			Command:      command,
 			NextActions:  []string{"Use one `--project-path <path>` value for the target Unity project."},
-		}).ToCLIError(clicore.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: command}))
+		}).ToCLIError(clierrors.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: command}))
 		return 1
 	}
 	return runTool(ctx, connection, command, params, stdout, stderr)
@@ -95,7 +97,7 @@ func prepareDynamicToolParams(
 ) (map[string]any, string, bool) {
 	commandArgs, dynamicCodeFilePath, err := extractDynamicCodeFileFlag(command, commandArgs)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     command,
 		})
@@ -104,14 +106,14 @@ func prepareDynamicToolParams(
 
 	params, nestedProjectPath, err := buildToolParams(commandArgs, tool)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     command,
 		})
 		return nil, "", false
 	}
 	if err := applyDynamicCodeFileParam(params, dynamicCodeFilePath); err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     command,
 		})
@@ -122,7 +124,7 @@ func prepareDynamicToolParams(
 	}
 	nestedConnection, err := project.ResolveConnection(startPath, nestedProjectPath)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     command,
 		})

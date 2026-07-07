@@ -13,6 +13,9 @@ import (
 	"testing"
 	"time"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/vibelog"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
@@ -62,7 +65,7 @@ func TestParseLaunchOptionsRejectsRemovedIgnoreCompilerErrorsFlags(t *testing.T)
 			t.Fatalf("expected removed ignore compiler errors flag error for %s", arg)
 		}
 
-		var argErr *clicore.ArgumentError
+		var argErr *clierrors.ArgumentError
 		if !errors.As(err, &argErr) {
 			t.Fatalf("expected argumentError for %s, got %T", arg, err)
 		}
@@ -166,7 +169,7 @@ func TestParseLaunchOptionsRejectsUnityHubRegistrationEqualsValues(t *testing.T)
 			t.Fatalf("expected Unity Hub registration option error for %s", arg)
 		}
 
-		var argErr *clicore.ArgumentError
+		var argErr *clierrors.ArgumentError
 		if !errors.As(err, &argErr) {
 			t.Fatalf("expected argumentError for %s, got %T", arg, err)
 		}
@@ -184,7 +187,7 @@ func TestParseLaunchOptionsRejectsMaxDepthBelowUnlimitedSentinel(t *testing.T) {
 		t.Fatal("expected invalid max-depth error")
 	}
 
-	var argErr *clicore.ArgumentError
+	var argErr *clierrors.ArgumentError
 	if !errors.As(err, &argErr) {
 		t.Fatalf("expected argumentError, got %T", err)
 	}
@@ -323,7 +326,7 @@ func TestWaitForLaunchReadinessWrapsStartupTimeout(t *testing.T) {
 	// Verifies launch timeout errors receive the launch-specific startup classification.
 	deps := defaultLaunchDeps()
 	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
-		return clicore.UnityServerNotRespondingError{
+		return clierrors.UnityServerNotRespondingError{
 			ProjectRoot: projectRoot,
 			Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
 			Cause:       errors.New("timed out waiting for Unity tool readiness"),
@@ -342,7 +345,7 @@ func TestWaitForLaunchReadinessWrapsInternalProbeDeadline(t *testing.T) {
 	// Verifies probe deadlines are classified as launch startup timeouts while the parent context is active.
 	deps := defaultLaunchDeps()
 	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
-		return clicore.UnityServerNotRespondingError{
+		return clierrors.UnityServerNotRespondingError{
 			ProjectRoot: projectRoot,
 			Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
 			Cause:       fmt.Errorf("probe deadline: %w", context.DeadlineExceeded),
@@ -377,8 +380,8 @@ func TestWaitForLaunchReadinessPreservesNoProcessReachability(t *testing.T) {
 	if errors.As(err, &startupErr) {
 		t.Fatalf("exited launch should not be classified as startup timeout: %v", err)
 	}
-	cliErr := clicore.ClassifyError(err, clicore.ErrorContext{Command: clicore.LaunchCommandName})
-	if cliErr.ErrorCode != clicore.ErrorCodeUnityNotReachable {
+	cliErr := clierrors.ClassifyError(err, clierrors.ErrorContext{Command: clicore.LaunchCommandName})
+	if cliErr.ErrorCode != clierrors.ErrorCodeUnityNotReachable {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
 	if strings.Contains(cliErr.Message, "Unity is running") {
@@ -845,7 +848,7 @@ func createLaunchTestProject(t *testing.T) string {
 // writes around launch and connection retry behavior.
 func readOnlyCliVibeLog(t *testing.T, projectRoot string) string {
 	t.Helper()
-	logFiles, err := filepath.Glob(filepath.Join(projectRoot, clicore.CLIVibeLogDirectory, clicore.CLIVibeLogPrefix+"_*.json"))
+	logFiles, err := filepath.Glob(filepath.Join(projectRoot, vibelog.CLIVibeLogDirectory, vibelog.CLIVibeLogPrefix+"_*.json"))
 	if err != nil {
 		t.Fatalf("failed to glob CLI Vibe logs: %v", err)
 	}
@@ -861,7 +864,7 @@ func readOnlyCliVibeLog(t *testing.T, projectRoot string) string {
 
 func enableCliVibeLog(t *testing.T) {
 	t.Helper()
-	t.Setenv(clicore.CLIVibeLogEnvName, "1")
+	t.Setenv(vibelog.CLIVibeLogEnvName, "1")
 }
 
 func decodeLaunchResponseFromOutput(t *testing.T, output string) launchReadyResponse {

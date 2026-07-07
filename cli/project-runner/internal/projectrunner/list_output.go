@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"sort"
 
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
+
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
@@ -85,16 +87,16 @@ func listOptionsForTool(tool clicore.ToolDefinition) []listOption {
 
 func newListOption(tool clicore.ToolDefinition, propertyName string, property clicore.ToolProperty) listOption {
 	return listOption{
-		Name:        "--" + clicore.OptionNameForProperty(tool.Name, propertyName, property),
+		Name:        "--" + tooldocs.OptionNameForProperty(tool.Name, propertyName, property),
 		Type:        property.Type,
-		Description: clicore.OptionSummary(tool.Name, propertyName, property),
+		Description: tooldocs.OptionSummary(tool.Name, propertyName, property),
 		Default:     listOptionDefault(property),
 		Values:      property.Enum,
 	}
 }
 
 func listOptionDefault(property clicore.ToolProperty) any {
-	if clicore.IsNegatedBooleanProperty(property) {
+	if tooldocs.IsNegatedBooleanProperty(property) {
 		return false
 	}
 	defaultValue := property.EffectiveDefault()
@@ -135,13 +137,13 @@ func appendDynamicCodeFileListOption(tool clicore.ToolDefinition, options []list
 		return options
 	}
 	for _, option := range options {
-		if option.Name == clicore.DynamicCodeFileOptionName {
+		if option.Name == tooldocs.DynamicCodeFileOptionName {
 			return options
 		}
 	}
 	return append(options, listOption{
-		Name:        clicore.DynamicCodeFileOptionName,
+		Name:        tooldocs.DynamicCodeFileOptionName,
 		Type:        "string",
-		Description: clicore.DynamicCodeFileOptionDescription,
+		Description: tooldocs.DynamicCodeFileOptionDescription,
 	})
 }

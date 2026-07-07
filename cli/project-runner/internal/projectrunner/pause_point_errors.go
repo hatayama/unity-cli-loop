@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
@@ -12,13 +14,13 @@ func pausePointWaitError(
 	options waitForPausePointOptions,
 	response pausePointStatusResponse,
 	state pausePointWaitState,
-) clicore.CLIError {
+) clierrors.CLIError {
 	response = normalizePausePointStatusResponse(response)
 
 	switch state {
 	case pausePointWaitStateNotEnabled:
 		return pausePointStateError(
-			clicore.ErrorCodePausePointNotEnabled,
+			clierrors.ErrorCodePausePointNotEnabled,
 			"Pause point is not enabled.",
 			projectRoot,
 			options,
@@ -26,7 +28,7 @@ func pausePointWaitError(
 			false)
 	case pausePointWaitStateExpired:
 		expiredError := pausePointStateError(
-			clicore.ErrorCodePausePointExpired,
+			clierrors.ErrorCodePausePointExpired,
 			"Pause point expired before it was hit.",
 			projectRoot,
 			options,
@@ -39,7 +41,7 @@ func pausePointWaitError(
 		return expiredError
 	case pausePointWaitStateCleared:
 		return pausePointStateError(
-			clicore.ErrorCodePausePointCleared,
+			clierrors.ErrorCodePausePointCleared,
 			"Pause point was cleared before it was hit.",
 			projectRoot,
 			options,
@@ -47,7 +49,7 @@ func pausePointWaitError(
 			true)
 	default:
 		timeoutError := pausePointStateError(
-			clicore.ErrorCodePausePointWaitTimeout,
+			clierrors.ErrorCodePausePointWaitTimeout,
 			fmt.Sprintf("Pause point was not hit within %ds.", options.timeoutSeconds),
 			projectRoot,
 			options,
@@ -104,10 +106,10 @@ func pausePointStateError(
 	options waitForPausePointOptions,
 	response pausePointStatusResponse,
 	retryable bool,
-) clicore.CLIError {
-	return clicore.CLIError{
+) clierrors.CLIError {
+	return clierrors.CLIError{
 		ErrorCode:   errorCode,
-		Phase:       clicore.ErrorPhaseResponseWaiting,
+		Phase:       clierrors.ErrorPhaseResponseWaiting,
 		Message:     message,
 		Retryable:   retryable,
 		SafeToRetry: retryable,

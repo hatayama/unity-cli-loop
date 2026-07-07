@@ -10,7 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hatayama/unity-cli-loop/common/clicore"
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -220,7 +221,7 @@ func TestRunControlPlayModeWithStateWaitFailsWhenStateNeverMatches(t *testing.T)
 	if code != 1 {
 		t.Fatalf("expected timeout failure, got %d with stdout %s stderr %s", code, stdout.String(), stderr.String())
 	}
-	if !bytes.Contains(stderr.Bytes(), []byte(clicore.ErrorCodeControlPlayModeWaitTimeout)) {
+	if !bytes.Contains(stderr.Bytes(), []byte(clierrors.ErrorCodeControlPlayModeWaitTimeout)) {
 		t.Fatalf("timeout error missing from stderr: %s", stderr.String())
 	}
 
@@ -281,11 +282,11 @@ func TestRunControlPlayModeWithStateWaitFailsImmediatelyWhenCompileErrorsBlockPl
 		t.Fatalf("expected compile error failure, got %d with stdout %s stderr %s", code, stdout.String(), stderr.String())
 	}
 
-	var envelope clicore.CLIErrorEnvelope
+	var envelope clierrors.CLIErrorEnvelope
 	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
 		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
 	}
-	if envelope.Error.ErrorCode != clicore.ErrorCodeControlPlayModeCompileErrors {
+	if envelope.Error.ErrorCode != clierrors.ErrorCodeControlPlayModeCompileErrors {
 		t.Fatalf("error code mismatch: %#v", envelope.Error)
 	}
 	if envelope.Error.Details["CompileErrorCount"] != float64(1) {
@@ -363,11 +364,11 @@ func TestRunControlPlayModeWithStateWaitFailsWhenCompileErrorsAppearDuringPollin
 		t.Fatalf("expected compile error failure, got %d with stdout %s stderr %s", code, stdout.String(), stderr.String())
 	}
 
-	var envelope clicore.CLIErrorEnvelope
+	var envelope clierrors.CLIErrorEnvelope
 	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
 		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
 	}
-	if envelope.Error.ErrorCode != clicore.ErrorCodeControlPlayModeCompileErrors {
+	if envelope.Error.ErrorCode != clierrors.ErrorCodeControlPlayModeCompileErrors {
 		t.Fatalf("error code mismatch: %#v", envelope.Error)
 	}
 	if !bytes.Contains(stderr.Bytes(), []byte("CS1525")) {

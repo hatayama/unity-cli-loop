@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
+	"github.com/hatayama/unity-cli-loop/common/vibelog"
 )
 
 type UnityProcess = unityprocess.UnityProcess
@@ -57,7 +58,7 @@ func runFocusWindow(ctx context.Context, projectRoot string, stdout io.Writer, s
 		return 1
 	}
 
-	correlationID := NewCLIVibeCorrelationID()
+	correlationID := vibelog.NewCLIVibeCorrelationID()
 	logFocusWindowFocusAttempt(projectRoot, runningProcess.Pid, correlationID)
 	if err := deps.focusUnityProcess(ctx, runningProcess.Pid); err != nil {
 		logFocusWindowFocusFailure(projectRoot, runningProcess.Pid, err, correlationID)
@@ -81,7 +82,7 @@ func writeFocusResponse(writer io.Writer, success bool, message string) {
 }
 
 func logFocusWindowFocusAttempt(projectRoot string, pid int, correlationID string) {
-	_ = WriteCLIVibeLog(projectRoot, CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(projectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_focus_window_focus_attempt",
 		Message:   "Attempting to focus Unity for the focus-window command.",
@@ -94,7 +95,7 @@ func logFocusWindowFocusAttempt(projectRoot string, pid int, correlationID strin
 }
 
 func logFocusWindowFocusSuccess(projectRoot string, pid int, correlationID string) {
-	_ = WriteCLIVibeLog(projectRoot, CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(projectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_focus_window_focus_success",
 		Message:   "Focused Unity for the focus-window command.",
@@ -107,7 +108,7 @@ func logFocusWindowFocusSuccess(projectRoot string, pid int, correlationID strin
 }
 
 func logFocusWindowFocusFailure(projectRoot string, pid int, focusErr error, correlationID string) {
-	_ = WriteCLIVibeLog(projectRoot, CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(projectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "WARNING",
 		Operation: "cli_focus_window_focus_failed",
 		Message:   "Failed to focus Unity for the focus-window command.",

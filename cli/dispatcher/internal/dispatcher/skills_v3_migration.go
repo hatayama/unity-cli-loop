@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
@@ -15,7 +17,7 @@ func runV3MigrationSkillInstall(projectRoot string, skills []skillDefinition, op
 	for _, target := range options.targets {
 		result, err := installV3MigrationSkillForTarget(projectRoot, target, skills, options.global, groupManagedSkillsForOptions(options))
 		if err != nil {
-			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
 		clicore.WriteFormat(stdout, "%s:\n", target.displayName)
@@ -24,7 +26,7 @@ func runV3MigrationSkillInstall(projectRoot string, skills []skillDefinition, op
 		clicore.WriteFormat(stdout, "  Skipped: %d\n", result.skipped)
 		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
 		if err != nil {
-			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
 		clicore.WriteFormat(stdout, "  Location: %s\n\n", baseDir)
@@ -40,7 +42,7 @@ func runV3MigrationSkillUninstall(projectRoot string, options skillCommandOption
 		grouped := groupManagedSkillsForOptions(options)
 		removed, notFound, err := uninstallV3MigrationSkillForTarget(projectRoot, target, options.global, grouped)
 		if err != nil {
-			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
 		clicore.WriteFormat(stdout, "%s:\n", target.displayName)
@@ -48,7 +50,7 @@ func runV3MigrationSkillUninstall(projectRoot string, options skillCommandOption
 		clicore.WriteFormat(stdout, "  Not found: %d\n", notFound)
 		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
 		if err != nil {
-			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
 		clicore.WriteFormat(stdout, "  Location: %s\n\n", baseDir)

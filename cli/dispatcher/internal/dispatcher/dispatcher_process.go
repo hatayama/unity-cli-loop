@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
@@ -52,11 +54,11 @@ func tryHandlePreConnectionRequestWithDeps(
 		}
 	}
 	if clicore.IsUnknownLeadingOption(command) {
-		clicore.WriteClassifiedError(stderr, &clicore.ArgumentError{
+		clierrors.WriteClassifiedError(stderr, &clierrors.ArgumentError{
 			Message:     "Unknown global option: " + command,
 			Option:      command,
 			NextActions: []string{"Run `uloop --help` to inspect supported global options."},
-		}, clicore.ErrorContext{})
+		}, clierrors.ErrorContext{})
 		return true, 1
 	}
 	if handled, code := tryHandleUpdateRequest(ctx, remainingArgs, stdout, stderr); handled {

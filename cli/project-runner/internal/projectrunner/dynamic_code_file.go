@@ -5,6 +5,9 @@ import (
 	"os"
 	"strings"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
@@ -21,7 +24,7 @@ func extractDynamicCodeFileFlag(command string, args []string) ([]string, string
 	path := ""
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
-		if arg != "--"+clicore.DynamicCodeFileFlagName && !strings.HasPrefix(arg, "--"+clicore.DynamicCodeFileFlagName+"=") {
+		if arg != "--"+tooldocs.DynamicCodeFileFlagName && !strings.HasPrefix(arg, "--"+tooldocs.DynamicCodeFileFlagName+"=") {
 			remaining = append(remaining, arg)
 			continue
 		}
@@ -30,7 +33,7 @@ func extractDynamicCodeFileFlag(command string, args []string) ([]string, string
 		if err != nil {
 			return nil, "", err
 		}
-		if name != clicore.DynamicCodeFileFlagName {
+		if name != tooldocs.DynamicCodeFileFlagName {
 			remaining = append(remaining, arg)
 			continue
 		}
@@ -51,9 +54,9 @@ func applyDynamicCodeFileParam(params map[string]any, path string) error {
 	}
 
 	if _, exists := params[dynamicCodeCodePropertyName]; exists {
-		return &clicore.ArgumentError{
+		return &clierrors.ArgumentError{
 			Message:     "--code and --code-file cannot be combined",
-			Option:      "--" + clicore.DynamicCodeFileFlagName,
+			Option:      "--" + tooldocs.DynamicCodeFileFlagName,
 			Command:     clicore.ExecuteDynamicCodeCommandName,
 			NextActions: []string{"Pass the C# source either inline with `--code` or from a file with `--code-file <path>`."},
 		}
@@ -61,7 +64,7 @@ func applyDynamicCodeFileParam(params map[string]any, path string) error {
 
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("failed to read --%s %s: %w", clicore.DynamicCodeFileFlagName, path, err)
+		return fmt.Errorf("failed to read --%s %s: %w", tooldocs.DynamicCodeFileFlagName, path, err)
 	}
 
 	params[dynamicCodeCodePropertyName] = string(content)

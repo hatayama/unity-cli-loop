@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hatayama/unity-cli-loop/common/clicore"
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 )
 
@@ -89,7 +90,7 @@ func TestInstallSetupFailureErrorIncludesInstallerStderr(t *testing.T) {
 	// Verifies installer stderr is preserved inside the JSON error envelope details.
 	cliErr := installSetupFailureError(context.Canceled, "warning before failure\n")
 
-	if cliErr.ErrorCode != clicore.ErrorCodeInternalError {
+	if cliErr.ErrorCode != clierrors.ErrorCodeInternalError {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
 	if cliErr.Details["Cause"] != context.Canceled.Error() {

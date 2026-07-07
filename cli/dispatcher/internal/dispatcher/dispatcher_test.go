@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
@@ -277,7 +279,7 @@ func TestEnforceDispatcherFreshnessRequiresManualUpdateWhenSelfUpdateDisabled(t 
 	if !handled || code != 1 {
 		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
 	}
-	if !bytes.Contains(stderr.Bytes(), []byte(clicore.ErrorCodeCLIUpdateRequired)) {
+	if !bytes.Contains(stderr.Bytes(), []byte(clierrors.ErrorCodeCLIUpdateRequired)) {
 		t.Fatalf("freshness output mismatch: %s", stderr.String())
 	}
 }
