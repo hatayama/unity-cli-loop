@@ -80,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
             ct.ThrowIfCancellationRequested();
 
-            await ToolSkillSynchronizer.InstallSkillFilesForTool(
+            await ToolSkillSynchronizer.InstallSkillFilesForToolWithDisabledTools(
                 toolName,
                 groupSkillsUnderUnityCliLoop,
                 _toolSettingsPort.GetDisabledTools());

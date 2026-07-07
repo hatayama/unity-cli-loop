@@ -192,7 +192,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            return DetectTargets(
+            return DetectTargetsForLayoutStateAtProjectRoot(
                 projectRoot,
                 requireSkillsDirectory: false,
                 groupSkillsUnderUnityCliLoop,
@@ -205,14 +205,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            return DetectTargets(
+            return DetectTargetsForLayoutStateAtProjectRoot(
                 projectRoot,
                 requireSkillsDirectory: false,
                 groupSkillsUnderUnityCliLoop,
                 includeFreshnessCheck: false);
         }
 
-        internal static List<SkillTargetInfo> DetectTargets(string projectRoot, bool requireSkillsDirectory)
+        internal static List<SkillTargetInfo> DetectTargetsAcrossLayoutsAtProjectRoot(
+            string projectRoot,
+            bool requireSkillsDirectory)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
@@ -248,7 +250,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return targets;
         }
 
-        internal static List<SkillTargetInfo> DetectTargets(
+        internal static List<SkillTargetInfo> DetectTargetsForLayoutStateAtProjectRoot(
             string projectRoot,
             bool requireSkillsDirectory,
             bool groupSkillsUnderUnityCliLoop,
@@ -322,13 +324,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string toolName,
             bool groupSkillsUnderUnityCliLoop)
         {
-            return await InstallSkillFilesForTool(
+            return await InstallSkillFilesForToolWithDisabledTools(
                 toolName,
                 groupSkillsUnderUnityCliLoop,
                 GetCurrentDisabledTools());
         }
 
-        internal static async Task<SkillInstallResult> InstallSkillFilesForTool(
+        internal static async Task<SkillInstallResult> InstallSkillFilesForToolWithDisabledTools(
             string toolName,
             bool groupSkillsUnderUnityCliLoop,
             string[] disabledTools)
