@@ -10,6 +10,21 @@ terminology cleanup (see the repository guidelines). When an internal identifier
 with this glossary, prefer renaming the internal identifier; when a public identifier
 conflicts, keep the identifier and document the mismatch here instead.
 
+## Known Naming Debt (Public API, Kept by Policy)
+
+The following public identifiers are kept by policy even though their names do not fully
+match the current glossary:
+
+- `UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT` and
+  `UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS` are used as tool catalog names,
+  not internal bridge commands.
+- The skill target types `SkillsTarget`, `SkillSetupTargetInfo`,
+  `ToolSkillSynchronizer.SkillTargetDefinition`, and `ToolSkillSynchronizer.SkillTargetInfo`
+  describe related concepts at different layers, but they remain public package identifiers.
+- Several first-party tool UseCases implement `IUnityCliLoop*Service` interfaces. The names
+  are preserved because renaming public identifiers is outside terminology cleanup; removing
+  the pass-through interfaces would be a separate structural refactor.
+
 ## Terms
 
 ### Tool
