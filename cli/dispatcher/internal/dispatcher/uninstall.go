@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"runtime"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/uninstall"
@@ -26,18 +28,18 @@ func tryHandleUninstallRequest(ctx context.Context, args []string, stdout io.Wri
 		return true, 0
 	}
 	if len(args) > 1 {
-		clicore.WriteClassifiedError(stderr, &clicore.ArgumentError{
+		clierrors.WriteClassifiedError(stderr, &clierrors.ArgumentError{
 			Message:     "Unknown uninstall option: " + args[1],
 			Option:      args[1],
 			Command:     clicore.UninstallCommandName,
 			NextActions: []string{"Run `uloop uninstall` without options."},
-		}, clicore.ErrorContext{Command: clicore.UninstallCommandName})
+		}, clierrors.ErrorContext{Command: clicore.UninstallCommandName})
 		return true, 1
 	}
 
 	installDir, err := resolveUninstallInstallDir(runtime.GOOS)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clicore.ErrorContext{Command: clicore.UninstallCommandName})
+		clierrors.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clierrors.ErrorContext{Command: clicore.UninstallCommandName})
 		return true, 1
 	}
 	uninstallCommand, err := uninstall.CommandForOS(runtime.GOOS, uninstall.Options{
@@ -45,7 +47,7 @@ func tryHandleUninstallRequest(ctx context.Context, args []string, stdout io.Wri
 		CurrentPID: os.Getpid(),
 	})
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clicore.ErrorContext{Command: clicore.UninstallCommandName})
+		clierrors.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clierrors.ErrorContext{Command: clicore.UninstallCommandName})
 		return true, 1
 	}
 
@@ -54,9 +56,9 @@ func tryHandleUninstallRequest(ctx context.Context, args []string, stdout io.Wri
 	command.Stdout = stdout
 	command.Stderr = stderr
 	if err := command.Run(); err != nil {
-		clicore.WriteErrorEnvelope(stderr, clicore.CLIError{
-			ErrorCode:   clicore.ErrorCodeInternalError,
-			Phase:       clicore.ErrorPhaseExecution,
+		clierrors.WriteErrorEnvelope(stderr, clierrors.CLIError{
+			ErrorCode:   clierrors.ErrorCodeInternalError,
+			Phase:       clierrors.ErrorPhaseExecution,
 			Message:     "Uninstall failed: " + err.Error(),
 			Retryable:   true,
 			SafeToRetry: true,

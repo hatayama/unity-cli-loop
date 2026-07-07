@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
@@ -65,7 +67,7 @@ func TestNewListCatalogUsesSpecialOptionAliases(t *testing.T) {
 				Name: clicore.CompileCommandName,
 				InputSchema: clicore.InputSchema{
 					Properties: map[string]clicore.ToolProperty{
-						clicore.ReloadExternalSceneChangesPropertyName: {Type: "boolean", Default: true},
+						tooldocs.ReloadExternalSceneChangesPropertyName: {Type: "boolean", Default: true},
 					},
 				},
 			},
@@ -127,7 +129,7 @@ func TestNewListCatalogIncludesExecuteDynamicCodeCodeFile(t *testing.T) {
 	catalog := newListCatalog(clicore.ToolsCache{Tools: []clicore.ToolDefinition{tool}})
 	executeDynamicCode := findListTool(t, catalog, clicore.ExecuteDynamicCodeCommandName)
 
-	findListOption(t, executeDynamicCode, clicore.DynamicCodeFileOptionName)
+	findListOption(t, executeDynamicCode, tooldocs.DynamicCodeFileOptionName)
 }
 
 func decodeListCatalog(t *testing.T, content []byte) listCatalog {

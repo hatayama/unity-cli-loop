@@ -4,8 +4,9 @@ import (
 	"context"
 	"time"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
-	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
@@ -148,8 +149,8 @@ func finishUnityAliveRetry(
 	return lastOutcome, newUnityServerNotRespondingError(connection, lastErr)
 }
 
-func newUnityServerNotRespondingError(connection unityipc.Connection, cause error) clicore.UnityServerNotRespondingError {
-	return clicore.UnityServerNotRespondingError{
+func newUnityServerNotRespondingError(connection unityipc.Connection, cause error) clierrors.UnityServerNotRespondingError {
+	return clierrors.UnityServerNotRespondingError{
 		ProjectRoot: connection.ProjectRoot,
 		Endpoint:    connection.Endpoint.Address,
 		Cause:       cause,

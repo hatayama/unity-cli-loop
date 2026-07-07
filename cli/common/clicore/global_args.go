@@ -3,6 +3,9 @@ package clicore
 import (
 	"strconv"
 	"strings"
+
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 )
 
 func ParseGlobalProjectPath(args []string) ([]string, string, error) {
@@ -11,7 +14,7 @@ func ParseGlobalProjectPath(args []string) ([]string, string, error) {
 
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
-		if arg != "--"+ProjectPathFlagName && !strings.HasPrefix(arg, "--"+ProjectPathFlagName+"=") {
+		if arg != "--"+tooldocs.ProjectPathFlagName && !strings.HasPrefix(arg, "--"+tooldocs.ProjectPathFlagName+"=") {
 			remaining = append(remaining, arg)
 			continue
 		}
@@ -20,7 +23,7 @@ func ParseGlobalProjectPath(args []string) ([]string, string, error) {
 		if err != nil {
 			return nil, "", err
 		}
-		if name != ProjectPathFlagName {
+		if name != tooldocs.ProjectPathFlagName {
 			remaining = append(remaining, arg)
 			continue
 		}
@@ -36,7 +39,7 @@ func ParseGlobalProjectPath(args []string) ([]string, string, error) {
 func ParseFlagValue(arg string, args []string, index int) (string, string, bool, error) {
 	trimmed := strings.TrimPrefix(arg, "--")
 	if trimmed == "" {
-		return "", "", false, &ArgumentError{
+		return "", "", false, &clierrors.ArgumentError{
 			Message:     "Invalid option: " + arg,
 			Option:      arg,
 			NextActions: []string{"Use `--option value` or `--option=value`."},
@@ -46,13 +49,13 @@ func ParseFlagValue(arg string, args []string, index int) (string, string, bool,
 	if strings.Contains(trimmed, "=") {
 		parts := strings.SplitN(trimmed, "=", 2)
 		if parts[1] == "" {
-			return "", "", false, MissingValueArgumentError("--" + parts[0])
+			return "", "", false, clierrors.MissingValueArgumentError("--" + parts[0])
 		}
 		return parts[0], parts[1], false, nil
 	}
 
 	if index+1 >= len(args) || IsNextOptionToken(args[index+1]) {
-		return "", "", false, MissingValueArgumentError("--" + trimmed)
+		return "", "", false, clierrors.MissingValueArgumentError("--" + trimmed)
 	}
 
 	return trimmed, args[index+1], true, nil

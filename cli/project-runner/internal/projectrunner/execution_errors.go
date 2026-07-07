@@ -3,13 +3,15 @@ package projectrunner
 import (
 	"fmt"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
-func compileWaitTimeoutError(projectRoot string) clicore.CLIError {
-	return clicore.CLIError{
-		ErrorCode: clicore.ErrorCodeCompileWaitTimeout,
-		Phase:     clicore.ErrorPhaseCompileWaiting,
+func compileWaitTimeoutError(projectRoot string) clierrors.CLIError {
+	return clierrors.CLIError{
+		ErrorCode: clierrors.ErrorCodeCompileWaitTimeout,
+		Phase:     clierrors.ErrorPhaseCompileWaiting,
 		Message: fmt.Sprintf(
 			"Compile status wait timed out after %dms. This does not mean the Unity Editor is frozen; the compile may simply still be running.",
 			compileWaitTimeout.Milliseconds()),

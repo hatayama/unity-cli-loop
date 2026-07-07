@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/clitest"
 )
@@ -287,7 +289,7 @@ func TestRunDispatcherExecuteDynamicCodeHelpDoesNotRequireUnityProject(t *testin
 		"Usage:",
 		"uloop execute-dynamic-code",
 		"--code <value>",
-		clicore.DynamicCodeFileOptionUsage,
+		tooldocs.DynamicCodeFileOptionUsage,
 		"--wait-for-domain-reload",
 		"Read C# code from a file",
 	} {

@@ -5,20 +5,22 @@ import (
 	"strings"
 	"testing"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
 func TestClassifyLaunchStartupTimeoutError(t *testing.T) {
 	// Verifies launch startup timeouts do not look like generic reachability or package failures.
-	cliErr := clicore.ClassifyError(
+	cliErr := clierrors.ClassifyError(
 		launchStartupTimeoutError{
 			projectRoot: "/tmp/MyProject",
 			cause:       errors.New("timed out waiting for Unity tool readiness"),
 		},
-		clicore.ErrorContext{ProjectRoot: "/tmp/MyProject", Command: clicore.LaunchCommandName},
+		clierrors.ErrorContext{ProjectRoot: "/tmp/MyProject", Command: clicore.LaunchCommandName},
 	)
 
-	if cliErr.ErrorCode != clicore.ErrorCodeUnityStartupTimeout {
+	if cliErr.ErrorCode != clierrors.ErrorCodeUnityStartupTimeout {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
 	if cliErr.Message != "Unity is running, but the Editor did not finish startup before the launch timeout." {
@@ -37,16 +39,16 @@ func TestClassifyLaunchStartupTimeoutError(t *testing.T) {
 
 func TestClassifyLaunchProcessExitTimeoutError(t *testing.T) {
 	// Verifies restart and quit process-exit timeouts are structured as retryable launch failures.
-	cliErr := clicore.ClassifyError(
+	cliErr := clierrors.ClassifyError(
 		launchProcessExitTimeoutError{
 			projectRoot: "/tmp/MyProject",
 			pid:         123,
 			timeout:     launchProcessExitTimeout,
 		},
-		clicore.ErrorContext{ProjectRoot: "/tmp/MyProject", Command: clicore.LaunchCommandName},
+		clierrors.ErrorContext{ProjectRoot: "/tmp/MyProject", Command: clicore.LaunchCommandName},
 	)
 
-	if cliErr.ErrorCode != clicore.ErrorCodeUnityProcessExitTimeout {
+	if cliErr.ErrorCode != clierrors.ErrorCodeUnityProcessExitTimeout {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
 	if !cliErr.Retryable || !cliErr.SafeToRetry {
@@ -60,16 +62,16 @@ func TestClassifyLaunchProcessExitTimeoutError(t *testing.T) {
 func TestClassifyInstallUnsupportedOS(t *testing.T) {
 	// Verifies install platform guards are reported as invalid command input.
 	// The bootstrap command wraps the raw error with wrapUnsupportedPlatformError
-	// before classification, matching how install.go feeds errors to clicore.ClassifyError.
-	cliErr := clicore.ClassifyError(
+	// before classification, matching how install.go feeds errors to clierrors.ClassifyError.
+	cliErr := clierrors.ClassifyError(
 		wrapUnsupportedPlatformError(errors.New(installUnsupportedOSMessage)),
-		clicore.ErrorContext{Command: "install"},
+		clierrors.ErrorContext{Command: "install"},
 	)
 
-	if cliErr.ErrorCode != clicore.ErrorCodeInvalidArgument {
+	if cliErr.ErrorCode != clierrors.ErrorCodeInvalidArgument {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
-	if cliErr.Phase != clicore.ErrorPhaseExecution {
+	if cliErr.Phase != clierrors.ErrorPhaseExecution {
 		t.Fatalf("phase mismatch: %#v", cliErr)
 	}
 	expectedAction := "Run `uloop install` on macOS or Windows."

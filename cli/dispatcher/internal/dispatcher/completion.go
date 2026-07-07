@@ -11,6 +11,9 @@ import (
 	"sort"
 	"strings"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
@@ -73,7 +76,7 @@ func runCompletionCommand(args []string, cache clicore.ToolsCache, stdout io.Wri
 
 	request, err := parseCompletionRequest(args)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: clicore.CompletionCommand})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.CompletionCommand})
 		return 1
 	}
 	return runCompletionRequest(request, stdout, stderr)
@@ -97,11 +100,11 @@ func runCompletionRequest(request completionRequest, stdout io.Writer, stderr io
 
 	configPath, err := getShellConfigPath(shellName)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: clicore.CompletionCommand})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.CompletionCommand})
 		return 1
 	}
 	if err := installCompletionScript(configPath, shellName, script); err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: clicore.CompletionCommand})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.CompletionCommand})
 		return 1
 	}
 
@@ -110,18 +113,18 @@ func runCompletionRequest(request completionRequest, stdout io.Writer, stderr io
 }
 
 func writeMissingCompletionCommandName(stderr io.Writer) {
-	clicore.WriteErrorEnvelope(stderr, (&clicore.ArgumentError{
+	clierrors.WriteErrorEnvelope(stderr, (&clierrors.ArgumentError{
 		Message:     "--list-options requires a command name",
 		Option:      clicore.ListOptionsFlag,
 		Command:     clicore.CompletionCommand,
 		NextActions: []string{"Pass the command name after `--list-options`."},
-	}).ToCLIError(clicore.ErrorContext{Command: clicore.CompletionCommand}))
+	}).ToCLIError(clierrors.ErrorContext{Command: clicore.CompletionCommand}))
 }
 
 func writeCompletionShellDetectionError(stderr io.Writer) {
-	clicore.WriteErrorEnvelope(stderr, clicore.CLIError{
-		ErrorCode:   clicore.ErrorCodeInvalidArgument,
-		Phase:       clicore.ErrorPhaseArgumentParsing,
+	clierrors.WriteErrorEnvelope(stderr, clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeInvalidArgument,
+		Phase:       clierrors.ErrorPhaseArgumentParsing,
 		Message:     "Could not detect shell.",
 		Retryable:   false,
 		SafeToRetry: false,
@@ -164,7 +167,7 @@ func parseCompletionRequest(args []string) (completionRequest, error) {
 
 		if arg == shellFlag {
 			if index+1 >= len(args) {
-				return completionRequest{}, clicore.MissingValueArgumentError(shellFlag)
+				return completionRequest{}, clierrors.MissingValueArgumentError(shellFlag)
 			}
 			normalized, err := normalizeShell(args[index+1])
 			if err != nil {
@@ -175,7 +178,7 @@ func parseCompletionRequest(args []string) (completionRequest, error) {
 			continue
 		}
 
-		return completionRequest{}, &clicore.ArgumentError{
+		return completionRequest{}, &clierrors.ArgumentError{
 			Message:     "Unknown completion option: " + arg,
 			Option:      arg,
 			Command:     clicore.CompletionCommand,
@@ -193,7 +196,7 @@ func normalizeShell(value string) (string, error) {
 	if normalized == "powershell-core" {
 		return "pwsh", nil
 	}
-	return "", &clicore.ArgumentError{
+	return "", &clierrors.ArgumentError{
 		Message:      "Unknown shell: " + value,
 		Option:       shellFlag,
 		Received:     value,
@@ -255,7 +258,7 @@ func printOptionsForCommand(command string, cache clicore.ToolsCache, stdout io.
 }
 
 func printOptionsForTool(tool clicore.ToolDefinition, stdout io.Writer) {
-	clicore.WriteLine(stdout, strings.Join(clicore.VisibleOptionNamesForTool(tool), "\n"))
+	clicore.WriteLine(stdout, strings.Join(tooldocs.VisibleOptionNamesForTool(tool), "\n"))
 }
 
 func detectShell() string {

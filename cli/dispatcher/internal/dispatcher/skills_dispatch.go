@@ -3,6 +3,8 @@ package dispatcher
 import (
 	"io"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
@@ -22,7 +24,7 @@ func runV3MigrationSkillsSubcommand(
 	case "install-v3-migration":
 		skills, err := collectV3MigrationSkillDefinition(projectRoot)
 		if err != nil {
-			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
 		return runV3MigrationSkillInstall(projectRoot, skills, options, stdout, stderr)

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
@@ -17,11 +19,11 @@ func (err launchProcessExitTimeoutError) Error() string {
 	return fmt.Sprintf("Unity process %d did not exit within %s", err.pid, err.timeout)
 }
 
-func (err launchProcessExitTimeoutError) ToCLIError(context clicore.ErrorContext) clicore.CLIError {
+func (err launchProcessExitTimeoutError) ToCLIError(context clierrors.ErrorContext) clierrors.CLIError {
 	projectRoot := clicore.FirstNonEmpty(context.ProjectRoot, err.projectRoot)
-	return clicore.CLIError{
-		ErrorCode:   clicore.ErrorCodeUnityProcessExitTimeout,
-		Phase:       clicore.ErrorPhaseExecution,
+	return clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeUnityProcessExitTimeout,
+		Phase:       clierrors.ErrorPhaseExecution,
 		Message:     fmt.Sprintf("Unity process %d did not exit before the launch timeout.", err.pid),
 		Retryable:   true,
 		SafeToRetry: true,

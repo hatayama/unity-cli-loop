@@ -12,6 +12,9 @@ import (
 	"testing"
 	"time"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
@@ -463,7 +466,7 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 	}
 	params := map[string]any{
 		compileForceParam: true,
-		clicore.ReloadExternalSceneChangesPropertyName: false,
+		tooldocs.ReloadExternalSceneChangesPropertyName: false,
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -555,7 +558,7 @@ func TestWritePostCompileWarmupWarningReportsNonFatalFailure(t *testing.T) {
 func TestCompileWaitTimeoutError(t *testing.T) {
 	cliErr := compileWaitTimeoutError("/tmp/MyProject")
 
-	if cliErr.ErrorCode != clicore.ErrorCodeCompileWaitTimeout {
+	if cliErr.ErrorCode != clierrors.ErrorCodeCompileWaitTimeout {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
 	if !cliErr.Retryable || !cliErr.SafeToRetry {

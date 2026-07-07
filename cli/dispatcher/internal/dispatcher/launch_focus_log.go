@@ -3,11 +3,13 @@ package dispatcher
 import (
 	"context"
 
+	"github.com/hatayama/unity-cli-loop/common/vibelog"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
 func logLaunchExistingFocusWithDeps(ctx context.Context, projectRoot string, pid int, deps launchDeps) {
-	correlationID := clicore.NewCLIVibeCorrelationID()
+	correlationID := vibelog.NewCLIVibeCorrelationID()
 	logLaunchExistingFocusAttempt(projectRoot, pid, correlationID)
 	if err := deps.focusUnityProcess(ctx, pid); err != nil {
 		logLaunchExistingFocusFailure(projectRoot, pid, err, correlationID)
@@ -17,7 +19,7 @@ func logLaunchExistingFocusWithDeps(ctx context.Context, projectRoot string, pid
 }
 
 func logLaunchExistingFocusAttempt(projectRoot string, pid int, correlationID string) {
-	_ = clicore.WriteCLIVibeLog(projectRoot, clicore.CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(projectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_launch_existing_focus_attempt",
 		Message:   "Attempting to focus the already-running Unity process.",
@@ -30,7 +32,7 @@ func logLaunchExistingFocusAttempt(projectRoot string, pid int, correlationID st
 }
 
 func logLaunchExistingFocusSuccess(projectRoot string, pid int, correlationID string) {
-	_ = clicore.WriteCLIVibeLog(projectRoot, clicore.CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(projectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_launch_existing_focus_success",
 		Message:   "Focused the already-running Unity process.",
@@ -43,7 +45,7 @@ func logLaunchExistingFocusSuccess(projectRoot string, pid int, correlationID st
 }
 
 func logLaunchExistingFocusFailure(projectRoot string, pid int, focusErr error, correlationID string) {
-	_ = clicore.WriteCLIVibeLog(projectRoot, clicore.CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(projectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "WARNING",
 		Operation: "cli_launch_existing_focus_failed",
 		Message:   "Failed to focus the already-running Unity process.",

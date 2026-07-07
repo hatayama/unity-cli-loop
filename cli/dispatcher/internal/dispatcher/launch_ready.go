@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/ui"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
@@ -31,7 +34,7 @@ type launchReadyResponse struct {
 	Message           string `json:"Message"`
 }
 
-func writeLaunchReadinessWait(stdout io.Writer, spinner *clicore.TerminalSpinner) {
+func writeLaunchReadinessWait(stdout io.Writer, spinner *ui.TerminalSpinner) {
 	spinner.Update(launchReadinessMessage)
 	if !spinner.Enabled {
 		clicore.WriteLine(stdout, launchReadinessMessage)
@@ -107,7 +110,7 @@ func writeLaunchQuitResponse(
 func writeLaunchResponse(stdout io.Writer, stderr io.Writer, response launchReadyResponse) int {
 	payload, err := json.Marshal(response)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: response.ProjectRoot, Command: clicore.LaunchCommandName})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: response.ProjectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
 	clicore.WriteJSON(stdout, payload)

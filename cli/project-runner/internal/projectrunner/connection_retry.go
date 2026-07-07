@@ -8,6 +8,9 @@ import (
 	"strings"
 	"time"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/vibelog"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
@@ -113,7 +116,7 @@ func (controller *connectionRetryFocusController) tryFocusProcess(
 	}
 	controller.attempted = true
 
-	correlationID := clicore.NewCLIVibeCorrelationID()
+	correlationID := vibelog.NewCLIVibeCorrelationID()
 	logConnectionRetryFocusAttempt(controller.connection, controller.method, pid, reason, cause, correlationID)
 	restorer, focusErr := controller.deps.focusUnityProcess(ctx, pid)
 	if focusErr == nil {
@@ -287,7 +290,7 @@ func isUnityServerBusyRPCError(err error) bool {
 	if len(rpcErr.Data) > 0 {
 		_ = json.Unmarshal(rpcErr.Data, &decodedData)
 	}
-	return clicore.RPCDataType(decodedData) == "server_busy"
+	return clierrors.RPCDataType(decodedData) == "server_busy"
 }
 
 func connectionRetryFocusReasonForError(
@@ -304,7 +307,7 @@ func connectionRetryFocusReasonForError(
 		return focusReasonMainThreadStall, true
 	}
 
-	if outcome.RequestDispatched && !outcome.RequestAccepted && clicore.IsFinalResponseTimeoutError(err) {
+	if outcome.RequestDispatched && !outcome.RequestAccepted && clierrors.IsFinalResponseTimeoutError(err) {
 		return focusReasonPreAcceptTimeout, true
 	}
 
@@ -314,7 +317,7 @@ func connectionRetryFocusReasonForError(
 	if responseTimeout > 0 {
 		return "", false
 	}
-	if !clicore.IsFinalResponseTimeoutError(err) {
+	if !clierrors.IsFinalResponseTimeoutError(err) {
 		return "", false
 	}
 	if strings.Contains(err.Error(), "heartbeat") {
@@ -340,7 +343,7 @@ func logConnectionRetryFocusAttempt(
 	retryCause error,
 	correlationID string,
 ) {
-	_ = clicore.WriteCLIVibeLog(connection.ProjectRoot, clicore.CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(connection.ProjectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_connection_retry_focus_attempt",
 		Message:   "Attempting to focus Unity while recovering a slow or unreachable request.",
@@ -363,7 +366,7 @@ func logConnectionRetryFocusSuccess(
 	retryCause error,
 	correlationID string,
 ) {
-	_ = clicore.WriteCLIVibeLog(connection.ProjectRoot, clicore.CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(connection.ProjectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_connection_retry_focus_success",
 		Message:   "Focused Unity while recovering a slow or unreachable request.",
@@ -387,7 +390,7 @@ func logConnectionRetryFocusFailure(
 	focusErr error,
 	correlationID string,
 ) {
-	_ = clicore.WriteCLIVibeLog(connection.ProjectRoot, clicore.CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(connection.ProjectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "WARNING",
 		Operation: "cli_connection_retry_focus_failed",
 		Message:   "Failed to focus Unity before retrying an undispatched request.",

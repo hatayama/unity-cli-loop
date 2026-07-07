@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
@@ -47,7 +49,7 @@ func isUnsupportedLaunchHubLongOption(arg string, option string) bool {
 }
 
 func unsupportedLaunchHubOptionError(arg string) error {
-	return &clicore.ArgumentError{
+	return &clierrors.ArgumentError{
 		Message:     "Native launch does not support Unity Hub registration options.",
 		Option:      arg,
 		Command:     clicore.LaunchCommandName,
@@ -56,7 +58,7 @@ func unsupportedLaunchHubOptionError(arg string) error {
 }
 
 func unknownLaunchOptionError(arg string) error {
-	return &clicore.ArgumentError{
+	return &clierrors.ArgumentError{
 		Message:     "Unknown launch option: " + arg,
 		Option:      arg,
 		Command:     clicore.LaunchCommandName,
@@ -89,7 +91,7 @@ func applyLaunchMaxDepthOption(options *launchOptions, args []string, index int)
 	}
 	maxDepth, err := strconv.Atoi(value)
 	if err != nil || maxDepth < -1 {
-		return index, clicore.InvalidValueArgumentError("--max-depth", value, "integer >= -1")
+		return index, clierrors.InvalidValueArgumentError("--max-depth", value, "integer >= -1")
 	}
 	options.maxDepth = maxDepth
 	return nextLaunchOptionIndex(index, consumed), nil
@@ -97,7 +99,7 @@ func applyLaunchMaxDepthOption(options *launchOptions, args []string, index int)
 
 func applyLaunchProjectPathArgument(options *launchOptions, arg string, index int) (int, error) {
 	if options.projectPath != "" {
-		return index, &clicore.ArgumentError{
+		return index, &clierrors.ArgumentError{
 			Message:     "Unexpected extra launch argument: " + arg,
 			Received:    arg,
 			Command:     clicore.LaunchCommandName,
@@ -119,12 +121,12 @@ func readLaunchOptionValue(option string, args []string, index int) (string, boo
 	if strings.Contains(option, "=") {
 		parts := strings.SplitN(option, "=", 2)
 		if parts[1] == "" {
-			return "", false, clicore.MissingValueArgumentError(parts[0])
+			return "", false, clierrors.MissingValueArgumentError(parts[0])
 		}
 		return parts[1], false, nil
 	}
 	if index+1 >= len(args) || isInvalidLaunchOptionValue(option, args[index+1]) {
-		return "", false, clicore.MissingValueArgumentError(option)
+		return "", false, clierrors.MissingValueArgumentError(option)
 	}
 	return args[index+1], true, nil
 }

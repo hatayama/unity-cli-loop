@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
+
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/project"
@@ -106,7 +108,7 @@ func printUnityToolCommandHelp(stdout io.Writer, cache clicore.ToolsCache, hasPr
 }
 
 func commandListDescription(description string) string {
-	line := clicore.FirstHelpLine(description)
+	line := tooldocs.FirstHelpLine(description)
 	for index, value := range line {
 		if value == '.' || value == '!' || value == '?' {
 			return strings.TrimSpace(line[:index+len(string(value))])

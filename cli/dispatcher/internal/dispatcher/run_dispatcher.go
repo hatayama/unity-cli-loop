@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/project"
 	sharedversion "github.com/hatayama/unity-cli-loop/common/version"
@@ -63,7 +65,7 @@ func runDispatcherWithDeps(ctx context.Context, args []string, stdout io.Writer,
 
 	remainingArgs, projectPath, err := clicore.ParseGlobalProjectPath(args)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{})
 		return 1
 	}
 
@@ -73,19 +75,19 @@ func runDispatcherWithDeps(ctx context.Context, args []string, stdout io.Writer,
 
 	startPath, err := os.Getwd()
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{})
 		return 1
 	}
 
 	projectRoot, err := resolveDispatcherProjectRoot(startPath, projectPath, remainingArgs)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{})
 		return 1
 	}
 
 	pin, err := loadDispatcherPin(projectRoot)
 	if err != nil {
-		clicore.WriteErrorEnvelope(stderr, dispatcherPinResolutionError(projectRoot, err))
+		clierrors.WriteErrorEnvelope(stderr, dispatcherPinResolutionError(projectRoot, err))
 		return 1
 	}
 
@@ -95,7 +97,7 @@ func runDispatcherWithDeps(ctx context.Context, args []string, stdout io.Writer,
 
 	realCLIPath, err := resolveDispatcherRealCLI(ctx, pin, stderr)
 	if err != nil {
-		clicore.WriteErrorEnvelope(stderr, dispatcherRealCLIResolutionError(projectRoot, pin, err))
+		clierrors.WriteErrorEnvelope(stderr, dispatcherRealCLIResolutionError(projectRoot, pin, err))
 		return 1
 	}
 
@@ -123,7 +125,7 @@ func runDispatcherProcessCommandWithDeps(
 
 	startPath, err := os.Getwd()
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: command})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: command})
 		return 1
 	}
 
@@ -143,9 +145,9 @@ func runDispatcherProcessCommandWithDeps(
 
 	// Precondition violated: shouldRunInDispatcherProcess routed a command here
 	// that no dispatcher-process handler accepts. Fail fast instead of guessing.
-	clicore.WriteErrorEnvelope(stderr, clicore.InternalCLIError(
+	clierrors.WriteErrorEnvelope(stderr, clierrors.InternalCLIError(
 		"Dispatcher routing bug: no dispatcher-process handler accepted command: "+command,
-		clicore.ErrorContext{Command: command},
+		clierrors.ErrorContext{Command: command},
 	))
 	return 1
 }
@@ -265,9 +267,9 @@ func executeDispatcherFreshnessPlan(ctx context.Context, plan dispatcherFreshnes
 	case dispatcherFreshnessRunRequiredUpdate, dispatcherFreshnessRunOptionalUpdate:
 		return runDispatcherFreshnessUpdate(ctx, plan, stderr, deps)
 	default:
-		clicore.WriteErrorEnvelope(stderr, clicore.InternalCLIError(
+		clierrors.WriteErrorEnvelope(stderr, clierrors.InternalCLIError(
 			"Dispatcher freshness routing bug: unknown action: "+string(plan.Action),
-			clicore.ErrorContext{},
+			clierrors.ErrorContext{},
 		))
 		return true, 1
 	}
@@ -309,9 +311,9 @@ func writeDispatcherSelfUpdateRequiredError(stderr io.Writer, updatedVersion str
 	if nextVersion != "" {
 		details["UpdatedDispatcherVersion"] = nextVersion
 	}
-	clicore.WriteErrorEnvelope(stderr, clicore.CLIError{
-		ErrorCode:   clicore.ErrorCodeCLIUpdateRequired,
-		Phase:       clicore.ErrorPhaseExecution,
+	clierrors.WriteErrorEnvelope(stderr, clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeCLIUpdateRequired,
+		Phase:       clierrors.ErrorPhaseExecution,
 		Message:     message,
 		Retryable:   true,
 		SafeToRetry: true,
@@ -321,9 +323,9 @@ func writeDispatcherSelfUpdateRequiredError(stderr io.Writer, updatedVersion str
 }
 
 func writeDispatcherManualUpdateRequiredError(stderr io.Writer, minimumVersion string, reason string) {
-	clicore.WriteErrorEnvelope(stderr, clicore.CLIError{
-		ErrorCode:   clicore.ErrorCodeCLIUpdateRequired,
-		Phase:       clicore.ErrorPhaseExecution,
+	clierrors.WriteErrorEnvelope(stderr, clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeCLIUpdateRequired,
+		Phase:       clierrors.ErrorPhaseExecution,
 		Message:     "This project requires uloop dispatcher >= " + minimumVersion + ". " + reason,
 		Retryable:   true,
 		SafeToRetry: true,
@@ -393,9 +395,9 @@ func runRealCLICommand(ctx context.Context, realCLIPath string, args []string, s
 		if errors.As(err, &exitErr) {
 			return exitErr.ExitCode()
 		}
-		clicore.WriteErrorEnvelope(stderr, clicore.CLIError{
-			ErrorCode:   clicore.ErrorCodeInternalError,
-			Phase:       clicore.ErrorPhaseExecution,
+		clierrors.WriteErrorEnvelope(stderr, clierrors.CLIError{
+			ErrorCode:   clierrors.ErrorCodeInternalError,
+			Phase:       clierrors.ErrorPhaseExecution,
 			Message:     "Failed to run resolved uloop CLI: " + err.Error(),
 			Retryable:   true,
 			SafeToRetry: true,
@@ -409,10 +411,10 @@ func runRealCLICommand(ctx context.Context, realCLIPath string, args []string, s
 	return 0
 }
 
-func dispatcherPinResolutionError(projectRoot string, cause error) clicore.CLIError {
-	return clicore.CLIError{
-		ErrorCode:   clicore.ErrorCodeInternalError,
-		Phase:       clicore.ErrorPhaseProjectResolve,
+func dispatcherPinResolutionError(projectRoot string, cause error) clierrors.CLIError {
+	return clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeInternalError,
+		Phase:       clierrors.ErrorPhaseProjectResolve,
 		Message:     "Could not resolve the required uloop project runner for this Unity project.",
 		Retryable:   true,
 		SafeToRetry: true,
@@ -427,10 +429,10 @@ func dispatcherPinResolutionError(projectRoot string, cause error) clicore.CLIEr
 	}
 }
 
-func dispatcherRealCLIResolutionError(projectRoot string, pin dispatcherPin, cause error) clicore.CLIError {
-	return clicore.CLIError{
-		ErrorCode:   clicore.ErrorCodeInternalError,
-		Phase:       clicore.ErrorPhaseExecution,
+func dispatcherRealCLIResolutionError(projectRoot string, pin dispatcherPin, cause error) clierrors.CLIError {
+	return clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeInternalError,
+		Phase:       clierrors.ErrorPhaseExecution,
 		Message:     "Could not prepare the pinned uloop project runner version.",
 		Retryable:   true,
 		SafeToRetry: true,
