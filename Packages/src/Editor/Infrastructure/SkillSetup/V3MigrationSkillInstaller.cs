@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 using Debug = UnityEngine.Debug;
@@ -48,23 +49,27 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static async Task<ToolSkillSynchronizer.SkillInstallResult> InstallV3MigrationSkillFilesAtProjectRoot(
             string projectRoot,
             IEnumerable<ToolSkillSynchronizer.SkillTargetInfo> targets,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
             SkillInstallLayout.SkillSourceInfo skill = GetV3MigrationSkillSourceInfo();
             return await InstallSpecificSkillFilesAtProjectRoot(
                 projectRoot,
                 targets,
                 skill,
-                groupSkillsUnderUnityCliLoop);
+                groupSkillsUnderUnityCliLoop,
+                ct);
         }
 
         internal static async Task<ToolSkillSynchronizer.SkillInstallResult> RemoveV3MigrationSkillFilesAtProjectRoot(
             string projectRoot,
             IEnumerable<ToolSkillSynchronizer.SkillTargetInfo> targets,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(targets != null, "targets must not be null");
+            ct.ThrowIfCancellationRequested();
 
             SkillInstallLayout.SkillSourceInfo skill = GetV3MigrationSkillSourceInfo();
             ToolSkillSynchronizer.SkillTargetInfo[] targetArray = targets.ToArray();
@@ -86,7 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 return new ToolSkillSynchronizer.SkillInstallResult(targetArray.Length, succeeded);
-            });
+            }, ct);
         }
 
         internal static SkillInstallState GetSkillInstallStateAtProjectRoot(
@@ -114,10 +119,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string projectRoot,
             IEnumerable<ToolSkillSynchronizer.SkillTargetInfo> targets,
             SkillInstallLayout.SkillSourceInfo skill,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(targets != null, "targets must not be null");
+            ct.ThrowIfCancellationRequested();
 
             ToolSkillSynchronizer.SkillTargetInfo[] targetArray = targets.ToArray();
             return await Task.Run(() =>
@@ -135,18 +142,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 return new ToolSkillSynchronizer.SkillInstallResult(targetArray.Length, succeeded);
-            });
+            }, ct);
         }
 
         internal static async Task<ToolSkillSynchronizer.SkillInstallResult> RemoveSpecificSkillFilesAtProjectRoot(
             string projectRoot,
             IEnumerable<ToolSkillSynchronizer.SkillTargetInfo> targets,
             string skillName,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(targets != null, "targets must not be null");
             Debug.Assert(!string.IsNullOrEmpty(skillName), "skillName must not be null or empty");
+            ct.ThrowIfCancellationRequested();
 
             ToolSkillSynchronizer.SkillTargetInfo[] targetArray = targets.ToArray();
             return await Task.Run(() =>
@@ -163,7 +172,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 return new ToolSkillSynchronizer.SkillInstallResult(targetArray.Length, succeeded);
-            });
+            }, ct);
         }
 
         private static SkillInstallLayout.SkillSourceInfo GetV3MigrationSkillSourceInfo()

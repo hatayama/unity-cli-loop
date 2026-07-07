@@ -121,23 +121,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 includeFreshnessCheck: false);
         }
 
-        public static async Task<SkillInstallResult> InstallSkillFilesForTool(
-            string toolName,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            return await InstallSkillFilesForToolWithDisabledTools(
-                toolName,
-                groupSkillsUnderUnityCliLoop,
-                SkillDisabledToolFilter.GetCurrentDisabledTools());
-        }
-
         internal static async Task<SkillInstallResult> InstallSkillFilesForToolWithDisabledTools(
             string toolName,
             bool groupSkillsUnderUnityCliLoop,
-            string[] disabledTools)
+            string[] disabledTools,
+            CancellationToken ct)
         {
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
             Debug.Assert(disabledTools != null, "disabledTools must not be null");
+            ct.ThrowIfCancellationRequested();
 
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
@@ -146,16 +138,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 projectRoot,
                 toolName,
                 groupSkillsUnderUnityCliLoop,
-                disabledTools);
+                disabledTools,
+                ct);
         }
 
         internal static async Task<SkillInstallResult> InstallSkillFiles(
             List<SkillTargetInfo> targets,
             bool groupSkillsUnderUnityCliLoop,
-            string[] disabledTools)
+            string[] disabledTools,
+            CancellationToken ct)
         {
             Debug.Assert(targets != null, "targets must not be null");
             Debug.Assert(disabledTools != null, "disabledTools must not be null");
+            ct.ThrowIfCancellationRequested();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
@@ -163,18 +158,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 projectRoot,
                 targets,
                 groupSkillsUnderUnityCliLoop,
-                disabledTools);
+                disabledTools,
+                ct);
         }
 
         internal static async Task<SkillInstallResult> InstallSkillFilesAtProjectRoot(
             string projectRoot,
             IEnumerable<SkillTargetInfo> targets,
             bool groupSkillsUnderUnityCliLoop,
-            string[] disabledTools)
+            string[] disabledTools,
+            CancellationToken ct)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(targets != null, "targets must not be null");
             Debug.Assert(disabledTools != null, "disabledTools must not be null");
+            ct.ThrowIfCancellationRequested();
 
             SkillTargetInfo[] targetArray = targets.ToArray();
             return await Task.Run(() =>
@@ -202,18 +200,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 return new SkillInstallResult(targetArray.Length, succeeded);
-            });
+            }, ct);
         }
 
         internal static async Task<SkillInstallResult> InstallSkillFilesForToolAtProjectRoot(
             string projectRoot,
             string toolName,
             bool groupSkillsUnderUnityCliLoop,
-            string[] disabledTools)
+            string[] disabledTools,
+            CancellationToken ct)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
             Debug.Assert(disabledTools != null, "disabledTools must not be null");
+            ct.ThrowIfCancellationRequested();
 
             if (disabledTools.Contains(toolName))
             {
@@ -250,7 +250,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 return new SkillInstallResult(targetArray.Length, succeeded);
-            });
+            }, ct);
         }
 
         internal static SkillInstallState GetV3MigrationSkillInstallStateAtProjectRoot(
@@ -267,23 +267,27 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static async Task<SkillInstallResult> InstallV3MigrationSkillFilesAtProjectRoot(
             string projectRoot,
             IEnumerable<SkillTargetInfo> targets,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
             return await V3MigrationSkillInstaller.InstallV3MigrationSkillFilesAtProjectRoot(
                 projectRoot,
                 targets,
-                groupSkillsUnderUnityCliLoop);
+                groupSkillsUnderUnityCliLoop,
+                ct);
         }
 
         internal static async Task<SkillInstallResult> RemoveV3MigrationSkillFilesAtProjectRoot(
             string projectRoot,
             IEnumerable<SkillTargetInfo> targets,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
             return await V3MigrationSkillInstaller.RemoveV3MigrationSkillFilesAtProjectRoot(
                 projectRoot,
                 targets,
-                groupSkillsUnderUnityCliLoop);
+                groupSkillsUnderUnityCliLoop,
+                ct);
         }
 
     }

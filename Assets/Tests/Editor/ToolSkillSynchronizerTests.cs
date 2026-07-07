@@ -90,7 +90,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             await ToolSkillSynchronizer.InstallSkillFiles(
                 targets,
                 groupSkillsUnderUnityCliLoop: false,
-                Array.Empty<string>());
+                Array.Empty<string>(),
+                ct: CancellationToken.None);
 
             // Assert: directories that didn't exist before should still not exist
             foreach (string dir in _nonExistentDirsBefore)
@@ -121,7 +122,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await ToolSkillSynchronizer.InstallSkillFiles(
                     new List<ToolSkillSynchronizer.SkillTargetInfo> { target },
                     groupSkillsUnderUnityCliLoop: false,
-                    disabledTools: new[] { "compile" });
+                    disabledTools: new[] { "compile" },
+                    ct: CancellationToken.None);
 
             Assert.That(result.IsSuccessful, Is.True);
             Assert.That(Directory.Exists(disabledSkillDir), Is.False);
@@ -153,7 +155,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     new[] { target },
                     groupSkillsUnderUnityCliLoop: true,
-                    disabledTools: Array.Empty<string>());
+                    disabledTools: Array.Empty<string>(),
+                    ct: CancellationToken.None);
 
             string installedSkillDir = Path.Combine(
                 targetRoot,
@@ -201,7 +204,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     new[] { target },
                     groupSkillsUnderUnityCliLoop: false,
-                    disabledTools: Array.Empty<string>());
+                    disabledTools: Array.Empty<string>(),
+                    ct: CancellationToken.None);
 
             string installedSkillDir = Path.Combine(
                 targetRoot,
@@ -252,7 +256,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     new[] { target },
                     groupSkillsUnderUnityCliLoop: false,
-                    disabledTools: Array.Empty<string>());
+                    disabledTools: Array.Empty<string>(),
+                    ct: CancellationToken.None);
 
             string installedSkillDir = Path.Combine(
                 skillsRoot,
@@ -295,7 +300,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     new[] { target },
                     groupSkillsUnderUnityCliLoop: false,
-                    disabledTools: Array.Empty<string>());
+                    disabledTools: Array.Empty<string>(),
+                    ct: CancellationToken.None);
 
             string installedSkillDir = Path.Combine(
                 skillsRoot,
@@ -338,7 +344,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     new[] { target },
                     groupSkillsUnderUnityCliLoop: false,
-                    disabledTools: Array.Empty<string>());
+                    disabledTools: Array.Empty<string>(),
+                    ct: CancellationToken.None);
 
             string installedSkillDir = Path.Combine(
                 skillsRoot,
@@ -382,7 +389,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     "enabled-skill",
                     groupSkillsUnderUnityCliLoop: false,
-                    disabledTools: Array.Empty<string>());
+                    disabledTools: Array.Empty<string>(),
+                    ct: CancellationToken.None);
 
             string enabledSkillDir = Path.Combine(skillsRoot, "uloop-enabled-skill");
 
@@ -416,7 +424,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     "disabled-skill",
                     groupSkillsUnderUnityCliLoop: false,
-                    disabledTools);
+                    disabledTools,
+                    ct: CancellationToken.None);
 
             string disabledSkillDir = Path.Combine(skillsRoot, "uloop-disabled-skill");
 
@@ -503,7 +512,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     "enabled-skill",
                     groupSkillsUnderUnityCliLoop: false,
-                    disabledTools);
+                    disabledTools,
+                    ct: CancellationToken.None);
 
             string enabledSkillDir = Path.Combine(skillsRoot, "uloop-enabled-skill");
 
@@ -552,7 +562,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     "enabled-skill",
                     groupSkillsUnderUnityCliLoop: false,
-                    disabledTools);
+                    disabledTools,
+                    ct: CancellationToken.None);
 
             Assert.That(result.IsSuccessful, Is.True);
             Assert.That(Directory.Exists(flatDisabledSkillDir), Is.False);
@@ -595,7 +606,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     new[] { target },
                     groupSkillsUnderUnityCliLoop: false,
-                    disabledTools: Array.Empty<string>());
+                    disabledTools: Array.Empty<string>(),
+                    ct: CancellationToken.None);
 
             string installedSkillDir = Path.Combine(
                 skillsRoot,
@@ -641,7 +653,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     new[] { target },
                     groupSkillsUnderUnityCliLoop: false,
-                    disabledTools: Array.Empty<string>());
+                    disabledTools: Array.Empty<string>(),
+                    ct: CancellationToken.None);
 
             Assert.That(result.IsSuccessful, Is.True);
             Assert.That(Directory.Exists(managedSkillsRoot), Is.False);
@@ -1437,7 +1450,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 temporaryRoot,
                 new[] { target },
                 groupSkillsUnderUnityCliLoop: true,
-                disabledTools: Array.Empty<string>());
+                disabledTools: Array.Empty<string>(),
+                ct: CancellationToken.None);
 
             string installedReferencePath = Path.Combine(
                 temporaryRoot,
@@ -1573,7 +1587,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     new[] { target },
                     groupSkillsUnderUnityCliLoop: true,
-                    disabledTools: Array.Empty<string>());
+                    disabledTools: Array.Empty<string>(),
+                    ct: CancellationToken.None);
 
             string installedSkillDir = Path.Combine(
                 targetRoot,
@@ -1620,7 +1635,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     new[] { target },
                     groupSkillsUnderUnityCliLoop: false,
-                    disabledTools: Array.Empty<string>());
+                    disabledTools: Array.Empty<string>(),
+                    ct: CancellationToken.None);
 
             Assert.That(result.IsSuccessful, Is.True);
             Assert.That(Directory.Exists(executeMenuItemSkillDir), Is.False);
@@ -1706,7 +1722,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     new[] { target },
                     skill,
-                    groupSkillsUnderUnityCliLoop: false);
+                    groupSkillsUnderUnityCliLoop: false,
+                    ct: CancellationToken.None);
 
             string installedSkillDir = Path.Combine(
                 temporaryRoot,
@@ -1741,7 +1758,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await V3MigrationSkillInstaller.InstallV3MigrationSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
-                    groupSkillsUnderUnityCliLoop: true);
+                    groupSkillsUnderUnityCliLoop: true,
+                    ct: CancellationToken.None);
 
             SkillInstallState installState = V3MigrationSkillInstaller.GetV3MigrationSkillInstallStateAtProjectRoot(
                 temporaryRoot,
@@ -1806,7 +1824,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     temporaryRoot,
                     new[] { target },
                     CliConstants.V3_CLI_INVOCATION_MIGRATION_SKILL_NAME,
-                    groupSkillsUnderUnityCliLoop: false);
+                    groupSkillsUnderUnityCliLoop: false,
+                    ct: CancellationToken.None);
 
             Assert.That(result.IsSuccessful, Is.True);
             Assert.That(Directory.Exists(migrationSkillDir), Is.False);
@@ -1845,7 +1864,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await V3MigrationSkillInstaller.RemoveV3MigrationSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
-                    groupSkillsUnderUnityCliLoop: false);
+                    groupSkillsUnderUnityCliLoop: false,
+                    ct: CancellationToken.None);
 
             Assert.That(result.IsSuccessful, Is.True);
             Assert.That(Directory.Exists(flatMigrationSkillDir), Is.False);
