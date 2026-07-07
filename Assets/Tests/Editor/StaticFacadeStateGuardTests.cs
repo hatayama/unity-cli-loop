@@ -63,6 +63,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/FirstPartyTools/SimulateKeyboard/SimulateKeyboardUseCase.cs"
         };
 
+        private static readonly Dictionary<string, string[]> OverloadGuardMethodsByPath = new Dictionary<string, string[]>
+        {
+            {
+                "Packages/src/Editor/FirstPartyTools/Compile/CompileController.cs",
+                new[] { "TryCompileAsync" }
+            },
+            {
+                "Packages/src/Editor/Infrastructure/CLI/NativeCliInstaller.cs",
+                new[] { "BuildInstallCommand" }
+            },
+            {
+                "Packages/src/Editor/Infrastructure/SkillSetup/SkillInstallLayout.cs",
+                new[] { "HasInstalledSkills" }
+            },
+            {
+                "Packages/src/Editor/Infrastructure/SkillSetup/SkillInstallationDetector.cs",
+                new[] { "AreSkillsInstalled" }
+            },
+            {
+                "Packages/src/Editor/Presentation/UnityCliLoopSettingsWindow.cs",
+                new[] { "GetSelectedTargetInstallState" }
+            }
+        };
+
         private static readonly Regex DirectMutableStaticFieldPattern = new Regex(
             @"\b(private|internal|public|protected)\s+static\s+(?!readonly\b)(?!event\b)(?!extern\b)[^(\r\n;=]*[;=]",
             RegexOptions.Compiled);
@@ -136,6 +160,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that R2-5 refactor targets do not add async methods without the standard ct parameter.
             List<string> violations = FindAsyncMethodsWithoutCancellationTokenCt();
+
+            Assert.That(violations, Is.Empty, string.Join("\n", violations));
+        }
+
+        [Test]
+        public void RefactorTargets_WhenScanned_DoNotDeclareTargetedOverloads()
+        {
+            // Tests that R2-7 refactor targets keep behavior variants in explicitly named methods.
+            List<string> violations = FindTargetedOverloadViolations();
 
             Assert.That(violations, Is.Empty, string.Join("\n", violations));
         }
@@ -411,6 +444,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     string methodName = match.Groups[1].Value;
                     int lineNumber = CountLinesBefore(source, match.Index) + 1;
                     violations.Add($"{relativePath}:{lineNumber}: {methodName}");
+                }
+            }
+
+            return violations;
+        }
+
+        private static List<string> FindTargetedOverloadViolations()
+        {
+            List<string> violations = new();
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+
+            foreach (KeyValuePair<string, string[]> target in OverloadGuardMethodsByPath)
+            {
+                string absolutePath = Path.Combine(projectRoot, target.Key);
+                string source = File.ReadAllText(absolutePath);
+                for (int nameIndex = 0; nameIndex < target.Value.Length; nameIndex++)
+                {
+                    string methodName = target.Value[nameIndex];
+                    Regex declarationPattern = new Regex(
+                        $@"\b(?:public|internal|private|protected)\s+(?:static\s+)?(?:async\s+)?[A-Za-z0-9_<>,\.\[\]\?]+\s+{methodName}\s*\(",
+                        RegexOptions.Compiled);
+                    MatchCollection matches = declarationPattern.Matches(source);
+                    if (matches.Count <= 1)
+                    {
+                        continue;
+                    }
+
+                    for (int matchIndex = 0; matchIndex < matches.Count; matchIndex++)
+                    {
+                        int lineNumber = CountLinesBefore(source, matches[matchIndex].Index) + 1;
+                        violations.Add($"{target.Key}:{lineNumber}: {methodName}");
+                    }
                 }
             }
 

@@ -618,7 +618,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            _selectedTargetInstallState = GetSelectedTargetInstallState(includeFreshnessCheck: false);
+            _selectedTargetInstallState = GetSelectedTargetInstallStateForCurrentProject(includeFreshnessCheck: false);
             RefreshCliSetupSection();
         }
 
@@ -653,7 +653,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             SkillInstallState installState = await Task.Run(
-                () => GetSelectedTargetInstallState(projectRoot, includeFreshnessCheck: true));
+                () => GetSelectedTargetInstallStateAtProjectRoot(projectRoot, includeFreshnessCheck: true));
             if (ct.IsCancellationRequested)
             {
                 return;
@@ -663,13 +663,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             RefreshCliSetupSection();
         }
 
-        private SkillInstallState GetSelectedTargetInstallState(bool includeFreshnessCheck)
+        private SkillInstallState GetSelectedTargetInstallStateForCurrentProject(bool includeFreshnessCheck)
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            return GetSelectedTargetInstallState(projectRoot, includeFreshnessCheck);
+            return GetSelectedTargetInstallStateAtProjectRoot(projectRoot, includeFreshnessCheck);
         }
 
-        private SkillInstallState GetSelectedTargetInstallState(
+        private SkillInstallState GetSelectedTargetInstallStateAtProjectRoot(
             string projectRoot,
             bool includeFreshnessCheck)
         {

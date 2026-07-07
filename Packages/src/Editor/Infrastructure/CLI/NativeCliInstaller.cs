@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string cliReleaseTag,
             bool removeLegacyLaunchers)
         {
-            return BuildInstallCommand(
+            return BuildInstallCommandWithPackagePath(
                 platform,
                 cliReleaseTag,
                 removeLegacyLaunchers,
@@ -36,13 +36,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 UnityCliLoopConstants.PackageResolvedPath);
         }
 
-        internal static NativeCliInstallCommand BuildInstallCommand(
+        internal static NativeCliInstallCommand BuildRemoteInstallCommand(
             RuntimePlatform platform,
             string cliReleaseTag,
             bool removeLegacyLaunchers,
             string posixShellPath)
         {
-            return BuildInstallCommand(
+            return BuildInstallCommandWithPackagePath(
                 platform,
                 cliReleaseTag,
                 removeLegacyLaunchers,
@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 null);
         }
 
-        internal static NativeCliInstallCommand BuildInstallCommand(
+        internal static NativeCliInstallCommand BuildInstallCommandWithPackagePath(
             RuntimePlatform platform,
             string cliReleaseTag,
             bool removeLegacyLaunchers,

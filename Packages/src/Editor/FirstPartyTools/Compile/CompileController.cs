@@ -84,21 +84,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Executes compilation asynchronously.
         /// </summary>
         /// <param name="forceRecompile">Whether to force a recompile.</param>
-        /// <returns>The compilation result.</returns>
-        /// <exception cref="InvalidOperationException">Thrown when the task is not found during compilation.</exception>
-        /// <remarks>
-        /// Callers must validate editor compilation state before invoking compile execution;
-        /// the production pipeline does this in CompileUseCase.
-        /// </remarks>
-        public async Task<CompileResult> TryCompileAsync(bool forceRecompile = false)
-        {
-            return await TryCompileAsync(forceRecompile, CancellationToken.None);
-        }
-
-        /// <summary>
-        /// Executes compilation asynchronously.
-        /// </summary>
-        /// <param name="forceRecompile">Whether to force a recompile.</param>
         /// <param name="ct">Cancellation token for the compile execution.</param>
         /// <returns>The compilation result.</returns>
         /// <exception cref="InvalidOperationException">Thrown when the task is not found during compilation.</exception>
