@@ -74,8 +74,7 @@ func RequireValidContractVersion(t *testing.T, label string, value string) {
 	if value == "" {
 		t.Fatalf("%s must not be empty", label)
 	}
-	_, ok := version.Compare(value, value)
-	if !ok {
+	if !version.IsValid(value) {
 		t.Fatalf("%s must be valid semver: %s", label, value)
 	}
 }

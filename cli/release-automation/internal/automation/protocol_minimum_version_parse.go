@@ -38,7 +38,7 @@ func ParseProtocolMinimumVersionValues(constantsContent []byte, pinContent []byt
 		values.RequiredProtocolVersion = requiredProtocolVersion
 		values.HasRequiredProtocol = true
 	}
-	if _, ok := sharedversion.Compare(pinVersion, pinVersion); !ok {
+	if !sharedversion.IsValid(pinVersion) {
 		return ProtocolMinimumVersionValues{}, fmt.Errorf("%s projectRunnerVersion must be semver, got %q", unityPackageCliPinFile, pinVersion)
 	}
 	return values, nil

@@ -50,8 +50,7 @@ func commandForScript(name string, scriptName string, version string, updateSele
 }
 
 func IsValidTargetVersion(value string) bool {
-	_, ok := sharedversion.Compare(value, value)
-	return ok
+	return sharedversion.IsValid(value)
 }
 
 func NormalizeTargetVersion(value string) string {
