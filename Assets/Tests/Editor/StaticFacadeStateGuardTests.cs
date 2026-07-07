@@ -91,6 +91,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             @"\b(?:private|internal|public|protected)\s+(?:static\s+)?async\s+(?:void|Task(?:<[^>]+>)?)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)",
             RegexOptions.Compiled | RegexOptions.Singleline);
 
+        private static readonly Regex CancellationTokenCtParameterPattern = new Regex(
+            @"\bCancellationToken\s+ct\b",
+            RegexOptions.Compiled);
+
         [Test]
         public void MigratedFacadeFiles_WhenScanned_DoNotOwnMutableStaticState()
         {
@@ -134,6 +138,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             List<string> violations = FindAsyncMethodsWithoutCancellationTokenCt();
 
             Assert.That(violations, Is.Empty, string.Join("\n", violations));
+        }
+
+        [Test]
+        public void CancellationTokenCtParameterPattern_WhenNameOnlyStartsWithCt_DoesNotMatch()
+        {
+            // Tests that the async guard requires the exact ct parameter name.
+            Assert.That(CancellationTokenCtParameterPattern.IsMatch("CancellationToken ct"), Is.True);
+            Assert.That(CancellationTokenCtParameterPattern.IsMatch("CancellationToken cts"), Is.False);
         }
 
         [Test]
@@ -379,7 +391,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 foreach (Match match in matches)
                 {
                     string parameterList = match.Groups[2].Value;
-                    if (parameterList.Contains("CancellationToken ct"))
+                    if (CancellationTokenCtParameterPattern.IsMatch(parameterList))
                     {
                         continue;
                     }
