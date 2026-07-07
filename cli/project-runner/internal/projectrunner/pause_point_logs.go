@@ -18,8 +18,9 @@ const (
 var fetchMatchingLogs = fetchMatchingLogsFromUnity
 
 type pausePointMatchingLog struct {
-	Type    string `json:"Type"`
-	Message string `json:"Message"`
+	Type       string `json:"Type"`
+	Message    string `json:"Message"`
+	StackTrace string `json:"StackTrace"`
 }
 
 type pausePointMatchingLogsResult struct {
@@ -67,11 +68,13 @@ type pausePointWaitResult struct {
 }
 
 type pausePointGetLogsResponse struct {
-	TotalCount     int                     `json:"TotalCount"`
-	DisplayedCount int                     `json:"DisplayedCount"`
-	MaxCount       int                     `json:"MaxCount"`
-	SearchText     string                  `json:"SearchText"`
-	Logs           []pausePointMatchingLog `json:"Logs"`
+	TotalCount        int                     `json:"TotalCount"`
+	DisplayedCount    int                     `json:"DisplayedCount"`
+	LogType           string                  `json:"LogType"`
+	MaxCount          int                     `json:"MaxCount"`
+	SearchText        string                  `json:"SearchText"`
+	IncludeStackTrace bool                    `json:"IncludeStackTrace"`
+	Logs              []pausePointMatchingLog `json:"Logs"`
 }
 
 func fetchMatchingLogsFromUnity(

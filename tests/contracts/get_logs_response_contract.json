@@ -1,0 +1,15 @@
+{
+  "TotalCount": 2,
+  "DisplayedCount": 1,
+  "LogType": "Error",
+  "MaxCount": 1,
+  "SearchText": "pause-point-id",
+  "IncludeStackTrace": true,
+  "Logs": [
+    {
+      "Type": "Error",
+      "Message": "pause-point-id failed",
+      "StackTrace": "Example.StackTrace:42"
+    }
+  ]
+}
