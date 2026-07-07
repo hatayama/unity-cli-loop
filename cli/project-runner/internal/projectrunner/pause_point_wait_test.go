@@ -428,13 +428,15 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnHit(t *testing.T) {
 		fetchedSearchText = searchText
 		fetchedMaxCount = maxCount
 		return pausePointMatchingLogsResult{
-			SearchText:     searchText,
-			TotalCount:     2,
-			DisplayedCount: 2,
-			MaxCount:       maxCount,
+			SearchText:        searchText,
+			TotalCount:        2,
+			DisplayedCount:    2,
+			LogType:           "Error",
+			MaxCount:          maxCount,
+			IncludeStackTrace: true,
 			Logs: []pausePointMatchingLog{
-				{Type: "Log", Message: "[jump] velocity=4.2"},
-				{Type: "Log", Message: "[jump] grounded=false"},
+				{Type: "Error", Message: "[jump] velocity=4.2", StackTrace: "trace one"},
+				{Type: "Error", Message: "[jump] grounded=false", StackTrace: "trace two"},
 			},
 		}, nil
 	}
@@ -462,6 +464,9 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnHit(t *testing.T) {
 	if len(result.MatchingLogs) != 2 || result.MatchingLogs[0].Message != "[jump] velocity=4.2" {
 		t.Fatalf("matching logs mismatch: %#v", result.MatchingLogs)
 	}
+	if result.MatchingLogs[0].StackTrace != "trace one" {
+		t.Fatalf("matching log stack trace mismatch: %#v", result.MatchingLogs)
+	}
 	if result.EvidenceSummary.EditorState.CapturedAt != "PausePointHit" {
 		t.Fatalf("editor state summary mismatch: %#v", result.EvidenceSummary)
 	}
@@ -472,6 +477,10 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnHit(t *testing.T) {
 		result.EvidenceSummary.MatchingLogs.MatchingLogCount != 2 ||
 		result.EvidenceSummary.MatchingLogs.ReturnedLogCount != 2 {
 		t.Fatalf("matching log summary mismatch: %#v", result.EvidenceSummary)
+	}
+	if result.EvidenceSummary.MatchingLogs.LogType != "Error" ||
+		!result.EvidenceSummary.MatchingLogs.IncludeStackTrace {
+		t.Fatalf("matching log metadata mismatch: %#v", result.EvidenceSummary)
 	}
 	if !strings.Contains(result.EvidenceSummary.Warning, "Multiple matching logs") {
 		t.Fatalf("warning mismatch: %#v", result.EvidenceSummary)
