@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -88,7 +89,7 @@ func TestToolReadinessDoneErrorReportsServerNotRespondingWhenUnityRuns(t *testin
 
 	err := toolReadinessDoneErrorWithDeps(context.Background(), t.TempDir(), errors.New("probe failed"), deps)
 
-	var notRespondingErr UnityServerNotRespondingError
+	var notRespondingErr clierrors.UnityServerNotRespondingError
 	if !errors.As(err, &notRespondingErr) {
 		t.Fatalf("expected Unity server not responding error, got %v", err)
 	}

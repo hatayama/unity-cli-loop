@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/install"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
@@ -33,20 +35,20 @@ func tryHandleInstallRequest(ctx context.Context, args []string, stdout io.Write
 	}
 	options, err := parseInstallOptions(args[1:])
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: clicore.InstallCommandName})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.InstallCommandName})
 		return true, 1
 	}
 
 	installDir, err := resolveNativeInstallDir(runtime.GOOS, options.installDir)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clicore.ErrorContext{Command: clicore.InstallCommandName})
+		clierrors.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clierrors.ErrorContext{Command: clicore.InstallCommandName})
 		return true, 1
 	}
 	installCommand, err := install.CommandForOS(runtime.GOOS, install.Options{
 		InstallDir: installDir,
 	})
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clicore.ErrorContext{Command: clicore.InstallCommandName})
+		clierrors.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clierrors.ErrorContext{Command: clicore.InstallCommandName})
 		return true, 1
 	}
 
@@ -56,7 +58,7 @@ func tryHandleInstallRequest(ctx context.Context, args []string, stdout io.Write
 	var installerStderr bytes.Buffer
 	command.Stderr = &installerStderr
 	if err := command.Run(); err != nil {
-		clicore.WriteErrorEnvelope(stderr, installSetupFailureError(err, installerStderr.String()))
+		clierrors.WriteErrorEnvelope(stderr, installSetupFailureError(err, installerStderr.String()))
 		return true, 1
 	}
 
@@ -64,7 +66,7 @@ func tryHandleInstallRequest(ctx context.Context, args []string, stdout io.Write
 	return true, 0
 }
 
-func installSetupFailureError(err error, installerStderr string) clicore.CLIError {
+func installSetupFailureError(err error, installerStderr string) clierrors.CLIError {
 	details := map[string]any{
 		"Cause": err.Error(),
 	}
@@ -72,9 +74,9 @@ func installSetupFailureError(err error, installerStderr string) clicore.CLIErro
 		details["InstallerStderr"] = stderrText
 	}
 
-	return clicore.CLIError{
-		ErrorCode:   clicore.ErrorCodeInternalError,
-		Phase:       clicore.ErrorPhaseExecution,
+	return clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeInternalError,
+		Phase:       clierrors.ErrorPhaseExecution,
 		Message:     "Install setup failed: " + err.Error(),
 		Retryable:   true,
 		SafeToRetry: true,
@@ -93,7 +95,7 @@ func parseInstallOptions(args []string) (installOptions, error) {
 				return installOptions{}, duplicateInstallDirOptionError(arg)
 			}
 			if index+1 >= len(args) || clicore.IsNextOptionToken(args[index+1]) {
-				return installOptions{}, clicore.MissingValueArgumentError(arg)
+				return installOptions{}, clierrors.MissingValueArgumentError(arg)
 			}
 			options.installDir = args[index+1]
 			index++
@@ -105,7 +107,7 @@ func parseInstallOptions(args []string) (installOptions, error) {
 			return installOptions{}, err
 		}
 		if name != installDirFlagName {
-			return installOptions{}, &clicore.ArgumentError{
+			return installOptions{}, &clierrors.ArgumentError{
 				Message:     "Unknown install option: --" + name,
 				Option:      "--" + name,
 				Command:     clicore.InstallCommandName,
@@ -124,7 +126,7 @@ func parseInstallOptions(args []string) (installOptions, error) {
 }
 
 func duplicateInstallDirOptionError(option string) error {
-	return &clicore.ArgumentError{
+	return &clierrors.ArgumentError{
 		Message:     "Duplicate install option: " + option,
 		Option:      option,
 		Command:     clicore.InstallCommandName,

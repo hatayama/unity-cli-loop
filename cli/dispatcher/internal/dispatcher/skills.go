@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/project"
 	"github.com/hatayama/unity-cli-loop/common/skillscan"
@@ -102,7 +104,7 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 
 	subcommand := args[1]
 	if !isKnownSkillsSubcommand(subcommand) {
-		clicore.WriteErrorEnvelope(stderr, unknownSkillsSubcommandError(subcommand, clicore.ErrorContext{Command: clicore.SkillsCommandName}))
+		clierrors.WriteErrorEnvelope(stderr, unknownSkillsSubcommandError(subcommand, clierrors.ErrorContext{Command: clicore.SkillsCommandName}))
 		return true, 1
 	}
 	if clicore.ContainsHelpRequest(args[2:]) {
@@ -111,13 +113,13 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 	}
 	options, err := parseSkillsOptions(args[2:])
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: clicore.SkillsCommandName})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.SkillsCommandName})
 		return true, 1
 	}
 
 	projectRoot, err := resolveSkillsProjectRoot(startPath, globalProjectPath, options.global)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: clicore.SkillsCommandName})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.SkillsCommandName})
 		return true, 1
 	}
 
@@ -127,7 +129,7 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 
 	skills, err := collectSkillDefinitions(projectRoot)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 		return true, 1
 	}
 
@@ -146,7 +148,7 @@ func parseSkillsOptions(args []string) (skillCommandOptions, error) {
 		default:
 			targetID, ok := skillTargetIDFromFlag(arg)
 			if !ok {
-				return skillCommandOptions{}, &clicore.ArgumentError{
+				return skillCommandOptions{}, &clierrors.ArgumentError{
 					Message:     "Unknown skills option: " + arg,
 					Option:      arg,
 					Command:     clicore.SkillsCommandName,
@@ -202,8 +204,8 @@ func groupManagedSkillsForOptions(options skillCommandOptions) bool {
 	return groupSkillsByDefault
 }
 
-func unknownSkillsSubcommandError(subcommand string, context clicore.ErrorContext) clicore.CLIError {
-	return (&clicore.ArgumentError{
+func unknownSkillsSubcommandError(subcommand string, context clierrors.ErrorContext) clierrors.CLIError {
+	return (&clierrors.ArgumentError{
 		Message:     "Unknown skills command: " + subcommand,
 		Received:    subcommand,
 		Command:     clicore.SkillsCommandName,
@@ -242,7 +244,7 @@ func runSkillsList(projectRoot string, skills []skillDefinition, options skillCo
 	for _, target := range targets {
 		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
 		if err != nil {
-			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
 		clicore.WriteFormat(stdout, "%s (%s):\n", target.displayName, location)
@@ -251,7 +253,7 @@ func runSkillsList(projectRoot string, skills []skillDefinition, options skillCo
 		for _, skill := range skills {
 			status, err := getSkillStatus(baseDir, skill, groupManagedSkillsForOptions(options))
 			if err != nil {
-				clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
+				clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 				return 1
 			}
 			clicore.WriteFormat(stdout, "  %s %s (%s)\n", statusIcon(status), skill.name, statusText(status))
@@ -270,7 +272,7 @@ func runSkillsInstall(projectRoot string, skills []skillDefinition, options skil
 	// skill copies that contradict the CLI, so refresh every detected install.
 	autoRefreshTargets, err := detectInstalledSkillTargets(projectRoot, skills, options)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 		return 1
 	}
 	for _, autoTarget := range autoRefreshTargets {
@@ -279,7 +281,7 @@ func runSkillsInstall(projectRoot string, skills []skillDefinition, options skil
 	for _, target := range append(append([]skillTarget{}, options.targets...), autoRefreshTargets...) {
 		result, err := installSkillsForTarget(projectRoot, target, skills, options.global, groupManagedSkillsForOptions(options))
 		if err != nil {
-			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
 		clicore.WriteFormat(stdout, "%s:\n", target.displayName)
@@ -291,7 +293,7 @@ func runSkillsInstall(projectRoot string, skills []skillDefinition, options skil
 		}
 		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
 		if err != nil {
-			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
 		clicore.WriteFormat(stdout, "  Location: %s\n\n", baseDir)
@@ -307,7 +309,7 @@ func runSkillsUninstall(projectRoot string, skills []skillDefinition, options sk
 		grouped := groupManagedSkillsForOptions(options)
 		removed, notFound, err := uninstallSkillsForTarget(projectRoot, target, skills, options.global, grouped)
 		if err != nil {
-			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
 		clicore.WriteFormat(stdout, "%s:\n", target.displayName)
@@ -315,7 +317,7 @@ func runSkillsUninstall(projectRoot string, skills []skillDefinition, options sk
 		clicore.WriteFormat(stdout, "  Not found: %d\n", notFound)
 		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
 		if err != nil {
-			clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
 		}
 		clicore.WriteFormat(stdout, "  Location: %s\n\n", baseDir)

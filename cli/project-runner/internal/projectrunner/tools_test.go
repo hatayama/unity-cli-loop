@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/clitest"
 )
@@ -157,8 +160,8 @@ func TestBuildToolParamsConvertsCompileStopOnExternalSceneChangesFlag(t *testing
 		t.Fatalf("buildToolParams failed: %v", err)
 	}
 
-	if params[clicore.ReloadExternalSceneChangesPropertyName] != false {
-		t.Fatalf("ReloadExternalSceneChanges mismatch: %#v", params[clicore.ReloadExternalSceneChangesPropertyName])
+	if params[tooldocs.ReloadExternalSceneChangesPropertyName] != false {
+		t.Fatalf("ReloadExternalSceneChanges mismatch: %#v", params[tooldocs.ReloadExternalSceneChangesPropertyName])
 	}
 }
 
@@ -193,7 +196,7 @@ func TestBuildToolParamsKeepsGenericReloadExternalSceneChangesFlagForOtherTools(
 		Name: "sample-tool",
 		InputSchema: clicore.InputSchema{
 			Properties: map[string]clicore.ToolProperty{
-				clicore.ReloadExternalSceneChangesPropertyName: {Type: "boolean", Default: true},
+				tooldocs.ReloadExternalSceneChangesPropertyName: {Type: "boolean", Default: true},
 			},
 		},
 	}
@@ -202,8 +205,8 @@ func TestBuildToolParamsKeepsGenericReloadExternalSceneChangesFlagForOtherTools(
 	if err != nil {
 		t.Fatalf("buildToolParams failed: %v", err)
 	}
-	if params[clicore.ReloadExternalSceneChangesPropertyName] != false {
-		t.Fatalf("ReloadExternalSceneChanges mismatch: %#v", params[clicore.ReloadExternalSceneChangesPropertyName])
+	if params[tooldocs.ReloadExternalSceneChangesPropertyName] != false {
+		t.Fatalf("ReloadExternalSceneChanges mismatch: %#v", params[tooldocs.ReloadExternalSceneChangesPropertyName])
 	}
 
 	_, _, err = buildToolParams([]string{"--stop-on-external-scene-changes"}, tool)
@@ -275,12 +278,12 @@ func TestBuildToolParamsReturnsStructuredBooleanValueError(t *testing.T) {
 		t.Fatal("expected argument error")
 	}
 
-	var argumentErr *clicore.ArgumentError
+	var argumentErr *clierrors.ArgumentError
 	if !errors.As(err, &argumentErr) {
 		t.Fatalf("expected argumentError, got %T", err)
 	}
-	cliErr := argumentErr.ToCLIError(clicore.ErrorContext{ProjectRoot: "/tmp/MyProject", Command: "sample-tool"})
-	if cliErr.ErrorCode != clicore.ErrorCodeInvalidArgument {
+	cliErr := argumentErr.ToCLIError(clierrors.ErrorContext{ProjectRoot: "/tmp/MyProject", Command: "sample-tool"})
+	if cliErr.ErrorCode != clierrors.ErrorCodeInvalidArgument {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
 	if cliErr.Details["ExpectedType"] != "flag" {

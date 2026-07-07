@@ -1,6 +1,9 @@
 package projectrunner
 
-import "github.com/hatayama/unity-cli-loop/common/clicore"
+import (
+	"github.com/hatayama/unity-cli-loop/common/clicore"
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+)
 
 func isSettingsManagedNativeToolCommand(command string) bool {
 	switch command {
@@ -11,10 +14,10 @@ func isSettingsManagedNativeToolCommand(command string) bool {
 	}
 }
 
-func nativeToolDisabledError(projectRoot string, command string) clicore.CLIError {
-	return clicore.CLIError{
-		ErrorCode:   clicore.ErrorCodeToolDisabled,
-		Phase:       clicore.ErrorPhaseDispatch,
+func nativeToolDisabledError(projectRoot string, command string) clierrors.CLIError {
+	return clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeToolDisabled,
+		Phase:       clierrors.ErrorPhaseDispatch,
 		Message:     "Tool is disabled in Unity CLI Loop settings: " + command,
 		Retryable:   false,
 		SafeToRetry: false,

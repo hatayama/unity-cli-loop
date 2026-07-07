@@ -8,6 +8,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clitest"
 	"github.com/hatayama/unity-cli-loop/common/skillscan"
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 )
 
 // Tests that run-tests-specific help text does not leak into unrelated tool schemas.
@@ -21,7 +22,7 @@ func TestVisibleOptionHelpEntriesKeepsGenericSaveBeforeRunHelpForOtherTools(t *t
 		},
 	}
 
-	entries := VisibleOptionHelpEntriesForTool(tool)
+	entries := tooldocs.VisibleOptionHelpEntriesForTool(tool)
 
 	if len(entries) != 1 {
 		t.Fatalf("entry count mismatch: %#v", entries)
@@ -41,12 +42,12 @@ func TestVisibleOptionNamesIncludesExecuteDynamicCodeCodeFile(t *testing.T) {
 		t.Fatal("execute-dynamic-code was not found in default tools")
 	}
 
-	options := VisibleOptionNamesForTool(tool)
+	options := tooldocs.VisibleOptionNamesForTool(tool)
 
 	if !slices.Contains(options, "--code") {
 		t.Fatalf("execute-dynamic-code code option was not listed: %#v", options)
 	}
-	if !slices.Contains(options, DynamicCodeFileOptionName) {
+	if !slices.Contains(options, tooldocs.DynamicCodeFileOptionName) {
 		t.Fatalf("execute-dynamic-code code-file option was not listed: %#v", options)
 	}
 	if slices.Contains(options, "--compile-only") {
@@ -61,15 +62,15 @@ func TestVisibleOptionHelpEntriesIncludesExecuteDynamicCodeCodeFile(t *testing.T
 		t.Fatal("execute-dynamic-code was not found in default tools")
 	}
 
-	entries := VisibleOptionHelpEntriesForTool(tool)
+	entries := tooldocs.VisibleOptionHelpEntriesForTool(tool)
 
 	found := false
 	for _, entry := range entries {
-		if entry.Name != DynamicCodeFileOptionName {
+		if entry.Name != tooldocs.DynamicCodeFileOptionName {
 			continue
 		}
 		found = true
-		if entry.Usage != DynamicCodeFileOptionUsage {
+		if entry.Usage != tooldocs.DynamicCodeFileOptionUsage {
 			t.Fatalf("code-file usage mismatch: %#v", entry)
 		}
 		if !strings.Contains(entry.Description, "Read C# code from a file") {

@@ -4,6 +4,9 @@ import (
 	"io"
 	"sort"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/project"
 )
@@ -22,16 +25,16 @@ func tryHandleCommandHelp(command string, startPath string, projectPath string, 
 				return true, 0
 			}
 		}
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: command})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: command})
 		return true, 1
 	}
 	tool, cache, ok, err := clicore.FindToolForCommand(connection.ProjectRoot, command)
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: command})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: command})
 		return true, 1
 	}
 	if !ok {
-		clicore.WriteErrorEnvelope(stderr, clicore.UnknownCommandError(command, cache, clicore.ErrorContext{
+		clierrors.WriteErrorEnvelope(stderr, clicore.UnknownCommandError(command, cache, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     command,
 		}))
@@ -77,18 +80,18 @@ func printNativeSingleCommandHelp(command string, stdout io.Writer) {
 func printToolHelp(tool clicore.ToolDefinition, stdout io.Writer) {
 	clicore.WriteLine(stdout, "Usage:")
 	clicore.WriteFormat(stdout, "  uloop %s", tool.Name)
-	if len(clicore.VisibleOptionHelpEntriesForTool(tool)) > 0 {
+	if len(tooldocs.VisibleOptionHelpEntriesForTool(tool)) > 0 {
 		clicore.WriteLine(stdout, " [options]")
 	} else {
 		clicore.WriteLine(stdout, "")
 	}
 
-	if description := clicore.FirstHelpLine(tool.Description); description != "" {
+	if description := tooldocs.FirstHelpLine(tool.Description); description != "" {
 		clicore.WriteLine(stdout, "")
 		clicore.WriteLine(stdout, description)
 	}
 
-	entries := clicore.VisibleOptionHelpEntriesForTool(tool)
+	entries := tooldocs.VisibleOptionHelpEntriesForTool(tool)
 	if len(entries) > 0 {
 		clicore.WriteLine(stdout, "")
 		clicore.WriteLine(stdout, "Options:")

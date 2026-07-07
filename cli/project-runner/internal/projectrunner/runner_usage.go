@@ -3,6 +3,8 @@ package projectrunner
 import (
 	"io"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
@@ -37,10 +39,10 @@ func printRunnerUsage(stdout io.Writer) {
 	clicore.WriteLine(stdout, "Run `uloop --help` for the full command list and command help.")
 }
 
-func dispatcherOwnedCommandError(command string) clicore.CLIError {
-	return clicore.CLIError{
-		ErrorCode:   clicore.ErrorCodeInvalidArgument,
-		Phase:       clicore.ErrorPhaseArgumentParsing,
+func dispatcherOwnedCommandError(command string) clierrors.CLIError {
+	return clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeInvalidArgument,
+		Phase:       clierrors.ErrorPhaseArgumentParsing,
 		Message:     "The `" + command + "` command is handled by the global uloop launcher, not by the project runner binary.",
 		Retryable:   false,
 		SafeToRetry: false,

@@ -8,6 +8,10 @@ import (
 	"fmt"
 	"time"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
+	"github.com/hatayama/unity-cli-loop/common/vibelog"
+
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
@@ -149,7 +153,7 @@ func compileForceRecompileEnabled(params map[string]any) bool {
 }
 
 func compileReloadExternalSceneChangesEnabled(params map[string]any) bool {
-	value, ok := params[clicore.ReloadExternalSceneChangesPropertyName].(bool)
+	value, ok := params[tooldocs.ReloadExternalSceneChangesPropertyName].(bool)
 	if !ok {
 		return true
 	}
@@ -183,18 +187,18 @@ func shouldWaitForCompileStatus(err error, outcome unityipc.UnitySendOutcome) bo
 	if !outcome.RequestDispatched {
 		return false
 	}
-	if clicore.IsTransportDisconnectError(err) {
+	if clierrors.IsTransportDisconnectError(err) {
 		return true
 	}
-	return outcome.RequestAccepted && clicore.IsFinalResponseTimeoutError(err)
+	return outcome.RequestAccepted && clierrors.IsFinalResponseTimeoutError(err)
 }
 
 func logCliDebugModeResolved(connection unityipc.Connection, command string) {
-	if !clicore.IsCLIVibeLogEnabled() {
+	if !vibelog.IsCLIVibeLogEnabled() {
 		return
 	}
 
-	_ = clicore.WriteCLIVibeLog(connection.ProjectRoot, clicore.CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(connection.ProjectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_debug_mode_resolved",
 		Message:   "Resolved CLI debug mode for the command.",
@@ -202,7 +206,7 @@ func logCliDebugModeResolved(connection unityipc.Connection, command string) {
 			"command":          command,
 			"debug_enabled":    true,
 			"debug_source":     "env",
-			"project_identity": clicore.ProjectIdentity(connection.ProjectRoot),
+			"project_identity": vibelog.ProjectIdentity(connection.ProjectRoot),
 			"cli_version":      clicontract.ProjectRunnerVersion(),
 		},
 	})
@@ -213,12 +217,12 @@ func logCompileRequestPrepared(
 	params map[string]any,
 	requestID string,
 ) {
-	if !clicore.IsCLIVibeLogEnabled() {
+	if !vibelog.IsCLIVibeLogEnabled() {
 		return
 	}
 
 	reloadExternalSceneChanges := compileReloadExternalSceneChangesEnabled(params)
-	_ = clicore.WriteCLIVibeLog(connection.ProjectRoot, clicore.CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(connection.ProjectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_compile_request_prepared",
 		Message:   "Prepared compile request parameters before dispatch.",
@@ -229,7 +233,7 @@ func logCompileRequestPrepared(
 			"force_recompile":                compileForceRecompileEnabled(params),
 			"reload_external_scene_changes":  reloadExternalSceneChanges,
 			"stop_on_external_scene_changes": !reloadExternalSceneChanges,
-			"project_identity":               clicore.ProjectIdentity(connection.ProjectRoot),
+			"project_identity":               vibelog.ProjectIdentity(connection.ProjectRoot),
 			"endpoint":                       connection.Endpoint.Address,
 			"timeout_ms":                     compileWaitTimeout.Milliseconds(),
 			"poll_interval_ms":               compileWaitPollInterval.Milliseconds(),
@@ -246,11 +250,11 @@ func logCompileRequestSendResult(
 	err error,
 	startedAt time.Time,
 ) {
-	if !clicore.IsCLIVibeLogEnabled() {
+	if !vibelog.IsCLIVibeLogEnabled() {
 		return
 	}
 
-	_ = clicore.WriteCLIVibeLog(connection.ProjectRoot, clicore.CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(connection.ProjectRoot, vibelog.CLIVibeLogEntry{
 		Level:     compileRequestSendResultLogLevel(err),
 		Operation: "cli_compile_request_send_result",
 		Message:   "Recorded compile request dispatch outcome before status polling.",
@@ -260,11 +264,11 @@ func logCompileRequestSendResult(
 			"request_dispatched": outcome.RequestDispatched,
 			"request_accepted":   outcome.RequestAccepted,
 			"response_received":  err == nil && len(outcome.Result) > 0,
-			"response_timeout":   err != nil && clicore.IsFinalResponseTimeoutError(err),
+			"response_timeout":   err != nil && clierrors.IsFinalResponseTimeoutError(err),
 			"transport_error":    clicore.ErrorMessage(err),
 			"elapsed_ms":         time.Since(startedAt).Milliseconds(),
 			"endpoint":           connection.Endpoint.Address,
-			"project_identity":   clicore.ProjectIdentity(connection.ProjectRoot),
+			"project_identity":   vibelog.ProjectIdentity(connection.ProjectRoot),
 			"outcome_total_ms":   outcome.Timing.Total.Milliseconds(),
 			"outcome_dial_ms":    outcome.Timing.Dial.Milliseconds(),
 			"outcome_write_ms":   outcome.Timing.Write.Milliseconds(),
@@ -287,18 +291,18 @@ func logCompileStatusPollStart(
 	startedAt time.Time,
 	deadline time.Time,
 ) {
-	if !clicore.IsCLIVibeLogEnabled() {
+	if !vibelog.IsCLIVibeLogEnabled() {
 		return
 	}
 
-	_ = clicore.WriteCLIVibeLog(options.connection.ProjectRoot, clicore.CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(options.connection.ProjectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_compile_status_poll_start",
 		Message:   "Started polling Unity compile status.",
 		Context: compileWaitLogContext(options, startedAt, map[string]any{
 			"started_at":       startedAt.UTC().Format(time.RFC3339Nano),
 			"deadline_at":      deadline.UTC().Format(time.RFC3339Nano),
-			"project_identity": clicore.ProjectIdentity(options.connection.ProjectRoot),
+			"project_identity": vibelog.ProjectIdentity(options.connection.ProjectRoot),
 		}),
 		CorrelationID: options.requestID,
 	})
@@ -312,7 +316,7 @@ func logCompileStatusPollObservedIfChanged(
 	err error,
 	lastObservationKey *string,
 ) {
-	if !clicore.IsCLIVibeLogEnabled() {
+	if !vibelog.IsCLIVibeLogEnabled() {
 		return
 	}
 
@@ -322,7 +326,7 @@ func logCompileStatusPollObservedIfChanged(
 	}
 
 	*lastObservationKey = observationKey
-	_ = clicore.WriteCLIVibeLog(options.connection.ProjectRoot, clicore.CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(options.connection.ProjectRoot, vibelog.CLIVibeLogEntry{
 		Level:     compileStatusPollObservedLogLevel(err),
 		Operation: "cli_compile_status_poll_observed",
 		Message:   "Observed Unity compile status while polling.",
@@ -366,12 +370,12 @@ func logCompileStatusPollComplete(
 	attempts int,
 	status compileStatusResponse,
 ) {
-	if !clicore.IsCLIVibeLogEnabled() {
+	if !vibelog.IsCLIVibeLogEnabled() {
 		return
 	}
 
 	summary := compileResultLogSummary(status.Result)
-	_ = clicore.WriteCLIVibeLog(options.connection.ProjectRoot, clicore.CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(options.connection.ProjectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "INFO",
 		Operation: "cli_compile_status_poll_complete",
 		Message:   "Unity compile status polling returned the stored result.",
@@ -392,11 +396,11 @@ func logCompileWaitTimedOut(
 	lastStatus compileStatusResponse,
 	lastErr error,
 ) {
-	if !clicore.IsCLIVibeLogEnabled() {
+	if !vibelog.IsCLIVibeLogEnabled() {
 		return
 	}
 
-	_ = clicore.WriteCLIVibeLog(options.connection.ProjectRoot, clicore.CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(options.connection.ProjectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "WARNING",
 		Operation: "cli_compile_status_poll_timeout",
 		Message:   "Timed out while polling Unity compile status.",
@@ -404,7 +408,7 @@ func logCompileWaitTimedOut(
 			"poll_attempts":        attempts,
 			"last_status":          compileStatusLogContext(lastStatus),
 			"last_transport_error": clicore.ErrorMessage(lastErr),
-			"project_identity":     clicore.ProjectIdentity(options.connection.ProjectRoot),
+			"project_identity":     vibelog.ProjectIdentity(options.connection.ProjectRoot),
 		}),
 		CorrelationID: options.requestID,
 	})
@@ -418,11 +422,11 @@ func logCompileWaitCancelled(
 	lastErr error,
 	cancelErr error,
 ) {
-	if !clicore.IsCLIVibeLogEnabled() {
+	if !vibelog.IsCLIVibeLogEnabled() {
 		return
 	}
 
-	_ = clicore.WriteCLIVibeLog(options.connection.ProjectRoot, clicore.CLIVibeLogEntry{
+	_ = vibelog.WriteCLIVibeLog(options.connection.ProjectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "WARNING",
 		Operation: "cli_compile_status_poll_cancelled",
 		Message:   "Compile status polling was cancelled.",

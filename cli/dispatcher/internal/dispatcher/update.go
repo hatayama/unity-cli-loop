@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
@@ -33,7 +35,7 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 	}
 	options, err := parseUpdateOptions(args[1:])
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, err, clicore.ErrorContext{Command: clicore.UpdateCommandName})
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.UpdateCommandName})
 		return true, 1
 	}
 
@@ -42,15 +44,15 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 		TargetVersion:  options.targetVersion,
 	})
 	if err != nil {
-		clicore.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clicore.ErrorContext{Command: clicore.UpdateCommandName})
+		clierrors.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clierrors.ErrorContext{Command: clicore.UpdateCommandName})
 		return true, 1
 	}
 
 	clicore.WriteLine(stdout, "Updating global uloop launcher...")
 	if err := updateRunCommand(ctx, updateCommand, stdout, stderr); err != nil {
-		clicore.WriteErrorEnvelope(stderr, clicore.CLIError{
-			ErrorCode:   clicore.ErrorCodeInternalError,
-			Phase:       clicore.ErrorPhaseExecution,
+		clierrors.WriteErrorEnvelope(stderr, clierrors.CLIError{
+			ErrorCode:   clierrors.ErrorCodeInternalError,
+			Phase:       clierrors.ErrorPhaseExecution,
 			Message:     "Update failed: " + err.Error(),
 			Retryable:   true,
 			SafeToRetry: true,
@@ -139,7 +141,7 @@ func parseUpdateOptions(args []string) (updateOptions, error) {
 			return updateOptions{}, err
 		}
 		if name != updateToVersionFlagName {
-			return updateOptions{}, &clicore.ArgumentError{
+			return updateOptions{}, &clierrors.ArgumentError{
 				Message:     "Unknown update option: --" + name,
 				Option:      "--" + name,
 				Command:     "update",
@@ -147,7 +149,7 @@ func parseUpdateOptions(args []string) (updateOptions, error) {
 			}
 		}
 		if options.targetVersion != "" {
-			return updateOptions{}, &clicore.ArgumentError{
+			return updateOptions{}, &clierrors.ArgumentError{
 				Message:     "Duplicate update option: --" + updateToVersionFlagName,
 				Option:      "--" + updateToVersionFlagName,
 				Command:     "update",
@@ -156,7 +158,7 @@ func parseUpdateOptions(args []string) (updateOptions, error) {
 		}
 		normalizedValue := update.NormalizeTargetVersion(value)
 		if !update.IsValidTargetVersion(normalizedValue) {
-			return updateOptions{}, &clicore.ArgumentError{
+			return updateOptions{}, &clierrors.ArgumentError{
 				Message:      "Invalid CLI version for --" + updateToVersionFlagName + ": " + value,
 				Option:       "--" + updateToVersionFlagName,
 				Received:     value,

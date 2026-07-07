@@ -3,6 +3,8 @@ package projectrunner
 import (
 	"encoding/json"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
@@ -49,7 +51,7 @@ func shouldWaitForExecuteDynamicCodeDisconnect(err error, outcome unityipc.Unity
 	if !outcome.RequestDispatched {
 		return false
 	}
-	return clicore.IsTransportDisconnectError(err)
+	return clierrors.IsTransportDisconnectError(err)
 }
 
 func stripExecuteDynamicCodeControlResult(result []byte) []byte {
