@@ -152,7 +152,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
-                    groupSkillsUnderUnityCliLoop: true);
+                    groupSkillsUnderUnityCliLoop: true,
+                    disabledTools: Array.Empty<string>());
 
             string installedSkillDir = Path.Combine(
                 targetRoot,
@@ -199,7 +200,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
-                    groupSkillsUnderUnityCliLoop: false);
+                    groupSkillsUnderUnityCliLoop: false,
+                    disabledTools: Array.Empty<string>());
 
             string installedSkillDir = Path.Combine(
                 targetRoot,
@@ -249,7 +251,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
-                    groupSkillsUnderUnityCliLoop: false);
+                    groupSkillsUnderUnityCliLoop: false,
+                    disabledTools: Array.Empty<string>());
 
             string installedSkillDir = Path.Combine(
                 skillsRoot,
@@ -291,7 +294,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
-                    groupSkillsUnderUnityCliLoop: false);
+                    groupSkillsUnderUnityCliLoop: false,
+                    disabledTools: Array.Empty<string>());
 
             string installedSkillDir = Path.Combine(
                 skillsRoot,
@@ -333,7 +337,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
-                    groupSkillsUnderUnityCliLoop: false);
+                    groupSkillsUnderUnityCliLoop: false,
+                    disabledTools: Array.Empty<string>());
 
             string installedSkillDir = Path.Combine(
                 skillsRoot,
@@ -376,7 +381,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await ToolSkillSynchronizer.InstallSkillFilesForToolAtProjectRoot(
                     temporaryRoot,
                     "enabled-skill",
-                    groupSkillsUnderUnityCliLoop: false);
+                    groupSkillsUnderUnityCliLoop: false,
+                    disabledTools: Array.Empty<string>());
 
             string enabledSkillDir = Path.Combine(skillsRoot, "uloop-enabled-skill");
 
@@ -588,7 +594,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
-                    groupSkillsUnderUnityCliLoop: false);
+                    groupSkillsUnderUnityCliLoop: false,
+                    disabledTools: Array.Empty<string>());
 
             string installedSkillDir = Path.Combine(
                 skillsRoot,
@@ -633,7 +640,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
-                    groupSkillsUnderUnityCliLoop: false);
+                    groupSkillsUnderUnityCliLoop: false,
+                    disabledTools: Array.Empty<string>());
 
             Assert.That(result.IsSuccessful, Is.True);
             Assert.That(Directory.Exists(managedSkillsRoot), Is.False);
@@ -1428,7 +1436,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
                 temporaryRoot,
                 new[] { target },
-                groupSkillsUnderUnityCliLoop: true);
+                groupSkillsUnderUnityCliLoop: true,
+                disabledTools: Array.Empty<string>());
 
             string installedReferencePath = Path.Combine(
                 temporaryRoot,
@@ -1562,7 +1571,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
-                    groupSkillsUnderUnityCliLoop: true);
+                    groupSkillsUnderUnityCliLoop: true,
+                    disabledTools: Array.Empty<string>());
 
             string installedSkillDir = Path.Combine(
                 targetRoot,
@@ -1608,7 +1618,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
-                    groupSkillsUnderUnityCliLoop: false);
+                    groupSkillsUnderUnityCliLoop: false,
+                    disabledTools: Array.Empty<string>());
 
             Assert.That(result.IsSuccessful, Is.True);
             Assert.That(Directory.Exists(executeMenuItemSkillDir), Is.False);

@@ -366,18 +366,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static async Task<SkillInstallResult> InstallSkillFilesAtProjectRoot(
             string projectRoot,
             IEnumerable<SkillTargetInfo> targets,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            return await InstallSkillFilesAtProjectRoot(
-                projectRoot,
-                targets,
-                groupSkillsUnderUnityCliLoop,
-                Array.Empty<string>());
-        }
-
-        internal static async Task<SkillInstallResult> InstallSkillFilesAtProjectRoot(
-            string projectRoot,
-            IEnumerable<SkillTargetInfo> targets,
             bool groupSkillsUnderUnityCliLoop,
             string[] disabledTools)
         {
@@ -412,18 +400,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 return new SkillInstallResult(targetArray.Length, succeeded);
             });
-        }
-
-        internal static async Task<SkillInstallResult> InstallSkillFilesForToolAtProjectRoot(
-            string projectRoot,
-            string toolName,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            return await InstallSkillFilesForToolAtProjectRoot(
-                projectRoot,
-                toolName,
-                groupSkillsUnderUnityCliLoop,
-                Array.Empty<string>());
         }
 
         internal static async Task<SkillInstallResult> InstallSkillFilesForToolAtProjectRoot(
