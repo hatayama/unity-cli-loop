@@ -103,24 +103,14 @@ func parseVersionPart(value string) (int, bool) {
 }
 
 func isValidPrerelease(value string) bool {
-	if value == "" {
-		return false
-	}
-	for _, identifier := range strings.Split(value, ".") {
-		if identifier == "" {
-			return false
-		}
-		if !containsOnlyPrereleaseCharacters(identifier) {
-			return false
-		}
-		if containsOnlyDigits(identifier) && hasLeadingZero(identifier) {
-			return false
-		}
-	}
-	return true
+	return isValidSemanticIdentifierList(value, true)
 }
 
 func isValidBuildMetadata(value string) bool {
+	return isValidSemanticIdentifierList(value, false)
+}
+
+func isValidSemanticIdentifierList(value string, rejectLeadingZeroNumericIdentifiers bool) bool {
 	if value == "" {
 		return false
 	}
@@ -129,6 +119,9 @@ func isValidBuildMetadata(value string) bool {
 			return false
 		}
 		if !containsOnlyPrereleaseCharacters(identifier) {
+			return false
+		}
+		if rejectLeadingZeroNumericIdentifiers && containsOnlyDigits(identifier) && hasLeadingZero(identifier) {
 			return false
 		}
 	}
