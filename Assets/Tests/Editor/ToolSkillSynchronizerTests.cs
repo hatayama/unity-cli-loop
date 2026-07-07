@@ -435,7 +435,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new Dictionary<string, byte[]>());
             string[] disabledTools = { UnityCliLoopConstants.TOOL_NAME_RUN_TESTS };
 
-            bool isDisabled = ToolSkillSynchronizer.IsSkillDisabledByToolSettings(
+            bool isDisabled = SkillDisabledToolFilter.IsSkillDisabledByToolSettings(
                 skill,
                 disabledTools);
 
@@ -452,7 +452,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new Dictionary<string, byte[]>());
             string[] disabledTools = Array.Empty<string>();
 
-            bool isDisabled = ToolSkillSynchronizer.IsSkillDisabledByToolSettings(
+            bool isDisabled = SkillDisabledToolFilter.IsSkillDisabledByToolSettings(
                 skill,
                 disabledTools);
 

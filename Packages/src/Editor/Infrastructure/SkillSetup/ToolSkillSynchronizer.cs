@@ -187,7 +187,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return await InstallSkillFilesForToolWithDisabledTools(
                 toolName,
                 groupSkillsUnderUnityCliLoop,
-                GetCurrentDisabledTools());
+                SkillDisabledToolFilter.GetCurrentDisabledTools());
         }
 
         internal static async Task<SkillInstallResult> InstallSkillFilesForToolWithDisabledTools(
@@ -240,7 +240,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 List<SkillInstallLayout.SkillSourceInfo> allSkills = SkillInstallLayout.GetSkillSourceInfos(projectRoot);
                 List<SkillInstallLayout.SkillSourceInfo> disabledSkills = allSkills
-                    .Where(skill => IsSkillDisabledByToolSettings(
+                    .Where(skill => SkillDisabledToolFilter.IsSkillDisabledByToolSettings(
                         skill,
                         disabledTools))
                     .ToList();
@@ -284,12 +284,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 List<SkillInstallLayout.SkillSourceInfo> allSkills = SkillInstallLayout.GetSkillSourceInfos(projectRoot);
                 List<SkillInstallLayout.SkillSourceInfo> disabledSkills = allSkills
-                    .Where(skill => IsSkillDisabledByToolSettings(
+                    .Where(skill => SkillDisabledToolFilter.IsSkillDisabledByToolSettings(
                         skill,
                         disabledTools))
                     .ToList();
                 List<SkillInstallLayout.SkillSourceInfo> toolSkills = allSkills
-                    .Where(skill => IsSkillForTool(skill, toolName))
+                    .Where(skill => SkillDisabledToolFilter.IsSkillForTool(skill, toolName))
                     .ToList();
                 if (toolSkills.Count == 0)
                 {
@@ -549,49 +549,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     targetRoot,
                     groupSkillsUnderUnityCliLoop: true);
             }
-        }
-
-        internal static bool IsSkillDisabledByToolSettings(
-            SkillInstallLayout.SkillSourceInfo skill,
-            IReadOnlyCollection<string> disabledTools)
-        {
-            if (disabledTools.Count == 0)
-            {
-                return false;
-            }
-
-            string toolName = GetToolNameForSkill(skill);
-            if (string.IsNullOrEmpty(toolName))
-            {
-                return false;
-            }
-
-            return disabledTools.Contains(toolName);
-        }
-
-        private static string[] GetCurrentDisabledTools()
-        {
-            ToolSettingsRepository repository = new ToolSettingsRepository();
-            return repository.GetDisabledTools();
-        }
-
-        private static bool IsSkillForTool(
-            SkillInstallLayout.SkillSourceInfo skill,
-            string toolName)
-        {
-            string skillToolName = GetToolNameForSkill(skill);
-            return string.Equals(skillToolName, toolName, StringComparison.Ordinal);
-        }
-
-        private static string GetToolNameForSkill(SkillInstallLayout.SkillSourceInfo skill)
-        {
-            string toolName = skill.ToolName;
-            if (string.IsNullOrEmpty(toolName) && skill.Name.StartsWith(CliConstants.SKILL_DIR_PREFIX, StringComparison.Ordinal))
-            {
-                toolName = skill.Name.Substring(CliConstants.SKILL_DIR_PREFIX.Length);
-            }
-
-            return toolName;
         }
 
         private static void DeleteUnexpectedInstalledSkillDirectories(
