@@ -29,7 +29,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         /// <summary>
-        /// Current recovery task. Can be awaited by other components to ensure recovery completes first.
+        /// Current recovery task. Completion signals that recovery activity ended; failures are carried by
+        /// logs and session state so UI awaiters do not need try-catch around this task.
         /// </summary>
         internal Task RecoveryTask => _currentRecoveryTask;
 
@@ -91,7 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (restoreTask.IsCanceled)
             {
-                scheduledRecoveryCompletionSource.SetCanceled();
+                scheduledRecoveryCompletionSource.SetResult(true);
                 return;
             }
 
@@ -103,7 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Debug.LogError($"[{UnityCliLoopConstants.PROJECT_NAME}] {message}");
                 VibeLogger.LogError("server_startup_restore_failed",
                     message);
-                scheduledRecoveryCompletionSource.SetException(restoreTask.Exception.GetBaseException());
+                scheduledRecoveryCompletionSource.SetResult(true);
                 return;
             }
 
@@ -118,14 +119,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Task recoveryTask = ScheduleRecoveryTask(() =>
             {
                 trackedRecoveryTask = ExecuteTrackedRecoveryAsync(recoveryAction);
-                return trackedRecoveryTask;
+                return CreateNonFaultingRecoveryTask(trackedRecoveryTask);
             }, isTrackedRecovery: true);
             if (trackedRecoveryTask != null)
             {
-                _ = ClearTrackedRecoveryWhenCompleteAsync(trackedRecoveryTask);
+                _ = ClearTrackedRecoveryWhenCompleteAsync(recoveryTask);
             }
 
             return recoveryTask;
+        }
+
+        private Task CreateNonFaultingRecoveryTask(Task recoveryTask)
+        {
+            Debug.Assert(recoveryTask != null, "recoveryTask must not be null");
+
+            return recoveryTask.ContinueWith(task =>
+            {
+                if (!task.IsFaulted)
+                {
+                    return;
+                }
+
+                // Why: the public RecoveryTask is an activity-finished signal; the underlying
+                // recovery failure is already logged and must be observed to avoid finalizer noise.
+                _ = task.Exception;
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
 
         private Task ScheduleRecoveryTask(Func<Task> createRecoveryTask, bool isTrackedRecovery)
