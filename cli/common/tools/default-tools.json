@@ -311,11 +311,12 @@
         "properties": {
           "Action": {
             "type": "string",
-            "description": "Action to perform: Play - Start play mode, Stop - Stop play mode, Pause - Pause play mode",
+            "description": "Action to perform: Play - Start play mode, Stop - Stop play mode, Pause - Pause play mode, Step - advance one frame while paused",
             "enum": [
               "Play",
               "Stop",
-              "Pause"
+              "Pause",
+              "Step"
             ],
             "default": "Play"
           },
