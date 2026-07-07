@@ -51,9 +51,8 @@ func findToolForCommandWithInternalToolNames(
 	preferEmbedded bool,
 	collectInternalToolNames func(string) map[string]bool,
 ) (ToolDefinition, ToolsCache, bool, error) {
-	defaultCache := LoadDefaultTools()
-	if tool, ok := FindTool(defaultCache, command); ok {
-		return tool, defaultCache, true, nil
+	if preferEmbedded {
+		return tools.FindForCommand(projectRoot, command, map[string]bool{}, true)
 	}
 
 	return tools.FindForCommand(projectRoot, command, collectInternalToolNames(projectRoot), preferEmbedded)
