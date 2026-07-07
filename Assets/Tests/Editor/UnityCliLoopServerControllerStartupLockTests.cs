@@ -347,6 +347,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void StartRecoveryIfNeededAsync_WhenPartiallyCreatedServerDisposeFails_ShouldSurfaceDisposeFailure()
+        {
+            // Tests that recovery cleanup does not hide a failed partially-created server disposal.
+            using CancellationTokenSource cancellationTokenSource = new();
+            TestServerInstance partiallyCreatedServer = new(
+                throwOnStart: true,
+                throwOnDispose: true,
+                onDispose: cancellationTokenSource.Cancel);
+            TestServerInstanceFactory serverInstanceFactory = new(
+                serverInstance: partiallyCreatedServer);
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                serverInstanceFactory: serverInstanceFactory);
+
+            System.InvalidOperationException exception =
+                Assert.ThrowsAsync<System.InvalidOperationException>(
+                    async () => await service.StartRecoveryIfNeededAsync(
+                        isAfterCompile: false,
+                        cancellationTokenSource.Token));
+
+            Assert.That(exception.Message, Is.EqualTo("dispose failed"));
+        }
+
+        [Test]
         public void StartRecoveryIfNeededAsync_WhenEditorNeverBecomesIdle_ShouldFailWithoutReadinessProbe()
         {
             // Tests that recovery does not hang forever when Unity never leaves compile or update state.
@@ -709,10 +732,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private sealed class TestServerInstanceFactory : IUnityCliLoopServerInstanceFactory
         {
             private readonly bool _throwOnCreate;
+            private readonly TestServerInstance _serverInstance;
 
-            public TestServerInstanceFactory(bool throwOnCreate = false)
+            public TestServerInstanceFactory(
+                bool throwOnCreate = false,
+                TestServerInstance serverInstance = null)
             {
                 _throwOnCreate = throwOnCreate;
+                _serverInstance = serverInstance;
             }
 
             public TestServerInstance LastCreated { get; private set; }
@@ -724,7 +751,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     throw new System.InvalidOperationException("start failed");
                 }
 
-                LastCreated = new TestServerInstance();
+                LastCreated = _serverInstance ?? new TestServerInstance();
                 return LastCreated;
             }
         }
@@ -734,11 +761,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         private sealed class TestServerInstance : IUnityCliLoopServerInstance
         {
+            private readonly bool _throwOnStart;
             private readonly bool _throwOnDispose;
+            private readonly System.Action _onDispose;
 
-            public TestServerInstance(bool throwOnDispose = false)
+            public TestServerInstance(
+                bool throwOnDispose = false,
+                bool throwOnStart = false,
+                System.Action onDispose = null)
             {
+                _throwOnStart = throwOnStart;
                 _throwOnDispose = throwOnDispose;
+                _onDispose = onDispose;
             }
 
             public bool IsRunning { get; private set; }
@@ -747,6 +781,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public void StartServer()
             {
+                if (_throwOnStart)
+                {
+                    throw new System.InvalidOperationException("start failed");
+                }
+
                 IsRunning = true;
             }
 
@@ -757,6 +796,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public void Dispose()
             {
+                _onDispose?.Invoke();
+
                 if (_throwOnDispose)
                 {
                     throw new System.InvalidOperationException("dispose failed");
