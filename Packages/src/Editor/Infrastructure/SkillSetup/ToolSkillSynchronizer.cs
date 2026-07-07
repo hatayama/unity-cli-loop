@@ -65,12 +65,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static readonly string V3MigrationSkillSourceDirectory = Path.Combine(
-            UnityCliLoopConstants.PackageResolvedPath,
-            CliConstants.TEMPORARY_SKILLS_DIR_NAME,
-            CliConstants.V3_CLI_INVOCATION_MIGRATION_SKILL_NAME,
-            "Skill");
-
         public static void RemoveSkillFiles(string toolName)
         {
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
@@ -308,22 +302,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             SkillTargetInfo target,
             bool groupSkillsUnderUnityCliLoop)
         {
-            SkillInstallLayout.SkillSourceInfo skill = GetV3MigrationSkillSourceInfo();
-            SkillInstallState preferredLayoutState = GetSkillInstallStateAtProjectRoot(
+            return V3MigrationSkillInstaller.GetV3MigrationSkillInstallStateAtProjectRoot(
                 projectRoot,
                 target,
-                skill,
                 groupSkillsUnderUnityCliLoop);
-            if (preferredLayoutState != SkillInstallState.Missing)
-            {
-                return preferredLayoutState;
-            }
-
-            return GetSkillInstallStateAtProjectRoot(
-                projectRoot,
-                target,
-                skill,
-                !groupSkillsUnderUnityCliLoop);
         }
 
         internal static async Task<SkillInstallResult> InstallV3MigrationSkillFilesAtProjectRoot(
@@ -331,11 +313,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             IEnumerable<SkillTargetInfo> targets,
             bool groupSkillsUnderUnityCliLoop)
         {
-            SkillInstallLayout.SkillSourceInfo skill = GetV3MigrationSkillSourceInfo();
-            return await InstallSpecificSkillFilesAtProjectRoot(
+            return await V3MigrationSkillInstaller.InstallV3MigrationSkillFilesAtProjectRoot(
                 projectRoot,
                 targets,
-                skill,
                 groupSkillsUnderUnityCliLoop);
         }
 
@@ -344,112 +324,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             IEnumerable<SkillTargetInfo> targets,
             bool groupSkillsUnderUnityCliLoop)
         {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-            Debug.Assert(targets != null, "targets must not be null");
-
-            SkillInstallLayout.SkillSourceInfo skill = GetV3MigrationSkillSourceInfo();
-            SkillTargetInfo[] targetArray = targets.ToArray();
-            return await Task.Run(() =>
-            {
-                int succeeded = 0;
-                foreach (SkillTargetInfo target in targetArray)
-                {
-                    string targetRoot = Path.Combine(projectRoot, target.DirName);
-                    SkillTargetInstaller.DeleteSkillDirectoryIfExists(
-                        targetRoot,
-                        skill.Name,
-                        groupSkillsUnderUnityCliLoop);
-                    SkillTargetInstaller.DeleteSkillDirectoryIfExists(
-                        targetRoot,
-                        skill.Name,
-                        !groupSkillsUnderUnityCliLoop);
-                    succeeded++;
-                }
-
-                return new SkillInstallResult(targetArray.Length, succeeded);
-            });
-        }
-
-        internal static SkillInstallState GetSkillInstallStateAtProjectRoot(
-            string projectRoot,
-            SkillTargetInfo target,
-            SkillInstallLayout.SkillSourceInfo skill,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-            Debug.Assert(!string.IsNullOrEmpty(target.DirName), "target dir name must not be null or empty");
-
-            string targetRoot = Path.Combine(projectRoot, target.DirName);
-            if (!Directory.Exists(targetRoot))
-            {
-                return SkillInstallState.Missing;
-            }
-
-            return SkillInstallLayout.GetInstalledStateForSkillSource(
-                targetRoot,
-                skill,
+            return await V3MigrationSkillInstaller.RemoveV3MigrationSkillFilesAtProjectRoot(
+                projectRoot,
+                targets,
                 groupSkillsUnderUnityCliLoop);
-        }
-
-        internal static async Task<SkillInstallResult> InstallSpecificSkillFilesAtProjectRoot(
-            string projectRoot,
-            IEnumerable<SkillTargetInfo> targets,
-            SkillInstallLayout.SkillSourceInfo skill,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-            Debug.Assert(targets != null, "targets must not be null");
-
-            SkillTargetInfo[] targetArray = targets.ToArray();
-            return await Task.Run(() =>
-            {
-                int succeeded = 0;
-                foreach (SkillTargetInfo target in targetArray)
-                {
-                    SkillTargetInstaller.InstallSpecificSkillsForTarget(
-                        projectRoot,
-                        target,
-                        Array.Empty<SkillInstallLayout.SkillSourceInfo>(),
-                        new[] { skill },
-                        groupSkillsUnderUnityCliLoop);
-                    succeeded++;
-                }
-
-                return new SkillInstallResult(targetArray.Length, succeeded);
-            });
-        }
-
-        internal static async Task<SkillInstallResult> RemoveSpecificSkillFilesAtProjectRoot(
-            string projectRoot,
-            IEnumerable<SkillTargetInfo> targets,
-            string skillName,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-            Debug.Assert(targets != null, "targets must not be null");
-            Debug.Assert(!string.IsNullOrEmpty(skillName), "skillName must not be null or empty");
-
-            SkillTargetInfo[] targetArray = targets.ToArray();
-            return await Task.Run(() =>
-            {
-                int succeeded = 0;
-                foreach (SkillTargetInfo target in targetArray)
-                {
-                    string targetRoot = Path.Combine(projectRoot, target.DirName);
-                    SkillTargetInstaller.DeleteSkillDirectoryIfExists(
-                        targetRoot,
-                        skillName,
-                        groupSkillsUnderUnityCliLoop);
-                    succeeded++;
-                }
-
-                return new SkillInstallResult(targetArray.Length, succeeded);
-            });
-        }
-
-        private static SkillInstallLayout.SkillSourceInfo GetV3MigrationSkillSourceInfo()
-        {
-            return SkillInstallLayout.GetSkillSourceInfoFromDirectory(V3MigrationSkillSourceDirectory);
         }
 
     }

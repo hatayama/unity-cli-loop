@@ -1702,7 +1702,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 });
 
             ToolSkillSynchronizer.SkillInstallResult result =
-                await ToolSkillSynchronizer.InstallSpecificSkillFilesAtProjectRoot(
+                await V3MigrationSkillInstaller.InstallSpecificSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
                     skill,
@@ -1713,7 +1713,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ".codex",
                 SkillInstallLayout.SkillsDirName,
                 CliConstants.V3_CLI_INVOCATION_MIGRATION_SKILL_NAME);
-            SkillInstallState installState = ToolSkillSynchronizer.GetSkillInstallStateAtProjectRoot(
+            SkillInstallState installState = V3MigrationSkillInstaller.GetSkillInstallStateAtProjectRoot(
                 temporaryRoot,
                 target,
                 skill,
@@ -1738,12 +1738,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 hasExistingSkills: false);
 
             ToolSkillSynchronizer.SkillInstallResult result =
-                await ToolSkillSynchronizer.InstallV3MigrationSkillFilesAtProjectRoot(
+                await V3MigrationSkillInstaller.InstallV3MigrationSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
                     groupSkillsUnderUnityCliLoop: true);
 
-            SkillInstallState installState = ToolSkillSynchronizer.GetV3MigrationSkillInstallStateAtProjectRoot(
+            SkillInstallState installState = V3MigrationSkillInstaller.GetV3MigrationSkillInstallStateAtProjectRoot(
                 temporaryRoot,
                 target,
                 groupSkillsUnderUnityCliLoop: false);
@@ -1770,7 +1770,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 groupSkillsUnderUnityCliLoop: false);
             Directory.CreateDirectory(Path.Combine(migrationSkillDir, "references"));
 
-            SkillInstallState installState = ToolSkillSynchronizer.GetV3MigrationSkillInstallStateAtProjectRoot(
+            SkillInstallState installState = V3MigrationSkillInstaller.GetV3MigrationSkillInstallStateAtProjectRoot(
                 temporaryRoot,
                 target,
                 groupSkillsUnderUnityCliLoop: false);
@@ -1802,7 +1802,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             WriteSkillFile(unrelatedSkillDir, "---\nname: uloop-compile\n---\n");
 
             ToolSkillSynchronizer.SkillInstallResult result =
-                await ToolSkillSynchronizer.RemoveSpecificSkillFilesAtProjectRoot(
+                await V3MigrationSkillInstaller.RemoveSpecificSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
                     CliConstants.V3_CLI_INVOCATION_MIGRATION_SKILL_NAME,
@@ -1842,7 +1842,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             WriteSkillFile(unrelatedSkillDir, "---\nname: uloop-compile\n---\n");
 
             ToolSkillSynchronizer.SkillInstallResult result =
-                await ToolSkillSynchronizer.RemoveV3MigrationSkillFilesAtProjectRoot(
+                await V3MigrationSkillInstaller.RemoveV3MigrationSkillFilesAtProjectRoot(
                     temporaryRoot,
                     new[] { target },
                     groupSkillsUnderUnityCliLoop: false);
