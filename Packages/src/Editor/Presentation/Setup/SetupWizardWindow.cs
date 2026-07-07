@@ -431,9 +431,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ScheduleResizeToContent();
         }
 
-        private async void RefreshUI(bool refreshSkillsSection = true)
+        private void RefreshUI(bool refreshSkillsSection = true)
+        {
+            RefreshUIAsync(refreshSkillsSection, CancellationToken.None).Forget();
+        }
+
+        private async Task RefreshUIAsync(
+            bool refreshSkillsSection,
+            CancellationToken ct)
         {
             CancelSkillInstallStateRefresh();
+            ct.ThrowIfCancellationRequested();
             RefreshAutoShowToggle();
             ViewDataBinder.SetVisible(_nodejsWarning, false);
             ViewDataBinder.SetVisible(_nodejsOk, false);
@@ -446,17 +454,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             await Task.Yield();
+            ct.ThrowIfCancellationRequested();
 
             ViewDataBinder.SetVisible(_nodejsWarning, false);
             ViewDataBinder.SetVisible(_nodejsOk, false);
 
-            await _cliSetupApplicationService.ForceRefreshCliVersionAsync(CancellationToken.None);
+            await _cliSetupApplicationService.ForceRefreshCliVersionAsync(ct);
             string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
             bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             string requiredCliVersion = GetMinimumRequiredCliVersion();
             bool cliInstalled = IsCliInstalled(cliVersion);
-            _needsCliPathSetup = await ShouldRepairCliPathSetupAsync(CancellationToken.None);
+            _needsCliPathSetup = await ShouldRepairCliPathSetupAsync(ct);
 
             _cliStepPresenter.Update(
                 cliInstalled,
@@ -500,10 +509,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             CancellationTokenSource cts = new();
             _skillInstallStateRefreshCts = cts;
-            RefreshDisplayedSkillTargetsAsync(cts.Token);
+            RefreshDisplayedSkillTargetsAsync(cts.Token).Forget();
         }
 
-        private async void RefreshDisplayedSkillTargetsAsync(CancellationToken ct)
+        private async Task RefreshDisplayedSkillTargetsAsync(CancellationToken ct)
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             List<SkillSetupTargetInfo> targets =
@@ -608,9 +617,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _isInstallingSkills);
         }
 
-        private async void HandleInstallCli()
+        private void HandleInstallCli()
         {
-            await RefreshCliPrimaryActionStateAsync(CancellationToken.None);
+            HandleInstallCliAsync(CancellationToken.None).Forget();
+        }
+
+        private async Task HandleInstallCliAsync(CancellationToken ct)
+        {
+            await RefreshCliPrimaryActionStateAsync(ct);
 
             string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
             bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
@@ -619,7 +633,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliIsDispatcher);
             if (ShouldRepairCliPathFromPrimaryButton(_needsCliPathSetup, state.NeedsUpdate))
             {
-                await HandleRepairCliPathSetup();
+                await HandleRepairCliPathSetup(ct);
                 return;
             }
 
@@ -638,7 +652,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 CliInstallResult result = await _cliSetupApplicationService.InstallGlobalCliAsync(
                     UnityEngine.Application.platform,
-                    CancellationToken.None);
+                    ct);
 
                 if (!result.Success)
                 {
@@ -656,8 +670,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 await CliPathSetupPrompt.EnsureVisibleAndShowResultAsync(
                     UnityEngine.Application.platform,
                     _cliSetupApplicationService,
-                    CancellationToken.None);
-                _needsCliPathSetup = await ShouldRepairCliPathSetupAsync(CancellationToken.None);
+                    ct);
+                _needsCliPathSetup = await ShouldRepairCliPathSetupAsync(ct);
             }
             finally
             {
@@ -704,7 +718,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return CliSetupPrimaryActionPolicy.ShouldRepairCliPath(needsCliPathSetup, needsUpdate);
         }
 
-        private async Task HandleRepairCliPathSetup()
+        private async Task HandleRepairCliPathSetup(CancellationToken ct)
         {
             _isInstallingCli = true;
             _cliStepPresenter.Update(
@@ -720,8 +734,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 await CliPathSetupPrompt.EnsureVisibleAndShowResultAsync(
                     UnityEngine.Application.platform,
                     _cliSetupApplicationService,
-                    CancellationToken.None);
-                _needsCliPathSetup = await ShouldRepairCliPathSetupAsync(CancellationToken.None);
+                    ct);
+                _needsCliPathSetup = await ShouldRepairCliPathSetupAsync(ct);
             }
             finally
             {
@@ -730,7 +744,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
         }
 
-        private async void HandleInstallSkills()
+        private void HandleInstallSkills()
+        {
+            HandleInstallSkillsAsync(CancellationToken.None).Forget();
+        }
+
+        private async Task HandleInstallSkillsAsync(CancellationToken ct)
         {
             CancelSkillInstallStateRefresh();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
@@ -752,7 +771,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 await _skillSetupUseCase.InstallSkillFilesAsync(
                     installableTargets,
                     !_installSkillsFlat,
-                    CancellationToken.None);
+                    ct);
                 if (shouldShowSkillsInstalledDialog)
                 {
                     EditorDialogHelper.ShowSkillsInstalledDialog();
