@@ -71,19 +71,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             },
             {
                 "Packages/src/Editor/Infrastructure/CLI/NativeCliInstaller.cs",
-                new[] { "BuildInstallCommand" }
+                new[] { "BuildRemoteInstallCommand", "BuildInstallCommandWithPackagePath" }
             },
             {
                 "Packages/src/Editor/Infrastructure/SkillSetup/SkillInstallLayout.cs",
-                new[] { "HasInstalledSkills" }
+                new[] { "HasInstalledSkillsInAnyLayout", "HasInstalledSkillsForLayout" }
             },
             {
                 "Packages/src/Editor/Infrastructure/SkillSetup/SkillInstallationDetector.cs",
-                new[] { "AreSkillsInstalled" }
+                new[]
+                {
+                    "AreSkillsInstalledInCurrentProject",
+                    "AreSkillsInstalledInCurrentProjectForLayout",
+                    "AreSkillsInstalledInAnyLayout",
+                    "AreSkillsInstalledForLayout"
+                }
             },
             {
                 "Packages/src/Editor/Presentation/UnityCliLoopSettingsWindow.cs",
-                new[] { "GetSelectedTargetInstallState" }
+                new[] { "GetSelectedTargetInstallStateForCurrentProject", "GetSelectedTargetInstallStateAtProjectRoot" }
             }
         };
 
@@ -466,6 +472,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         $@"\b(?:public|internal|private|protected)\s+(?:static\s+)?(?:async\s+)?[A-Za-z0-9_<>,\.\[\]\?]+\s+{methodName}\s*\(",
                         RegexOptions.Compiled);
                     MatchCollection matches = declarationPattern.Matches(source);
+                    if (matches.Count == 0)
+                    {
+                        violations.Add($"{target.Key}:0: missing guard target {methodName}");
+                        continue;
+                    }
+
                     if (matches.Count <= 1)
                     {
                         continue;
