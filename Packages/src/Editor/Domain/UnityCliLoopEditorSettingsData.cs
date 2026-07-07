@@ -1,17 +1,14 @@
-using System;
-
 namespace io.github.hatayama.UnityCliLoop.Domain
 {
-    [Serializable]
     public record UnityCliLoopEditorSettingsData
     {
-        public bool showDeveloperTools = false;
-        public string lastSeenSetupWizardVersion = "";
-        public string lastSeenSetupWizardMinimumDispatcherVersion = "";
-        public bool suppressSetupWizardAutoShow = false;
-        public bool legacySetupWizardStateMigrated = false;
-        public bool showUnityCliLoopSecuritySetting = true;
-        public bool showToolSettings = true;
-        public bool installSkillsFlat = true;
+        public bool showDeveloperTools { get; init; } = false;
+        public string lastSeenSetupWizardVersion { get; init; } = "";
+        public string lastSeenSetupWizardMinimumDispatcherVersion { get; init; } = "";
+        public bool suppressSetupWizardAutoShow { get; init; } = false;
+        public bool legacySetupWizardStateMigrated { get; init; } = false;
+        public bool showUnityCliLoopSecuritySetting { get; init; } = true;
+        public bool showToolSettings { get; init; } = true;
+        public bool installSkillsFlat { get; init; } = true;
     }
 }
