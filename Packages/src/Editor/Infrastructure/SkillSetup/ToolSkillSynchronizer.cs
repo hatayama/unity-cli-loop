@@ -21,20 +21,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public static class ToolSkillSynchronizer
     {
-        public readonly struct SkillTargetDefinition
-        {
-            public readonly string DirName;
-            public readonly string Flag;
-            public readonly string DisplayName;
-
-            public SkillTargetDefinition(string dirName, string flag, string displayName)
-            {
-                DirName = dirName;
-                Flag = flag;
-                DisplayName = displayName;
-            }
-        }
-
         public readonly struct SkillInstallResult
         {
             public readonly int AttemptedTargets;
@@ -79,16 +65,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static readonly SkillTargetDefinition[] SkillTargets =
-        {
-            new(".claude", "--claude", "Claude Code"),
-            new(".cursor", "--cursor", "Cursor"),
-            new(".gemini", "--gemini", "Gemini CLI"),
-            new(".codex", "--codex", "Codex CLI"),
-            new(".agents", "--agents", "Other (.agents)"),
-            new(".agent", "--antigravity", "Antigravity")
-        };
-
         private static readonly string[] DeprecatedSkillNames =
         {
             "uloop-capture-window",
@@ -104,8 +80,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CliConstants.V3_CLI_INVOCATION_MIGRATION_SKILL_NAME,
             "Skill");
 
-        internal static readonly string[] SkillTargetDirs = SkillTargets.Select(t => t.DirName).ToArray();
-
         public static void RemoveSkillFiles(string toolName)
         {
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
@@ -119,7 +93,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(!string.IsNullOrEmpty(toolName), "toolName must not be null or empty");
 
-            foreach (string targetDir in SkillTargetDirs)
+            foreach (string targetDir in SkillTargetDetector.SkillTargetDirs)
             {
                 string targetRoot = Path.Combine(projectRoot, targetDir);
                 if (!Directory.Exists(targetRoot))
@@ -144,7 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
 
-            foreach (string targetDir in SkillTargetDirs)
+            foreach (string targetDir in SkillTargetDetector.SkillTargetDirs)
             {
                 string targetRoot = Path.Combine(projectRoot, targetDir);
                 if (!Directory.Exists(targetRoot))
@@ -186,7 +160,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            return DetectTargetsForLayoutStateAtProjectRoot(
+            return SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                 projectRoot,
                 requireSkillsDirectory: false,
                 groupSkillsUnderUnityCliLoop,
@@ -199,119 +173,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            return DetectTargetsForLayoutStateAtProjectRoot(
+            return SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                 projectRoot,
                 requireSkillsDirectory: false,
                 groupSkillsUnderUnityCliLoop,
                 includeFreshnessCheck: false);
-        }
-
-        internal static List<SkillTargetInfo> DetectTargetsAcrossLayoutsAtProjectRoot(
-            string projectRoot,
-            bool requireSkillsDirectory)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            List<SkillTargetInfo> targets = new();
-
-            foreach (SkillTargetDefinition target in SkillTargets)
-            {
-                string targetRoot = Path.Combine(projectRoot, target.DirName);
-                if (!Directory.Exists(targetRoot))
-                {
-                    continue;
-                }
-
-                bool hasSkillsDirectory = SkillInstallLayout.HasOptedInSkillsDirectory(targetRoot);
-                if (requireSkillsDirectory && !hasSkillsDirectory)
-                {
-                    continue;
-                }
-
-                bool hasULoopSkills = hasSkillsDirectory
-                    && SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot);
-                targets.Add(new SkillTargetInfo(
-                    target.DisplayName,
-                    target.DirName,
-                    target.Flag,
-                    hasSkillsDirectory,
-                    hasULoopSkills,
-                    installState: hasULoopSkills
-                        ? SkillInstallState.Installed
-                        : SkillInstallState.Missing));
-            }
-
-            return targets;
-        }
-
-        internal static List<SkillTargetInfo> DetectTargetsForLayoutStateAtProjectRoot(
-            string projectRoot,
-            bool requireSkillsDirectory,
-            bool groupSkillsUnderUnityCliLoop,
-            bool includeFreshnessCheck)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            List<SkillTargetInfo> targets = new();
-
-            foreach (SkillTargetDefinition target in SkillTargets)
-            {
-                string targetRoot = Path.Combine(projectRoot, target.DirName);
-                if (!Directory.Exists(targetRoot))
-                {
-                    continue;
-                }
-
-                bool hasSkillsDirectory = SkillInstallLayout.HasOptedInSkillsDirectory(targetRoot);
-                if (requireSkillsDirectory && !hasSkillsDirectory)
-                {
-                    continue;
-                }
-
-                SkillInstallState installState = ResolveInstallState(
-                    projectRoot,
-                    targetRoot,
-                    hasSkillsDirectory,
-                    groupSkillsUnderUnityCliLoop,
-                    includeFreshnessCheck);
-                bool hasULoopSkills = installState == SkillInstallState.Installed
-                    || installState == SkillInstallState.Checking
-                    || installState == SkillInstallState.Outdated;
-                bool hasDifferentLayoutSkills = hasSkillsDirectory
-                    && SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot, !groupSkillsUnderUnityCliLoop);
-                targets.Add(new SkillTargetInfo(
-                    target.DisplayName,
-                    target.DirName,
-                    target.Flag,
-                    hasSkillsDirectory,
-                    hasULoopSkills,
-                    hasDifferentLayoutSkills,
-                    installState));
-            }
-
-            return targets;
-        }
-
-        private static SkillInstallState ResolveInstallState(
-            string projectRoot,
-            string targetRoot,
-            bool hasSkillsDirectory,
-            bool groupSkillsUnderUnityCliLoop,
-            bool includeFreshnessCheck)
-        {
-            if (!hasSkillsDirectory)
-            {
-                return SkillInstallState.Missing;
-            }
-
-            if (!includeFreshnessCheck)
-            {
-                return SkillInstallLayout.HasInstalledSkills(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop)
-                    ? SkillInstallState.Checking
-                    : SkillInstallState.Missing;
-            }
-
-            return SkillInstallLayout.GetInstalledState(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop);
         }
 
         public static async Task<SkillInstallResult> InstallSkillFilesForTool(
@@ -413,7 +279,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return new SkillInstallResult(0, 0);
             }
 
-            SkillTargetInfo[] targetArray = DetectTargetsWithSkillsDirectory(projectRoot).ToArray();
+            SkillTargetInfo[] targetArray = SkillTargetDetector.DetectTargetsWithSkillsDirectory(projectRoot).ToArray();
             return await Task.Run(() =>
             {
                 List<SkillInstallLayout.SkillSourceInfo> allSkills = SkillInstallLayout.GetSkillSourceInfos(projectRoot);
@@ -726,34 +592,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return toolName;
-        }
-
-        private static List<SkillTargetInfo> DetectTargetsWithSkillsDirectory(string projectRoot)
-        {
-            List<SkillTargetInfo> targets = new();
-            foreach (SkillTargetDefinition target in SkillTargets)
-            {
-                string targetRoot = Path.Combine(projectRoot, target.DirName);
-                if (!Directory.Exists(targetRoot))
-                {
-                    continue;
-                }
-
-                bool hasSkillsDirectory = SkillInstallLayout.HasOptedInSkillsDirectory(targetRoot);
-                if (!hasSkillsDirectory)
-                {
-                    continue;
-                }
-
-                targets.Add(new SkillTargetInfo(
-                    target.DisplayName,
-                    target.DirName,
-                    target.Flag,
-                    hasSkillsDirectory,
-                    hasExistingSkills: false));
-            }
-
-            return targets;
         }
 
         private static void DeleteUnexpectedInstalledSkillDirectories(

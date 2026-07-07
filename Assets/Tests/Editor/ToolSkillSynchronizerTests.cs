@@ -37,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _toolSettingsFileExisted = File.Exists(ToolSettingsFilePath);
             _toolSettingsFileContent = _toolSettingsFileExisted ? File.ReadAllText(ToolSettingsFilePath) : null;
 
-            _nonExistentDirsBefore = ToolSkillSynchronizer.SkillTargetDirs
+            _nonExistentDirsBefore = SkillTargetDetector.SkillTargetDirs
                 .Where(dir => !Directory.Exists(Path.Combine(_projectRoot, dir)))
                 .ToArray();
             _temporaryRoots = new string[0];
@@ -86,7 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             // Act
             List<ToolSkillSynchronizer.SkillTargetInfo> targets =
-                ToolSkillSynchronizer.DetectTargetsAcrossLayoutsAtProjectRoot(_projectRoot, requireSkillsDirectory: true);
+                SkillTargetDetector.DetectTargetsAcrossLayoutsAtProjectRoot(_projectRoot, requireSkillsDirectory: true);
             await ToolSkillSynchronizer.InstallSkillFiles(
                 targets,
                 groupSkillsUnderUnityCliLoop: false,
@@ -652,18 +652,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Arrange
             string temporaryRoot = CreateTemporaryProjectRoot();
-            foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
+            foreach (string dir in SkillTargetDetector.SkillTargetDirs)
             {
                 Directory.CreateDirectory(Path.Combine(temporaryRoot, dir));
             }
 
             // Act
-            string[] detectedTargetDirs = ToolSkillSynchronizer.DetectTargetsAcrossLayoutsAtProjectRoot(temporaryRoot, requireSkillsDirectory: true)
+            string[] detectedTargetDirs = SkillTargetDetector.DetectTargetsAcrossLayoutsAtProjectRoot(temporaryRoot, requireSkillsDirectory: true)
                 .Select(target => target.DirName)
                 .ToArray();
 
             // Assert
-            foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
+            foreach (string dir in SkillTargetDetector.SkillTargetDirs)
             {
                 Assert.IsFalse(detectedTargetDirs.Contains(dir),
                     $"Target '{dir}' should not be detected when only the parent directory exists");
@@ -674,17 +674,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void DetectTargets_WhenParentDirectoryExists_ReportsTargetAsNotOptedIn()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
-            foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
+            foreach (string dir in SkillTargetDetector.SkillTargetDirs)
             {
                 Directory.CreateDirectory(Path.Combine(temporaryRoot, dir));
             }
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsAcrossLayoutsAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsAcrossLayoutsAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: false)
                 .ToArray();
 
-            Assert.AreEqual(ToolSkillSynchronizer.SkillTargetDirs.Length, detectedTargets.Length);
+            Assert.AreEqual(SkillTargetDetector.SkillTargetDirs.Length, detectedTargets.Length);
             foreach (ToolSkillSynchronizer.SkillTargetInfo target in detectedTargets)
             {
                 Assert.IsNotEmpty(target.InstallFlag,
@@ -701,17 +701,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Arrange
             string temporaryRoot = CreateTemporaryProjectRoot();
-            foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
+            foreach (string dir in SkillTargetDetector.SkillTargetDirs)
             {
                 Directory.CreateDirectory(Path.Combine(temporaryRoot, dir, SkillInstallLayout.SkillsDirName));
             }
 
             // Act
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsAcrossLayoutsAtProjectRoot(temporaryRoot, requireSkillsDirectory: true)
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsAcrossLayoutsAtProjectRoot(temporaryRoot, requireSkillsDirectory: true)
                 .ToArray();
 
             // Assert
-            Assert.AreEqual(ToolSkillSynchronizer.SkillTargetDirs.Length, detectedTargets.Length,
+            Assert.AreEqual(SkillTargetDetector.SkillTargetDirs.Length, detectedTargets.Length,
                 "Targets with a skills directory should be detected");
 
             foreach (ToolSkillSynchronizer.SkillTargetInfo target in detectedTargets)
@@ -731,7 +731,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             ToolSkillSynchronizer.RemoveSkillFilesAtProjectRoot(temporaryRoot, testToolName);
 
-            foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
+            foreach (string dir in SkillTargetDetector.SkillTargetDirs)
             {
                 string fullPath = Path.Combine(temporaryRoot, dir);
                 Assert.IsFalse(Directory.Exists(fullPath),
@@ -762,7 +762,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
             CreateFakeSourceSkill(temporaryRoot, "uloop-compile", "CompileTool", "reference.md", "reference");
-            foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
+            foreach (string dir in SkillTargetDetector.SkillTargetDirs)
             {
                 string targetRoot = Path.Combine(temporaryRoot, dir);
                 WriteSkillFile(Path.Combine(
@@ -772,12 +772,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "uloop-compile"));
             }
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsAcrossLayoutsAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsAcrossLayoutsAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true)
                 .ToArray();
 
-            Assert.AreEqual(ToolSkillSynchronizer.SkillTargetDirs.Length, detectedTargets.Length);
+            Assert.AreEqual(SkillTargetDetector.SkillTargetDirs.Length, detectedTargets.Length);
             foreach (ToolSkillSynchronizer.SkillTargetInfo target in detectedTargets)
             {
                 Assert.IsTrue(target.HasExistingSkills,
@@ -789,13 +789,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void DetectTargets_WhenGroupedLayoutRequested_IgnoresFlatInstalledSkills()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
-            foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
+            foreach (string dir in SkillTargetDetector.SkillTargetDirs)
             {
                 string targetRoot = Path.Combine(temporaryRoot, dir);
                 WriteSkillFile(Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName, "uloop-compile"));
             }
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsForLayoutStateAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
@@ -818,7 +818,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string targetRoot = Path.Combine(temporaryRoot, ".cursor");
             Directory.CreateDirectory(Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName, "uloop-compile"));
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsForLayoutStateAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
@@ -837,7 +837,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
             CreateFakeSourceSkill(temporaryRoot, "uloop-compile", "CompileTool", "reference.md", "reference");
-            foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
+            foreach (string dir in SkillTargetDetector.SkillTargetDirs)
             {
                 string targetRoot = Path.Combine(temporaryRoot, dir);
                 WriteSkillFile(Path.Combine(
@@ -847,7 +847,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "uloop-compile"));
             }
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsForLayoutStateAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: false,
@@ -867,7 +867,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void DetectTargets_WhenLegacyThirdPartySkillsExist_ReportsInstalled()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
-            foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
+            foreach (string dir in SkillTargetDetector.SkillTargetDirs)
             {
                 string targetRoot = Path.Combine(temporaryRoot, dir);
                 WriteSkillFile(
@@ -875,12 +875,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "---\nname: acme-third-party\ntoolName: acme-third-party\n---\n");
             }
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsAcrossLayoutsAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsAcrossLayoutsAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true)
                 .ToArray();
 
-            Assert.AreEqual(ToolSkillSynchronizer.SkillTargetDirs.Length, detectedTargets.Length);
+            Assert.AreEqual(SkillTargetDetector.SkillTargetDirs.Length, detectedTargets.Length);
             foreach (ToolSkillSynchronizer.SkillTargetInfo target in detectedTargets)
             {
                 Assert.IsTrue(target.HasExistingSkills,
@@ -892,7 +892,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void DetectTargets_WhenOnlyGroupedThirdPartySkillsExist_DoesNotReportInstalled()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
-            foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
+            foreach (string dir in SkillTargetDetector.SkillTargetDirs)
             {
                 string targetRoot = Path.Combine(temporaryRoot, dir);
                 WriteSkillFile(
@@ -904,14 +904,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "---\nname: acme-third-party\ntoolName: acme-third-party\n---\n");
             }
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsForLayoutStateAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
                     includeFreshnessCheck: true)
                 .ToArray();
 
-            Assert.AreEqual(ToolSkillSynchronizer.SkillTargetDirs.Length, detectedTargets.Length);
+            Assert.AreEqual(SkillTargetDetector.SkillTargetDirs.Length, detectedTargets.Length);
             foreach (ToolSkillSynchronizer.SkillTargetInfo target in detectedTargets)
             {
                 Assert.IsFalse(target.HasExistingSkills,
@@ -923,7 +923,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void DetectTargets_WhenOnlyManualLegacySkillsExist_DoesNotReportInstalled()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
-            foreach (string dir in ToolSkillSynchronizer.SkillTargetDirs)
+            foreach (string dir in SkillTargetDetector.SkillTargetDirs)
             {
                 string targetRoot = Path.Combine(temporaryRoot, dir);
                 WriteSkillFile(
@@ -931,12 +931,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "---\nname: find-orphaned-meta\n---\n");
             }
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsAcrossLayoutsAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsAcrossLayoutsAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true)
                 .ToArray();
 
-            Assert.AreEqual(ToolSkillSynchronizer.SkillTargetDirs.Length, detectedTargets.Length);
+            Assert.AreEqual(SkillTargetDetector.SkillTargetDirs.Length, detectedTargets.Length);
             foreach (ToolSkillSynchronizer.SkillTargetInfo target in detectedTargets)
             {
                 Assert.IsFalse(target.HasExistingSkills,
@@ -975,7 +975,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             WriteSkillFile(installedSkillDir, "---\nname: uloop-cached-skill\n---\n");
             File.WriteAllText(Path.Combine(installedSkillDir, "reference.md"), "reference");
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsForLayoutStateAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
@@ -1072,7 +1072,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "uloop-fake-skill",
                 "reference.md"), "reference");
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsForLayoutStateAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
@@ -1099,7 +1099,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             WriteSkillFile(installedSkillDir, "---\nname: uloop-fake-skill\n---\nchanged");
             File.WriteAllText(Path.Combine(installedSkillDir, "reference.md"), "reference");
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsForLayoutStateAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
@@ -1133,7 +1133,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             WriteSkillFile(installedSkillDir, "---\nname: uloop-public-skill\n---\n");
             File.WriteAllText(Path.Combine(installedSkillDir, "reference.md"), "reference");
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsForLayoutStateAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
@@ -1336,7 +1336,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             WriteSkillFile(installedSkillDir, "---\nname: uloop-public-skill\n---\n");
             File.WriteAllText(Path.Combine(installedSkillDir, "reference.md"), "reference");
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsForLayoutStateAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
@@ -1369,7 +1369,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             File.WriteAllText(Path.Combine(installedSkillDir, "reference.md"), "reference");
             File.WriteAllText(Path.Combine(installedSkillDir, "stale.md"), "stale");
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsForLayoutStateAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
@@ -1402,7 +1402,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             WriteSkillFile(installedSkillDir, "---\r\nname: uloop-public-skill\r\n---\r\n");
             File.WriteAllText(Path.Combine(installedSkillDir, "reference.md"), "line1\r\nline2\r\n");
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsForLayoutStateAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
@@ -1522,7 +1522,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "uloop-execute-menu-item");
             WriteSkillFile(executeMenuItemSkillDir, "---\nname: uloop-execute-menu-item\n---\n");
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsForLayoutStateAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
@@ -1641,7 +1641,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ".claude",
                 SkillInstallLayout.SkillsDirName));
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsForLayoutStateAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
@@ -1669,7 +1669,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ".claude",
                 SkillInstallLayout.SkillsDirName));
 
-            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargetsForLayoutStateAtProjectRoot(
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
                     groupSkillsUnderUnityCliLoop: true,
