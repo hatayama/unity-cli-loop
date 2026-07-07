@@ -17,6 +17,11 @@ func IsLessThan(left string, right string) bool {
 	return ok && result < 0
 }
 
+func IsValid(value string) bool {
+	_, ok := parseSemanticVersion(value)
+	return ok
+}
+
 func Compare(left string, right string) (int, bool) {
 	leftVersion, leftOK := parseSemanticVersion(left)
 	rightVersion, rightOK := parseSemanticVersion(right)
@@ -38,7 +43,10 @@ func Compare(left string, right string) (int, bool) {
 
 func parseSemanticVersion(value string) (semanticVersion, bool) {
 	trimmed := trimVersionPrefix(value)
-	withoutBuildMetadata, _, _ := strings.Cut(trimmed, "+")
+	withoutBuildMetadata, buildMetadata, hasBuildMetadata := strings.Cut(trimmed, "+")
+	if hasBuildMetadata && !isValidBuildMetadata(buildMetadata) {
+		return semanticVersion{}, false
+	}
 	versionPart, prerelease, hasPrerelease := strings.Cut(withoutBuildMetadata, "-")
 	parts := strings.Split(versionPart, ".")
 	if len(parts) != 3 {
@@ -95,6 +103,14 @@ func parseVersionPart(value string) (int, bool) {
 }
 
 func isValidPrerelease(value string) bool {
+	return isValidSemanticIdentifierList(value, true)
+}
+
+func isValidBuildMetadata(value string) bool {
+	return isValidSemanticIdentifierList(value, false)
+}
+
+func isValidSemanticIdentifierList(value string, rejectLeadingZeroNumericIdentifiers bool) bool {
 	if value == "" {
 		return false
 	}
@@ -105,7 +121,7 @@ func isValidPrerelease(value string) bool {
 		if !containsOnlyPrereleaseCharacters(identifier) {
 			return false
 		}
-		if containsOnlyDigits(identifier) && hasLeadingZero(identifier) {
+		if rejectLeadingZeroNumericIdentifiers && containsOnlyDigits(identifier) && hasLeadingZero(identifier) {
 			return false
 		}
 	}

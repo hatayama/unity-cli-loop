@@ -758,11 +758,37 @@ func TestLoadDispatcherPinRejectsInvalidProjectRunnerVersion(t *testing.T) {
 	}
 }
 
+func TestLoadDispatcherPinRejectsProjectRunnerVersionWithInvalidBuildMetadata(t *testing.T) {
+	// Verifies project pin build metadata cannot smuggle path segments through semver validation.
+	projectRoot := createDispatcherUnityProject(t)
+	pinPath := filepath.Join(projectRoot, dispatcherProjectPinRelativePath)
+	writeDispatcherPinFileWithMinimum(t, pinPath, "3.0.0+../../payload", "3.0.0-beta.39")
+
+	_, err := loadDispatcherPin(projectRoot)
+
+	if err == nil {
+		t.Fatal("expected invalid projectRunnerVersion error")
+	}
+}
+
 func TestLoadDispatcherPinRejectsInvalidMinimumDispatcherVersion(t *testing.T) {
 	// Verifies malformed dispatcher minimums fail closed instead of bypassing freshness checks.
 	projectRoot := createDispatcherUnityProject(t)
 	pinPath := filepath.Join(projectRoot, dispatcherProjectPinRelativePath)
 	writeDispatcherPinFileWithMinimum(t, pinPath, "3.0.0-beta.58", "../../payload")
+
+	_, err := loadDispatcherPin(projectRoot)
+
+	if err == nil {
+		t.Fatal("expected invalid minimumDispatcherVersion error")
+	}
+}
+
+func TestLoadDispatcherPinRejectsMinimumDispatcherVersionWithLeadingZero(t *testing.T) {
+	// Verifies dispatcher pin validation rejects versions the shared comparator cannot order.
+	projectRoot := createDispatcherUnityProject(t)
+	pinPath := filepath.Join(projectRoot, dispatcherProjectPinRelativePath)
+	writeDispatcherPinFileWithMinimum(t, pinPath, "3.0.0-beta.58", "3.00.1")
 
 	_, err := loadDispatcherPin(projectRoot)
 

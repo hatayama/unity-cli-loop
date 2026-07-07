@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
-)
 
-var dispatcherProjectRunnerVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)?$`)
+	sharedversion "github.com/hatayama/unity-cli-loop/common/version"
+)
 
 type dispatcherPin struct {
 	ProjectRunnerVersion     string `json:"projectRunnerVersion"`
@@ -105,7 +104,7 @@ func normalizeDispatcherVersion(value string) string {
 }
 
 func validateDispatcherProjectRunnerVersion(projectRunnerVersion string) error {
-	if !dispatcherProjectRunnerVersionPattern.MatchString(projectRunnerVersion) {
+	if !sharedversion.IsValid(projectRunnerVersion) {
 		return fmt.Errorf("expected semantic version, got %q", projectRunnerVersion)
 	}
 	return nil

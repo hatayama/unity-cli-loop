@@ -57,6 +57,31 @@ func TestIsLessThanHandlesPrereleaseVersions(t *testing.T) {
 	}
 }
 
+func TestIsValidMatchesCompareValidity(t *testing.T) {
+	// Verifies callers can validate semver strings without using self-comparison as a proxy.
+	cases := []struct {
+		value    string
+		expected bool
+	}{
+		{value: "3.0.0", expected: true},
+		{value: "v3.0.0-beta.1", expected: true},
+		{value: "V3.0.0-beta.1+build.7", expected: true},
+		{value: "not-a-version", expected: false},
+		{value: "3.00.1", expected: false},
+		{value: "3.0.0-01", expected: false},
+		{value: "3.0.0+../../payload", expected: false},
+		{value: "3.0.0+", expected: false},
+		{value: "3.0.0+build..7", expected: false},
+	}
+
+	for _, tt := range cases {
+		result := IsValid(tt.value)
+		if result != tt.expected {
+			t.Fatalf("IsValid(%q) = %v, want %v", tt.value, result, tt.expected)
+		}
+	}
+}
+
 func TestCompareRejectsInvalidVersion(t *testing.T) {
 	// Verifies that malformed CLI versions do not pass compatibility checks.
 	cases := []string{
@@ -67,6 +92,7 @@ func TestCompareRejectsInvalidVersion(t *testing.T) {
 		"1.02.3",
 		"1.2.03",
 		"1.2.3-alpha.01",
+		"1.2.3+../../payload",
 	}
 
 	for _, value := range cases {
