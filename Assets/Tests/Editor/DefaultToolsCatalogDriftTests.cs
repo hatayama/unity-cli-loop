@@ -5,6 +5,7 @@ using System.Linq;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
+using io.github.hatayama.UnityCliLoop.CompositionRoot;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 using ToolParameterInfo = io.github.hatayama.UnityCliLoop.ToolContracts.ParameterInfo;
@@ -91,7 +92,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static Dictionary<string, JObject> ReadLiveSchemas(string[] embeddedToolNames)
         {
-            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            // Why: this drift guard compares catalog structure, so local tool settings
+            // must not hide disabled tools and turn developer preferences into failures.
+            UnityCliLoopToolRegistry registry = new UnityCliLoopToolRegistry(
+                new AlwaysEnabledToolSettingsPort(),
+                internalToolNameProvider: null,
+                toolDiscovery: UnityCliLoopToolDiscovery.DiscoverTools);
             HashSet<string> embeddedNameSet = new(embeddedToolNames, StringComparer.Ordinal);
 
             return registry.GetRegisteredTools()
@@ -131,7 +137,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return new JObject
             {
                 ["type"] = "object",
-                ["required"] = new JArray(schema.Required),
+                ["required"] = NormalizeStringValues(schema.Required),
                 ["properties"] = normalizedProperties
             };
         }
@@ -174,7 +180,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return new JArray();
             }
 
-            return new JArray(values.Values<string>());
+            return NormalizeStringValues(values.Values<string>());
+        }
+
+        private static JArray NormalizeStringValues(IEnumerable<string> values)
+        {
+            if (values == null)
+            {
+                return new JArray();
+            }
+
+            return new JArray(values.OrderBy(value => value, StringComparer.Ordinal));
         }
 
         private static string NormalizeSchemaType(string type)
@@ -214,6 +230,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             return comparableSchema;
+        }
+
+        /// <summary>
+        /// Test-only settings port that exposes every discovered tool.
+        /// </summary>
+        private sealed class AlwaysEnabledToolSettingsPort : IToolSettingsPort
+        {
+            public bool IsToolEnabled(string toolName)
+            {
+                return true;
+            }
+
+            public void SetToolEnabled(string toolName, bool enabled)
+            {
+            }
+
+            public string[] GetDisabledTools()
+            {
+                return Array.Empty<string>();
+            }
+
+            public void InvalidateCache()
+            {
+            }
         }
     }
 }
