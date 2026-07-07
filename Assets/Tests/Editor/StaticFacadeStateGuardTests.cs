@@ -79,13 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             },
             {
                 "Packages/src/Editor/Infrastructure/SkillSetup/SkillInstallationDetector.cs",
-                new[]
-                {
-                    "AreSkillsInstalledInCurrentProject",
-                    "AreSkillsInstalledInCurrentProjectForLayout",
-                    "AreSkillsInstalledInAnyLayout",
-                    "AreSkillsInstalledForLayout"
-                }
+                new[] { "AreSkillsInstalledInAnyLayout", "AreSkillsInstalledForLayout" }
             },
             {
                 "Packages/src/Editor/Presentation/UnityCliLoopSettingsWindow.cs",

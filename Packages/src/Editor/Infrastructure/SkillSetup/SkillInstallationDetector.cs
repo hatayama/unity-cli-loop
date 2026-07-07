@@ -11,7 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public sealed class SkillInstallationDetector
     {
-        public bool AreSkillsInstalledInCurrentProject(string targetDir)
+        public bool AreSkillsInstalled(string targetDir)
         {
             Debug.Assert(!string.IsNullOrEmpty(targetDir), "targetDir must not be null or empty");
 
@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return AreSkillsInstalledInAnyLayout(projectRoot, targetDir);
         }
 
-        public bool AreSkillsInstalledInCurrentProjectForLayout(string targetDir, bool groupSkillsUnderUnityCliLoop)
+        public bool AreSkillsInstalled(string targetDir, bool groupSkillsUnderUnityCliLoop)
         {
             Debug.Assert(!string.IsNullOrEmpty(targetDir), "targetDir must not be null or empty");
 
