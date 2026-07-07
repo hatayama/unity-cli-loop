@@ -43,6 +43,67 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return new[] { reference };
         }
 
+        /// <summary>
+        /// Resolves the final asmdef reference list without JSON mutation concerns.
+        /// </summary>
+        public static ThirdPartyToolMigrationAsmdefReferenceMigrationResult MigrateAsmdefReferences(
+            string[] references,
+            bool hasLegacyCSharpSource,
+            bool requiresToolContractsReference,
+            bool requiresApplicationReference,
+            bool requiresDomainReference,
+            bool requiresFirstPartyScreenshotReference)
+        {
+            Debug.Assert(references != null, "references must not be null");
+
+            string[] sourceReferences = references ?? throw new ArgumentNullException(nameof(references));
+            int replacementCount = 0;
+            HashSet<string> addedReferences = new(StringComparer.Ordinal);
+            List<string> migratedReferences = new();
+            foreach (string sourceReference in sourceReferences)
+            {
+                string reference = sourceReference ?? string.Empty;
+                string[] migratedReferenceItems = GetMigratedAsmdefReferences(
+                    reference,
+                    hasLegacyCSharpSource,
+                    requiresApplicationReference,
+                    requiresDomainReference,
+                    requiresFirstPartyScreenshotReference);
+                bool referenceChanged = migratedReferenceItems.Length != 1 ||
+                    !string.Equals(migratedReferenceItems[0], reference, StringComparison.Ordinal);
+                if (referenceChanged)
+                {
+                    replacementCount++;
+                }
+
+                foreach (string migratedReference in migratedReferenceItems)
+                {
+                    string migratedReferenceKey = GetCurrentAsmdefReferenceKey(migratedReference);
+                    if (!addedReferences.Add(migratedReferenceKey))
+                    {
+                        continue;
+                    }
+
+                    migratedReferences.Add(migratedReference);
+                }
+            }
+
+            replacementCount += AppendRequiredCurrentAsmdefReferences(
+                migratedReferences,
+                addedReferences,
+                hasLegacyCSharpSource || requiresToolContractsReference,
+                requiresApplicationReference,
+                requiresDomainReference,
+                requiresFirstPartyScreenshotReference);
+
+            string[] resultReferences = replacementCount == 0
+                ? sourceReferences
+                : migratedReferences.ToArray();
+            return new ThirdPartyToolMigrationAsmdefReferenceMigrationResult(
+                resultReferences,
+                replacementCount);
+        }
+
         private static string[] GetMigratedLegacyEditorReferences(
             bool requiresApplicationReference,
             bool requiresDomainReference,
@@ -82,6 +143,72 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             }
 
             references.Add(reference);
+        }
+
+        private static int AppendRequiredCurrentAsmdefReferences(
+            List<string> references,
+            HashSet<string> addedReferences,
+            bool requiresToolContractsReference,
+            bool requiresApplicationReference,
+            bool requiresDomainReference,
+            bool requiresFirstPartyScreenshotReference)
+        {
+            Debug.Assert(references != null, "references must not be null");
+            Debug.Assert(addedReferences != null, "addedReferences must not be null");
+
+            int replacementCount = 0;
+            if (requiresToolContractsReference)
+            {
+                replacementCount += AppendRequiredCurrentAsmdefReference(
+                    references,
+                    addedReferences,
+                    CurrentToolContractsGuidReference);
+            }
+
+            if (requiresApplicationReference)
+            {
+                replacementCount += AppendRequiredCurrentAsmdefReference(
+                    references,
+                    addedReferences,
+                    CurrentApplicationGuidReference);
+            }
+
+            if (requiresDomainReference)
+            {
+                replacementCount += AppendRequiredCurrentAsmdefReference(
+                    references,
+                    addedReferences,
+                    CurrentDomainGuidReference);
+            }
+
+            if (requiresFirstPartyScreenshotReference)
+            {
+                replacementCount += AppendRequiredCurrentAsmdefReference(
+                    references,
+                    addedReferences,
+                    CurrentFirstPartyToolsScreenshotGuidReference);
+            }
+
+            return replacementCount;
+        }
+
+        private static int AppendRequiredCurrentAsmdefReference(
+            List<string> references,
+            HashSet<string> addedReferences,
+            string reference)
+        {
+            Debug.Assert(references != null, "references must not be null");
+            Debug.Assert(addedReferences != null, "addedReferences must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(reference), "reference must not be null or empty");
+
+            string referenceKey = GetCurrentAsmdefReferenceKey(reference);
+            if (!addedReferences.Add(referenceKey))
+            {
+                return 0;
+            }
+
+            references.Add(reference);
+            return 1;
         }
 
         public static string GetCurrentAsmdefReferenceKey(string reference)

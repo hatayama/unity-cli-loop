@@ -106,4 +106,25 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public RemovedLegacyPlayerLoopTimingSignature[] RemovedPlayerLoopTimingSignatures { get; }
         public bool Changed => ReplacementCount > 0;
     }
+
+    /// <summary>
+    /// Describes migrated asmdef references resolved by pure migration policy.
+    /// </summary>
+    public readonly struct ThirdPartyToolMigrationAsmdefReferenceMigrationResult
+    {
+        public ThirdPartyToolMigrationAsmdefReferenceMigrationResult(
+            string[] references,
+            int replacementCount)
+        {
+            Debug.Assert(references != null, "references must not be null");
+            Debug.Assert(replacementCount >= 0, "replacementCount must not be negative");
+
+            References = references ?? throw new ArgumentNullException(nameof(references));
+            ReplacementCount = replacementCount;
+        }
+
+        public string[] References { get; }
+        public int ReplacementCount { get; }
+        public bool Changed => ReplacementCount > 0;
+    }
 }
