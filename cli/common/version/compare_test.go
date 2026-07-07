@@ -1,6 +1,39 @@
 package version
 
-import "testing"
+import (
+	"encoding/json"
+	"os"
+	"testing"
+)
+
+type compareCaseCatalog struct {
+	Cases []compareCase `json:"cases"`
+}
+
+type compareCase struct {
+	Name       string `json:"name"`
+	Left       string `json:"left"`
+	Right      string `json:"right"`
+	OK         bool   `json:"ok"`
+	Comparison int    `json:"comparison"`
+}
+
+func TestCompareMatchesSharedCases(t *testing.T) {
+	// Verifies that Go comparison behavior matches the shared cross-language contract table.
+	catalog := readCompareCaseCatalog(t)
+
+	for _, tt := range catalog.Cases {
+		t.Run(tt.Name, func(t *testing.T) {
+			result, ok := Compare(tt.Left, tt.Right)
+			if ok != tt.OK {
+				t.Fatalf("Compare(%q, %q) ok = %v, want %v", tt.Left, tt.Right, ok, tt.OK)
+			}
+			if result != tt.Comparison {
+				t.Fatalf("Compare(%q, %q) = %d, want %d", tt.Left, tt.Right, result, tt.Comparison)
+			}
+		})
+	}
+}
 
 func TestIsLessThanHandlesPrereleaseVersions(t *testing.T) {
 	// Verifies that CLI version checks follow npm-style prerelease ordering.
@@ -42,4 +75,22 @@ func TestCompareRejectsInvalidVersion(t *testing.T) {
 			t.Fatalf("invalid version %q should not compare successfully", value)
 		}
 	}
+}
+
+func readCompareCaseCatalog(t *testing.T) compareCaseCatalog {
+	t.Helper()
+
+	data, err := os.ReadFile("compare_cases.json")
+	if err != nil {
+		t.Fatalf("failed to read shared compare cases: %v", err)
+	}
+
+	var catalog compareCaseCatalog
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		t.Fatalf("failed to parse shared compare cases: %v", err)
+	}
+	if len(catalog.Cases) == 0 {
+		t.Fatal("shared compare cases must not be empty")
+	}
+	return catalog
 }

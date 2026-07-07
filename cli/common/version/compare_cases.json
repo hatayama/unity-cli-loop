@@ -1,0 +1,214 @@
+{
+  "cases": [
+    {
+      "name": "release equal",
+      "left": "1.2.3",
+      "right": "1.2.3",
+      "ok": true,
+      "comparison": 0
+    },
+    {
+      "name": "major greater",
+      "left": "2.0.0",
+      "right": "1.9.9",
+      "ok": true,
+      "comparison": 1
+    },
+    {
+      "name": "minor less",
+      "left": "1.2.0",
+      "right": "1.3.0",
+      "ok": true,
+      "comparison": -1
+    },
+    {
+      "name": "patch greater",
+      "left": "1.2.4",
+      "right": "1.2.3",
+      "ok": true,
+      "comparison": 1
+    },
+    {
+      "name": "prerelease less than release",
+      "left": "1.2.3-alpha",
+      "right": "1.2.3",
+      "ok": true,
+      "comparison": -1
+    },
+    {
+      "name": "release greater than prerelease",
+      "left": "1.2.3",
+      "right": "1.2.3-alpha",
+      "ok": true,
+      "comparison": 1
+    },
+    {
+      "name": "numeric prerelease ordering",
+      "left": "1.2.3-beta.2",
+      "right": "1.2.3-beta.10",
+      "ok": true,
+      "comparison": -1
+    },
+    {
+      "name": "numeric prerelease lower than text",
+      "left": "1.2.3-1",
+      "right": "1.2.3-alpha",
+      "ok": true,
+      "comparison": -1
+    },
+    {
+      "name": "lexical prerelease ordering",
+      "left": "1.2.3-alpha",
+      "right": "1.2.3-beta",
+      "ok": true,
+      "comparison": -1
+    },
+    {
+      "name": "shorter prerelease prefix lower",
+      "left": "1.2.3-alpha",
+      "right": "1.2.3-alpha.1",
+      "ok": true,
+      "comparison": -1
+    },
+    {
+      "name": "build metadata ignored for release",
+      "left": "1.2.3+build.1",
+      "right": "1.2.3+build.2",
+      "ok": true,
+      "comparison": 0
+    },
+    {
+      "name": "build metadata ignored for prerelease",
+      "left": "1.2.3-alpha+build.1",
+      "right": "1.2.3-alpha+build.2",
+      "ok": true,
+      "comparison": 0
+    },
+    {
+      "name": "lowercase v prefix accepted",
+      "left": "v1.2.3",
+      "right": "1.2.3",
+      "ok": true,
+      "comparison": 0
+    },
+    {
+      "name": "uppercase V prefix accepted",
+      "left": "V1.2.3-alpha",
+      "right": "1.2.3-alpha",
+      "ok": true,
+      "comparison": 0
+    },
+    {
+      "name": "surrounding whitespace accepted",
+      "left": " 1.2.3 ",
+      "right": "1.2.3",
+      "ok": true,
+      "comparison": 0
+    },
+    {
+      "name": "core major leading zero rejected",
+      "left": "01.2.3",
+      "right": "1.2.3",
+      "ok": false,
+      "comparison": 0
+    },
+    {
+      "name": "core minor leading zero rejected",
+      "left": "1.02.3",
+      "right": "1.2.3",
+      "ok": false,
+      "comparison": 0
+    },
+    {
+      "name": "core patch leading zero rejected",
+      "left": "1.2.03",
+      "right": "1.2.3",
+      "ok": false,
+      "comparison": 0
+    },
+    {
+      "name": "prerelease numeric leading zero rejected",
+      "left": "1.2.3-alpha.01",
+      "right": "1.2.3-alpha.1",
+      "ok": false,
+      "comparison": 0
+    },
+    {
+      "name": "empty prerelease rejected",
+      "left": "1.2.3-",
+      "right": "1.2.3",
+      "ok": false,
+      "comparison": 0
+    },
+    {
+      "name": "empty prerelease identifier rejected",
+      "left": "1.2.3-alpha..1",
+      "right": "1.2.3-alpha.1",
+      "ok": false,
+      "comparison": 0
+    },
+    {
+      "name": "invalid prerelease underscore rejected",
+      "left": "1.2.3-alpha_1",
+      "right": "1.2.3-alpha.1",
+      "ok": false,
+      "comparison": 0
+    },
+    {
+      "name": "invalid prerelease slash rejected",
+      "left": "1.2.3-alpha/1",
+      "right": "1.2.3-alpha.1",
+      "ok": false,
+      "comparison": 0
+    },
+    {
+      "name": "non digit core rejected",
+      "left": "1.x.3",
+      "right": "1.2.3",
+      "ok": false,
+      "comparison": 0
+    },
+    {
+      "name": "short core rejected",
+      "left": "1.2",
+      "right": "1.2.0",
+      "ok": false,
+      "comparison": 0
+    },
+    {
+      "name": "duplicate v prefix rejected",
+      "left": "vv1.2.3",
+      "right": "1.2.3",
+      "ok": false,
+      "comparison": 0
+    },
+    {
+      "name": "signed core numeric rejected",
+      "left": "+1.2.3",
+      "right": "1.2.3",
+      "ok": false,
+      "comparison": 0
+    },
+    {
+      "name": "hyphen prerelease accepted",
+      "left": "1.2.3-alpha-1",
+      "right": "1.2.3-alpha.1",
+      "ok": true,
+      "comparison": 1
+    },
+    {
+      "name": "single zero numeric prerelease accepted",
+      "left": "1.2.3-0",
+      "right": "1.2.3-1",
+      "ok": true,
+      "comparison": -1
+    },
+    {
+      "name": "empty string rejected",
+      "left": "",
+      "right": "1.2.3",
+      "ok": false,
+      "comparison": 0
+    }
+  ]
+}
