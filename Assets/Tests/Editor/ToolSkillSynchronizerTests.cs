@@ -1491,6 +1491,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void InstallSpecificSkillsForTarget_WhenCancellationRequested_DoesNotWriteSkill()
+        {
+            // Tests that target installation observes cancellation before writing managed skill files.
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Codex CLI",
+                ".codex",
+                "--codex",
+                hasSkillsDirectory: true,
+                hasExistingSkills: false);
+            SkillInstallLayout.SkillSourceInfo skill = new(
+                "uloop-cancelled-skill",
+                string.Empty,
+                new Dictionary<string, byte[]>
+                {
+                    [SkillInstallLayout.SkillFileName] = Encoding.UTF8.GetBytes(
+                        "---\nname: uloop-cancelled-skill\n---\n")
+                });
+            using CancellationTokenSource cancellation = new();
+            cancellation.Cancel();
+
+            Assert.Throws<OperationCanceledException>(() =>
+                SkillTargetInstaller.InstallSpecificSkillsForTarget(
+                    temporaryRoot,
+                    target,
+                    Array.Empty<SkillInstallLayout.SkillSourceInfo>(),
+                    new[] { skill },
+                    groupSkillsUnderUnityCliLoop: false,
+                    cancellation.Token));
+            Assert.That(
+                Directory.Exists(Path.Combine(
+                    temporaryRoot,
+                    ".codex",
+                    SkillInstallLayout.SkillsDirName,
+                    "uloop-cancelled-skill")),
+                Is.False);
+        }
+
+        [Test]
+        public void ValidateV3MigrationSkillSourceName_WhenNameDiffers_Throws()
+        {
+            // Tests that the packaged migration skill is rejected if its frontmatter name violates the contract.
+            SkillInstallLayout.SkillSourceInfo skill = new(
+                "unexpected-migration-skill",
+                string.Empty,
+                new Dictionary<string, byte[]>
+                {
+                    [SkillInstallLayout.SkillFileName] = Encoding.UTF8.GetBytes(
+                        "---\nname: unexpected-migration-skill\n---\n")
+                });
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                V3MigrationSkillInstaller.ValidateV3MigrationSkillSourceName(skill));
+
+            Assert.That(exception.Message, Does.Contain(CliConstants.V3_CLI_INVOCATION_MIGRATION_SKILL_NAME));
+        }
+
+        [Test]
         public async Task GetV3MigrationSkillInstallStateAtProjectRoot_WhenSkillExistsInAlternateLayout_ReturnsInstalled()
         {
             // Tests that the temporary migration skill is detected even when it exists in the alternate layout.

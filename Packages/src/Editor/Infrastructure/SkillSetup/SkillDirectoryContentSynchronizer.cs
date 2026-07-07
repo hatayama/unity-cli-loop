@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 
 using Debug = UnityEngine.Debug;
 
@@ -21,12 +22,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static void SyncInstalledSkillDirectory(
             string skillDirectory,
-            IReadOnlyDictionary<string, byte[]> skillFiles)
+            IReadOnlyDictionary<string, byte[]> skillFiles,
+            CancellationToken ct)
         {
             Debug.Assert(!string.IsNullOrEmpty(skillDirectory), "skillDirectory must not be null or empty");
             Debug.Assert(skillFiles != null, "skillFiles must not be null");
             Debug.Assert(skillFiles.ContainsKey(SkillInstallLayout.SkillFileName),
                 "skillFiles must contain SKILL.md");
+            ct.ThrowIfCancellationRequested();
 
             string parentDirectory = Path.GetDirectoryName(skillDirectory);
             Debug.Assert(!string.IsNullOrEmpty(parentDirectory), "parentDirectory must not be null or empty");
@@ -40,9 +43,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool syncCompleted = false;
             try
             {
-                WriteSkillFiles(skillDirectory, skillFiles);
-                DeleteUnexpectedSkillFiles(skillDirectory, skillFiles.Keys);
-                DeleteEmptyDirectories(skillDirectory);
+                WriteSkillFiles(skillDirectory, skillFiles, ct);
+                DeleteUnexpectedSkillFiles(skillDirectory, skillFiles.Keys, ct);
+                DeleteEmptyDirectories(skillDirectory, ct);
                 syncCompleted = true;
             }
             finally
@@ -72,11 +75,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return files;
         }
 
-        internal static void DeleteEmptyDirectories(string skillDirectory)
+        internal static void DeleteEmptyDirectories(string skillDirectory, CancellationToken ct)
         {
             foreach (string directoryPath in Directory.EnumerateDirectories(skillDirectory, "*", SearchOption.AllDirectories)
                          .OrderByDescending(path => path.Length))
             {
+                ct.ThrowIfCancellationRequested();
                 if (Directory.EnumerateFileSystemEntries(directoryPath).Any())
                 {
                     continue;
@@ -106,10 +110,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static void WriteSkillFiles(
             string skillDirectory,
-            IReadOnlyDictionary<string, byte[]> skillFiles)
+            IReadOnlyDictionary<string, byte[]> skillFiles,
+            CancellationToken ct)
         {
             foreach (KeyValuePair<string, byte[]> skillFile in skillFiles)
             {
+                ct.ThrowIfCancellationRequested();
                 string fullPath = Path.Combine(skillDirectory, skillFile.Key);
                 string fileDirectory = Path.GetDirectoryName(fullPath);
                 Debug.Assert(!string.IsNullOrEmpty(fileDirectory), "fileDirectory must not be null or empty");
@@ -154,11 +160,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static void DeleteUnexpectedSkillFiles(
             string skillDirectory,
-            IEnumerable<string> expectedRelativePaths)
+            IEnumerable<string> expectedRelativePaths,
+            CancellationToken ct)
         {
             HashSet<string> expectedPaths = new(expectedRelativePaths, StringComparer.Ordinal);
             foreach (string filePath in Directory.EnumerateFiles(skillDirectory, "*", SearchOption.AllDirectories))
             {
+                ct.ThrowIfCancellationRequested();
                 string fileName = Path.GetFileName(filePath);
                 if (IsExcludedSkillFile(fileName))
                 {
@@ -191,9 +199,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             Directory.CreateDirectory(skillDirectory);
-            WriteSkillFiles(skillDirectory, backupFiles);
-            DeleteUnexpectedSkillFiles(skillDirectory, backupFiles.Keys);
-            DeleteEmptyDirectories(skillDirectory);
+            WriteSkillFiles(skillDirectory, backupFiles, CancellationToken.None);
+            DeleteUnexpectedSkillFiles(skillDirectory, backupFiles.Keys, CancellationToken.None);
+            DeleteEmptyDirectories(skillDirectory, CancellationToken.None);
         }
     }
 }

@@ -78,15 +78,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 int succeeded = 0;
                 foreach (ToolSkillSynchronizer.SkillTargetInfo target in targetArray)
                 {
+                    ct.ThrowIfCancellationRequested();
                     string targetRoot = Path.Combine(projectRoot, target.DirName);
                     SkillTargetInstaller.DeleteSkillDirectoryIfExists(
                         targetRoot,
                         skill.Name,
-                        groupSkillsUnderUnityCliLoop);
+                        groupSkillsUnderUnityCliLoop,
+                        ct);
                     SkillTargetInstaller.DeleteSkillDirectoryIfExists(
                         targetRoot,
                         skill.Name,
-                        !groupSkillsUnderUnityCliLoop);
+                        !groupSkillsUnderUnityCliLoop,
+                        ct);
                     succeeded++;
                 }
 
@@ -132,12 +135,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 int succeeded = 0;
                 foreach (ToolSkillSynchronizer.SkillTargetInfo target in targetArray)
                 {
+                    ct.ThrowIfCancellationRequested();
                     SkillTargetInstaller.InstallSpecificSkillsForTarget(
                         projectRoot,
                         target,
                         Array.Empty<SkillInstallLayout.SkillSourceInfo>(),
                         new[] { skill },
-                        groupSkillsUnderUnityCliLoop);
+                        groupSkillsUnderUnityCliLoop,
+                        ct);
                     succeeded++;
                 }
 
@@ -163,11 +168,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 int succeeded = 0;
                 foreach (ToolSkillSynchronizer.SkillTargetInfo target in targetArray)
                 {
+                    ct.ThrowIfCancellationRequested();
                     string targetRoot = Path.Combine(projectRoot, target.DirName);
                     SkillTargetInstaller.DeleteSkillDirectoryIfExists(
                         targetRoot,
                         skillName,
-                        groupSkillsUnderUnityCliLoop);
+                        groupSkillsUnderUnityCliLoop,
+                        ct);
                     succeeded++;
                 }
 
@@ -177,7 +184,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static SkillInstallLayout.SkillSourceInfo GetV3MigrationSkillSourceInfo()
         {
-            return SkillInstallLayout.GetSkillSourceInfoFromDirectory(V3MigrationSkillSourceDirectory);
+            SkillInstallLayout.SkillSourceInfo skill =
+                SkillInstallLayout.GetSkillSourceInfoFromDirectory(V3MigrationSkillSourceDirectory);
+            ValidateV3MigrationSkillSourceName(skill);
+            return skill;
+        }
+
+        internal static void ValidateV3MigrationSkillSourceName(SkillInstallLayout.SkillSourceInfo skill)
+        {
+            if (string.Equals(
+                    skill.Name,
+                    CliConstants.V3_CLI_INVOCATION_MIGRATION_SKILL_NAME,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            throw new InvalidOperationException(
+                $"V3 migration skill source name must be '{CliConstants.V3_CLI_INVOCATION_MIGRATION_SKILL_NAME}', but was '{skill.Name}'.");
         }
     }
 }

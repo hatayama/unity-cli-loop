@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -25,8 +26,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             ToolSkillSynchronizer.SkillTargetInfo target,
             IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> disabledSkills,
             IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> enabledSkills,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
+            ct.ThrowIfCancellationRequested();
             string targetRoot = Path.Combine(projectRoot, target.DirName);
             string skillsRoot = SkillInstallLayout.GetSkillsRoot(targetRoot);
             HashSet<string> managedSkillNames = new(
@@ -41,24 +44,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Directory.CreateDirectory(SkillInstallLayout.GetManagedSkillsRoot(targetRoot));
             }
 
-            DeleteDeprecatedSkillDirectoriesFromAllLayouts(targetRoot);
-            DeleteDisabledSkillDirectoriesFromAllLayouts(targetRoot, disabledSkills);
+            DeleteDeprecatedSkillDirectoriesFromAllLayouts(targetRoot, ct);
+            DeleteDisabledSkillDirectoriesFromAllLayouts(targetRoot, disabledSkills, ct);
 
             foreach (SkillInstallLayout.SkillSourceInfo skill in enabledSkills)
             {
+                ct.ThrowIfCancellationRequested();
                 string installedSkillDirectory = SkillInstallLayout.GetInstalledSkillDirectoryPathForLayout(
                     targetRoot,
                     skill.Name,
                     groupSkillsUnderUnityCliLoop);
-                SkillDirectoryContentSynchronizer.SyncInstalledSkillDirectory(installedSkillDirectory, skill.SkillFiles);
-                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, !groupSkillsUnderUnityCliLoop);
+                SkillDirectoryContentSynchronizer.SyncInstalledSkillDirectory(installedSkillDirectory, skill.SkillFiles, ct);
+                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, !groupSkillsUnderUnityCliLoop, ct);
             }
 
             DeleteUnexpectedInstalledSkillDirectories(
                 targetRoot,
                 enabledSkills.Select(skill => skill.Name),
                 managedSkillNames,
-                groupSkillsUnderUnityCliLoop);
+                groupSkillsUnderUnityCliLoop,
+                ct);
 
             if (!groupSkillsUnderUnityCliLoop)
             {
@@ -66,10 +71,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     targetRoot,
                     enabledSkills.Select(skill => skill.Name),
                     managedSkillNames,
-                    groupSkillsUnderUnityCliLoop: true);
+                    groupSkillsUnderUnityCliLoop: true,
+                    ct);
                 DeleteEmptyManagedSkillsParentDirectoryIfNeeded(
                     targetRoot,
-                    groupSkillsUnderUnityCliLoop: true);
+                    groupSkillsUnderUnityCliLoop: true,
+                    ct);
             }
         }
 
@@ -78,8 +85,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             ToolSkillSynchronizer.SkillTargetInfo target,
             IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> disabledSkills,
             IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> skills,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
+            ct.ThrowIfCancellationRequested();
             string targetRoot = Path.Combine(projectRoot, target.DirName);
             string skillsRoot = SkillInstallLayout.GetSkillsRoot(targetRoot);
             Directory.CreateDirectory(skillsRoot);
@@ -89,32 +98,36 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Directory.CreateDirectory(SkillInstallLayout.GetManagedSkillsRoot(targetRoot));
             }
 
-            DeleteDeprecatedSkillDirectoriesForLayout(targetRoot, groupSkillsUnderUnityCliLoop);
-            DeleteDisabledSkillDirectoriesForLayout(targetRoot, disabledSkills, groupSkillsUnderUnityCliLoop);
+            DeleteDeprecatedSkillDirectoriesForLayout(targetRoot, groupSkillsUnderUnityCliLoop, ct);
+            DeleteDisabledSkillDirectoriesForLayout(targetRoot, disabledSkills, groupSkillsUnderUnityCliLoop, ct);
 
             foreach (SkillInstallLayout.SkillSourceInfo skill in skills)
             {
+                ct.ThrowIfCancellationRequested();
                 string installedSkillDirectory = SkillInstallLayout.GetInstalledSkillDirectoryPathForLayout(
                     targetRoot,
                     skill.Name,
                     groupSkillsUnderUnityCliLoop);
-                SkillDirectoryContentSynchronizer.SyncInstalledSkillDirectory(installedSkillDirectory, skill.SkillFiles);
-                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, !groupSkillsUnderUnityCliLoop);
+                SkillDirectoryContentSynchronizer.SyncInstalledSkillDirectory(installedSkillDirectory, skill.SkillFiles, ct);
+                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, !groupSkillsUnderUnityCliLoop, ct);
             }
 
             if (!groupSkillsUnderUnityCliLoop)
             {
                 DeleteEmptyManagedSkillsParentDirectoryIfNeeded(
                     targetRoot,
-                    groupSkillsUnderUnityCliLoop: true);
+                    groupSkillsUnderUnityCliLoop: true,
+                    ct);
             }
         }
 
         internal static void DeleteSkillDirectoryIfExists(
             string targetRoot,
             string skillName,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
+            ct.ThrowIfCancellationRequested();
             string installedSkillDirectory = SkillInstallLayout.GetInstalledSkillDirectoryPathForLayout(
                 targetRoot,
                 skillName,
@@ -125,14 +138,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             Directory.Delete(installedSkillDirectory, true);
-            DeleteEmptyManagedSkillsParentDirectoryIfNeeded(targetRoot, groupSkillsUnderUnityCliLoop);
+            DeleteEmptyManagedSkillsParentDirectoryIfNeeded(targetRoot, groupSkillsUnderUnityCliLoop, ct);
         }
 
         private static void DeleteUnexpectedInstalledSkillDirectories(
             string targetRoot,
             IEnumerable<string> expectedSkillNames,
             IEnumerable<string> removableSkillNames,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
             HashSet<string> expectedSkillNameSet = new(expectedSkillNames, StringComparer.Ordinal);
             HashSet<string> removableSkillNameSet = new(removableSkillNames, StringComparer.Ordinal);
@@ -140,6 +154,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                          targetRoot,
                          groupSkillsUnderUnityCliLoop))
             {
+                ct.ThrowIfCancellationRequested();
                 if (expectedSkillNameSet.Contains(installedSkillName))
                 {
                     continue;
@@ -150,55 +165,64 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     continue;
                 }
 
-                DeleteSkillDirectoryIfExists(targetRoot, installedSkillName, groupSkillsUnderUnityCliLoop);
+                DeleteSkillDirectoryIfExists(targetRoot, installedSkillName, groupSkillsUnderUnityCliLoop, ct);
             }
         }
 
-        private static void DeleteDeprecatedSkillDirectoriesFromAllLayouts(string targetRoot)
+        private static void DeleteDeprecatedSkillDirectoriesFromAllLayouts(string targetRoot, CancellationToken ct)
         {
             foreach (string deprecatedSkillName in DeprecatedSkillNames)
             {
-                DeleteSkillDirectoryIfExists(targetRoot, deprecatedSkillName, groupSkillsUnderUnityCliLoop: true);
-                DeleteSkillDirectoryIfExists(targetRoot, deprecatedSkillName, groupSkillsUnderUnityCliLoop: false);
+                ct.ThrowIfCancellationRequested();
+                DeleteSkillDirectoryIfExists(targetRoot, deprecatedSkillName, groupSkillsUnderUnityCliLoop: true, ct);
+                DeleteSkillDirectoryIfExists(targetRoot, deprecatedSkillName, groupSkillsUnderUnityCliLoop: false, ct);
             }
         }
 
         private static void DeleteDisabledSkillDirectoriesFromAllLayouts(
             string targetRoot,
-            IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> disabledSkills)
+            IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> disabledSkills,
+            CancellationToken ct)
         {
             foreach (SkillInstallLayout.SkillSourceInfo skill in disabledSkills)
             {
-                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, groupSkillsUnderUnityCliLoop: true);
-                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, groupSkillsUnderUnityCliLoop: false);
+                ct.ThrowIfCancellationRequested();
+                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, groupSkillsUnderUnityCliLoop: true, ct);
+                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, groupSkillsUnderUnityCliLoop: false, ct);
             }
         }
 
         private static void DeleteDeprecatedSkillDirectoriesForLayout(
             string targetRoot,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
             foreach (string deprecatedSkillName in DeprecatedSkillNames)
             {
-                DeleteSkillDirectoryIfExists(targetRoot, deprecatedSkillName, groupSkillsUnderUnityCliLoop);
+                ct.ThrowIfCancellationRequested();
+                DeleteSkillDirectoryIfExists(targetRoot, deprecatedSkillName, groupSkillsUnderUnityCliLoop, ct);
             }
         }
 
         private static void DeleteDisabledSkillDirectoriesForLayout(
             string targetRoot,
             IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> disabledSkills,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
             foreach (SkillInstallLayout.SkillSourceInfo skill in disabledSkills)
             {
-                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, groupSkillsUnderUnityCliLoop);
+                ct.ThrowIfCancellationRequested();
+                DeleteSkillDirectoryIfExists(targetRoot, skill.Name, groupSkillsUnderUnityCliLoop, ct);
             }
         }
 
         private static void DeleteEmptyManagedSkillsParentDirectoryIfNeeded(
             string targetRoot,
-            bool groupSkillsUnderUnityCliLoop)
+            bool groupSkillsUnderUnityCliLoop,
+            CancellationToken ct)
         {
+            ct.ThrowIfCancellationRequested();
             if (!groupSkillsUnderUnityCliLoop)
             {
                 return;
@@ -210,8 +234,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            DeleteExcludedFilesAtRoot(managedSkillsRoot);
-            DeleteEmptyDirectoriesAtRoot(managedSkillsRoot);
+            DeleteExcludedFilesAtRoot(managedSkillsRoot, ct);
+            DeleteEmptyDirectoriesAtRoot(managedSkillsRoot, ct);
             if (Directory.EnumerateFileSystemEntries(managedSkillsRoot).Any())
             {
                 return;
@@ -220,10 +244,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Directory.Delete(managedSkillsRoot);
         }
 
-        private static void DeleteExcludedFilesAtRoot(string directoryPath)
+        private static void DeleteExcludedFilesAtRoot(string directoryPath, CancellationToken ct)
         {
             foreach (string filePath in Directory.EnumerateFiles(directoryPath))
             {
+                ct.ThrowIfCancellationRequested();
                 string fileName = Path.GetFileName(filePath);
                 if (!SkillDirectoryContentSynchronizer.IsExcludedSkillFile(fileName))
                 {
@@ -234,11 +259,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static void DeleteEmptyDirectoriesAtRoot(string directoryPath)
+        private static void DeleteEmptyDirectoriesAtRoot(string directoryPath, CancellationToken ct)
         {
             foreach (string childDirectoryPath in Directory.EnumerateDirectories(directoryPath))
             {
-                SkillDirectoryContentSynchronizer.DeleteEmptyDirectories(childDirectoryPath);
+                ct.ThrowIfCancellationRequested();
+                SkillDirectoryContentSynchronizer.DeleteEmptyDirectories(childDirectoryPath, ct);
                 if (Directory.EnumerateFileSystemEntries(childDirectoryPath).Any())
                 {
                     continue;

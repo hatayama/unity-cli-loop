@@ -190,12 +190,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 int succeeded = 0;
                 foreach (SkillTargetInfo target in targetArray)
                 {
+                    ct.ThrowIfCancellationRequested();
                     SkillTargetInstaller.InstallSkillsForTarget(
                         projectRoot,
                         target,
                         disabledSkills,
                         enabledSkills,
-                        groupSkillsUnderUnityCliLoop);
+                        groupSkillsUnderUnityCliLoop,
+                        ct);
                     succeeded++;
                 }
 
@@ -240,12 +242,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 int succeeded = 0;
                 foreach (SkillTargetInfo target in targetArray)
                 {
+                    ct.ThrowIfCancellationRequested();
                     SkillTargetInstaller.InstallSpecificSkillsForTarget(
                         projectRoot,
                         target,
                         disabledSkills,
                         toolSkills,
-                        groupSkillsUnderUnityCliLoop);
+                        groupSkillsUnderUnityCliLoop,
+                        ct);
                     succeeded++;
                 }
 
