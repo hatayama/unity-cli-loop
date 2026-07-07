@@ -139,12 +139,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     });
                 CompileResult result =
                     CompileResultFactory.CreateExternalSceneChangeFailureResult(sceneChangeResult);
-                RecordCompileResultIfNeeded(
-                    result,
-                    BuildCompileControllerStateContext(new Dictionary<string, object>
-                    {
-                        ["external_scene_change_failed_before_request"] = true
-                    }));
+                RecordCompileResultIfNeeded(result);
                 return result;
             }
 
@@ -475,19 +470,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityEngine.Debug.Assert(result != null, "result must not be null");
 
             TaskCompletionSource<CompileResult> task = _currentCompileTask;
-            Dictionary<string, object> completionContext = BuildCompileControllerStateContext(
-                new Dictionary<string, object>
-                {
-                    ["unregister_events"] = unregisterEvents,
-                    ["success"] = result.Success,
-                    ["error_count"] = result.ErrorCount,
-                    ["warning_count"] = result.WarningCount,
-                    ["is_indeterminate"] = result.IsIndeterminate
-                });
             // Completion subscribers are outside this controller, so state cleanup cannot depend on them returning.
             try
             {
-                RecordCompileResultIfNeeded(result, completionContext);
+                RecordCompileResultIfNeeded(result);
 
                 if (unregisterEvents)
                 {
@@ -513,12 +499,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private void RecordCompileResultIfNeeded(
-            CompileResult result,
-            Dictionary<string, object> completionContext)
+        private void RecordCompileResultIfNeeded(CompileResult result)
         {
             UnityEngine.Debug.Assert(result != null, "result must not be null");
-            UnityEngine.Debug.Assert(completionContext != null, "completionContext must not be null");
 
             if (!_resultRecordingContext.Enabled)
             {
@@ -532,8 +515,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _resultRecordingContext.ForceRecompile,
                 result,
                 _resultRecordingContext.RequestId);
-            completionContext["result_recorded_in_session_state"] = true;
-            completionContext["request_id"] = _resultRecordingContext.RequestId;
         }
 
         /// <summary>
