@@ -105,13 +105,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     managedSkillNames,
                     groupSkillsUnderUnityCliLoop,
                     ct);
-            }
 
-            if (!groupSkillsUnderUnityCliLoop)
-            {
-                if (syncScope == SkillSyncScope.FullSync)
+                if (!groupSkillsUnderUnityCliLoop)
                 {
-                    HashSet<string> managedSkillNames = GetManagedSkillNames(skills, disabledSkills);
                     DeleteUnexpectedInstalledSkillDirectories(
                         targetRoot,
                         skills.Select(skill => skill.Name),
@@ -119,7 +115,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         groupSkillsUnderUnityCliLoop: true,
                         ct);
                 }
+            }
 
+            if (!groupSkillsUnderUnityCliLoop)
+            {
                 DeleteEmptyManagedSkillsParentDirectoryIfNeeded(
                     targetRoot,
                     groupSkillsUnderUnityCliLoop: true,
