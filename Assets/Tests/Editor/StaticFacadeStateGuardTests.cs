@@ -88,7 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RegexOptions.Compiled);
 
         private static readonly Regex AsyncMethodSignaturePattern = new Regex(
-            @"\b(?:private|internal|public|protected)\s+(?:static\s+)?async\s+(?:void|Task(?:<[^>]+>)?)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)",
+            @"\b(?:(?:private|internal|public|protected)\s+)?(?:static\s+)?async\s+(?:void|Task(?:<[^()\n]+>)?)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)",
             RegexOptions.Compiled | RegexOptions.Singleline);
 
         private static readonly Regex CancellationTokenCtParameterPattern = new Regex(
@@ -146,6 +146,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that the async guard requires the exact ct parameter name.
             Assert.That(CancellationTokenCtParameterPattern.IsMatch("CancellationToken ct"), Is.True);
             Assert.That(CancellationTokenCtParameterPattern.IsMatch("CancellationToken cts"), Is.False);
+        }
+
+        [Test]
+        public void AsyncMethodSignaturePattern_WhenVisibilityIsImplicitAndReturnTypeIsNestedGeneric_Matches()
+        {
+            // Tests that the async guard does not skip implicit-private methods or nested generic Task returns.
+            string source = "async Task<List<string>> LoadAsync(CancellationToken ct) => new List<string>();";
+            Match match = AsyncMethodSignaturePattern.Match(source);
+
+            Assert.That(match.Success, Is.True);
+            Assert.That(match.Groups[1].Value, Is.EqualTo("LoadAsync"));
+            Assert.That(match.Groups[2].Value, Is.EqualTo("CancellationToken ct"));
         }
 
         [Test]
