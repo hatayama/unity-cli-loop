@@ -488,7 +488,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 catch (Exception ex)
                 {
                     // Ensure partially created server is cleaned up on failure
-                    try { server?.Dispose(); } catch { }
+                    server?.Dispose();
                     // Unwrap SocketException details if present
                     SocketException sockEx = ex as SocketException;
                     if (ex is InvalidOperationException && ex.InnerException is SocketException innerSock)
