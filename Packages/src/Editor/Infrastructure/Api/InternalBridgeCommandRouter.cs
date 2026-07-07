@@ -12,49 +12,49 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal static class InternalBridgeCommandRouter
     {
-        public static bool IsInternalCommand(string commandName)
+        public static bool IsInternalCommand(string methodName)
         {
-            return commandName == UnityCliLoopConstants.COMMAND_NAME_GET_VERSION ||
-                   commandName == UnityCliLoopConstants.COMMAND_NAME_GET_COMPILE_STATUS ||
-                   commandName == UnityCliLoopConstants.COMMAND_NAME_GET_PAUSE_POINT_STATUS ||
-                   commandName == UnityCliLoopConstants.COMMAND_NAME_CLEAR_PAUSE_POINT_STATUS ||
-                   commandName == UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS;
+            return methodName == UnityCliLoopConstants.COMMAND_NAME_GET_VERSION ||
+                   methodName == UnityCliLoopConstants.COMMAND_NAME_GET_COMPILE_STATUS ||
+                   methodName == UnityCliLoopConstants.COMMAND_NAME_GET_PAUSE_POINT_STATUS ||
+                   methodName == UnityCliLoopConstants.COMMAND_NAME_CLEAR_PAUSE_POINT_STATUS ||
+                   methodName == UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS;
         }
 
         public static UnityCliLoopToolResponse Execute(
-            string commandName,
+            string methodName,
             JToken paramsToken,
             UnityCliLoopToolRegistrarService toolRegistrarService)
         {
-            Debug.Assert(IsInternalCommand(commandName), $"Unknown internal bridge command: {commandName}");
+            Debug.Assert(IsInternalCommand(methodName), $"Unknown internal bridge command: {methodName}");
             Debug.Assert(toolRegistrarService != null, "toolRegistrarService must not be null");
 
-            if (commandName == UnityCliLoopConstants.COMMAND_NAME_GET_VERSION)
+            if (methodName == UnityCliLoopConstants.COMMAND_NAME_GET_VERSION)
             {
                 return GetVersionBridgeCommand.Execute();
             }
 
-            if (commandName == UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS)
+            if (methodName == UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS)
             {
                 return GetToolDetailsBridgeCommand.Execute(paramsToken, toolRegistrarService);
             }
 
-            if (commandName == UnityCliLoopConstants.COMMAND_NAME_GET_COMPILE_STATUS)
+            if (methodName == UnityCliLoopConstants.COMMAND_NAME_GET_COMPILE_STATUS)
             {
                 return CompileStatusBridgeCommand.Execute(paramsToken);
             }
 
-            if (commandName == UnityCliLoopConstants.COMMAND_NAME_GET_PAUSE_POINT_STATUS)
+            if (methodName == UnityCliLoopConstants.COMMAND_NAME_GET_PAUSE_POINT_STATUS)
             {
                 return PausePointStatusBridgeCommand.Execute(paramsToken);
             }
 
-            if (commandName == UnityCliLoopConstants.COMMAND_NAME_CLEAR_PAUSE_POINT_STATUS)
+            if (methodName == UnityCliLoopConstants.COMMAND_NAME_CLEAR_PAUSE_POINT_STATUS)
             {
                 return PausePointStatusBridgeCommand.Clear(paramsToken);
             }
 
-            throw new ArgumentException($"Unknown internal bridge command: {commandName}", nameof(commandName));
+            throw new ArgumentException($"Unknown internal bridge command: {methodName}", nameof(methodName));
         }
     }
 }
