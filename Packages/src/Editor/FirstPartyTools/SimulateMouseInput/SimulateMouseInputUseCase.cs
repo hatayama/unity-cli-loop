@@ -212,7 +212,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 else if (pressWasApplied)
                 {
                     InputSimulationWaitOutcome releaseOutcome =
-                        await ReleaseButtonIfPossible(mouse, button).ConfigureAwait(false);
+                        await ReleaseButtonIfPossible(mouse, button, CancellationToken.None).ConfigureAwait(false);
                     if (releaseOutcome == InputSimulationWaitOutcome.TimedOut)
                     {
                         waitOutcome = InputSimulationWaitOutcome.TimedOut;
@@ -325,7 +325,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 else if (pressWasApplied)
                 {
                     InputSimulationWaitOutcome releaseOutcome =
-                        await ReleaseButtonIfPossible(mouse, button).ConfigureAwait(false);
+                        await ReleaseButtonIfPossible(mouse, button, CancellationToken.None).ConfigureAwait(false);
                     if (releaseOutcome == InputSimulationWaitOutcome.TimedOut)
                     {
                         waitOutcome = InputSimulationWaitOutcome.TimedOut;
@@ -635,9 +635,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return hits;
         }
 
-        private static async Task<InputSimulationWaitOutcome> ReleaseButtonIfPossible(Mouse mouse, RuntimeMouseButton button)
+        private static async Task<InputSimulationWaitOutcome> ReleaseButtonIfPossible(
+            Mouse mouse,
+            RuntimeMouseButton button,
+            CancellationToken ct)
         {
-            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
             if (!CanInjectMouseState(mouse))
             {
                 return InputSimulationWaitOutcome.Completed;
@@ -651,7 +654,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             InputSimulationWaitOutcome releaseOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
                 () => MouseInputState.SetButtonState(mouse, button, false),
-                CancellationToken.None).ConfigureAwait(false);
+                ct).ConfigureAwait(false);
             if (releaseOutcome == InputSimulationWaitOutcome.TimedOut)
             {
                 ScheduleReleaseButtonImmediately(mouse, button);
@@ -714,7 +717,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
             if (pressWasApplied)
             {
-                await ReleaseButtonIfPossible(mouse, button).ConfigureAwait(false);
+                await ReleaseButtonIfPossible(mouse, button, ct).ConfigureAwait(false);
             }
 
             MouseInputState.SetButtonUp(button);

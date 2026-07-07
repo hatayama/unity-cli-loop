@@ -55,6 +55,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/Infrastructure/Server/DomainReloadDetectionFileService.cs"
         };
 
+        private static readonly string[] AsyncCancellationTokenGuardPaths = new string[]
+        {
+            "Packages/src/Editor/Infrastructure/SkillSetup/ToolSkillSynchronizer.cs",
+            "Packages/src/Editor/Presentation/Setup/SetupWizardWindow.cs",
+            "Packages/src/Editor/FirstPartyTools/SimulateMouseInput/SimulateMouseInputUseCase.cs",
+            "Packages/src/Editor/FirstPartyTools/SimulateKeyboard/SimulateKeyboardUseCase.cs"
+        };
+
         private static readonly Regex DirectMutableStaticFieldPattern = new Regex(
             @"\b(private|internal|public|protected)\s+static\s+(?!readonly\b)(?!event\b)(?!extern\b)[^(\r\n;=]*[;=]",
             RegexOptions.Compiled);
@@ -77,6 +85,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static readonly Regex AllowedStaticIdentifierPattern = new Regex(
             @"\b(ServiceValue|RepositoryValue|RegistryValue|RegisteredUseCase)\b",
+            RegexOptions.Compiled);
+
+        private static readonly Regex AsyncMethodSignaturePattern = new Regex(
+            @"\b(?:(?:private|internal|public|protected)\s+)?(?:static\s+)?async\s+(?:void|Task(?:<[^()\n]+>)?)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:<[^()\n]+>)?\s*\(([^)]*)\)",
+            RegexOptions.Compiled | RegexOptions.Singleline);
+
+        private static readonly Regex CancellationTokenCtParameterPattern = new Regex(
+            @"\bCancellationToken\s+ct\b",
             RegexOptions.Compiled);
 
         [Test]
@@ -113,6 +129,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             List<string> violations = FindStaticClassViolations(InstanceServicePaths);
 
             Assert.That(violations, Is.Empty, string.Join("\n", violations));
+        }
+
+        [Test]
+        public void RefactorTargets_WhenDeclaringAsyncMethods_RequireCancellationTokenCt()
+        {
+            // Tests that R2-5 refactor targets do not add async methods without the standard ct parameter.
+            List<string> violations = FindAsyncMethodsWithoutCancellationTokenCt();
+
+            Assert.That(violations, Is.Empty, string.Join("\n", violations));
+        }
+
+        [Test]
+        public void CancellationTokenCtParameterPattern_WhenNameOnlyStartsWithCt_DoesNotMatch()
+        {
+            // Tests that the async guard requires the exact ct parameter name.
+            Assert.That(CancellationTokenCtParameterPattern.IsMatch("CancellationToken ct"), Is.True);
+            Assert.That(CancellationTokenCtParameterPattern.IsMatch("CancellationToken cts"), Is.False);
+        }
+
+        [Test]
+        public void AsyncMethodSignaturePattern_WhenVisibilityIsImplicitAndReturnTypeIsNestedGeneric_Matches()
+        {
+            // Tests that the async guard does not skip implicit-private methods or nested generic Task returns.
+            string source = "async Task<List<string>> LoadAsync<T>(CancellationToken ct) => new List<string>();";
+            Match match = AsyncMethodSignaturePattern.Match(source);
+
+            Assert.That(match.Success, Is.True);
+            Assert.That(match.Groups[1].Value, Is.EqualTo("LoadAsync"));
+            Assert.That(match.Groups[2].Value, Is.EqualTo("CancellationToken ct"));
         }
 
         [Test]
@@ -342,6 +387,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             return violations;
+        }
+
+        private static List<string> FindAsyncMethodsWithoutCancellationTokenCt()
+        {
+            List<string> violations = new();
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+
+            for (int pathIndex = 0; pathIndex < AsyncCancellationTokenGuardPaths.Length; pathIndex++)
+            {
+                string relativePath = AsyncCancellationTokenGuardPaths[pathIndex];
+                string absolutePath = Path.Combine(projectRoot, relativePath);
+                string source = File.ReadAllText(absolutePath);
+                MatchCollection matches = AsyncMethodSignaturePattern.Matches(source);
+                foreach (Match match in matches)
+                {
+                    string parameterList = match.Groups[2].Value;
+                    if (CancellationTokenCtParameterPattern.IsMatch(parameterList))
+                    {
+                        continue;
+                    }
+
+                    string methodName = match.Groups[1].Value;
+                    int lineNumber = CountLinesBefore(source, match.Index) + 1;
+                    violations.Add($"{relativePath}:{lineNumber}: {methodName}");
+                }
+            }
+
+            return violations;
+        }
+
+        private static int CountLinesBefore(string source, int index)
+        {
+            int lineCount = 0;
+            for (int charIndex = 0; charIndex < index; charIndex++)
+            {
+                if (source[charIndex] == '\n')
+                {
+                    lineCount++;
+                }
+            }
+
+            return lineCount;
         }
 
         private static List<string> FindStaticClassViolations(string[] relativePaths)
