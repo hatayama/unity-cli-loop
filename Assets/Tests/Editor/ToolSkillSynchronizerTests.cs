@@ -85,7 +85,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "At least one target directory should not exist for this test to be meaningful");
 
             // Act
-            await ToolSkillSynchronizer.InstallSkillFiles();
+            List<ToolSkillSynchronizer.SkillTargetInfo> targets =
+                ToolSkillSynchronizer.DetectTargets(_projectRoot, requireSkillsDirectory: true);
+            await ToolSkillSynchronizer.InstallSkillFiles(
+                targets,
+                groupSkillsUnderUnityCliLoop: false,
+                Array.Empty<string>());
 
             // Assert: directories that didn't exist before should still not exist
             foreach (string dir in _nonExistentDirsBefore)
@@ -96,13 +101,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
-        // Tests that the public install path preserves disabled tool settings.
+        // Tests that disabled tool inputs prevent skill recreation.
         [Test]
-        public async Task InstallSkillFiles_WhenToolIsDisabledInSettings_DoesNotRecreateSkill()
+        public async Task InstallSkillFiles_WhenToolIsDisabled_DoesNotRecreateSkill()
         {
-            Directory.CreateDirectory(UnityCliLoopConstants.ULOOP_DIR);
-            File.WriteAllText(ToolSettingsFilePath, "{\"disabledTools\":[\"compile\"]}");
-
             string temporaryRoot = CreateTemporaryProjectRoot();
             string targetRoot = Path.Combine(temporaryRoot, ".claude");
             string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
@@ -118,7 +120,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillInstallResult result =
                 await ToolSkillSynchronizer.InstallSkillFiles(
                     new List<ToolSkillSynchronizer.SkillTargetInfo> { target },
-                    groupSkillsUnderUnityCliLoop: false);
+                    groupSkillsUnderUnityCliLoop: false,
+                    disabledTools: new[] { "compile" });
 
             Assert.That(result.IsSuccessful, Is.True);
             Assert.That(Directory.Exists(disabledSkillDir), Is.False);

@@ -318,23 +318,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return SkillInstallLayout.GetInstalledState(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop);
         }
 
-        /// <summary>
-        /// Re-installs skills only for targets that already opted in via an existing skills directory.
-        /// </summary>
-        public static async Task<SkillInstallResult> InstallSkillFiles()
-        {
-            return await InstallSkillFiles(groupSkillsUnderUnityCliLoop: false);
-        }
-
-        public static async Task<SkillInstallResult> InstallSkillFiles(bool groupSkillsUnderUnityCliLoop)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            List<SkillTargetInfo> targets = DetectTargets(projectRoot, requireSkillsDirectory: true);
-            return await InstallSkillFiles(targets, groupSkillsUnderUnityCliLoop);
-        }
-
         public static async Task<SkillInstallResult> InstallSkillFilesForTool(
             string toolName,
             bool groupSkillsUnderUnityCliLoop)
@@ -361,21 +344,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 toolName,
                 groupSkillsUnderUnityCliLoop,
                 disabledTools);
-        }
-
-        public static async Task<SkillInstallResult> InstallSkillFiles(List<SkillTargetInfo> targets)
-        {
-            return await InstallSkillFiles(targets, groupSkillsUnderUnityCliLoop: false);
-        }
-
-        public static async Task<SkillInstallResult> InstallSkillFiles(
-            List<SkillTargetInfo> targets,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            return await InstallSkillFiles(
-                targets,
-                groupSkillsUnderUnityCliLoop,
-                GetCurrentDisabledTools());
         }
 
         internal static async Task<SkillInstallResult> InstallSkillFiles(
