@@ -206,18 +206,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ToolSettings_WhenLoaded_CompileUnderDomainAssembly()
+        public void ToolSettings_WhenLoaded_PinPortsToDomainAndStorageDtoToInfrastructure()
         {
-            // Tests that tool-specific settings concepts stay in the domain layer.
-            string toolSettingsDataAssemblyName = typeof(ToolSettingsData).Assembly.GetName().Name;
+            // Tests that tool-specific settings ports stay in the domain layer while JSON storage DTOs stay in infrastructure.
             string editorSettingsDataAssemblyName = typeof(UnityCliLoopEditorSettingsData).Assembly.GetName().Name;
             string toolSettingsPortAssemblyName = typeof(IToolSettingsPort).Assembly.GetName().Name;
             string editorSettingsPortAssemblyName = typeof(IUnityCliLoopEditorSettingsPort).Assembly.GetName().Name;
+            string toolSettingsDataAssemblyName = typeof(ToolSettingsData).Assembly.GetName().Name;
 
-            Assert.That(toolSettingsDataAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(editorSettingsDataAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(toolSettingsPortAssemblyName, Is.EqualTo(DomainAssemblyName));
             Assert.That(editorSettingsPortAssemblyName, Is.EqualTo(DomainAssemblyName));
+            Assert.That(toolSettingsDataAssemblyName, Is.EqualTo(InfrastructureAssemblyName));
         }
 
         [Test]

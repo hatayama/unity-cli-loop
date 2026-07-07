@@ -1,6 +1,6 @@
 using System;
 
-namespace io.github.hatayama.UnityCliLoop.Domain
+namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     [Serializable]
     public record ToolSettingsData
