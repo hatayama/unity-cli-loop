@@ -170,11 +170,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return false;
         }
 
-        public static List<SkillTargetInfo> DetectTargets()
-        {
-            return DetectTargets(requireSkillsDirectory: false);
-        }
-
         public static List<SkillTargetInfo> DetectTargetsForLayout(bool groupSkillsUnderUnityCliLoop)
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
@@ -217,43 +212,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 includeFreshnessCheck: false);
         }
 
-        internal static List<SkillTargetInfo> DetectTargets(bool requireSkillsDirectory)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            return DetectTargets(projectRoot, requireSkillsDirectory);
-        }
-
-        internal static List<SkillTargetInfo> DetectTargets(
-            bool requireSkillsDirectory,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            return DetectTargets(
-                projectRoot,
-                requireSkillsDirectory,
-                groupSkillsUnderUnityCliLoop,
-                includeFreshnessCheck: true);
-        }
-
-        internal static List<SkillTargetInfo> DetectTargets(
-            bool requireSkillsDirectory,
-            bool groupSkillsUnderUnityCliLoop,
-            bool includeFreshnessCheck)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            return DetectTargets(
-                projectRoot,
-                requireSkillsDirectory,
-                groupSkillsUnderUnityCliLoop,
-                includeFreshnessCheck);
-        }
-
         internal static List<SkillTargetInfo> DetectTargets(string projectRoot, bool requireSkillsDirectory)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
@@ -288,18 +246,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return targets;
-        }
-
-        internal static List<SkillTargetInfo> DetectTargets(
-            string projectRoot,
-            bool requireSkillsDirectory,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            return DetectTargets(
-                projectRoot,
-                requireSkillsDirectory,
-                groupSkillsUnderUnityCliLoop,
-                includeFreshnessCheck: true);
         }
 
         internal static List<SkillTargetInfo> DetectTargets(
@@ -382,7 +328,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public static async Task<SkillInstallResult> InstallSkillFiles(bool groupSkillsUnderUnityCliLoop)
         {
-            List<SkillTargetInfo> targets = DetectTargets(requireSkillsDirectory: true);
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            List<SkillTargetInfo> targets = DetectTargets(projectRoot, requireSkillsDirectory: true);
             return await InstallSkillFiles(targets, groupSkillsUnderUnityCliLoop);
         }
 

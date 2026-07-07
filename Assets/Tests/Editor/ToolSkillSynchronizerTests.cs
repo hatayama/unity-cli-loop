@@ -787,7 +787,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
                     requireSkillsDirectory: true,
-                    groupSkillsUnderUnityCliLoop: true)
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
                 .ToArray();
 
             foreach (ToolSkillSynchronizer.SkillTargetInfo target in detectedTargets)
@@ -809,7 +810,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
                     requireSkillsDirectory: true,
-                    groupSkillsUnderUnityCliLoop: true)
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -837,7 +839,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
                     requireSkillsDirectory: true,
-                    groupSkillsUnderUnityCliLoop: false)
+                    groupSkillsUnderUnityCliLoop: false,
+                    includeFreshnessCheck: true)
                 .ToArray();
 
             foreach (ToolSkillSynchronizer.SkillTargetInfo target in detectedTargets)
@@ -893,7 +896,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
                     requireSkillsDirectory: true,
-                    groupSkillsUnderUnityCliLoop: true)
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
                 .ToArray();
 
             Assert.AreEqual(ToolSkillSynchronizer.SkillTargetDirs.Length, detectedTargets.Length);
@@ -963,7 +967,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
                     requireSkillsDirectory: true,
-                    groupSkillsUnderUnityCliLoop: true)
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1059,7 +1064,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
                     requireSkillsDirectory: true,
-                    groupSkillsUnderUnityCliLoop: true)
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1085,7 +1091,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
                     requireSkillsDirectory: true,
-                    groupSkillsUnderUnityCliLoop: true)
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1118,7 +1125,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
                     requireSkillsDirectory: true,
-                    groupSkillsUnderUnityCliLoop: true)
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1320,7 +1328,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
                     requireSkillsDirectory: true,
-                    groupSkillsUnderUnityCliLoop: true)
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1352,7 +1361,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
                     requireSkillsDirectory: true,
-                    groupSkillsUnderUnityCliLoop: true)
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1384,7 +1394,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
                     requireSkillsDirectory: true,
-                    groupSkillsUnderUnityCliLoop: true)
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1501,7 +1512,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
                     requireSkillsDirectory: true,
-                    groupSkillsUnderUnityCliLoop: true)
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1617,7 +1629,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
                     requireSkillsDirectory: true,
-                    groupSkillsUnderUnityCliLoop: true)
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
@@ -1644,7 +1657,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = ToolSkillSynchronizer.DetectTargets(
                     temporaryRoot,
                     requireSkillsDirectory: true,
-                    groupSkillsUnderUnityCliLoop: true)
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
                 .ToArray();
 
             Assert.That(detectedTargets.Length, Is.EqualTo(1));
