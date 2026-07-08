@@ -7,7 +7,7 @@ using io.github.hatayama.UnityCliLoop.Runtime;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Characterizes synchronous mouse UI cleanup before main-thread scheduling is extracted.
+    /// Characterizes synchronous mouse UI cleanup scheduling.
     /// </summary>
     [TestFixture]
     public sealed class MouseUiMainThreadCleanupSchedulerTests
@@ -24,11 +24,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void ExecuteCleanupOnMainThread_AfterContextCapture_RunsImmediately()
         {
-            SimulateMouseUiUseCase useCase = new();
-            useCase.CaptureMainThreadContext();
+            MouseUiMainThreadCleanupScheduler scheduler = new();
+            scheduler.CaptureMainThreadContext();
             bool cleanupRan = false;
 
-            useCase.ExecuteCleanupOnMainThread(() => cleanupRan = true);
+            scheduler.ExecuteCleanupOnMainThread(() => cleanupRan = true);
 
             Assert.That(cleanupRan, Is.True);
         }
@@ -45,10 +45,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 null,
                 "Target",
                 new Vector2(100f, 200f));
-            SimulateMouseUiUseCase useCase = new();
-            useCase.CaptureMainThreadContext();
+            MouseUiMainThreadCleanupScheduler scheduler = new();
+            scheduler.CaptureMainThreadContext();
 
-            useCase.QueueOverlayClear();
+            scheduler.QueueOverlayClear();
 
             Assert.That(SimulateMouseUiOverlayState.IsActive, Is.False);
         }

@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
@@ -21,10 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Wire-visible fragment of the paused preflight message; tests pin the composed string.
         public const string PausedActionDescription = "simulating UI input";
 
-        private const float EXPAND_DURATION = SimulateMouseUiAnimationConstants.EXPAND_DURATION;
-        private const float EXPAND_START_SCALE = SimulateMouseUiAnimationConstants.EXPAND_START_SCALE;
-        private const float DISSIPATE_DURATION = SimulateMouseUiAnimationConstants.DISSIPATE_DURATION;
-        private SynchronizationContext? _mainThreadContext;
+        private readonly MouseUiMainThreadCleanupScheduler _mainThreadCleanupScheduler = new();
 
         public async Task<SimulateMouseUiResponse> ExecuteAsync(
             SimulateMouseUiSchema request,
@@ -36,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             ct.ThrowIfCancellationRequested();
-            CaptureMainThreadContext();
+            _mainThreadCleanupScheduler.CaptureMainThreadContext();
 
             (MouseUiSimulationCommand? parameters, string? actionError) = MouseUiSimulationCommand.TryFromSchema(request);
             if (parameters == null)
@@ -65,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             EventSystem activeEventSystem = eventSystem!;
 
             MouseUiSimulationActivityLogger.LogSimulationStart(parameters, correlationId);
-            EnsureOverlayExists();
+            OverlayCanvasFactory.EnsureExists();
 
             SimulateMouseUiResponse? dragStateFailure =
                 MouseUiSimulationValidator.ValidateActiveDragState(parameters);
@@ -115,11 +111,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static void EnsureOverlayExists()
-        {
-            OverlayCanvasFactory.EnsureExists();
-        }
-
         // Input coordinates use top-left origin; Unity Screen space uses bottom-left origin.
         // Handles.GetMainGameViewSize() returns the Game view's target resolution (e.g. 1920x1080),
         // which matches the Canvas layout space — unlike Screen.height which returns the window pixel size.
@@ -166,10 +157,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 MouseAction.Click, inputPos, null,
                 targetName, Handles.GetMainGameViewSize());
 
-            bool expandCompleted = await PlayExpandAnimation(ct).ConfigureAwait(false);
+            bool expandCompleted = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
             if (!expandCompleted)
             {
-                QueueOverlayClear();
+                _mainThreadCleanupScheduler.QueueOverlayClear();
                 return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Click, inputPos, null, targetName);
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -177,10 +168,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Fire click events after expand animation so the user sees where the click lands
             ExecutePointerClickEvents(resolvedTargets, pointerData);
 
-            bool dissipateCompleted = await PlayDissipateAnimation(ct).ConfigureAwait(false);
+            bool dissipateCompleted = await MouseUiOverlayAnimator.PlayDissipateAnimation(ct).ConfigureAwait(false);
             if (!dissipateCompleted)
             {
-                QueueOverlayClear();
+                _mainThreadCleanupScheduler.QueueOverlayClear();
                 return MouseUiSimulationResponseFactory.CreateClickResult(parameters, inputPos, targetName, hitTarget);
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -230,10 +221,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 MouseAction.LongPress, inputPos, null,
                 targetName, Handles.GetMainGameViewSize());
 
-            bool expandCompleted = await PlayExpandAnimation(ct).ConfigureAwait(false);
+            bool expandCompleted = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
             if (!expandCompleted)
             {
-                QueueOverlayClear();
+                _mainThreadCleanupScheduler.QueueOverlayClear();
                 return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.LongPress, inputPos, null, targetName);
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -248,10 +239,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 while (elapsed < parameters.Duration)
                 {
                     SimulateMouseUiOverlayState.UpdateLongPressElapsed(elapsed);
-                    bool frameReady = await WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
+                    bool frameReady = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
                     if (!frameReady)
                     {
-                        QueueOverlayClear();
+                        _mainThreadCleanupScheduler.QueueOverlayClear();
                         return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.LongPress, inputPos, null, targetName);
                     }
                     await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -264,15 +255,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Ensure pointerUp fires even if the hold loop is cancelled
                 if (shouldReleasePointer)
                 {
-                    ExecuteCleanupOnMainThread(
+                    _mainThreadCleanupScheduler.ExecuteCleanupOnMainThread(
                         () => ExecuteEvents.Execute(resolvedTargets.Target!, pointerData, ExecuteEvents.pointerUpHandler));
                 }
             }
 
-            bool dissipateCompleted = await PlayDissipateAnimation(ct).ConfigureAwait(false);
+            bool dissipateCompleted = await MouseUiOverlayAnimator.PlayDissipateAnimation(ct).ConfigureAwait(false);
             if (!dissipateCompleted)
             {
-                QueueOverlayClear();
+                _mainThreadCleanupScheduler.QueueOverlayClear();
                 return MouseUiSimulationResponseFactory.CreateLongPressResult(parameters, inputPos, targetName, hitTarget);
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -410,18 +401,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 SimulateMouseUiOverlayState.Update(
                     MouseAction.Drag, inputStart, null, null, Handles.GetMainGameViewSize());
-                bool expandCompleted = await PlayExpandAnimation(ct).ConfigureAwait(false);
+                bool expandCompleted = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
                 if (!expandCompleted)
                 {
-                    QueueOverlayClear();
+                    _mainThreadCleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, null);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
-                bool dissipateCompleted = await PlayDissipateAnimation(ct).ConfigureAwait(false);
+                bool dissipateCompleted = await MouseUiOverlayAnimator.PlayDissipateAnimation(ct).ConfigureAwait(false);
                 if (!dissipateCompleted)
                 {
-                    QueueOverlayClear();
+                    _mainThreadCleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, null);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -451,10 +442,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                bool expandCompleted = await PlayExpandAnimation(ct).ConfigureAwait(false);
+                bool expandCompleted = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
                 if (!expandCompleted)
                 {
-                    QueueOverlayClear();
+                    _mainThreadCleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -463,31 +454,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     .ConfigureAwait(false);
                 if (!dragCompleted)
                 {
-                    QueueOverlayClear();
+                    _mainThreadCleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
-                bool frameReady = await WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
+                bool frameReady = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
                 if (!frameReady)
                 {
-                    QueueOverlayClear();
+                    _mainThreadCleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
             }
             finally
             {
-                ExecuteCleanupOnMainThread(() => FinalizeDrag(pointerData, target, explicitDropTarget));
+                _mainThreadCleanupScheduler.ExecuteCleanupOnMainThread(() => FinalizeDrag(pointerData, target, explicitDropTarget));
             }
 
             SimulateMouseUiOverlayState.Update(
                 MouseAction.Drag, inputEnd, inputStart, targetName, Handles.GetMainGameViewSize());
 
-            bool completedDissipate = await PlayDissipateAnimation(ct).ConfigureAwait(false);
+            bool completedDissipate = await MouseUiOverlayAnimator.PlayDissipateAnimation(ct).ConfigureAwait(false);
             if (!completedDissipate)
             {
-                QueueOverlayClear();
+                _mainThreadCleanupScheduler.QueueOverlayClear();
                 return MouseUiSimulationResponseFactory.CreateDragResult(parameters, inputStart, inputEnd, targetName);
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -544,7 +535,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (duration <= 0f)
             {
-                bool frameReady = await WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
+                bool frameReady = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
                 if (!frameReady)
                 {
                     return false;
@@ -565,7 +556,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             do
             {
-                bool frameReady = await WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
+                bool frameReady = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
                 if (!frameReady)
                 {
                     return false;
@@ -639,18 +630,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 SimulateMouseUiOverlayState.Update(
                     MouseAction.DragStart, inputPos, null, null, Handles.GetMainGameViewSize());
-                bool expandCompleted = await PlayExpandAnimation(ct).ConfigureAwait(false);
+                bool expandCompleted = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
                 if (!expandCompleted)
                 {
-                    QueueOverlayClear();
+                    _mainThreadCleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.DragStart, inputPos, null, null);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
-                bool dissipateCompleted = await PlayDissipateAnimation(ct).ConfigureAwait(false);
+                bool dissipateCompleted = await MouseUiOverlayAnimator.PlayDissipateAnimation(ct).ConfigureAwait(false);
                 if (!dissipateCompleted)
                 {
-                    QueueOverlayClear();
+                    _mainThreadCleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.DragStart, inputPos, null, null);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -681,10 +672,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool animationCompleted = false;
             try
             {
-                animationCompleted = await PlayExpandAnimation(ct).ConfigureAwait(false);
+                animationCompleted = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
                 if (!animationCompleted)
                 {
-                    QueueOverlayClear();
+                    _mainThreadCleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.DragStart, inputPos, null, targetName);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -695,7 +686,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Cancellation during animation leaves beginDrag dispatched; clean up
                 if (!animationCompleted)
                 {
-                    ExecuteCleanupOnMainThread(() =>
+                    _mainThreadCleanupScheduler.ExecuteCleanupOnMainThread(() =>
                     {
                         FinalizeDrag(pointerData, target, null);
                         MouseDragState.Clear();
@@ -756,7 +747,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.DragSpeed, ct).ConfigureAwait(false);
             if (!dragCompleted)
             {
-                QueueOverlayClear();
+                _mainThreadCleanupScheduler.QueueOverlayClear();
                 return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.DragMove, inputEnd, null, targetName);
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -828,22 +819,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.DragSpeed, ct).ConfigureAwait(false);
                 if (!dragCompleted)
                 {
-                    QueueOverlayClear();
+                    _mainThreadCleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.DragEnd, inputEnd, null, targetName);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
-                bool frameReady = await WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
+                bool frameReady = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
                 if (!frameReady)
                 {
-                    QueueOverlayClear();
+                    _mainThreadCleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.DragEnd, inputEnd, null, targetName);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
             }
             finally
             {
-                ExecuteCleanupOnMainThread(() =>
+                _mainThreadCleanupScheduler.ExecuteCleanupOnMainThread(() =>
                 {
                     FinalizeDrag(pointerData, target, explicitDropTarget);
                     MouseDragState.Clear();
@@ -853,10 +844,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SimulateMouseUiOverlayState.Update(
                 MouseAction.DragEnd, inputEnd, null, targetName, Handles.GetMainGameViewSize());
 
-            bool dissipateCompleted = await PlayDissipateAnimation(ct).ConfigureAwait(false);
+            bool dissipateCompleted = await MouseUiOverlayAnimator.PlayDissipateAnimation(ct).ConfigureAwait(false);
             if (!dissipateCompleted)
             {
-                QueueOverlayClear();
+                _mainThreadCleanupScheduler.QueueOverlayClear();
                 return MouseUiSimulationResponseFactory.CreateDragEndResult(parameters, inputEnd, targetName);
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -894,107 +885,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return null;
-        }
-
-        internal static async Task<bool> PlayExpandAnimation(CancellationToken ct)
-        {
-            SimulateMouseUiOverlay overlay = OverlayCanvasFactory.VisualizationCanvas.MouseUiOverlay;
-
-            // Previous dissipate sets alpha to 0; restore before expand starts
-            overlay.SetAlpha(1f);
-
-            float startTime = Time.realtimeSinceStartup;
-            float elapsed = 0f;
-            while (elapsed < EXPAND_DURATION)
-            {
-                float t = elapsed / EXPAND_DURATION;
-                overlay.SetCursorScale(Mathf.Lerp(EXPAND_START_SCALE, 1f, t));
-                bool frameReady = await WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
-                if (!frameReady)
-                {
-                    return false;
-                }
-                await MainThreadSwitcher.SwitchToMainThread(ct);
-                elapsed = Time.realtimeSinceStartup - startTime;
-            }
-            overlay.SetCursorScale(1f);
-            return true;
-        }
-
-        internal static async Task<bool> PlayDissipateAnimation(CancellationToken ct)
-        {
-            SimulateMouseUiOverlay overlay = OverlayCanvasFactory.VisualizationCanvas.MouseUiOverlay;
-
-            float startTime = Time.realtimeSinceStartup;
-            float elapsed = 0f;
-            while (elapsed < DISSIPATE_DURATION)
-            {
-                float t = elapsed / DISSIPATE_DURATION;
-                overlay.SetCursorScale(Mathf.Lerp(1f, 0f, t));
-                overlay.SetAlpha(Mathf.Lerp(1f, 0f, t));
-                bool frameReady = await WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
-                if (!frameReady)
-                {
-                    return false;
-                }
-                await MainThreadSwitcher.SwitchToMainThread(ct);
-                elapsed = Time.realtimeSinceStartup - startTime;
-            }
-            overlay!.SetCursorScale(0f);
-            overlay!.SetAlpha(0f);
-            SimulateMouseUiOverlayState.Clear();
-            return true;
-        }
-
-        internal static async Task<bool> WaitForEditorFrameAndSwitchToMainThreadAsync(CancellationToken ct)
-        {
-            bool frameReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
-                1,
-                UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
-                ct).ConfigureAwait(false);
-            if (!frameReady)
-            {
-                return false;
-            }
-
-            await MainThreadSwitcher.SwitchToMainThread(ct);
-            return true;
-        }
-
-        internal void CaptureMainThreadContext()
-        {
-            _mainThreadContext = SynchronizationContext.Current;
-            Debug.Assert(_mainThreadContext != null, "Main thread synchronization context must be captured.");
-        }
-
-        internal void QueueOverlayClear()
-        {
-            ExecuteCleanupOnMainThread(SimulateMouseUiOverlayState.Clear);
-        }
-
-        internal void ExecuteCleanupOnMainThread(Action cleanup)
-        {
-            Debug.Assert(cleanup != null, "cleanup must not be null");
-            if (cleanup == null)
-            {
-                throw new ArgumentNullException(nameof(cleanup));
-            }
-
-            if (MainThreadSwitcher.IsMainThread)
-            {
-                cleanup();
-                return;
-            }
-
-            SynchronizationContext? context = _mainThreadContext;
-            Debug.Assert(context != null, "Main thread synchronization context must be captured before cleanup.");
-            if (context == null)
-            {
-                throw new InvalidOperationException("Main thread synchronization context was not captured.");
-            }
-
-            // Why: timeout continuations can run on timer threads while Unity objects must still be cleaned up on the Editor thread.
-            context.Post(_ => cleanup(), null);
         }
 
     }
