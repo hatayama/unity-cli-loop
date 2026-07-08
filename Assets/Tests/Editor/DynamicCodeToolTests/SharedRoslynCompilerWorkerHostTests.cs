@@ -33,16 +33,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             string requestFilePath =
                 @"C:\Users\ExampleUser\Documents\unity\SampleWorkspace\SampleUnityProject\Temp\UnityCliLoopCompilation\DynamicCommand_1.worker";
 
-            string command = SharedRoslynCompilerWorkerHost.CreateCompileRequestCommandForTests(requestFilePath);
+            string command = SharedRoslynCompilerWorkerProtocol.CreateCompileRequestCommand(requestFilePath);
 
-            Assert.That(command, Does.StartWith(SharedRoslynCompilerWorkerHost.CompileRequestPathPrefix));
+            Assert.That(command, Does.StartWith(SharedRoslynCompilerWorkerProtocol.CompileRequestPathPrefix));
             Assert.That(command, Does.Not.Contain(requestFilePath));
             foreach (char character in command)
             {
                 Assert.That(character, Is.LessThanOrEqualTo((char)127));
             }
 
-            string encodedPath = command.Substring(SharedRoslynCompilerWorkerHost.CompileRequestPathPrefix.Length);
+            string encodedPath = command.Substring(SharedRoslynCompilerWorkerProtocol.CompileRequestPathPrefix.Length);
             string decodedPath = Encoding.UTF8.GetString(Convert.FromBase64String(encodedPath));
             Assert.That(decodedPath, Is.EqualTo(Path.GetFullPath(requestFilePath)));
         }
@@ -51,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public void TryParseResponseHeader_WhenHeaderContainsExitCode_ShouldReturnParsedCode()
         {
             // Verifies the worker protocol accepts its result prefix followed by a numeric exit code.
-            bool parsed = SharedRoslynCompilerWorkerHost.TryParseResponseHeader("__ULOOP_RESULT__ 7", out int exitCode);
+            bool parsed = SharedRoslynCompilerWorkerProtocol.TryParseResponseHeader("__ULOOP_RESULT__ 7", out int exitCode);
 
             Assert.That(parsed, Is.True);
             Assert.That(exitCode, Is.EqualTo(7));
@@ -61,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public void GetResponseHeaderFailureReason_WhenPrefixIsInvalid_ShouldReportInvalidHeader()
         {
             // Verifies a response without the worker result prefix is classified as an invalid header.
-            string failureReason = SharedRoslynCompilerWorkerHost.GetResponseHeaderFailureReason("unexpected response");
+            string failureReason = SharedRoslynCompilerWorkerProtocol.GetResponseHeaderFailureReason("unexpected response");
 
             Assert.That(failureReason, Is.EqualTo("worker_invalid_header"));
         }
@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public void GetResponseHeaderFailureReason_WhenExitCodeIsInvalid_ShouldReportInvalidExitCode()
         {
             // Verifies a prefixed response with a non-numeric status is classified as an invalid exit code.
-            string failureReason = SharedRoslynCompilerWorkerHost.GetResponseHeaderFailureReason(
+            string failureReason = SharedRoslynCompilerWorkerProtocol.GetResponseHeaderFailureReason(
                 "__ULOOP_RESULT__ not-a-number");
 
             Assert.That(failureReason, Is.EqualTo("worker_invalid_exit_code"));
@@ -79,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void CreateProgramSource_WhenRequestPathHasNoPrefix_ShouldRecoverRawPath()
         {
-            string programSource = SharedRoslynCompilerWorkerHost.CreateProgramSourceForTests();
+            string programSource = SharedRoslynCompilerWorkerProtocol.CreateProgramSource();
 
             Assert.That(programSource, Does.Contain("return RecoverRawRequestPath(requestPath);"));
             Assert.That(programSource, Does.Contain("FindWindowsDrivePathIndex"));
@@ -89,24 +89,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void CreateProgramSource_WhenTemplateIsLoaded_ShouldReplaceTokens()
         {
-            string templatePath = SharedRoslynCompilerWorkerHost.GetWorkerProgramTemplatePathForTests();
-            string programSource = SharedRoslynCompilerWorkerHost.CreateProgramSourceForTests();
+            string templatePath = SharedRoslynCompilerWorkerProtocol.GetWorkerProgramTemplatePath();
+            string programSource = SharedRoslynCompilerWorkerProtocol.CreateProgramSource();
 
             Assert.That(File.Exists(templatePath), Is.True);
-            Assert.That(programSource, Does.Contain(SharedRoslynCompilerWorkerHost.CompileRequestPathPrefix));
+            Assert.That(programSource, Does.Contain(SharedRoslynCompilerWorkerProtocol.CompileRequestPathPrefix));
             Assert.That(programSource, Does.Contain(
-                SharedRoslynCompilerWorkerHost.GetSharedCompilerWorkerResultPrefixForTests()));
+                SharedRoslynCompilerWorkerProtocol.SharedCompilerWorkerResultPrefix));
             Assert.That(programSource, Does.Contain(
-                SharedRoslynCompilerWorkerHost.GetSharedCompilerWorkerEndMarkerForTests()));
+                SharedRoslynCompilerWorkerProtocol.SharedCompilerWorkerEndMarker));
             Assert.That(programSource, Does.Contain(
-                SharedRoslynCompilerWorkerHost.GetSharedCompilerWorkerQuitCommandForTests()));
+                SharedRoslynCompilerWorkerProtocol.SharedCompilerWorkerQuitCommand));
             Assert.That(programSource, Does.Not.Contain("{{"));
         }
 
         [Test]
         public void CreateProgramSource_WhenRequestPathPrefixHasLeadingGarbage_ShouldDecodeEncodedPath()
         {
-            string programSource = SharedRoslynCompilerWorkerHost.CreateProgramSourceForTests();
+            string programSource = SharedRoslynCompilerWorkerProtocol.CreateProgramSource();
 
             Assert.That(programSource, Does.Contain("FindRequestPathPrefixIndex"));
             Assert.That(programSource, Does.Contain("IndexOf(RequestPathPrefix"));
@@ -116,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void CreateProgramSource_WhenRawPathContainsPrefixAfterDirectorySeparator_ShouldRecoverRawPath()
         {
-            string programSource = SharedRoslynCompilerWorkerHost.CreateProgramSourceForTests();
+            string programSource = SharedRoslynCompilerWorkerProtocol.CreateProgramSource();
 
             Assert.That(programSource, Does.Contain("HasDirectorySeparatorBeforePrefix"));
             Assert.That(programSource, Does.Contain("return HasDirectorySeparatorBeforePrefix(requestPath, encodedPathIndex) ? -1 : encodedPathIndex;"));
@@ -125,7 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void CreateProgramSource_WhenEncodedPayloadIsMalformed_ShouldRecoverRawPath()
         {
-            string programSource = SharedRoslynCompilerWorkerHost.CreateProgramSourceForTests();
+            string programSource = SharedRoslynCompilerWorkerProtocol.CreateProgramSource();
 
             Assert.That(programSource, Does.Contain("IsBase64Payload"));
             Assert.That(programSource, Does.Contain("HasValidBase64Padding"));
