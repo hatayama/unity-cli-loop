@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             byte[] sourceBytes = Encoding.UTF8.GetBytes("line1\r\nline2\rline3\n");
             byte[] expectedBytes = Encoding.UTF8.GetBytes("line1\nline2\nline3\n");
 
-            byte[] actualBytes = SkillInstallLayout.NormalizeSkillFileContent("reference.md", sourceBytes);
+            byte[] actualBytes = SkillFileContentNormalizer.NormalizeSkillFileContent("reference.md", sourceBytes);
 
             Assert.That(actualBytes, Is.EqualTo(expectedBytes));
         }
@@ -36,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 .Concat(Encoding.Unicode.GetBytes("line1\nline2\n"))
                 .ToArray();
 
-            byte[] actualBytes = SkillInstallLayout.NormalizeSkillFileContent("install.ps1", sourceBytes);
+            byte[] actualBytes = SkillFileContentNormalizer.NormalizeSkillFileContent("install.ps1", sourceBytes);
 
             Assert.That(actualBytes, Is.EqualTo(expectedBytes));
         }
@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 .Concat(Encoding.BigEndianUnicode.GetBytes("line1\nline2\n"))
                 .ToArray();
 
-            byte[] actualBytes = SkillInstallLayout.NormalizeSkillFileContent("install.ps1", sourceBytes);
+            byte[] actualBytes = SkillFileContentNormalizer.NormalizeSkillFileContent("install.ps1", sourceBytes);
 
             Assert.That(actualBytes, Is.EqualTo(expectedBytes));
         }
@@ -63,7 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             byte[] sourceBytes = Encoding.UTF8.GetBytes("line1\r\nline2\r\n");
 
-            byte[] actualBytes = SkillInstallLayout.NormalizeSkillFileContent("image.png", sourceBytes);
+            byte[] actualBytes = SkillFileContentNormalizer.NormalizeSkillFileContent("image.png", sourceBytes);
 
             Assert.That(actualBytes, Is.EqualTo(sourceBytes));
         }
@@ -74,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             byte[] sourceBytes = { 0x41, 0x42, 0x00, 0x43, 0x0D, 0x44 };
 
-            byte[] actualBytes = SkillInstallLayout.NormalizeSkillFileContent("reference.md", sourceBytes);
+            byte[] actualBytes = SkillFileContentNormalizer.NormalizeSkillFileContent("reference.md", sourceBytes);
 
             Assert.That(actualBytes, Is.EqualTo(sourceBytes));
         }
@@ -85,7 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             byte[] sourceBytes = Encoding.UTF8.GetBytes("line1\nline2\n");
 
-            byte[] actualBytes = SkillInstallLayout.NormalizeSkillFileContent("reference.md", sourceBytes);
+            byte[] actualBytes = SkillFileContentNormalizer.NormalizeSkillFileContent("reference.md", sourceBytes);
 
             Assert.That(actualBytes, Is.EqualTo(sourceBytes));
         }
