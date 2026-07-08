@@ -39,44 +39,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static readonly string[] SkillTargetDirs = SkillTargets.Select(t => t.DirName).ToArray();
 
-        internal static List<ToolSkillSynchronizer.SkillTargetInfo> DetectTargetsAcrossLayoutsAtProjectRoot(
-            string projectRoot,
-            bool requireSkillsDirectory)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            List<ToolSkillSynchronizer.SkillTargetInfo> targets = new();
-
-            foreach (SkillTargetDefinition target in SkillTargets)
-            {
-                string targetRoot = Path.Combine(projectRoot, target.DirName);
-                if (!Directory.Exists(targetRoot))
-                {
-                    continue;
-                }
-
-                bool hasSkillsDirectory = SkillInstallLayout.HasOptedInSkillsDirectory(targetRoot);
-                if (requireSkillsDirectory && !hasSkillsDirectory)
-                {
-                    continue;
-                }
-
-                bool hasULoopSkills = hasSkillsDirectory
-                    && SkillInstallLayout.HasInstalledSkillsInAnyLayout(projectRoot, targetRoot);
-                targets.Add(new ToolSkillSynchronizer.SkillTargetInfo(
-                    target.DisplayName,
-                    target.DirName,
-                    target.Flag,
-                    hasSkillsDirectory,
-                    hasULoopSkills,
-                    installState: hasULoopSkills
-                        ? SkillInstallState.Installed
-                        : SkillInstallState.Missing));
-            }
-
-            return targets;
-        }
-
         internal static List<ToolSkillSynchronizer.SkillTargetInfo> DetectTargetsForLayoutStateAtProjectRoot(
             string projectRoot,
             bool requireSkillsDirectory,
