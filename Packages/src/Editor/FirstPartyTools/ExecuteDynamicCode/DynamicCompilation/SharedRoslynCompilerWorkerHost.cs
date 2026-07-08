@@ -5,7 +5,6 @@ using System.IO;
 using System.Threading;
 using UnityEditor;
 using UnityEditor.Compilation;
-using Debug = UnityEngine.Debug;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -21,13 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string RoslynWorkerAssemblyFileName = "RoslynCompilerWorker.dll";
         private const string RoslynWorkerCompileResponseFileName = "RoslynCompilerWorker.rsp";
 
-        private static readonly object SharedCompilerWorkerLock = new();
-        private static Action<string> s_deleteWorkerDirectory = path => Directory.Delete(path, true);
-        private static Action<Process, string> s_sendCompileRequest = SendCompileRequestCore;
-        private static Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]>
-            s_compileWorkerAssemblyForTests;
-        private static Process _sharedCompilerWorkerProcess;
-        private static string _workerDirectoryPath;
+        private static readonly SharedRoslynCompilerWorkerSession ServiceValue = new();
 
         /// <summary>
         /// Carries the result data produced by Worker Attempt behavior.
@@ -138,16 +131,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action markBuildFinished,
             Action incrementBuildCount)
         {
-            lock (SharedCompilerWorkerLock)
-            {
-                return TryCompileWithRetries(
+            return ServiceValue.ExecuteLocked(
+                () => TryCompileWithRetries(
                     requestFilePath,
                     externalCompilerPaths,
                     ct,
                     markBuildStarted,
                     markBuildFinished,
-                    incrementBuildCount);
-            }
+                    incrementBuildCount));
         }
 
         private static CompilerMessage[] TryCompileWithRetries(
@@ -173,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return attemptResult.Messages;
                 }
 
-                ShutdownWorkerProcessLocked();
+                ServiceValue.ShutdownProcessLocked();
 
                 if (attemptResult.ShouldRetry && attempt < SharedCompilerWorkerMaxAttempts)
                 {
@@ -215,7 +206,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static WorkerStartupResult EnsureWorkerReady(ExternalCompilerPaths externalCompilerPaths)
         {
-            if (HasLiveWorkerProcess())
+            if (ServiceValue.HasLiveProcessLocked())
             {
                 return WorkerStartupResult.Ready();
             }
@@ -243,11 +234,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return WorkerStartupResult.Ready();
             }
 
-            SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult buildResult = CompileWorkerAssembly(
-                externalCompilerPaths,
-                workerPaths.SourcePath,
-                workerPaths.AssemblyPath,
-                workerPaths.CompileResponseFilePath);
+            SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult buildResult =
+                ServiceValue.CompileWorkerAssemblyLocked(
+                    externalCompilerPaths,
+                    workerPaths.SourcePath,
+                    workerPaths.AssemblyPath,
+                    workerPaths.CompileResponseFilePath);
             if (!buildResult.StartedSuccessfully)
             {
                 return WorkerStartupResult.Failure(
@@ -275,8 +267,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             WorkerPaths workerPaths)
         {
             ProcessStartInfo startInfo = CreateWorkerStartInfo(externalCompilerPaths, workerPaths);
-            _sharedCompilerWorkerProcess = ProcessStartHelper.TryStart(startInfo);
-            if (_sharedCompilerWorkerProcess == null)
+            if (!ServiceValue.StartProcessLocked(startInfo))
             {
                 return WorkerStartupResult.Failure(
                     "worker_start_failed",
@@ -297,7 +288,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action markBuildFinished,
             Action incrementBuildCount)
         {
-            if (!HasLiveWorkerProcess())
+            if (!ServiceValue.HasLiveProcessLocked())
             {
                 return WorkerAttemptResult.RetryableFailure(
                     "worker_process_missing",
@@ -323,7 +314,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             catch (OperationCanceledException)
             {
-                ShutdownWorkerProcessLocked();
+                ServiceValue.ShutdownProcessLocked();
                 throw;
             }
             finally
@@ -335,21 +326,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void SendCompileRequest(string requestFilePath)
         {
             string absoluteRequestFilePath = Path.GetFullPath(requestFilePath);
-            s_sendCompileRequest(_sharedCompilerWorkerProcess, absoluteRequestFilePath);
-        }
-
-        private static void SendCompileRequestCore(Process workerProcess, string requestFilePath)
-        {
-            string requestCommand = SharedRoslynCompilerWorkerProtocol.CreateCompileRequestCommand(requestFilePath);
-            workerProcess.StandardInput.WriteLine(requestCommand);
-            workerProcess.StandardInput.Flush();
+            ServiceValue.SendCompileRequestLocked(absoluteRequestFilePath);
         }
 
         private static WorkerAttemptResult ReadWorkerResponse(
             string requestFilePath,
             CancellationToken ct)
         {
-            StreamReader reader = _sharedCompilerWorkerProcess.StandardOutput;
+            StreamReader reader = ServiceValue.GetOutputReaderLocked();
             string responseHeader = SharedRoslynCompilerWorkerProtocol.ReadProtocolLine(
                 reader,
                 ct);
@@ -384,7 +368,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             string workerDirectoryPath = GetWorkerDirectoryPath();
             Directory.CreateDirectory(workerDirectoryPath);
-            _workerDirectoryPath = workerDirectoryPath;
+            ServiceValue.RecordWorkerDirectoryLocked(workerDirectoryPath);
             return new WorkerPaths(
                 workerDirectoryPath,
                 Path.Combine(workerDirectoryPath, RoslynWorkerSourceFileName),
@@ -437,34 +421,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return startInfo;
         }
 
-        private static SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult CompileWorkerAssembly(
-            ExternalCompilerPaths externalCompilerPaths,
-            string workerSourcePath,
-            string workerAssemblyPath,
-            string workerCompileResponseFilePath)
-        {
-            if (s_compileWorkerAssemblyForTests != null)
-            {
-                return SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult.Started(
-                    s_compileWorkerAssemblyForTests(
-                        externalCompilerPaths,
-                        workerSourcePath,
-                        workerAssemblyPath,
-                        workerCompileResponseFilePath));
-            }
-
-            return SharedRoslynCompilerWorkerAssemblyBuilder.CompileWorkerAssembly(
-                externalCompilerPaths,
-                workerSourcePath,
-                workerAssemblyPath,
-                workerCompileResponseFilePath);
-        }
-
-        private static bool HasLiveWorkerProcess()
-        {
-            return _sharedCompilerWorkerProcess != null && !_sharedCompilerWorkerProcess.HasExited;
-        }
-
         private static bool HasErrors(IReadOnlyCollection<CompilerMessage> messages)
         {
             foreach (CompilerMessage message in messages)
@@ -513,127 +469,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static Action<string> SwapWorkerDirectoryDeleterForTests(Action<string> deleter)
         {
-            Debug.Assert(deleter != null, "deleter must not be null");
-
-            Action<string> previous = s_deleteWorkerDirectory;
-            s_deleteWorkerDirectory = deleter;
-            return previous;
+            return ServiceValue.SwapWorkerDirectoryDeleterForTests(deleter);
         }
 
         internal static Action<Process, string> SwapCompileRequestSenderForTests(Action<Process, string> sender)
         {
-            Debug.Assert(sender != null, "sender must not be null");
-
-            Action<Process, string> previous = s_sendCompileRequest;
-            s_sendCompileRequest = sender;
-            return previous;
+            return ServiceValue.SwapCompileRequestSenderForTests(sender);
         }
 
         internal static Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]>
             SwapWorkerAssemblyCompilerForTests(
                 Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]> compiler)
         {
-            Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]> previous =
-                s_compileWorkerAssemblyForTests;
-            s_compileWorkerAssemblyForTests = compiler;
-            return previous;
+            return ServiceValue.SwapWorkerAssemblyCompilerForTests(compiler);
         }
 
         private static void Shutdown()
         {
-            lock (SharedCompilerWorkerLock)
-            {
-                ShutdownWorkerProcessLocked();
-                CleanupWorkerDirectoryLocked();
-            }
-        }
-
-        private static void ShutdownWorkerProcessLocked()
-        {
-            Process workerProcess = _sharedCompilerWorkerProcess;
-            _sharedCompilerWorkerProcess = null;
-            if (workerProcess == null)
-            {
-                return;
-            }
-
-            try
-            {
-                if (!workerProcess.HasExited)
-                {
-                    workerProcess.StandardInput.WriteLine(
-                        SharedRoslynCompilerWorkerProtocol.SharedCompilerWorkerQuitCommand);
-                    workerProcess.StandardInput.Flush();
-                    workerProcess.WaitForExit(500);
-                }
-
-                if (!workerProcess.HasExited)
-                {
-                    workerProcess.Kill();
-                    workerProcess.WaitForExit(500);
-                }
-            }
-            catch (IOException ex)
-            {
-                LogWorkerShutdownFailure(ex);
-            }
-            catch (ObjectDisposedException ex)
-            {
-                LogWorkerShutdownFailure(ex);
-            }
-            catch (InvalidOperationException ex)
-            {
-                LogWorkerShutdownFailure(ex);
-            }
-            finally
-            {
-                workerProcess.Dispose();
-            }
-        }
-
-        private static void CleanupWorkerDirectoryLocked()
-        {
-            string workerDirectoryPath = _workerDirectoryPath ?? GetWorkerDirectoryPath();
-            if (!Directory.Exists(workerDirectoryPath))
-            {
-                _workerDirectoryPath = null;
-                return;
-            }
-
-            TryDeleteWorkerDirectory(workerDirectoryPath);
-            _workerDirectoryPath = null;
-        }
-
-        private static void TryDeleteWorkerDirectory(string workerDirectoryPath)
-        {
-            try
-            {
-                s_deleteWorkerDirectory(workerDirectoryPath);
-            }
-            catch (IOException ex)
-            {
-                LogWorkerDirectoryCleanupFailure(workerDirectoryPath, ex);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                LogWorkerDirectoryCleanupFailure(workerDirectoryPath, ex);
-            }
-        }
-
-        private static void LogWorkerDirectoryCleanupFailure(string workerDirectoryPath, Exception ex)
-        {
-            VibeLogger.LogWarning(
-                "dynamic_code_shared_worker_cleanup_failed",
-                "execute-dynamic-code shared Roslyn worker directory cleanup failed during shutdown",
-                new
-                {
-                    worker_directory_path = workerDirectoryPath,
-                    exception_type = ex.GetType().FullName,
-                    exception_message = ex.Message
-                },
-                humanNote: "Shared Roslyn worker cleanup could not remove its temporary directory during shutdown.",
-                aiTodo: "Investigate file locks or permission issues if temporary worker directories continue to accumulate.");
-            Debug.LogWarning($"[{UnityCliLoopConstants.PROJECT_NAME}] Failed to delete shared Roslyn worker directory '{workerDirectoryPath}': {ex.Message}");
+            ServiceValue.Shutdown(GetWorkerDirectoryPath());
         }
 
         private static WorkerAttemptResult CreateRetryableWorkerCommunicationFailure(
@@ -648,20 +501,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     exception_type = ex.GetType().FullName,
                     exception_message = ex.Message
                 });
-        }
-
-        private static void LogWorkerShutdownFailure(Exception ex)
-        {
-            VibeLogger.LogWarning(
-                "dynamic_code_shared_worker_shutdown_failed",
-                "execute-dynamic-code shared Roslyn worker shutdown observed a communication failure",
-                new
-                {
-                    exception_type = ex.GetType().FullName,
-                    exception_message = ex.Message
-                },
-                humanNote: "Shared Roslyn worker shutdown saw a broken communication channel while cleaning up a crashed worker.",
-                aiTodo: "Investigate repeated worker shutdown communication failures if shared compilation stops recovering cleanly.");
         }
 
         private static object AppendAttempt(object failureContext, int attempt)

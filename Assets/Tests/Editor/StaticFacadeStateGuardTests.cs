@@ -20,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/Application/UnityCliLoopToolRegistrar.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCodeServices.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/Execution/DynamicCodeForegroundWarmupState.cs",
+            "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCompilation/SharedRoslynCompilerWorkerHost.cs",
             "Packages/src/Editor/ToolContracts/EditorFrameWaiter.cs",
             "Packages/src/Editor/FirstPartyTools/Common/InputRecording/InputRecorder.cs",
             "Packages/src/Editor/FirstPartyTools/RecordInput/Application/RecordingsApplicationFacade.cs",
@@ -52,7 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/Application/SessionRecoveryService.cs",
             "Packages/src/Editor/Application/UseCases/SkillSetupUseCase.cs",
             "Packages/src/Editor/Domain/UnityCliLoopCompileSessionLifecycleService.cs",
-            "Packages/src/Editor/Infrastructure/Server/DomainReloadDetectionFileService.cs"
+            "Packages/src/Editor/Infrastructure/Server/DomainReloadDetectionFileService.cs",
+            "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCompilation/SharedRoslynCompilerWorkerSession.cs"
         };
 
         private static readonly string[] AsyncCancellationTokenGuardPaths = new string[]
