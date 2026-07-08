@@ -140,34 +140,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Vector2 inputPos = new(parameters.X, parameters.Y);
             Vector2 screenPos = MouseUiCoordinateConverter.InputToScreen(inputPos);
-            RaycastResult? hit = parameters.BypassRaycast ? null : UiRaycastHelper.RaycastUI(screenPos, eventSystem);
-            RaycastResult startRaycast = new();
-            GameObject? rawTarget = null;
-
-            if (parameters.BypassRaycast)
-            {
-                if (!MouseUiPointerTargetResolver.TryResolveGameObjectPath(
-                    parameters.TargetPath,
-                    "TargetPath",
+            (RaycastResult startRaycast, GameObject? target, SimulateMouseUiResponse? targetFailureResponse) =
+                MouseUiDragTargetResolver.Resolve(
+                    parameters,
+                    eventSystem,
                     MouseAction.DragStart,
                     inputPos,
-                    out rawTarget,
-                    out SimulateMouseUiResponse? failureResponse))
-                {
-                    return failureResponse!;
-                }
-
-                startRaycast = MouseUiPointerTargetResolver.CreateDirectRaycastResult(rawTarget!);
-            }
-            else if (hit != null)
+                    screenPos);
+            if (targetFailureResponse != null)
             {
-                rawTarget = hit.Value.gameObject;
-                startRaycast = hit.Value;
+                return targetFailureResponse;
             }
-
-            GameObject? target = rawTarget != null
-                ? ExecuteEvents.GetEventHandler<IDragHandler>(rawTarget)
-                : null;
 
             if (target == null)
             {
