@@ -268,7 +268,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static IEnumerable<string> EnumerateDependencyPackageCacheRoots(string projectRoot)
         {
             HashSet<string> dependencyNames = new(
-                EnumerateManifestDependencies(projectRoot).Select(dependency => dependency.Key),
+                EnumerateManifestDependencies(projectRoot)
+                    .Where(dependency => ResolveLocalDependencyPath(dependency.Value, projectRoot) == null)
+                    .Select(dependency => dependency.Key),
                 StringComparer.OrdinalIgnoreCase);
             if (dependencyNames.Count == 0)
             {
