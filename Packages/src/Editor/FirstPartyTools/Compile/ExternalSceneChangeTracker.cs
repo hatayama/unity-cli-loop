@@ -290,7 +290,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            if (HasSameFileState(PrefabStageSnapshots[assetPath], currentFingerprint))
+            if (ExternalAssetFileStateComparer.HasSameFileState(
+                PrefabStageSnapshots[assetPath], currentFingerprint))
             {
                 return;
             }
@@ -583,15 +584,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Debug.LogWarning("Unity CLI Loop could not " + action + " before Unity refreshes assets on focus return. " +
                              "Affected assets: " + string.Join(", ", failedAssetPaths));
-        }
-
-        private static bool HasSameFileState(
-            (bool Exists, DateTime LastWriteTimeUtc, long Length) previousFingerprint,
-            (bool Exists, DateTime LastWriteTimeUtc, long Length) currentFingerprint)
-        {
-            return previousFingerprint.Exists == currentFingerprint.Exists &&
-                   previousFingerprint.LastWriteTimeUtc == currentFingerprint.LastWriteTimeUtc &&
-                   previousFingerprint.Length == currentFingerprint.Length;
         }
     }
 }

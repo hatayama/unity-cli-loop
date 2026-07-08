@@ -56,7 +56,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                if (HasSameFileState(_snapshots[scene.AssetPath], currentFingerprint))
+                if (ExternalAssetFileStateComparer.HasSameFileState(
+                    _snapshots[scene.AssetPath], currentFingerprint))
                 {
                     continue;
                 }
@@ -108,15 +109,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return (true, null, Array.Empty<string>());
-        }
-
-        private static bool HasSameFileState(
-            (bool Exists, DateTime LastWriteTimeUtc, long Length) previousFingerprint,
-            (bool Exists, DateTime LastWriteTimeUtc, long Length) currentFingerprint)
-        {
-            return previousFingerprint.Exists == currentFingerprint.Exists &&
-                   previousFingerprint.LastWriteTimeUtc == currentFingerprint.LastWriteTimeUtc &&
-                   previousFingerprint.Length == currentFingerprint.Length;
         }
 
         private static string CreateStoppedMessage(string[] scenePaths)
