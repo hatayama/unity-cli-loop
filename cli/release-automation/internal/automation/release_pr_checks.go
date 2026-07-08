@@ -49,6 +49,12 @@ type releasePRCheckConfig struct {
 	watchIntervalSeconds  int
 }
 
+type releasePRCheckDeps struct {
+	now       func() time.Time
+	sleep     func(context.Context, time.Duration) error
+	runOutput func(context.Context, string, ...string) (string, error)
+}
+
 type releasePullRequest struct {
 	Number      int    `json:"number"`
 	HeadRefName string `json:"headRefName"`
@@ -62,13 +68,25 @@ type releasePullRequestBody struct {
 }
 
 func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.Writer) int {
+	return runReleasePleasePRChecksWithDeps(ctx, stdout, stderr, defaultReleasePRCheckDeps())
+}
+
+func defaultReleasePRCheckDeps() releasePRCheckDeps {
+	return releasePRCheckDeps{
+		now:       releasePRCheckNow,
+		sleep:     releasePRCheckSleep,
+		runOutput: runReleasePRCheckCommandOutput,
+	}
+}
+
+func runReleasePleasePRChecksWithDeps(ctx context.Context, stdout io.Writer, stderr io.Writer, deps releasePRCheckDeps) int {
 	config, err := releasePRCheckConfigFromEnvironment()
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1
 	}
 
-	releasePR, found, err := findReleasePRCheckPullRequestWithRetry(ctx, config)
+	releasePR, found, err := findReleasePRCheckPullRequestWithRetry(ctx, config, deps)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1
@@ -78,7 +96,7 @@ func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.W
 		return 0
 	}
 
-	bodyChanged, err := clarifyReleasePRCheckBody(ctx, config, releasePR)
+	bodyChanged, err := clarifyReleasePRCheckBody(ctx, config, releasePR, deps)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1
@@ -87,17 +105,17 @@ func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.W
 		writeReleasePRCheckLine(stdout, fmt.Sprintf("Updated release PR #%d body to clarify release component labels.", releasePR.Number))
 	}
 
-	err = markReleasePRCheckDraft(ctx, config, releasePR)
+	err = markReleasePRCheckDraft(ctx, config, releasePR, deps)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1
 	}
 	writeReleasePRCheckLine(stdout, fmt.Sprintf("Marked release PR #%d as draft while checks run.", releasePR.Number))
 
-	dispatchedAt := releasePRCheckNow().UTC().Truncate(time.Second)
+	dispatchedAt := deps.now().UTC().Truncate(time.Second)
 	for _, workflow := range config.workflows {
 		writeReleasePRCheckLine(stdout, fmt.Sprintf("Dispatching %s for release PR #%d: %s", workflow, releasePR.Number, releasePR.URL))
-		err = dispatchReleasePRCheckWorkflow(ctx, config, workflow, releasePR)
+		err = dispatchReleasePRCheckWorkflow(ctx, config, workflow, releasePR, deps)
 		if err != nil {
 			writeReleasePRCheckLine(stderr, err)
 			return 1
@@ -107,14 +125,14 @@ func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.W
 	checkedHeadSHA := ""
 	checkedHeadWorkflow := ""
 	for _, workflow := range config.workflows {
-		run, err := findDispatchedReleasePRCheckRun(ctx, config, workflow, releasePR, dispatchedAt)
+		run, err := findDispatchedReleasePRCheckRun(ctx, config, workflow, releasePR, dispatchedAt, deps)
 		if err != nil {
 			writeReleasePRCheckLine(stderr, err)
 			return 1
 		}
 
 		writeReleasePRCheckLine(stdout, fmt.Sprintf("Watching %s run %d for release PR #%d.", workflow, run.DatabaseID, releasePR.Number))
-		err = watchReleasePRCheckRun(ctx, config, run.DatabaseID)
+		err = watchReleasePRCheckRun(ctx, config, run.DatabaseID, deps)
 		if err != nil {
 			writeReleasePRCheckLine(stderr, err)
 			return 1
@@ -136,13 +154,13 @@ func RunReleasePleasePRChecks(ctx context.Context, stdout io.Writer, stderr io.W
 		}
 	}
 
-	err = verifyReleasePRCheckHeadMatchesRun(ctx, config, releasePR, checkedHeadSHA)
+	err = verifyReleasePRCheckHeadMatchesRun(ctx, config, releasePR, checkedHeadSHA, deps)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1
 	}
 
-	err = markReleasePRCheckReady(ctx, config, releasePR)
+	err = markReleasePRCheckReady(ctx, config, releasePR, deps)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1
@@ -221,8 +239,8 @@ func releasePRCheckPositiveIntFromEnvironment(name string, defaultValue int) (in
 	return parsedValue, nil
 }
 
-func findReleasePRCheckPullRequest(ctx context.Context, config releasePRCheckConfig) (releasePullRequest, bool, error) {
-	output, err := runReleasePRCheckOutput(
+func findReleasePRCheckPullRequest(ctx context.Context, config releasePRCheckConfig, deps releasePRCheckDeps) (releasePullRequest, bool, error) {
+	output, err := deps.runOutput(
 		ctx,
 		"gh",
 		"pr",
@@ -267,14 +285,14 @@ func findReleasePRCheckPullRequest(ctx context.Context, config releasePRCheckCon
 	return matchingPRs[0], true, nil
 }
 
-func findReleasePRCheckPullRequestWithRetry(ctx context.Context, config releasePRCheckConfig) (releasePullRequest, bool, error) {
+func findReleasePRCheckPullRequestWithRetry(ctx context.Context, config releasePRCheckConfig, deps releasePRCheckDeps) (releasePullRequest, bool, error) {
 	for attempt := 0; attempt < config.lookupAttempts; attempt++ {
-		releasePR, found, err := findReleasePRCheckPullRequest(ctx, config)
+		releasePR, found, err := findReleasePRCheckPullRequest(ctx, config, deps)
 		if err != nil || found {
 			return releasePR, found, err
 		}
 		if attempt+1 < config.lookupAttempts {
-			err = releasePRCheckSleep(ctx, time.Duration(config.lookupIntervalSeconds)*time.Second)
+			err = deps.sleep(ctx, time.Duration(config.lookupIntervalSeconds)*time.Second)
 			if err != nil {
 				return releasePullRequest{}, false, err
 			}
@@ -306,18 +324,18 @@ func releasePRCheckTitleMatches(title string) bool {
 	return rest == "release" || strings.HasPrefix(rest, "release ")
 }
 
-func markReleasePRCheckDraft(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest) error {
-	_, err := runReleasePRCheckOutput(ctx, "gh", "pr", "ready", strconv.Itoa(releasePR.Number), "--repo", config.repository, "--undo")
+func markReleasePRCheckDraft(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest, deps releasePRCheckDeps) error {
+	_, err := deps.runOutput(ctx, "gh", "pr", "ready", strconv.Itoa(releasePR.Number), "--repo", config.repository, "--undo")
 	return err
 }
 
-func markReleasePRCheckReady(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest) error {
-	_, err := runReleasePRCheckOutput(ctx, "gh", "pr", "ready", strconv.Itoa(releasePR.Number), "--repo", config.repository)
+func markReleasePRCheckReady(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest, deps releasePRCheckDeps) error {
+	_, err := deps.runOutput(ctx, "gh", "pr", "ready", strconv.Itoa(releasePR.Number), "--repo", config.repository)
 	return err
 }
 
-func clarifyReleasePRCheckBody(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest) (bool, error) {
-	output, err := runReleasePRCheckOutput(ctx, "gh", "pr", "view", strconv.Itoa(releasePR.Number), "--repo", config.repository, "--json", "body")
+func clarifyReleasePRCheckBody(ctx context.Context, config releasePRCheckConfig, releasePR releasePullRequest, deps releasePRCheckDeps) (bool, error) {
+	output, err := deps.runOutput(ctx, "gh", "pr", "view", strconv.Itoa(releasePR.Number), "--repo", config.repository, "--json", "body")
 	if err != nil {
 		return false, err
 	}
@@ -339,7 +357,7 @@ func clarifyReleasePRCheckBody(ctx context.Context, config releasePRCheckConfig,
 	}
 	defer cleanup()
 
-	_, err = runReleasePRCheckOutput(ctx, "gh", "pr", "edit", strconv.Itoa(releasePR.Number), "--repo", config.repository, "--body-file", bodyFile)
+	_, err = deps.runOutput(ctx, "gh", "pr", "edit", strconv.Itoa(releasePR.Number), "--repo", config.repository, "--body-file", bodyFile)
 	if err != nil {
 		return false, err
 	}
@@ -371,8 +389,9 @@ func verifyReleasePRCheckHeadMatchesRun(
 	config releasePRCheckConfig,
 	releasePR releasePullRequest,
 	checkedHeadSHA string,
+	deps releasePRCheckDeps,
 ) error {
-	currentReleasePR, found, err := findReleasePRCheckPullRequest(ctx, config)
+	currentReleasePR, found, err := findReleasePRCheckPullRequest(ctx, config, deps)
 	if err != nil {
 		return err
 	}
@@ -388,7 +407,7 @@ func verifyReleasePRCheckHeadMatchesRun(
 	return nil
 }
 
-func runReleasePRCheckOutput(ctx context.Context, name string, args ...string) (string, error) {
+func runReleasePRCheckCommandOutput(ctx context.Context, name string, args ...string) (string, error) {
 	command := exec.CommandContext(ctx, name, args...)
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
