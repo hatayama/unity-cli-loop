@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -372,7 +373,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             GetToolDetailsResponse getToolDetailsResponse = response as GetToolDetailsResponse;
             string[] toolNames = getToolDetailsResponse?.Tools
                 .Select(tool => tool.Name)
-                .ToArray() ?? new string[0];
+                .ToArray() ?? Array.Empty<string>();
 
             Assert.That(toolNames, Does.Contain(DevelopmentOnlyCatalogTestToolName));
         }
@@ -394,7 +395,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             GetToolDetailsResponse getToolDetailsResponse = response as GetToolDetailsResponse;
             string[] toolNames = getToolDetailsResponse?.Tools
                 .Select(tool => tool.Name)
-                .ToArray() ?? new string[0];
+                .ToArray() ?? Array.Empty<string>();
 
             Assert.That(toolNames, Does.Not.Contain(DevelopmentOnlyCatalogTestToolName));
         }

@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 
@@ -48,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return StrictJsonBooleanMetadataReader.ReadOptionalBoolean(
                 parameters,
                 IncludeDevelopmentOnlyPropertyName,
-                System.StringComparison.OrdinalIgnoreCase) ?? false;
+                StringComparison.OrdinalIgnoreCase) ?? false;
         }
     }
 }
