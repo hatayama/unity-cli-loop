@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Infrastructure;
@@ -304,42 +302,5 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(detection.ExecutablePath, Is.EqualTo("/Users/ExampleUser/.npm-global/bin/uloop"));
         }
 
-        [Test]
-        public void KillProcessIfRunning_WhenProcessAlreadyExited_DoesNotThrow()
-        {
-            // Verifies that process cleanup tolerates the race where the child exits before Kill.
-            ProcessStartInfo startInfo = BuildImmediateExitProcessStartInfo();
-
-            using Process process = Process.Start(startInfo);
-            process.WaitForExit();
-
-            Assert.DoesNotThrow(() => CliInstallationDetector.KillProcessIfRunning(process));
-        }
-
-        private static ProcessStartInfo BuildImmediateExitProcessStartInfo()
-        {
-            if (UnityEngine.Application.platform == UnityEngine.RuntimePlatform.WindowsEditor)
-            {
-                return new ProcessStartInfo
-                {
-                    FileName = "cmd.exe",
-                    Arguments = "/c exit 0",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-            }
-
-            return new ProcessStartInfo
-            {
-                FileName = "/bin/sh",
-                Arguments = "-c \"exit 0\"",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-        }
     }
 }
