@@ -316,6 +316,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task InstallSkillFilesAtProjectRoot_WhenDisabledSkillExistsInBothLayouts_RemovesBothLayouts()
+        {
+            // Tests that full sync removes disabled skills through the scope cleanup before installing enabled skills.
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-enabled-skill",
+                "EnabledTool",
+                "reference.md",
+                "enabled-reference");
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-disabled-skill",
+                "DisabledTool",
+                "reference.md",
+                "disabled-reference");
+
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
+            string skillsRoot = Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName);
+            string managedSkillsRoot = Path.Combine(
+                skillsRoot,
+                SkillInstallLayout.ManagedSkillsDirName);
+            string flatDisabledSkillDir = Path.Combine(skillsRoot, "uloop-disabled-skill");
+            string groupedDisabledSkillDir = Path.Combine(managedSkillsRoot, "uloop-disabled-skill");
+            WriteSkillFile(flatDisabledSkillDir, "---\nname: uloop-disabled-skill\n---\n");
+            WriteSkillFile(groupedDisabledSkillDir, "---\nname: uloop-disabled-skill\n---\n");
+
+            ToolSkillSynchronizer.SkillTargetInfo target = new(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: true);
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await ToolSkillSynchronizer.InstallSkillFilesAtProjectRoot(
+                    temporaryRoot,
+                    new[] { target },
+                    groupSkillsUnderUnityCliLoop: false,
+                    disabledTools: new[] { "disabled-skill" },
+                    ct: CancellationToken.None);
+
+            string enabledSkillDir = Path.Combine(skillsRoot, "uloop-enabled-skill");
+
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(File.Exists(Path.Combine(enabledSkillDir, SkillInstallLayout.SkillFileName)), Is.True);
+            Assert.That(Directory.Exists(flatDisabledSkillDir), Is.False);
+            Assert.That(Directory.Exists(groupedDisabledSkillDir), Is.False);
+        }
+
+        [Test]
         public async Task InstallSkillFilesAtProjectRoot_WhenFlatLayoutRequested_InstallsProjectLocalCustomSkills()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();

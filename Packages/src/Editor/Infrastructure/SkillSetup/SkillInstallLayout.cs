@@ -332,18 +332,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return GetInstalledSkillDirectoryPath(targetRoot, skillName, groupSkillsUnderUnityCliLoop);
         }
 
-        internal static IEnumerable<string> EnumerateInstalledSkillDirectoryNamesForLayout(
-            string targetRoot,
-            bool groupSkillsUnderUnityCliLoop)
-        {
-            IEnumerable<string> installedSkillDirectories = groupSkillsUnderUnityCliLoop
-                ? EnumerateManagedSkillDirectories(targetRoot)
-                : EnumerateLegacyManagedSkillDirectories(targetRoot);
-            return installedSkillDirectories
-                .Select(Path.GetFileName)
-                .Where(name => !string.IsNullOrEmpty(name));
-        }
-
         private static IEnumerable<string> EnumerateManagedSkillDirectories(string targetRoot)
         {
             string managedSkillsRoot = GetManagedSkillsRoot(targetRoot);
