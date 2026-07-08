@@ -43,10 +43,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 new[] { separator },
                 StringSplitOptions.RemoveEmptyEntries);
             StringComparison comparison = GetPathComparison(platform);
+            string normalizedInstallDirectory = NormalizePathForComparison(installDirectory, platform);
             StringBuilder builder = new(installDirectory);
             foreach (string entry in entries)
             {
-                if (string.Equals(entry, installDirectory, comparison))
+                if (!string.IsNullOrWhiteSpace(entry)
+                    && string.Equals(
+                        NormalizePathForComparison(entry, platform),
+                        normalizedInstallDirectory,
+                        comparison))
                 {
                     continue;
                 }
