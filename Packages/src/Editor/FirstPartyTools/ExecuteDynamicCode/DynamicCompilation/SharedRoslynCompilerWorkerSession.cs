@@ -183,12 +183,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action forceKill,
             Action<Exception> logFailure)
         {
+            bool shouldForceKill;
             try
             {
-                if (!hasExited())
-                {
-                    forceKill();
-                }
+                shouldForceKill = !hasExited();
+            }
+            catch (Win32Exception ex)
+            {
+                logFailure(ex);
+                // An unavailable exit code leaves process state unknown, so forced termination is safer.
+                shouldForceKill = true;
+            }
+            catch (InvalidOperationException ex)
+            {
+                logFailure(ex);
+                return;
+            }
+
+            if (!shouldForceKill)
+            {
+                return;
+            }
+
+            try
+            {
+                forceKill();
             }
             catch (Win32Exception ex)
             {

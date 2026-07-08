@@ -148,6 +148,84 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// Verifies an unknown exit state still attempts forced termination after logging the query failure.
+        /// </summary>
+        [Test]
+        public void ExecuteProcessShutdown_WhenForceExitQueryThrowsWin32Exception_ShouldStillForceKill()
+        {
+            Win32Exception queryFailure = new(5, "worker exit code unavailable");
+            Exception loggedFailure = null;
+            int hasExitedCallCount = 0;
+            int forceKillCallCount = 0;
+            int disposeCallCount = 0;
+            int failureLogCount = 0;
+
+            SharedRoslynCompilerWorkerSession.ExecuteProcessShutdown(
+                hasExited: () =>
+                {
+                    hasExitedCallCount++;
+                    if (hasExitedCallCount == 2)
+                    {
+                        throw queryFailure;
+                    }
+
+                    return false;
+                },
+                requestGracefulShutdown: () => { },
+                forceKill: () => forceKillCallCount++,
+                dispose: () => disposeCallCount++,
+                logFailure: ex =>
+                {
+                    failureLogCount++;
+                    loggedFailure = ex;
+                });
+
+            Assert.That(loggedFailure, Is.SameAs(queryFailure));
+            Assert.That(failureLogCount, Is.EqualTo(1));
+            Assert.That(forceKillCallCount, Is.EqualTo(1));
+            Assert.That(disposeCallCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a missing associated process skips forced termination after logging the query failure.
+        /// </summary>
+        [Test]
+        public void ExecuteProcessShutdown_WhenForceExitQueryThrowsInvalidOperationException_ShouldSkipForceKill()
+        {
+            InvalidOperationException queryFailure = new("worker process unavailable");
+            Exception loggedFailure = null;
+            int hasExitedCallCount = 0;
+            int forceKillCallCount = 0;
+            int disposeCallCount = 0;
+            int failureLogCount = 0;
+
+            SharedRoslynCompilerWorkerSession.ExecuteProcessShutdown(
+                hasExited: () =>
+                {
+                    hasExitedCallCount++;
+                    if (hasExitedCallCount == 2)
+                    {
+                        throw queryFailure;
+                    }
+
+                    return false;
+                },
+                requestGracefulShutdown: () => { },
+                forceKill: () => forceKillCallCount++,
+                dispose: () => disposeCallCount++,
+                logFailure: ex =>
+                {
+                    failureLogCount++;
+                    loggedFailure = ex;
+                });
+
+            Assert.That(loggedFailure, Is.SameAs(queryFailure));
+            Assert.That(failureLogCount, Is.EqualTo(1));
+            Assert.That(forceKillCallCount, Is.Zero);
+            Assert.That(disposeCallCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
         /// Verifies successful graceful shutdown skips forced termination and disposes once.
         /// </summary>
         [Test]
