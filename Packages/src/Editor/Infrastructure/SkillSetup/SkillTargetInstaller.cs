@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -96,27 +95,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 DeleteSkillDirectoryIfExists(targetRoot, skill.Name, !groupSkillsUnderUnityCliLoop, ct);
             }
 
-            if (syncScope == SkillSyncScope.FullSync)
-            {
-                HashSet<string> managedSkillNames = GetManagedSkillNames(skills, disabledSkills);
-                DeleteUnexpectedInstalledSkillDirectories(
-                    targetRoot,
-                    skills.Select(skill => skill.Name),
-                    managedSkillNames,
-                    groupSkillsUnderUnityCliLoop,
-                    ct);
-
-                if (!groupSkillsUnderUnityCliLoop)
-                {
-                    DeleteUnexpectedInstalledSkillDirectories(
-                        targetRoot,
-                        skills.Select(skill => skill.Name),
-                        managedSkillNames,
-                        groupSkillsUnderUnityCliLoop: true,
-                        ct);
-                }
-            }
-
             if (!groupSkillsUnderUnityCliLoop)
             {
                 DeleteEmptyManagedSkillsParentDirectoryIfNeeded(
@@ -124,18 +102,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     groupSkillsUnderUnityCliLoop: true,
                     ct);
             }
-        }
-
-        private static HashSet<string> GetManagedSkillNames(
-            IEnumerable<SkillInstallLayout.SkillSourceInfo> skills,
-            IEnumerable<SkillInstallLayout.SkillSourceInfo> disabledSkills)
-        {
-            HashSet<string> managedSkillNames = new(
-                skills.Select(skill => skill.Name),
-                StringComparer.Ordinal);
-            managedSkillNames.UnionWith(disabledSkills.Select(skill => skill.Name));
-            managedSkillNames.UnionWith(DeprecatedSkillNames);
-            return managedSkillNames;
         }
 
         internal static void DeleteSkillDirectoryIfExists(
@@ -156,34 +122,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             Directory.Delete(installedSkillDirectory, true);
             DeleteEmptyManagedSkillsParentDirectoryIfNeeded(targetRoot, groupSkillsUnderUnityCliLoop, ct);
-        }
-
-        private static void DeleteUnexpectedInstalledSkillDirectories(
-            string targetRoot,
-            IEnumerable<string> expectedSkillNames,
-            IEnumerable<string> removableSkillNames,
-            bool groupSkillsUnderUnityCliLoop,
-            CancellationToken ct)
-        {
-            HashSet<string> expectedSkillNameSet = new(expectedSkillNames, StringComparer.Ordinal);
-            HashSet<string> removableSkillNameSet = new(removableSkillNames, StringComparer.Ordinal);
-            foreach (string installedSkillName in SkillInstallLayout.EnumerateInstalledSkillDirectoryNamesForLayout(
-                         targetRoot,
-                         groupSkillsUnderUnityCliLoop))
-            {
-                ct.ThrowIfCancellationRequested();
-                if (expectedSkillNameSet.Contains(installedSkillName))
-                {
-                    continue;
-                }
-
-                if (!removableSkillNameSet.Contains(installedSkillName))
-                {
-                    continue;
-                }
-
-                DeleteSkillDirectoryIfExists(targetRoot, installedSkillName, groupSkillsUnderUnityCliLoop, ct);
-            }
         }
 
         private static void DeleteDeprecatedSkillDirectories(
