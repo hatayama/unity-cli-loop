@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
-using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.Compilation;
 using Debug = UnityEngine.Debug;
@@ -21,9 +20,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string RoslynWorkerSourceFileName = "RoslynCompilerWorker.cs";
         private const string RoslynWorkerAssemblyFileName = "RoslynCompilerWorker.dll";
         private const string RoslynWorkerCompileResponseFileName = "RoslynCompilerWorker.rsp";
-        private const int WorkerAssemblyBuildTimeoutMilliseconds = 30000;
-        internal const string DotnetMultilevelLookupEnvironmentVariableName = "DOTNET_MULTILEVEL_LOOKUP";
-        internal const string DotnetMultilevelLookupDisabledValue = "0";
 
         private static readonly object SharedCompilerWorkerLock = new();
         private static Action<string> s_deleteWorkerDirectory = path => Directory.Delete(path, true);
@@ -97,42 +93,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public static WorkerStartupResult Failure(string failureReason, object failureContext)
             {
                 return new WorkerStartupResult(false, failureReason, failureContext);
-            }
-        }
-
-        /// <summary>
-        /// Carries the result data produced by Worker Assembly Build behavior.
-        /// </summary>
-        private sealed class WorkerAssemblyBuildResult
-        {
-            public bool StartedSuccessfully { get; }
-
-            public CompilerMessage[] Messages { get; }
-
-            public string FailureReason { get; }
-
-            public object FailureContext { get; }
-
-            private WorkerAssemblyBuildResult(
-                bool startedSuccessfully,
-                CompilerMessage[] messages,
-                string failureReason,
-                object failureContext)
-            {
-                StartedSuccessfully = startedSuccessfully;
-                Messages = messages;
-                FailureReason = failureReason;
-                FailureContext = failureContext;
-            }
-
-            public static WorkerAssemblyBuildResult Started(CompilerMessage[] messages)
-            {
-                return new WorkerAssemblyBuildResult(true, messages, null, null);
-            }
-
-            public static WorkerAssemblyBuildResult StartFailure(string failureReason, object failureContext)
-            {
-                return new WorkerAssemblyBuildResult(false, null, failureReason, failureContext);
             }
         }
 
@@ -283,7 +243,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return WorkerStartupResult.Ready();
             }
 
-            WorkerAssemblyBuildResult buildResult = CompileWorkerAssembly(
+            SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult buildResult = CompileWorkerAssembly(
                 externalCompilerPaths,
                 workerPaths.SourcePath,
                 workerPaths.AssemblyPath,
@@ -300,7 +260,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return WorkerStartupResult.Ready();
             }
 
-            DeleteWorkerAssemblyIfPresent(workerPaths.AssemblyPath);
+            SharedRoslynCompilerWorkerAssemblyBuilder.DeleteWorkerAssemblyIfPresent(workerPaths.AssemblyPath);
             return WorkerStartupResult.Failure(
                 "worker_build_failed",
                 new
@@ -462,9 +422,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ProcessStartInfo startInfo = new()            {
                 FileName = externalCompilerPaths.DotnetHostPath,
                 Arguments = "exec"
-                    + " --runtimeconfig " + QuoteCommandLineArgument(externalCompilerPaths.CompilerRuntimeConfigPath)
-                    + " --depsfile " + QuoteCommandLineArgument(externalCompilerPaths.CompilerDepsFilePath)
-                    + " " + QuoteCommandLineArgument(workerPaths.AssemblyPath),
+                    + " --runtimeconfig " + SharedRoslynCompilerWorkerAssemblyBuilder.QuoteCommandLineArgument(externalCompilerPaths.CompilerRuntimeConfigPath)
+                    + " --depsfile " + SharedRoslynCompilerWorkerAssemblyBuilder.QuoteCommandLineArgument(externalCompilerPaths.CompilerDepsFilePath)
+                    + " " + SharedRoslynCompilerWorkerAssemblyBuilder.QuoteCommandLineArgument(workerPaths.AssemblyPath),
                 WorkingDirectory = workerPaths.DirectoryPath,
                 UseShellExecute = false,
                 RedirectStandardInput = true,
@@ -473,21 +433,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CreateNoWindow = true
             };
 
-            ConfigureWorkerDotnetRuntimeEnvironment(startInfo);
+            SharedRoslynCompilerWorkerAssemblyBuilder.ConfigureWorkerDotnetRuntimeEnvironment(startInfo);
             return startInfo;
         }
 
-        internal static void ConfigureWorkerDotnetRuntimeEnvironment(ProcessStartInfo startInfo)
-        {
-            Debug.Assert(startInfo != null, "startInfo must not be null");
-
-            // Why: global probing can select a system .NET 6 runtime while Unity 6000.4 worker
-            // references come from the bundled .NET 8 runtime, which breaks assembly binding.
-            startInfo.EnvironmentVariables[DotnetMultilevelLookupEnvironmentVariableName] =
-                DotnetMultilevelLookupDisabledValue;
-        }
-
-        private static WorkerAssemblyBuildResult CompileWorkerAssembly(
+        private static SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult CompileWorkerAssembly(
             ExternalCompilerPaths externalCompilerPaths,
             string workerSourcePath,
             string workerAssemblyPath,
@@ -495,7 +445,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (s_compileWorkerAssemblyForTests != null)
             {
-                return WorkerAssemblyBuildResult.Started(
+                return SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult.Started(
                     s_compileWorkerAssemblyForTests(
                         externalCompilerPaths,
                         workerSourcePath,
@@ -503,114 +453,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         workerCompileResponseFilePath));
             }
 
-            WriteWorkerCompilerResponseFile(
-                workerCompileResponseFilePath,
+            return SharedRoslynCompilerWorkerAssemblyBuilder.CompileWorkerAssembly(
+                externalCompilerPaths,
                 workerSourcePath,
                 workerAssemblyPath,
-                BuildWorkerReferenceSet(externalCompilerPaths));
-
-            ProcessStartInfo startInfo = new()            {
-                FileName = externalCompilerPaths.DotnetHostPath,
-                Arguments = $"{QuoteCommandLineArgument(externalCompilerPaths.CompilerDllPath)} @{QuoteCommandLineArgument(workerCompileResponseFilePath)}",
-                WorkingDirectory = Path.GetDirectoryName(workerSourcePath),
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-            ConfigureWorkerDotnetRuntimeEnvironment(startInfo);
-
-            using Process process = ProcessStartHelper.TryStart(startInfo);
-            if (process == null)
-            {
-                return WorkerAssemblyBuildResult.StartFailure(
-                    "worker_compiler_start_failed",
-                    new
-                    {
-                        dotnet_host_path = externalCompilerPaths.DotnetHostPath,
-                        compiler_dll_path = externalCompilerPaths.CompilerDllPath
-                    });
-            }
-
-            Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
-            Task<string> stderrTask = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(WorkerAssemblyBuildTimeoutMilliseconds))
-            {
-                if (!process.HasExited)
-                {
-                    process.Kill();
-                    process.WaitForExit(500);
-                }
-
-                Task.WaitAll(stdoutTask, stderrTask);
-                return WorkerAssemblyBuildResult.StartFailure(
-                    "worker_compiler_timeout",
-                    new
-                    {
-                        timeout_ms = WorkerAssemblyBuildTimeoutMilliseconds,
-                        dotnet_host_path = externalCompilerPaths.DotnetHostPath,
-                        compiler_dll_path = externalCompilerPaths.CompilerDllPath
-                    });
-            }
-
-            Task.WaitAll(stdoutTask, stderrTask);
-            CompilerMessage[] compilerMessages = ExternalCompilerMessageParser.Parse(
-                stdoutTask.GetAwaiter().GetResult(),
-                stderrTask.GetAwaiter().GetResult(),
-                process.ExitCode);
-            return WorkerAssemblyBuildResult.Started(compilerMessages);
-        }
-
-        private static List<string> BuildWorkerReferenceSet(ExternalCompilerPaths externalCompilerPaths)
-        {
-            string sharedRuntimeDirectoryPath = externalCompilerPaths.NetCoreRuntimeSharedDirectoryPath;
-            List<string> references = new()            {
-                Path.Combine(sharedRuntimeDirectoryPath, "System.Private.CoreLib.dll"),
-                Path.Combine(sharedRuntimeDirectoryPath, "System.Runtime.dll"),
-                Path.Combine(sharedRuntimeDirectoryPath, "System.Console.dll"),
-                Path.Combine(sharedRuntimeDirectoryPath, "System.Collections.dll"),
-                Path.Combine(sharedRuntimeDirectoryPath, "System.IO.dll"),
-                Path.Combine(sharedRuntimeDirectoryPath, "System.Threading.dll"),
-                Path.Combine(sharedRuntimeDirectoryPath, "System.Threading.Tasks.dll"),
-                Path.Combine(sharedRuntimeDirectoryPath, "System.Text.Encoding.Extensions.dll"),
-                Path.Combine(sharedRuntimeDirectoryPath, "System.Runtime.Extensions.dll"),
-                Path.Combine(sharedRuntimeDirectoryPath, "netstandard.dll"),
-                externalCompilerPaths.CodeAnalysisDllPath,
-                externalCompilerPaths.CodeAnalysisCSharpDllPath
-            };
-
-            AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Collections.Immutable.dll"));
-            AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Reflection.Metadata.dll"));
-            AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Runtime.CompilerServices.Unsafe.dll"));
-            AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Memory.dll"));
-            AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Buffers.dll"));
-            AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Threading.Tasks.Extensions.dll"));
-
-            return references;
-        }
-
-        private static void WriteWorkerCompilerResponseFile(
-            string responseFilePath,
-            string sourcePath,
-            string dllPath,
-            IReadOnlyCollection<string> references)
-        {
-            List<string> lines = new()            {
-                "-nologo",
-                "-nostdlib+",
-                "-target:exe",
-                "-optimize+",
-                "-debug-",
-                QuoteResponseFileArgument("-out:", dllPath)
-            };
-
-            foreach (string reference in references)
-            {
-                lines.Add(QuoteResponseFileArgument("-r:", reference));
-            }
-
-            lines.Add(QuoteResponseFilePath(sourcePath));
-            File.WriteAllLines(responseFilePath, lines);
+                workerCompileResponseFilePath);
         }
 
         private static bool HasLiveWorkerProcess()
@@ -642,14 +489,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return string.Empty;
-        }
-
-        private static void DeleteWorkerAssemblyIfPresent(string assemblyPath)
-        {
-            if (File.Exists(assemblyPath))
-            {
-                File.Delete(assemblyPath);
-            }
         }
 
         private static void ShutdownForReload()
@@ -832,33 +671,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 attempt,
                 details = failureContext
             };
-        }
-
-        private static string QuoteResponseFileArgument(string prefix, string value)
-        {
-            return $"{prefix}{QuoteResponseFilePath(value)}";
-        }
-
-        private static string QuoteResponseFilePath(string path)
-        {
-            return $"\"{path}\"";
-        }
-
-        private static string QuoteCommandLineArgument(string value)
-        {
-            return $"\"{value}\"";
-        }
-
-        private static void AddIfExists(
-            List<string> destination,
-            string referencePath)
-        {
-            if (string.IsNullOrEmpty(referencePath) || !File.Exists(referencePath))
-            {
-                return;
-            }
-
-            destination.Add(referencePath);
         }
 
     }
