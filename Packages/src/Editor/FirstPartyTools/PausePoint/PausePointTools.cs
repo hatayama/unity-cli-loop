@@ -172,11 +172,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public PausePointResponse Enable(EnablePausePointSchema parameters)
         {
-            if (parameters == null)
-            {
-                throw new ArgumentNullException(nameof(parameters));
-            }
-
             string idError = ValidateId(parameters.Id);
             if (idError != null)
             {
@@ -196,11 +191,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public PausePointResponse Clear(ClearPausePointSchema parameters)
         {
-            if (parameters == null)
-            {
-                throw new ArgumentNullException(nameof(parameters));
-            }
-
             if (parameters.All)
             {
                 UloopPausePointClearAllResult clearAllResult = UloopPausePointRegistry.ClearAll();

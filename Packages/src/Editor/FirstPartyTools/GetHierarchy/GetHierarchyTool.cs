@@ -22,11 +22,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static UnityCliLoopHierarchyRequest ToRequest(GetHierarchySchema parameters)
         {
-            if (parameters == null)
-            {
-                throw new System.ArgumentNullException(nameof(parameters));
-            }
-
             return new UnityCliLoopHierarchyRequest
             {
                 IncludeInactive = parameters.IncludeInactive,

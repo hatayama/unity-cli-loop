@@ -24,11 +24,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static UnityCliLoopScreenshotRequest ToRequest(ScreenshotSchema parameters)
         {
-            if (parameters == null)
-            {
-                throw new System.ArgumentNullException(nameof(parameters));
-            }
-
             return new UnityCliLoopScreenshotRequest
             {
                 WindowName = parameters.WindowName,
