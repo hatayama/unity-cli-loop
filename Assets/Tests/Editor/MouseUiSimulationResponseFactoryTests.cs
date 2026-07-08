@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             });
 
             SimulateMouseUiResponse response =
-                MouseUiSimulationValidator.CreateFailure(command, "Validation failed.");
+                MouseUiSimulationResponseFactory.CreateFailure(command, "Validation failed.");
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Is.EqualTo("Validation failed."));
@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 position = new(10.25f, 20.75f);
             Vector2 endPosition = new(30.5f, 40.25f);
 
-            SimulateMouseUiResponse response = SimulateMouseUiUseCase.CreateFrameTimeoutResult(
+            SimulateMouseUiResponse response = MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(
                 MouseAction.Drag,
                 position,
                 endPosition,
@@ -69,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             Vector2 position = new(10.25f, 20.75f);
 
-            SimulateMouseUiResponse response = SimulateMouseUiUseCase.CreateFrameTimeoutResult(
+            SimulateMouseUiResponse response = MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(
                 MouseAction.Click,
                 position,
                 null,
@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 position = new(10.25f, 20.75f);
 
             SimulateMouseUiResponse response =
-                SimulateMouseUiUseCase.CreateClickResult(command, position, targetName, hitTarget);
+                MouseUiSimulationResponseFactory.CreateClickResult(command, position, targetName, hitTarget);
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.Message, Is.EqualTo(expectedMessage));
@@ -136,7 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 position = new(10.25f, 20.75f);
 
             SimulateMouseUiResponse response =
-                SimulateMouseUiUseCase.CreateLongPressResult(command, position, targetName, hitTarget);
+                MouseUiSimulationResponseFactory.CreateLongPressResult(command, position, targetName, hitTarget);
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.Message, Is.EqualTo(expectedMessage));
@@ -166,7 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 startPosition = new(10.25f, 20.75f);
             Vector2 endPosition = new(30.5f, 40.25f);
 
-            SimulateMouseUiResponse response = SimulateMouseUiUseCase.CreateDragResult(
+            SimulateMouseUiResponse response = MouseUiSimulationResponseFactory.CreateDragResult(
                 command,
                 startPosition,
                 endPosition,
@@ -195,7 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             });
             Vector2 endPosition = new(30.5f, 40.25f);
 
-            SimulateMouseUiResponse response = SimulateMouseUiUseCase.CreateDragEndResult(
+            SimulateMouseUiResponse response = MouseUiSimulationResponseFactory.CreateDragEndResult(
                 command,
                 endPosition,
                 "DragTarget");

@@ -20,12 +20,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PlayModeToolPreflightService.RequireActiveAndNotPaused(pausedActionDescription);
             if (!playModeResult.IsValid)
             {
-                return CreateFailure(parameters, playModeResult.ErrorMessage);
+                return MouseUiSimulationResponseFactory.CreateFailure(parameters, playModeResult.ErrorMessage);
             }
 
             if (eventSystem == null)
             {
-                return CreateFailure(
+                return MouseUiSimulationResponseFactory.CreateFailure(
                     parameters,
                     "No EventSystem found in the scene. Ensure an EventSystem GameObject exists.");
             }
@@ -40,21 +40,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            return CreateFailure(
+            return MouseUiSimulationResponseFactory.CreateFailure(
                 parameters,
                 $"Cannot {parameters.Action.ToString()} while a split drag is active. Call DragEnd first.");
-        }
-
-        internal static SimulateMouseUiResponse CreateFailure(
-            MouseUiSimulationCommand parameters,
-            string message)
-        {
-            return new SimulateMouseUiResponse
-            {
-                Success = false,
-                Message = message,
-                Action = parameters.Action.ToString()
-            };
         }
 
         private static SimulateMouseUiResponse? ValidateSimulationRequestOptions(
@@ -62,26 +50,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (parameters.Action != MouseAction.Click && parameters.Action != MouseAction.LongPress && parameters.DragSpeed < 0f)
             {
-                return CreateFailure(parameters, $"DragSpeed must be non-negative, got: {parameters.DragSpeed}");
+                return MouseUiSimulationResponseFactory.CreateFailure(parameters, $"DragSpeed must be non-negative, got: {parameters.DragSpeed}");
             }
 
             if (IsDragAction(parameters.Action) && parameters.Button != MouseButton.Left)
             {
-                return CreateFailure(
+                return MouseUiSimulationResponseFactory.CreateFailure(
                     parameters,
                     $"Drag actions only support Left button (uGUI ignores non-left drags), got: {parameters.Button}");
             }
 
             if (parameters.BypassRaycast && !SupportsBypassRaycast(parameters.Action))
             {
-                return CreateFailure(parameters, "BypassRaycast is not supported for this action.");
+                return MouseUiSimulationResponseFactory.CreateFailure(parameters, "BypassRaycast is not supported for this action.");
             }
 
             if (parameters.BypassRaycast &&
                 RequiresBypassTargetPath(parameters.Action) &&
                 string.IsNullOrWhiteSpace(parameters.TargetPath))
             {
-                return CreateFailure(
+                return MouseUiSimulationResponseFactory.CreateFailure(
                     parameters,
                     "TargetPath is required when BypassRaycast is true for Click, LongPress, Drag, or DragStart.");
             }
@@ -90,7 +78,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.Action != MouseAction.Drag &&
                 parameters.Action != MouseAction.DragEnd)
             {
-                return CreateFailure(parameters, "DropTargetPath supports Drag and DragEnd only.");
+                return MouseUiSimulationResponseFactory.CreateFailure(parameters, "DropTargetPath supports Drag and DragEnd only.");
             }
 
             return null;
