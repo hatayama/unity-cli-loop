@@ -25,29 +25,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Vector2 inputEnd = new(parameters.X, parameters.Y);
             Vector2 screenStart = MouseUiCoordinateConverter.InputToScreen(inputStart);
             Vector2 screenEnd = MouseUiCoordinateConverter.InputToScreen(inputEnd);
-            RaycastResult? hit = parameters.BypassRaycast ? null : UiRaycastHelper.RaycastUI(screenStart, eventSystem);
-            RaycastResult startRaycast = new();
-            GameObject? rawTarget = null;
-
-            if (parameters.BypassRaycast)
-            {
-                if (!MouseUiPointerTargetResolver.TryResolveGameObjectPath(
-                    parameters.TargetPath,
-                    "TargetPath",
+            (RaycastResult startRaycast, GameObject? target, SimulateMouseUiResponse? targetFailureResponse) =
+                MouseUiDragTargetResolver.Resolve(
+                    parameters,
+                    eventSystem,
                     MouseAction.Drag,
                     inputStart,
-                    out rawTarget,
-                    out SimulateMouseUiResponse? failureResponse))
-                {
-                    return failureResponse!;
-                }
-
-                startRaycast = MouseUiPointerTargetResolver.CreateDirectRaycastResult(rawTarget!);
-            }
-            else if (hit != null)
+                    screenStart);
+            if (targetFailureResponse != null)
             {
-                rawTarget = hit.Value.gameObject;
-                startRaycast = hit.Value;
+                return targetFailureResponse;
             }
 
             GameObject? explicitDropTarget = null;
@@ -60,11 +47,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return dropFailureResponse!;
             }
-
-            // Execute dispatches only to the exact target; resolve the actual drag handler up the hierarchy
-            GameObject? target = rawTarget != null
-                ? ExecuteEvents.GetEventHandler<IDragHandler>(rawTarget)
-                : null;
 
             if (target == null)
             {
