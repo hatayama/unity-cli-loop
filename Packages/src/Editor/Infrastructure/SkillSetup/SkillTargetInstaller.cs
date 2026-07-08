@@ -273,7 +273,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 ct.ThrowIfCancellationRequested();
                 string fileName = Path.GetFileName(filePath);
-                if (!SkillDirectoryContentSynchronizer.IsExcludedSkillFile(fileName))
+                if (!SkillSetupFileExclusion.IsExcludedSkillFile(fileName))
                 {
                     continue;
                 }

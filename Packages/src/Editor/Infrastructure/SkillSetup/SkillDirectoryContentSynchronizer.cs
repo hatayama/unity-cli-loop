@@ -13,13 +13,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal static class SkillDirectoryContentSynchronizer
     {
-        private static readonly string[] ExcludedSkillFileNames =
-        {
-            ".meta",
-            ".DS_Store",
-            ".gitkeep"
-        };
-
         internal static void SyncInstalledSkillDirectory(
             string skillDirectory,
             IReadOnlyDictionary<string, byte[]> skillFiles,
@@ -63,7 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             foreach (string filePath in Directory.EnumerateFiles(skillDirectory, "*", SearchOption.AllDirectories))
             {
                 string fileName = Path.GetFileName(filePath);
-                if (IsExcludedSkillFile(fileName))
+                if (SkillSetupFileExclusion.IsExcludedSkillFile(fileName))
                 {
                     continue;
                 }
@@ -88,24 +81,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                 Directory.Delete(directoryPath);
             }
-        }
-
-        internal static bool IsExcludedSkillFile(string fileName)
-        {
-            if (ExcludedSkillFileNames.Contains(fileName))
-            {
-                return true;
-            }
-
-            foreach (string excludedPattern in ExcludedSkillFileNames)
-            {
-                if (fileName.EndsWith(excludedPattern, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private static void WriteSkillFiles(
@@ -168,7 +143,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 ct.ThrowIfCancellationRequested();
                 string fileName = Path.GetFileName(filePath);
-                if (IsExcludedSkillFile(fileName))
+                if (SkillSetupFileExclusion.IsExcludedSkillFile(fileName))
                 {
                     continue;
                 }

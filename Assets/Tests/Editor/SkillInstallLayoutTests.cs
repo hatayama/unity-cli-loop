@@ -297,6 +297,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(actualBytes, Is.EqualTo(expectedBytes));
         }
 
+        // Tests that skill setup file scans share the same generated-file exclusion behavior.
+        [Test]
+        public void IsExcludedSkillFile_WhenGeneratedSkillFileNameIsPassed_ReturnsTrue()
+        {
+            Assert.That(SkillSetupFileExclusion.IsExcludedSkillFile("reference.md.meta"), Is.True);
+            Assert.That(SkillSetupFileExclusion.IsExcludedSkillFile(".DS_Store"), Is.True);
+            Assert.That(SkillSetupFileExclusion.IsExcludedSkillFile(".gitkeep"), Is.True);
+            Assert.That(SkillSetupFileExclusion.IsExcludedSkillFile("SKILL.md"), Is.False);
+        }
+
         private string CreateTemporaryProjectRoot()
         {
             string temporaryRoot = Path.Combine(
