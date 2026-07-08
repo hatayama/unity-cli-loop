@@ -41,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new RecordInputResponse
             {
                 Success = false,
-                Message = "record-input requires the Input System package (com.unity.inputsystem). Install it via Package Manager and set Active Input Handling to 'Input System Package (New)' or 'Both' in Player Settings.",
+                Message = InputSystemPackageRequirementMessage.Format("record-input"),
                 Action = request.Action.ToString()
             };
 #else

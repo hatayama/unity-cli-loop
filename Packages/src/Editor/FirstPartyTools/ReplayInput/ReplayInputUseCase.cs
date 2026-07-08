@@ -38,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new ReplayInputResponse
             {
                 Success = false,
-                Message = "replay-input requires the Input System package (com.unity.inputsystem). Install it via Package Manager and set Active Input Handling to 'Input System Package (New)' or 'Both' in Player Settings.",
+                Message = InputSystemPackageRequirementMessage.Format("replay-input"),
                 Action = request.Action.ToString()
             };
 #else
