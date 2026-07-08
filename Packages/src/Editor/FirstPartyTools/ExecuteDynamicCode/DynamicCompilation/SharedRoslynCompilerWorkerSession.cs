@@ -16,7 +16,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class SharedRoslynCompilerWorkerSession
     {
         private readonly object _syncRoot = new();
-        private Action<string> _deleteWorkerDirectory = path => Directory.Delete(path, true);
         private Func<ProcessStartInfo, Process> _startProcess = ProcessStartHelper.TryStart;
         private Action<Process, string> _sendCompileRequest = SendCompileRequestCore;
         private Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]>
@@ -228,15 +227,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal Action<string> SwapWorkerDirectoryDeleterForTests(Action<string> deleter)
-        {
-            Debug.Assert(deleter != null, "deleter must not be null");
-
-            Action<string> previous = _deleteWorkerDirectory;
-            _deleteWorkerDirectory = deleter;
-            return previous;
-        }
-
         internal Func<ProcessStartInfo, Process> SwapProcessStarterForTests(
             Func<ProcessStartInfo, Process> starter)
         {
@@ -291,7 +281,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             try
             {
-                _deleteWorkerDirectory(workerDirectoryPath);
+                Directory.Delete(workerDirectoryPath, true);
             }
             catch (IOException ex)
             {
