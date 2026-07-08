@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -25,6 +26,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(
                 startInfo.EnvironmentVariables[SharedRoslynCompilerWorkerAssemblyBuilder.DotnetMultilevelLookupEnvironmentVariableName],
                 Is.EqualTo(SharedRoslynCompilerWorkerAssemblyBuilder.DotnetMultilevelLookupDisabledValue));
+        }
+
+        /// <summary>
+        /// Verifies a pending compiler stream does not keep the bounded drain waiting.
+        /// </summary>
+        [Test]
+        public void WaitForCompilerStreamDrain_WhenStreamIsPending_ShouldReturnFalse()
+        {
+            TaskCompletionSource<string> pendingStream = new();
+
+            bool completed = SharedRoslynCompilerWorkerAssemblyBuilder.WaitForCompilerStreamDrain(
+                Task.FromResult("stdout"),
+                pendingStream.Task,
+                0);
+            pendingStream.SetResult("stderr");
+
+            Assert.That(completed, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies completed compiler streams satisfy the bounded drain immediately.
+        /// </summary>
+        [Test]
+        public void WaitForCompilerStreamDrain_WhenStreamsAreCompleted_ShouldReturnTrue()
+        {
+            bool completed = SharedRoslynCompilerWorkerAssemblyBuilder.WaitForCompilerStreamDrain(
+                Task.FromResult("stdout"),
+                Task.FromResult("stderr"),
+                0);
+
+            Assert.That(completed, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies a faulted compiler stream is treated as drained without escaping timeout recovery.
+        /// </summary>
+        [Test]
+        public void WaitForCompilerStreamDrain_WhenStreamFaults_ShouldReturnTrue()
+        {
+            Task<string> faultedStream = Task.FromException<string>(new IOException("stream read failed"));
+
+            bool completed = SharedRoslynCompilerWorkerAssemblyBuilder.WaitForCompilerStreamDrain(
+                Task.FromResult("stdout"),
+                faultedStream,
+                0);
+
+            Assert.That(completed, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies one faulted stream does not make a still-pending drain appear complete.
+        /// </summary>
+        [Test]
+        public void WaitForCompilerStreamDrain_WhenFaultedStreamHasPendingPeer_ShouldReturnFalse()
+        {
+            TaskCompletionSource<string> pendingStream = new();
+            Task<string> faultedStream = Task.FromException<string>(new IOException("stream read failed"));
+
+            bool completed = SharedRoslynCompilerWorkerAssemblyBuilder.WaitForCompilerStreamDrain(
+                faultedStream,
+                pendingStream.Task,
+                0);
+            pendingStream.SetResult("stderr");
+
+            Assert.That(completed, Is.False);
         }
 
         [Test]
