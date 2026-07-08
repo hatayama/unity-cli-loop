@@ -15,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         public static CliPathSetupPlan ResolveCurrentUserPlan(RuntimePlatform platform)
         {
-            string installDirectory = NativeCliInstaller.GetCurrentUserGlobalCliInstallDirectory(platform);
+            string installDirectory = NativeCliInstallPathResolver.GetCurrentUserGlobalCliInstallDirectory(platform);
             string shellPath = NodeEnvironmentResolver.GetUserShell();
             return ResolvePlan(
                 platform,
