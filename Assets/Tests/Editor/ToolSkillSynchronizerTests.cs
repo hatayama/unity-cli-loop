@@ -1639,6 +1639,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task RemoveSpecificSkillFilesAtProjectRoot_WithMultipleTargets_ReportsAllTargetsSucceeded()
+        {
+            // Tests that migration skill removal reports one successful result per requested target.
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            ToolSkillSynchronizer.SkillTargetInfo codexTarget = new(
+                "Codex CLI",
+                ".codex",
+                "--codex",
+                hasSkillsDirectory: true,
+                hasExistingSkills: false);
+            ToolSkillSynchronizer.SkillTargetInfo claudeTarget = new(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory: true,
+                hasExistingSkills: false);
+            string codexSkillDir = Path.Combine(
+                temporaryRoot,
+                ".codex",
+                SkillInstallLayout.SkillsDirName,
+                CliConstants.V3_CLI_INVOCATION_MIGRATION_SKILL_NAME);
+            string claudeSkillDir = Path.Combine(
+                temporaryRoot,
+                ".claude",
+                SkillInstallLayout.SkillsDirName,
+                CliConstants.V3_CLI_INVOCATION_MIGRATION_SKILL_NAME);
+            WriteSkillFile(codexSkillDir, "---\nname: v3-cli-invocation-migration\n---\n");
+            WriteSkillFile(claudeSkillDir, "---\nname: v3-cli-invocation-migration\n---\n");
+
+            ToolSkillSynchronizer.SkillInstallResult result =
+                await V3MigrationSkillInstaller.RemoveSpecificSkillFilesAtProjectRoot(
+                    temporaryRoot,
+                    new[] { codexTarget, claudeTarget },
+                    CliConstants.V3_CLI_INVOCATION_MIGRATION_SKILL_NAME,
+                    groupSkillsUnderUnityCliLoop: false,
+                    ct: CancellationToken.None);
+
+            Assert.That(result.AttemptedTargets, Is.EqualTo(2));
+            Assert.That(result.SucceededTargets, Is.EqualTo(2));
+            Assert.That(result.IsSuccessful, Is.True);
+            Assert.That(Directory.Exists(codexSkillDir), Is.False);
+            Assert.That(Directory.Exists(claudeSkillDir), Is.False);
+        }
+
+        [Test]
         public async Task RemoveV3MigrationSkillFilesAtProjectRoot_WhenSkillExistsInBothLayouts_RemovesBothLayouts()
         {
             // Tests that temporary migration skill removal cleans up both supported install layouts.
