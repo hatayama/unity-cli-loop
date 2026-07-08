@@ -56,6 +56,82 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             eventSystemDisableScope.Restore();
         }
 
+        #region Request Validation Tests
+
+        /// <summary>
+        /// Verifies one-shot drag rejects a negative speed before pointer execution starts.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator DragOneShot_WithNegativeSpeed_Should_ReturnValidationFailure()
+        {
+            yield return RunTool(new JObject
+            {
+                ["action"] = MouseAction.Drag.ToString(),
+                ["dragSpeed"] = -1f
+            });
+
+            Assert.That(lastResponse.Success, Is.False);
+            Assert.That(lastResponse.Message, Is.EqualTo("DragSpeed must be non-negative, got: -1"));
+            Assert.That(lastResponse.Action, Is.EqualTo(MouseAction.Drag.ToString()));
+        }
+
+        /// <summary>
+        /// Verifies drag actions reject non-left buttons before pointer execution starts.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator DragOneShot_WithRightButton_Should_ReturnValidationFailure()
+        {
+            yield return RunTool(new JObject
+            {
+                ["action"] = MouseAction.Drag.ToString(),
+                ["button"] = MouseButton.Right.ToString()
+            });
+
+            Assert.That(lastResponse.Success, Is.False);
+            Assert.That(
+                lastResponse.Message,
+                Is.EqualTo("Drag actions only support Left button (uGUI ignores non-left drags), got: Right"));
+            Assert.That(lastResponse.Action, Is.EqualTo(MouseAction.Drag.ToString()));
+        }
+
+        /// <summary>
+        /// Verifies bypass click requires an explicit target path before pointer execution starts.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Click_WithBypassRaycastAndNoTargetPath_Should_ReturnValidationFailure()
+        {
+            yield return RunTool(new JObject
+            {
+                ["action"] = MouseAction.Click.ToString(),
+                ["bypassRaycast"] = true
+            });
+
+            Assert.That(lastResponse.Success, Is.False);
+            Assert.That(
+                lastResponse.Message,
+                Is.EqualTo("TargetPath is required when BypassRaycast is true for Click, LongPress, Drag, or DragStart."));
+            Assert.That(lastResponse.Action, Is.EqualTo(MouseAction.Click.ToString()));
+        }
+
+        /// <summary>
+        /// Verifies click rejects a drop target path that only drag completion can consume.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Click_WithDropTargetPath_Should_ReturnValidationFailure()
+        {
+            yield return RunTool(new JObject
+            {
+                ["action"] = MouseAction.Click.ToString(),
+                ["dropTargetPath"] = "TestCanvas/DropTarget"
+            });
+
+            Assert.That(lastResponse.Success, Is.False);
+            Assert.That(lastResponse.Message, Is.EqualTo("DropTargetPath supports Drag and DragEnd only."));
+            Assert.That(lastResponse.Action, Is.EqualTo(MouseAction.Click.ToString()));
+        }
+
+        #endregion
+
         #region Click Tests
 
         [UnityTest]
