@@ -72,29 +72,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             ct.ThrowIfCancellationRequested();
 
             SkillInstallLayout.SkillSourceInfo skill = GetV3MigrationSkillSourceInfo();
-            ToolSkillSynchronizer.SkillTargetInfo[] targetArray = targets.ToArray();
-            return await Task.Run(() =>
-            {
-                int succeeded = 0;
-                foreach (ToolSkillSynchronizer.SkillTargetInfo target in targetArray)
+            return await RunForTargetsAsync(
+                targets,
+                (ToolSkillSynchronizer.SkillTargetInfo target, CancellationToken targetCt) =>
                 {
-                    ct.ThrowIfCancellationRequested();
                     string targetRoot = Path.Combine(projectRoot, target.DirName);
                     SkillTargetInstaller.DeleteSkillDirectoryIfExists(
                         targetRoot,
                         skill.Name,
                         groupSkillsUnderUnityCliLoop,
-                        ct);
+                        targetCt);
                     SkillTargetInstaller.DeleteSkillDirectoryIfExists(
                         targetRoot,
                         skill.Name,
                         !groupSkillsUnderUnityCliLoop,
-                        ct);
-                    succeeded++;
-                }
-
-                return new ToolSkillSynchronizer.SkillInstallResult(targetArray.Length, succeeded);
-            }, ct);
+                        targetCt);
+                },
+                ct);
         }
 
         internal static SkillInstallState GetSkillInstallStateAtProjectRoot(
@@ -129,25 +123,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(targets != null, "targets must not be null");
             ct.ThrowIfCancellationRequested();
 
-            ToolSkillSynchronizer.SkillTargetInfo[] targetArray = targets.ToArray();
-            return await Task.Run(() =>
-            {
-                int succeeded = 0;
-                foreach (ToolSkillSynchronizer.SkillTargetInfo target in targetArray)
+            return await RunForTargetsAsync(
+                targets,
+                (ToolSkillSynchronizer.SkillTargetInfo target, CancellationToken targetCt) =>
                 {
-                    ct.ThrowIfCancellationRequested();
                     SkillTargetInstaller.InstallSpecificSkillsForTarget(
                         projectRoot,
                         target,
                         Array.Empty<SkillInstallLayout.SkillSourceInfo>(),
                         new[] { skill },
                         groupSkillsUnderUnityCliLoop,
-                        ct);
-                    succeeded++;
-                }
-
-                return new ToolSkillSynchronizer.SkillInstallResult(targetArray.Length, succeeded);
-            }, ct);
+                        targetCt);
+                },
+                ct);
         }
 
         internal static async Task<ToolSkillSynchronizer.SkillInstallResult> RemoveSpecificSkillFilesAtProjectRoot(
@@ -162,6 +150,28 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(skillName), "skillName must not be null or empty");
             ct.ThrowIfCancellationRequested();
 
+            return await RunForTargetsAsync(
+                targets,
+                (ToolSkillSynchronizer.SkillTargetInfo target, CancellationToken targetCt) =>
+                {
+                    string targetRoot = Path.Combine(projectRoot, target.DirName);
+                    SkillTargetInstaller.DeleteSkillDirectoryIfExists(
+                        targetRoot,
+                        skillName,
+                        groupSkillsUnderUnityCliLoop,
+                        targetCt);
+                },
+                ct);
+        }
+
+        private static async Task<ToolSkillSynchronizer.SkillInstallResult> RunForTargetsAsync(
+            IEnumerable<ToolSkillSynchronizer.SkillTargetInfo> targets,
+            Action<ToolSkillSynchronizer.SkillTargetInfo, CancellationToken> targetOperation,
+            CancellationToken ct)
+        {
+            Debug.Assert(targets != null, "targets must not be null");
+            Debug.Assert(targetOperation != null, "targetOperation must not be null");
+
             ToolSkillSynchronizer.SkillTargetInfo[] targetArray = targets.ToArray();
             return await Task.Run(() =>
             {
@@ -169,12 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 foreach (ToolSkillSynchronizer.SkillTargetInfo target in targetArray)
                 {
                     ct.ThrowIfCancellationRequested();
-                    string targetRoot = Path.Combine(projectRoot, target.DirName);
-                    SkillTargetInstaller.DeleteSkillDirectoryIfExists(
-                        targetRoot,
-                        skillName,
-                        groupSkillsUnderUnityCliLoop,
-                        ct);
+                    targetOperation(target, ct);
                     succeeded++;
                 }
 
