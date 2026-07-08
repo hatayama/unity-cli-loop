@@ -60,11 +60,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     $"Drag actions only support Left button (uGUI ignores non-left drags), got: {parameters.Button}");
             }
 
-            if (parameters.BypassRaycast && !SupportsBypassRaycast(parameters.Action))
-            {
-                return MouseUiSimulationResponseFactory.CreateFailure(parameters, "BypassRaycast is not supported for this action.");
-            }
-
             if (parameters.BypassRaycast &&
                 RequiresBypassTargetPath(parameters.Action) &&
                 string.IsNullOrWhiteSpace(parameters.TargetPath))
@@ -87,13 +82,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static bool RequiresIdlePointer(MouseAction action)
         {
             return action == MouseAction.Click || action == MouseAction.Drag || action == MouseAction.LongPress;
-        }
-
-        private static bool SupportsBypassRaycast(MouseAction action)
-        {
-            return action == MouseAction.Click
-                || action == MouseAction.LongPress
-                || IsDragAction(action);
         }
 
         private static bool RequiresBypassTargetPath(MouseAction action)
