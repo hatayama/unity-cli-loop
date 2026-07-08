@@ -47,6 +47,40 @@ func TestEnumerateSourceRootsUsesPackageSearchResults(t *testing.T) {
 	}
 }
 
+// Tests that local manifest dependencies exclude stale roots with the same identity from PackageCache.
+func TestEnumeratePackageSearchResultsExcludesStaleCacheForLocalDependencies(t *testing.T) {
+	for _, dependencyPrefix := range []string{"file:", "path:"} {
+		t.Run(dependencyPrefix, func(t *testing.T) {
+			projectRoot := t.TempDir()
+			localPackageRoot := filepath.Join(t.TempDir(), "local-package")
+			if err := os.MkdirAll(localPackageRoot, 0o755); err != nil {
+				t.Fatalf("failed to create local package: %v", err)
+			}
+			staleCacheRoot := filepath.Join(
+				projectRoot,
+				"Library",
+				"PackageCache",
+				"com.example.local@1.0.0")
+			if err := os.MkdirAll(staleCacheRoot, 0o755); err != nil {
+				t.Fatalf("failed to create stale cache package: %v", err)
+			}
+			writeManifest(
+				t,
+				projectRoot,
+				`{"dependencies":{"com.example.local":"`+dependencyPrefix+
+					filepath.ToSlash(localPackageRoot)+`"}}`)
+
+			results := EnumeratePackageSearchResults(projectRoot)
+
+			actual := packageResultSummaries(results)
+			expected := []string{"com.example.local|" + filepath.Clean(localPackageRoot)}
+			if !reflect.DeepEqual(actual, expected) {
+				t.Fatalf("package results mismatch:\nactual:   %#v\nexpected: %#v", actual, expected)
+			}
+		})
+	}
+}
+
 // Tests that package search results expose stable package identities for direct, manifest, and cached roots.
 func TestEnumeratePackageSearchResultsCapturesPackageIdentities(t *testing.T) {
 	projectRoot := t.TempDir()
