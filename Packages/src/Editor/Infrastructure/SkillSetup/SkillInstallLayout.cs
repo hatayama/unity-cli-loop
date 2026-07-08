@@ -202,7 +202,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (File.Exists(skillMdPath))
             {
                 string content = File.ReadAllText(skillMdPath);
-                if (SkillContentMatchesTool(content, skillDir, toolName))
+                if (SkillSourceFrontmatterReader.SkillContentMatchesTool(content, skillDir, toolName))
                 {
                     return true;
                 }
@@ -233,12 +233,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     }
 
                     string skillContent = File.ReadAllText(skillFilePath);
-                    if (!IsInternalSkill(skillContent))
+                    if (!SkillSourceFrontmatterReader.IsInternalSkill(skillContent))
                     {
                         continue;
                     }
 
-                    string toolName = GetToolNameFromSkillContent(skillContent);
+                    string toolName = SkillSourceFrontmatterReader.GetToolNameFromSkillContent(skillContent);
                     if (!string.IsNullOrEmpty(toolName))
                     {
                         toolNames.Add(toolName);
@@ -264,7 +264,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Dictionary<string, string> descriptions = new(StringComparer.Ordinal);
             foreach (SkillSourceDefinition source in GetSkillSources(projectRoot).Values)
             {
-                string toolName = ResolveToolNameForSkillSource(source.Name, source.ToolName);
+                string toolName = SkillSourceFrontmatterReader.ResolveToolNameForSkillSource(
+                    source.Name,
+                    source.ToolName);
                 if (string.IsNullOrEmpty(toolName) || string.IsNullOrWhiteSpace(source.Description))
                 {
                     continue;
@@ -287,12 +289,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(File.Exists(skillFilePath), "skill source must contain SKILL.md");
 
             string skillContent = File.ReadAllText(skillFilePath);
-            string skillName = ParseNameFromFrontmatter(skillContent);
+            string skillName = SkillSourceFrontmatterReader.ParseNameFromFrontmatter(skillContent);
             Debug.Assert(IsSafeSkillPathComponent(skillName), "skillName must be a single safe path component");
 
             return new SkillSourceInfo(
                 skillName,
-                ParseToolNameFromFrontmatter(skillContent),
+                SkillSourceFrontmatterReader.ParseToolNameFromFrontmatter(skillContent),
                 CollectSourceSkillFiles(skillDirectory, skillFilePath));
         }
 
@@ -371,7 +373,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             string content = File.ReadAllText(skillMdPath);
-            if (!string.IsNullOrEmpty(ParseToolNameFromFrontmatter(content)))
+            if (!string.IsNullOrEmpty(SkillSourceFrontmatterReader.ParseToolNameFromFrontmatter(content)))
             {
                 return true;
             }
@@ -634,12 +636,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     }
 
                     string skillContent = File.ReadAllText(skillFilePath);
-                    if (IsInternalSkill(skillContent))
+                    if (SkillSourceFrontmatterReader.IsInternalSkill(skillContent))
                     {
                         continue;
                     }
 
-                    string skillName = ParseNameFromFrontmatter(skillContent);
+                    string skillName = SkillSourceFrontmatterReader.ParseNameFromFrontmatter(skillContent);
                     if (string.IsNullOrEmpty(skillName)
                         || !IsSafeSkillPathComponent(skillName)
                         || sources.ContainsKey(skillName))
@@ -649,8 +651,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
                     sources[skillName] = new SkillSourceDefinition(
                         skillName,
-                        ParseToolNameFromFrontmatter(skillContent),
-                        ParseDescriptionFromFrontmatter(skillContent),
+                        SkillSourceFrontmatterReader.ParseToolNameFromFrontmatter(skillContent),
+                        SkillSourceFrontmatterReader.ParseDescriptionFromFrontmatter(skillContent),
                         skillDirectory,
                         CollectSourceSkillFiles(skillDirectory, skillFilePath));
                 }
@@ -908,133 +910,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     yield return editorDirectory;
                 }
             }
-        }
-
-        private static string ParseToolNameFromFrontmatter(string content)
-        {
-            Match frontmatterMatch = Regex.Match(content, @"^---\r?\n([\s\S]*?)\r?\n---");
-            if (!frontmatterMatch.Success)
-            {
-                return null;
-            }
-
-            string frontmatter = frontmatterMatch.Groups[1].Value;
-            Match toolNameMatch = Regex.Match(frontmatter, @"^toolName:\s*(.+)$", RegexOptions.Multiline);
-            if (!toolNameMatch.Success)
-            {
-                return null;
-            }
-
-            return toolNameMatch.Groups[1].Value.Trim();
-        }
-
-        private static string ParseNameFromFrontmatter(string content)
-        {
-            Match frontmatterMatch = Regex.Match(content, @"^---\r?\n([\s\S]*?)\r?\n---");
-            if (!frontmatterMatch.Success)
-            {
-                return null;
-            }
-
-            string frontmatter = frontmatterMatch.Groups[1].Value;
-            Match nameMatch = Regex.Match(frontmatter, @"^name:\s*(.+)$", RegexOptions.Multiline);
-            if (!nameMatch.Success)
-            {
-                return null;
-            }
-
-            return nameMatch.Groups[1].Value.Trim().Trim('"');
-        }
-
-        private static string ParseDescriptionFromFrontmatter(string content)
-        {
-            Match frontmatterMatch = Regex.Match(content, @"^---\r?\n([\s\S]*?)\r?\n---");
-            if (!frontmatterMatch.Success)
-            {
-                return null;
-            }
-
-            string frontmatter = frontmatterMatch.Groups[1].Value;
-            Match descriptionMatch = Regex.Match(frontmatter, @"^description:\s*(.+)$", RegexOptions.Multiline);
-            if (!descriptionMatch.Success)
-            {
-                return null;
-            }
-
-            return descriptionMatch.Groups[1].Value.Trim().Trim('"');
-        }
-
-        private static string ResolveToolNameForSkillSource(string skillName, string toolName)
-        {
-            if (!string.IsNullOrEmpty(toolName))
-            {
-                return toolName;
-            }
-
-            if (string.IsNullOrEmpty(skillName)
-                || !skillName.StartsWith(CliConstants.SKILL_DIR_PREFIX, StringComparison.Ordinal))
-            {
-                return null;
-            }
-
-            return skillName.Substring(CliConstants.SKILL_DIR_PREFIX.Length);
-        }
-
-        private static bool SkillContentMatchesTool(string content, string skillDirectory, string toolName)
-        {
-            string parsedToolName = ParseToolNameFromFrontmatter(content);
-            if (!string.IsNullOrEmpty(parsedToolName))
-            {
-                return parsedToolName == toolName;
-            }
-
-            string parsedSkillName = ParseNameFromFrontmatter(content);
-            if (!string.IsNullOrEmpty(parsedSkillName))
-            {
-                return parsedSkillName == $"{CliConstants.SKILL_DIR_PREFIX}{toolName}";
-            }
-
-            string dirName = Path.GetFileName(skillDirectory);
-            return dirName == $"{CliConstants.SKILL_DIR_PREFIX}{toolName}";
-        }
-
-        private static string GetToolNameFromSkillContent(string content)
-        {
-            string parsedToolName = ParseToolNameFromFrontmatter(content);
-            if (!string.IsNullOrEmpty(parsedToolName))
-            {
-                return parsedToolName;
-            }
-
-            string parsedSkillName = ParseNameFromFrontmatter(content);
-            if (string.IsNullOrEmpty(parsedSkillName)
-                || !parsedSkillName.StartsWith(CliConstants.SKILL_DIR_PREFIX, StringComparison.Ordinal))
-            {
-                return null;
-            }
-
-            return parsedSkillName.Substring(CliConstants.SKILL_DIR_PREFIX.Length);
-        }
-
-        private static bool IsInternalSkill(string content)
-        {
-            Match frontmatterMatch = Regex.Match(content, @"^---\r?\n([\s\S]*?)\r?\n---");
-            if (!frontmatterMatch.Success)
-            {
-                return false;
-            }
-
-            string frontmatter = frontmatterMatch.Groups[1].Value;
-            Match internalMatch = Regex.Match(frontmatter, @"^internal:\s*(.+)$", RegexOptions.Multiline);
-            if (!internalMatch.Success)
-            {
-                return false;
-            }
-
-            return string.Equals(
-                internalMatch.Groups[1].Value.Trim(),
-                "true",
-                StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsSafeSkillPathComponent(string skillName)
