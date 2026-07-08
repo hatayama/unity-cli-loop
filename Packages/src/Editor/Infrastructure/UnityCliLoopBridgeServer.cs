@@ -4,7 +4,6 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -575,45 +574,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        /// <summary>
-        /// Creates a Content-Length framed message for JSON-RPC 2.0 communication.
-        /// </summary>
-        /// <param name="jsonContent">The JSON content to frame</param>
-        /// <returns>The framed message with Content-Length header</returns>
-        private string CreateContentLengthFrame(string jsonContent)
-        {
-            if (string.IsNullOrEmpty(jsonContent))
-            {
-                return string.Empty;
-            }
-            
-            // Calculate content length in bytes (UTF-8 encoding)
-            int contentLength = Encoding.UTF8.GetByteCount(jsonContent);
-            
-            // Create the framed message: Content-Length: <n>\r\n\r\n<json_content>
-            return $"Content-Length: {contentLength}\r\n\r\n{jsonContent}";
-        }
-
-        private async Task WriteJsonResponseAsync(
-            Stream stream,
-            string responseJson,
-            CancellationToken ct)
-        {
-            if (string.IsNullOrEmpty(responseJson))
-            {
-                return;
-            }
-
-            if (!stream.CanWrite || ct.IsCancellationRequested)
-            {
-                return;
-            }
-
-            string framedResponse = CreateContentLengthFrame(responseJson);
-            byte[] responseData = Encoding.UTF8.GetBytes(framedResponse);
-            await stream.WriteAsync(responseData, 0, responseData.Length, ct);
-        }
-
         private async Task ProcessRequestFrameAsync(
             BridgeClientConnection client,
             Stream stream,
@@ -634,7 +594,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         requestCancellationTokenSource.Token,
                         async (responseJsonValue, cancelOnClientDisconnect, createHeartbeatJson) =>
                         {
-                            await WriteJsonResponseLockedAsync(
+                            await UnityCliLoopBridgeResponseWriter.WriteJsonResponseLockedAsync(
                                 stream, streamWriteLock, responseJsonValue, serverCancellationToken);
 
                             if (createHeartbeatJson != null)
@@ -647,7 +607,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                                 CancellationToken heartbeatToken = heartbeatCancellationSource.Token;
                                 heartbeatTask = _heartbeatService.SendHeartbeatsAsync(
                                     createHeartbeatJson,
-                                    heartbeatJson => WriteJsonResponseLockedAsync(
+                                    heartbeatJson => UnityCliLoopBridgeResponseWriter.WriteJsonResponseLockedAsync(
                                         stream, streamWriteLock, heartbeatJson, heartbeatToken),
                                     TimeSpan.FromSeconds(UnityCliLoopServerConfig.HEARTBEAT_INTERVAL_SECONDS),
                                     heartbeatToken);
@@ -669,7 +629,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     await _heartbeatService.StopHeartbeatsAsync(heartbeatTask, heartbeatCancellationSource);
                     heartbeatTask = null;
 
-                    await WriteJsonResponseLockedAsync(stream, streamWriteLock, responseJson, serverCancellationToken);
+                    await UnityCliLoopBridgeResponseWriter.WriteJsonResponseLockedAsync(
+                        stream, streamWriteLock, responseJson, serverCancellationToken);
                 }
                 finally
                 {
@@ -679,26 +640,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                         clientDisconnectMonitorTask,
                         requestCancellationTokenSource);
                 }
-            }
-        }
-
-        private async Task WriteJsonResponseLockedAsync(
-            Stream stream,
-            SemaphoreSlim streamWriteLock,
-            string responseJson,
-            CancellationToken ct)
-        {
-            // Why: heartbeat frames are written from a background timer while the final
-            // response is written by the request task; interleaved writes would corrupt
-            // Content-Length framing, so all frame writes share one lock per connection.
-            await streamWriteLock.WaitAsync(ct);
-            try
-            {
-                await WriteJsonResponseAsync(stream, responseJson, ct);
-            }
-            finally
-            {
-                streamWriteLock.Release();
             }
         }
 
