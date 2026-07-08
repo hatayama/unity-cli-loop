@@ -467,11 +467,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Shutdown();
         }
 
-        internal static Action<string> SwapWorkerDirectoryDeleterForTests(Action<string> deleter)
-        {
-            return ServiceValue.SwapWorkerDirectoryDeleterForTests(deleter);
-        }
-
         internal static Action<Process, string> SwapCompileRequestSenderForTests(Action<Process, string> sender)
         {
             return ServiceValue.SwapCompileRequestSenderForTests(sender);
