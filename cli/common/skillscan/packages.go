@@ -166,7 +166,10 @@ func enumeratePackageCacheResults(projectRoot string) []PackageSearchResult {
 		return []PackageSearchResult{}
 	}
 	dependencyNames := map[string]bool{}
-	for dependencyName := range dependencies {
+	for dependencyName, dependencyValue := range dependencies {
+		if resolveLocalDependencyPath(dependencyValue, projectRoot) != "" {
+			continue
+		}
 		dependencyNames[strings.ToLower(dependencyName)] = true
 	}
 	packageCacheDir := filepath.Join(projectRoot, "Library", "PackageCache")

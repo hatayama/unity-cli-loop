@@ -169,6 +169,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(skillSources["uloop-manifest-priority"].ToolName, Is.EqualTo("manifest-winner"));
         }
 
+        // Tests that local manifest dependencies do not also discover stale PackageCache-only skills.
+        [TestCase("file:")]
+        [TestCase("path:")]
+        public void GetSkillSourceInfos_WhenLocalDependencyHasStaleCache_ExcludesCacheOnlySkill(
+            string dependencyPrefix)
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            string localPackageRoot = CreateTemporaryProjectRoot();
+            string cachePackageRoot = Path.Combine(
+                temporaryRoot,
+                "Library",
+                "PackageCache",
+                "com.example.local@1.0.0");
+            WriteSourceSkill(localPackageRoot, "uloop-local-skill", "local-tool", "LocalTool");
+            WriteSourceSkill(cachePackageRoot, "uloop-stale-cache-skill", "stale-tool", "StaleTool");
+
+            string manifestPath = Path.Combine(temporaryRoot, "Packages", "manifest.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(manifestPath));
+            string portableLocalPackageRoot = localPackageRoot.Replace(Path.DirectorySeparatorChar, '/');
+            File.WriteAllText(
+                manifestPath,
+                $"{{\"dependencies\":{{\"com.example.local\":" +
+                $"\"{dependencyPrefix}{portableLocalPackageRoot}\"}}}}");
+
+            string[] skillNames = SkillInstallLayout.GetSkillSourceInfos(temporaryRoot)
+                .Select(skill => skill.Name)
+                .ToArray();
+
+            Assert.That(skillNames, Does.Contain("uloop-local-skill"));
+            Assert.That(skillNames, Does.Not.Contain("uloop-stale-cache-skill"));
+        }
+
         // Tests that skill discovery follows bundled tools after they move into the first-party plugin assembly.
         [Test]
         public void GetSkillSourceInfos_WhenFirstPartyToolIsUnderFirstPartyTools_IncludesToolSkill()
