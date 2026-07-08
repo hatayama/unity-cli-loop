@@ -146,6 +146,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool completed = Task.WaitAny(
                 new[] { streamDrainTask },
                 timeoutMilliseconds) == 0;
+            ObserveCompilerStreamFailure(stdoutTask);
+            ObserveCompilerStreamFailure(stderrTask);
             ObserveCompilerStreamFailure(streamDrainTask);
             return completed;
         }

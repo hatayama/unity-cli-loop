@@ -75,6 +75,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(completed, Is.True);
         }
 
+        /// <summary>
+        /// Verifies one faulted stream does not make a still-pending drain appear complete.
+        /// </summary>
+        [Test]
+        public void WaitForCompilerStreamDrain_WhenFaultedStreamHasPendingPeer_ShouldReturnFalse()
+        {
+            TaskCompletionSource<string> pendingStream = new();
+            Task<string> faultedStream = Task.FromException<string>(new IOException("stream read failed"));
+
+            bool completed = SharedRoslynCompilerWorkerAssemblyBuilder.WaitForCompilerStreamDrain(
+                faultedStream,
+                pendingStream.Task,
+                0);
+            pendingStream.SetResult("stderr");
+
+            Assert.That(completed, Is.False);
+        }
+
         [Test]
         public void CreateCompileRequestCommand_WhenPathIsWindowsAbsolutePath_ShouldEncodeAsciiPayload()
         {
