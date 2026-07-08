@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -77,6 +78,120 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             {
                 previousProcess.Dispose();
             }
+        }
+
+        /// <summary>
+        /// Verifies a broken graceful shutdown channel still falls back to forced termination.
+        /// </summary>
+        [Test]
+        public void ExecuteProcessShutdown_WhenGracefulRequestThrowsIOException_ShouldStillForceKill()
+        {
+            IOException shutdownFailure = new("worker input closed");
+            Exception loggedFailure = null;
+            int forceKillCallCount = 0;
+            int disposeCallCount = 0;
+
+            SharedRoslynCompilerWorkerSession.ExecuteProcessShutdown(
+                hasExited: () => false,
+                requestGracefulShutdown: () => throw shutdownFailure,
+                forceKill: () => forceKillCallCount++,
+                dispose: () => disposeCallCount++,
+                logFailure: ex => loggedFailure = ex);
+
+            Assert.That(loggedFailure, Is.SameAs(shutdownFailure));
+            Assert.That(forceKillCallCount, Is.EqualTo(1));
+            Assert.That(disposeCallCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a disposed graceful shutdown channel still falls back to forced termination.
+        /// </summary>
+        [Test]
+        public void ExecuteProcessShutdown_WhenGracefulRequestThrowsObjectDisposedException_ShouldStillForceKill()
+        {
+            ObjectDisposedException shutdownFailure = new("worker input");
+            Exception loggedFailure = null;
+            int forceKillCallCount = 0;
+            int disposeCallCount = 0;
+
+            SharedRoslynCompilerWorkerSession.ExecuteProcessShutdown(
+                hasExited: () => false,
+                requestGracefulShutdown: () => throw shutdownFailure,
+                forceKill: () => forceKillCallCount++,
+                dispose: () => disposeCallCount++,
+                logFailure: ex => loggedFailure = ex);
+
+            Assert.That(loggedFailure, Is.SameAs(shutdownFailure));
+            Assert.That(forceKillCallCount, Is.EqualTo(1));
+            Assert.That(disposeCallCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies an operating-system kill failure is logged without escaping process disposal.
+        /// </summary>
+        [Test]
+        public void ExecuteProcessShutdown_WhenForceKillThrowsWin32Exception_ShouldLogAndDispose()
+        {
+            Win32Exception shutdownFailure = new(5, "worker kill denied");
+            Exception loggedFailure = null;
+            int disposeCallCount = 0;
+
+            Assert.DoesNotThrow(() => SharedRoslynCompilerWorkerSession.ExecuteProcessShutdown(
+                hasExited: () => false,
+                requestGracefulShutdown: () => { },
+                forceKill: () => throw shutdownFailure,
+                dispose: () => disposeCallCount++,
+                logFailure: ex => loggedFailure = ex));
+
+            Assert.That(loggedFailure, Is.SameAs(shutdownFailure));
+            Assert.That(disposeCallCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies successful graceful shutdown skips forced termination and disposes once.
+        /// </summary>
+        [Test]
+        public void ExecuteProcessShutdown_WhenGracefulRequestExitsProcess_ShouldSkipForceKill()
+        {
+            bool processExited = false;
+            int forceKillCallCount = 0;
+            int disposeCallCount = 0;
+            int failureLogCount = 0;
+
+            SharedRoslynCompilerWorkerSession.ExecuteProcessShutdown(
+                hasExited: () => processExited,
+                requestGracefulShutdown: () => processExited = true,
+                forceKill: () => forceKillCallCount++,
+                dispose: () => disposeCallCount++,
+                logFailure: ex => failureLogCount++);
+
+            Assert.That(forceKillCallCount, Is.Zero);
+            Assert.That(failureLogCount, Is.Zero);
+            Assert.That(disposeCallCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies an already exited process skips both termination phases and disposes once.
+        /// </summary>
+        [Test]
+        public void ExecuteProcessShutdown_WhenProcessAlreadyExited_ShouldOnlyDispose()
+        {
+            int gracefulRequestCallCount = 0;
+            int forceKillCallCount = 0;
+            int disposeCallCount = 0;
+            int failureLogCount = 0;
+
+            SharedRoslynCompilerWorkerSession.ExecuteProcessShutdown(
+                hasExited: () => true,
+                requestGracefulShutdown: () => gracefulRequestCallCount++,
+                forceKill: () => forceKillCallCount++,
+                dispose: () => disposeCallCount++,
+                logFailure: ex => failureLogCount++);
+
+            Assert.That(gracefulRequestCallCount, Is.Zero);
+            Assert.That(forceKillCallCount, Is.Zero);
+            Assert.That(failureLogCount, Is.Zero);
+            Assert.That(disposeCallCount, Is.EqualTo(1));
         }
 
         /// <summary>
