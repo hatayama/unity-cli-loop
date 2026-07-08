@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -25,6 +26,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(
                 startInfo.EnvironmentVariables[SharedRoslynCompilerWorkerAssemblyBuilder.DotnetMultilevelLookupEnvironmentVariableName],
                 Is.EqualTo(SharedRoslynCompilerWorkerAssemblyBuilder.DotnetMultilevelLookupDisabledValue));
+        }
+
+        /// <summary>
+        /// Verifies a pending compiler stream does not keep the bounded drain waiting.
+        /// </summary>
+        [Test]
+        public void WaitForCompilerStreamDrain_WhenStreamIsPending_ShouldReturnFalse()
+        {
+            TaskCompletionSource<string> pendingStream = new();
+
+            bool completed = SharedRoslynCompilerWorkerAssemblyBuilder.WaitForCompilerStreamDrain(
+                Task.FromResult("stdout"),
+                pendingStream.Task,
+                0);
+            pendingStream.SetResult("stderr");
+
+            Assert.That(completed, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies completed compiler streams satisfy the bounded drain immediately.
+        /// </summary>
+        [Test]
+        public void WaitForCompilerStreamDrain_WhenStreamsAreCompleted_ShouldReturnTrue()
+        {
+            bool completed = SharedRoslynCompilerWorkerAssemblyBuilder.WaitForCompilerStreamDrain(
+                Task.FromResult("stdout"),
+                Task.FromResult("stderr"),
+                0);
+
+            Assert.That(completed, Is.True);
         }
 
         [Test]
