@@ -17,19 +17,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return null;
             }
 
-            JToken waitForDomainReloadToken =
-                paramsObject.GetValue(WaitForDomainReloadParamName, StringComparison.OrdinalIgnoreCase);
-            if (waitForDomainReloadToken == null)
-            {
-                return null;
-            }
-
-            if (waitForDomainReloadToken.Type != JTokenType.Boolean)
-            {
-                return null;
-            }
-
-            return waitForDomainReloadToken.Value<bool>();
+            return StrictJsonBooleanMetadataReader.ReadOptionalBoolean(
+                paramsObject,
+                WaitForDomainReloadParamName,
+                StringComparison.OrdinalIgnoreCase);
         }
     }
 }

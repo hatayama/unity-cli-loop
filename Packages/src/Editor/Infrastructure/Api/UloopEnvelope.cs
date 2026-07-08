@@ -85,18 +85,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static bool ReadStrictBooleanMetadata(JObject metadata, string propertyName)
         {
-            if (metadata == null)
-            {
-                return false;
-            }
-
-            JToken metadataToken = metadata[propertyName];
-            if (metadataToken == null || metadataToken.Type != JTokenType.Boolean)
-            {
-                return false;
-            }
-
-            return metadataToken.Value<bool>();
+            return StrictJsonBooleanMetadataReader.ReadOptionalBoolean(
+                metadata,
+                propertyName,
+                StringComparison.Ordinal) ?? false;
         }
     }
 }
