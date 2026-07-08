@@ -515,6 +515,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void BuildPathWithInstallDirectory_OnWindowsRemovesTrailingSeparatorDuplicate()
+        {
+            // Verifies that a trailing separator does not preserve a duplicate native install directory.
+            string result = NativeCliInstallPathResolver.BuildPathWithInstallDirectory(
+                "C:\\npm;C:\\Users\\ExampleUser\\Programs\\uloop\\bin\\;C:\\Tools",
+                "C:\\Users\\ExampleUser\\Programs\\uloop\\bin",
+                RuntimePlatform.WindowsEditor);
+
+            Assert.That(
+                result,
+                Is.EqualTo("C:\\Users\\ExampleUser\\Programs\\uloop\\bin;C:\\npm;C:\\Tools"));
+        }
+
+        [Test]
         public void BuildPathWithInstallDirectory_OnMacPrependsMissingNativeInstallDir()
         {
             // Verifies that POSIX PATH prefers the freshly installed native CLI.
