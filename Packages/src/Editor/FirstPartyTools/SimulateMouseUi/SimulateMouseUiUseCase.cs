@@ -1128,7 +1128,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             context.Post(_ => cleanup(), null);
         }
 
-        private static SimulateMouseUiResponse CreateFrameTimeoutResult(
+        internal static SimulateMouseUiResponse CreateFrameTimeoutResult(
             MouseAction action,
             Vector2 position,
             Vector2? endPosition,
@@ -1147,7 +1147,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static SimulateMouseUiResponse CreateClickResult(
+        internal static SimulateMouseUiResponse CreateClickResult(
             MouseUiSimulationCommand parameters,
             Vector2 inputPos,
             string? targetName,
@@ -1168,7 +1168,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static SimulateMouseUiResponse CreateLongPressResult(
+        internal static SimulateMouseUiResponse CreateLongPressResult(
             MouseUiSimulationCommand parameters,
             Vector2 inputPos,
             string? targetName,
@@ -1189,7 +1189,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static SimulateMouseUiResponse CreateDragResult(
+        internal static SimulateMouseUiResponse CreateDragResult(
             MouseUiSimulationCommand parameters,
             Vector2 inputStart,
             Vector2 inputEnd,
@@ -1210,7 +1210,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static SimulateMouseUiResponse CreateDragEndResult(
+        internal static SimulateMouseUiResponse CreateDragEndResult(
             MouseUiSimulationCommand parameters,
             Vector2 inputEnd,
             string targetName)
