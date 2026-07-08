@@ -302,6 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies uninstall completion reports the launcher path when deferred self-removal times out.
             string targetPath = "C:\\Users\\ExampleUser\\Programs\\uloop\\bin\\uloop.exe";
+            int delayCount = 0;
 
             CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallCompletionAsync(
                 targetPath,
@@ -309,10 +310,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 250,
                 100,
                 executablePath => true,
-                (delayMs, ct) => Task.CompletedTask);
+                (delayMs, ct) =>
+                {
+                    delayCount++;
+                    return Task.CompletedTask;
+                });
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorOutput, Does.Contain(targetPath));
+            Assert.That(delayCount, Is.EqualTo(3));
         }
 
         [Test]
