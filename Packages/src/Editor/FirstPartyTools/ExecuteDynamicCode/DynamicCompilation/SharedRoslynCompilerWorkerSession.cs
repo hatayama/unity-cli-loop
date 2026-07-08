@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -104,37 +105,117 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            try
-            {
-                if (!workerProcess.HasExited)
+            ExecuteProcessShutdown(
+                hasExited: () => workerProcess.HasExited,
+                requestGracefulShutdown: () =>
                 {
                     workerProcess.StandardInput.WriteLine(
                         SharedRoslynCompilerWorkerProtocol.SharedCompilerWorkerQuitCommand);
                     workerProcess.StandardInput.Flush();
                     workerProcess.WaitForExit(500);
-                }
-
-                if (!workerProcess.HasExited)
+                },
+                forceKill: () =>
                 {
                     workerProcess.Kill();
                     workerProcess.WaitForExit(500);
+                },
+                dispose: workerProcess.Dispose,
+                logFailure: LogWorkerShutdownFailure);
+        }
+
+        internal static void ExecuteProcessShutdown(
+            Func<bool> hasExited,
+            Action requestGracefulShutdown,
+            Action forceKill,
+            Action dispose,
+            Action<Exception> logFailure)
+        {
+            Debug.Assert(hasExited != null, "hasExited must not be null");
+            Debug.Assert(requestGracefulShutdown != null, "requestGracefulShutdown must not be null");
+            Debug.Assert(forceKill != null, "forceKill must not be null");
+            Debug.Assert(dispose != null, "dispose must not be null");
+            Debug.Assert(logFailure != null, "logFailure must not be null");
+
+            try
+            {
+                // A failed graceful request must not prevent the forced termination phase.
+                TryRequestGracefulShutdown(hasExited, requestGracefulShutdown, logFailure);
+                TryForceKill(hasExited, forceKill, logFailure);
+            }
+            finally
+            {
+                dispose();
+            }
+        }
+
+        private static void TryRequestGracefulShutdown(
+            Func<bool> hasExited,
+            Action requestGracefulShutdown,
+            Action<Exception> logFailure)
+        {
+            try
+            {
+                if (!hasExited())
+                {
+                    requestGracefulShutdown();
                 }
             }
             catch (IOException ex)
             {
-                LogWorkerShutdownFailure(ex);
+                logFailure(ex);
             }
             catch (ObjectDisposedException ex)
             {
-                LogWorkerShutdownFailure(ex);
+                logFailure(ex);
             }
             catch (InvalidOperationException ex)
             {
-                LogWorkerShutdownFailure(ex);
+                logFailure(ex);
             }
-            finally
+            catch (Win32Exception ex)
             {
-                workerProcess.Dispose();
+                logFailure(ex);
+            }
+        }
+
+        private static void TryForceKill(
+            Func<bool> hasExited,
+            Action forceKill,
+            Action<Exception> logFailure)
+        {
+            bool shouldForceKill;
+            try
+            {
+                shouldForceKill = !hasExited();
+            }
+            catch (Win32Exception ex)
+            {
+                logFailure(ex);
+                // An unavailable exit code leaves process state unknown, so forced termination is safer.
+                shouldForceKill = true;
+            }
+            catch (InvalidOperationException ex)
+            {
+                logFailure(ex);
+                return;
+            }
+
+            if (!shouldForceKill)
+            {
+                return;
+            }
+
+            try
+            {
+                forceKill();
+            }
+            catch (Win32Exception ex)
+            {
+                logFailure(ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                logFailure(ex);
             }
         }
 
