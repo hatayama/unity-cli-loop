@@ -242,10 +242,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string rightPath,
             RuntimePlatform platform)
         {
+            // Windows and macOS editor paths follow their default case-insensitive filesystem behavior.
+            // Probing case sensitivity per volume would add I/O and complexity to this CLI-only source gate.
+            bool usesCaseInsensitivePathIdentity = platform == RuntimePlatform.WindowsEditor
+                || platform == RuntimePlatform.OSXEditor;
+            StringComparison comparison = usesCaseInsensitivePathIdentity
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
             return string.Equals(
                 Path.GetFullPath(leftPath),
                 Path.GetFullPath(rightPath),
-                StringComparison.Ordinal);
+                comparison);
         }
 
         private static IEnumerable<string> EnumerateDirectProjectPackageRoots(string projectRoot)

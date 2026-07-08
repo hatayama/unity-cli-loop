@@ -121,6 +121,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(skillSources.Select(skill => skill.Name), Does.Contain("uloop-launch"));
         }
 
+        // Tests that differently cased paths follow each editor platform's path identity policy.
+        [TestCase(UnityEngine.RuntimePlatform.WindowsEditor, true)]
+        [TestCase(UnityEngine.RuntimePlatform.OSXEditor, true)]
+        [TestCase(UnityEngine.RuntimePlatform.LinuxEditor, false)]
+        public void HaveSamePathIdentityAtPlatform_WhenCasingDiffers_UsesPlatformPolicy(
+            UnityEngine.RuntimePlatform platform,
+            bool expected)
+        {
+            string lowerCasePath = Path.Combine(_projectRoot, "case-sensitive-root");
+            string upperCasePath = Path.Combine(_projectRoot, "CASE-SENSITIVE-ROOT");
+
+            bool actual = SkillSourceRootEnumerator.HaveSamePathIdentityAtPlatform(
+                lowerCasePath,
+                upperCasePath,
+                platform);
+
+            Assert.That(actual, Is.EqualTo(expected));
+        }
+
         // Tests that Tool Settings can read source skill frontmatter descriptions by tool name.
         [Test]
         public void GetToolDescriptionsByToolName_WhenSkillHasDescription_MapsDescriptionToToolName()
