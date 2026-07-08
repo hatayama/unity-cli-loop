@@ -14,8 +14,8 @@ type releaseWorkflowRun struct {
 	CreatedAt  string `json:"createdAt"`
 }
 
-func dispatchReleasePRCheckWorkflow(ctx context.Context, config releasePRCheckConfig, workflow string, releasePR releasePullRequest) error {
-	_, err := runReleasePRCheckOutput(ctx, "gh", "workflow", "run", workflow, "--repo", config.repository, "--ref", releasePR.HeadRefName)
+func dispatchReleasePRCheckWorkflow(ctx context.Context, config releasePRCheckConfig, workflow string, releasePR releasePullRequest, deps releasePRCheckDeps) error {
+	_, err := deps.runOutput(ctx, "gh", "workflow", "run", workflow, "--repo", config.repository, "--ref", releasePR.HeadRefName)
 	return err
 }
 
@@ -25,9 +25,10 @@ func findDispatchedReleasePRCheckRun(
 	workflow string,
 	releasePR releasePullRequest,
 	dispatchedAt time.Time,
+	deps releasePRCheckDeps,
 ) (releaseWorkflowRun, error) {
 	for attempt := 0; attempt < config.lookupAttempts; attempt++ {
-		run, found, err := latestReleasePRCheckRun(ctx, config, workflow, releasePR, dispatchedAt)
+		run, found, err := latestReleasePRCheckRun(ctx, config, workflow, releasePR, dispatchedAt, deps)
 		if err != nil {
 			return releaseWorkflowRun{}, err
 		}
@@ -35,7 +36,7 @@ func findDispatchedReleasePRCheckRun(
 			return run, nil
 		}
 		if attempt+1 < config.lookupAttempts {
-			err = releasePRCheckSleep(ctx, time.Duration(config.lookupIntervalSeconds)*time.Second)
+			err = deps.sleep(ctx, time.Duration(config.lookupIntervalSeconds)*time.Second)
 			if err != nil {
 				return releaseWorkflowRun{}, err
 			}
@@ -50,8 +51,9 @@ func latestReleasePRCheckRun(
 	workflow string,
 	releasePR releasePullRequest,
 	dispatchedAt time.Time,
+	deps releasePRCheckDeps,
 ) (releaseWorkflowRun, bool, error) {
-	output, err := runReleasePRCheckOutput(
+	output, err := deps.runOutput(
 		ctx,
 		"gh",
 		"run",
@@ -102,8 +104,8 @@ func latestReleasePRCheckRun(
 	return latestRun, true, nil
 }
 
-func watchReleasePRCheckRun(ctx context.Context, config releasePRCheckConfig, runID int64) error {
-	_, err := runReleasePRCheckOutput(
+func watchReleasePRCheckRun(ctx context.Context, config releasePRCheckConfig, runID int64, deps releasePRCheckDeps) error {
+	_, err := deps.runOutput(
 		ctx,
 		"gh",
 		"run",
