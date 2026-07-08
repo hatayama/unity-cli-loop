@@ -45,6 +45,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// Verifies replacing the cached worker releases the previously owned process handle.
+        /// </summary>
+        [Test]
+        public void StartProcessLocked_WhenReplacingCachedProcess_ShouldDisposePreviousHandle()
+        {
+            SharedRoslynCompilerWorkerSession session = new();
+            Process previousProcess = new();
+            bool previousProcessDisposed = false;
+            int startAttempt = 0;
+            previousProcess.Disposed += (sender, args) => previousProcessDisposed = true;
+            session.SwapProcessStarterForTests(startInfo =>
+            {
+                startAttempt++;
+                return startAttempt == 1 ? previousProcess : null;
+            });
+            ProcessStartInfo ignoredStartInfo = new();
+
+            try
+            {
+                bool firstStartSucceeded = session.ExecuteLocked(
+                    () => session.StartProcessLocked(ignoredStartInfo));
+                bool secondStartSucceeded = session.ExecuteLocked(
+                    () => session.StartProcessLocked(ignoredStartInfo));
+
+                Assert.That(firstStartSucceeded, Is.True);
+                Assert.That(secondStartSucceeded, Is.False);
+                Assert.That(previousProcessDisposed, Is.True);
+            }
+            finally
+            {
+                previousProcess.Dispose();
+            }
+        }
+
+        /// <summary>
         /// Verifies a pending compiler stream does not keep the bounded drain waiting.
         /// </summary>
         [Test]
