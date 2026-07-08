@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private readonly object _syncRoot = new();
         private Action<string> _deleteWorkerDirectory = path => Directory.Delete(path, true);
+        private Func<ProcessStartInfo, Process> _startProcess = ProcessStartHelper.TryStart;
         private Action<Process, string> _sendCompileRequest = SendCompileRequestCore;
         private Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]>
             _compileWorkerAssemblyForTests;
@@ -41,7 +42,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal bool StartProcessLocked(ProcessStartInfo startInfo)
         {
             AssertLockHeld();
-            _workerProcess = ProcessStartHelper.TryStart(startInfo);
+            // EnsureWorkerReady reaches this method only after the same lock observed no live process,
+            // so replacement releases the stale handle without retrying graceful shutdown.
+            Process previousProcess = _workerProcess;
+            _workerProcess = null;
+            previousProcess?.Dispose();
+
+            _workerProcess = _startProcess(startInfo);
             return _workerProcess != null;
         }
 
@@ -146,6 +153,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Action<string> previous = _deleteWorkerDirectory;
             _deleteWorkerDirectory = deleter;
+            return previous;
+        }
+
+        internal Func<ProcessStartInfo, Process> SwapProcessStarterForTests(
+            Func<ProcessStartInfo, Process> starter)
+        {
+            Debug.Assert(starter != null, "starter must not be null");
+
+            Func<ProcessStartInfo, Process> previous = _startProcess;
+            _startProcess = starter;
             return previous;
         }
 
