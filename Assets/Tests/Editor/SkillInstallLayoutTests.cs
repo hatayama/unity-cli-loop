@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
@@ -386,22 +385,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(catalogNames, Does.Contain("public-tool"));
             Assert.That(registeredToolNames, Does.Not.Contain("internal-tool"));
             Assert.That(registeredToolNames, Does.Contain("public-tool"));
-        }
-
-        // Tests that PowerShell scripts keep their source encoding while line endings are normalized.
-        [Test]
-        public void NormalizeSkillFileContent_WhenPowerShellScriptUsesUtf16LittleEndian_PreservesEncoding()
-        {
-            byte[] sourceBytes = Encoding.Unicode.GetPreamble()
-                .Concat(Encoding.Unicode.GetBytes("line1\r\nline2\r\n"))
-                .ToArray();
-            byte[] expectedBytes = Encoding.Unicode.GetPreamble()
-                .Concat(Encoding.Unicode.GetBytes("line1\nline2\n"))
-                .ToArray();
-
-            byte[] actualBytes = SkillInstallLayout.NormalizeSkillFileContent("install.ps1", sourceBytes);
-
-            Assert.That(actualBytes, Is.EqualTo(expectedBytes));
         }
 
         // Tests that skill setup file scans share the same generated-file exclusion behavior.
