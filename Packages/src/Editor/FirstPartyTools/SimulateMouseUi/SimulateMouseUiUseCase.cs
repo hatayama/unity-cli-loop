@@ -324,7 +324,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return MouseUiSimulationResponseFactory.CreateLongPressResult(parameters, inputPos, targetName, hitTarget);
         }
 
-        private static PointerEventData CreatePointerPressData(
+        internal static PointerEventData CreatePointerPressData(
             EventSystem eventSystem,
             Vector2 screenPos,
             MouseButton button)
@@ -337,7 +337,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static ResolvedPointerTargets ResolvePressablePointerTargets(
+        internal static ResolvedPointerTargets ResolvePressablePointerTargets(
             MouseUiSimulationCommand parameters,
             EventSystem eventSystem,
             Vector2 inputPos,
@@ -1133,7 +1133,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return UiRaycastHelper.RaycastUI(screenPosition, eventSystem);
         }
 
-        private static bool TryResolveGameObjectPath(
+        internal static bool TryResolveGameObjectPath(
             string targetPath,
             string parameterName,
             MouseAction action,
@@ -1164,7 +1164,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static bool TryResolveDropTargetPath(
+        internal static bool TryResolveDropTargetPath(
             MouseUiSimulationCommand parameters,
             MouseAction action,
             Vector2 inputPosition,
@@ -1239,7 +1239,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 : new TargetPathLookupResult(null, matchCount);
         }
 
-        private static RaycastResult CreateDirectRaycastResult(GameObject target)
+        internal static RaycastResult CreateDirectRaycastResult(GameObject target)
         {
             return new RaycastResult
             {
@@ -1259,7 +1259,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public int MatchCount { get; }
         }
 
-        private readonly struct ResolvedPointerTargets
+        internal readonly struct ResolvedPointerTargets
         {
             private ResolvedPointerTargets(
                 GameObject? rawTarget,
