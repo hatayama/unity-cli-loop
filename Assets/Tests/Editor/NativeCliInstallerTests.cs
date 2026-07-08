@@ -298,36 +298,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task WaitForUninstallTargetRemovalAsync_WhenDeferredRemovalCompletesReturnsSuccess()
+        public async Task WaitForUninstallCompletionAsync_WhenTargetRemainsReportsTimeout()
         {
-            // Verifies that Settings uninstall waits for deferred launcher self-removal before refreshing CLI status.
-            int remainingExistingChecks = 2;
+            // Verifies uninstall completion reports the launcher path when deferred self-removal times out.
+            string targetPath = "C:\\Users\\ExampleUser\\Programs\\uloop\\bin\\uloop.exe";
             int delayCount = 0;
 
-            CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallTargetRemovalAsync(
-                "C:\\Users\\ExampleUser\\AppData\\Local\\Programs\\uloop\\bin\\uloop.exe",
-                CancellationToken.None,
-                1000,
-                100,
-                executablePath => remainingExistingChecks-- > 0,
-                (delayMs, ct) =>
-                {
-                    delayCount++;
-                    return Task.CompletedTask;
-                });
-
-            Assert.That(result.Success, Is.True, result.ErrorOutput);
-            Assert.That(delayCount, Is.EqualTo(2));
-        }
-
-        [Test]
-        public async Task WaitForUninstallTargetRemovalAsync_WhenTargetRemainsReturnsFailure()
-        {
-            // Verifies that delayed launcher removal failures do not recache a stale installed CLI.
-            int delayCount = 0;
-
-            CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallTargetRemovalAsync(
-                "C:\\Users\\ExampleUser\\AppData\\Local\\Programs\\uloop\\bin\\uloop.exe",
+            CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallCompletionAsync(
+                targetPath,
                 CancellationToken.None,
                 250,
                 100,
@@ -339,107 +317,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 });
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorOutput, Does.Contain("Timed out waiting for uLoop CLI uninstall"));
+            Assert.That(result.ErrorOutput, Does.Contain(targetPath));
             Assert.That(delayCount, Is.EqualTo(3));
         }
 
         [Test]
-        public async Task WaitForUninstallCompletionAsync_OnWindowsWaitsForUserPathRemoval()
+        public async Task WaitForUninstallCompletionAsync_WhenTargetIsRemovedReturnsSuccess()
         {
-            // Verifies that Settings uninstall waits until Windows User PATH no longer resolves the native CLI directory.
-            string installDirectory = "C:\\Users\\ExampleUser\\Programs\\uloop\\bin";
-            string userPath = installDirectory + ";C:\\npm";
-            int delayCount = 0;
+            // Verifies uninstall completion succeeds as soon as deferred launcher self-removal finishes.
 
             CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallCompletionAsync(
-                installDirectory + "\\uloop.exe",
-                installDirectory,
-                RuntimePlatform.WindowsEditor,
-                CancellationToken.None,
-                1000,
-                100,
-                executablePath => false,
-                true,
-                (name, target) => userPath,
-                (delayMs, ct) =>
-                {
-                    delayCount++;
-                    userPath = "C:\\npm";
-                    return Task.CompletedTask;
-                });
-
-            Assert.That(result.Success, Is.True, result.ErrorOutput);
-            Assert.That(delayCount, Is.EqualTo(1));
-        }
-
-        [Test]
-        public async Task WaitForUninstallCompletionAsync_OnWindowsFailsWhenUserPathRemains()
-        {
-            // Verifies that uninstall cannot report success while Windows User PATH still contains the native CLI directory.
-            string installDirectory = "C:\\Users\\ExampleUser\\Programs\\uloop\\bin";
-            int delayCount = 0;
-
-            CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallCompletionAsync(
-                installDirectory + "\\uloop.exe",
-                installDirectory,
-                RuntimePlatform.WindowsEditor,
+                "C:\\Users\\ExampleUser\\Programs\\uloop\\bin\\uloop.exe",
                 CancellationToken.None,
                 250,
                 100,
                 executablePath => false,
-                true,
-                (name, target) => installDirectory + ";C:\\npm",
-                (delayMs, ct) =>
-                {
-                    delayCount++;
-                    return Task.CompletedTask;
-                });
-
-            Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorOutput, Does.Contain("Windows User PATH"));
-            Assert.That(result.ErrorOutput, Does.Not.Contain("\\uloop.exe"));
-            Assert.That(delayCount, Is.EqualTo(3));
-        }
-
-        [Test]
-        public async Task WaitForUninstallCompletionAsync_WhenUserPathRemovalIsNotRequiredReportsTargetTimeoutOnly()
-        {
-            // Verifies fallback uninstall failures do not claim ownership of Windows User PATH cleanup.
-            string installDirectory = "C:\\Users\\ExampleUser\\Programs\\uloop\\bin";
-
-            CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallCompletionAsync(
-                installDirectory + "\\uloop.exe",
-                installDirectory,
-                RuntimePlatform.WindowsEditor,
-                CancellationToken.None,
-                250,
-                100,
-                executablePath => true,
-                false,
-                (name, target) => installDirectory + ";C:\\npm",
-                (delayMs, ct) => Task.CompletedTask);
-
-            Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorOutput, Does.Contain("\\uloop.exe"));
-            Assert.That(result.ErrorOutput, Does.Not.Contain("Windows User PATH"));
-        }
-
-        [Test]
-        public async Task WaitForUninstallCompletionAsync_WhenUserPathRemovalIsNotRequiredIgnoresUserPath()
-        {
-            // Verifies fallback launchers can complete uninstall without owning Windows User PATH cleanup.
-            string installDirectory = "C:\\Users\\ExampleUser\\Programs\\uloop\\bin";
-
-            CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallCompletionAsync(
-                installDirectory + "\\uloop.exe",
-                installDirectory,
-                RuntimePlatform.WindowsEditor,
-                CancellationToken.None,
-                250,
-                100,
-                executablePath => false,
-                false,
-                (name, target) => installDirectory + ";C:\\npm",
                 (delayMs, ct) => Task.CompletedTask);
 
             Assert.That(result.Success, Is.True, result.ErrorOutput);

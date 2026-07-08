@@ -220,24 +220,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 : CliConstants.POSIX_PATH_ENVIRONMENT_VARIABLE;
         }
 
-        internal static bool DoesUserPathContainInstallDirectory(
-            string installDirectory,
-            RuntimePlatform platform,
-            Func<string, EnvironmentVariableTarget, string> getEnvironmentVariable)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
-            UnityEngine.Debug.Assert(getEnvironmentVariable != null, "getEnvironmentVariable must not be null");
-
-            if (platform != RuntimePlatform.WindowsEditor)
-            {
-                return false;
-            }
-
-            string pathVariableName = GetPathEnvironmentVariableName(platform);
-            string currentUserPath = getEnvironmentVariable(pathVariableName, EnvironmentVariableTarget.User);
-            return DoesPathContainInstallDirectory(currentUserPath, installDirectory, platform);
-        }
-
         private static string GetPathSeparator(RuntimePlatform platform)
         {
             return platform == RuntimePlatform.WindowsEditor
@@ -270,42 +252,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return normalizedPath.TrimEnd('\\', '/').Replace('/', '\\');
-        }
-
-        private static bool DoesPathContainInstallDirectory(
-            string currentPath,
-            string installDirectory,
-            RuntimePlatform platform)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
-
-            string normalizedPath = currentPath ?? "";
-            if (string.IsNullOrEmpty(normalizedPath))
-            {
-                return false;
-            }
-
-            string separator = GetPathSeparator(platform);
-            string[] entries = normalizedPath.Split(
-                new[] { separator },
-                StringSplitOptions.RemoveEmptyEntries);
-            string normalizedInstallDirectory = NormalizePathForComparison(installDirectory, platform);
-            StringComparison comparison = GetPathComparison(platform);
-            foreach (string entry in entries)
-            {
-                if (string.IsNullOrWhiteSpace(entry))
-                {
-                    continue;
-                }
-
-                string normalizedEntry = NormalizePathForComparison(entry, platform);
-                if (string.Equals(normalizedEntry, normalizedInstallDirectory, comparison))
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private static string GetGlobalCliInstallFileName(RuntimePlatform platform)
