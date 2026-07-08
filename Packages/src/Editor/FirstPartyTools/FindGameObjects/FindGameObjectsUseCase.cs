@@ -11,7 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Processing sequence: 1. Search criteria validation, 2. GameObject search execution, 3. Result conversion and formatting
     /// Related classes: FindGameObjectsTool, GameObjectFinderService, ComponentSerializer
     /// </summary>
-    public class FindGameObjectsUseCase : IUnityCliLoopGameObjectSearchService
+    public class FindGameObjectsUseCase
     {
         private readonly GameObjectFinderService _finderService;
         private readonly ComponentSerializer _componentSerializer;
@@ -27,8 +27,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <param name="parameters">Search parameters</param>
         /// <param name="ct">Cancellation control token</param>
         /// <returns>Search result</returns>
-        public Task<UnityCliLoopGameObjectSearchResult> ExecuteAsync(
-            UnityCliLoopGameObjectSearchRequest parameters,
+        public Task<FindGameObjectsResponse> ExecuteAsync(
+            FindGameObjectsSchema parameters,
             CancellationToken ct)
         {
             // Handle Selected mode separately
@@ -43,9 +43,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string.IsNullOrEmpty(parameters.Tag) &&
                 !parameters.Layer.HasValue)
             {
-                return Task.FromResult(new UnityCliLoopGameObjectSearchResult
+                return Task.FromResult(new FindGameObjectsResponse
                 {
-                    Results = new UnityCliLoopGameObjectResult[0],
+                    Results = new FindGameObjectResult[0],
                     TotalFound = 0,
                     ErrorMessage = "At least one search criterion must be provided"
                 });
@@ -71,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // 3. Result conversion and formatting
                 ct.ThrowIfCancellationRequested();
                 
-                List<UnityCliLoopGameObjectResult> results = new();
+                List<FindGameObjectResult> results = new();
                 
                 foreach (GameObjectDetails details in foundObjects)
                 {
@@ -81,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     
                     try
                     {
-                        UnityCliLoopGameObjectResult result = new()                        {
+                        FindGameObjectResult result = new()                        {
                             Name = details.Name,
                             Path = details.Path,
                             IsActive = details.IsActive,
@@ -105,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     }
                 }
                 
-                UnityCliLoopGameObjectSearchResult response = new()                {
+                FindGameObjectsResponse response = new()                {
                     Results = results.ToArray(),
                     TotalFound = results.Count
                 };
@@ -123,9 +123,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new { searchParameters = parameters, error = ex.Message }
                 );
                 
-                return Task.FromResult(new UnityCliLoopGameObjectSearchResult
+                return Task.FromResult(new FindGameObjectsResponse
                 {
-                    Results = new UnityCliLoopGameObjectResult[0],
+                    Results = new FindGameObjectResult[0],
                     TotalFound = 0,
                     ErrorMessage = "Search execution failed. Please check the logs for details."
                 });
@@ -136,8 +136,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Execute Selected mode: get currently selected GameObjects in Unity Editor
         /// Single selection returns JSON directly, multiple selection exports to file
         /// </summary>
-        private UnityCliLoopGameObjectSearchResult ExecuteSelectedMode(
-            UnityCliLoopGameObjectSearchRequest parameters,
+        private FindGameObjectsResponse ExecuteSelectedMode(
+            FindGameObjectsSchema parameters,
             CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -147,17 +147,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // No selection
             if (selectedObjects.Length == 0)
             {
-                return new UnityCliLoopGameObjectSearchResult
+                return new FindGameObjectsResponse
                 {
-                    Results = new UnityCliLoopGameObjectResult[0],
+                    Results = new FindGameObjectResult[0],
                     TotalFound = 0,
                     Message = "No GameObjects are currently selected in Unity Editor."
                 };
             }
 
             // Convert to FindGameObjectResult array
-            List<UnityCliLoopGameObjectResult> results = new();
-            List<UnityCliLoopGameObjectProcessingError> errors = new();
+            List<FindGameObjectResult> results = new();
+            List<ProcessingError> errors = new();
 
             foreach (GameObjectDetails details in selectedObjects)
             {
@@ -165,7 +165,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 try
                 {
-                    UnityCliLoopGameObjectResult result = new()                    {
+                    FindGameObjectResult result = new()                    {
                         Name = details.Name,
                         Path = details.Path,
                         IsActive = details.IsActive,
@@ -184,7 +184,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         $"Failed to process selected GameObject: {details.Name}",
                         new { gameObjectName = details.Name, gameObjectPath = details.Path, error = ex.Message }
                     );
-                    errors.Add(new UnityCliLoopGameObjectProcessingError
+                    errors.Add(new ProcessingError
                     {
                         GameObjectName = details.Name,
                         GameObjectPath = details.Path,
@@ -193,13 +193,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            UnityCliLoopGameObjectResult[] resultArray = results.ToArray();
-            UnityCliLoopGameObjectProcessingError[] errorArray = errors.Count > 0 ? errors.ToArray() : null;
+            FindGameObjectResult[] resultArray = results.ToArray();
+            ProcessingError[] errorArray = errors.Count > 0 ? errors.ToArray() : null;
 
             // Single selection: return JSON directly
             if (resultArray.Length == 1)
             {
-                return new UnityCliLoopGameObjectSearchResult
+                return new FindGameObjectsResponse
                 {
                     Results = resultArray,
                     TotalFound = 1,
@@ -210,9 +210,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // No successful results
             if (resultArray.Length == 0)
             {
-                return new UnityCliLoopGameObjectSearchResult
+                return new FindGameObjectsResponse
                 {
-                    Results = new UnityCliLoopGameObjectResult[0],
+                    Results = new FindGameObjectResult[0],
                     TotalFound = 0,
                     ProcessingErrors = errorArray,
                     Message = "All selected GameObjects failed to process."
@@ -222,20 +222,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Multiple selection: export to file
             string filePath = FindGameObjectsResultExporter.ExportResults(resultArray);
 
-            return new UnityCliLoopGameObjectSearchResult
+            return new FindGameObjectsResponse
             {
                 ResultsFilePath = filePath,
                 TotalFound = resultArray.Length,
                 Message = $"Multiple objects selected ({resultArray.Length}). Results exported to file.",
                 ProcessingErrors = errorArray
             };
-        }
-
-        public Task<UnityCliLoopGameObjectSearchResult> FindGameObjectsAsync(
-            UnityCliLoopGameObjectSearchRequest request,
-            CancellationToken ct)
-        {
-            return ExecuteAsync(request, ct);
         }
     }
 }

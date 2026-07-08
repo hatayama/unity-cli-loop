@@ -348,14 +348,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void HierarchyTypes_WhenLoaded_CompileUnderFirstPartyToolsAssembly()
         {
-            // Tests that bundled hierarchy implementation types stay inside the first-party tool assembly.
-            string serviceAssemblyName = typeof(IUnityCliLoopHierarchyService).Assembly.GetName().Name;
-            string requestAssemblyName = typeof(UnityCliLoopHierarchyRequest).Assembly.GetName().Name;
-            string resultAssemblyName = typeof(UnityCliLoopHierarchyResult).Assembly.GetName().Name;
+            // Tests that bundled hierarchy tool contracts stay inside the first-party tool assembly.
+            string schemaAssemblyName = typeof(GetHierarchySchema).Assembly.GetName().Name;
+            string responseAssemblyName = typeof(GetHierarchyResponse).Assembly.GetName().Name;
 
-            Assert.That(serviceAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(requestAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(resultAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
+            Assert.That(schemaAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
+            Assert.That(responseAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
         }
 
         [Test]
@@ -379,15 +377,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GameObjectSearchTypes_WhenLoaded_CompileUnderFirstPartyToolsAssembly()
         {
-            // Tests that bundled GameObject search implementation types stay inside the first-party tool assembly.
-            string serviceAssemblyName = typeof(IUnityCliLoopGameObjectSearchService).Assembly.GetName().Name;
-            string requestAssemblyName = typeof(UnityCliLoopGameObjectSearchRequest).Assembly.GetName().Name;
-            string resultAssemblyName = typeof(UnityCliLoopGameObjectSearchResult).Assembly.GetName().Name;
+            // Tests that bundled GameObject search contracts stay inside the first-party tool assembly.
+            string schemaAssemblyName = typeof(FindGameObjectsSchema).Assembly.GetName().Name;
+            string responseAssemblyName = typeof(FindGameObjectsResponse).Assembly.GetName().Name;
+            string resultAssemblyName = typeof(FindGameObjectResult).Assembly.GetName().Name;
+            string errorAssemblyName = typeof(ProcessingError).Assembly.GetName().Name;
             string componentAssemblyName = typeof(ComponentInfo).Assembly.GetName().Name;
 
-            Assert.That(serviceAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(requestAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
+            Assert.That(schemaAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
+            Assert.That(responseAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
             Assert.That(resultAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
+            Assert.That(errorAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
             Assert.That(componentAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
         }
 
@@ -404,14 +404,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ScreenshotContracts_WhenLoaded_CompileUnderToolContractsAssembly()
         {
             // Tests that screenshot public contracts are exposed from the shared ToolContracts assembly.
-            string serviceAssemblyName = typeof(IUnityCliLoopScreenshotService).Assembly.GetName().Name;
-            string requestAssemblyName = typeof(UnityCliLoopScreenshotRequest).Assembly.GetName().Name;
-            string resultAssemblyName = typeof(UnityCliLoopScreenshotResult).Assembly.GetName().Name;
+            string schemaAssemblyName = typeof(ScreenshotSchema).Assembly.GetName().Name;
+            string responseAssemblyName = typeof(ScreenshotResponse).Assembly.GetName().Name;
+            string infoAssemblyName = typeof(ScreenshotInfo).Assembly.GetName().Name;
             string elementAssemblyName = typeof(UIElementInfo).Assembly.GetName().Name;
 
-            Assert.That(serviceAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
-            Assert.That(requestAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
-            Assert.That(resultAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
+            Assert.That(schemaAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
+            Assert.That(responseAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
+            Assert.That(infoAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
             Assert.That(elementAssemblyName, Is.EqualTo(ToolContractsAssemblyName));
         }
 
@@ -427,22 +427,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void InputRecordingTypes_WhenLoaded_CompileUnderFirstPartyToolsAssembly()
         {
-            // Tests that bundled input recording implementation types stay inside the first-party tool assembly.
-            string recordServiceAssemblyName = typeof(IUnityCliLoopRecordInputService).Assembly.GetName().Name;
-            string recordRequestAssemblyName = typeof(UnityCliLoopRecordInputRequest).Assembly.GetName().Name;
-            string recordResultAssemblyName = typeof(UnityCliLoopRecordInputResult).Assembly.GetName().Name;
-            string replayServiceAssemblyName = typeof(IUnityCliLoopReplayInputService).Assembly.GetName().Name;
-            string replayRequestAssemblyName = typeof(UnityCliLoopReplayInputRequest).Assembly.GetName().Name;
-            string replayResultAssemblyName = typeof(UnityCliLoopReplayInputResult).Assembly.GetName().Name;
+            // Tests that bundled input recording contracts stay inside the first-party tool assembly.
+            string recordSchemaAssemblyName = typeof(RecordInputSchema).Assembly.GetName().Name;
+            string recordResponseAssemblyName = typeof(RecordInputResponse).Assembly.GetName().Name;
+            string replaySchemaAssemblyName = typeof(ReplayInputSchema).Assembly.GetName().Name;
+            string replayResponseAssemblyName = typeof(ReplayInputResponse).Assembly.GetName().Name;
             string recordActionAssemblyName = typeof(RecordInputAction).Assembly.GetName().Name;
             string replayActionAssemblyName = typeof(ReplayInputAction).Assembly.GetName().Name;
 
-            Assert.That(recordServiceAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(recordRequestAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(recordResultAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(replayServiceAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(replayRequestAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(replayResultAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
+            Assert.That(recordSchemaAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
+            Assert.That(recordResponseAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
+            Assert.That(replaySchemaAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
+            Assert.That(replayResponseAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
             Assert.That(recordActionAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
             Assert.That(replayActionAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
         }

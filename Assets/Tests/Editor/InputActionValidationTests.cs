@@ -19,12 +19,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies invalid replay-input action enum values do not escape as an exception.
             ReplayInputUseCase useCase = new();
-            UnityCliLoopReplayInputRequest request = new()
+            ReplayInputSchema request = new()
             {
                 Action = (ReplayInputAction)999
             };
 
-            UnityCliLoopReplayInputResult result =
+            ReplayInputResponse result =
                 await useCase.ReplayInputAsync(request, CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
@@ -37,12 +37,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies invalid record-input action enum values do not escape as an exception.
             RecordInputUseCase useCase = new();
-            UnityCliLoopRecordInputRequest request = new()
+            RecordInputSchema request = new()
             {
                 Action = (RecordInputAction)999
             };
 
-            UnityCliLoopRecordInputResult result =
+            RecordInputResponse result =
                 await useCase.RecordInputAsync(request, CancellationToken.None);
 
             Assert.That(result.Success, Is.False);

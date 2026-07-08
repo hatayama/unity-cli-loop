@@ -13,12 +13,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Captures Unity Editor windows or GameView rendering for the bundled screenshot tool.
     /// </summary>
-    public class ScreenshotUseCase : IUnityCliLoopScreenshotService
+    public class ScreenshotUseCase
     {
         private const int ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES = 2;
 
-        public async Task<UnityCliLoopScreenshotResult> CaptureAsync(
-            UnityCliLoopScreenshotRequest request,
+        public async Task<ScreenshotResponse> CaptureAsync(
+            ScreenshotSchema request,
             CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -44,8 +44,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return await CaptureWindowsAsync(request, correlationId, ct).ConfigureAwait(false);
         }
 
-        private async Task<UnityCliLoopScreenshotResult> CaptureRenderingAsync(
-            UnityCliLoopScreenshotRequest request, string correlationId, CancellationToken ct)
+        private async Task<ScreenshotResponse> CaptureRenderingAsync(
+            ScreenshotSchema request, string correlationId, CancellationToken ct)
         {
             SynchronizationContext editorContext =
                 CapturedEditorSynchronizationContext.RequireCurrent("rendering screenshot use case");
@@ -57,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "CaptureMode.rendering requires PlayMode",
                     correlationId: correlationId
                 );
-                return new UnityCliLoopScreenshotResult();
+                return new ScreenshotResponse();
             }
 
             List<UIElementInfo> annotatedElements = new();
@@ -71,12 +71,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (request.ElementsOnly)
             {
                 UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, (int)Handles.GetMainGameViewSize().y);
-                UnityCliLoopScreenshotInfo elementsOnlyInfo = new();
+                ScreenshotInfo elementsOnlyInfo = new();
                 elementsOnlyInfo.CoordinateSystem = UnityCliLoopScreenshotCoordinateSystem.GameView;
                 elementsOnlyInfo.AnnotatedElements = annotatedElements;
-                return new UnityCliLoopScreenshotResult
+                return new ScreenshotResponse
                 {
-                    Screenshots = new List<UnityCliLoopScreenshotInfo> { elementsOnlyInfo }
+                    Screenshots = new List<ScreenshotInfo> { elementsOnlyInfo }
                 };
             }
 
@@ -102,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         return CreateTimedOutResult(
                             "annotation overlay render",
                             correlationId,
-                            new List<UnityCliLoopScreenshotInfo>());
+                            new List<ScreenshotInfo>());
                     }
 
                     await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
@@ -117,7 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return CreateTimedOutResult(
                         "GameView rendering capture",
                         correlationId,
-                        new List<UnityCliLoopScreenshotInfo>());
+                        new List<ScreenshotInfo>());
                 }
 
                 await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
@@ -136,12 +136,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "GameView RenderTexture is not available. Open the Game view and wait for a frame before retrying.",
                     correlationId: correlationId
                 );
-                return new UnityCliLoopScreenshotResult();
+                return new ScreenshotResponse();
             }
 
             int width = texture.width;
             int height = texture.height;
-            List<UnityCliLoopScreenshotInfo> screenshots = new();
+            List<ScreenshotInfo> screenshots = new();
 
             try
             {
@@ -152,7 +152,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SaveTextureAsPng(texture, savedPath);
 
                 FileInfo savedFileInfo = new(savedPath);
-                UnityCliLoopScreenshotInfo info = new()
+                ScreenshotInfo info = new()
                 {
                     ImagePath = savedPath,
                     FileSizeBytes = savedFileInfo.Length,
@@ -189,11 +189,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 );
             }
 
-            return new UnityCliLoopScreenshotResult { Screenshots = screenshots };
+            return new ScreenshotResponse { Screenshots = screenshots };
         }
 
-        private async Task<UnityCliLoopScreenshotResult> CaptureWindowsAsync(
-            UnityCliLoopScreenshotRequest request, string correlationId, CancellationToken ct)
+        private async Task<ScreenshotResponse> CaptureWindowsAsync(
+            ScreenshotSchema request, string correlationId, CancellationToken ct)
         {
             SynchronizationContext editorContext =
                 CapturedEditorSynchronizationContext.RequireCurrent("window screenshot use case");
@@ -205,13 +205,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     $"Window '{request.WindowName}' not found (MatchMode: {request.MatchMode})",
                     correlationId: correlationId
                 );
-                return new UnityCliLoopScreenshotResult();
+                return new ScreenshotResponse();
             }
 
             string outputDirectory = EnsureOutputDirectoryExists(request.OutputDirectory);
             string safeWindowName = SanitizeFileName(request.WindowName);
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
-            List<UnityCliLoopScreenshotInfo> screenshots = new();
+            List<ScreenshotInfo> screenshots = new();
 
             for (int i = 0; i < windows.Length; i++)
             {
@@ -250,7 +250,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     SaveTextureAsPng(texture, savedPath);
 
                     FileInfo savedFileInfo = new(savedPath);
-                    screenshots.Add(new UnityCliLoopScreenshotInfo
+                    screenshots.Add(new ScreenshotInfo
                     {
                         ImagePath = savedPath,
                         FileSizeBytes = savedFileInfo.Length,
@@ -280,13 +280,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId: correlationId
             );
 
-            return new UnityCliLoopScreenshotResult { Screenshots = screenshots };
+            return new ScreenshotResponse { Screenshots = screenshots };
         }
 
-        private static UnityCliLoopScreenshotResult CreateTimedOutResult(
+        internal static ScreenshotResponse CreateTimedOutResult(
             string waitName,
             string correlationId,
-            List<UnityCliLoopScreenshotInfo> screenshots)
+            List<ScreenshotInfo> screenshots)
         {
             string message =
                 $"Timed out after {UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS}ms while waiting for {waitName} frames.";
@@ -297,7 +297,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId: correlationId
             );
 
-            return new UnityCliLoopScreenshotResult
+            return new ScreenshotResponse
             {
                 TimedOut = true,
                 Message = message,
@@ -324,7 +324,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             editorContext.Post(_ => UIElementAnnotator.DestroyAnnotationOverlay(annotationOverlay), null);
         }
 
-        private void ValidateParameters(UnityCliLoopScreenshotRequest request)
+        private void ValidateParameters(ScreenshotSchema request)
         {
             if (request.CaptureMode != CaptureMode.rendering &&
                 string.IsNullOrEmpty(request.WindowName))
