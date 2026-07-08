@@ -57,6 +57,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(actualBytes, Is.EqualTo(expectedBytes));
         }
 
+        // Tests that an explicit big-endian BOM wins over byte patterns that resemble little-endian CR.
+        [Test]
+        public void NormalizeSkillFileContent_WhenUtf16BigEndianBomContainsAmbiguousCodeUnit_PreservesEncoding()
+        {
+            byte[] sourceBytes = Encoding.BigEndianUnicode.GetPreamble()
+                .Concat(Encoding.BigEndianUnicode.GetBytes("\u0D00\r\nline"))
+                .ToArray();
+            byte[] expectedBytes = Encoding.BigEndianUnicode.GetPreamble()
+                .Concat(Encoding.BigEndianUnicode.GetBytes("\u0D00\nline"))
+                .ToArray();
+
+            byte[] actualBytes = SkillFileContentNormalizer.NormalizeSkillFileContent("reference.md", sourceBytes);
+
+            Assert.That(actualBytes, Is.EqualTo(expectedBytes));
+        }
+
+        // Tests that BOM-less UTF-16 little-endian text still uses line-ending heuristics.
+        [Test]
+        public void NormalizeSkillFileContent_WhenUtf16LittleEndianHasNoBom_NormalizesCrlf()
+        {
+            byte[] sourceBytes = Encoding.Unicode.GetBytes("line1\r\nline2\r\n");
+            byte[] expectedBytes = Encoding.Unicode.GetBytes("line1\nline2\n");
+
+            byte[] actualBytes = SkillFileContentNormalizer.NormalizeSkillFileContent("reference.md", sourceBytes);
+
+            Assert.That(actualBytes, Is.EqualTo(expectedBytes));
+        }
+
+        // Tests that BOM-less UTF-16 big-endian text still uses line-ending heuristics.
+        [Test]
+        public void NormalizeSkillFileContent_WhenUtf16BigEndianHasNoBom_NormalizesCrlf()
+        {
+            byte[] sourceBytes = Encoding.BigEndianUnicode.GetBytes("line1\r\nline2\r\n");
+            byte[] expectedBytes = Encoding.BigEndianUnicode.GetBytes("line1\nline2\n");
+
+            byte[] actualBytes = SkillFileContentNormalizer.NormalizeSkillFileContent("reference.md", sourceBytes);
+
+            Assert.That(actualBytes, Is.EqualTo(expectedBytes));
+        }
+
         // Tests that files outside the text extension allowlist keep their original bytes.
         [Test]
         public void NormalizeSkillFileContent_WhenExtensionIsNotText_ReturnsOriginalContent()

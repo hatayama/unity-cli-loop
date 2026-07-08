@@ -39,12 +39,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return content;
             }
 
-            if (HasUtf16LittleEndianBom(content) || HasUtf16LittleEndianLineEnding(content))
+            if (HasUtf16LittleEndianBom(content))
             {
                 return NormalizeUtf16LineEndings(content, isLittleEndian: true);
             }
 
-            if (HasUtf16BigEndianBom(content) || HasUtf16BigEndianLineEnding(content))
+            if (HasUtf16BigEndianBom(content))
+            {
+                return NormalizeUtf16LineEndings(content, isLittleEndian: false);
+            }
+
+            if (HasUtf16LittleEndianLineEnding(content))
+            {
+                return NormalizeUtf16LineEndings(content, isLittleEndian: true);
+            }
+
+            if (HasUtf16BigEndianLineEnding(content))
             {
                 return NormalizeUtf16LineEndings(content, isLittleEndian: false);
             }
