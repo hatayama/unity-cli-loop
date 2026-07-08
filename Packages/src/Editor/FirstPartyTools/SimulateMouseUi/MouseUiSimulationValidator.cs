@@ -1,0 +1,127 @@
+#nullable enable
+using UnityEngine.EventSystems;
+
+using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Validates mouse UI simulation preconditions and request options.
+    /// </summary>
+    internal static class MouseUiSimulationValidator
+    {
+        internal static SimulateMouseUiResponse? ValidateSimulationStart(
+            MouseUiSimulationCommand parameters,
+            EventSystem? eventSystem,
+            string pausedActionDescription)
+        {
+            ValidationResult playModeResult =
+                PlayModeToolPreflightService.RequireActiveAndNotPaused(pausedActionDescription);
+            if (!playModeResult.IsValid)
+            {
+                return CreateFailure(parameters, playModeResult.ErrorMessage);
+            }
+
+            if (eventSystem == null)
+            {
+                return CreateFailure(
+                    parameters,
+                    "No EventSystem found in the scene. Ensure an EventSystem GameObject exists.");
+            }
+
+            return ValidateSimulationRequestOptions(parameters);
+        }
+
+        internal static SimulateMouseUiResponse? ValidateActiveDragState(MouseUiSimulationCommand parameters)
+        {
+            if (!MouseDragState.IsDragging || !RequiresIdlePointer(parameters.Action))
+            {
+                return null;
+            }
+
+            return CreateFailure(
+                parameters,
+                $"Cannot {parameters.Action.ToString()} while a split drag is active. Call DragEnd first.");
+        }
+
+        internal static SimulateMouseUiResponse CreateFailure(
+            MouseUiSimulationCommand parameters,
+            string message)
+        {
+            return new SimulateMouseUiResponse
+            {
+                Success = false,
+                Message = message,
+                Action = parameters.Action.ToString()
+            };
+        }
+
+        private static SimulateMouseUiResponse? ValidateSimulationRequestOptions(
+            MouseUiSimulationCommand parameters)
+        {
+            if (parameters.Action != MouseAction.Click && parameters.Action != MouseAction.LongPress && parameters.DragSpeed < 0f)
+            {
+                return CreateFailure(parameters, $"DragSpeed must be non-negative, got: {parameters.DragSpeed}");
+            }
+
+            if (IsDragAction(parameters.Action) && parameters.Button != MouseButton.Left)
+            {
+                return CreateFailure(
+                    parameters,
+                    $"Drag actions only support Left button (uGUI ignores non-left drags), got: {parameters.Button}");
+            }
+
+            if (parameters.BypassRaycast && !SupportsBypassRaycast(parameters.Action))
+            {
+                return CreateFailure(parameters, "BypassRaycast is not supported for this action.");
+            }
+
+            if (parameters.BypassRaycast &&
+                RequiresBypassTargetPath(parameters.Action) &&
+                string.IsNullOrWhiteSpace(parameters.TargetPath))
+            {
+                return CreateFailure(
+                    parameters,
+                    "TargetPath is required when BypassRaycast is true for Click, LongPress, Drag, or DragStart.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(parameters.DropTargetPath) &&
+                parameters.Action != MouseAction.Drag &&
+                parameters.Action != MouseAction.DragEnd)
+            {
+                return CreateFailure(parameters, "DropTargetPath supports Drag and DragEnd only.");
+            }
+
+            return null;
+        }
+
+        private static bool RequiresIdlePointer(MouseAction action)
+        {
+            return action == MouseAction.Click || action == MouseAction.Drag || action == MouseAction.LongPress;
+        }
+
+        private static bool SupportsBypassRaycast(MouseAction action)
+        {
+            return action == MouseAction.Click
+                || action == MouseAction.LongPress
+                || IsDragAction(action);
+        }
+
+        private static bool RequiresBypassTargetPath(MouseAction action)
+        {
+            return action == MouseAction.Click
+                || action == MouseAction.LongPress
+                || action == MouseAction.Drag
+                || action == MouseAction.DragStart;
+        }
+
+        private static bool IsDragAction(MouseAction action)
+        {
+            return action == MouseAction.Drag
+                || action == MouseAction.DragStart
+                || action == MouseAction.DragMove
+                || action == MouseAction.DragEnd;
+        }
+    }
+}
