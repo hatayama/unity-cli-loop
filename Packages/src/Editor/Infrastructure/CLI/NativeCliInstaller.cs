@@ -93,14 +93,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string installPath = NativeCliInstallPathResolver.GetGlobalCliInstallPath(installDirectory, platform);
             CliInstallResult removalResult = await NativeCliUninstallCompletionWaiter.WaitForUninstallCompletionAsync(
                 installPath,
-                installDirectory,
-                platform,
                 ct,
                 NativeCliUninstallCompletionWaiter.UNINSTALL_COMPLETION_TIMEOUT_MS,
                 NativeCliSetupCommandRunner.INSTALL_PROCESS_WAIT_SLICE_MS,
                 File.Exists,
-                false,
-                Environment.GetEnvironmentVariable,
                 Task.Delay);
             if (!removalResult.Success)
             {
