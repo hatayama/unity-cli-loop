@@ -28,12 +28,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const ushort LineFeedCodeUnit = 0x000A;
         private const string EditorDirName = "Editor";
         private const string CliOnlyToolsDirName = "CliOnlyTools~";
-        private static readonly HashSet<string> ExcludedFileNames = new()
-        {
-            ".meta",
-            ".DS_Store",
-            ".gitkeep"
-        };
         private static readonly HashSet<string> TextSkillFileExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             ".json",
@@ -442,7 +436,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             foreach (string filePath in Directory.EnumerateFiles(skillDirectory, "*", SearchOption.AllDirectories))
             {
                 string fileName = Path.GetFileName(filePath);
-                if (IsExcludedFile(fileName))
+                if (SkillSetupFileExclusion.IsExcludedSkillFile(fileName))
                 {
                     continue;
                 }
@@ -1053,24 +1047,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 internalMatch.Groups[1].Value.Trim(),
                 "true",
                 StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool IsExcludedFile(string fileName)
-        {
-            if (ExcludedFileNames.Contains(fileName))
-            {
-                return true;
-            }
-
-            foreach (string excludedPattern in ExcludedFileNames)
-            {
-                if (fileName.EndsWith(excludedPattern, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private static bool IsSafeSkillPathComponent(string skillName)
