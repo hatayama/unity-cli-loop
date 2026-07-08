@@ -142,23 +142,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(stderrTask != null, "stderrTask must not be null");
             Debug.Assert(timeoutMilliseconds >= 0, "timeoutMilliseconds must not be negative");
 
-            bool completed = Task.WaitAll(
-                new Task[] { stdoutTask, stderrTask },
-                timeoutMilliseconds);
-            if (completed)
-            {
-                return true;
-            }
-
-            ObserveCompilerStreamFailure(stdoutTask);
-            ObserveCompilerStreamFailure(stderrTask);
-            return false;
+            Task streamDrainTask = Task.WhenAll(stdoutTask, stderrTask);
+            bool completed = Task.WaitAny(
+                new[] { streamDrainTask },
+                timeoutMilliseconds) == 0;
+            ObserveCompilerStreamFailure(streamDrainTask);
+            return completed;
         }
 
-        private static void ObserveCompilerStreamFailure(Task<string> streamTask)
+        private static void ObserveCompilerStreamFailure(Task streamDrainTask)
         {
             // Why: disposing the process after a bounded drain can fault a pending read task later.
-            _ = streamTask.ContinueWith(
+            _ = streamDrainTask.ContinueWith(
                 task => { _ = task.Exception; },
                 TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
         }

@@ -59,6 +59,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(completed, Is.True);
         }
 
+        /// <summary>
+        /// Verifies a faulted compiler stream is treated as drained without escaping timeout recovery.
+        /// </summary>
+        [Test]
+        public void WaitForCompilerStreamDrain_WhenStreamFaults_ShouldReturnTrue()
+        {
+            Task<string> faultedStream = Task.FromException<string>(new IOException("stream read failed"));
+
+            bool completed = SharedRoslynCompilerWorkerAssemblyBuilder.WaitForCompilerStreamDrain(
+                Task.FromResult("stdout"),
+                faultedStream,
+                0);
+
+            Assert.That(completed, Is.True);
+        }
+
         [Test]
         public void CreateCompileRequestCommand_WhenPathIsWindowsAbsolutePath_ShouldEncodeAsciiPayload()
         {
