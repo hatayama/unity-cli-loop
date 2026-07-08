@@ -44,7 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new SimulateMouseInputResponse
             {
                 Success = false,
-                Message = "simulate-mouse-input requires the Input System package (com.unity.inputsystem). Install it via Package Manager and set Active Input Handling to 'Input System Package (New)' or 'Both' in Player Settings.",
+                Message = InputSystemPackageRequirementMessage.Format("simulate-mouse-input"),
                 Action = parameters.Action.ToString()
             };
 #else
