@@ -215,10 +215,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static string GetCliOnlySkillSourceRoot(string projectRoot)
         {
             string currentProjectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            if (!string.Equals(
-                Path.GetFullPath(projectRoot),
-                Path.GetFullPath(currentProjectRoot),
-                StringComparison.Ordinal))
+            if (!HaveSamePathIdentityAtPlatform(
+                projectRoot,
+                currentProjectRoot,
+                UnityEngine.Application.platform))
             {
                 return null;
             }
@@ -231,9 +231,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static bool IsCliOnlySkillSourceRoot(string searchRoot)
         {
+            return HaveSamePathIdentityAtPlatform(
+                searchRoot,
+                GetCliOnlySkillSourceRoot(UnityCliLoopPathResolver.GetProjectRoot()),
+                UnityEngine.Application.platform);
+        }
+
+        internal static bool HaveSamePathIdentityAtPlatform(
+            string leftPath,
+            string rightPath,
+            RuntimePlatform platform)
+        {
             return string.Equals(
-                Path.GetFullPath(searchRoot),
-                Path.GetFullPath(GetCliOnlySkillSourceRoot(UnityCliLoopPathResolver.GetProjectRoot())),
+                Path.GetFullPath(leftPath),
+                Path.GetFullPath(rightPath),
                 StringComparison.Ordinal);
         }
 
