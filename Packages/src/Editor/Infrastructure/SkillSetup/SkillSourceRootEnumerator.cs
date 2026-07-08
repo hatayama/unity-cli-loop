@@ -250,9 +250,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal;
             return string.Equals(
-                Path.GetFullPath(leftPath),
-                Path.GetFullPath(rightPath),
+                NormalizePathForIdentity(leftPath),
+                NormalizePathForIdentity(rightPath),
                 comparison);
+        }
+
+        private static string NormalizePathForIdentity(string path)
+        {
+            string fullPath = Path.GetFullPath(path);
+            string root = Path.GetPathRoot(fullPath);
+            if (!string.IsNullOrEmpty(root) && string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase))
+            {
+                // Trimming the only separator from a filesystem root would change its identity.
+                return root;
+            }
+
+            string normalizedPath = fullPath.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar);
+            Debug.Assert(!string.IsNullOrEmpty(normalizedPath), "normalizedPath must not be empty");
+            return normalizedPath;
         }
 
         private static IEnumerable<string> EnumerateDirectProjectPackageRoots(string projectRoot)

@@ -140,6 +140,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(actual, Is.EqualTo(expected));
         }
 
+        // Tests that an optional trailing directory separator does not change path identity.
+        [TestCase(UnityEngine.RuntimePlatform.WindowsEditor)]
+        [TestCase(UnityEngine.RuntimePlatform.OSXEditor)]
+        [TestCase(UnityEngine.RuntimePlatform.LinuxEditor)]
+        public void HaveSamePathIdentityAtPlatform_WhenTrailingSeparatorDiffers_ReturnsTrue(
+            UnityEngine.RuntimePlatform platform)
+        {
+            string path = Path.Combine(_projectRoot, "skill-source-root");
+            string pathWithTrailingSeparator = path + Path.DirectorySeparatorChar;
+
+            bool actual = SkillSourceRootEnumerator.HaveSamePathIdentityAtPlatform(
+                path,
+                pathWithTrailingSeparator,
+                platform);
+
+            Assert.That(actual, Is.True);
+        }
+
         // Tests that Tool Settings can read source skill frontmatter descriptions by tool name.
         [Test]
         public void GetToolDescriptionsByToolName_WhenSkillHasDescription_MapsDescriptionToToolName()
