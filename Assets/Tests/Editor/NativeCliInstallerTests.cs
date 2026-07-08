@@ -298,7 +298,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             int remainingExistingChecks = 2;
             int delayCount = 0;
 
-            CliInstallResult result = await NativeCliInstaller.WaitForUninstallTargetRemovalAsync(
+            CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallTargetRemovalAsync(
                 "C:\\Users\\ExampleUser\\AppData\\Local\\Programs\\uloop\\bin\\uloop.exe",
                 CancellationToken.None,
                 1000,
@@ -320,7 +320,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that delayed launcher removal failures do not recache a stale installed CLI.
             int delayCount = 0;
 
-            CliInstallResult result = await NativeCliInstaller.WaitForUninstallTargetRemovalAsync(
+            CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallTargetRemovalAsync(
                 "C:\\Users\\ExampleUser\\AppData\\Local\\Programs\\uloop\\bin\\uloop.exe",
                 CancellationToken.None,
                 250,
@@ -345,7 +345,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string userPath = installDirectory + ";C:\\npm";
             int delayCount = 0;
 
-            CliInstallResult result = await NativeCliInstaller.WaitForUninstallCompletionAsync(
+            CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallCompletionAsync(
                 installDirectory + "\\uloop.exe",
                 installDirectory,
                 RuntimePlatform.WindowsEditor,
@@ -373,7 +373,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string installDirectory = "C:\\Users\\ExampleUser\\Programs\\uloop\\bin";
             int delayCount = 0;
 
-            CliInstallResult result = await NativeCliInstaller.WaitForUninstallCompletionAsync(
+            CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallCompletionAsync(
                 installDirectory + "\\uloop.exe",
                 installDirectory,
                 RuntimePlatform.WindowsEditor,
@@ -401,7 +401,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies fallback uninstall failures do not claim ownership of Windows User PATH cleanup.
             string installDirectory = "C:\\Users\\ExampleUser\\Programs\\uloop\\bin";
 
-            CliInstallResult result = await NativeCliInstaller.WaitForUninstallCompletionAsync(
+            CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallCompletionAsync(
                 installDirectory + "\\uloop.exe",
                 installDirectory,
                 RuntimePlatform.WindowsEditor,
@@ -424,7 +424,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies fallback launchers can complete uninstall without owning Windows User PATH cleanup.
             string installDirectory = "C:\\Users\\ExampleUser\\Programs\\uloop\\bin";
 
-            CliInstallResult result = await NativeCliInstaller.WaitForUninstallCompletionAsync(
+            CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallCompletionAsync(
                 installDirectory + "\\uloop.exe",
                 installDirectory,
                 RuntimePlatform.WindowsEditor,
@@ -443,7 +443,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void UninstallCompletionTimeout_IsLongEnoughForDeferredWindowsPowerShellCleanup()
         {
             // Verifies Settings uninstall does not report failure before Windows deferred cleanup can finish.
-            Assert.That(NativeCliInstaller.UNINSTALL_COMPLETION_TIMEOUT_MS, Is.GreaterThanOrEqualTo(30000));
+            Assert.That(
+                NativeCliUninstallCompletionWaiter.UNINSTALL_COMPLETION_TIMEOUT_MS,
+                Is.GreaterThanOrEqualTo(30000));
         }
 
         [Test]
