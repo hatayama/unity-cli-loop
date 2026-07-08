@@ -70,9 +70,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
                 ["dragSpeed"] = -1f
             });
 
-            Assert.That(lastResponse.Success, Is.False);
-            Assert.That(lastResponse.Message, Is.EqualTo("DragSpeed must be non-negative, got: -1"));
-            Assert.That(lastResponse.Action, Is.EqualTo(MouseAction.Drag.ToString()));
+            Assert.IsFalse(lastResponse.Success);
+            Assert.AreEqual("DragSpeed must be non-negative, got: -1", lastResponse.Message);
+            Assert.AreEqual(MouseAction.Drag.ToString(), lastResponse.Action);
         }
 
         /// <summary>
@@ -87,11 +87,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
                 ["button"] = MouseButton.Right.ToString()
             });
 
-            Assert.That(lastResponse.Success, Is.False);
-            Assert.That(
-                lastResponse.Message,
-                Is.EqualTo("Drag actions only support Left button (uGUI ignores non-left drags), got: Right"));
-            Assert.That(lastResponse.Action, Is.EqualTo(MouseAction.Drag.ToString()));
+            Assert.IsFalse(lastResponse.Success);
+            Assert.AreEqual(
+                "Drag actions only support Left button (uGUI ignores non-left drags), got: Right",
+                lastResponse.Message);
+            Assert.AreEqual(MouseAction.Drag.ToString(), lastResponse.Action);
         }
 
         /// <summary>
@@ -106,11 +106,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
                 ["bypassRaycast"] = true
             });
 
-            Assert.That(lastResponse.Success, Is.False);
-            Assert.That(
-                lastResponse.Message,
-                Is.EqualTo("TargetPath is required when BypassRaycast is true for Click, LongPress, Drag, or DragStart."));
-            Assert.That(lastResponse.Action, Is.EqualTo(MouseAction.Click.ToString()));
+            Assert.IsFalse(lastResponse.Success);
+            Assert.AreEqual(
+                "TargetPath is required when BypassRaycast is true for Click, LongPress, Drag, or DragStart.",
+                lastResponse.Message);
+            Assert.AreEqual(MouseAction.Click.ToString(), lastResponse.Action);
         }
 
         /// <summary>
@@ -125,9 +125,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
                 ["dropTargetPath"] = "TestCanvas/DropTarget"
             });
 
-            Assert.That(lastResponse.Success, Is.False);
-            Assert.That(lastResponse.Message, Is.EqualTo("DropTargetPath supports Drag and DragEnd only."));
-            Assert.That(lastResponse.Action, Is.EqualTo(MouseAction.Click.ToString()));
+            Assert.IsFalse(lastResponse.Success);
+            Assert.AreEqual("DropTargetPath supports Drag and DragEnd only.", lastResponse.Message);
+            Assert.AreEqual(MouseAction.Click.ToString(), lastResponse.Action);
         }
 
         #endregion
