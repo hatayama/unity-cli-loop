@@ -167,39 +167,49 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static IEnumerable<string> EnumerateSkillSourceRoots(string projectRoot)
         {
+            List<string> orderedRoots = new();
             HashSet<string> seenRoots = new(StringComparer.Ordinal);
 
-            AddSkillSourceRoot(seenRoots, GetCliOnlySkillSourceRoot(projectRoot));
-            AddSkillSourceRoot(seenRoots, Path.Combine(projectRoot, "Assets"));
+            AddSkillSourceRoot(orderedRoots, seenRoots, GetCliOnlySkillSourceRoot(projectRoot));
+            AddSkillSourceRoot(orderedRoots, seenRoots, Path.Combine(projectRoot, "Assets"));
             foreach (string packageRoot in EnumerateDirectProjectPackageRoots(projectRoot))
             {
-                AddSkillSourceRoot(seenRoots, packageRoot);
+                AddSkillSourceRoot(orderedRoots, seenRoots, packageRoot);
             }
 
             foreach (string packageRoot in EnumerateManifestLocalPackageRoots(projectRoot))
             {
-                AddSkillSourceRoot(seenRoots, packageRoot);
+                AddSkillSourceRoot(orderedRoots, seenRoots, packageRoot);
             }
 
             foreach (string packageRoot in EnumerateDependencyPackageCacheRoots(projectRoot))
             {
-                AddSkillSourceRoot(seenRoots, packageRoot);
+                AddSkillSourceRoot(orderedRoots, seenRoots, packageRoot);
             }
 
-            foreach (string root in seenRoots)
+            foreach (string root in orderedRoots)
             {
                 yield return root;
             }
         }
 
-        private static void AddSkillSourceRoot(HashSet<string> roots, string root)
+        private static void AddSkillSourceRoot(
+            List<string> orderedRoots,
+            HashSet<string> seenRoots,
+            string root)
         {
             if (string.IsNullOrEmpty(root))
             {
                 return;
             }
 
-            roots.Add(Path.GetFullPath(root));
+            string normalizedRoot = Path.GetFullPath(root);
+            if (!seenRoots.Add(normalizedRoot))
+            {
+                return;
+            }
+
+            orderedRoots.Add(normalizedRoot);
         }
 
         private static string GetCliOnlySkillSourceRoot(string projectRoot)

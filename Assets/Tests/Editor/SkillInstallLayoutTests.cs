@@ -131,6 +131,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(descriptions[UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT], Does.StartWith("Pauses Unity's playback"));
         }
 
+        // Tests that duplicate skill names use the earlier source root across each precedence boundary.
+        [Test]
+        public void GetSkillSourceInfos_WhenNamesOverlap_PrefersEarlierSourceRoot()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            string manifestPackageRoot = CreateTemporaryProjectRoot();
+            string assetsRoot = Path.Combine(temporaryRoot, "Assets");
+            string directPackageRoot = Path.Combine(temporaryRoot, "Packages", "com.example.direct");
+            string cachePackageRoot = Path.Combine(
+                temporaryRoot,
+                "Library",
+                "PackageCache",
+                "com.example.cached@1.0.0");
+
+            WriteSourceSkill(assetsRoot, "uloop-assets-priority", "assets-winner", "AssetsWinner");
+            WriteSourceSkill(directPackageRoot, "uloop-assets-priority", "direct-loser", "DirectLoser");
+            WriteSourceSkill(directPackageRoot, "uloop-package-priority", "direct-winner", "DirectWinner");
+            WriteSourceSkill(manifestPackageRoot, "uloop-package-priority", "manifest-loser", "ManifestLoser");
+            WriteSourceSkill(manifestPackageRoot, "uloop-manifest-priority", "manifest-winner", "ManifestWinner");
+            WriteSourceSkill(cachePackageRoot, "uloop-manifest-priority", "cache-loser", "CacheLoser");
+
+            string manifestPath = Path.Combine(temporaryRoot, "Packages", "manifest.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(manifestPath));
+            string portableManifestPackageRoot = manifestPackageRoot.Replace(Path.DirectorySeparatorChar, '/');
+            File.WriteAllText(
+                manifestPath,
+                $"{{\"dependencies\":{{\"com.example.manifest\":\"file:{portableManifestPackageRoot}\"," +
+                "\"com.example.cached\":\"1.0.0\"}}}");
+
+            Dictionary<string, SkillInstallLayout.SkillSourceInfo> skillSources = SkillInstallLayout
+                .GetSkillSourceInfos(temporaryRoot)
+                .ToDictionary(skill => skill.Name, StringComparer.Ordinal);
+
+            Assert.That(skillSources["uloop-assets-priority"].ToolName, Is.EqualTo("assets-winner"));
+            Assert.That(skillSources["uloop-package-priority"].ToolName, Is.EqualTo("direct-winner"));
+            Assert.That(skillSources["uloop-manifest-priority"].ToolName, Is.EqualTo("manifest-winner"));
+        }
+
         // Tests that skill discovery follows bundled tools after they move into the first-party plugin assembly.
         [Test]
         public void GetSkillSourceInfos_WhenFirstPartyToolIsUnderFirstPartyTools_IncludesToolSkill()
@@ -345,6 +383,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Path.Combine(skillDir, SkillInstallLayout.SkillFileName),
                 $"---\nname: {skillName}\n{internalLine}---\n");
             File.WriteAllText(Path.Combine(skillDir, additionalFileRelativePath), additionalFileContent);
+        }
+
+        private static void WriteSourceSkill(
+            string sourceRoot,
+            string skillName,
+            string toolName,
+            string toolDirectoryName)
+        {
+            string skillDirectory = Path.Combine(sourceRoot, "Editor", toolDirectoryName, "Skill");
+            Directory.CreateDirectory(skillDirectory);
+            File.WriteAllText(
+                Path.Combine(skillDirectory, SkillInstallLayout.SkillFileName),
+                $"---\nname: {skillName}\ntoolName: {toolName}\n---\n");
         }
 
         /// <summary>
