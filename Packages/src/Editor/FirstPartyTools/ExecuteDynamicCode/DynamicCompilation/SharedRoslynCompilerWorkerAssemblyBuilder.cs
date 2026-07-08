@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class SharedRoslynCompilerWorkerAssemblyBuilder
     {
         private const int WorkerAssemblyBuildTimeoutMilliseconds = 30000;
+        private const int WorkerCompilerTerminationTimeoutMilliseconds = 500;
         internal const string DotnetMultilevelLookupEnvironmentVariableName = "DOTNET_MULTILEVEL_LOOKUP";
         internal const string DotnetMultilevelLookupDisabledValue = "0";
 
@@ -107,10 +108,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!process.HasExited)
                 {
                     process.Kill();
-                    process.WaitForExit(500);
+                    process.WaitForExit(WorkerCompilerTerminationTimeoutMilliseconds);
                 }
 
-                Task.WaitAll(stdoutTask, stderrTask);
+                WaitForCompilerStreamDrain(
+                    stdoutTask,
+                    stderrTask,
+                    WorkerCompilerTerminationTimeoutMilliseconds);
                 return WorkerAssemblyBuildResult.StartFailure(
                     "worker_compiler_timeout",
                     new
@@ -127,6 +131,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 stderrTask.GetAwaiter().GetResult(),
                 process.ExitCode);
             return WorkerAssemblyBuildResult.Started(compilerMessages);
+        }
+
+        internal static bool WaitForCompilerStreamDrain(
+            Task<string> stdoutTask,
+            Task<string> stderrTask,
+            int timeoutMilliseconds)
+        {
+            Debug.Assert(stdoutTask != null, "stdoutTask must not be null");
+            Debug.Assert(stderrTask != null, "stderrTask must not be null");
+            Debug.Assert(timeoutMilliseconds >= 0, "timeoutMilliseconds must not be negative");
+
+            Task streamDrainTask = Task.WhenAll(stdoutTask, stderrTask);
+            bool completed = Task.WaitAny(
+                new[] { streamDrainTask },
+                timeoutMilliseconds) == 0;
+            ObserveCompilerStreamFailure(stdoutTask);
+            ObserveCompilerStreamFailure(stderrTask);
+            ObserveCompilerStreamFailure(streamDrainTask);
+            return completed;
+        }
+
+        private static void ObserveCompilerStreamFailure(Task streamDrainTask)
+        {
+            // Why: disposing the process after a bounded drain can fault a pending read task later.
+            _ = streamDrainTask.ContinueWith(
+                task => { _ = task.Exception; },
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
         }
 
         private static List<string> BuildWorkerReferenceSet(ExternalCompilerPaths externalCompilerPaths)
