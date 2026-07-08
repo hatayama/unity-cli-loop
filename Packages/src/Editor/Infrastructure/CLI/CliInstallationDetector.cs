@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System;
 using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -33,7 +32,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public sealed class CliInstallationDetector : ICliInstallationDetector
     {
-        private const int PROCESS_TIMEOUT_MS = 5000;
         private const string SHELL_PATH_START_MARKER = "__ULOOP_PATH_START__";
         private const string SHELL_PATH_END_MARKER = "__ULOOP_PATH_END__";
         private const string SHELL_VERSION_START_MARKER = "__ULOOP_VERSION_START__";
@@ -217,7 +215,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 pathSetupPlan,
                 Environment.GetEnvironmentVariable(CliConstants.POSIX_PATH_ENVIRONMENT_VARIABLE));
 
-            string output = ExecuteAndGetOutput(startInfo, ct);
+            CliDetectionCommandResult commandResult = CliDetectionCommandRunner.Execute(startInfo, ct);
+            string output = commandResult == null
+                ? null
+                : string.Join(Environment.NewLine, commandResult.StandardOutputLines).Trim();
             return ParseShellCliInstallationOutput(output);
         }
 
@@ -421,60 +422,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 true);
         }
 
-        private static string ExecuteAndGetOutput(ProcessStartInfo startInfo, CancellationToken ct)
-        {
-            UnityEngine.Debug.Assert(startInfo != null, "startInfo must not be null");
-            UnityEngine.Debug.Assert(startInfo.RedirectStandardOutput, "RedirectStandardOutput must be true");
-            UnityEngine.Debug.Assert(startInfo.RedirectStandardError, "RedirectStandardError must be true");
-
-            Process process = ProcessStartHelper.TryStart(startInfo);
-            if (process == null)
-            {
-                return null;
-            }
-
-            using (process)
-            {
-                StringBuilder outputBuilder = new();
-
-                process.OutputDataReceived += (sender, e) =>
-                {
-                    if (e.Data != null)
-                    {
-                        outputBuilder.AppendLine(e.Data);
-                    }
-                };
-                process.ErrorDataReceived += (sender, e) => { };
-
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
-
-                using CancellationTokenRegistration registration = ct.Register(() => KillProcessIfRunning(process));
-                bool exited = process.WaitForExit(PROCESS_TIMEOUT_MS);
-                if (!exited)
-                {
-                    KillProcessIfRunning(process);
-                    return null;
-                }
-
-                process.WaitForExit();
-                return outputBuilder.ToString().Trim();
-            }
-        }
-
-        internal static void KillProcessIfRunning(Process process)
-        {
-            UnityEngine.Debug.Assert(process != null, "process must not be null");
-
-            try
-            {
-                process.Kill();
-            }
-            catch (System.InvalidOperationException)
-            {
-            }
-        }
-
         private static bool IsSuccessfulShellStatus(string statusBlock)
         {
             string status = ExtractFirstNonEmptyLine(statusBlock);
@@ -540,54 +487,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CreateNoWindow = true
             };
 
-            Process process = ProcessStartHelper.TryStart(startInfo);
-            if (process == null)
-            {
-                return null;
-            }
-
-            StringBuilder outputBuilder = new();
-
-            process.OutputDataReceived += (sender, e) =>
-            {
-                if (e.Data != null)
-                {
-                    outputBuilder.Append(e.Data);
-                }
-            };
-            process.ErrorDataReceived += (sender, e) => { };
-
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            using CancellationTokenRegistration registration = ct.Register(() =>
-            {
-                KillProcessIfRunning(process);
-            });
-
             try
             {
-                bool exited = process.WaitForExit(PROCESS_TIMEOUT_MS);
-
-                if (!exited)
+                CliDetectionCommandResult commandResult = CliDetectionCommandRunner.Execute(startInfo, ct);
+                if (commandResult == null)
                 {
-                    KillProcessIfRunning(process);
-                    process.Dispose();
                     return null;
                 }
 
-                // Parameterless WaitForExit flushes async output buffers
-                process.WaitForExit();
-
-                string output = outputBuilder.ToString().Trim();
-                bool failed = process.ExitCode != 0 || string.IsNullOrEmpty(output);
-                process.Dispose();
+                string output = string.Concat(commandResult.StandardOutputLines).Trim();
+                bool failed = commandResult.ExitCode != 0 || string.IsNullOrEmpty(output);
 
                 return failed ? null : output;
             }
             catch (Exception ex)
             {
-                process.Dispose();
                 if (!ct.IsCancellationRequested)
                 {
                     UnityEngine.Debug.LogWarning($"[UnityCliLoop] Failed to detect CLI version: {ex.Message}");
