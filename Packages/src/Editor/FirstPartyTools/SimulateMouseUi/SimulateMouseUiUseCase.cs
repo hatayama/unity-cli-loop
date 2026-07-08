@@ -81,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return response;
         }
 
-        private static void LogSimulationStart(MouseUiSimulationCommand parameters, string correlationId)
+        internal static void LogSimulationStart(MouseUiSimulationCommand parameters, string correlationId)
         {
             VibeLogger.LogInfo(
                 "simulate_mouse_start",
@@ -99,7 +99,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             );
         }
 
-        private static void LogSimulationComplete(
+        internal static void LogSimulationComplete(
             MouseUiSimulationCommand parameters,
             SimulateMouseUiResponse response,
             string correlationId)
@@ -927,7 +927,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        private static async Task<bool> PlayExpandAnimation(CancellationToken ct)
+        internal static async Task<bool> PlayExpandAnimation(CancellationToken ct)
         {
             SimulateMouseUiOverlay overlay = OverlayCanvasFactory.VisualizationCanvas.MouseUiOverlay;
 
@@ -952,7 +952,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        private static async Task<bool> PlayDissipateAnimation(CancellationToken ct)
+        internal static async Task<bool> PlayDissipateAnimation(CancellationToken ct)
         {
             SimulateMouseUiOverlay overlay = OverlayCanvasFactory.VisualizationCanvas.MouseUiOverlay;
 
@@ -977,7 +977,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        private static async Task<bool> WaitForEditorFrameAndSwitchToMainThreadAsync(CancellationToken ct)
+        internal static async Task<bool> WaitForEditorFrameAndSwitchToMainThreadAsync(CancellationToken ct)
         {
             bool frameReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
                 1,
@@ -992,18 +992,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        private void CaptureMainThreadContext()
+        internal void CaptureMainThreadContext()
         {
             _mainThreadContext = SynchronizationContext.Current;
             Debug.Assert(_mainThreadContext != null, "Main thread synchronization context must be captured.");
         }
 
-        private void QueueOverlayClear()
+        internal void QueueOverlayClear()
         {
             ExecuteCleanupOnMainThread(SimulateMouseUiOverlayState.Clear);
         }
 
-        private void ExecuteCleanupOnMainThread(Action cleanup)
+        internal void ExecuteCleanupOnMainThread(Action cleanup)
         {
             Debug.Assert(cleanup != null, "cleanup must not be null");
             if (cleanup == null)
