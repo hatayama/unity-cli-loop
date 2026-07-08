@@ -11,6 +11,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal static class SkillSourceFrontmatterReader
     {
+        private static string NormalizeFrontmatterScalar(string value)
+        {
+            return value.Trim().Trim('"', '\'');
+        }
+
         internal static string ParseToolNameFromFrontmatter(string content)
         {
             Match frontmatterMatch = Regex.Match(content, @"^---\r?\n([\s\S]*?)\r?\n---");
@@ -26,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return null;
             }
 
-            return toolNameMatch.Groups[1].Value.Trim();
+            return NormalizeFrontmatterScalar(toolNameMatch.Groups[1].Value);
         }
 
         internal static string ParseNameFromFrontmatter(string content)
@@ -44,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return null;
             }
 
-            return nameMatch.Groups[1].Value.Trim().Trim('"');
+            return NormalizeFrontmatterScalar(nameMatch.Groups[1].Value);
         }
 
         internal static string ParseDescriptionFromFrontmatter(string content)
@@ -62,7 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return null;
             }
 
-            return descriptionMatch.Groups[1].Value.Trim().Trim('"');
+            return NormalizeFrontmatterScalar(descriptionMatch.Groups[1].Value);
         }
 
         internal static string ResolveToolNameForSkillSource(string skillName, string toolName)
@@ -133,7 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return string.Equals(
-                internalMatch.Groups[1].Value.Trim(),
+                NormalizeFrontmatterScalar(internalMatch.Groups[1].Value),
                 "true",
                 StringComparison.OrdinalIgnoreCase);
         }
