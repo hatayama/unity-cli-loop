@@ -70,6 +70,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 loginShellCommand);
         }
 
+        internal static NativeCliInstallCommand BuildUninstallCommand(
+            string installDirectory,
+            RuntimePlatform platform)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
+
+            string installPath = NativeCliInstallPathResolver.GetGlobalCliInstallPath(installDirectory, platform);
+            return new NativeCliInstallCommand(
+                installPath,
+                "uninstall",
+                $"{QuoteProcessArgument(installPath)} uninstall");
+        }
+
         private static string BuildPosixRemoteInstallScriptCommand(string scriptUrl, string releaseTag)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptUrl), "scriptUrl must not be null or empty");
@@ -155,7 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return $"'{value.Replace("'", "''")}'";
         }
 
-        internal static string QuoteProcessArgument(string value)
+        private static string QuoteProcessArgument(string value)
         {
             UnityEngine.Debug.Assert(value != null, "value must not be null");
             return $"\"{value.Replace("\"", "\\\"")}\"";

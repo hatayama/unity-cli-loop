@@ -138,7 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     return IsShellDetectionUsableForPathSetup(
                         detection,
                         platform,
-                        NativeCliInstaller.IsPackageOwnedCurrentUserInstallPath,
+                        NativeCliInstallPathResolver.IsPackageOwnedCurrentUserInstallPath,
                         minimumDispatcherVersion);
                 },
                 ct);
@@ -185,7 +185,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             RuntimePlatform platform,
             CancellationToken ct)
         {
-            string executablePath = NativeCliInstaller.GetCurrentUserGlobalCliInstallPath(platform);
+            string executablePath = NativeCliInstallPathResolver.GetCurrentUserGlobalCliInstallPath(platform);
             if (string.IsNullOrEmpty(executablePath) || !File.Exists(executablePath))
             {
                 return new CliInstallationDetection(null, executablePath);
@@ -243,7 +243,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (platform != RuntimePlatform.WindowsEditor)
             {
                 startInfo.EnvironmentVariables[CliConstants.POSIX_PATH_ENVIRONMENT_VARIABLE] =
-                    NativeCliInstaller.BuildPathWithoutInstallDirectory(
+                    NativeCliInstallPathResolver.BuildPathWithoutInstallDirectory(
                         currentPath,
                         pathSetupPlan.InstallDirectory,
                         platform);
