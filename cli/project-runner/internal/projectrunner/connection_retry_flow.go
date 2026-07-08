@@ -51,10 +51,8 @@ func finishBusyRetry(
 
 func finishNonRetryableConnectionAttempt(
 	ctx context.Context,
-	outcome unityipc.UnitySendOutcome,
-	err error,
-	lastOutcome unityipc.UnitySendOutcome,
-	lastErr error,
+	currentAttempt sendAttempt,
+	lastAttempt sendAttempt,
 	responseTimeout time.Duration,
 	focusController *connectionRetryFocusController,
 ) (unityipc.UnitySendOutcome, error) {
@@ -64,54 +62,57 @@ func finishNonRetryableConnectionAttempt(
 	// surface as-is. The transport error is not compared against the window
 	// deadline because the connection deadline can fire microseconds before
 	// the context reports expiry.
-	if err != nil && !isRPCError(err) && isUnityServerBusyRPCError(lastErr) {
+	if currentAttempt.err != nil && !isRPCError(currentAttempt.err) && isUnityServerBusyRPCError(lastAttempt.err) {
 		if ctx.Err() != nil {
-			return outcome, ctx.Err()
+			return currentAttempt.outcome, ctx.Err()
 		}
-		return lastOutcome, lastErr
+		return lastAttempt.outcome, lastAttempt.err
 	}
-	if reason, ok := connectionRetryFocusReasonForError(err, outcome, responseTimeout); ok {
-		focusController.tryFocus(ctx, reason, err)
+	if reason, ok := connectionRetryFocusReasonForError(currentAttempt.err, currentAttempt.outcome, responseTimeout); ok {
+		focusController.tryFocus(ctx, reason, currentAttempt.err)
 		focusController.keepUnityFocusedAfterReturn()
 	}
-	return outcome, err
+	return currentAttempt.outcome, currentAttempt.err
+}
+
+type sendAttempt struct {
+	outcome unityipc.UnitySendOutcome
+	err     error
 }
 
 func finishUndispatchedRetryProbe(
 	ctx context.Context,
 	retryContext context.Context,
 	connection unityipc.Connection,
-	outcome unityipc.UnitySendOutcome,
-	err error,
+	currentAttempt sendAttempt,
 	processErr error,
 	runningProcess *unityprocess.UnityProcess,
-	lastOutcome unityipc.UnitySendOutcome,
-	lastErr error,
+	lastAttempt sendAttempt,
 ) (bool, unityipc.UnitySendOutcome, error) {
 	if processErr != nil {
 		if retryContext.Err() == nil {
-			return true, outcome, processErr
+			return true, currentAttempt.outcome, processErr
 		}
 		if ctx.Err() != nil {
-			return true, outcome, ctx.Err()
+			return true, currentAttempt.outcome, ctx.Err()
 		}
 		// A busy response seen during the window is the truer diagnosis than a
 		// final dial cut short by the expiring retry context.
-		if isUnityServerBusyRPCError(lastErr) {
-			return true, lastOutcome, lastErr
+		if isUnityServerBusyRPCError(lastAttempt.err) {
+			return true, lastAttempt.outcome, lastAttempt.err
 		}
-		return true, outcome, newUnityServerNotRespondingError(connection, err)
+		return true, currentAttempt.outcome, newUnityServerNotRespondingError(connection, currentAttempt.err)
 	}
 	if runningProcess != nil {
-		return false, outcome, nil
+		return false, currentAttempt.outcome, nil
 	}
 	// Same masking as the probe-error path: a busy response seen during the
 	// window proves a server answered moments ago, so it is a truer diagnosis
 	// than a final dial cut short by the expiring retry context.
-	if retryContext.Err() != nil && isUnityServerBusyRPCError(lastErr) {
-		return true, lastOutcome, lastErr
+	if retryContext.Err() != nil && isUnityServerBusyRPCError(lastAttempt.err) {
+		return true, lastAttempt.outcome, lastAttempt.err
 	}
-	return true, outcome, err
+	return true, currentAttempt.outcome, currentAttempt.err
 }
 
 func finishUnityAliveRetryWait(

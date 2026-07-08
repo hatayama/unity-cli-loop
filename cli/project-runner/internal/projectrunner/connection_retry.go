@@ -227,10 +227,14 @@ func sendWithTransientConnectionRetryWithDeps(
 		if !shouldRetryUndispatchedConnection(err, outcome) {
 			return finishNonRetryableConnectionAttempt(
 				ctx,
-				outcome,
-				err,
-				lastOutcome,
-				lastErr,
+				sendAttempt{
+					outcome: outcome,
+					err:     err,
+				},
+				sendAttempt{
+					outcome: lastOutcome,
+					err:     lastErr,
+				},
 				responseTimeout,
 				focusController,
 			)
@@ -241,12 +245,16 @@ func sendWithTransientConnectionRetryWithDeps(
 			ctx,
 			retryContext,
 			connection,
-			outcome,
-			err,
+			sendAttempt{
+				outcome: outcome,
+				err:     err,
+			},
 			processErr,
 			runningProcess,
-			lastOutcome,
-			lastErr,
+			sendAttempt{
+				outcome: lastOutcome,
+				err:     lastErr,
+			},
 		); finished {
 			return finalOutcome, finalErr
 		}
