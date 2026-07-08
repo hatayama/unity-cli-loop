@@ -23,7 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetInstallCommand_OnMacKeepsDispatcherCurlInstallerAvailable()
         {
             // Verifies that editor installs use the dispatcher installer script, not npm.
-            NativeCliInstallCommand command = NativeCliInstaller.BuildRemoteInstallCommand(
+            NativeCliInstallCommand command = NativeCliCommandBuilder.BuildRemoteInstallCommand(
                 RuntimePlatform.OSXEditor,
                 TestBetaCliVersion,
                 false,
@@ -44,7 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetInstallCommand_OnMacDelegatesPosixSnippetThroughSh()
         {
             // Verifies that fish or other login shells only load environment before POSIX script execution.
-            NativeCliInstallCommand command = NativeCliInstaller.BuildRemoteInstallCommand(
+            NativeCliInstallCommand command = NativeCliCommandBuilder.BuildRemoteInstallCommand(
                 RuntimePlatform.OSXEditor,
                 TestBetaCliVersion,
                 false,
@@ -61,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetInstallCommand_OnMacPropagatesInstallerDownloadFailure()
         {
             // Verifies that editor installs do not report success when curl fails before script execution.
-            NativeCliInstallCommand command = NativeCliInstaller.BuildRemoteInstallCommand(
+            NativeCliInstallCommand command = NativeCliCommandBuilder.BuildRemoteInstallCommand(
                 RuntimePlatform.OSXEditor,
                 TestBetaCliVersion,
                 false,
@@ -77,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetInstallCommand_OnWindowsKeepsDispatcherPowerShellInstallerAvailable()
         {
             // Verifies that editor installs use the dispatcher PowerShell installer script.
-            NativeCliInstallCommand command = NativeCliInstaller.BuildRemoteInstallCommand(
+            NativeCliInstallCommand command = NativeCliCommandBuilder.BuildRemoteInstallCommand(
                 RuntimePlatform.WindowsEditor,
                 TestBetaCliVersion,
                 false,
@@ -95,7 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetInstallCommand_OnMacDispatcherInstallerDoesNotAdvertiseWindowsLegacyCleanup()
         {
             // Verifies that macOS manual commands do not expose old cleanup flags.
-            NativeCliInstallCommand command = NativeCliInstaller.BuildRemoteInstallCommand(
+            NativeCliInstallCommand command = NativeCliCommandBuilder.BuildRemoteInstallCommand(
                 RuntimePlatform.OSXEditor,
                 TestBetaCliVersion,
                 true,
@@ -109,7 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetInstallCommand_OnWindowsDoesNotNeedLegacyCleanupFlag()
         {
             // Verifies that Windows installs rely on the native CLI install command for legacy cleanup.
-            NativeCliInstallCommand command = NativeCliInstaller.BuildRemoteInstallCommand(
+            NativeCliInstallCommand command = NativeCliCommandBuilder.BuildRemoteInstallCommand(
                 RuntimePlatform.WindowsEditor,
                 TestBetaCliVersion,
                 true,
@@ -123,7 +123,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetInstallCommand_WhenVPrefixedVersionUsesDispatcherReleaseTag()
         {
             // Verifies root release tags are normalized to dispatcher releases for installer scripts.
-            NativeCliInstallCommand command = NativeCliInstaller.BuildRemoteInstallCommand(
+            NativeCliInstallCommand command = NativeCliCommandBuilder.BuildRemoteInstallCommand(
                 RuntimePlatform.OSXEditor,
                 "v3.0.0",
                 false,
@@ -156,7 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             try
             {
-                NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommandWithPackagePath(
+                NativeCliInstallCommand command = NativeCliCommandBuilder.BuildInstallCommandWithPackagePath(
                     RuntimePlatform.OSXEditor,
                     TestBetaCliVersion,
                     false,
@@ -202,7 +202,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             try
             {
-                NativeCliInstallCommand command = NativeCliInstaller.BuildInstallCommandWithPackagePath(
+                NativeCliInstallCommand command = NativeCliCommandBuilder.BuildInstallCommandWithPackagePath(
                     RuntimePlatform.WindowsEditor,
                     TestBetaCliVersion,
                     false,
@@ -228,7 +228,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildInstallerScriptUrl_WhenBetaVersionUsesReleaseInstallerScript()
         {
             // Verifies that beta editor installs use the script shipped with the selected dispatcher release.
-            string url = NativeCliInstaller.BuildInstallerScriptUrl(
+            string url = NativeCliCommandBuilder.BuildInstallerScriptUrl(
                 TestBetaReleaseTag,
                 CliConstants.POSIX_INSTALL_SCRIPT_NAME);
 
@@ -239,7 +239,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildInstallerScriptUrl_WhenStableVersionUsesReleaseInstallerScript()
         {
             // Verifies that stable editor installs use the script shipped with the selected dispatcher release.
-            string url = NativeCliInstaller.BuildInstallerScriptUrl(
+            string url = NativeCliCommandBuilder.BuildInstallerScriptUrl(
                 TestStableReleaseTag,
                 CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
 
