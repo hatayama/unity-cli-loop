@@ -22,11 +22,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static UnityCliLoopReplayInputRequest ToRequest(ReplayInputSchema parameters)
         {
-            if (parameters == null)
-            {
-                throw new System.ArgumentNullException(nameof(parameters));
-            }
-
             return new UnityCliLoopReplayInputRequest
             {
                 Action = parameters.Action,

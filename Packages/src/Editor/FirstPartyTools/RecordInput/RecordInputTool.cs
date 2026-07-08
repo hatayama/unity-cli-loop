@@ -23,11 +23,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static UnityCliLoopRecordInputRequest ToRequest(RecordInputSchema parameters)
         {
-            if (parameters == null)
-            {
-                throw new System.ArgumentNullException(nameof(parameters));
-            }
-
             return new UnityCliLoopRecordInputRequest
             {
                 Action = parameters.Action,
