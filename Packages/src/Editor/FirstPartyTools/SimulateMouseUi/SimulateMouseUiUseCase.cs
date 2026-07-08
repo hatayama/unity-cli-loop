@@ -111,26 +111,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        // Input coordinates use top-left origin; Unity Screen space uses bottom-left origin.
-        // Handles.GetMainGameViewSize() returns the Game view's target resolution (e.g. 1920x1080),
-        // which matches the Canvas layout space — unlike Screen.height which returns the window pixel size.
-        internal static Vector2 InputToScreen(Vector2 inputPos)
-        {
-            float targetHeight = Handles.GetMainGameViewSize().y;
-            return new Vector2(inputPos.x, targetHeight - inputPos.y);
-        }
-
-        internal static Vector2 ScreenToInput(Vector2 screenPos)
-        {
-            float targetHeight = Handles.GetMainGameViewSize().y;
-            return new Vector2(screenPos.x, targetHeight - screenPos.y);
-        }
-
         private async Task<SimulateMouseUiResponse> ExecuteClick(
             MouseUiSimulationCommand parameters, EventSystem eventSystem, CancellationToken ct)
         {
             Vector2 inputPos = new(parameters.X, parameters.Y);
-            Vector2 screenPos = InputToScreen(inputPos);
+            Vector2 screenPos = MouseUiCoordinateConverter.InputToScreen(inputPos);
             PointerEventData pointerData = MouseUiPointerTargetResolver.CreatePointerPressData(eventSystem, screenPos, parameters.Button);
             ResolvedPointerTargets resolvedTargets =
                 MouseUiPointerTargetResolver.ResolvePressablePointerTargets(parameters, eventSystem, inputPos, screenPos, pointerData, MouseAction.Click);
@@ -193,7 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Vector2 inputPos = new(parameters.X, parameters.Y);
-            Vector2 screenPos = InputToScreen(inputPos);
+            Vector2 screenPos = MouseUiCoordinateConverter.InputToScreen(inputPos);
             PointerEventData pointerData = MouseUiPointerTargetResolver.CreatePointerPressData(eventSystem, screenPos, parameters.Button);
             ResolvedPointerTargets resolvedTargets =
                 MouseUiPointerTargetResolver.ResolvePressablePointerTargets(parameters, eventSystem, inputPos, screenPos, pointerData, MouseAction.LongPress);
@@ -354,8 +339,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Vector2 inputStart = new(parameters.FromX, parameters.FromY);
             Vector2 inputEnd = new(parameters.X, parameters.Y);
-            Vector2 screenStart = InputToScreen(inputStart);
-            Vector2 screenEnd = InputToScreen(inputEnd);
+            Vector2 screenStart = MouseUiCoordinateConverter.InputToScreen(inputStart);
+            Vector2 screenEnd = MouseUiCoordinateConverter.InputToScreen(inputEnd);
             RaycastResult? hit = parameters.BypassRaycast ? null : UiRaycastHelper.RaycastUI(screenStart, eventSystem);
             RaycastResult startRaycast = new();
             GameObject? rawTarget = null;
@@ -547,7 +532,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 pointerData.delta = endPos - previousPosition;
                 ExecuteEvents.Execute(target, pointerData, ExecuteEvents.dragHandler);
 
-                SimulateMouseUiOverlayState.UpdatePosition(ScreenToInput(endPos));
+                SimulateMouseUiOverlayState.UpdatePosition(MouseUiCoordinateConverter.ScreenToInput(endPos));
                 return true;
             }
 
@@ -573,7 +558,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 ExecuteEvents.Execute(target, pointerData, ExecuteEvents.dragHandler);
 
-                SimulateMouseUiOverlayState.UpdatePosition(ScreenToInput(currentPosition));
+                SimulateMouseUiOverlayState.UpdatePosition(MouseUiCoordinateConverter.ScreenToInput(currentPosition));
             }
             while (t < 1.0f);
 
@@ -596,7 +581,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Vector2 inputPos = new(parameters.X, parameters.Y);
-            Vector2 screenPos = InputToScreen(inputPos);
+            Vector2 screenPos = MouseUiCoordinateConverter.InputToScreen(inputPos);
             RaycastResult? hit = parameters.BypassRaycast ? null : UiRaycastHelper.RaycastUI(screenPos, eventSystem);
             RaycastResult startRaycast = new();
             GameObject? rawTarget = null;
@@ -730,14 +715,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Vector2 inputEnd = new(parameters.X, parameters.Y);
-            Vector2 screenEnd = InputToScreen(inputEnd);
+            Vector2 screenEnd = MouseUiCoordinateConverter.InputToScreen(inputEnd);
             PointerEventData pointerData = MouseDragState.PointerData!;
             GameObject target = MouseDragState.Target!;
             string targetName = target.name;
 
             SimulateMouseUiOverlayState.Update(
                 MouseAction.DragMove,
-                ScreenToInput(pointerData.position),
+                MouseUiCoordinateConverter.ScreenToInput(pointerData.position),
                 SimulateMouseUiOverlayState.DragStartPosition,
                 targetName, Handles.GetMainGameViewSize());
 
@@ -790,7 +775,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Vector2 inputEnd = new(parameters.X, parameters.Y);
-            Vector2 screenEnd = InputToScreen(inputEnd);
+            Vector2 screenEnd = MouseUiCoordinateConverter.InputToScreen(inputEnd);
             PointerEventData pointerData = MouseDragState.PointerData!;
             GameObject target = MouseDragState.Target!;
             string targetName = target.name;
@@ -808,7 +793,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             SimulateMouseUiOverlayState.Update(
                 MouseAction.DragEnd,
-                ScreenToInput(pointerData.position),
+                MouseUiCoordinateConverter.ScreenToInput(pointerData.position),
                 SimulateMouseUiOverlayState.DragStartPosition,
                 targetName, Handles.GetMainGameViewSize());
 

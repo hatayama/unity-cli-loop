@@ -21,7 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 inputPosition = new(12.5f, 37.25f);
             float gameViewHeight = Handles.GetMainGameViewSize().y;
 
-            Vector2 screenPosition = SimulateMouseUiUseCase.InputToScreen(inputPosition);
+            Vector2 screenPosition = MouseUiCoordinateConverter.InputToScreen(inputPosition);
 
             Assert.That(
                 screenPosition,
@@ -36,8 +36,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             Vector2 inputPosition = new(42.5f, 64.25f);
 
-            Vector2 screenPosition = SimulateMouseUiUseCase.InputToScreen(inputPosition);
-            Vector2 restoredPosition = SimulateMouseUiUseCase.ScreenToInput(screenPosition);
+            Vector2 screenPosition = MouseUiCoordinateConverter.InputToScreen(inputPosition);
+            Vector2 restoredPosition = MouseUiCoordinateConverter.ScreenToInput(screenPosition);
 
             Assert.That(restoredPosition, Is.EqualTo(inputPosition));
         }
