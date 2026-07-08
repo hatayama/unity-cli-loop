@@ -328,10 +328,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void SimulateMouseUiUseCase_WhenReturningAfterTimeout_UsesCapturedUnityObjectState()
+        public void MouseUiPressActionExecutor_WhenReturningAfterTimeout_UsesCapturedUnityObjectState()
         {
             // Tests that timeout result branches use plain captured bools instead of UnityEngine.Object null checks.
-            string source = ReadSourceFile("Packages/src/Editor/FirstPartyTools/SimulateMouseUi/SimulateMouseUiUseCase.cs");
+            string source = ReadSourceFile(
+                "Packages/src/Editor/FirstPartyTools/SimulateMouseUi/MouseUiPressActionExecutor.cs");
 
             Assert.That(source, Does.Contain("bool hitTarget = resolvedTargets.Target != null;"));
             Assert.That(source, Does.Contain("bool shouldReleasePointer = resolvedTargets.RawTarget != null && resolvedTargets.Target != null;"));
