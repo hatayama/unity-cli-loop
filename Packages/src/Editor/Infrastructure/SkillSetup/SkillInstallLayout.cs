@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 
 using UnityEngine;
 
@@ -26,8 +25,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const int Utf16CodeUnitByteCount = 2;
         private const ushort CarriageReturnCodeUnit = 0x000D;
         private const ushort LineFeedCodeUnit = 0x000A;
-        private const string EditorDirName = "Editor";
-        private const string CliOnlyToolsDirName = "CliOnlyTools~";
         private static readonly HashSet<string> TextSkillFileExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             ".json",
@@ -38,32 +35,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             ".yaml",
             ".yml"
         };
-
-        /// <summary>
-        /// Provides Skill Source Definition behavior for Unity CLI Loop.
-        /// </summary>
-        private sealed class SkillSourceDefinition
-        {
-            public readonly string Name;
-            public readonly string ToolName;
-            public readonly string Description;
-            public readonly string SkillDirectoryPath;
-            public readonly Dictionary<string, byte[]> SkillFiles;
-
-            public SkillSourceDefinition(
-                string name,
-                string toolName,
-                string description,
-                string skillDirectoryPath,
-                Dictionary<string, byte[]> skillFiles)
-            {
-                Name = name;
-                ToolName = toolName;
-                Description = description;
-                SkillDirectoryPath = skillDirectoryPath;
-                SkillFiles = skillFiles;
-            }
-        }
 
         internal readonly struct SkillSourceInfo
         {
@@ -144,14 +115,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return true;
             }
 
-            Dictionary<string, SkillSourceDefinition> expectedSkills = GetSkillSources(projectRoot);
+            List<SkillSourceInfo> expectedSkills = SkillSourceRootEnumerator.GetSkillSourceInfos(projectRoot);
             if (expectedSkills.Count == 0)
             {
                 return false;
             }
 
-            return expectedSkills.Keys.Any(skillName =>
-                Directory.Exists(GetInstalledSkillDirectoryPath(targetRoot, skillName, groupSkillsUnderUnityCliLoop)));
+            return expectedSkills.Any(skill =>
+                Directory.Exists(GetInstalledSkillDirectoryPath(targetRoot, skill.Name, groupSkillsUnderUnityCliLoop)));
         }
 
         internal static SkillInstallState GetInstalledState(
@@ -159,7 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string targetRoot,
             bool groupSkillsUnderUnityCliLoop)
         {
-            Dictionary<string, SkillSourceDefinition> expectedSkills = GetSkillSources(projectRoot);
+            List<SkillSourceInfo> expectedSkills = SkillSourceRootEnumerator.GetSkillSourceInfos(projectRoot);
             bool hasLayoutSkills = HasInstalledSkillsForLayout(projectRoot, targetRoot, groupSkillsUnderUnityCliLoop);
             if (expectedSkills.Count == 0)
             {
@@ -169,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool hasInstalledExpectedSkill = false;
             bool hasMissingExpectedSkill = false;
 
-            foreach (SkillSourceDefinition expectedSkill in expectedSkills.Values)
+            foreach (SkillSourceInfo expectedSkill in expectedSkills)
             {
                 string installedSkillDirectory = GetInstalledSkillDirectoryPath(
                     targetRoot,
@@ -202,7 +173,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (File.Exists(skillMdPath))
             {
                 string content = File.ReadAllText(skillMdPath);
-                if (SkillContentMatchesTool(content, skillDir, toolName))
+                if (SkillSourceFrontmatterReader.SkillContentMatchesTool(content, skillDir, toolName))
                 {
                     return true;
                 }
@@ -216,67 +187,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            HashSet<string> toolNames = new(StringComparer.Ordinal);
-            foreach (string searchRoot in EnumerateSkillSourceRoots(projectRoot))
-            {
-                if (!Directory.Exists(searchRoot))
-                {
-                    continue;
-                }
-
-                foreach (string skillFilePath in EnumerateSourceSkillFiles(searchRoot))
-                {
-                    string skillDirectory = Path.GetDirectoryName(skillFilePath);
-                    if (skillDirectory == null)
-                    {
-                        continue;
-                    }
-
-                    string skillContent = File.ReadAllText(skillFilePath);
-                    if (!IsInternalSkill(skillContent))
-                    {
-                        continue;
-                    }
-
-                    string toolName = GetToolNameFromSkillContent(skillContent);
-                    if (!string.IsNullOrEmpty(toolName))
-                    {
-                        toolNames.Add(toolName);
-                    }
-                }
-            }
-
-            return toolNames;
+            return SkillSourceRootEnumerator.GetInternalSkillToolNames(projectRoot);
         }
 
         internal static List<SkillSourceInfo> GetSkillSourceInfos(string projectRoot)
         {
-            return GetSkillSources(projectRoot)
-                .Values
-                .Select(source => new SkillSourceInfo(source.Name, source.ToolName, source.SkillFiles))
-                .ToList();
+            return SkillSourceRootEnumerator.GetSkillSourceInfos(projectRoot);
         }
 
         internal static IReadOnlyDictionary<string, string> GetToolDescriptionsByToolName(string projectRoot)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            Dictionary<string, string> descriptions = new(StringComparer.Ordinal);
-            foreach (SkillSourceDefinition source in GetSkillSources(projectRoot).Values)
-            {
-                string toolName = ResolveToolNameForSkillSource(source.Name, source.ToolName);
-                if (string.IsNullOrEmpty(toolName) || string.IsNullOrWhiteSpace(source.Description))
-                {
-                    continue;
-                }
-
-                if (!descriptions.ContainsKey(toolName))
-                {
-                    descriptions[toolName] = source.Description;
-                }
-            }
-
-            return descriptions;
+            return SkillSourceRootEnumerator.GetToolDescriptionsByToolName(projectRoot);
         }
 
         internal static SkillSourceInfo GetSkillSourceInfoFromDirectory(string skillDirectory)
@@ -287,12 +210,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(File.Exists(skillFilePath), "skill source must contain SKILL.md");
 
             string skillContent = File.ReadAllText(skillFilePath);
-            string skillName = ParseNameFromFrontmatter(skillContent);
+            string skillName = SkillSourceFrontmatterReader.ParseNameFromFrontmatter(skillContent);
             Debug.Assert(IsSafeSkillPathComponent(skillName), "skillName must be a single safe path component");
 
             return new SkillSourceInfo(
                 skillName,
-                ParseToolNameFromFrontmatter(skillContent),
+                SkillSourceFrontmatterReader.ParseToolNameFromFrontmatter(skillContent),
                 CollectSourceSkillFiles(skillDirectory, skillFilePath));
         }
 
@@ -371,7 +294,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             string content = File.ReadAllText(skillMdPath);
-            if (!string.IsNullOrEmpty(ParseToolNameFromFrontmatter(content)))
+            if (!string.IsNullOrEmpty(SkillSourceFrontmatterReader.ParseToolNameFromFrontmatter(content)))
             {
                 return true;
             }
@@ -436,7 +359,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return files;
         }
 
-        private static Dictionary<string, byte[]> CollectSourceSkillFiles(
+        internal static Dictionary<string, byte[]> CollectSourceSkillFiles(
             string skillDirectory,
             string skillFilePath)
         {
@@ -615,429 +538,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             output.Add((byte)(codeUnit & 0xFF));
         }
 
-        private static Dictionary<string, SkillSourceDefinition> GetSkillSources(string projectRoot)
-        {
-            Dictionary<string, SkillSourceDefinition> sources = new(StringComparer.Ordinal);
-            foreach (string searchRoot in EnumerateSkillSourceRoots(projectRoot))
-            {
-                if (!Directory.Exists(searchRoot))
-                {
-                    continue;
-                }
-
-                foreach (string skillFilePath in EnumerateSourceSkillFiles(searchRoot))
-                {
-                    string skillDirectory = Path.GetDirectoryName(skillFilePath);
-                    if (skillDirectory == null)
-                    {
-                        continue;
-                    }
-
-                    string skillContent = File.ReadAllText(skillFilePath);
-                    if (IsInternalSkill(skillContent))
-                    {
-                        continue;
-                    }
-
-                    string skillName = ParseNameFromFrontmatter(skillContent);
-                    if (string.IsNullOrEmpty(skillName)
-                        || !IsSafeSkillPathComponent(skillName)
-                        || sources.ContainsKey(skillName))
-                    {
-                        continue;
-                    }
-
-                    sources[skillName] = new SkillSourceDefinition(
-                        skillName,
-                        ParseToolNameFromFrontmatter(skillContent),
-                        ParseDescriptionFromFrontmatter(skillContent),
-                        skillDirectory,
-                        CollectSourceSkillFiles(skillDirectory, skillFilePath));
-                }
-            }
-
-            return sources;
-        }
-
-        private static IEnumerable<string> EnumerateSourceSkillFiles(string searchRoot)
-        {
-            if (IsCliOnlySkillSourceRoot(searchRoot))
-            {
-                return Directory.EnumerateFiles(searchRoot, SkillFileName, SearchOption.AllDirectories);
-            }
-
-            return EnumerateEditorFolders(searchRoot, 3).SelectMany(editorFolder =>
-                Directory.EnumerateFiles(editorFolder, SkillFileName, SearchOption.AllDirectories));
-        }
-
-        private static IEnumerable<string> EnumerateSkillSourceRoots(string projectRoot)
-        {
-            HashSet<string> seenRoots = new(StringComparer.Ordinal);
-
-            AddSkillSourceRoot(seenRoots, GetCliOnlySkillSourceRoot(projectRoot));
-            AddSkillSourceRoot(seenRoots, Path.Combine(projectRoot, "Assets"));
-            foreach (string packageRoot in EnumerateDirectProjectPackageRoots(projectRoot))
-            {
-                AddSkillSourceRoot(seenRoots, packageRoot);
-            }
-
-            foreach (string packageRoot in EnumerateManifestLocalPackageRoots(projectRoot))
-            {
-                AddSkillSourceRoot(seenRoots, packageRoot);
-            }
-
-            foreach (string packageRoot in EnumerateDependencyPackageCacheRoots(projectRoot))
-            {
-                AddSkillSourceRoot(seenRoots, packageRoot);
-            }
-
-            foreach (string root in seenRoots)
-            {
-                yield return root;
-            }
-        }
-
-        private static void AddSkillSourceRoot(HashSet<string> roots, string root)
-        {
-            if (string.IsNullOrEmpty(root))
-            {
-                return;
-            }
-
-            roots.Add(Path.GetFullPath(root));
-        }
-
-        private static string GetCliOnlySkillSourceRoot(string projectRoot)
-        {
-            string currentProjectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            if (!string.Equals(
-                Path.GetFullPath(projectRoot),
-                Path.GetFullPath(currentProjectRoot),
-                StringComparison.Ordinal))
-            {
-                return null;
-            }
-
-            return Path.Combine(
-                UnityCliLoopConstants.PackageResolvedPath,
-                EditorDirName,
-                CliOnlyToolsDirName);
-        }
-
-        private static bool IsCliOnlySkillSourceRoot(string searchRoot)
-        {
-            return string.Equals(
-                Path.GetFullPath(searchRoot),
-                Path.GetFullPath(GetCliOnlySkillSourceRoot(UnityCliLoopPathResolver.GetProjectRoot())),
-                StringComparison.Ordinal);
-        }
-
-        private static IEnumerable<string> EnumerateDirectProjectPackageRoots(string projectRoot)
-        {
-            string packagesRoot = Path.Combine(projectRoot, "Packages");
-            if (!Directory.Exists(packagesRoot))
-            {
-                yield break;
-            }
-
-            foreach (string packageDirectory in Directory.EnumerateDirectories(packagesRoot))
-            {
-                yield return ResolveSkillSearchRootCandidate(packageDirectory);
-            }
-        }
-
-        private static IEnumerable<string> EnumerateManifestLocalPackageRoots(string projectRoot)
-        {
-            foreach (KeyValuePair<string, string> dependency in EnumerateManifestDependencies(projectRoot))
-            {
-                string localPath = ResolveLocalDependencyPath(dependency.Value, projectRoot);
-                if (string.IsNullOrEmpty(localPath))
-                {
-                    continue;
-                }
-
-                yield return ResolveSkillSearchRootCandidate(localPath);
-            }
-        }
-
-        private static IEnumerable<string> EnumerateDependencyPackageCacheRoots(string projectRoot)
-        {
-            HashSet<string> dependencyNames = new(
-                EnumerateManifestDependencies(projectRoot).Select(dependency => dependency.Key),
-                StringComparer.OrdinalIgnoreCase);
-            if (dependencyNames.Count == 0)
-            {
-                yield break;
-            }
-
-            string packageCacheRoot = Path.Combine(projectRoot, "Library", "PackageCache");
-            if (!Directory.Exists(packageCacheRoot))
-            {
-                yield break;
-            }
-
-            foreach (string packageDirectory in Directory.EnumerateDirectories(packageCacheRoot))
-            {
-                string packageName = Path.GetFileName(packageDirectory);
-                if (string.IsNullOrEmpty(packageName))
-                {
-                    continue;
-                }
-
-                int separatorIndex = packageName.IndexOf('@');
-                string dependencyName = separatorIndex >= 0 ? packageName.Substring(0, separatorIndex) : packageName;
-                if (!dependencyNames.Contains(dependencyName))
-                {
-                    continue;
-                }
-
-                yield return ResolveSkillSearchRootCandidate(packageDirectory);
-            }
-        }
-
-        private static IEnumerable<KeyValuePair<string, string>> EnumerateManifestDependencies(string projectRoot)
-        {
-            string manifestPath = Path.Combine(projectRoot, "Packages", "manifest.json");
-            if (!File.Exists(manifestPath))
-            {
-                yield break;
-            }
-
-            string manifestContent = File.ReadAllText(manifestPath);
-            Match dependenciesMatch = Regex.Match(
-                manifestContent,
-                "\"dependencies\"\\s*:\\s*\\{(?<body>[\\s\\S]*?)\\}",
-                RegexOptions.Multiline);
-            if (!dependenciesMatch.Success)
-            {
-                yield break;
-            }
-
-            MatchCollection dependencyMatches = Regex.Matches(
-                dependenciesMatch.Groups["body"].Value,
-                "\"(?<name>[^\"]+)\"\\s*:\\s*\"(?<value>[^\"]*)\"");
-            foreach (Match dependencyMatch in dependencyMatches)
-            {
-                string dependencyName = dependencyMatch.Groups["name"].Value;
-                string dependencyValue = dependencyMatch.Groups["value"].Value;
-                if (string.IsNullOrEmpty(dependencyName) || string.IsNullOrEmpty(dependencyValue))
-                {
-                    continue;
-                }
-
-                yield return new KeyValuePair<string, string>(dependencyName, dependencyValue);
-            }
-        }
-
-        private static string ResolveLocalDependencyPath(string dependencyValue, string projectRoot)
-        {
-            const string FilePrefix = "file:";
-            const string PathPrefix = "path:";
-
-            if (dependencyValue.StartsWith(FilePrefix, StringComparison.Ordinal))
-            {
-                return ResolveDependencyPath(dependencyValue.Substring(FilePrefix.Length), projectRoot);
-            }
-
-            if (dependencyValue.StartsWith(PathPrefix, StringComparison.Ordinal))
-            {
-                return ResolveDependencyPath(dependencyValue.Substring(PathPrefix.Length), projectRoot);
-            }
-
-            return null;
-        }
-
-        private static string ResolveDependencyPath(string rawPath, string projectRoot)
-        {
-            if (string.IsNullOrWhiteSpace(rawPath))
-            {
-                return null;
-            }
-
-            string normalizedPath = rawPath.Trim();
-            if (normalizedPath.StartsWith("//", StringComparison.Ordinal))
-            {
-                normalizedPath = normalizedPath.Substring(2);
-            }
-
-            if (Path.IsPathRooted(normalizedPath))
-            {
-                return normalizedPath;
-            }
-
-            return Path.GetFullPath(Path.Combine(projectRoot, normalizedPath));
-        }
-
-        private static string ResolveSkillSearchRootCandidate(string candidate)
-        {
-            string nestedRoot = Path.Combine(candidate, "Packages", "src");
-            if (Directory.Exists(nestedRoot))
-            {
-                return nestedRoot;
-            }
-
-            return candidate;
-        }
-
-        private static IEnumerable<string> EnumerateEditorFolders(string basePath, int maxDepth)
-        {
-            return EnumerateEditorFoldersRecursive(basePath, depth: 0, maxDepth);
-        }
-
-        private static IEnumerable<string> EnumerateEditorFoldersRecursive(
-            string currentPath,
-            int depth,
-            int maxDepth)
-        {
-            if (depth > maxDepth || !Directory.Exists(currentPath))
-            {
-                yield break;
-            }
-
-            foreach (string directory in Directory.EnumerateDirectories(currentPath))
-            {
-                string directoryName = Path.GetFileName(directory);
-                if (string.Equals(directoryName, "Editor", StringComparison.Ordinal))
-                {
-                    yield return directory;
-                    continue;
-                }
-
-                foreach (string editorDirectory in EnumerateEditorFoldersRecursive(directory, depth + 1, maxDepth))
-                {
-                    yield return editorDirectory;
-                }
-            }
-        }
-
-        private static string ParseToolNameFromFrontmatter(string content)
-        {
-            Match frontmatterMatch = Regex.Match(content, @"^---\r?\n([\s\S]*?)\r?\n---");
-            if (!frontmatterMatch.Success)
-            {
-                return null;
-            }
-
-            string frontmatter = frontmatterMatch.Groups[1].Value;
-            Match toolNameMatch = Regex.Match(frontmatter, @"^toolName:\s*(.+)$", RegexOptions.Multiline);
-            if (!toolNameMatch.Success)
-            {
-                return null;
-            }
-
-            return toolNameMatch.Groups[1].Value.Trim();
-        }
-
-        private static string ParseNameFromFrontmatter(string content)
-        {
-            Match frontmatterMatch = Regex.Match(content, @"^---\r?\n([\s\S]*?)\r?\n---");
-            if (!frontmatterMatch.Success)
-            {
-                return null;
-            }
-
-            string frontmatter = frontmatterMatch.Groups[1].Value;
-            Match nameMatch = Regex.Match(frontmatter, @"^name:\s*(.+)$", RegexOptions.Multiline);
-            if (!nameMatch.Success)
-            {
-                return null;
-            }
-
-            return nameMatch.Groups[1].Value.Trim().Trim('"');
-        }
-
-        private static string ParseDescriptionFromFrontmatter(string content)
-        {
-            Match frontmatterMatch = Regex.Match(content, @"^---\r?\n([\s\S]*?)\r?\n---");
-            if (!frontmatterMatch.Success)
-            {
-                return null;
-            }
-
-            string frontmatter = frontmatterMatch.Groups[1].Value;
-            Match descriptionMatch = Regex.Match(frontmatter, @"^description:\s*(.+)$", RegexOptions.Multiline);
-            if (!descriptionMatch.Success)
-            {
-                return null;
-            }
-
-            return descriptionMatch.Groups[1].Value.Trim().Trim('"');
-        }
-
-        private static string ResolveToolNameForSkillSource(string skillName, string toolName)
-        {
-            if (!string.IsNullOrEmpty(toolName))
-            {
-                return toolName;
-            }
-
-            if (string.IsNullOrEmpty(skillName)
-                || !skillName.StartsWith(CliConstants.SKILL_DIR_PREFIX, StringComparison.Ordinal))
-            {
-                return null;
-            }
-
-            return skillName.Substring(CliConstants.SKILL_DIR_PREFIX.Length);
-        }
-
-        private static bool SkillContentMatchesTool(string content, string skillDirectory, string toolName)
-        {
-            string parsedToolName = ParseToolNameFromFrontmatter(content);
-            if (!string.IsNullOrEmpty(parsedToolName))
-            {
-                return parsedToolName == toolName;
-            }
-
-            string parsedSkillName = ParseNameFromFrontmatter(content);
-            if (!string.IsNullOrEmpty(parsedSkillName))
-            {
-                return parsedSkillName == $"{CliConstants.SKILL_DIR_PREFIX}{toolName}";
-            }
-
-            string dirName = Path.GetFileName(skillDirectory);
-            return dirName == $"{CliConstants.SKILL_DIR_PREFIX}{toolName}";
-        }
-
-        private static string GetToolNameFromSkillContent(string content)
-        {
-            string parsedToolName = ParseToolNameFromFrontmatter(content);
-            if (!string.IsNullOrEmpty(parsedToolName))
-            {
-                return parsedToolName;
-            }
-
-            string parsedSkillName = ParseNameFromFrontmatter(content);
-            if (string.IsNullOrEmpty(parsedSkillName)
-                || !parsedSkillName.StartsWith(CliConstants.SKILL_DIR_PREFIX, StringComparison.Ordinal))
-            {
-                return null;
-            }
-
-            return parsedSkillName.Substring(CliConstants.SKILL_DIR_PREFIX.Length);
-        }
-
-        private static bool IsInternalSkill(string content)
-        {
-            Match frontmatterMatch = Regex.Match(content, @"^---\r?\n([\s\S]*?)\r?\n---");
-            if (!frontmatterMatch.Success)
-            {
-                return false;
-            }
-
-            string frontmatter = frontmatterMatch.Groups[1].Value;
-            Match internalMatch = Regex.Match(frontmatter, @"^internal:\s*(.+)$", RegexOptions.Multiline);
-            if (!internalMatch.Success)
-            {
-                return false;
-            }
-
-            return string.Equals(
-                internalMatch.Groups[1].Value.Trim(),
-                "true",
-                StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool IsSafeSkillPathComponent(string skillName)
+        internal static bool IsSafeSkillPathComponent(string skillName)
         {
             if (string.IsNullOrEmpty(skillName))
             {
