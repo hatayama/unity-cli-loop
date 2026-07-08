@@ -450,7 +450,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildUninstallCommand_OnMacRunsInstalledLauncher()
         {
             // Verifies that editor uninstall delegates removal to the installed uloop command.
-            NativeCliInstallCommand command = NativeCliInstaller.BuildUninstallCommand(
+            NativeCliInstallCommand command = NativeCliCommandBuilder.BuildUninstallCommand(
                 "/Users/ExampleUser/.local/bin",
                 RuntimePlatform.OSXEditor);
 
@@ -463,7 +463,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildUninstallCommand_OnWindowsRunsInstalledLauncher()
         {
             // Verifies that Windows editor uninstall delegates removal to the installed uloop command.
-            NativeCliInstallCommand command = NativeCliInstaller.BuildUninstallCommand(
+            NativeCliInstallCommand command = NativeCliCommandBuilder.BuildUninstallCommand(
                 "C:\\Users\\ExampleUser\\AppData\\Local\\Programs\\uloop\\bin",
                 RuntimePlatform.WindowsEditor);
 
@@ -478,7 +478,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildPathWithInstallDirectory_OnWindowsPrependsMissingNativeInstallDir()
         {
             // Verifies that Unity's current Windows PATH prefers the freshly installed native CLI.
-            string result = NativeCliInstaller.BuildPathWithInstallDirectory(
+            string result = NativeCliInstallPathResolver.BuildPathWithInstallDirectory(
                 "C:\\npm",
                 "C:\\Users\\ExampleUser\\Programs\\uloop\\bin",
                 RuntimePlatform.WindowsEditor);
@@ -506,7 +506,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildPathWithInstallDirectory_OnWindowsMovesExistingNativeInstallDirToFront()
         {
             // Verifies that a later Windows native install dir does not leave an earlier npm shim first.
-            string result = NativeCliInstaller.BuildPathWithInstallDirectory(
+            string result = NativeCliInstallPathResolver.BuildPathWithInstallDirectory(
                 "C:\\npm;C:\\USERS\\EXAMPLEUSER\\PROGRAMS\\ULOOP\\BIN",
                 "C:\\Users\\ExampleUser\\Programs\\uloop\\bin",
                 RuntimePlatform.WindowsEditor);
@@ -518,7 +518,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildPathWithInstallDirectory_OnMacPrependsMissingNativeInstallDir()
         {
             // Verifies that POSIX PATH prefers the freshly installed native CLI.
-            string result = NativeCliInstaller.BuildPathWithInstallDirectory(
+            string result = NativeCliInstallPathResolver.BuildPathWithInstallDirectory(
                 "/usr/local/bin",
                 "/Users/ExampleUser/.local/bin",
                 RuntimePlatform.OSXEditor);
@@ -530,7 +530,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildPathWithoutInstallDirectory_OnWindowsRemovesNativeInstallDir()
         {
             // Verifies that Windows uninstall removes the native CLI directory from PATH without removing npm.
-            string result = NativeCliInstaller.BuildPathWithoutInstallDirectory(
+            string result = NativeCliInstallPathResolver.BuildPathWithoutInstallDirectory(
                 "C:\\npm;C:\\USERS\\EXAMPLEUSER\\PROGRAMS\\ULOOP\\BIN\\;C:\\Tools",
                 "C:\\Users\\ExampleUser\\Programs\\uloop\\bin",
                 RuntimePlatform.WindowsEditor);
@@ -558,7 +558,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetDefaultInstallDirectoryFromRoots_OnMacMatchesInstallerDefault()
         {
             // Verifies that Unity mirrors the POSIX installer default install directory.
-            string result = NativeCliInstaller.GetDefaultInstallDirectoryFromRoots(
+            string result = NativeCliInstallPathResolver.GetDefaultInstallDirectoryFromRoots(
                 RuntimePlatform.OSXEditor,
                 "/Users/ExampleUser",
                 null);
@@ -570,7 +570,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void GetDefaultInstallDirectoryFromRoots_OnWindowsMatchesInstallerDefault()
         {
             // Verifies that Unity mirrors the PowerShell installer default install directory.
-            string result = NativeCliInstaller.GetDefaultInstallDirectoryFromRoots(
+            string result = NativeCliInstallPathResolver.GetDefaultInstallDirectoryFromRoots(
                 RuntimePlatform.WindowsEditor,
                 null,
                 "C:\\Users\\ExampleUser\\AppData\\Local");
@@ -586,7 +586,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void IsPackageOwnedInstallPath_WhenExecutableMatchesInstallDirectoryReturnsTrue()
         {
             // Verifies that uninstall is available only for the package-owned command path.
-            bool result = NativeCliInstaller.IsPackageOwnedInstallPath(
+            bool result = NativeCliInstallPathResolver.IsPackageOwnedInstallPath(
                 "C:/Users/ExampleUser/AppData/Local/Programs/uloop/bin/uloop.exe",
                 "C:\\Users\\ExampleUser\\AppData\\Local\\Programs\\uloop\\bin",
                 RuntimePlatform.WindowsEditor);
@@ -598,7 +598,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void IsPackageOwnedInstallPath_WhenExecutableIsSharedCommandReturnsFalse()
         {
             // Verifies that same-version shared commands do not route the settings button to uninstall.
-            bool result = NativeCliInstaller.IsPackageOwnedInstallPath(
+            bool result = NativeCliInstallPathResolver.IsPackageOwnedInstallPath(
                 "C:\\Tools\\uloop.exe",
                 "C:\\Users\\ExampleUser\\AppData\\Local\\Programs\\uloop\\bin",
                 RuntimePlatform.WindowsEditor);
