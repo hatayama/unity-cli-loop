@@ -3,6 +3,7 @@ package automation
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -120,6 +121,56 @@ func TestReleasePRChecksDispatchAndMarkReady(t *testing.T) {
 	assertReleasePRCheckLogContains(t, result.ghLog, "run watch 4242 --repo owner/repository --exit-status --compact --interval 1")
 	assertReleasePRCheckLogContains(t, result.ghLog, "run watch 5353 --repo owner/repository --exit-status --compact --interval 1")
 	assertReleasePRCheckLogContainsLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
+}
+
+// Verifies release PR checks can run through the injected command runner instead of direct exec.
+func TestReleasePRChecksUseInjectedCommandRunner(t *testing.T) {
+	t.Setenv("GITHUB_REPOSITORY", "owner/repository")
+	t.Setenv("TARGET_BRANCH", "v3-beta")
+	t.Setenv("RELEASE_PR_CHECK_LOOKUP_ATTEMPTS", "1")
+	t.Setenv("RELEASE_PR_CHECK_WATCH_INTERVAL_SECONDS", "1")
+	commandLog := []string{}
+	deps := releasePRCheckDeps{
+		now: func() time.Time {
+			return time.Date(2026, 5, 30, 1, 0, 0, 0, time.UTC)
+		},
+		sleep: func(ctx context.Context, duration time.Duration) error {
+			return ctx.Err()
+		},
+		runOutput: func(ctx context.Context, name string, args ...string) (string, error) {
+			commandLine := strings.Join(append([]string{name}, args...), " ")
+			commandLog = append(commandLog, commandLine)
+			if commandLine == "gh pr list --repo owner/repository --state open --base v3-beta --label autorelease: pending --json number,headRefName,headRefOid,title,url" {
+				return `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`, nil
+			}
+			if commandLine == "gh pr view 1043 --repo owner/repository --json body" {
+				return `{"body":""}`, nil
+			}
+			if commandLine == "gh pr ready 1043 --repo owner/repository --undo" ||
+				commandLine == "gh workflow run build-and-test.yml --repo owner/repository --ref release-please--branches--v3-beta" ||
+				commandLine == "gh workflow run unity-compile-check-and-test-runner.yml --repo owner/repository --ref release-please--branches--v3-beta" ||
+				commandLine == "gh run watch 4242 --repo owner/repository --exit-status --compact --interval 1" ||
+				commandLine == "gh pr ready 1043 --repo owner/repository" {
+				return "", nil
+			}
+			if strings.HasPrefix(commandLine, "gh run list --repo owner/repository --workflow ") {
+				return `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`, nil
+			}
+			return "", fmt.Errorf("unexpected command: %s", commandLine)
+		},
+	}
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+
+	exitCode := runReleasePleasePRChecksWithDeps(context.Background(), &stdout, &stderr, deps)
+
+	if exitCode != 0 {
+		t.Fatalf("release PR checks failed: stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	commandLogText := strings.Join(commandLog, "\n")
+	assertReleasePRCheckLogContains(t, commandLogText, "gh workflow run build-and-test.yml --repo owner/repository --ref release-please--branches--v3-beta")
+	assertReleasePRCheckLogContains(t, commandLogText, "gh run watch 4242 --repo owner/repository --exit-status --compact --interval 1")
+	assertReleasePRCheckLogContainsLine(t, commandLogText, "gh pr ready 1043 --repo owner/repository")
 }
 
 // Verifies that the RELEASE_PR_CHECK_WORKFLOWS environment override replaces the default workflow list.
