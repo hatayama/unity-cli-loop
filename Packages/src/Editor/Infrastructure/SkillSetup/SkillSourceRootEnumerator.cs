@@ -215,10 +215,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static string GetCliOnlySkillSourceRoot(string projectRoot)
         {
             string currentProjectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            if (!string.Equals(
-                Path.GetFullPath(projectRoot),
-                Path.GetFullPath(currentProjectRoot),
-                StringComparison.Ordinal))
+            if (!HaveSamePathIdentityAtPlatform(
+                projectRoot,
+                currentProjectRoot,
+                UnityEngine.Application.platform))
             {
                 return null;
             }
@@ -231,10 +231,45 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static bool IsCliOnlySkillSourceRoot(string searchRoot)
         {
+            return HaveSamePathIdentityAtPlatform(
+                searchRoot,
+                GetCliOnlySkillSourceRoot(UnityCliLoopPathResolver.GetProjectRoot()),
+                UnityEngine.Application.platform);
+        }
+
+        internal static bool HaveSamePathIdentityAtPlatform(
+            string leftPath,
+            string rightPath,
+            RuntimePlatform platform)
+        {
+            // Windows and macOS editor paths follow their default case-insensitive filesystem behavior.
+            // Probing case sensitivity per volume would add I/O and complexity to this CLI-only source gate.
+            bool usesCaseInsensitivePathIdentity = platform == RuntimePlatform.WindowsEditor
+                || platform == RuntimePlatform.OSXEditor;
+            StringComparison comparison = usesCaseInsensitivePathIdentity
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
             return string.Equals(
-                Path.GetFullPath(searchRoot),
-                Path.GetFullPath(GetCliOnlySkillSourceRoot(UnityCliLoopPathResolver.GetProjectRoot())),
-                StringComparison.Ordinal);
+                NormalizePathForIdentity(leftPath),
+                NormalizePathForIdentity(rightPath),
+                comparison);
+        }
+
+        private static string NormalizePathForIdentity(string path)
+        {
+            string fullPath = Path.GetFullPath(path);
+            string root = Path.GetPathRoot(fullPath);
+            if (!string.IsNullOrEmpty(root) && string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase))
+            {
+                // Trimming the only separator from a filesystem root would change its identity.
+                return root;
+            }
+
+            string normalizedPath = fullPath.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar);
+            Debug.Assert(!string.IsNullOrEmpty(normalizedPath), "normalizedPath must not be empty");
+            return normalizedPath;
         }
 
         private static IEnumerable<string> EnumerateDirectProjectPackageRoots(string projectRoot)
