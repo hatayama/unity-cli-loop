@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Coordinates Input System recording for the bundled record-input tool.
     /// </summary>
-    public class RecordInputUseCase : IUnityCliLoopRecordInputService
+    public class RecordInputUseCase
     {
         // Wire-visible fragment of the paused preflight message; tests pin the composed string.
         public const string PausedActionDescription = "recording input";
@@ -28,8 +28,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 #if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning disable CS1998
 #endif
-        public async Task<UnityCliLoopRecordInputResult> RecordInputAsync(
-            UnityCliLoopRecordInputRequest request,
+        public async Task<RecordInputResponse> RecordInputAsync(
+            RecordInputSchema request,
             CancellationToken ct)
 #if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning restore CS1998
@@ -38,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ct.ThrowIfCancellationRequested();
 
 #if !ULOOP_HAS_INPUT_SYSTEM
-            return new UnityCliLoopRecordInputResult
+            return new RecordInputResponse
             {
                 Success = false,
                 Message = "record-input requires the Input System package (com.unity.inputsystem). Install it via Package Manager and set Active Input Handling to 'Input System Package (New)' or 'Both' in Player Settings.",
@@ -54,7 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId: correlationId
             );
 
-            UnityCliLoopRecordInputResult response;
+            RecordInputResponse response;
 
             switch (request.Action)
             {
@@ -71,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 default:
                     // Only reachable when an out-of-range enum value is cast from an integer;
                     // surface as a Success=false response so the CLI treats it as a validation failure.
-                    response = new UnityCliLoopRecordInputResult
+                    response = new RecordInputResponse
                     {
                         Success = false,
                         Message = $"Unknown record-input action: {request.Action}",
@@ -94,14 +94,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 #if ULOOP_HAS_INPUT_SYSTEM
         private static int _delayedStartGeneration;
 
-        private static async Task<UnityCliLoopRecordInputResult> ExecuteStartAsync(
-            UnityCliLoopRecordInputRequest request,
+        private static async Task<RecordInputResponse> ExecuteStartAsync(
+            RecordInputSchema request,
             CancellationToken ct)
         {
             ValidationResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!preflight.IsValid)
             {
-                return new UnityCliLoopRecordInputResult
+                return new RecordInputResponse
                 {
                     Success = false,
                     Message = preflight.ErrorMessage,
@@ -111,7 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (InputRecorder.IsRecording)
             {
-                return new UnityCliLoopRecordInputResult
+                return new RecordInputResponse
                 {
                     Success = false,
                     Message = "Already recording. Stop the current recording first.",
@@ -121,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (InputReplayer.IsReplaying)
             {
-                return new UnityCliLoopRecordInputResult
+                return new RecordInputResponse
                 {
                     Success = false,
                     Message = "Cannot record while replaying. Stop the replay first.",
@@ -131,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (RecordInputOverlayState.Phase == RecordInputOverlayPhase.Countdown)
             {
-                return new UnityCliLoopRecordInputResult
+                return new RecordInputResponse
                 {
                     Success = false,
                     Message = "Recording countdown already in progress.",
@@ -155,7 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         .ConfigureAwait(false);
                 if (delayedStartOutcome != RecordInputDelayedStartOutcome.Started)
                 {
-                    return new UnityCliLoopRecordInputResult
+                    return new RecordInputResponse
                     {
                         Success = false,
                         Message = "Recording cancelled (PlayMode ended during countdown).",
@@ -171,7 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string filterMessage = keyFilter != null ? $" (filtering: {request.Keys})" : "";
             string delayMessage = delaySeconds > 0 ? $" (after {delaySeconds}s countdown)" : "";
-            return new UnityCliLoopRecordInputResult
+            return new RecordInputResponse
             {
                 Success = true,
                 Message = $"Recording started{filterMessage}{delayMessage}. Use Stop to save.",
@@ -179,13 +179,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static UnityCliLoopRecordInputResult ExecuteStop(UnityCliLoopRecordInputRequest request)
+        private static RecordInputResponse ExecuteStop(RecordInputSchema request)
         {
             if (RecordInputOverlayState.Phase == RecordInputOverlayPhase.Countdown)
             {
                 Interlocked.Increment(ref _delayedStartGeneration);
                 RecordInputOverlayState.Clear();
-                return new UnityCliLoopRecordInputResult
+                return new RecordInputResponse
                 {
                     Success = true,
                     Message = "Recording countdown cancelled.",
@@ -200,7 +200,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     string savedPath = InputRecorder.LastAutoSavePath;
                     InputRecorder.LastAutoSavePath = null;
-                    return new UnityCliLoopRecordInputResult
+                    return new RecordInputResponse
                     {
                         Success = true,
                         Message = $"Recording was auto-saved at duration limit: {savedPath}",
@@ -209,7 +209,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     };
                 }
 
-                return new UnityCliLoopRecordInputResult
+                return new RecordInputResponse
                 {
                     Success = false,
                     Message = "Not currently recording. Use Start first.",
@@ -225,7 +225,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             int eventCount = data.GetTotalEventCount();
 
-            return new UnityCliLoopRecordInputResult
+            return new RecordInputResponse
             {
                 Success = true,
                 Message = $"Recording saved: {eventCount} events across {data.Metadata.TotalFrames} frames ({data.Metadata.DurationSeconds:F1}s)",

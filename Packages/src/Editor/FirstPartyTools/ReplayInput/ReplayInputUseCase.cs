@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Coordinates Input System playback for the bundled replay-input tool.
     /// </summary>
-    public class ReplayInputUseCase : IUnityCliLoopReplayInputService
+    public class ReplayInputUseCase
     {
         // Wire-visible fragment of the paused preflight message; tests pin the composed string.
         public const string PausedActionDescription = "replaying input";
@@ -25,8 +25,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 #if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning disable CS1998
 #endif
-        public async Task<UnityCliLoopReplayInputResult> ReplayInputAsync(
-            UnityCliLoopReplayInputRequest request,
+        public async Task<ReplayInputResponse> ReplayInputAsync(
+            ReplayInputSchema request,
             CancellationToken ct)
 #if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning restore CS1998
@@ -35,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ct.ThrowIfCancellationRequested();
 
 #if !ULOOP_HAS_INPUT_SYSTEM
-            return new UnityCliLoopReplayInputResult
+            return new ReplayInputResponse
             {
                 Success = false,
                 Message = "replay-input requires the Input System package (com.unity.inputsystem). Install it via Package Manager and set Active Input Handling to 'Input System Package (New)' or 'Both' in Player Settings.",
@@ -51,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId: correlationId
             );
 
-            UnityCliLoopReplayInputResult response;
+            ReplayInputResponse response;
 
             switch (request.Action)
             {
@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 default:
                     // Only reachable when an out-of-range enum value is cast from an integer;
                     // surface as a Success=false response so the CLI treats it as a validation failure.
-                    response = new UnityCliLoopReplayInputResult
+                    response = new ReplayInputResponse
                     {
                         Success = false,
                         Message = $"Unknown replay-input action: {request.Action}",
@@ -92,12 +92,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
 #if ULOOP_HAS_INPUT_SYSTEM
-        private static UnityCliLoopReplayInputResult ExecuteStart(UnityCliLoopReplayInputRequest request)
+        private static ReplayInputResponse ExecuteStart(ReplayInputSchema request)
         {
             ValidationResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!preflight.IsValid)
             {
-                return new UnityCliLoopReplayInputResult
+                return new ReplayInputResponse
                 {
                     Success = false,
                     Message = preflight.ErrorMessage,
@@ -107,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (InputReplayer.IsReplaying)
             {
-                return new UnityCliLoopReplayInputResult
+                return new ReplayInputResponse
                 {
                     Success = false,
                     Message = "Already replaying. Stop the current replay first.",
@@ -117,7 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (InputRecorder.IsRecording)
             {
-                return new UnityCliLoopReplayInputResult
+                return new ReplayInputResponse
                 {
                     Success = false,
                     Message = "Cannot replay while recording. Stop the recording first.",
@@ -128,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string inputPath = InputRecordingFileHelper.ResolveLatestRecording(request.InputPath);
             if (string.IsNullOrEmpty(inputPath))
             {
-                return new UnityCliLoopReplayInputResult
+                return new ReplayInputResponse
                 {
                     Success = false,
                     Message = $"No recording files found in {RecordInputConstants.DEFAULT_OUTPUT_DIR}/",
@@ -138,7 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!File.Exists(inputPath))
             {
-                return new UnityCliLoopReplayInputResult
+                return new ReplayInputResponse
                 {
                     Success = false,
                     Message = $"Recording file not found: {inputPath}",
@@ -150,7 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (data == null || data.Metadata == null)
             {
-                return new UnityCliLoopReplayInputResult
+                return new ReplayInputResponse
                 {
                     Success = false,
                     Message = $"Failed to parse recording file: {inputPath}",
@@ -164,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             int eventCount = data.GetTotalEventCount();
 
-            return new UnityCliLoopReplayInputResult
+            return new ReplayInputResponse
             {
                 Success = true,
                 Message = $"Replay started: {eventCount} events across {data.Metadata.TotalFrames} frames" +
@@ -176,11 +176,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static UnityCliLoopReplayInputResult ExecuteStop()
+        private static ReplayInputResponse ExecuteStop()
         {
             if (!InputReplayer.IsReplaying)
             {
-                return new UnityCliLoopReplayInputResult
+                return new ReplayInputResponse
                 {
                     Success = false,
                     Message = "Not currently replaying.",
@@ -192,7 +192,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int totalFrames = InputReplayer.TotalFrames;
             InputReplayer.StopReplay();
 
-            return new UnityCliLoopReplayInputResult
+            return new ReplayInputResponse
             {
                 Success = true,
                 Message = $"Replay stopped at frame {stoppedFrame}/{totalFrames}",
@@ -203,11 +203,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static UnityCliLoopReplayInputResult ExecuteStatus()
+        private static ReplayInputResponse ExecuteStatus()
         {
             if (!InputReplayer.IsReplaying)
             {
-                return new UnityCliLoopReplayInputResult
+                return new ReplayInputResponse
                 {
                     Success = true,
                     Message = "Not replaying.",
@@ -216,7 +216,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
-            return new UnityCliLoopReplayInputResult
+            return new ReplayInputResponse
             {
                 Success = true,
                 Message = $"Replaying: frame {InputReplayer.CurrentFrame}/{InputReplayer.TotalFrames} ({InputReplayer.Progress:P0})",
