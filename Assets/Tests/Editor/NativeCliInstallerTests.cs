@@ -255,7 +255,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "--version",
                 "missing-uloop-release-installer --version");
 
-            CliInstallResult result = NativeCliInstaller.RunInstallCommand(command, CancellationToken.None, 1000);
+            CliInstallResult result = NativeCliSetupCommandRunner.RunInstallCommand(
+                command,
+                CancellationToken.None,
+                1000);
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorOutput, Does.Contain("Failed to start release CLI installer"));
@@ -267,7 +270,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that release installer stalls cannot leave the editor setup task alive forever.
             NativeCliInstallCommand command = BuildLongRunningInstallCommand();
 
-            CliInstallResult result = NativeCliInstaller.RunInstallCommand(command, CancellationToken.None, 50);
+            CliInstallResult result = NativeCliSetupCommandRunner.RunInstallCommand(
+                command,
+                CancellationToken.None,
+                50);
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorOutput, Does.Contain("timed out"));
@@ -281,7 +287,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             using CancellationTokenSource cts = new();
             cts.CancelAfter(10);
 
-            CliInstallResult result = NativeCliInstaller.RunUninstallCommand(
+            CliInstallResult result = NativeCliSetupCommandRunner.RunUninstallCommand(
                 command,
                 "/Users/ExampleUser/.local/bin",
                 cts.Token,
