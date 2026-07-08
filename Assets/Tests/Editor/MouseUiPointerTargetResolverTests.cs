@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 screenPosition = new(12.5f, 34.5f);
 
             PointerEventData pointerData =
-                SimulateMouseUiUseCase.CreatePointerPressData(eventSystem, screenPosition, MouseButton.Right);
+                MouseUiPointerTargetResolver.CreatePointerPressData(eventSystem, screenPosition, MouseButton.Right);
 
             Assert.That(pointerData.position, Is.EqualTo(screenPosition));
             Assert.That(pointerData.pressPosition, Is.EqualTo(screenPosition));
@@ -60,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string targetPath = GameObjectPathUtility.GetFullPath(expectedTarget);
             Vector2 inputPosition = new(10f, 20f);
 
-            bool resolved = SimulateMouseUiUseCase.TryResolveGameObjectPath(
+            bool resolved = MouseUiPointerTargetResolver.TryResolveGameObjectPath(
                 targetPath,
                 "TargetPath",
                 MouseAction.Click,
@@ -82,7 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string targetPath = "MouseUiTargetResolverTests_MissingRoot/Target";
             Vector2 inputPosition = new(10f, 20f);
 
-            bool resolved = SimulateMouseUiUseCase.TryResolveGameObjectPath(
+            bool resolved = MouseUiPointerTargetResolver.TryResolveGameObjectPath(
                 targetPath,
                 "TargetPath",
                 MouseAction.Click,
@@ -113,7 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string targetPath = GameObjectPathUtility.GetFullPath(firstTarget);
             Vector2 inputPosition = new(10f, 20f);
 
-            bool resolved = SimulateMouseUiUseCase.TryResolveGameObjectPath(
+            bool resolved = MouseUiPointerTargetResolver.TryResolveGameObjectPath(
                 targetPath,
                 "TargetPath",
                 MouseAction.Click,
@@ -142,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 DropTargetPath = " "
             });
 
-            bool resolved = SimulateMouseUiUseCase.TryResolveDropTargetPath(
+            bool resolved = MouseUiPointerTargetResolver.TryResolveDropTargetPath(
                 command,
                 MouseAction.Drag,
                 new Vector2(10f, 20f),
@@ -170,7 +170,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             });
             Vector2 inputPosition = new(10f, 20f);
 
-            bool resolved = SimulateMouseUiUseCase.TryResolveDropTargetPath(
+            bool resolved = MouseUiPointerTargetResolver.TryResolveDropTargetPath(
                 command,
                 MouseAction.Drag,
                 inputPosition,
@@ -204,7 +204,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 DropTargetPath = targetPath
             });
 
-            bool resolved = SimulateMouseUiUseCase.TryResolveDropTargetPath(
+            bool resolved = MouseUiPointerTargetResolver.TryResolveDropTargetPath(
                 command,
                 MouseAction.Drag,
                 new Vector2(10f, 20f),
@@ -235,10 +235,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             });
             Vector2 position = new(10f, 20f);
             PointerEventData pointerData =
-                SimulateMouseUiUseCase.CreatePointerPressData(eventSystem, position, MouseButton.Left);
+                MouseUiPointerTargetResolver.CreatePointerPressData(eventSystem, position, MouseButton.Left);
 
-            SimulateMouseUiUseCase.ResolvedPointerTargets resolvedTargets =
-                SimulateMouseUiUseCase.ResolvePressablePointerTargets(
+            ResolvedPointerTargets resolvedTargets =
+                MouseUiPointerTargetResolver.ResolvePressablePointerTargets(
                     command,
                     eventSystem,
                     position,
@@ -270,10 +270,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             });
             Vector2 position = new(10f, 20f);
             PointerEventData pointerData =
-                SimulateMouseUiUseCase.CreatePointerPressData(eventSystem, position, MouseButton.Left);
+                MouseUiPointerTargetResolver.CreatePointerPressData(eventSystem, position, MouseButton.Left);
 
-            SimulateMouseUiUseCase.ResolvedPointerTargets resolvedTargets =
-                SimulateMouseUiUseCase.ResolvePressablePointerTargets(
+            ResolvedPointerTargets resolvedTargets =
+                MouseUiPointerTargetResolver.ResolvePressablePointerTargets(
                     command,
                     eventSystem,
                     position,
@@ -296,7 +296,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             GameObject target = CreateGameObject("MouseUiTargetResolverTests_DirectRaycastTarget");
 
-            RaycastResult result = SimulateMouseUiUseCase.CreateDirectRaycastResult(target);
+            RaycastResult result = MouseUiPointerTargetResolver.CreateDirectRaycastResult(target);
 
             Assert.That(result.gameObject, Is.SameAs(target));
         }

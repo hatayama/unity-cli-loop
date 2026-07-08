@@ -151,19 +151,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             OverlayCanvasFactory.EnsureExists();
         }
 
-        private static PointerEventData.InputButton ToInputButton(MouseButton button)
-        {
-            switch (button)
-            {
-                case MouseButton.Right:
-                    return PointerEventData.InputButton.Right;
-                case MouseButton.Middle:
-                    return PointerEventData.InputButton.Middle;
-                default:
-                    return PointerEventData.InputButton.Left;
-            }
-        }
-
         // Input coordinates use top-left origin; Unity Screen space uses bottom-left origin.
         // Handles.GetMainGameViewSize() returns the Game view's target resolution (e.g. 1920x1080),
         // which matches the Canvas layout space — unlike Screen.height which returns the window pixel size.
@@ -184,9 +171,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Vector2 inputPos = new(parameters.X, parameters.Y);
             Vector2 screenPos = InputToScreen(inputPos);
-            PointerEventData pointerData = CreatePointerPressData(eventSystem, screenPos, parameters.Button);
+            PointerEventData pointerData = MouseUiPointerTargetResolver.CreatePointerPressData(eventSystem, screenPos, parameters.Button);
             ResolvedPointerTargets resolvedTargets =
-                ResolvePressablePointerTargets(parameters, eventSystem, inputPos, screenPos, pointerData, MouseAction.Click);
+                MouseUiPointerTargetResolver.ResolvePressablePointerTargets(parameters, eventSystem, inputPos, screenPos, pointerData, MouseAction.Click);
             if (resolvedTargets.FailureResponse != null)
             {
                 return resolvedTargets.FailureResponse;
@@ -247,9 +234,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Vector2 inputPos = new(parameters.X, parameters.Y);
             Vector2 screenPos = InputToScreen(inputPos);
-            PointerEventData pointerData = CreatePointerPressData(eventSystem, screenPos, parameters.Button);
+            PointerEventData pointerData = MouseUiPointerTargetResolver.CreatePointerPressData(eventSystem, screenPos, parameters.Button);
             ResolvedPointerTargets resolvedTargets =
-                ResolvePressablePointerTargets(parameters, eventSystem, inputPos, screenPos, pointerData, MouseAction.LongPress);
+                MouseUiPointerTargetResolver.ResolvePressablePointerTargets(parameters, eventSystem, inputPos, screenPos, pointerData, MouseAction.LongPress);
             if (resolvedTargets.FailureResponse != null)
             {
                 return resolvedTargets.FailureResponse;
@@ -322,93 +309,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
             return MouseUiSimulationResponseFactory.CreateLongPressResult(parameters, inputPos, targetName, hitTarget);
-        }
-
-        internal static PointerEventData CreatePointerPressData(
-            EventSystem eventSystem,
-            Vector2 screenPos,
-            MouseButton button)
-        {
-            return new PointerEventData(eventSystem)
-            {
-                position = screenPos,
-                pressPosition = screenPos,
-                button = ToInputButton(button)
-            };
-        }
-
-        internal static ResolvedPointerTargets ResolvePressablePointerTargets(
-            MouseUiSimulationCommand parameters,
-            EventSystem eventSystem,
-            Vector2 inputPos,
-            Vector2 screenPos,
-            PointerEventData pointerData,
-            MouseAction action)
-        {
-            if (parameters.BypassRaycast)
-            {
-                return ResolveBypassPressablePointerTargets(parameters, inputPos, pointerData, action);
-            }
-
-            RaycastResult? hit = RaycastUI(screenPos, eventSystem);
-            if (hit == null)
-            {
-                return ResolvedPointerTargets.Empty;
-            }
-
-            return ResolveRaycastPressablePointerTargets(hit.Value, pointerData);
-        }
-
-        private static ResolvedPointerTargets ResolveBypassPressablePointerTargets(
-            MouseUiSimulationCommand parameters,
-            Vector2 inputPos,
-            PointerEventData pointerData,
-            MouseAction action)
-        {
-            if (!TryResolveGameObjectPath(
-                parameters.TargetPath,
-                "TargetPath",
-                action,
-                inputPos,
-                out GameObject? rawTarget,
-                out SimulateMouseUiResponse? failureResponse))
-            {
-                return ResolvedPointerTargets.Failure(failureResponse);
-            }
-
-            RaycastResult directRaycast = CreateDirectRaycastResult(rawTarget!);
-            pointerData.pointerCurrentRaycast = directRaycast;
-            pointerData.pointerPressRaycast = directRaycast;
-
-            return CreateResolvedPressablePointerTargets(rawTarget!, pointerData);
-        }
-
-        private static ResolvedPointerTargets ResolveRaycastPressablePointerTargets(
-            RaycastResult hit,
-            PointerEventData pointerData)
-        {
-            GameObject rawTarget = hit.gameObject;
-            pointerData.pointerCurrentRaycast = hit;
-            pointerData.pointerPressRaycast = hit;
-
-            return CreateResolvedPressablePointerTargets(rawTarget, pointerData);
-        }
-
-        private static ResolvedPointerTargets CreateResolvedPressablePointerTargets(
-            GameObject rawTarget,
-            PointerEventData pointerData)
-        {
-            // Execute dispatches only to the exact target; composite controls need hierarchy traversal.
-            GameObject? pressTarget = ExecuteEvents.GetEventHandler<IPointerDownHandler>(rawTarget);
-            GameObject? clickTarget = ExecuteEvents.GetEventHandler<IPointerClickHandler>(rawTarget);
-            GameObject? target = pressTarget ?? clickTarget;
-            if (target != null)
-            {
-                pointerData.pointerPress = target;
-                pointerData.rawPointerPress = rawTarget;
-            }
-
-            return ResolvedPointerTargets.Success(rawTarget, pressTarget, clickTarget, target);
         }
 
         private static void ExecutePointerClickEvents(
@@ -496,13 +396,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Vector2 inputEnd = new(parameters.X, parameters.Y);
             Vector2 screenStart = InputToScreen(inputStart);
             Vector2 screenEnd = InputToScreen(inputEnd);
-            RaycastResult? hit = parameters.BypassRaycast ? null : RaycastUI(screenStart, eventSystem);
+            RaycastResult? hit = parameters.BypassRaycast ? null : UiRaycastHelper.RaycastUI(screenStart, eventSystem);
             RaycastResult startRaycast = new();
             GameObject? rawTarget = null;
 
             if (parameters.BypassRaycast)
             {
-                if (!TryResolveGameObjectPath(
+                if (!MouseUiPointerTargetResolver.TryResolveGameObjectPath(
                     parameters.TargetPath,
                     "TargetPath",
                     MouseAction.Drag,
@@ -513,7 +413,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return failureResponse!;
                 }
 
-                startRaycast = CreateDirectRaycastResult(rawTarget!);
+                startRaycast = MouseUiPointerTargetResolver.CreateDirectRaycastResult(rawTarget!);
             }
             else if (hit != null)
             {
@@ -522,7 +422,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             GameObject? explicitDropTarget = null;
-            if (!TryResolveDropTargetPath(
+            if (!MouseUiPointerTargetResolver.TryResolveDropTargetPath(
                 parameters,
                 MouseAction.Drag,
                 inputEnd,
@@ -631,7 +531,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (explicitDropTarget != null)
             {
-                pointerData.pointerCurrentRaycast = CreateDirectRaycastResult(explicitDropTarget);
+                pointerData.pointerCurrentRaycast = MouseUiPointerTargetResolver.CreateDirectRaycastResult(explicitDropTarget);
             }
             else
             {
@@ -737,13 +637,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Vector2 inputPos = new(parameters.X, parameters.Y);
             Vector2 screenPos = InputToScreen(inputPos);
-            RaycastResult? hit = parameters.BypassRaycast ? null : RaycastUI(screenPos, eventSystem);
+            RaycastResult? hit = parameters.BypassRaycast ? null : UiRaycastHelper.RaycastUI(screenPos, eventSystem);
             RaycastResult startRaycast = new();
             GameObject? rawTarget = null;
 
             if (parameters.BypassRaycast)
             {
-                if (!TryResolveGameObjectPath(
+                if (!MouseUiPointerTargetResolver.TryResolveGameObjectPath(
                     parameters.TargetPath,
                     "TargetPath",
                     MouseAction.DragStart,
@@ -754,7 +654,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return failureResponse!;
                 }
 
-                startRaycast = CreateDirectRaycastResult(rawTarget!);
+                startRaycast = MouseUiPointerTargetResolver.CreateDirectRaycastResult(rawTarget!);
             }
             else if (hit != null)
             {
@@ -936,7 +836,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string targetName = target.name;
             GameObject? explicitDropTarget = null;
 
-            if (!TryResolveDropTargetPath(
+            if (!MouseUiPointerTargetResolver.TryResolveDropTargetPath(
                 parameters,
                 MouseAction.DragEnd,
                 inputEnd,
@@ -1126,179 +1026,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why: timeout continuations can run on timer threads while Unity objects must still be cleaned up on the Editor thread.
             context.Post(_ => cleanup(), null);
-        }
-
-        private static RaycastResult? RaycastUI(Vector2 screenPosition, EventSystem eventSystem)
-        {
-            return UiRaycastHelper.RaycastUI(screenPosition, eventSystem);
-        }
-
-        internal static bool TryResolveGameObjectPath(
-            string targetPath,
-            string parameterName,
-            MouseAction action,
-            Vector2 inputPosition,
-            out GameObject? target,
-            out SimulateMouseUiResponse? failureResponse)
-        {
-            TargetPathLookupResult lookupResult = FindActiveGameObjectByPath(targetPath);
-            target = lookupResult.Target;
-            if (target != null)
-            {
-                failureResponse = null;
-                return true;
-            }
-
-            string message = lookupResult.MatchCount == 0
-                ? $"{parameterName} '{targetPath}' was not found."
-                : $"{parameterName} '{targetPath}' matched {lookupResult.MatchCount} active GameObjects. Use a unique hierarchy path.";
-
-            failureResponse = new SimulateMouseUiResponse
-            {
-                Success = false,
-                Message = message,
-                Action = action.ToString(),
-                PositionX = inputPosition.x,
-                PositionY = inputPosition.y
-            };
-            return false;
-        }
-
-        internal static bool TryResolveDropTargetPath(
-            MouseUiSimulationCommand parameters,
-            MouseAction action,
-            Vector2 inputPosition,
-            out GameObject? dropTarget,
-            out SimulateMouseUiResponse? failureResponse)
-        {
-            dropTarget = null;
-            failureResponse = null;
-
-            if (string.IsNullOrWhiteSpace(parameters.DropTargetPath))
-            {
-                return true;
-            }
-
-            if (!TryResolveGameObjectPath(
-                parameters.DropTargetPath,
-                "DropTargetPath",
-                action,
-                inputPosition,
-                out GameObject? rawDropTarget,
-                out failureResponse))
-            {
-                return false;
-            }
-
-            GameObject? dropHandler = ExecuteEvents.GetEventHandler<IDropHandler>(rawDropTarget!);
-            if (dropHandler == null)
-            {
-                failureResponse = new SimulateMouseUiResponse
-                {
-                    Success = false,
-                    Message = $"DropTargetPath '{parameters.DropTargetPath}' has no drop handler.",
-                    Action = action.ToString(),
-                    PositionX = inputPosition.x,
-                    PositionY = inputPosition.y
-                };
-                return false;
-            }
-
-            dropTarget = rawDropTarget;
-            return true;
-        }
-
-        private static TargetPathLookupResult FindActiveGameObjectByPath(string targetPath)
-        {
-            string normalizedPath = targetPath.Trim().Trim('/');
-            if (string.IsNullOrEmpty(normalizedPath))
-            {
-                return new TargetPathLookupResult(null, 0);
-            }
-
-            GameObject[] gameObjects = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
-            GameObject? matchedTarget = null;
-            int matchCount = 0;
-
-            foreach (GameObject gameObject in gameObjects)
-            {
-                if (!string.Equals(
-                    GameObjectPathUtility.GetFullPath(gameObject),
-                    normalizedPath,
-                    StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                matchCount++;
-                matchedTarget = gameObject;
-            }
-
-            return matchCount == 1
-                ? new TargetPathLookupResult(matchedTarget, matchCount)
-                : new TargetPathLookupResult(null, matchCount);
-        }
-
-        internal static RaycastResult CreateDirectRaycastResult(GameObject target)
-        {
-            return new RaycastResult
-            {
-                gameObject = target
-            };
-        }
-
-        private readonly struct TargetPathLookupResult
-        {
-            public TargetPathLookupResult(GameObject? target, int matchCount)
-            {
-                Target = target;
-                MatchCount = matchCount;
-            }
-
-            public GameObject? Target { get; }
-            public int MatchCount { get; }
-        }
-
-        internal readonly struct ResolvedPointerTargets
-        {
-            private ResolvedPointerTargets(
-                GameObject? rawTarget,
-                GameObject? pressTarget,
-                GameObject? clickTarget,
-                GameObject? target,
-                SimulateMouseUiResponse? failureResponse)
-            {
-                RawTarget = rawTarget;
-                PressTarget = pressTarget;
-                ClickTarget = clickTarget;
-                Target = target;
-                FailureResponse = failureResponse;
-            }
-
-            public static ResolvedPointerTargets Empty { get; } =
-                new(null, null, null, null, null);
-
-            public GameObject? RawTarget { get; }
-            public GameObject? PressTarget { get; }
-            public GameObject? ClickTarget { get; }
-            public GameObject? Target { get; }
-            public SimulateMouseUiResponse? FailureResponse { get; }
-
-            public static ResolvedPointerTargets Success(
-                GameObject rawTarget,
-                GameObject? pressTarget,
-                GameObject? clickTarget,
-                GameObject? target)
-            {
-                return new ResolvedPointerTargets(rawTarget, pressTarget, clickTarget, target, null);
-            }
-
-            public static ResolvedPointerTargets Failure(
-                SimulateMouseUiResponse? failureResponse)
-            {
-                Debug.Assert(failureResponse != null, "Failure response must exist when target resolution fails.");
-                return new ResolvedPointerTargets(null, null, null, null, failureResponse);
-            }
         }
 
     }
