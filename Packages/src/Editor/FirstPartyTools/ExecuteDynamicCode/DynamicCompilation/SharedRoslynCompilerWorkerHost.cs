@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
@@ -19,20 +18,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class SharedRoslynCompilerWorkerHost
     {
         private const int SharedCompilerWorkerMaxAttempts = 2;
-        private const string SharedCompilerWorkerResultPrefix = "__ULOOP_RESULT__";
-        private const string SharedCompilerWorkerEndMarker = "__ULOOP_END__";
-        private const string SharedCompilerWorkerQuitCommand = "__QUIT__";
-        internal const string CompileRequestPathPrefix = "path-base64:";
         private const string RoslynWorkerSourceFileName = "RoslynCompilerWorker.cs";
         private const string RoslynWorkerAssemblyFileName = "RoslynCompilerWorker.dll";
         private const string RoslynWorkerCompileResponseFileName = "RoslynCompilerWorker.rsp";
-        private const string RoslynWorkerProgramTemplateRelativePath =
-            "Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCompilation/Templates/SharedRoslynCompilerWorkerProgram.cs.template";
-        private const string SharedCompilerWorkerResultPrefixToken = "{{SHARED_COMPILER_WORKER_RESULT_PREFIX}}";
-        private const string SharedCompilerWorkerEndMarkerToken = "{{SHARED_COMPILER_WORKER_END_MARKER}}";
-        private const string SharedCompilerWorkerQuitCommandToken = "{{SHARED_COMPILER_WORKER_QUIT_COMMAND}}";
-        private const string CompileRequestPathPrefixToken = "{{COMPILE_REQUEST_PATH_PREFIX}}";
-        private const int SharedCompilerWorkerResponseTimeoutMilliseconds = 30000;
         private const int WorkerAssemblyBuildTimeoutMilliseconds = 30000;
         internal const string DotnetMultilevelLookupEnvironmentVariableName = "DOTNET_MULTILEVEL_LOOKUP";
         internal const string DotnetMultilevelLookupDisabledValue = "0";
@@ -392,36 +380,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void SendCompileRequestCore(Process workerProcess, string requestFilePath)
         {
-            string requestCommand = CreateCompileRequestCommand(requestFilePath);
+            string requestCommand = SharedRoslynCompilerWorkerProtocol.CreateCompileRequestCommand(requestFilePath);
             workerProcess.StandardInput.WriteLine(requestCommand);
             workerProcess.StandardInput.Flush();
-        }
-
-        internal static string CreateCompileRequestCommandForTests(string requestFilePath)
-        {
-            return CreateCompileRequestCommand(requestFilePath);
-        }
-
-        internal static string CreateProgramSourceForTests()
-        {
-            return CreateProgramSource();
-        }
-
-        private static string CreateCompileRequestCommand(string requestFilePath)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(requestFilePath), "requestFilePath must not be empty");
-
-            string fullRequestFilePath = Path.GetFullPath(requestFilePath);
-            byte[] requestPathBytes = Encoding.UTF8.GetBytes(fullRequestFilePath);
-            return CompileRequestPathPrefix + Convert.ToBase64String(requestPathBytes);
         }
 
         private static WorkerAttemptResult ReadWorkerResponse(
             string requestFilePath,
             CancellationToken ct)
         {
-            string responseHeader = ReadProtocolLine(
-                _sharedCompilerWorkerProcess.StandardOutput,
+            StreamReader reader = _sharedCompilerWorkerProcess.StandardOutput;
+            string responseHeader = SharedRoslynCompilerWorkerProtocol.ReadProtocolLine(
+                reader,
                 ct);
             if (string.IsNullOrEmpty(responseHeader))
             {
@@ -430,14 +400,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new { request_file_path = requestFilePath });
             }
 
-            if (!TryParseResponseHeader(responseHeader, out int exitCode))
+            if (!SharedRoslynCompilerWorkerProtocol.TryParseResponseHeader(responseHeader, out int exitCode))
             {
                 return WorkerAttemptResult.RetryableFailure(
-                    GetResponseHeaderFailureReason(responseHeader),
+                    SharedRoslynCompilerWorkerProtocol.GetResponseHeaderFailureReason(responseHeader),
                     new { header = responseHeader });
             }
 
-            List<string> outputLines = ReadDiagnosticLines(ct);
+            List<string> outputLines = SharedRoslynCompilerWorkerProtocol.ReadDiagnosticLines(reader, ct);
             if (outputLines == null)
             {
                 return WorkerAttemptResult.RetryableFailure(
@@ -448,49 +418,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string combinedOutput = string.Join("\n", outputLines);
             CompilerMessage[] compilerMessages = ExternalCompilerMessageParser.Parse(combinedOutput, string.Empty, exitCode);
             return WorkerAttemptResult.Successful(compilerMessages);
-        }
-
-        private static bool TryParseResponseHeader(string responseHeader, out int exitCode)
-        {
-            exitCode = 0;
-
-            if (!responseHeader.StartsWith(SharedCompilerWorkerResultPrefix, StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            string statusText = responseHeader.Substring(SharedCompilerWorkerResultPrefix.Length).Trim();
-            return int.TryParse(statusText, out exitCode);
-        }
-
-        private static string GetResponseHeaderFailureReason(string responseHeader)
-        {
-            if (!responseHeader.StartsWith(SharedCompilerWorkerResultPrefix, StringComparison.Ordinal))
-            {
-                return "worker_invalid_header";
-            }
-
-            return "worker_invalid_exit_code";
-        }
-
-        private static List<string> ReadDiagnosticLines(CancellationToken ct)
-        {
-            List<string> outputLines = new();
-            while (true)
-            {
-                string outputLine = ReadProtocolLine(_sharedCompilerWorkerProcess.StandardOutput, ct);
-                if (outputLine == null)
-                {
-                    return null;
-                }
-
-                if (outputLine == SharedCompilerWorkerEndMarker)
-                {
-                    return outputLines;
-                }
-
-                outputLines.Add(outputLine);
-            }
         }
 
         private static WorkerPaths CreateWorkerPaths()
@@ -515,7 +442,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void SynchronizeWorkerSource(WorkerPaths workerPaths)
         {
-            string workerSource = CreateProgramSource();
+            string workerSource = SharedRoslynCompilerWorkerProtocol.CreateProgramSource();
             if (File.Exists(workerPaths.SourcePath) && File.ReadAllText(workerPaths.SourcePath) == workerSource)
             {
                 return;
@@ -686,22 +613,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             File.WriteAllLines(responseFilePath, lines);
         }
 
-        private static string ReadProtocolLine(StreamReader reader, CancellationToken ct)
-        {
-            Debug.Assert(reader != null, "reader must not be null");
-
-            Task<string> readTask = Task.Run(() => reader.ReadLine());
-            Task timeoutTask = Task.Delay(SharedCompilerWorkerResponseTimeoutMilliseconds, ct);
-            Task completedTask = Task.WhenAny(readTask, timeoutTask).GetAwaiter().GetResult();
-            if (!ReferenceEquals(completedTask, readTask))
-            {
-                ct.ThrowIfCancellationRequested();
-                return null;
-            }
-
-            return readTask.GetAwaiter().GetResult();
-        }
-
         private static bool HasLiveWorkerProcess()
         {
             return _sharedCompilerWorkerProcess != null && !_sharedCompilerWorkerProcess.HasExited;
@@ -811,7 +722,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (!workerProcess.HasExited)
                 {
-                    workerProcess.StandardInput.WriteLine(SharedCompilerWorkerQuitCommand);
+                    workerProcess.StandardInput.WriteLine(
+                        SharedRoslynCompilerWorkerProtocol.SharedCompilerWorkerQuitCommand);
                     workerProcess.StandardInput.Flush();
                     workerProcess.WaitForExit(500);
                 }
@@ -949,40 +861,5 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             destination.Add(referencePath);
         }
 
-        private static string CreateProgramSource()
-        {
-            string templatePath = GetWorkerProgramTemplatePath();
-            string templateSource = File.ReadAllText(templatePath, Encoding.UTF8);
-            return templateSource
-                .Replace(SharedCompilerWorkerResultPrefixToken, SharedCompilerWorkerResultPrefix)
-                .Replace(SharedCompilerWorkerEndMarkerToken, SharedCompilerWorkerEndMarker)
-                .Replace(SharedCompilerWorkerQuitCommandToken, SharedCompilerWorkerQuitCommand)
-                .Replace(CompileRequestPathPrefixToken, CompileRequestPathPrefix);
-        }
-
-        internal static string GetWorkerProgramTemplatePathForTests()
-        {
-            return GetWorkerProgramTemplatePath();
-        }
-
-        internal static string GetSharedCompilerWorkerResultPrefixForTests()
-        {
-            return SharedCompilerWorkerResultPrefix;
-        }
-
-        internal static string GetSharedCompilerWorkerEndMarkerForTests()
-        {
-            return SharedCompilerWorkerEndMarker;
-        }
-
-        internal static string GetSharedCompilerWorkerQuitCommandForTests()
-        {
-            return SharedCompilerWorkerQuitCommand;
-        }
-
-        private static string GetWorkerProgramTemplatePath()
-        {
-            return Path.Combine(UnityCliLoopConstants.PackageResolvedPath, RoslynWorkerProgramTemplateRelativePath);
-        }
     }
 }
