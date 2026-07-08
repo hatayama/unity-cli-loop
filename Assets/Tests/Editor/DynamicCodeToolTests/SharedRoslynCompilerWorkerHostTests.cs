@@ -29,6 +29,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// Verifies shutdown remains an idempotent no-op before a worker process or directory exists.
+        /// </summary>
+        [Test]
+        public void Shutdown_WhenWorkerWasNeverStarted_ShouldRemainIdempotent()
+        {
+            SharedRoslynCompilerWorkerSession session = new();
+            string unusedWorkerDirectoryPath = Path.Combine(
+                Path.GetTempPath(),
+                $"SharedRoslynCompilerWorkerSessionTests_{Guid.NewGuid():N}");
+
+            Assert.That(Directory.Exists(unusedWorkerDirectoryPath), Is.False);
+            Assert.DoesNotThrow(() => session.Shutdown(unusedWorkerDirectoryPath));
+            Assert.DoesNotThrow(() => session.Shutdown(unusedWorkerDirectoryPath));
+        }
+
+        /// <summary>
         /// Verifies a pending compiler stream does not keep the bounded drain waiting.
         /// </summary>
         [Test]
