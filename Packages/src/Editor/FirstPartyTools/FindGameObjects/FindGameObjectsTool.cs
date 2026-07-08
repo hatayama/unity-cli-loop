@@ -22,11 +22,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static UnityCliLoopGameObjectSearchRequest ToRequest(FindGameObjectsSchema parameters)
         {
-            if (parameters == null)
-            {
-                throw new System.ArgumentNullException(nameof(parameters));
-            }
-
             return new UnityCliLoopGameObjectSearchRequest
             {
                 NamePattern = parameters.NamePattern,

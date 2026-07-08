@@ -15,11 +15,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         protected override Task<ClearConsoleResponse> ExecuteAsync(ClearConsoleSchema parameters, CancellationToken ct)
         {
-            if (parameters == null)
-            {
-                throw new System.ArgumentNullException(nameof(parameters));
-            }
-
             ct.ThrowIfCancellationRequested();
             ConsoleClearService consoleClear = new();
             UnityCliLoopConsoleClearResult result = consoleClear.Clear(parameters.AddConfirmationMessage);
