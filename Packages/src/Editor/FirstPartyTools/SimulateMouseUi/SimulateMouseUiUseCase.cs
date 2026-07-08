@@ -53,7 +53,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
 
             EventSystem? eventSystem = EventSystem.current;
-            SimulateMouseUiResponse? validationFailure = ValidateSimulationStart(parameters, eventSystem);
+            SimulateMouseUiResponse? validationFailure = MouseUiSimulationValidator.ValidateSimulationStart(
+                parameters,
+                eventSystem,
+                PausedActionDescription);
             if (validationFailure != null)
             {
                 return validationFailure;
@@ -64,7 +67,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             LogSimulationStart(parameters, correlationId);
             EnsureOverlayExists();
 
-            SimulateMouseUiResponse? dragStateFailure = ValidateActiveDragState(parameters);
+            SimulateMouseUiResponse? dragStateFailure =
+                MouseUiSimulationValidator.ValidateActiveDragState(parameters);
             if (dragStateFailure != null)
             {
                 return dragStateFailure;
@@ -75,94 +79,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             LogSimulationComplete(parameters, response, correlationId);
 
             return response;
-        }
-
-        private static SimulateMouseUiResponse? ValidateSimulationStart(
-            MouseUiSimulationCommand parameters,
-            EventSystem? eventSystem)
-        {
-            ValidationResult playModeResult = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
-            if (!playModeResult.IsValid)
-            {
-                return CreateFailure(parameters, playModeResult.ErrorMessage);
-            }
-
-            if (eventSystem == null)
-            {
-                return CreateFailure(
-                    parameters,
-                    "No EventSystem found in the scene. Ensure an EventSystem GameObject exists.");
-            }
-
-            return ValidateSimulationRequestOptions(parameters);
-        }
-
-        private static SimulateMouseUiResponse? ValidateSimulationRequestOptions(
-            MouseUiSimulationCommand parameters)
-        {
-            if (parameters.Action != MouseAction.Click && parameters.Action != MouseAction.LongPress && parameters.DragSpeed < 0f)
-            {
-                return CreateFailure(parameters, $"DragSpeed must be non-negative, got: {parameters.DragSpeed}");
-            }
-
-            if (IsDragAction(parameters.Action) && parameters.Button != MouseButton.Left)
-            {
-                return CreateFailure(
-                    parameters,
-                    $"Drag actions only support Left button (uGUI ignores non-left drags), got: {parameters.Button}");
-            }
-
-            if (parameters.BypassRaycast && !SupportsBypassRaycast(parameters.Action))
-            {
-                return CreateFailure(parameters, "BypassRaycast is not supported for this action.");
-            }
-
-            if (parameters.BypassRaycast &&
-                RequiresBypassTargetPath(parameters.Action) &&
-                string.IsNullOrWhiteSpace(parameters.TargetPath))
-            {
-                return CreateFailure(
-                    parameters,
-                    "TargetPath is required when BypassRaycast is true for Click, LongPress, Drag, or DragStart.");
-            }
-
-            if (!string.IsNullOrWhiteSpace(parameters.DropTargetPath) &&
-                parameters.Action != MouseAction.Drag &&
-                parameters.Action != MouseAction.DragEnd)
-            {
-                return CreateFailure(parameters, "DropTargetPath supports Drag and DragEnd only.");
-            }
-
-            return null;
-        }
-
-        private static SimulateMouseUiResponse? ValidateActiveDragState(MouseUiSimulationCommand parameters)
-        {
-            if (!MouseDragState.IsDragging || !RequiresIdlePointer(parameters.Action))
-            {
-                return null;
-            }
-
-            return CreateFailure(
-                parameters,
-                $"Cannot {parameters.Action.ToString()} while a split drag is active. Call DragEnd first.");
-        }
-
-        private static bool RequiresIdlePointer(MouseAction action)
-        {
-            return action == MouseAction.Click || action == MouseAction.Drag || action == MouseAction.LongPress;
-        }
-
-        private static SimulateMouseUiResponse CreateFailure(
-            MouseUiSimulationCommand parameters,
-            string message)
-        {
-            return new SimulateMouseUiResponse
-            {
-                Success = false,
-                Message = message,
-                Action = parameters.Action.ToString()
-            };
         }
 
         private static void LogSimulationStart(MouseUiSimulationCommand parameters, string correlationId)
@@ -224,7 +140,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 default:
                     // Unreachable when TryFromSchema succeeds; kept as a defensive Success=false response
                     // instead of a throw so any future MouseAction addition surfaces as a validation failure.
-                    return CreateFailure(parameters, $"Unknown mouse action: {parameters.Action}");
+                    return MouseUiSimulationValidator.CreateFailure(
+                        parameters,
+                        $"Unknown mouse action: {parameters.Action}");
             }
         }
 
@@ -1313,21 +1231,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return UiRaycastHelper.RaycastUI(screenPosition, eventSystem);
         }
 
-        private static bool SupportsBypassRaycast(MouseAction action)
-        {
-            return action == MouseAction.Click
-                || action == MouseAction.LongPress
-                || IsDragAction(action);
-        }
-
-        private static bool RequiresBypassTargetPath(MouseAction action)
-        {
-            return action == MouseAction.Click
-                || action == MouseAction.LongPress
-                || action == MouseAction.Drag
-                || action == MouseAction.DragStart;
-        }
-
         private static bool TryResolveGameObjectPath(
             string targetPath,
             string parameterName,
@@ -1496,12 +1399,5 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static bool IsDragAction(MouseAction action)
-        {
-            return action == MouseAction.Drag
-                || action == MouseAction.DragStart
-                || action == MouseAction.DragMove
-                || action == MouseAction.DragEnd;
-        }
     }
 }
