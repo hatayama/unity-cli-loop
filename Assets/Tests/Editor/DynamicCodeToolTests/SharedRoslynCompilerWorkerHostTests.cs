@@ -48,6 +48,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         [Test]
+        public void TryParseResponseHeader_WhenHeaderContainsExitCode_ShouldReturnParsedCode()
+        {
+            // Verifies the worker protocol accepts its result prefix followed by a numeric exit code.
+            bool parsed = SharedRoslynCompilerWorkerHost.TryParseResponseHeader("__ULOOP_RESULT__ 7", out int exitCode);
+
+            Assert.That(parsed, Is.True);
+            Assert.That(exitCode, Is.EqualTo(7));
+        }
+
+        [Test]
+        public void GetResponseHeaderFailureReason_WhenPrefixIsInvalid_ShouldReportInvalidHeader()
+        {
+            // Verifies a response without the worker result prefix is classified as an invalid header.
+            string failureReason = SharedRoslynCompilerWorkerHost.GetResponseHeaderFailureReason("unexpected response");
+
+            Assert.That(failureReason, Is.EqualTo("worker_invalid_header"));
+        }
+
+        [Test]
+        public void GetResponseHeaderFailureReason_WhenExitCodeIsInvalid_ShouldReportInvalidExitCode()
+        {
+            // Verifies a prefixed response with a non-numeric status is classified as an invalid exit code.
+            string failureReason = SharedRoslynCompilerWorkerHost.GetResponseHeaderFailureReason(
+                "__ULOOP_RESULT__ not-a-number");
+
+            Assert.That(failureReason, Is.EqualTo("worker_invalid_exit_code"));
+        }
+
+        [Test]
         public void CreateProgramSource_WhenRequestPathHasNoPrefix_ShouldRecoverRawPath()
         {
             string programSource = SharedRoslynCompilerWorkerHost.CreateProgramSourceForTests();

@@ -450,7 +450,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return WorkerAttemptResult.Successful(compilerMessages);
         }
 
-        private static bool TryParseResponseHeader(string responseHeader, out int exitCode)
+        internal static bool TryParseResponseHeader(string responseHeader, out int exitCode)
         {
             exitCode = 0;
 
@@ -463,7 +463,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return int.TryParse(statusText, out exitCode);
         }
 
-        private static string GetResponseHeaderFailureReason(string responseHeader)
+        internal static string GetResponseHeaderFailureReason(string responseHeader)
         {
             if (!responseHeader.StartsWith(SharedCompilerWorkerResultPrefix, StringComparison.Ordinal))
             {
