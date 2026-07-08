@@ -140,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 default:
                     // Unreachable when TryFromSchema succeeds; kept as a defensive Success=false response
                     // instead of a throw so any future MouseAction addition surfaces as a validation failure.
-                    return MouseUiSimulationValidator.CreateFailure(
+                    return MouseUiSimulationResponseFactory.CreateFailure(
                         parameters,
                         $"Unknown mouse action: {parameters.Action}");
             }
@@ -214,7 +214,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!expandCompleted)
             {
                 QueueOverlayClear();
-                return CreateFrameTimeoutResult(MouseAction.Click, inputPos, null, targetName);
+                return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Click, inputPos, null, targetName);
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -225,11 +225,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!dissipateCompleted)
             {
                 QueueOverlayClear();
-                return CreateClickResult(parameters, inputPos, targetName, hitTarget);
+                return MouseUiSimulationResponseFactory.CreateClickResult(parameters, inputPos, targetName, hitTarget);
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
-            return CreateClickResult(parameters, inputPos, targetName, hitTarget);
+            return MouseUiSimulationResponseFactory.CreateClickResult(parameters, inputPos, targetName, hitTarget);
         }
 
         private async Task<SimulateMouseUiResponse> ExecuteLongPress(
@@ -278,7 +278,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!expandCompleted)
             {
                 QueueOverlayClear();
-                return CreateFrameTimeoutResult(MouseAction.LongPress, inputPos, null, targetName);
+                return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.LongPress, inputPos, null, targetName);
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -296,7 +296,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     if (!frameReady)
                     {
                         QueueOverlayClear();
-                        return CreateFrameTimeoutResult(MouseAction.LongPress, inputPos, null, targetName);
+                        return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.LongPress, inputPos, null, targetName);
                     }
                     await MainThreadSwitcher.SwitchToMainThread(ct);
                     elapsed = Time.realtimeSinceStartup - startTime;
@@ -317,11 +317,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!dissipateCompleted)
             {
                 QueueOverlayClear();
-                return CreateLongPressResult(parameters, inputPos, targetName, hitTarget);
+                return MouseUiSimulationResponseFactory.CreateLongPressResult(parameters, inputPos, targetName, hitTarget);
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
-            return CreateLongPressResult(parameters, inputPos, targetName, hitTarget);
+            return MouseUiSimulationResponseFactory.CreateLongPressResult(parameters, inputPos, targetName, hitTarget);
         }
 
         private static PointerEventData CreatePointerPressData(
@@ -545,7 +545,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!expandCompleted)
                 {
                     QueueOverlayClear();
-                    return CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, null);
+                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, null);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -553,7 +553,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!dissipateCompleted)
                 {
                     QueueOverlayClear();
-                    return CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, null);
+                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, null);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -586,7 +586,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!expandCompleted)
                 {
                     QueueOverlayClear();
-                    return CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
+                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -595,7 +595,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!dragCompleted)
                 {
                     QueueOverlayClear();
-                    return CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
+                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -603,7 +603,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!frameReady)
                 {
                     QueueOverlayClear();
-                    return CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
+                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
             }
@@ -619,11 +619,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!completedDissipate)
             {
                 QueueOverlayClear();
-                return CreateDragResult(parameters, inputStart, inputEnd, targetName);
+                return MouseUiSimulationResponseFactory.CreateDragResult(parameters, inputStart, inputEnd, targetName);
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
-            return CreateDragResult(parameters, inputStart, inputEnd, targetName);
+            return MouseUiSimulationResponseFactory.CreateDragResult(parameters, inputStart, inputEnd, targetName);
         }
 
         // Lifecycle must match StandaloneInputModule: raycast → pointerUp → drop → endDrag
@@ -774,7 +774,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!expandCompleted)
                 {
                     QueueOverlayClear();
-                    return CreateFrameTimeoutResult(MouseAction.DragStart, inputPos, null, null);
+                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.DragStart, inputPos, null, null);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -782,7 +782,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!dissipateCompleted)
                 {
                     QueueOverlayClear();
-                    return CreateFrameTimeoutResult(MouseAction.DragStart, inputPos, null, null);
+                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.DragStart, inputPos, null, null);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -816,7 +816,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!animationCompleted)
                 {
                     QueueOverlayClear();
-                    return CreateFrameTimeoutResult(MouseAction.DragStart, inputPos, null, targetName);
+                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.DragStart, inputPos, null, targetName);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
                 animationCompleted = true;
@@ -888,7 +888,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!dragCompleted)
             {
                 QueueOverlayClear();
-                return CreateFrameTimeoutResult(MouseAction.DragMove, inputEnd, null, targetName);
+                return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.DragMove, inputEnd, null, targetName);
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -960,7 +960,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!dragCompleted)
                 {
                     QueueOverlayClear();
-                    return CreateFrameTimeoutResult(MouseAction.DragEnd, inputEnd, null, targetName);
+                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.DragEnd, inputEnd, null, targetName);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -968,7 +968,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!frameReady)
                 {
                     QueueOverlayClear();
-                    return CreateFrameTimeoutResult(MouseAction.DragEnd, inputEnd, null, targetName);
+                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.DragEnd, inputEnd, null, targetName);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
             }
@@ -988,11 +988,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!dissipateCompleted)
             {
                 QueueOverlayClear();
-                return CreateDragEndResult(parameters, inputEnd, targetName);
+                return MouseUiSimulationResponseFactory.CreateDragEndResult(parameters, inputEnd, targetName);
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
-            return CreateDragEndResult(parameters, inputEnd, targetName);
+            return MouseUiSimulationResponseFactory.CreateDragEndResult(parameters, inputEnd, targetName);
         }
 
         // User input during a CLI drag can cause Unity's StandaloneInputModule to
@@ -1126,104 +1126,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why: timeout continuations can run on timer threads while Unity objects must still be cleaned up on the Editor thread.
             context.Post(_ => cleanup(), null);
-        }
-
-        private static SimulateMouseUiResponse CreateFrameTimeoutResult(
-            MouseAction action,
-            Vector2 position,
-            Vector2? endPosition,
-            string? hitGameObjectName)
-        {
-            return new SimulateMouseUiResponse
-            {
-                Success = false,
-                Message = $"Timed out after {UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS}ms while waiting for an editor frame.",
-                Action = action.ToString(),
-                HitGameObjectName = hitGameObjectName,
-                PositionX = position.x,
-                PositionY = position.y,
-                EndPositionX = endPosition.HasValue ? endPosition.Value.x : null,
-                EndPositionY = endPosition.HasValue ? endPosition.Value.y : null
-            };
-        }
-
-        private static SimulateMouseUiResponse CreateClickResult(
-            MouseUiSimulationCommand parameters,
-            Vector2 inputPos,
-            string? targetName,
-            bool hitTarget)
-        {
-            return new SimulateMouseUiResponse
-            {
-                Success = true,
-                Message = hitTarget
-                    ? parameters.BypassRaycast
-                        ? $"Bypass-clicked '{targetName}' at ({inputPos.x:F1}, {inputPos.y:F1}) via '{parameters.TargetPath}'"
-                        : $"Clicked '{targetName}' at ({inputPos.x:F1}, {inputPos.y:F1})"
-                    : $"Clicked at ({inputPos.x:F1}, {inputPos.y:F1}) - no UI element hit",
-                Action = MouseAction.Click.ToString(),
-                HitGameObjectName = targetName,
-                PositionX = inputPos.x,
-                PositionY = inputPos.y
-            };
-        }
-
-        private static SimulateMouseUiResponse CreateLongPressResult(
-            MouseUiSimulationCommand parameters,
-            Vector2 inputPos,
-            string? targetName,
-            bool hitTarget)
-        {
-            return new SimulateMouseUiResponse
-            {
-                Success = true,
-                Message = hitTarget
-                    ? parameters.BypassRaycast
-                        ? $"Bypass-long-pressed '{targetName}' at ({inputPos.x:F1}, {inputPos.y:F1}) via '{parameters.TargetPath}' for {parameters.Duration:F1}s"
-                        : $"Long-pressed '{targetName}' at ({inputPos.x:F1}, {inputPos.y:F1}) for {parameters.Duration:F1}s"
-                    : $"Long-pressed at ({inputPos.x:F1}, {inputPos.y:F1}) for {parameters.Duration:F1}s - no UI element hit",
-                Action = MouseAction.LongPress.ToString(),
-                HitGameObjectName = targetName,
-                PositionX = inputPos.x,
-                PositionY = inputPos.y
-            };
-        }
-
-        private static SimulateMouseUiResponse CreateDragResult(
-            MouseUiSimulationCommand parameters,
-            Vector2 inputStart,
-            Vector2 inputEnd,
-            string targetName)
-        {
-            return new SimulateMouseUiResponse
-            {
-                Success = true,
-                Message = parameters.BypassRaycast
-                    ? $"Bypass-dragged '{targetName}' from ({inputStart.x:F1}, {inputStart.y:F1}) to ({inputEnd.x:F1}, {inputEnd.y:F1}) via '{parameters.TargetPath}' at {parameters.DragSpeed:F0} px/s"
-                    : $"Dragged '{targetName}' from ({inputStart.x:F1}, {inputStart.y:F1}) to ({inputEnd.x:F1}, {inputEnd.y:F1}) at {parameters.DragSpeed:F0} px/s",
-                Action = MouseAction.Drag.ToString(),
-                HitGameObjectName = targetName,
-                PositionX = inputStart.x,
-                PositionY = inputStart.y,
-                EndPositionX = inputEnd.x,
-                EndPositionY = inputEnd.y
-            };
-        }
-
-        private static SimulateMouseUiResponse CreateDragEndResult(
-            MouseUiSimulationCommand parameters,
-            Vector2 inputEnd,
-            string targetName)
-        {
-            return new SimulateMouseUiResponse
-            {
-                Success = true,
-                Message = $"Drag ended on '{targetName}' at ({inputEnd.x:F1}, {inputEnd.y:F1}) at {parameters.DragSpeed:F0} px/s",
-                Action = MouseAction.DragEnd.ToString(),
-                HitGameObjectName = targetName,
-                PositionX = inputEnd.x,
-                PositionY = inputEnd.y
-            };
         }
 
         private static RaycastResult? RaycastUI(Vector2 screenPosition, EventSystem eventSystem)
