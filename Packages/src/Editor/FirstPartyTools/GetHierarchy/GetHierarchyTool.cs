@@ -16,22 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         protected override async Task<GetHierarchyResponse> ExecuteAsync(GetHierarchySchema parameters, CancellationToken ct)
         {
             GetHierarchyUseCase useCase = new(new HierarchyService(), new HierarchySerializer());
-            UnityCliLoopHierarchyResult result = await useCase.GetHierarchyAsync(ToRequest(parameters), ct);
-            return new GetHierarchyResponse(result.FilePath, result.Message);
-        }
-
-        private static UnityCliLoopHierarchyRequest ToRequest(GetHierarchySchema parameters)
-        {
-            return new UnityCliLoopHierarchyRequest
-            {
-                IncludeInactive = parameters.IncludeInactive,
-                MaxDepth = parameters.MaxDepth,
-                RootPath = parameters.RootPath,
-                IncludeComponents = parameters.IncludeComponents,
-                IncludePaths = parameters.IncludePaths,
-                UseComponentsLut = parameters.UseComponentsLut,
-                UseSelection = parameters.UseSelection,
-            };
+            return await useCase.ExecuteAsync(parameters, ct);
         }
     }
 }

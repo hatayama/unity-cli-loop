@@ -98,21 +98,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ScreenshotTool_ToResponse_WhenCaptureTimedOut_PreservesTimeoutDetails()
+        public void ScreenshotUseCase_CreateTimedOutResult_PreservesTimeoutDetails()
         {
-            // Verifies screenshot timeout results are visible to CLI callers without pretending an image was captured.
-            UnityCliLoopScreenshotResult result = new UnityCliLoopScreenshotResult
+            // Verifies screenshot timeout results keep the timeout marker, message, and captured screenshot count.
+            List<ScreenshotInfo> screenshots = new List<ScreenshotInfo>
             {
-                TimedOut = true,
-                Message = "Timed out while waiting for frames.",
-                Screenshots = new List<UnityCliLoopScreenshotInfo>(),
+                new ScreenshotInfo
+                {
+                    ImagePath = "capture.png",
+                },
             };
-
-            ScreenshotResponse response = ScreenshotTool.ToResponse(result);
+            ScreenshotResponse response = ScreenshotUseCase.CreateTimedOutResult(
+                "EditorWindow capture",
+                "test-correlation-id",
+                screenshots);
 
             Assert.That(response.TimedOut, Is.True);
-            Assert.That(response.Message, Is.EqualTo("Timed out while waiting for frames."));
-            Assert.That(response.ScreenshotCount, Is.EqualTo(0));
+            Assert.That(
+                response.Message,
+                Is.EqualTo($"Timed out after {UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS}ms while waiting for EditorWindow capture frames."));
+            Assert.That(response.ScreenshotCount, Is.EqualTo(1));
         }
 
         private static void RestoreEditorMainThreadDispatcher()

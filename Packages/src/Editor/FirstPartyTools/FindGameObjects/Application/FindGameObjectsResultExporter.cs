@@ -23,11 +23,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         /// <param name="results">GameObject result array to export</param>
         /// <returns>Relative path to the exported file</returns>
-        public static string ExportResults(UnityCliLoopGameObjectResult[] results)
+        public static string ExportResults(FindGameObjectResult[] results)
         {
             if (results == null)
             {
-                results = new UnityCliLoopGameObjectResult[0];
+                results = new FindGameObjectResult[0];
             }
 
             // Create export directory if it doesn't exist
@@ -68,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             public string ExportTimestamp;
             public int TotalCount;
-            public UnityCliLoopGameObjectResult[] Results;
+            public FindGameObjectResult[] Results;
         }
     }
 }
