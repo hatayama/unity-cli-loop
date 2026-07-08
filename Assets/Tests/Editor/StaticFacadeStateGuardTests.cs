@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new[] { "TryCompileAsync" }
             },
             {
-                "Packages/src/Editor/Infrastructure/CLI/NativeCliInstaller.cs",
+                "Packages/src/Editor/Infrastructure/CLI/NativeCliCommandBuilder.cs",
                 new[] { "BuildRemoteInstallCommand", "BuildInstallCommandWithPackagePath" }
             },
             {
