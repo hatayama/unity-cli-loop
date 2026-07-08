@@ -450,7 +450,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildUninstallCommand_OnMacRunsInstalledLauncher()
         {
             // Verifies that editor uninstall delegates removal to the installed uloop command.
-            NativeCliInstallCommand command = NativeCliInstaller.BuildUninstallCommand(
+            NativeCliInstallCommand command = NativeCliCommandBuilder.BuildUninstallCommand(
                 "/Users/ExampleUser/.local/bin",
                 RuntimePlatform.OSXEditor);
 
@@ -463,7 +463,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildUninstallCommand_OnWindowsRunsInstalledLauncher()
         {
             // Verifies that Windows editor uninstall delegates removal to the installed uloop command.
-            NativeCliInstallCommand command = NativeCliInstaller.BuildUninstallCommand(
+            NativeCliInstallCommand command = NativeCliCommandBuilder.BuildUninstallCommand(
                 "C:\\Users\\ExampleUser\\AppData\\Local\\Programs\\uloop\\bin",
                 RuntimePlatform.WindowsEditor);
 

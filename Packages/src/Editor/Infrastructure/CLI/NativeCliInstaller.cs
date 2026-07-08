@@ -79,7 +79,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     $"Could not resolve the global CLI install directory. Set {CliConstants.INSTALL_DIR_ENVIRONMENT_VARIABLE} and try again.");
             }
 
-            NativeCliInstallCommand command = BuildUninstallCommand(installDirectory, platform);
+            NativeCliInstallCommand command = NativeCliCommandBuilder.BuildUninstallCommand(
+                installDirectory,
+                platform);
             CliInstallResult result = await Task.Run(
                 () => RunUninstallCommand(command, installDirectory, ct, INSTALL_PROCESS_TIMEOUT_MS),
                 ct);
@@ -107,19 +109,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             RemoveInstallDirectoryFromCurrentProcessPath(platform);
             return result;
-        }
-
-        internal static NativeCliInstallCommand BuildUninstallCommand(
-            string installDirectory,
-            RuntimePlatform platform)
-        {
-            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(installDirectory), "installDirectory must not be null or empty");
-
-            string installPath = NativeCliInstallPathResolver.GetGlobalCliInstallPath(installDirectory, platform);
-            return new NativeCliInstallCommand(
-                installPath,
-                "uninstall",
-                $"{NativeCliCommandBuilder.QuoteProcessArgument(installPath)} uninstall");
         }
 
         internal static CliInstallResult RunInstallCommand(
