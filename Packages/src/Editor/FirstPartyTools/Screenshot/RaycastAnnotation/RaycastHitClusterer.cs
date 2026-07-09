@@ -69,6 +69,80 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return representative;
         }
 
+        // Split a set of reachable samples into 4-connected components based on their (Row, Column) grid cells.
+        // Why: RaycastGridAnnotator clusters by GameObject (see CreateClusterKey), but a single GameObject can
+        // still produce multiple visually closed outline regions when UI occlusion carves gaps in its
+        // reachable samples. The caller uses these components to emit one annotation per closed region.
+        internal static List<List<RaycastClusterSample>> SplitIntoConnectedComponents(
+            List<RaycastClusterSample> reachableSamples)
+        {
+            System.Diagnostics.Debug.Assert(reachableSamples != null, "Reachable samples must not be null.");
+            List<RaycastClusterSample> validSamples = reachableSamples!;
+
+            List<List<RaycastClusterSample>> components = new List<List<RaycastClusterSample>>();
+            Dictionary<(int, int), RaycastClusterSample> cellToSample =
+                new Dictionary<(int, int), RaycastClusterSample>();
+            List<(int, int)> gridCellOrder = new List<(int, int)>();
+
+            foreach (RaycastClusterSample sample in validSamples)
+            {
+                if (sample.Row > 0 && sample.Column > 0)
+                {
+                    (int, int) cell = (sample.Row, sample.Column);
+                    System.Diagnostics.Debug.Assert(
+                        !cellToSample.ContainsKey(cell),
+                        "Reachable samples must not contain duplicate (Row, Column) cells.");
+                    cellToSample.Add(cell, sample);
+                    gridCellOrder.Add(cell);
+                    continue;
+                }
+                components.Add(new List<RaycastClusterSample> { sample });
+            }
+
+            HashSet<(int, int)> visited = new HashSet<(int, int)>();
+            foreach ((int, int) startCell in gridCellOrder)
+            {
+                if (visited.Contains(startCell))
+                {
+                    continue;
+                }
+
+                List<RaycastClusterSample> component = new List<RaycastClusterSample>();
+                Queue<(int, int)> queue = new Queue<(int, int)>();
+                queue.Enqueue(startCell);
+                visited.Add(startCell);
+                while (queue.Count > 0)
+                {
+                    (int row, int column) current = queue.Dequeue();
+                    component.Add(cellToSample[current]);
+
+                    (int, int)[] neighbors =
+                    {
+                        (current.row - 1, current.column),
+                        (current.row + 1, current.column),
+                        (current.row, current.column - 1),
+                        (current.row, current.column + 1)
+                    };
+                    foreach ((int, int) neighbor in neighbors)
+                    {
+                        if (visited.Contains(neighbor))
+                        {
+                            continue;
+                        }
+                        if (!cellToSample.ContainsKey(neighbor))
+                        {
+                            continue;
+                        }
+                        visited.Add(neighbor);
+                        queue.Enqueue(neighbor);
+                    }
+                }
+                components.Add(component);
+            }
+
+            return components;
+        }
+
         internal static RaycastClusterSample? SelectReachableRepresentativeSample(
             List<RaycastClusterSample> samples,
             RaycastClusterSampleOcclusionCheck isOccluded)
