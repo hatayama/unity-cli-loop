@@ -25,8 +25,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public string ScreenshotToInputFormula { get; set; } = UnityCliLoopConstants.SCREENSHOT_WINDOW_TO_INPUT_FORMULA_UNAVAILABLE;
         public string UnityInputFormula { get; set; } = "";
         public List<UIElementInfo> AnnotatedElements { get; set; } = new List<UIElementInfo>();
-        public List<RaycastGridPointInfo> RaycastGridPoints { get; set; } = new List<RaycastGridPointInfo>();
         public List<RaycastLayerSummaryInfo> RaycastLayerSummaries { get; set; } = new List<RaycastLayerSummaryInfo>();
+        public List<string> RaycastLayerNamesChecked { get; set; } = new List<string>();
     }
 
     /// <summary>
