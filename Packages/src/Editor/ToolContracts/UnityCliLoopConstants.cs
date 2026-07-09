@@ -93,6 +93,13 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY =
             "unity_x = input_x; unity_y = gameViewHeight - input_y";
 
+        // Screenshot tool coordinate constants
+        public const string COORDINATE_SYSTEM_TOP_LEFT_WINDOW = "top-left-window";
+        public const string SCREENSHOT_RENDERING_TO_INPUT_FORMULA =
+            "simulate_mouse_x = image_x / resolutionScale; simulate_mouse_y = image_y / resolutionScale + imageToInputOffsetY";
+        public const string SCREENSHOT_WINDOW_TO_INPUT_FORMULA_UNAVAILABLE =
+            "unavailable: window screenshots include Unity Editor chrome; use capture-mode rendering for mouse input coordinates";
+
         public const int CORRELATION_ID_LENGTH = 8;
         public const string GUID_FORMAT_NO_HYPHENS = "N";
         

@@ -37,15 +37,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return EditorWindowCaptureUtility.GetOpenWindowNames();
         }
 
-        public Task<(Texture2D? texture, int yOffset, bool timedOut)> CaptureGameRenderingAsync(
+        public async Task<(Texture2D? texture, int yOffset, bool timedOut)> CaptureGameRenderingAsync(
             float resolutionScale,
             int timeoutMilliseconds,
             CancellationToken ct)
         {
-            return EditorWindowCaptureUtility.CaptureGameRenderingAsync(
-                resolutionScale,
-                timeoutMilliseconds,
-                ct);
+            (Texture2D? texture, GameRenderingImageInfo renderingImageInfo, bool timedOut) =
+                await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
+                    resolutionScale,
+                    null,
+                    timeoutMilliseconds,
+                    ct).ConfigureAwait(false);
+            return (texture, renderingImageInfo.ImageToInputOffsetY, timedOut);
         }
     }
 
