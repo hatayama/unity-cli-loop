@@ -182,7 +182,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 DestroyAnnotationOverlay(annotationOverlay, editorContext);
             }
 
-            UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, Mathf.RoundToInt(gameViewSize.y));
+            // Uses the settled capture-time size, not the pre-capture gameViewSize sample, so annotated
+            // element coordinates stay consistent with the GameViewWidth/Height this response reports.
+            UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, Mathf.RoundToInt(captureRenderingInfo.GameViewSize.y));
             List<UIElementInfo> responseAnnotatedElements =
                 CreateResponseAnnotatedElements(annotatedElements, physicsColliderElements);
 
