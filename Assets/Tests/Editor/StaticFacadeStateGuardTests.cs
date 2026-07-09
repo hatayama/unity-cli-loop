@@ -69,7 +69,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/FirstPartyTools/SimulateKeyboard/KeyboardInputMainThreadCleanup.cs",
             "Packages/src/Editor/FirstPartyTools/SimulateKeyboard/KeyboardInputActionExecutor.cs",
             "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCodeMissingReturnRetryPolicy.cs",
-            "Packages/src/Editor/Infrastructure/Server/UnityCliLoopServerRecoveryExecutor.cs"
+            "Packages/src/Editor/Infrastructure/Server/UnityCliLoopServerRecoveryExecutor.cs",
+            "Packages/src/Editor/Infrastructure/ThirdPartyToolMigration/ThirdPartyToolMigrationFastFirstPartyScreenshotRequirementCollector.cs"
         };
 
         private static readonly Dictionary<string, string[]> OverloadGuardMethodsByPath = new Dictionary<string, string[]>
