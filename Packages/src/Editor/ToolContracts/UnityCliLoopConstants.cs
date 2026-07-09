@@ -86,6 +86,13 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string SCREENSHOTS_DIR = "Screenshots";
         public const string VIBE_LOGS_DIR = "VibeLogs";
 
+        // Raycast tool constants
+        public const float RAYCAST_DEFAULT_MAX_DISTANCE = 1000f;
+        public const string COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW = "top-left-game-view";
+        public const string COORDINATE_SYSTEM_BOTTOM_LEFT_GAME_VIEW = "bottom-left-game-view";
+        public const string COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY =
+            "unity_x = input_x; unity_y = gameViewHeight - input_y";
+
         public const int CORRELATION_ID_LENGTH = 8;
         public const string GUID_FORMAT_NO_HYPHENS = "N";
         
