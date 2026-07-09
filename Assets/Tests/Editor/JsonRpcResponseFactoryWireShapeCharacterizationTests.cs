@@ -59,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void CreateDispatchAcceptedResponse_WithHeartbeatNegotiated_ProducesFrozenJson()
         {
             // Verifies the dispatch-accepted-with-heartbeat wire shape is byte-equal to the frozen baseline.
-            string response = JsonRpcRequestProcessor.CreateDispatchAcceptedResponse(1, 10);
+            string response = JsonRpcResponseFactory.CreateDispatchAcceptedResponse(1, 10);
 
             Assert.That(response, Is.EqualTo(
                 "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"accepted\":true},\"uloop\":{\"phase\":\"accepted\",\"heartbeatIntervalSeconds\":10}}"));
@@ -69,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void CreateDispatchAcceptedResponse_WithoutHeartbeat_ProducesFrozenJson()
         {
             // Verifies the dispatch-accepted-without-heartbeat wire shape is byte-equal to the frozen baseline.
-            string response = JsonRpcRequestProcessor.CreateDispatchAcceptedResponse(1, 0);
+            string response = JsonRpcResponseFactory.CreateDispatchAcceptedResponse(1, 0);
 
             Assert.That(response, Is.EqualTo(
                 "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"accepted\":true},\"uloop\":{\"phase\":\"accepted\"}}"));
@@ -79,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void CreateHeartbeatResponse_WhenSerialized_ProducesFrozenJson()
         {
             // Verifies the heartbeat frame wire shape is byte-equal to the frozen baseline.
-            string response = JsonRpcRequestProcessor.CreateHeartbeatResponse(7, 12.5);
+            string response = JsonRpcResponseFactory.CreateHeartbeatResponse(7, 12.5);
 
             Assert.That(response, Is.EqualTo(
                 "{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"alive\":true},\"uloop\":{\"phase\":\"heartbeat\",\"mainThreadStallSeconds\":12.5}}"));
