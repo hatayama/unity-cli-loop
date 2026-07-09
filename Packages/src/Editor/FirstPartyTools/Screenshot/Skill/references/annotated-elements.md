@@ -18,18 +18,18 @@ Read this when using `uloop screenshot --capture-mode rendering --annotate-eleme
 
 ## Coordinate Conversion
 
-When `CoordinateSystem` is `"gameView"`, convert image pixel coordinates to simulate-mouse coordinates:
+When `ImageCoordinateSystem` is `"top-left-game-view"`, convert image pixel coordinates to simulate-mouse coordinates using `ScreenshotToInputFormula`:
 
 ```text
-sim_x = image_x / ResolutionScale
-sim_y = image_y / ResolutionScale + YOffset
+simulate_mouse_x = image_x / resolutionScale
+simulate_mouse_y = image_y / resolutionScale + imageToInputOffsetY
 ```
 
 When `ResolutionScale` is `1.0`, this simplifies to:
 
 ```text
-sim_x = image_x
-sim_y = image_y + YOffset
+simulate_mouse_x = image_x
+simulate_mouse_y = image_y + imageToInputOffsetY
 ```
 
 ## Annotation Readability

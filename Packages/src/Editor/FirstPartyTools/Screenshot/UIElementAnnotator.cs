@@ -1,3 +1,4 @@
+#nullable enable
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -58,9 +59,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             List<UIElementInfo> elements = new();
             HashSet<GameObject> processedObjects = new();
+            UiRaycastHelper.RaycastContext? raycastContext = CreateRaycastContextForCurrentEventSystem();
 
-            CollectSelectables(elements, processedObjects);
-            CollectEventHandlers(elements, processedObjects);
+            CollectSelectables(elements, processedObjects, raycastContext);
+            CollectEventHandlers(elements, processedObjects, raycastContext);
 
             return elements;
         }
@@ -117,10 +119,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             canvas.sortingOrder = OVERLAY_SORT_ORDER;
 
             Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            List<AnnotationDrawInfo> drawInfos = new(elements.Count);
+            float physicsAnnotationScreenHeight = CalculatePhysicsAnnotationScreenHeight(elements);
 
             foreach (UIElementInfo element in elements)
             {
-                CreateAnnotationForElement(root.transform, element, font, borderMetrics);
+                drawInfos.Add(CreateAnnotationDrawInfo(element, physicsAnnotationScreenHeight));
+            }
+
+            foreach (AnnotationDrawInfo drawInfo in drawInfos)
+            {
+                CreateAnnotationBorderForElement(root.transform, drawInfo, borderMetrics);
+            }
+
+            foreach (AnnotationDrawInfo drawInfo in drawInfos)
+            {
+                CreateAnnotationLabelForElement(root.transform, drawInfo, font, borderMetrics);
             }
 
             return root;
@@ -134,7 +148,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static void CollectSelectables(List<UIElementInfo> elements, HashSet<GameObject> processedObjects)
+        private static void CollectSelectables(
+            List<UIElementInfo> elements,
+            HashSet<GameObject> processedObjects,
+            UiRaycastHelper.RaycastContext? raycastContext)
         {
             Selectable[] selectables = Selectable.allSelectablesArray;
             foreach (Selectable selectable in selectables)
@@ -147,13 +164,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 processedObjects.Add(selectable.gameObject);
 
                 string type = ClassifySelectable(selectable);
-                AddElementInfo(elements, selectable.gameObject, selectable.name, type);
+                AddElementInfo(elements, selectable.gameObject, selectable.name, type, raycastContext);
             }
         }
 
         // Collects non-Selectable MonoBehaviours that implement pointer/drag event interfaces.
         // Priority: IDragHandler > IDropHandler > IPointerClickHandler > IPointerDownHandler
-        private static void CollectEventHandlers(List<UIElementInfo> elements, HashSet<GameObject> processedObjects)
+        private static void CollectEventHandlers(
+            List<UIElementInfo> elements,
+            HashSet<GameObject> processedObjects,
+            UiRaycastHelper.RaycastContext? raycastContext)
         {
             MonoBehaviour[] allBehaviours = Object.FindObjectsOfType<MonoBehaviour>();
             foreach (MonoBehaviour behaviour in allBehaviours)
@@ -168,18 +188,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string type = ClassifyEventHandler(behaviour);
+                string? type = ClassifyEventHandler(behaviour);
                 if (type == null)
                 {
                     continue;
                 }
 
                 processedObjects.Add(behaviour.gameObject);
-                AddElementInfo(elements, behaviour.gameObject, behaviour.name, type);
+                AddElementInfo(elements, behaviour.gameObject, behaviour.name, type, raycastContext);
             }
         }
 
-        private static string ClassifyEventHandler(MonoBehaviour behaviour)
+        private static string? ClassifyEventHandler(MonoBehaviour behaviour)
         {
             if (behaviour is IDragHandler) return "Draggable";
             if (behaviour is IDropHandler) return "DropTarget";
@@ -204,11 +224,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Reusable buffers to avoid per-element allocations in AddElementInfo → GetScreenCorners
         private static readonly Vector3[] SharedWorldCorners = new Vector3[4];
         private static readonly Vector2[] SharedScreenCorners = new Vector2[4];
-        private static readonly List<RaycastResult> SharedRaycastResults = new List<RaycastResult>();
-        private static PointerEventData SharedPointerEventData;
-        private static EventSystem SharedPointerEventSystem;
 
-        private static void AddElementInfo(List<UIElementInfo> elements, GameObject go, string name, string type)
+        private static void AddElementInfo(
+            List<UIElementInfo> elements,
+            GameObject go,
+            string name,
+            string type,
+            UiRaycastHelper.RaycastContext? raycastContext)
         {
             RectTransform rectTransform = go.GetComponent<RectTransform>();
             if (rectTransform == null)
@@ -241,7 +263,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             float centerX = (minX + maxX) / 2f;
             float centerY = (minY + maxY) / 2f;
 
-            if (!IsRaycastReachable(go, centerX, centerY))
+            if (!IsRaycastReachable(go, centerX, centerY, raycastContext))
             {
                 return;
             }
@@ -266,50 +288,44 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static bool HasActiveGraphicRaycaster(Canvas canvas)
         {
             GraphicRaycaster raycaster = canvas.GetComponent<GraphicRaycaster>();
-            return raycaster != null && raycaster.isActiveAndEnabled;
+            return canvas.isActiveAndEnabled && raycaster != null && raycaster.isActiveAndEnabled;
         }
 
-        // simulate-mouse uses EventSystem.RaycastAll, so only advertise elements whose
-        // center point is actually hittable. Skips the check when no EventSystem exists
-        // (e.g. annotation-only scenes without interaction).
-        private static bool IsRaycastReachable(GameObject go, float centerX, float centerY)
+        // Uses the same raycast path as simulate-mouse so annotations match UI input behavior.
+        // Skips the check when no EventSystem exists, such as annotation-only scenes without interaction.
+        private static bool IsRaycastReachable(
+            GameObject go,
+            float centerX,
+            float centerY,
+            UiRaycastHelper.RaycastContext? raycastContext)
         {
-            EventSystem eventSystem = EventSystem.current;
-            if (eventSystem == null)
+            if (raycastContext == null)
             {
                 return true;
             }
 
-            if (SharedPointerEventData == null || SharedPointerEventSystem != eventSystem)
+            RaycastResult? raycastResult = raycastContext.Raycast(new Vector2(centerX, centerY));
+            if (raycastResult == null)
             {
-                SharedPointerEventData = new PointerEventData(eventSystem);
-                SharedPointerEventSystem = eventSystem;
+                return false;
             }
-            SharedPointerEventData.position = new Vector2(centerX, centerY);
-
-            SharedRaycastResults.Clear();
-            eventSystem.RaycastAll(SharedPointerEventData, SharedRaycastResults);
 
             Transform targetTransform = go.transform;
-            foreach (RaycastResult raycastResult in SharedRaycastResults)
+            Transform hitTransform = raycastResult.Value.gameObject.transform;
+            return hitTransform == targetTransform || hitTransform.IsChildOf(targetTransform);
+        }
+
+        // Reuses one raycast context while collecting annotations because a screenshot can
+        // test many UI elements in one frame.
+        private static UiRaycastHelper.RaycastContext? CreateRaycastContextForCurrentEventSystem()
+        {
+            EventSystem eventSystem = EventSystem.current;
+            if (eventSystem == null)
             {
-                Transform hitTransform = raycastResult.gameObject.transform;
-                if (hitTransform == targetTransform || hitTransform.IsChildOf(targetTransform))
-                {
-                    return true;
-                }
+                return null;
             }
 
-            // EventSystem clips at Screen.width/height which can be smaller than the
-            // Canvas layout space (Game view target resolution). Check Canvas space directly.
-            RectTransform rectTransform = go.GetComponent<RectTransform>();
-            if (rectTransform != null)
-            {
-                return RectTransformUtility.RectangleContainsScreenPoint(
-                    rectTransform, new Vector2(centerX, centerY), null);
-            }
-
-            return false;
+            return new UiRaycastHelper.RaycastContext(eventSystem);
         }
 
         // Writes 4 corners into SharedScreenCorners in screen pixel coordinates (bottom-left origin).
@@ -359,51 +375,169 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        private static void CreateAnnotationForElement(
+        private static void CreateAnnotationBorderForElement(
             Transform parent,
-            UIElementInfo element,
-            Font font,
+            AnnotationDrawInfo drawInfo,
             AnnotationBorderMetrics borderMetrics)
         {
-            float screenMinX = element.BoundsMinX;
-            float screenMaxX = element.BoundsMaxX;
-            float screenMinY = element.BoundsMinY;
-            float screenMaxY = element.BoundsMaxY;
-
-            Color color = GetAnnotationColorForElement(element);
-            Color contrastColor = GetContrastingTextColor(color);
-            AnnotationBorderColors borderColors = GetAnnotationBorderColors(color);
+            if (drawInfo.OutlineSegments.Count > 0)
+            {
+                CreateAnnotationOutlineForElement(parent, drawInfo, borderMetrics);
+                return;
+            }
 
             CreateBorder(
                 parent,
                 "LightOuter",
-                screenMinX - borderMetrics.OuterOffset,
-                screenMinY - borderMetrics.OuterOffset,
-                screenMaxX + borderMetrics.OuterOffset,
-                screenMaxY + borderMetrics.OuterOffset,
+                drawInfo.ScreenMinX - borderMetrics.OuterOffset,
+                drawInfo.ScreenMinY - borderMetrics.OuterOffset,
+                drawInfo.ScreenMaxX + borderMetrics.OuterOffset,
+                drawInfo.ScreenMaxY + borderMetrics.OuterOffset,
                 borderMetrics.NeutralThickness,
-                borderColors.Outer);
+                drawInfo.BorderColors.Outer);
             CreateBorder(
                 parent,
                 "ColorMiddle",
-                screenMinX - borderMetrics.ColorOffset,
-                screenMinY - borderMetrics.ColorOffset,
-                screenMaxX + borderMetrics.ColorOffset,
-                screenMaxY + borderMetrics.ColorOffset,
+                drawInfo.ScreenMinX - borderMetrics.ColorOffset,
+                drawInfo.ScreenMinY - borderMetrics.ColorOffset,
+                drawInfo.ScreenMaxX + borderMetrics.ColorOffset,
+                drawInfo.ScreenMaxY + borderMetrics.ColorOffset,
                 borderMetrics.ColorThickness,
-                borderColors.Middle);
-            CreateBorder(parent, "DarkInner", screenMinX, screenMinY, screenMaxX, screenMaxY, borderMetrics.NeutralThickness, borderColors.Inner);
+                drawInfo.BorderColors.Middle);
+            CreateBorder(
+                parent,
+                "DarkInner",
+                drawInfo.ScreenMinX,
+                drawInfo.ScreenMinY,
+                drawInfo.ScreenMaxX,
+                drawInfo.ScreenMaxY,
+                borderMetrics.NeutralThickness,
+                drawInfo.BorderColors.Inner);
+        }
 
-            string labelText = CreateDisplayLabel(element);
+        private static void CreateAnnotationOutlineForElement(
+            Transform parent,
+            AnnotationDrawInfo drawInfo,
+            AnnotationBorderMetrics borderMetrics)
+        {
+            float outerThickness = borderMetrics.ColorThickness + borderMetrics.NeutralThickness * 2f;
+            CreateOutline(
+                parent,
+                "LightOuter",
+                drawInfo.OutlineSegments,
+                outerThickness,
+                drawInfo.BorderColors.Outer);
+            CreateOutline(
+                parent,
+                "ColorMiddle",
+                drawInfo.OutlineSegments,
+                borderMetrics.ColorThickness,
+                drawInfo.BorderColors.Middle);
+            CreateOutline(
+                parent,
+                "DarkInner",
+                drawInfo.OutlineSegments,
+                borderMetrics.NeutralThickness,
+                drawInfo.BorderColors.Inner);
+        }
+
+        private static void CreateAnnotationLabelForElement(
+            Transform parent,
+            AnnotationDrawInfo drawInfo,
+            Font font,
+            AnnotationBorderMetrics borderMetrics)
+        {
             CreateLabel(
                 parent,
-                labelText,
-                screenMinX,
-                screenMaxY + borderMetrics.OuterOffset + borderMetrics.LabelOutlineDistance + borderMetrics.LabelToBorderGap,
-                color,
-                contrastColor,
+                drawInfo.DisplayLabel,
+                drawInfo.ScreenMinX,
+                drawInfo.ScreenMaxY + borderMetrics.OuterOffset + borderMetrics.LabelOutlineDistance + borderMetrics.LabelToBorderGap,
+                drawInfo.Color,
+                drawInfo.ContrastColor,
                 font,
                 borderMetrics.LabelOutlineDistance);
+        }
+
+        private static AnnotationDrawInfo CreateAnnotationDrawInfo(
+            UIElementInfo element,
+            float physicsAnnotationScreenHeight)
+        {
+            Color color = GetAnnotationColorForElement(element);
+            Color contrastColor = GetContrastingTextColor(color);
+            AnnotationBorderColors borderColors = GetAnnotationBorderColors(color);
+            string displayLabel = CreateDisplayLabel(element);
+            float screenMinX = element.BoundsMinX;
+            float screenMinY = element.BoundsMinY;
+            float screenMaxX = element.BoundsMaxX;
+            float screenMaxY = element.BoundsMaxY;
+            List<RaycastOutlineSegment> outlineSegments = element.RaycastOutlineSegments;
+
+            if (IsPhysicsColliderElement(element))
+            {
+                Debug.Assert(
+                    physicsAnnotationScreenHeight >= 0f,
+                    "Physics collider annotations require a non-negative Game View height.");
+                screenMinY = physicsAnnotationScreenHeight - element.BoundsMaxY;
+                screenMaxY = physicsAnnotationScreenHeight - element.BoundsMinY;
+                outlineSegments = ConvertTopLeftOutlineSegmentsToScreenSegments(
+                    element.RaycastOutlineSegments,
+                    physicsAnnotationScreenHeight);
+            }
+
+            return new AnnotationDrawInfo(
+                screenMinX,
+                screenMinY,
+                screenMaxX,
+                screenMaxY,
+                color,
+                contrastColor,
+                borderColors,
+                displayLabel,
+                outlineSegments);
+        }
+
+        private static float CalculatePhysicsAnnotationScreenHeight(List<UIElementInfo> elements)
+        {
+            foreach (UIElementInfo element in elements)
+            {
+                if (!IsPhysicsColliderElement(element))
+                {
+                    continue;
+                }
+
+                return GameViewCoordinateUtility.GetMainGameViewSize().y;
+            }
+
+            return 0f;
+        }
+
+        private static bool IsPhysicsColliderElement(UIElementInfo element)
+        {
+            return element.Type == "PhysicsCollider";
+        }
+
+        private static List<RaycastOutlineSegment> ConvertTopLeftOutlineSegmentsToScreenSegments(
+            List<RaycastOutlineSegment> outlineSegments,
+            float screenHeight)
+        {
+            List<RaycastOutlineSegment> screenSegments = new(outlineSegments.Count);
+            foreach (RaycastOutlineSegment segment in outlineSegments)
+            {
+                screenSegments.Add(ConvertTopLeftOutlineSegmentToScreenSegment(segment, screenHeight));
+            }
+
+            return screenSegments;
+        }
+
+        internal static RaycastOutlineSegment ConvertTopLeftOutlineSegmentToScreenSegment(
+            RaycastOutlineSegment segment,
+            float screenHeight)
+        {
+            return new RaycastOutlineSegment(
+                segment.StartX,
+                screenHeight - segment.StartY,
+                segment.EndX,
+                screenHeight - segment.EndY);
         }
 
         private static void CreateBorder(
@@ -417,6 +551,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CreateBorderEdge(parent, $"{name}_Bottom", borderEdgeRects.Bottom, color);
             CreateBorderEdge(parent, $"{name}_Left", borderEdgeRects.Left, color);
             CreateBorderEdge(parent, $"{name}_Right", borderEdgeRects.Right, color);
+        }
+
+        private static void CreateOutline(
+            Transform parent,
+            string name,
+            List<RaycastOutlineSegment> outlineSegments,
+            float thickness,
+            Color color)
+        {
+            for (int i = 0; i < outlineSegments.Count; i++)
+            {
+                Rect rect = CalculateOutlineSegmentRect(outlineSegments[i], thickness);
+                CreateBorderEdge(parent, $"{name}_Outline_{i}", rect, color);
+            }
+        }
+
+        internal static Rect CalculateOutlineSegmentRect(RaycastOutlineSegment segment, float thickness)
+        {
+            Debug.Assert(thickness >= 0f, "Outline thickness must not be negative.");
+            bool horizontal = Mathf.Approximately(segment.StartY, segment.EndY);
+            bool vertical = Mathf.Approximately(segment.StartX, segment.EndX);
+            Debug.Assert(horizontal || vertical, "Raycast outline segments must be axis-aligned.");
+
+            if (horizontal)
+            {
+                float minX = Mathf.Min(segment.StartX, segment.EndX) - thickness / 2f;
+                float width = Mathf.Abs(segment.EndX - segment.StartX) + thickness;
+                return new Rect(minX, segment.StartY - thickness / 2f, width, thickness);
+            }
+
+            float minY = Mathf.Min(segment.StartY, segment.EndY) - thickness / 2f;
+            float height = Mathf.Abs(segment.EndY - segment.StartY) + thickness;
+            return new Rect(segment.StartX - thickness / 2f, minY, thickness, height);
         }
 
         internal static BorderEdgeRects CalculateBorderEdgeRects(
@@ -511,7 +678,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(element != null, "UIElementInfo must not be null.");
 
-            int labelIndex = GetLabelIndex(element.Label);
+            int labelIndex = GetLabelIndex(element!.Label);
             if (labelIndex < 0)
             {
                 return FALLBACK_COLOR;
@@ -589,7 +756,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(element != null, "UIElementInfo must not be null.");
 
-            string interaction = element.Interaction;
+            string interaction = element!.Interaction;
             if (string.IsNullOrEmpty(interaction))
             {
                 interaction = GetInteractionForType(element.Type);
@@ -657,6 +824,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Inner = inner;
                 Middle = middle;
                 Outer = outer;
+            }
+        }
+
+        private readonly struct AnnotationDrawInfo
+        {
+            public readonly float ScreenMinX;
+            public readonly float ScreenMinY;
+            public readonly float ScreenMaxX;
+            public readonly float ScreenMaxY;
+            public readonly Color Color;
+            public readonly Color ContrastColor;
+            public readonly AnnotationBorderColors BorderColors;
+            public readonly string DisplayLabel;
+            public readonly List<RaycastOutlineSegment> OutlineSegments;
+
+            public AnnotationDrawInfo(
+                float screenMinX,
+                float screenMinY,
+                float screenMaxX,
+                float screenMaxY,
+                Color color,
+                Color contrastColor,
+                AnnotationBorderColors borderColors,
+                string displayLabel,
+                List<RaycastOutlineSegment> outlineSegments)
+            {
+                ScreenMinX = screenMinX;
+                ScreenMinY = screenMinY;
+                ScreenMaxX = screenMaxX;
+                ScreenMaxY = screenMaxY;
+                Color = color;
+                ContrastColor = contrastColor;
+                BorderColors = borderColors;
+                DisplayLabel = displayLabel;
+                OutlineSegments = outlineSegments;
             }
         }
 

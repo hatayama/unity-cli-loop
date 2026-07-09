@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
-using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.InternalAPIBridge;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -165,11 +164,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Captures game rendering by reading GameView's composited RenderTexture (PlayMode only).
         // Contains all cameras + Screen Space Overlay Canvas, without tab bar or borders.
-        // Coordinate mapping to simulate-mouse:
-        //   sim_x = image_x / resolutionScale, sim_y = image_y / resolutionScale + YOffset
-        // where YOffset = Screen.height - RenderTexture.height (returned in the tuple).
-        public static async Task<(Texture2D? texture, int yOffset, bool timedOut)> CaptureGameRenderingAsync(
+        internal static async Task<(Texture2D? texture, GameRenderingImageInfo renderingImageInfo, bool timedOut)> CaptureGameRenderingAsync(
             float resolutionScale,
+            GameRenderingImageInfo? renderingImageInfo,
             int frameWaitTimeoutMilliseconds,
             CancellationToken ct)
         {
@@ -184,7 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ct).ConfigureAwait(false);
             if (!framesReady)
             {
-                return (null, 0, true);
+                return (null, default, true);
             }
 
             await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
@@ -193,10 +190,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (rt == null)
             {
                 Debug.LogWarning("[EditorWindowCaptureUtility] GameView RenderTexture is not available");
-                return (null, 0, false);
+                GameRenderingImageInfo unavailableInfo = renderingImageInfo ??
+                    CreateUnavailableGameRenderingImageInfo(Handles.GetMainGameViewSize());
+                return (null, unavailableInfo, false);
             }
 
-            int yOffset = (int)Handles.GetMainGameViewSize().y - rt.height;
+            // GameView RenderTexture can be shorter than the full input area, so raw image Y needs this offset.
+            GameRenderingImageInfo captureInfo = renderingImageInfo ??
+                CreateGameRenderingImageInfo(Handles.GetMainGameViewSize(), rt.width, rt.height);
 
             // RenderTexture uses bottom-left origin; flip vertically for standard top-left image format
             RenderTextureDescriptor flipDescriptor = new(rt.width, rt.height, rt.format, 0);
@@ -231,7 +232,63 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 texture = ApplyResolutionScaling(texture, resolutionScale);
             }
 
-            return (texture, yOffset, false);
+            return (texture, captureInfo, false);
+        }
+
+        // Raycast-grid annotations must use the same settled RenderTexture geometry as the PNG capture path.
+        internal static async Task<(GameRenderingImageInfo renderingImageInfo, bool timedOut)> GetGameRenderingImageInfoAsync(
+            int frameWaitTimeoutMilliseconds,
+            CancellationToken ct)
+        {
+            Debug.Assert(UnityEditor.EditorApplication.isPlaying, "GetGameRenderingImageInfoAsync requires PlayMode");
+
+            SynchronizationContext editorContext =
+                CapturedEditorSynchronizationContext.RequireCurrent("raycast grid rendering info capture");
+            bool framesReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                2,
+                frameWaitTimeoutMilliseconds,
+                ct).ConfigureAwait(false);
+            if (!framesReady)
+            {
+                return (default, true);
+            }
+
+            await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+
+            Vector2 gameViewSize = Handles.GetMainGameViewSize();
+            RenderTexture rt = GameViewBridge.GetRenderTexture();
+            if (rt == null)
+            {
+                return (CreateUnavailableGameRenderingImageInfo(gameViewSize), false);
+            }
+
+            return (CreateGameRenderingImageInfo(gameViewSize, rt.width, rt.height), false);
+        }
+
+        internal static GameRenderingImageInfo CreateUnavailableGameRenderingImageInfo(Vector2 gameViewSize)
+        {
+            return new GameRenderingImageInfo(gameViewSize, gameViewSize, 0);
+        }
+
+        private static GameRenderingImageInfo CreateGameRenderingImageInfo(
+            Vector2 gameViewSize,
+            int renderTextureWidth,
+            int renderTextureHeight)
+        {
+            Vector2 renderingImageSize = new(renderTextureWidth, renderTextureHeight);
+            int imageToInputOffsetY = CalculateImageToInputOffsetY(gameViewSize, renderTextureHeight);
+            return new GameRenderingImageInfo(gameViewSize, renderingImageSize, imageToInputOffsetY);
+        }
+
+        /// <summary>
+        /// Calculates the Y offset from rendering screenshot image space to Game View input space.
+        /// </summary>
+        internal static int CalculateImageToInputOffsetY(Vector2 gameViewSize, int renderTextureHeight)
+        {
+            Debug.Assert(gameViewSize.y >= 0f, "Game View height must not be negative.");
+            Debug.Assert(renderTextureHeight >= 0, "RenderTexture height must not be negative.");
+
+            return Mathf.RoundToInt(gameViewSize.y) - renderTextureHeight;
         }
 
         private static Texture2D ApplyResolutionScaling(Texture2D originalTexture, float scale)
@@ -297,6 +354,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return MainThreadSwitcher.SwitchToMainThread(ct);
+        }
+    }
+
+    /// <summary>
+    /// Describes the Game View geometry used to map rendering screenshots back to input coordinates.
+    /// </summary>
+    internal readonly struct GameRenderingImageInfo
+    {
+        public readonly Vector2 GameViewSize;
+        public readonly Vector2 RenderingImageSize;
+        public readonly int ImageToInputOffsetY;
+
+        public GameRenderingImageInfo(
+            Vector2 gameViewSize,
+            Vector2 renderingImageSize,
+            int imageToInputOffsetY)
+        {
+            GameViewSize = gameViewSize;
+            RenderingImageSize = renderingImageSize;
+            ImageToInputOffsetY = imageToInputOffsetY;
         }
     }
 }

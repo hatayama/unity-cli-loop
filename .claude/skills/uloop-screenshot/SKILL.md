@@ -79,9 +79,10 @@ Returns JSON with:
   - `FileSizeBytes`: Size of the saved file in bytes
   - `Width`: Captured image width in pixels
   - `Height`: Captured image height in pixels
-  - `CoordinateSystem`: `"gameView"` or `"window"`
+  - `ImageCoordinateSystem`: `"top-left-game-view"` or `"top-left-window"`
   - `ResolutionScale`: Resolution scale used for capture
-  - `YOffset`: Y offset used for gameView coordinate conversion
+  - `ImageToInputOffsetY`: Y offset used for top-left-game-view coordinate conversion
+  - `ScreenshotToInputFormula`: Formula converting raw image pixels to simulate-mouse input coordinates
   - `AnnotatedElements`: Array of annotated UI element metadata. Empty unless `--annotate-elements` is used.
 
 For `AnnotatedElements` fields and gameView coordinate conversion, read [references/annotated-elements.md](references/annotated-elements.md) before using screenshot coordinates with mouse simulation tools.

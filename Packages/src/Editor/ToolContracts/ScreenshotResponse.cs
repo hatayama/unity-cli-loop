@@ -2,8 +2,6 @@
 
 using System.Collections.Generic;
 
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-
 namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
     /// <summary>
@@ -15,20 +13,20 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public long FileSizeBytes { get; set; }
         public int Width { get; set; }
         public int Height { get; set; }
-
-        // "gameView": image from game RenderTexture. Convert to simulate-mouse coords:
-        //   sim_x = image_x / ResolutionScale
-        //   sim_y = image_y / ResolutionScale + YOffset
-        // "window": EditorWindow capture including toolbar
-        public string CoordinateSystem { get; set; } = UnityCliLoopScreenshotCoordinateSystem.Window;
-
+        public string ImageCoordinateSystem { get; set; } = UnityCliLoopConstants.COORDINATE_SYSTEM_TOP_LEFT_WINDOW;
         public float ResolutionScale { get; set; } = 1.0f;
 
         // Y offset to add to image pixel Y to get simulate-mouse Y coordinate.
-        // Only meaningful when CoordinateSystem == "gameView".
-        public int YOffset { get; set; }
+        // Only meaningful when ImageCoordinateSystem is the Game View system.
+        public int ImageToInputOffsetY { get; set; }
 
+        public float GameViewWidth { get; set; }
+        public float GameViewHeight { get; set; }
+        public string ScreenshotToInputFormula { get; set; } = UnityCliLoopConstants.SCREENSHOT_WINDOW_TO_INPUT_FORMULA_UNAVAILABLE;
+        public string UnityInputFormula { get; set; } = "";
         public List<UIElementInfo> AnnotatedElements { get; set; } = new List<UIElementInfo>();
+        public List<RaycastGridPointInfo> RaycastGridPoints { get; set; } = new List<RaycastGridPointInfo>();
+        public List<RaycastLayerSummaryInfo> RaycastLayerSummaries { get; set; } = new List<RaycastLayerSummaryInfo>();
     }
 
     /// <summary>
