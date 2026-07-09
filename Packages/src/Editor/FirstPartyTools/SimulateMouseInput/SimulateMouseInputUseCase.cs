@@ -1,6 +1,5 @@
 #nullable enable
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
@@ -181,7 +180,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 () => MouseInputState.SetPositionState(mouse, screenPos), ct).ConfigureAwait(false);
             if (positionOutcome == InputSimulationWaitOutcome.TimedOut)
             {
-                return TimedOutButtonResult(UnityCliLoopMouseInputAction.Click, buttonName, inputPos);
+                return MouseInputSimulationResponseFactory.TimedOutButtonResult(
+                    UnityCliLoopMouseInputAction.Click,
+                    buttonName,
+                    inputPos);
             }
 
             // Press button
@@ -245,7 +247,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
-                return InterruptedButtonResult(
+                return MouseInputSimulationResponseFactory.InterruptedButtonResult(
                     UnityCliLoopMouseInputAction.Click,
                     buttonName,
                     inputPos);
@@ -253,7 +255,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
             {
-                return TimedOutButtonResult(UnityCliLoopMouseInputAction.Click, buttonName, inputPos);
+                return MouseInputSimulationResponseFactory.TimedOutButtonResult(
+                    UnityCliLoopMouseInputAction.Click,
+                    buttonName,
+                    inputPos);
             }
 
             string durationText = request.Duration > 0f ? $" for {InputSimulationDurationFormatter.FormatSeconds(request.Duration)}s" : "";
@@ -291,7 +296,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 () => MouseInputState.SetPositionState(mouse, screenPos), ct).ConfigureAwait(false);
             if (positionOutcome == InputSimulationWaitOutcome.TimedOut)
             {
-                return TimedOutButtonResult(UnityCliLoopMouseInputAction.LongPress, buttonName, inputPos);
+                return MouseInputSimulationResponseFactory.TimedOutButtonResult(
+                    UnityCliLoopMouseInputAction.LongPress,
+                    buttonName,
+                    inputPos);
             }
 
             // Press button
@@ -358,7 +366,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
-                return InterruptedButtonResult(
+                return MouseInputSimulationResponseFactory.InterruptedButtonResult(
                     UnityCliLoopMouseInputAction.LongPress,
                     buttonName,
                     inputPos);
@@ -366,7 +374,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
             {
-                return TimedOutButtonResult(UnityCliLoopMouseInputAction.LongPress, buttonName, inputPos);
+                return MouseInputSimulationResponseFactory.TimedOutButtonResult(
+                    UnityCliLoopMouseInputAction.LongPress,
+                    buttonName,
+                    inputPos);
             }
 
             return new SimulateMouseInputResponse
@@ -391,7 +402,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (applyOutcome == InputSimulationWaitOutcome.TimedOut)
             {
                 ScheduleTimedOutMouseOverlayCleanup();
-                return TimedOutActionResult(UnityCliLoopMouseInputAction.MoveDelta);
+                return MouseInputSimulationResponseFactory.TimedOutActionResult(
+                    UnityCliLoopMouseInputAction.MoveDelta);
             }
 
             InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForObservationFrames(ct)
@@ -400,13 +412,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
                 SimulateMouseInputOverlayState.Clear();
-                return InterruptedActionResult(UnityCliLoopMouseInputAction.MoveDelta);
+                return MouseInputSimulationResponseFactory.InterruptedActionResult(
+                    UnityCliLoopMouseInputAction.MoveDelta);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
             {
                 ScheduleTimedOutMouseOverlayCleanup();
-                return TimedOutActionResult(UnityCliLoopMouseInputAction.MoveDelta);
+                return MouseInputSimulationResponseFactory.TimedOutActionResult(
+                    UnityCliLoopMouseInputAction.MoveDelta);
             }
 
             return new SimulateMouseInputResponse
@@ -430,7 +444,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (applyOutcome == InputSimulationWaitOutcome.TimedOut)
             {
                 ScheduleTimedOutMouseOverlayCleanup();
-                return TimedOutActionResult(UnityCliLoopMouseInputAction.Scroll);
+                return MouseInputSimulationResponseFactory.TimedOutActionResult(
+                    UnityCliLoopMouseInputAction.Scroll);
             }
 
             InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForObservationFrames(ct)
@@ -439,13 +454,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
                 SimulateMouseInputOverlayState.Clear();
-                return InterruptedActionResult(UnityCliLoopMouseInputAction.Scroll);
+                return MouseInputSimulationResponseFactory.InterruptedActionResult(
+                    UnityCliLoopMouseInputAction.Scroll);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
             {
                 ScheduleTimedOutMouseOverlayCleanup();
-                return TimedOutActionResult(UnityCliLoopMouseInputAction.Scroll);
+                return MouseInputSimulationResponseFactory.TimedOutActionResult(
+                    UnityCliLoopMouseInputAction.Scroll);
             }
 
             return new SimulateMouseInputResponse
@@ -493,7 +510,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (applyOutcome == InputSimulationWaitOutcome.TimedOut)
                 {
                     ScheduleTimedOutDeltaCleanup(mouse);
-                    return TimedOutActionResult(UnityCliLoopMouseInputAction.SmoothDelta);
+                    return MouseInputSimulationResponseFactory.TimedOutActionResult(
+                        UnityCliLoopMouseInputAction.SmoothDelta);
                 }
 
                 previousT = t;
@@ -504,13 +522,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
                     ResetDeltaIfPossible(mouse);
                     SimulateMouseInputOverlayState.Clear();
-                    return InterruptedActionResult(UnityCliLoopMouseInputAction.SmoothDelta);
+                    return MouseInputSimulationResponseFactory.InterruptedActionResult(
+                        UnityCliLoopMouseInputAction.SmoothDelta);
                 }
 
                 if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
                 {
                     ScheduleTimedOutDeltaCleanup(mouse);
-                    return TimedOutActionResult(UnityCliLoopMouseInputAction.SmoothDelta);
+                    return MouseInputSimulationResponseFactory.TimedOutActionResult(
+                        UnityCliLoopMouseInputAction.SmoothDelta);
                 }
 
                 if (t >= 1f)
@@ -525,7 +545,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (resetOutcome == InputSimulationWaitOutcome.TimedOut)
             {
                 ScheduleTimedOutDeltaCleanup(mouse);
-                return TimedOutActionResult(UnityCliLoopMouseInputAction.SmoothDelta);
+                return MouseInputSimulationResponseFactory.TimedOutActionResult(
+                    UnityCliLoopMouseInputAction.SmoothDelta);
             }
 
             return new SimulateMouseInputResponse
@@ -534,105 +555,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Message = $"Smooth delta ({request.DeltaX:F1}, {request.DeltaY:F1}) over {duration:F2}s",
                 Action = UnityCliLoopMouseInputAction.SmoothDelta.ToString()
             };
-        }
-
-        private static SimulateMouseInputResponse InterruptedButtonResult(
-            UnityCliLoopMouseInputAction action,
-            string buttonName,
-            Vector2 inputPos)
-        {
-            SimulateMouseInputResponse result = InterruptedActionResult(action);
-            result.Button = buttonName;
-            result.PositionX = inputPos.x;
-            result.PositionY = inputPos.y;
-            return result;
-        }
-
-        private static SimulateMouseInputResponse InterruptedActionResult(
-            UnityCliLoopMouseInputAction action)
-        {
-            SimulateMouseInputResponse result = new()
-            {
-                Success = true,
-                Message = "Mouse input stopped because Unity paused during Pause Point inspection. Unity CLI Loop released its held input bookkeeping.",
-                Action = action.ToString(),
-                InterruptedByPausePoint = true
-            };
-            AttachPausePointHit(result);
-            return result;
-        }
-
-        private static SimulateMouseInputResponse TimedOutButtonResult(
-            UnityCliLoopMouseInputAction action,
-            string buttonName,
-            Vector2 inputPos)
-        {
-            SimulateMouseInputResponse result = TimedOutActionResult(action);
-            result.Button = buttonName;
-            result.PositionX = inputPos.x;
-            result.PositionY = inputPos.y;
-            return result;
-        }
-
-        private static SimulateMouseInputResponse TimedOutActionResult(
-            UnityCliLoopMouseInputAction action)
-        {
-            return new SimulateMouseInputResponse
-            {
-                Success = false,
-                Message = "Mouse input timed out while waiting for Unity Editor update. Cleanup is queued for the next Editor tick.",
-                Action = action.ToString()
-            };
-        }
-
-        private static void AttachPausePointHit(SimulateMouseInputResponse result)
-        {
-            if (result == null)
-            {
-                Debug.Assert(false, "result must not be null");
-                return;
-            }
-
-            UloopPausePointSnapshot? snapshot = UloopPausePointRegistry.GetLatestHitSnapshot();
-            if (snapshot == null)
-            {
-                return;
-            }
-
-            if (!snapshot.IsHit)
-            {
-                return;
-            }
-
-            string? snapshotId = snapshot.Id;
-            if (string.IsNullOrEmpty(snapshotId))
-            {
-                return;
-            }
-
-            result.PausePointId = snapshotId;
-            result.PausePointHitCount = snapshot.HitCount;
-            result.PausePointHits = CollectPausePointHits();
-        }
-
-        // One input can hit several markers in the same frame; the representative
-        // PausePointId alone forced agents into extra status calls to find the others.
-        private static List<UnityCliLoopPausePointHit> CollectPausePointHits()
-        {
-            List<UnityCliLoopPausePointHit> hits = new();
-            foreach (UloopPausePointSnapshot snapshot in UloopPausePointRegistry.GetHitSnapshots())
-            {
-                if (!snapshot.IsHit || string.IsNullOrEmpty(snapshot.Id))
-                {
-                    continue;
-                }
-                hits.Add(new UnityCliLoopPausePointHit
-                {
-                    Id = snapshot.Id,
-                    HitCount = snapshot.HitCount
-                });
-            }
-            return hits;
         }
 
         private static async Task<InputSimulationWaitOutcome> ReleaseButtonIfPossible(
