@@ -1,6 +1,6 @@
 {
   "name": "uloop-cli",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "//version": "x-release-please-version",
   "description": "CLI tool for Unity Editor communication via Unity CLI Loop",
   "main": "dist/cli.bundle.cjs",
@@ -58,7 +58,7 @@
     "eslint-plugin-prettier": "5.5.6",
     "eslint-plugin-security": "4.0.1",
     "jest": "30.4.2",
-    "knip": "6.25.0",
+    "knip": "6.24.0",
     "prettier": "3.9.4",
     "ts-jest": "29.4.11",
     "typescript": "6.0.3",
