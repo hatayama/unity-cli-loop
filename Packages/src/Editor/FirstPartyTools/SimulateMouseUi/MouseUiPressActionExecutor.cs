@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Vector2 inputPos = new(parameters.X, parameters.Y);
             Vector2 screenPos = MouseUiCoordinateConverter.InputToScreen(inputPos);
             PointerEventData pointerData = MouseUiPointerTargetResolver.CreatePointerPressData(eventSystem, screenPos, parameters.Button);
+            MouseUiInputSystemSync.SyncMousePosition(screenPos);
             ResolvedPointerTargets resolvedTargets =
                 MouseUiPointerTargetResolver.ResolvePressablePointerTargets(parameters, eventSystem, inputPos, screenPos, pointerData, MouseAction.Click);
             if (resolvedTargets.FailureResponse != null)
@@ -90,6 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Vector2 inputPos = new(parameters.X, parameters.Y);
             Vector2 screenPos = MouseUiCoordinateConverter.InputToScreen(inputPos);
             PointerEventData pointerData = MouseUiPointerTargetResolver.CreatePointerPressData(eventSystem, screenPos, parameters.Button);
+            MouseUiInputSystemSync.SyncMousePosition(screenPos);
             ResolvedPointerTargets resolvedTargets =
                 MouseUiPointerTargetResolver.ResolvePressablePointerTargets(parameters, eventSystem, inputPos, screenPos, pointerData, MouseAction.LongPress);
             if (resolvedTargets.FailureResponse != null)
