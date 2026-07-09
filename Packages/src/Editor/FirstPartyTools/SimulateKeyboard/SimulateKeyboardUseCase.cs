@@ -1,6 +1,5 @@
 #nullable enable
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
@@ -237,12 +236,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
-                return InterruptedKeyResult(UnityCliLoopKeyboardAction.Press, keyName, pressEdgeObserved);
+                return KeyboardInputSimulationResponseFactory.InterruptedKeyResult(
+                    UnityCliLoopKeyboardAction.Press,
+                    keyName,
+                    pressEdgeObserved);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
             {
-                return TimedOutKeyResult(UnityCliLoopKeyboardAction.Press, keyName);
+                return KeyboardInputSimulationResponseFactory.TimedOutKeyResult(
+                    UnityCliLoopKeyboardAction.Press,
+                    keyName);
             }
 
             string durationText = duration > 0f ? $" for {InputSimulationDurationFormatter.FormatSeconds(duration)}s" : "";
@@ -320,12 +324,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
-                return InterruptedKeyResult(UnityCliLoopKeyboardAction.KeyDown, keyName, pressEdgeObserved);
+                return KeyboardInputSimulationResponseFactory.InterruptedKeyResult(
+                    UnityCliLoopKeyboardAction.KeyDown,
+                    keyName,
+                    pressEdgeObserved);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
             {
-                return TimedOutKeyResult(UnityCliLoopKeyboardAction.KeyDown, keyName);
+                return KeyboardInputSimulationResponseFactory.TimedOutKeyResult(
+                    UnityCliLoopKeyboardAction.KeyDown,
+                    keyName);
             }
 
             string keyDownEdgeText = pressEdgeObserved
@@ -362,7 +371,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (releaseOutcome == InputSimulationWaitOutcome.TimedOut)
             {
                 ScheduleTimedOutHeldKeyCleanup(keyboard, key, keyName, false);
-                return TimedOutKeyResult(UnityCliLoopKeyboardAction.KeyUp, keyName);
+                return KeyboardInputSimulationResponseFactory.TimedOutKeyResult(
+                    UnityCliLoopKeyboardAction.KeyUp,
+                    keyName);
             }
 
             await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
@@ -373,12 +384,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .ConfigureAwait(false);
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
-                return InterruptedKeyResult(UnityCliLoopKeyboardAction.KeyUp, keyName, null);
+                return KeyboardInputSimulationResponseFactory.InterruptedKeyResult(
+                    UnityCliLoopKeyboardAction.KeyUp,
+                    keyName,
+                    null);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
             {
-                return TimedOutKeyResult(UnityCliLoopKeyboardAction.KeyUp, keyName);
+                return KeyboardInputSimulationResponseFactory.TimedOutKeyResult(
+                    UnityCliLoopKeyboardAction.KeyUp,
+                    keyName);
             }
 
             return new SimulateKeyboardResponse
@@ -397,90 +413,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return Key.Enter.ToString();
             }
             return keyName;
-        }
-
-        // pressEdgeObserved stays nullable because KeyUp has no press edge to report;
-        // Press/KeyDown must pass their observation so pause-point interruptions (the
-        // most common E2E path) do not silently drop the field.
-        private static SimulateKeyboardResponse InterruptedKeyResult(
-            UnityCliLoopKeyboardAction action,
-            string keyName,
-            bool? pressEdgeObserved)
-        {
-            SimulateKeyboardResponse result = new()
-            {
-                Success = true,
-                Message = $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' was released from Unity CLI Loop bookkeeping.",
-                Action = action.ToString(),
-                KeyName = keyName,
-                InterruptedByPausePoint = true,
-                PressEdgeObserved = pressEdgeObserved
-            };
-            AttachPausePointHit(result);
-            return result;
-        }
-
-        private static SimulateKeyboardResponse TimedOutKeyResult(
-            UnityCliLoopKeyboardAction action,
-            string keyName)
-        {
-            return new SimulateKeyboardResponse
-            {
-                Success = false,
-                Message = $"Keyboard input timed out while waiting for Unity Editor update. Key '{keyName}' cleanup is queued for the next Editor tick.",
-                Action = action.ToString(),
-                KeyName = keyName
-            };
-        }
-
-        private static void AttachPausePointHit(SimulateKeyboardResponse result)
-        {
-            if (result == null)
-            {
-                Debug.Assert(false, "result must not be null");
-                return;
-            }
-
-            UloopPausePointSnapshot? snapshot = UloopPausePointRegistry.GetLatestHitSnapshot();
-            if (snapshot == null)
-            {
-                return;
-            }
-
-            if (!snapshot.IsHit)
-            {
-                return;
-            }
-
-            string? snapshotId = snapshot.Id;
-            if (string.IsNullOrEmpty(snapshotId))
-            {
-                return;
-            }
-
-            result.PausePointId = snapshotId;
-            result.PausePointHitCount = snapshot.HitCount;
-            result.PausePointHits = CollectPausePointHits();
-        }
-
-        // One input can hit several markers in the same frame; the representative
-        // PausePointId alone forced agents into extra status calls to find the others.
-        private static List<UnityCliLoopPausePointHit> CollectPausePointHits()
-        {
-            List<UnityCliLoopPausePointHit> hits = new();
-            foreach (UloopPausePointSnapshot snapshot in UloopPausePointRegistry.GetHitSnapshots())
-            {
-                if (!snapshot.IsHit || string.IsNullOrEmpty(snapshot.Id))
-                {
-                    continue;
-                }
-                hits.Add(new UnityCliLoopPausePointHit
-                {
-                    Id = snapshot.Id,
-                    HitCount = snapshot.HitCount
-                });
-            }
-            return hits;
         }
 
         private static async Task FinalizePressOverlay(CancellationToken ct)
