@@ -53,22 +53,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// Verifies an exact unique hierarchy path resolves to its active GameObject.
         /// </summary>
         [Test]
-        public void TryResolveGameObjectPath_WithUniquePath_ReturnsTarget()
+        public void ResolveGameObjectPath_WithUniquePath_ReturnsTarget()
         {
             GameObject root = CreateGameObject("MouseUiTargetResolverTests_UniqueRoot");
             GameObject expectedTarget = CreateGameObject("Target", root.transform);
             string targetPath = GameObjectPathUtility.GetFullPath(expectedTarget);
             Vector2 inputPosition = new(10f, 20f);
 
-            bool resolved = MouseUiPointerTargetResolver.TryResolveGameObjectPath(
-                targetPath,
-                "TargetPath",
-                MouseAction.Click,
-                inputPosition,
-                out GameObject? target,
-                out SimulateMouseUiResponse? failureResponse);
+            (GameObject? target, SimulateMouseUiResponse? failureResponse) =
+                MouseUiPointerTargetResolver.ResolveGameObjectPath(
+                    targetPath,
+                    "TargetPath",
+                    MouseAction.Click,
+                    inputPosition);
 
-            Assert.That(resolved, Is.True);
             Assert.That(target, Is.SameAs(expectedTarget));
             Assert.That(failureResponse, Is.Null);
         }
@@ -77,20 +75,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// Verifies a missing hierarchy path returns the exact wire-visible failure response.
         /// </summary>
         [Test]
-        public void TryResolveGameObjectPath_WithMissingPath_ReturnsNotFoundFailure()
+        public void ResolveGameObjectPath_WithMissingPath_ReturnsNotFoundFailure()
         {
             string targetPath = "MouseUiTargetResolverTests_MissingRoot/Target";
             Vector2 inputPosition = new(10f, 20f);
 
-            bool resolved = MouseUiPointerTargetResolver.TryResolveGameObjectPath(
-                targetPath,
-                "TargetPath",
-                MouseAction.Click,
-                inputPosition,
-                out GameObject? target,
-                out SimulateMouseUiResponse? failureResponse);
+            (GameObject? target, SimulateMouseUiResponse? failureResponse) =
+                MouseUiPointerTargetResolver.ResolveGameObjectPath(
+                    targetPath,
+                    "TargetPath",
+                    MouseAction.Click,
+                    inputPosition);
 
-            Assert.That(resolved, Is.False);
             Assert.That(target, Is.Null);
             Assert.That(failureResponse, Is.Not.Null);
             Assert.That(failureResponse!.Success, Is.False);
@@ -104,7 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// Verifies duplicate hierarchy paths return the exact ambiguity count and no target.
         /// </summary>
         [Test]
-        public void TryResolveGameObjectPath_WithDuplicatePath_ReturnsAmbiguousFailure()
+        public void ResolveGameObjectPath_WithDuplicatePath_ReturnsAmbiguousFailure()
         {
             GameObject firstRoot = CreateGameObject("MouseUiTargetResolverTests_DuplicateRoot");
             GameObject firstTarget = CreateGameObject("Target", firstRoot.transform);
@@ -113,15 +109,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string targetPath = GameObjectPathUtility.GetFullPath(firstTarget);
             Vector2 inputPosition = new(10f, 20f);
 
-            bool resolved = MouseUiPointerTargetResolver.TryResolveGameObjectPath(
-                targetPath,
-                "TargetPath",
-                MouseAction.Click,
-                inputPosition,
-                out GameObject? target,
-                out SimulateMouseUiResponse? failureResponse);
+            (GameObject? target, SimulateMouseUiResponse? failureResponse) =
+                MouseUiPointerTargetResolver.ResolveGameObjectPath(
+                    targetPath,
+                    "TargetPath",
+                    MouseAction.Click,
+                    inputPosition);
 
-            Assert.That(resolved, Is.False);
             Assert.That(target, Is.Null);
             Assert.That(failureResponse, Is.Not.Null);
             Assert.That(
@@ -134,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// Verifies an empty drop path succeeds without resolving an explicit target.
         /// </summary>
         [Test]
-        public void TryResolveDropTargetPath_WithoutPath_ReturnsNoTarget()
+        public void ResolveDropTargetPath_WithoutPath_ReturnsNoTarget()
         {
             MouseUiSimulationCommand command = CreateCommand(new SimulateMouseUiSchema
             {
@@ -142,14 +136,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 DropTargetPath = " "
             });
 
-            bool resolved = MouseUiPointerTargetResolver.TryResolveDropTargetPath(
-                command,
-                MouseAction.Drag,
-                new Vector2(10f, 20f),
-                out GameObject? dropTarget,
-                out SimulateMouseUiResponse? failureResponse);
+            (GameObject? dropTarget, SimulateMouseUiResponse? failureResponse) =
+                MouseUiPointerTargetResolver.ResolveDropTargetPath(
+                    command,
+                    MouseAction.Drag,
+                    new Vector2(10f, 20f));
 
-            Assert.That(resolved, Is.True);
             Assert.That(dropTarget, Is.Null);
             Assert.That(failureResponse, Is.Null);
         }
@@ -158,7 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// Verifies an explicit drop target without a handler returns the exact failure response.
         /// </summary>
         [Test]
-        public void TryResolveDropTargetPath_WithoutDropHandler_ReturnsFailure()
+        public void ResolveDropTargetPath_WithoutDropHandler_ReturnsFailure()
         {
             GameObject root = CreateGameObject("MouseUiTargetResolverTests_DropRoot");
             GameObject target = CreateGameObject("DropTarget", root.transform);
@@ -170,14 +162,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             });
             Vector2 inputPosition = new(10f, 20f);
 
-            bool resolved = MouseUiPointerTargetResolver.TryResolveDropTargetPath(
-                command,
-                MouseAction.Drag,
-                inputPosition,
-                out GameObject? dropTarget,
-                out SimulateMouseUiResponse? failureResponse);
+            (GameObject? dropTarget, SimulateMouseUiResponse? failureResponse) =
+                MouseUiPointerTargetResolver.ResolveDropTargetPath(
+                    command,
+                    MouseAction.Drag,
+                    inputPosition);
 
-            Assert.That(resolved, Is.False);
             Assert.That(dropTarget, Is.Null);
             Assert.That(failureResponse, Is.Not.Null);
             Assert.That(
@@ -192,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// Verifies an explicit drop target with a hierarchy handler returns its raw target.
         /// </summary>
         [Test]
-        public void TryResolveDropTargetPath_WithDropHandler_ReturnsRawTarget()
+        public void ResolveDropTargetPath_WithDropHandler_ReturnsRawTarget()
         {
             GameObject root = CreateGameObject("MouseUiTargetResolverTests_DropHandlerRoot");
             root.AddComponent<MouseUiPointerTargetResolverTestHandler>();
@@ -204,14 +194,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 DropTargetPath = targetPath
             });
 
-            bool resolved = MouseUiPointerTargetResolver.TryResolveDropTargetPath(
-                command,
-                MouseAction.Drag,
-                new Vector2(10f, 20f),
-                out GameObject? dropTarget,
-                out SimulateMouseUiResponse? failureResponse);
+            (GameObject? dropTarget, SimulateMouseUiResponse? failureResponse) =
+                MouseUiPointerTargetResolver.ResolveDropTargetPath(
+                    command,
+                    MouseAction.Drag,
+                    new Vector2(10f, 20f));
 
-            Assert.That(resolved, Is.True);
             Assert.That(dropTarget, Is.SameAs(expectedTarget));
             Assert.That(failureResponse, Is.Null);
         }

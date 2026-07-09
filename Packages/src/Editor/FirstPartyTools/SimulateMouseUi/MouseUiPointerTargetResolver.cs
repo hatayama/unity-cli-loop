@@ -66,13 +66,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PointerEventData pointerData,
             MouseAction action)
         {
-            if (!TryResolveGameObjectPath(
-                parameters.TargetPath,
-                "TargetPath",
-                action,
-                inputPos,
-                out GameObject? rawTarget,
-                out SimulateMouseUiResponse? failureResponse))
+            (GameObject? rawTarget, SimulateMouseUiResponse? failureResponse) =
+                ResolveGameObjectPath(
+                    parameters.TargetPath,
+                    "TargetPath",
+                    action,
+                    inputPos);
+            if (failureResponse != null)
             {
                 return ResolvedPointerTargets.Failure(failureResponse);
             }
@@ -112,27 +112,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ResolvedPointerTargets.Success(rawTarget, pressTarget, clickTarget, target);
         }
 
-        internal static bool TryResolveGameObjectPath(
+        internal static (GameObject? Target, SimulateMouseUiResponse? FailureResponse) ResolveGameObjectPath(
             string targetPath,
             string parameterName,
             MouseAction action,
-            Vector2 inputPosition,
-            out GameObject? target,
-            out SimulateMouseUiResponse? failureResponse)
+            Vector2 inputPosition)
         {
             TargetPathLookupResult lookupResult = FindActiveGameObjectByPath(targetPath);
-            target = lookupResult.Target;
-            if (target != null)
+            if (lookupResult.Target != null)
             {
-                failureResponse = null;
-                return true;
+                return (lookupResult.Target, null);
             }
 
             string message = lookupResult.MatchCount == 0
                 ? $"{parameterName} '{targetPath}' was not found."
                 : $"{parameterName} '{targetPath}' matched {lookupResult.MatchCount} active GameObjects. Use a unique hierarchy path.";
 
-            failureResponse = new SimulateMouseUiResponse
+            SimulateMouseUiResponse failureResponse = new()
             {
                 Success = false,
                 Message = message,
@@ -140,33 +136,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PositionX = inputPosition.x,
                 PositionY = inputPosition.y
             };
-            return false;
+            return (null, failureResponse);
         }
 
-        internal static bool TryResolveDropTargetPath(
+        internal static (GameObject? Target, SimulateMouseUiResponse? FailureResponse) ResolveDropTargetPath(
             MouseUiSimulationCommand parameters,
             MouseAction action,
-            Vector2 inputPosition,
-            out GameObject? dropTarget,
-            out SimulateMouseUiResponse? failureResponse)
+            Vector2 inputPosition)
         {
-            dropTarget = null;
-            failureResponse = null;
-
             if (string.IsNullOrWhiteSpace(parameters.DropTargetPath))
             {
-                return true;
+                return (null, null);
             }
 
-            if (!TryResolveGameObjectPath(
-                parameters.DropTargetPath,
-                "DropTargetPath",
-                action,
-                inputPosition,
-                out GameObject? rawDropTarget,
-                out failureResponse))
+            (GameObject? rawDropTarget, SimulateMouseUiResponse? failureResponse) =
+                ResolveGameObjectPath(
+                    parameters.DropTargetPath,
+                    "DropTargetPath",
+                    action,
+                    inputPosition);
+            if (failureResponse != null)
             {
-                return false;
+                return (null, failureResponse);
             }
 
             GameObject? dropHandler = ExecuteEvents.GetEventHandler<IDropHandler>(rawDropTarget!);
@@ -180,11 +171,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     PositionX = inputPosition.x,
                     PositionY = inputPosition.y
                 };
-                return false;
+                return (null, failureResponse);
             }
 
-            dropTarget = rawDropTarget;
-            return true;
+            return (rawDropTarget, null);
         }
 
         private static TargetPathLookupResult FindActiveGameObjectByPath(string targetPath)
