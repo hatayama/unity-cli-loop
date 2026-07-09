@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Vector2 renderingImageSize,
             int imageToInputOffsetY)
         {
-            List<RaycastLayerHitSample> samples = CollectRaycastGridPointsForGrid(
+            List<RaycastLayerHitSample> samples = CollectLayerHitSamples(
                 renderingImageSize,
                 imageToInputOffsetY,
                 CLUSTERED_GRID_ROWS,
@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return CreateLayerSummaries(samples);
         }
 
-        private static List<RaycastLayerHitSample> CollectRaycastGridPointsForGrid(
+        private static List<RaycastLayerHitSample> CollectLayerHitSamples(
             Vector2 renderingImageSize,
             int imageToInputOffsetY,
             int rowCount,
