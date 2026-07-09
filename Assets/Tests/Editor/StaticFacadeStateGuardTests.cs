@@ -67,7 +67,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/FirstPartyTools/SimulateMouseInput/MouseInputMotionActionExecutor.cs",
             "Packages/src/Editor/FirstPartyTools/SimulateKeyboard/SimulateKeyboardUseCase.cs",
             "Packages/src/Editor/FirstPartyTools/SimulateKeyboard/KeyboardInputMainThreadCleanup.cs",
-            "Packages/src/Editor/FirstPartyTools/SimulateKeyboard/KeyboardInputActionExecutor.cs"
+            "Packages/src/Editor/FirstPartyTools/SimulateKeyboard/KeyboardInputActionExecutor.cs",
+            "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCodeMissingReturnRetryPolicy.cs"
         };
 
         private static readonly Dictionary<string, string[]> OverloadGuardMethodsByPath = new Dictionary<string, string[]>
@@ -323,13 +324,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that timeout-sensitive dynamic-code awaits do not capture Unity's synchronization context.
             string source = ReadSourceFile(
                 "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/ExecuteDynamicCodeUseCase.cs");
+            string retryPolicySource = ReadSourceFile(
+                "Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/DynamicCodeMissingReturnRetryPolicy.cs");
 
             Assert.That(source, Does.Contain("await WarmForegroundExecutionPathIfNeededAsync(parameters, cancellationToken)\n                    .ConfigureAwait(false);"));
             Assert.That(source, Does.Contain("await ExecuteRequestAsync(request, cancellationToken).ConfigureAwait(false);"));
-            Assert.That(source, Does.Contain("await RetryMissingReturnIfNeeded(\n                    executionResult,"));
+            Assert.That(source, Does.Contain("await DynamicCodeMissingReturnRetryPolicy.RetryMissingReturnIfNeeded(\n                    executionResult,"));
             Assert.That(source, Does.Contain("cancellationToken).ConfigureAwait(false);"));
             Assert.That(source, Does.Contain("await _runtime.ExecuteAsync(request, cancellationToken).ConfigureAwait(false);"));
             Assert.That(source, Does.Contain("await _runtime.TryExecuteIfIdleAsync(\n                request,\n                cancellationToken).ConfigureAwait(false);"));
+            Assert.That(
+                retryPolicySource,
+                Does.Contain("await executeRetryAsync(codeWithReturn, ct)\n                .ConfigureAwait(false);"));
         }
 
         [Test]
