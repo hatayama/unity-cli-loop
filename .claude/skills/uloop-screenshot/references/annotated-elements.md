@@ -1,10 +1,10 @@
 # Annotated Elements and Coordinates
 
-Read this when using `uloop screenshot --capture-mode rendering --annotate-elements true` or clustered `--annotate-raycast-grid true --raycast-layer-mask <layers>` output to find coordinates for `simulate-mouse-ui`, `simulate-mouse-input`, or `raycast`.
+Read this when using `uloop screenshot --capture-mode rendering --annotate-elements true` or `--annotate-raycast-grid true` output to find coordinates for `simulate-mouse-ui`, `simulate-mouse-input`, or `raycast`.
 
 ## AnnotatedElements Fields
 
-`AnnotatedElements` is empty unless `--annotate-elements true` is used, or unless `--annotate-raycast-grid true --raycast-layer-mask <layers>` adds clustered 3D collider candidates. UI entries are sorted by z-order, frontmost first. Each item contains:
+`AnnotatedElements` is empty unless `--annotate-elements true` is used, or unless `--annotate-raycast-grid true` adds clustered 3D collider candidates (with or without `--raycast-layer-mask`). UI entries are sorted by z-order, frontmost first. Each item contains:
 
 - `Label`: Index label in JSON (`A` = frontmost, `B` = next, ...). Screenshot labels also include the interaction hint, such as `A / CLICK` or `B / DRAG`.
 - `Name`: Element name
@@ -18,21 +18,9 @@ Read this when using `uloop screenshot --capture-mode rendering --annotate-eleme
 - `SortingOrder`: Canvas sorting order. Higher values are in front.
 - `SiblingIndex`: Transform sibling index under the element's direct parent. Do not use it as a reliable z-order signal across nested UI hierarchies.
 
-## RaycastGridPoints Fields
-
-`RaycastGridPoints` is populated when `--annotate-raycast-grid true` is used without `--raycast-layer-mask`. It is a coarse 5x5 grid preview of what each sample point would hit.
-
-- `Label`: Grid point label
-- `Hit`: Whether the raycast hit a collider
-- `InputX`, `InputY`: Top-left Game View coordinates for this sample point. Pass directly to `simulate-mouse-input --x/--y` or `raycast --x/--y`.
-- `InjectedUnityPositionX`, `InjectedUnityPositionY`: The same point converted to bottom-left Unity coordinates (what `Mouse.current.position` would read)
-- `HitGameObjectName`, `HitGameObjectPath`: Identifies the hit object when `Hit` is true, null otherwise
-- `HitLayer`, `HitLayerIndex`: Physics layer of the hit object, null otherwise
-- `Distance`: Distance from `Camera.main` to the hit point, null otherwise
-
 ## RaycastLayerSummaries Fields
 
-`RaycastLayerSummaries` is populated when `--annotate-raycast-grid true` is used without `--raycast-layer-mask`. It is built from dense raycast samples, while `RaycastGridPoints` remains the coarse 5x5 annotated grid.
+`RaycastLayerSummaries` is always populated when `--annotate-raycast-grid true` is used, regardless of `--raycast-layer-mask`. It is built from a dense 40x40 raycast sample pass over `Physics.DefaultRaycastLayers` (fixed, independent of `--raycast-layer-mask`), so it always tells you what else is hittable across every default-visible layer, even when you narrowed `AnnotatedElements` down to one layer with `--raycast-layer-mask`.
 
 - `Layer`: Physics layer name to pass to `--raycast-layer-mask`
 - `LayerIndex`: Unity physics layer index
@@ -40,6 +28,12 @@ Read this when using `uloop screenshot --capture-mode rendering --annotate-eleme
 - `RepresentativeObjectPath`: Hierarchy path for the object with the most hits on that layer. Ties are resolved alphabetically by path.
 
 Entries are sorted by `HitCount` descending, then `LayerIndex` ascending.
+
+## RaycastLayerNamesChecked Fields
+
+`RaycastLayerNamesChecked` is populated when `--annotate-raycast-grid true` is used. It lists the physics layer names that were actually eligible to produce `AnnotatedElements` `PhysicsCollider` entries in this response: the clustering mask (`--raycast-layer-mask` if set, otherwise `Physics.DefaultRaycastLayers`) intersected with `Camera.main.cullingMask`. Use it to diagnose why an expected layer produced no `PhysicsCollider` entries — if the layer name is missing here, the active camera cannot see it this frame regardless of `--raycast-layer-mask`.
+
+This is a different mask than `RaycastLayerSummaries`, which always reports against the fixed `Physics.DefaultRaycastLayers` set. `RaycastLayerNamesChecked` tracks what was actually clustered; `RaycastLayerSummaries` is a constant discovery aid for "what else could I filter to next."
 
 ## Coordinate Conversion
 
@@ -50,7 +44,7 @@ simulate_mouse_x = image_x / resolutionScale
 simulate_mouse_y = image_y / resolutionScale + imageToInputOffsetY
 ```
 
-When `ResolutionScale` is `1.0` and `imageToInputOffsetY` is `0` for rendering captures, raw image pixel coordinates already match mouse-input coordinates. `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` are already mouse-input coordinates in that mode, so pass those values directly.
+When `ResolutionScale` is `1.0` and `imageToInputOffsetY` is `0` for rendering captures, raw image pixel coordinates already match mouse-input coordinates. `AnnotatedElements[].SimX/SimY` is already a mouse-input coordinate in that mode, so pass it directly.
 
 For `PhysicsCollider` entries, `SimX/SimY` is a real sampled raycast hit nearest to the reachable cluster centroid. This avoids synthetic center points that may fall into empty space for L-shaped or ring-shaped collider coverage. Always use `SimX/SimY` for clicking; use `BoundsMinX/Y` and `BoundsMaxX/Y` only as a sampled coverage guide.
 

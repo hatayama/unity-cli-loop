@@ -63,9 +63,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<UIElementInfo> annotatedElements = new();
             List<UIElementInfo> physicsColliderElements = new();
             Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
-            List<RaycastGridPointInfo> raycastGridPoints = new();
             List<RaycastLayerSummaryInfo> raycastLayerSummaries = new();
-            List<UIElementInfo> raycastGridOverlayElements = new();
+            List<string> raycastLayerNamesChecked = new();
             GameRenderingImageInfo? raycastGridRenderingInfo = null;
 
             if (request.AnnotateElements)
@@ -94,24 +93,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 raycastGridRenderingInfo = renderingImageInfo;
                 gameViewSize = renderingImageInfo.GameViewSize;
                 RaycastLayerMaskResolution raycastLayerMaskResolution = ResolveRaycastLayerMask(request);
+                List<RaycastLayerDefinition> availableLayerDefinitions = GetAvailableLayerDefinitions();
+                int effectiveLayerMask = raycastLayerMaskResolution.HasLayerNames
+                    ? raycastLayerMaskResolution.Mask
+                    : Physics.DefaultRaycastLayers;
 
-                if (raycastLayerMaskResolution.HasLayerNames)
-                {
-                    physicsColliderElements = RaycastGridAnnotator.CollectPhysicsColliderElements(
-                        renderingImageInfo.RenderingImageSize,
-                        renderingImageInfo.ImageToInputOffsetY,
-                        raycastLayerMaskResolution.Mask);
-                }
-                else
-                {
-                    raycastGridPoints = RaycastGridAnnotator.CollectRaycastGridPoints(
-                        renderingImageInfo.RenderingImageSize,
-                        renderingImageInfo.ImageToInputOffsetY);
-                    raycastLayerSummaries = RaycastGridAnnotator.CollectRaycastLayerSummaries(
-                        renderingImageInfo.RenderingImageSize,
-                        renderingImageInfo.ImageToInputOffsetY);
-                    raycastGridOverlayElements = RaycastGridAnnotator.CreateOverlayElements(raycastGridPoints);
-                }
+                physicsColliderElements = RaycastGridAnnotator.CollectPhysicsColliderElements(
+                    renderingImageInfo.RenderingImageSize,
+                    renderingImageInfo.ImageToInputOffsetY,
+                    effectiveLayerMask);
+                raycastLayerSummaries = RaycastGridAnnotator.CollectRaycastLayerSummaries(
+                    renderingImageInfo.RenderingImageSize,
+                    renderingImageInfo.ImageToInputOffsetY);
+
+                Camera mainCamera = Camera.main;
+                int checkedLayerMask = mainCamera != null ? effectiveLayerMask & mainCamera.cullingMask : 0;
+                raycastLayerNamesChecked = RaycastLayerMaskResolver.CreateLayerNamesFromMask(
+                    checkedLayerMask,
+                    availableLayerDefinitions);
             }
 
             if (request.ElementsOnly)
@@ -123,8 +122,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 int elementsOnlyImageToInputOffsetY = raycastGridRenderingInfo?.ImageToInputOffsetY ?? 0;
                 ApplyRenderingCoordinateMetadata(elementsOnlyInfo, gameViewSize, elementsOnlyImageToInputOffsetY);
                 elementsOnlyInfo.AnnotatedElements = elementsOnlyAnnotatedElements;
-                elementsOnlyInfo.RaycastGridPoints = raycastGridPoints;
                 elementsOnlyInfo.RaycastLayerSummaries = raycastLayerSummaries;
+                elementsOnlyInfo.RaycastLayerNamesChecked = raycastLayerNamesChecked;
                 return new ScreenshotResponse
                 {
                     Screenshots = new List<ScreenshotInfo> { elementsOnlyInfo }
@@ -140,7 +139,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (request.AnnotateElements || request.AnnotateRaycastGrid)
                 {
                     List<UIElementInfo> overlayElements = new(annotatedElements);
-                    overlayElements.AddRange(raycastGridOverlayElements);
                     overlayElements.AddRange(physicsColliderElements);
                     annotationOverlay = UIElementAnnotator.CreateAnnotationOverlay(
                         overlayElements,
@@ -221,8 +219,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
                 ApplyRenderingCoordinateMetadata(info, captureRenderingInfo.GameViewSize, captureRenderingInfo.ImageToInputOffsetY);
                 info.AnnotatedElements = responseAnnotatedElements;
-                info.RaycastGridPoints = raycastGridPoints;
                 info.RaycastLayerSummaries = raycastLayerSummaries;
+                info.RaycastLayerNamesChecked = raycastLayerNamesChecked;
                 screenshots.Add(info);
             }
             catch (Exception ex)

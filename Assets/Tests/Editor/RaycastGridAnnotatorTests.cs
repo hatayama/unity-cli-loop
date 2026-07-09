@@ -16,66 +16,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class RaycastGridAnnotatorTests
     {
         [Test]
-        public void CalculateGridInputPosition_WhenRenderingHasTopOffset_ShouldSampleInsideCapturedImage()
+        public void CalculateGridInputPositionForGrid_WhenRenderingHasTopOffset_ShouldSampleInsideCapturedImage()
         {
             // Tests that a grid input position samples inside the captured image when rendering has a top offset.
             Vector2 renderingImageSize = new Vector2(1200f, 1080f);
 
             Vector2 inputPosition =
-                RaycastGridAnnotator.CalculateGridInputPosition(renderingImageSize, 303, 1, 3);
+                RaycastGridAnnotator.CalculateGridInputPositionForGrid(renderingImageSize, 303, 5, 5, 1, 3);
 
             Assert.That(inputPosition.x, Is.EqualTo(600f));
             Assert.That(inputPosition.y, Is.EqualTo(483f));
         }
 
         [Test]
-        public void CalculateGridInputPosition_WhenRenderingHasTopOffset_ShouldKeepBottomRowVisible()
+        public void CalculateGridInputPositionForGrid_WhenRenderingHasTopOffset_ShouldKeepBottomRowVisible()
         {
             // Tests that the bottom grid row stays visible within the rendering image when a top offset is applied.
             Vector2 renderingImageSize = new Vector2(1200f, 1080f);
 
             Vector2 inputPosition =
-                RaycastGridAnnotator.CalculateGridInputPosition(renderingImageSize, 303, 5, 3);
+                RaycastGridAnnotator.CalculateGridInputPositionForGrid(renderingImageSize, 303, 5, 5, 5, 3);
 
             Assert.That(inputPosition.x, Is.EqualTo(600f));
             Assert.That(inputPosition.y, Is.EqualTo(1203f));
-        }
-
-        [Test]
-        public void CreateOverlayElements_WhenPointsIncludeMisses_ShouldAnnotateOnlyHits()
-        {
-            // Tests that overlay elements are created only for grid points that registered a physics hit.
-            List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>
-            {
-                new RaycastGridPointInfo
-                {
-                    Label = "R1",
-                    Hit = true,
-                    InputX = 100f,
-                    InputY = 200f,
-                    InjectedUnityPositionX = 100f,
-                    InjectedUnityPositionY = 880f,
-                    HitGameObjectName = "Cube",
-                    HitGameObjectPath = "Cube"
-                },
-                new RaycastGridPointInfo
-                {
-                    Label = "R2",
-                    Hit = false,
-                    InputX = 200f,
-                    InputY = 300f,
-                    InjectedUnityPositionX = 200f,
-                    InjectedUnityPositionY = 780f
-                }
-            };
-
-            List<UIElementInfo> overlayElements = RaycastGridAnnotator.CreateOverlayElements(points);
-
-            Assert.That(overlayElements.Count, Is.EqualTo(1));
-            Assert.That(overlayElements[0].Label, Is.EqualTo("R1"));
-            Assert.That(overlayElements[0].Name, Is.EqualTo("Cube"));
-            Assert.That(overlayElements[0].Type, Is.EqualTo("RaycastHit"));
-            Assert.That(overlayElements[0].Interaction, Is.EqualTo("Raycast"));
         }
 
         [Test]
@@ -115,6 +78,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(resolution.HasLayerNames, Is.True);
             Assert.That(resolution.InvalidLayerNames, Is.EqualTo(new List<string> { "Missing" }));
             Assert.That(resolution.ValidLayerNames, Is.EqualTo(new List<string> { "Default", "Ground" }));
+        }
+
+        [Test]
+        public void CreateLayerNamesFromMask_WhenMaskMatchesSpecificLayers_ShouldReturnOnlyThoseLayerNames()
+        {
+            // Tests that only the layer names whose bits are set in the mask are returned.
+            List<RaycastLayerDefinition> availableLayers = new List<RaycastLayerDefinition>
+            {
+                new RaycastLayerDefinition { Name = "Default", Index = 0 },
+                new RaycastLayerDefinition { Name = "Ground", Index = 8 },
+                new RaycastLayerDefinition { Name = "Clickable", Index = 9 }
+            };
+            int mask = (1 << 8) | (1 << 9);
+
+            List<string> layerNames = RaycastLayerMaskResolver.CreateLayerNamesFromMask(mask, availableLayers);
+
+            Assert.That(layerNames, Is.EqualTo(new List<string> { "Ground", "Clickable" }));
+        }
+
+        [Test]
+        public void CreateLayerNamesFromMask_WhenMaskIsDefaultRaycastLayers_ShouldExcludeIgnoreRaycastLayer()
+        {
+            // Tests that Physics.DefaultRaycastLayers excludes the built-in Ignore Raycast layer (index 2).
+            List<RaycastLayerDefinition> availableLayers = new List<RaycastLayerDefinition>
+            {
+                new RaycastLayerDefinition { Name = "Default", Index = 0 },
+                new RaycastLayerDefinition { Name = "Ignore Raycast", Index = 2 },
+                new RaycastLayerDefinition { Name = "Ground", Index = 8 }
+            };
+
+            List<string> layerNames = RaycastLayerMaskResolver.CreateLayerNamesFromMask(
+                Physics.DefaultRaycastLayers, availableLayers);
+
+            Assert.That(layerNames, Is.EqualTo(new List<string> { "Default", "Ground" }));
+        }
+
+        [Test]
+        public void CreateLayerNamesFromMask_WhenMaskHasNoMatchingLayers_ShouldReturnEmptyList()
+        {
+            // Tests that a mask with no bits overlapping the available layers returns an empty list.
+            List<RaycastLayerDefinition> availableLayers = new List<RaycastLayerDefinition>
+            {
+                new RaycastLayerDefinition { Name = "Ground", Index = 8 }
+            };
+
+            List<string> layerNames = RaycastLayerMaskResolver.CreateLayerNamesFromMask(0, availableLayers);
+
+            Assert.That(layerNames, Is.Empty);
         }
 
         [Test]
@@ -566,7 +577,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void CreateLayerSummaries_ShouldCountHitsByLayerAndSortByHitCount()
         {
             // Tests that layer summaries count hits per layer and sort by descending hit count.
-            List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>
+            List<RaycastLayerHitSample> points = new List<RaycastLayerHitSample>
             {
                 CreateLayerHitPoint("Ground", 8, "Ground/A"),
                 CreateLayerHitPoint("Ground", 8, "Ground/B"),
@@ -586,7 +597,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void CreateLayerSummaries_WhenLayerCountsTie_ShouldSortByLayerIndex()
         {
             // Tests that tied hit counts fall back to sorting by ascending layer index.
-            List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>
+            List<RaycastLayerHitSample> points = new List<RaycastLayerHitSample>
             {
                 CreateLayerHitPoint("Clickable", 9, "Clickable/A"),
                 CreateLayerHitPoint("Ground", 8, "Ground/A")
@@ -602,7 +613,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void CreateLayerSummaries_ShouldUseMostFrequentObjectPathAsRepresentative()
         {
             // Tests that the representative object path is the most frequently hit path within the layer.
-            List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>
+            List<RaycastLayerHitSample> points = new List<RaycastLayerHitSample>
             {
                 CreateLayerHitPoint("Ground", 8, "Ground/A"),
                 CreateLayerHitPoint("Ground", 8, "Ground/A"),
@@ -618,7 +629,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void CreateLayerSummaries_WhenObjectCountsTie_ShouldUseAlphabeticalPath()
         {
             // Tests that a tie in per-object hit counts is broken by picking the alphabetically first path.
-            List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>
+            List<RaycastLayerHitSample> points = new List<RaycastLayerHitSample>
             {
                 CreateLayerHitPoint("Ground", 8, "Ground/B"),
                 CreateLayerHitPoint("Ground", 8, "Ground/A")
@@ -633,9 +644,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void CreateLayerSummaries_WhenNoHits_ShouldReturnEmptyList()
         {
             // Tests that no layer summaries are produced when none of the grid points registered a hit.
-            List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>
+            List<RaycastLayerHitSample> points = new List<RaycastLayerHitSample>
             {
-                new RaycastGridPointInfo
+                new RaycastLayerHitSample
                 {
                     Hit = false
                 }
@@ -697,12 +708,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(segment.EndY, Is.EqualTo(endY));
         }
 
-        private static RaycastGridPointInfo CreateLayerHitPoint(
+        private static RaycastLayerHitSample CreateLayerHitPoint(
             string layer,
             int layerIndex,
             string objectPath)
         {
-            return new RaycastGridPointInfo
+            return new RaycastLayerHitSample
             {
                 Hit = true,
                 HitLayer = layer,

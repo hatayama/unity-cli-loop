@@ -271,12 +271,12 @@
           },
           "AnnotateRaycastGrid": {
             "type": "boolean",
-            "description": "Annotate 3D physics raycast candidate points on rendering screenshots. Uses Camera.main, Camera.main.cullingMask visibility, and the same top-left Game View coordinates as simulate-mouse-input.",
+            "description": "Annotate clustered 3D physics raycast candidates (PhysicsCollider entries in AnnotatedElements) on rendering screenshots. Uses Camera.main, Camera.main.cullingMask visibility, and the same top-left Game View coordinates as simulate-mouse-input.",
             "default": false
           },
           "RaycastLayerMask": {
             "type": "string",
-            "description": "Comma-separated physics layer names used by AnnotateRaycastGrid. Hits are limited to layers also visible to Camera.main.cullingMask. When set, returns clustered PhysicsCollider entries in AnnotatedElements instead of the coarse grid points.",
+            "description": "Comma-separated physics layer names used by AnnotateRaycastGrid to narrow which layers are clustered. Hits are limited to layers also visible to Camera.main.cullingMask. When omitted, clusters against Physics.DefaultRaycastLayers.",
             "default": ""
           }
         }
@@ -470,12 +470,12 @@
           },
           "X": {
             "type": "number",
-            "description": "Target X position in Game View pixels (origin: top-left). Used by Click and LongPress. Use AnnotatedElements[].SimX, RaycastGridPoints[].InputX, or raw image pixels converted with ScreenshotToInputFormula.",
+            "description": "Target X position in Game View pixels (origin: top-left). Used by Click and LongPress. Use AnnotatedElements[].SimX, or raw image pixels converted with ScreenshotToInputFormula.",
             "default": 0
           },
           "Y": {
             "type": "number",
-            "description": "Target Y position in Game View pixels (origin: top-left). Used by Click and LongPress. Use AnnotatedElements[].SimY, RaycastGridPoints[].InputY, or raw image pixels converted with ScreenshotToInputFormula.",
+            "description": "Target Y position in Game View pixels (origin: top-left). Used by Click and LongPress. Use AnnotatedElements[].SimY, or raw image pixels converted with ScreenshotToInputFormula.",
             "default": 0
           },
           "Button": {
