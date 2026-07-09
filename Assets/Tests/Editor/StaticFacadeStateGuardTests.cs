@@ -62,6 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/Infrastructure/SkillSetup/ToolSkillSynchronizer.cs",
             "Packages/src/Editor/Presentation/Setup/SetupWizardWindow.cs",
             "Packages/src/Editor/FirstPartyTools/SimulateMouseInput/SimulateMouseInputUseCase.cs",
+            "Packages/src/Editor/FirstPartyTools/SimulateMouseInput/MouseInputMainThreadCleanup.cs",
             "Packages/src/Editor/FirstPartyTools/SimulateKeyboard/SimulateKeyboardUseCase.cs"
         };
 

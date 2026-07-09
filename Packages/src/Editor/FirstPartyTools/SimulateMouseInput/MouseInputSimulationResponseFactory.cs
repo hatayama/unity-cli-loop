@@ -1,0 +1,116 @@
+#if ULOOP_HAS_INPUT_SYSTEM
+#nullable enable
+using System.Collections.Generic;
+using UnityEngine;
+
+using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Creates wire-visible responses for mouse input simulation outcomes.
+    /// </summary>
+    internal static class MouseInputSimulationResponseFactory
+    {
+        internal static SimulateMouseInputResponse InterruptedButtonResult(
+            UnityCliLoopMouseInputAction action,
+            string buttonName,
+            Vector2 inputPos)
+        {
+            SimulateMouseInputResponse result = InterruptedActionResult(action);
+            result.Button = buttonName;
+            result.PositionX = inputPos.x;
+            result.PositionY = inputPos.y;
+            return result;
+        }
+
+        internal static SimulateMouseInputResponse InterruptedActionResult(
+            UnityCliLoopMouseInputAction action)
+        {
+            SimulateMouseInputResponse result = new()
+            {
+                Success = true,
+                Message = "Mouse input stopped because Unity paused during Pause Point inspection. Unity CLI Loop released its held input bookkeeping.",
+                Action = action.ToString(),
+                InterruptedByPausePoint = true
+            };
+            AttachPausePointHit(result);
+            return result;
+        }
+
+        internal static SimulateMouseInputResponse TimedOutButtonResult(
+            UnityCliLoopMouseInputAction action,
+            string buttonName,
+            Vector2 inputPos)
+        {
+            SimulateMouseInputResponse result = TimedOutActionResult(action);
+            result.Button = buttonName;
+            result.PositionX = inputPos.x;
+            result.PositionY = inputPos.y;
+            return result;
+        }
+
+        internal static SimulateMouseInputResponse TimedOutActionResult(
+            UnityCliLoopMouseInputAction action)
+        {
+            return new SimulateMouseInputResponse
+            {
+                Success = false,
+                Message = "Mouse input timed out while waiting for Unity Editor update. Cleanup is queued for the next Editor tick.",
+                Action = action.ToString()
+            };
+        }
+
+        private static void AttachPausePointHit(SimulateMouseInputResponse result)
+        {
+            if (result == null)
+            {
+                Debug.Assert(false, "result must not be null");
+                return;
+            }
+
+            UloopPausePointSnapshot? snapshot = UloopPausePointRegistry.GetLatestHitSnapshot();
+            if (snapshot == null)
+            {
+                return;
+            }
+
+            if (!snapshot.IsHit)
+            {
+                return;
+            }
+
+            string? snapshotId = snapshot.Id;
+            if (string.IsNullOrEmpty(snapshotId))
+            {
+                return;
+            }
+
+            result.PausePointId = snapshotId;
+            result.PausePointHitCount = snapshot.HitCount;
+            result.PausePointHits = CollectPausePointHits();
+        }
+
+        // One input can hit several markers in the same frame; the representative
+        // PausePointId alone forced agents into extra status calls to find the others.
+        private static List<UnityCliLoopPausePointHit> CollectPausePointHits()
+        {
+            List<UnityCliLoopPausePointHit> hits = new();
+            foreach (UloopPausePointSnapshot snapshot in UloopPausePointRegistry.GetHitSnapshots())
+            {
+                if (!snapshot.IsHit || string.IsNullOrEmpty(snapshot.Id))
+                {
+                    continue;
+                }
+                hits.Add(new UnityCliLoopPausePointHit
+                {
+                    Id = snapshot.Id,
+                    HitCount = snapshot.HitCount
+                });
+            }
+            return hits;
+        }
+    }
+}
+#endif
