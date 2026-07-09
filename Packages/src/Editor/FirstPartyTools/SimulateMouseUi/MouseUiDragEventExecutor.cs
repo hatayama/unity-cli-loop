@@ -31,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 pointerDrag = dragTarget,
                 rawPointerPress = raycastResult.gameObject
             };
+            MouseUiInputSystemSync.SyncMousePosition(screenPos);
 
             // Slider.OnPointerDown initializes m_Offset for handle positioning
             GameObject? pressTarget = ExecuteEvents.ExecuteHierarchy(
@@ -105,6 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Vector2 previousPosition = pointerData.position;
                 pointerData.position = endPos;
                 pointerData.delta = endPos - previousPosition;
+                MouseUiInputSystemSync.SyncMousePosition(endPos);
                 ExecuteEvents.Execute(target, pointerData, ExecuteEvents.dragHandler);
 
                 SimulateMouseUiOverlayState.UpdatePosition(MouseUiCoordinateConverter.ScreenToInput(endPos));
@@ -131,6 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 pointerData.position = currentPosition;
                 pointerData.delta = currentPosition - previousPosition;
 
+                MouseUiInputSystemSync.SyncMousePosition(currentPosition);
                 ExecuteEvents.Execute(target, pointerData, ExecuteEvents.dragHandler);
 
                 SimulateMouseUiOverlayState.UpdatePosition(MouseUiCoordinateConverter.ScreenToInput(currentPosition));
