@@ -112,14 +112,122 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 RaycastColliderMetadata metadata =
                     clusterCollection.MetadataByClusterKey[reachableCluster.Representative.ClusterKey];
-                elements.Add(CreatePhysicsColliderElement(
-                    $"R{elements.Count + 1}",
+                List<UIElementInfo> componentElements = CreateComponentElements(
                     reachableCluster,
                     metadata,
-                    sampleCoverage));
+                    sampleCoverage,
+                    elements.Count + 1);
+                elements.AddRange(componentElements);
             }
 
             return elements;
+        }
+
+        // Split the reachable cluster into 4-connected regions and materialize one UIElementInfo per region.
+        // Why: a single GameObject can produce multiple visually closed outline regions when UI occlusion
+        // splits its reachable samples, and agents need one annotation per closed region so they can address
+        // each one with its own Label, Bounds, SimX/SimY, and RaycastOutlineSegments.
+        internal static List<UIElementInfo> CreateComponentElements(
+            RaycastClusterInfo reachableCluster,
+            RaycastColliderMetadata metadata,
+            RaycastSampleCoverage sampleCoverage,
+            int startLabelNumber)
+        {
+            List<List<RaycastClusterSample>> components =
+                RaycastHitClusterer.SplitIntoConnectedComponents(reachableCluster.Samples);
+            components.Sort(CompareComponentsByTopLeft);
+
+            List<UIElementInfo> componentElements = new List<UIElementInfo>();
+            for (int j = 0; j < components.Count; j++)
+            {
+                List<RaycastClusterSample> componentSamples = components[j];
+                RaycastClusterInfo componentCluster = new RaycastClusterInfo
+                {
+                    Samples = componentSamples,
+                    SampleCount = componentSamples.Count,
+                    Representative = RaycastHitClusterer.SelectRepresentativeSample(componentSamples)
+                };
+                componentElements.Add(CreatePhysicsColliderElement(
+                    $"R{startLabelNumber + j}",
+                    componentCluster,
+                    metadata,
+                    sampleCoverage));
+            }
+            return componentElements;
+        }
+
+        // Order components so labels are assigned in a fully deterministic top-left-first sequence.
+        // Why: List<T>.Sort is not stable, so two components sharing the same min InputY and min InputX
+        // would otherwise flip order between runs. The min (Row, Column) tiebreaker pins the order.
+        private static int CompareComponentsByTopLeft(
+            List<RaycastClusterSample> left,
+            List<RaycastClusterSample> right)
+        {
+            float leftMinY = MinInputY(left);
+            float rightMinY = MinInputY(right);
+            int yComparison = leftMinY.CompareTo(rightMinY);
+            if (yComparison != 0)
+            {
+                return yComparison;
+            }
+
+            float leftMinX = MinInputX(left);
+            float rightMinX = MinInputX(right);
+            int xComparison = leftMinX.CompareTo(rightMinX);
+            if (xComparison != 0)
+            {
+                return xComparison;
+            }
+
+            (int, int) leftMinCell = MinRowColumn(left);
+            (int, int) rightMinCell = MinRowColumn(right);
+            int rowComparison = leftMinCell.Item1.CompareTo(rightMinCell.Item1);
+            if (rowComparison != 0)
+            {
+                return rowComparison;
+            }
+            return leftMinCell.Item2.CompareTo(rightMinCell.Item2);
+        }
+
+        private static float MinInputX(List<RaycastClusterSample> samples)
+        {
+            float minValue = samples[0].InputX;
+            for (int i = 1; i < samples.Count; i++)
+            {
+                if (samples[i].InputX < minValue)
+                {
+                    minValue = samples[i].InputX;
+                }
+            }
+            return minValue;
+        }
+
+        private static float MinInputY(List<RaycastClusterSample> samples)
+        {
+            float minValue = samples[0].InputY;
+            for (int i = 1; i < samples.Count; i++)
+            {
+                if (samples[i].InputY < minValue)
+                {
+                    minValue = samples[i].InputY;
+                }
+            }
+            return minValue;
+        }
+
+        private static (int, int) MinRowColumn(List<RaycastClusterSample> samples)
+        {
+            (int, int) minCell = (samples[0].Row, samples[0].Column);
+            for (int i = 1; i < samples.Count; i++)
+            {
+                (int, int) candidate = (samples[i].Row, samples[i].Column);
+                if (candidate.Item1 < minCell.Item1 ||
+                    (candidate.Item1 == minCell.Item1 && candidate.Item2 < minCell.Item2))
+                {
+                    minCell = candidate;
+                }
+            }
+            return minCell;
         }
 
         private static RaycastLayerHitSample CreateLayerHitSample(GameViewRaycastResult raycastResult)
@@ -300,7 +408,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(collider != null, "Collider is required for raycast clustering.");
 
-            // A placement area can use several colliders on one object; one annotation should describe the clickable object.
+            // Cluster by GameObject so multi-collider objects share metadata (name, path, layer, components).
+            // The 4-connected component split in CollectPhysicsColliderElements re-derives one annotation per
+            // visually closed region so a single GameObject can produce multiple entries when UI occlusion
+            // splits its reachable samples.
             return collider!.gameObject.GetInstanceID();
         }
 
