@@ -47,6 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void Prepare_WhenScriptUsesBareUnityObject_ShouldAddObjectAlias()
         {
+            // Verifies a bare "Object" call resolves to UnityEngine.Object via an injected alias.
             PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
                 "GameObject go = new GameObject(\"source\");\nObject.Instantiate(go);\nreturn null;",
                 DynamicCodeConstants.DEFAULT_NAMESPACE,
@@ -59,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void Prepare_WhenObjectAliasAlreadyExists_ShouldNotAddDuplicateAlias()
         {
+            // Verifies the default Object alias is not injected a second time when the user already declared it.
             PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
                 "using Object = UnityEngine.Object;\nObject.Instantiate(new GameObject(\"source\"));\nreturn null;",
                 DynamicCodeConstants.DEFAULT_NAMESPACE,
@@ -73,6 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void Prepare_WhenCustomObjectAliasAlreadyExists_ShouldRespectUserAlias()
         {
+            // Verifies a user-defined "Object" alias to a different type is preserved, not overridden by the default.
             PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
                 "using Object = System.Object;\nreturn new Object();",
                 DynamicCodeConstants.DEFAULT_NAMESPACE,
@@ -87,6 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void Prepare_WhenVerbatimObjectAliasAlreadyExists_ShouldRespectUserAlias()
         {
+            // Verifies a verbatim "@Object" alias is detected so the default Object alias is skipped.
             PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
                 "using @Object = System.Object;\nreturn new @Object();",
                 DynamicCodeConstants.DEFAULT_NAMESPACE,
@@ -102,6 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void Prepare_WhenScriptUsesBareUnityRandom_ShouldAddRandomAlias()
         {
+            // Verifies a bare "Random" call resolves to UnityEngine.Random via an injected alias.
             PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
                 "int value = Random.Range(0, 10);\nreturn value;",
                 DynamicCodeConstants.DEFAULT_NAMESPACE,
@@ -114,6 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void CountSubstring_WhenTargetIsEmpty_ShouldReturnZero()
         {
+            // Verifies the shared string-counting test helper treats an empty target as zero matches.
             int count = DynamicCodeTestStringUtility.CountSubstring("source", "");
 
             Assert.AreEqual(0, count);

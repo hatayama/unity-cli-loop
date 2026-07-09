@@ -100,7 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             int segmentStart = pos;
-            int afterUsing = SkipWhitespace(source, pos + 5);
+            int afterUsing = SkipWhitespaceAndComments(source, pos + 5);
             if (StartsWithKeyword(source, afterUsing, "static"))
             {
                 return AddUsingDirectiveStep(source, segmentStart, braceDepth, result);
