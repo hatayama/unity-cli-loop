@@ -16,12 +16,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class MouseInputPressActionExecutor
     {
-        // Input coordinates use top-left origin; Unity Screen space uses bottom-left origin.
-        // Uses Screen.height (runtime resolution) because Mouse.current.position is in
-        // runtime screen space, not the editor Game view target resolution.
-        private static Vector2 InputToScreen(Vector2 inputPos)
+        // Uses the Game View's target resolution (not the runtime window's Screen.height) so the
+        // Y-flip matches what a `screenshot --capture-mode rendering` image represents.
+        private static GameViewCoordinateConversion ConvertInputToUnity(Vector2 inputPos)
         {
-            return new Vector2(inputPos.x, Screen.height - inputPos.y);
+            Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
+            return GameViewCoordinateUtility.ConvertInputToUnity(inputPos, gameViewSize);
         }
 
         internal static async Task<SimulateMouseInputResponse> ExecuteClick(
@@ -38,13 +38,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Vector2 inputPos = new(request.X, request.Y);
-            Vector2 screenPos = InputToScreen(inputPos);
+            GameViewCoordinateConversion conversion = ConvertInputToUnity(inputPos);
             RuntimeMouseButton button = ToRuntimeMouseButton(request.Button);
             string buttonName = button.ToString();
 
             // Set mouse position before clicking
             InputSimulationWaitOutcome positionOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                () => MouseInputState.SetPositionState(mouse, screenPos), ct).ConfigureAwait(false);
+                () => MouseInputState.SetPositionState(mouse, conversion.InjectedUnityPosition), ct).ConfigureAwait(false);
             if (positionOutcome == InputSimulationWaitOutcome.TimedOut)
             {
                 return MouseInputSimulationResponseFactory.TimedOutButtonResult(
@@ -132,15 +132,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string durationText = request.Duration > 0f ? $" for {InputSimulationDurationFormatter.FormatSeconds(request.Duration)}s" : "";
-            return new SimulateMouseInputResponse
-            {
-                Success = true,
-                Message = $"Clicked {buttonName} at ({inputPos.x:F1}, {inputPos.y:F1}){durationText}",
-                Action = UnityCliLoopMouseInputAction.Click.ToString(),
-                Button = buttonName,
-                PositionX = inputPos.x,
-                PositionY = inputPos.y
-            };
+            return MouseInputSimulationResponseFactory.SuccessButtonResult(
+                UnityCliLoopMouseInputAction.Click,
+                $"Clicked {buttonName} at ({inputPos.x:F1}, {inputPos.y:F1}){durationText}",
+                buttonName,
+                inputPos,
+                conversion);
         }
 
         internal static async Task<SimulateMouseInputResponse> ExecuteLongPress(
@@ -157,13 +154,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Vector2 inputPos = new(request.X, request.Y);
-            Vector2 screenPos = InputToScreen(inputPos);
+            GameViewCoordinateConversion conversion = ConvertInputToUnity(inputPos);
             RuntimeMouseButton button = ToRuntimeMouseButton(request.Button);
             string buttonName = button.ToString();
 
             // Set mouse position before pressing
             InputSimulationWaitOutcome positionOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                () => MouseInputState.SetPositionState(mouse, screenPos), ct).ConfigureAwait(false);
+                () => MouseInputState.SetPositionState(mouse, conversion.InjectedUnityPosition), ct).ConfigureAwait(false);
             if (positionOutcome == InputSimulationWaitOutcome.TimedOut)
             {
                 return MouseInputSimulationResponseFactory.TimedOutButtonResult(
@@ -253,15 +250,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     inputPos);
             }
 
-            return new SimulateMouseInputResponse
-            {
-                Success = true,
-                Message = $"Long-pressed {buttonName} at ({inputPos.x:F1}, {inputPos.y:F1}) for {InputSimulationDurationFormatter.FormatSeconds(request.Duration)}s",
-                Action = UnityCliLoopMouseInputAction.LongPress.ToString(),
-                Button = buttonName,
-                PositionX = inputPos.x,
-                PositionY = inputPos.y
-            };
+            return MouseInputSimulationResponseFactory.SuccessButtonResult(
+                UnityCliLoopMouseInputAction.LongPress,
+                $"Long-pressed {buttonName} at ({inputPos.x:F1}, {inputPos.y:F1}) for {InputSimulationDurationFormatter.FormatSeconds(request.Duration)}s",
+                buttonName,
+                inputPos,
+                conversion);
         }
 
         private static RuntimeMouseButton ToRuntimeMouseButton(UnityCliLoopMouseButton button)
