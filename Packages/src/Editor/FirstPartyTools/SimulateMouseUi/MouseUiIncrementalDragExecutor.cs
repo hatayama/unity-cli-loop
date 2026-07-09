@@ -219,16 +219,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PointerEventData pointerData = MouseDragState.PointerData!;
             GameObject target = MouseDragState.Target!;
             string targetName = target.name;
-            GameObject? explicitDropTarget = null;
-
-            if (!MouseUiPointerTargetResolver.TryResolveDropTargetPath(
-                parameters,
-                MouseAction.DragEnd,
-                inputEnd,
-                out explicitDropTarget,
-                out SimulateMouseUiResponse? dropFailureResponse))
+            (GameObject? explicitDropTarget, SimulateMouseUiResponse? dropFailureResponse) =
+                MouseUiPointerTargetResolver.ResolveDropTargetPath(
+                    parameters,
+                    MouseAction.DragEnd,
+                    inputEnd);
+            if (dropFailureResponse != null)
             {
-                return dropFailureResponse!;
+                return dropFailureResponse;
             }
 
             SimulateMouseUiOverlayState.Update(

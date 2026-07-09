@@ -37,15 +37,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return targetFailureResponse;
             }
 
-            GameObject? explicitDropTarget = null;
-            if (!MouseUiPointerTargetResolver.TryResolveDropTargetPath(
-                parameters,
-                MouseAction.Drag,
-                inputEnd,
-                out explicitDropTarget,
-                out SimulateMouseUiResponse? dropFailureResponse))
+            (GameObject? explicitDropTarget, SimulateMouseUiResponse? dropFailureResponse) =
+                MouseUiPointerTargetResolver.ResolveDropTargetPath(
+                    parameters,
+                    MouseAction.Drag,
+                    inputEnd);
+            if (dropFailureResponse != null)
             {
-                return dropFailureResponse!;
+                return dropFailureResponse;
             }
 
             if (target == null)
