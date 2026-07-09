@@ -60,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 : DynamicCodeLiteralHoister.Rewrite(body);
             string preparedSource = WrapperTemplate.Build(
                 shape.UsingDirectives,
+                shape.AliasedNames,
                 namespaceName,
                 className,
                 hoistedResult.RewrittenSource,

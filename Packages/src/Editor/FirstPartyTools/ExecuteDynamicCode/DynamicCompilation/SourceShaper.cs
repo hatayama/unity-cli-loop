@@ -121,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int braceDepth,
             SourceShapeResult result)
         {
-            int usingPos = SkipWhitespace(source, pos + 6);
+            int usingPos = SkipWhitespaceAndComments(source, pos + 6);
             if (!StartsWithKeyword(source, usingPos, "using"))
             {
                 return null;
@@ -137,8 +137,115 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SourceShapeResult result)
         {
             int semiEnd = FindSemicolon(source, segmentStart);
-            result.UsingDirectives.Add(source.Substring(segmentStart, semiEnd - segmentStart + 1).TrimEnd());
+            RegisterUsingDirective(result, source, segmentStart, semiEnd);
             return new SourceTopLevelStep(semiEnd + 1, braceDepth);
+        }
+
+        private static void RegisterUsingDirective(
+            SourceShapeResult result,
+            string source,
+            int segmentStart,
+            int semiEnd)
+        {
+            result.UsingDirectives.Add(source.Substring(segmentStart, semiEnd - segmentStart + 1).TrimEnd());
+
+            string aliasName = ExtractUsingAliasName(source, segmentStart, semiEnd);
+            if (!string.IsNullOrEmpty(aliasName))
+            {
+                result.AliasedNames.Add(aliasName);
+            }
+        }
+
+        // Recognizes "using Name = ...", "using @Name = ...", and their "global using" variants
+        // so WrapperTemplate can skip injecting a default alias the user's code already defines.
+        private static string ExtractUsingAliasName(string source, int segmentStart, int semiEnd)
+        {
+            int position = segmentStart;
+            if (StartsWithKeyword(source, position, "global"))
+            {
+                position = SkipWhitespaceAndComments(source, position + "global".Length);
+            }
+
+            if (!StartsWithKeyword(source, position, "using"))
+            {
+                return null;
+            }
+
+            position = SkipWhitespaceAndComments(source, position + "using".Length);
+            if (StartsWithKeyword(source, position, "static"))
+            {
+                return null;
+            }
+
+            (string Name, int EndPosition) aliasName = ReadAliasName(source, position, semiEnd);
+            if (aliasName.Name == null)
+            {
+                return null;
+            }
+
+            int equalsPosition = SkipWhitespaceAndComments(source, aliasName.EndPosition);
+            if (equalsPosition > semiEnd || source[equalsPosition] != '=')
+            {
+                return null;
+            }
+
+            return aliasName.Name;
+        }
+
+        private static (string Name, int EndPosition) ReadAliasName(string source, int position, int semiEnd)
+        {
+            int currentPosition = position;
+            if (currentPosition <= semiEnd && source[currentPosition] == '@')
+            {
+                currentPosition++;
+            }
+
+            if (currentPosition > semiEnd || !IsIdentifierStart(source[currentPosition]))
+            {
+                return (null, position);
+            }
+
+            int nameStart = currentPosition;
+            currentPosition++;
+            while (currentPosition <= semiEnd && IsIdentifierPart(source[currentPosition]))
+            {
+                currentPosition++;
+            }
+
+            return (source.Substring(nameStart, currentPosition - nameStart), currentPosition);
+        }
+
+        private static bool IsIdentifierStart(char value)
+        {
+            return char.IsLetter(value) || value == '_';
+        }
+
+        private static bool IsIdentifierPart(char value)
+        {
+            return char.IsLetterOrDigit(value) || value == '_';
+        }
+
+        private static int SkipWhitespaceAndComments(string source, int pos)
+        {
+            int current = SkipWhitespace(source, pos);
+            while (true)
+            {
+                if (TryMatchLineComment(source, current, out int afterLine))
+                {
+                    current = SkipWhitespace(source, afterLine);
+                    continue;
+                }
+
+                if (TryMatchBlockComment(source, current, out int afterBlock))
+                {
+                    current = SkipWhitespace(source, afterBlock);
+                    continue;
+                }
+
+                break;
+            }
+
+            return current;
         }
 
         private static SourceTopLevelStep? TryAnalyzeTopLevelDeclaration(
@@ -254,7 +361,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     : body + "\nreturn null;";
             }
 
-            return WrapperTemplate.Build(shape.UsingDirectives, namespaceName, className, body);
+            return WrapperTemplate.Build(shape.UsingDirectives, shape.AliasedNames, namespaceName, className, body);
         }
 
         internal static int SkipWhitespace(string s, int pos)
@@ -711,6 +818,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class SourceShapeResult
     {
         public List<string> UsingDirectives { get; } = new List<string>();
+        public HashSet<string> AliasedNames { get; } = new HashSet<string>(System.StringComparer.Ordinal);
         public bool HasNamespaceDeclaration { get; set; }
         public bool HasTypeDeclaration { get; set; }
         public bool HasTopLevelStatements { get; set; }
