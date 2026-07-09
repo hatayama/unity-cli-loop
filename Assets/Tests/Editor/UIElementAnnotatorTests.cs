@@ -78,6 +78,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(outlineColor, Is.EqualTo(new Color(0f, 0f, 0f, 0.95f)));
         }
 
+        /// <summary>
+        /// Verifies that converting a top-left outline segment to screen space flips its Y coordinates.
+        /// </summary>
+        [Test]
+        public void ConvertTopLeftOutlineSegmentToScreenSegment_ShouldFlipYForCanvasSpace()
+        {
+            RaycastOutlineSegment inputSegment = new(10f, 20f, 30f, 20f);
+
+            RaycastOutlineSegment screenSegment =
+                UIElementAnnotator.ConvertTopLeftOutlineSegmentToScreenSegment(inputSegment, 100f);
+
+            Assert.That(screenSegment.StartX, Is.EqualTo(10f));
+            Assert.That(screenSegment.StartY, Is.EqualTo(80f));
+            Assert.That(screenSegment.EndX, Is.EqualTo(30f));
+            Assert.That(screenSegment.EndY, Is.EqualTo(80f));
+        }
+
+        /// <summary>
+        /// Verifies that a horizontal outline segment's rect extends both endpoints by half the thickness.
+        /// </summary>
+        [Test]
+        public void CalculateOutlineSegmentRect_WhenHorizontalSegment_ShouldExtendBothEndpoints()
+        {
+            RaycastOutlineSegment segment = new(10f, 20f, 30f, 20f);
+
+            Rect rect = UIElementAnnotator.CalculateOutlineSegmentRect(segment, 4f);
+
+            Assert.That(rect, Is.EqualTo(new Rect(8f, 18f, 24f, 4f)));
+        }
+
+        /// <summary>
+        /// Verifies that a vertical outline segment's rect extends both endpoints by half the thickness.
+        /// </summary>
+        [Test]
+        public void CalculateOutlineSegmentRect_WhenVerticalSegment_ShouldExtendBothEndpoints()
+        {
+            RaycastOutlineSegment segment = new(10f, 20f, 10f, 50f);
+
+            Rect rect = UIElementAnnotator.CalculateOutlineSegmentRect(segment, 4f);
+
+            Assert.That(rect, Is.EqualTo(new Rect(8f, 18f, 4f, 34f)));
+        }
+
         [Test]
         public void CalculateBorderEdgeRects_WhenBoundsAreProvided_ShouldPlaceEdgesInsideTheBounds()
         {

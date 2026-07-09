@@ -61,6 +61,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             List<UIElementInfo> annotatedElements = new();
+            List<UIElementInfo> physicsColliderElements = new();
+            Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
+            List<RaycastGridPointInfo> raycastGridPoints = new();
+            List<RaycastLayerSummaryInfo> raycastLayerSummaries = new();
+            List<UIElementInfo> raycastGridOverlayElements = new();
+            GameRenderingImageInfo? raycastGridRenderingInfo = null;
 
             if (request.AnnotateElements)
             {
@@ -68,12 +74,57 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 UIElementAnnotator.AssignLabels(annotatedElements);
             }
 
+            if (request.AnnotateRaycastGrid)
+            {
+                GameRenderingImageInfo renderingImageInfo;
+                bool gridInfoTimedOut;
+                (renderingImageInfo, gridInfoTimedOut) = await EditorWindowCaptureUtility.GetGameRenderingImageInfoAsync(
+                    UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                    ct).ConfigureAwait(false);
+                if (gridInfoTimedOut)
+                {
+                    return CreateTimedOutResult(
+                        "raycast grid rendering info capture",
+                        correlationId,
+                        new List<ScreenshotInfo>());
+                }
+
+                await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+
+                raycastGridRenderingInfo = renderingImageInfo;
+                gameViewSize = renderingImageInfo.GameViewSize;
+                RaycastLayerMaskResolution raycastLayerMaskResolution = ResolveRaycastLayerMask(request);
+
+                if (raycastLayerMaskResolution.HasLayerNames)
+                {
+                    physicsColliderElements = RaycastGridAnnotator.CollectPhysicsColliderElements(
+                        renderingImageInfo.RenderingImageSize,
+                        renderingImageInfo.ImageToInputOffsetY,
+                        raycastLayerMaskResolution.Mask);
+                }
+                else
+                {
+                    raycastGridPoints = RaycastGridAnnotator.CollectRaycastGridPoints(
+                        renderingImageInfo.RenderingImageSize,
+                        renderingImageInfo.ImageToInputOffsetY);
+                    raycastLayerSummaries = RaycastGridAnnotator.CollectRaycastLayerSummaries(
+                        renderingImageInfo.RenderingImageSize,
+                        renderingImageInfo.ImageToInputOffsetY);
+                    raycastGridOverlayElements = RaycastGridAnnotator.CreateOverlayElements(raycastGridPoints);
+                }
+            }
+
             if (request.ElementsOnly)
             {
-                UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, (int)Handles.GetMainGameViewSize().y);
-                ScreenshotInfo elementsOnlyInfo = new();
-                elementsOnlyInfo.CoordinateSystem = UnityCliLoopScreenshotCoordinateSystem.GameView;
-                elementsOnlyInfo.AnnotatedElements = annotatedElements;
+                UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, Mathf.RoundToInt(gameViewSize.y));
+                List<UIElementInfo> elementsOnlyAnnotatedElements =
+                    CreateResponseAnnotatedElements(annotatedElements, physicsColliderElements);
+                ScreenshotInfo elementsOnlyInfo = new() { ResolutionScale = request.ResolutionScale };
+                int elementsOnlyImageToInputOffsetY = raycastGridRenderingInfo?.ImageToInputOffsetY ?? 0;
+                ApplyRenderingCoordinateMetadata(elementsOnlyInfo, gameViewSize, elementsOnlyImageToInputOffsetY);
+                elementsOnlyInfo.AnnotatedElements = elementsOnlyAnnotatedElements;
+                elementsOnlyInfo.RaycastGridPoints = raycastGridPoints;
+                elementsOnlyInfo.RaycastLayerSummaries = raycastLayerSummaries;
                 return new ScreenshotResponse
                 {
                     Screenshots = new List<ScreenshotInfo> { elementsOnlyInfo }
@@ -82,14 +133,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             GameObject annotationOverlay = null;
             Texture2D texture;
-            int yOffset;
-            bool timedOut;
+            GameRenderingImageInfo captureRenderingInfo;
+            bool captureTimedOut;
             try
             {
-                if (request.AnnotateElements)
+                if (request.AnnotateElements || request.AnnotateRaycastGrid)
                 {
+                    List<UIElementInfo> overlayElements = new(annotatedElements);
+                    overlayElements.AddRange(raycastGridOverlayElements);
+                    overlayElements.AddRange(physicsColliderElements);
                     annotationOverlay = UIElementAnnotator.CreateAnnotationOverlay(
-                        annotatedElements,
+                        overlayElements,
                         request.ResolutionScale);
                     Canvas.ForceUpdateCanvases();
                     // Chained CLI calls can read the previous GameView RT before overlay rendering catches up.
@@ -108,11 +162,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
                 }
 
-                (texture, yOffset, timedOut) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
+                (texture, captureRenderingInfo, captureTimedOut) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
                     request.ResolutionScale,
+                    raycastGridRenderingInfo,
                     UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
                     ct).ConfigureAwait(false);
-                if (timedOut)
+                if (captureTimedOut)
                 {
                     return CreateTimedOutResult(
                         "GameView rendering capture",
@@ -127,7 +182,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 DestroyAnnotationOverlay(annotationOverlay, editorContext);
             }
 
-            UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, (int)Handles.GetMainGameViewSize().y);
+            UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, Mathf.RoundToInt(gameViewSize.y));
+            List<UIElementInfo> responseAnnotatedElements =
+                CreateResponseAnnotatedElements(annotatedElements, physicsColliderElements);
 
             if (texture == null)
             {
@@ -158,11 +215,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     FileSizeBytes = savedFileInfo.Length,
                     Width = width,
                     Height = height,
-                    CoordinateSystem = UnityCliLoopScreenshotCoordinateSystem.GameView,
                     ResolutionScale = request.ResolutionScale,
-                    YOffset = yOffset,
-                    AnnotatedElements = annotatedElements,
                 };
+                ApplyRenderingCoordinateMetadata(info, captureRenderingInfo.GameViewSize, captureRenderingInfo.ImageToInputOffsetY);
+                info.AnnotatedElements = responseAnnotatedElements;
+                info.RaycastGridPoints = raycastGridPoints;
+                info.RaycastLayerSummaries = raycastLayerSummaries;
                 screenshots.Add(info);
             }
             catch (Exception ex)
@@ -250,13 +308,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     SaveTextureAsPng(texture, savedPath);
 
                     FileInfo savedFileInfo = new(savedPath);
-                    screenshots.Add(new ScreenshotInfo
+                    ScreenshotInfo info = new()
                     {
                         ImagePath = savedPath,
                         FileSizeBytes = savedFileInfo.Length,
                         Width = width,
                         Height = height,
-                    });
+                    };
+                    ApplyWindowCoordinateMetadata(info);
+                    screenshots.Add(info);
                 }
                 catch (Exception ex)
                 {
@@ -324,6 +384,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             editorContext.Post(_ => UIElementAnnotator.DestroyAnnotationOverlay(annotationOverlay), null);
         }
 
+        private static void ApplyRenderingCoordinateMetadata(
+            ScreenshotInfo info,
+            Vector2 gameViewSize,
+            int imageToInputOffsetY = 0)
+        {
+            info.ImageCoordinateSystem = UnityCliLoopConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW;
+            info.GameViewWidth = gameViewSize.x;
+            info.GameViewHeight = gameViewSize.y;
+            info.ImageToInputOffsetY = imageToInputOffsetY;
+            info.ScreenshotToInputFormula = UnityCliLoopConstants.SCREENSHOT_RENDERING_TO_INPUT_FORMULA;
+            info.UnityInputFormula = UnityCliLoopConstants.COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY;
+        }
+
+        private static void ApplyWindowCoordinateMetadata(ScreenshotInfo info)
+        {
+            info.ImageCoordinateSystem = UnityCliLoopConstants.COORDINATE_SYSTEM_TOP_LEFT_WINDOW;
+            info.ScreenshotToInputFormula = UnityCliLoopConstants.SCREENSHOT_WINDOW_TO_INPUT_FORMULA_UNAVAILABLE;
+            info.UnityInputFormula = "";
+        }
+
+        private static List<UIElementInfo> CreateResponseAnnotatedElements(
+            List<UIElementInfo> uiElements,
+            List<UIElementInfo> physicsColliderElements)
+        {
+            List<UIElementInfo> responseElements = new(uiElements);
+            responseElements.AddRange(physicsColliderElements);
+            return responseElements;
+        }
+
         private void ValidateParameters(ScreenshotSchema request)
         {
             if (request.CaptureMode != CaptureMode.rendering &&
@@ -338,7 +427,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     $"ResolutionScale must be between 0.1 and 1.0, got: {request.ResolutionScale}");
             }
 
-            // AnnotateElements and ElementsOnly rely on PlayMode rendering pipeline
+            // AnnotateElements, ElementsOnly, and AnnotateRaycastGrid rely on PlayMode rendering pipeline
             if (request.CaptureMode != CaptureMode.rendering)
             {
                 if (request.AnnotateElements)
@@ -350,12 +439,75 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     throw new UnityCliLoopToolParameterValidationException("ElementsOnly is only supported when CaptureMode=rendering");
                 }
+
+                if (request.AnnotateRaycastGrid)
+                {
+                    throw new UnityCliLoopToolParameterValidationException("AnnotateRaycastGrid is only supported when CaptureMode=rendering");
+                }
             }
 
-            if (request.ElementsOnly && !request.AnnotateElements)
+            if (request.ElementsOnly &&
+                !request.AnnotateElements &&
+                !request.AnnotateRaycastGrid)
             {
-                throw new UnityCliLoopToolParameterValidationException("ElementsOnly requires AnnotateElements=true");
+                throw new UnityCliLoopToolParameterValidationException(
+                    "ElementsOnly requires AnnotateElements=true or AnnotateRaycastGrid=true");
             }
+
+            RaycastLayerMaskResolution raycastLayerMaskResolution = ResolveRaycastLayerMask(request);
+            if (raycastLayerMaskResolution.HasLayerNames && !request.AnnotateRaycastGrid)
+            {
+                throw new UnityCliLoopToolParameterValidationException(
+                    "RaycastLayerMask requires AnnotateRaycastGrid=true");
+            }
+
+            if (!raycastLayerMaskResolution.IsValid)
+            {
+                throw new UnityCliLoopToolParameterValidationException(
+                    CreateInvalidRaycastLayerMaskMessage(raycastLayerMaskResolution));
+            }
+        }
+
+        private static RaycastLayerMaskResolution ResolveRaycastLayerMask(ScreenshotSchema request)
+        {
+            string raycastLayerMask = request.RaycastLayerMask ?? "";
+            return RaycastLayerMaskResolver.Resolve(
+                raycastLayerMask,
+                GetAvailableLayerDefinitions());
+        }
+
+        private static List<RaycastLayerDefinition> GetAvailableLayerDefinitions()
+        {
+            List<RaycastLayerDefinition> layerDefinitions = new();
+            for (int layerIndex = 0; layerIndex <= 31; layerIndex++)
+            {
+                string layerName = LayerMask.LayerToName(layerIndex);
+                if (string.IsNullOrEmpty(layerName))
+                {
+                    continue;
+                }
+
+                layerDefinitions.Add(new RaycastLayerDefinition
+                {
+                    Name = layerName,
+                    Index = layerIndex
+                });
+            }
+
+            return layerDefinitions;
+        }
+
+        private static string CreateInvalidRaycastLayerMaskMessage(
+            RaycastLayerMaskResolution raycastLayerMaskResolution)
+        {
+            string invalidLayerNames = string.Join(", ", raycastLayerMaskResolution.InvalidLayerNames);
+            string validLayerNames = string.Join(", ", raycastLayerMaskResolution.ValidLayerNames);
+            if (string.IsNullOrEmpty(validLayerNames))
+            {
+                validLayerNames = "(none)";
+            }
+
+            return $"RaycastLayerMask contains unknown layer name(s): {invalidLayerNames}. Valid layers: {validLayerNames}";
         }
 
         private string EnsureOutputDirectoryExists(string outputDirectory)

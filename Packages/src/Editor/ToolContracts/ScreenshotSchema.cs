@@ -1,6 +1,3 @@
-
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-
 namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
     /// <summary>
@@ -15,5 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public CaptureMode CaptureMode { get; set; } = CaptureMode.window;
         public bool AnnotateElements { get; set; } = false;
         public bool ElementsOnly { get; set; } = false;
+        public bool AnnotateRaycastGrid { get; set; } = false;
+        public string RaycastLayerMask { get; set; } = "";
     }
 }
