@@ -129,6 +129,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return layerNames;
         }
 
+        internal static List<string> CreateLayerNamesFromMask(
+            int mask,
+            IReadOnlyList<RaycastLayerDefinition> availableLayers)
+        {
+            List<string> layerNames = new List<string>();
+            foreach (RaycastLayerDefinition layer in availableLayers)
+            {
+                if (!IsValidLayer(layer))
+                {
+                    continue;
+                }
+
+                if ((mask & (1 << layer.Index)) == 0)
+                {
+                    continue;
+                }
+
+                layerNames.Add(layer.Name);
+            }
+
+            return layerNames;
+        }
+
         private static bool IsValidLayer(RaycastLayerDefinition layer)
         {
             return !string.IsNullOrEmpty(layer.Name) &&

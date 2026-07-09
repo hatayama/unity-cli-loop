@@ -29,8 +29,8 @@ uloop simulate-mouse-input --action <action> [options]
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--action` | enum | `Click` | `Click`, `LongPress`, `MoveDelta`, `SmoothDelta`, `Scroll` |
-| `--x` | number | `0` | Target X position in Game View pixels (origin: top-left). Used by Click and LongPress. Use `AnnotatedElements[].SimX`, `RaycastGridPoints[].InputX`, or raw image pixels converted with `ScreenshotToInputFormula`. |
-| `--y` | number | `0` | Target Y position in Game View pixels (origin: top-left). Used by Click and LongPress. Use `AnnotatedElements[].SimY`, `RaycastGridPoints[].InputY`, or raw image pixels converted with `ScreenshotToInputFormula`. |
+| `--x` | number | `0` | Target X position in Game View pixels (origin: top-left). Used by Click and LongPress. Use `AnnotatedElements[].SimX`, or raw image pixels converted with `ScreenshotToInputFormula`. |
+| `--y` | number | `0` | Target Y position in Game View pixels (origin: top-left). Used by Click and LongPress. Use `AnnotatedElements[].SimY`, or raw image pixels converted with `ScreenshotToInputFormula`. |
 | `--button` | enum | `Left` | Mouse button: `Left`, `Right`, `Middle`. Used by Click and LongPress. |
 | `--duration` | number | `0` | Hold duration for LongPress, or interpolation duration for SmoothDelta (seconds). For Click, 0 = one-shot tap. |
 | `--delta-x` | number | `0` | Delta X in pixels for MoveDelta/SmoothDelta. Positive = right. |
@@ -103,7 +103,7 @@ uloop simulate-mouse-input --action SmoothDelta --delta-x 300 --delta-y 0 --dura
 
 - `--x` / `--y` use **top-left Game View coordinates**.
 - Raw image pixels from `uloop screenshot --capture-mode rendering` must be converted with `ScreenshotToInputFormula`.
-- `AnnotatedElements[].SimX/SimY` and `RaycastGridPoints[].InputX/InputY` can be passed directly to this tool.
+- `AnnotatedElements[].SimX/SimY` can be passed directly to this tool.
 - Do not flip Y in the caller. The tool converts internally for Unity Input System:
 
 ```text

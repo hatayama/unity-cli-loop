@@ -13,43 +13,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class RaycastGridAnnotator
     {
-        private const int GRID_COLUMNS = 5;
-        private const int GRID_ROWS = 5;
         private const int CLUSTERED_GRID_COLUMNS = 40;
         private const int CLUSTERED_GRID_ROWS = 40;
-        private const float MARKER_SIZE = 18f;
-
-        internal static List<RaycastGridPointInfo> CollectRaycastGridPoints(
-            Vector2 renderingImageSize,
-            int imageToInputOffsetY)
-        {
-            return CollectRaycastGridPointsForGrid(
-                renderingImageSize,
-                imageToInputOffsetY,
-                GRID_ROWS,
-                GRID_COLUMNS);
-        }
 
         internal static List<RaycastLayerSummaryInfo> CollectRaycastLayerSummaries(
             Vector2 renderingImageSize,
             int imageToInputOffsetY)
         {
-            List<RaycastGridPointInfo> points = CollectRaycastGridPointsForGrid(
+            List<RaycastLayerHitSample> samples = CollectLayerHitSamples(
                 renderingImageSize,
                 imageToInputOffsetY,
                 CLUSTERED_GRID_ROWS,
                 CLUSTERED_GRID_COLUMNS);
-            return CreateLayerSummaries(points);
+            return CreateLayerSummaries(samples);
         }
 
-        private static List<RaycastGridPointInfo> CollectRaycastGridPointsForGrid(
+        private static List<RaycastLayerHitSample> CollectLayerHitSamples(
             Vector2 renderingImageSize,
             int imageToInputOffsetY,
             int rowCount,
             int columnCount)
         {
-            List<RaycastGridPointInfo> points = new List<RaycastGridPointInfo>();
-            int labelIndex = 1;
+            List<RaycastLayerHitSample> samples = new List<RaycastLayerHitSample>();
             // Sync once for the whole grid; each candidate raycast then reads the same current physics state.
             Physics.SyncTransforms();
 
@@ -70,27 +55,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         Physics.DefaultRaycastLayers,
                         false);
 
-                    points.Add(CreatePointInfo($"R{labelIndex}", inputPosition, raycastResult));
-                    labelIndex++;
+                    samples.Add(CreateLayerHitSample(raycastResult));
                 }
             }
 
-            return points;
-        }
-
-        internal static Vector2 CalculateGridInputPosition(
-            Vector2 renderingImageSize,
-            int imageToInputOffsetY,
-            int row,
-            int column)
-        {
-            return CalculateGridInputPositionForGrid(
-                renderingImageSize,
-                imageToInputOffsetY,
-                GRID_ROWS,
-                GRID_COLUMNS,
-                row,
-                column);
+            return samples;
         }
 
         internal static Vector2 CalculateGridInputPositionForGrid(
@@ -153,90 +122,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return elements;
         }
 
-        internal static List<UIElementInfo> CreateOverlayElements(List<RaycastGridPointInfo> points)
+        private static RaycastLayerHitSample CreateLayerHitSample(GameViewRaycastResult raycastResult)
         {
-            List<UIElementInfo> overlayElements = new List<UIElementInfo>();
-
-            foreach (RaycastGridPointInfo point in points)
+            RaycastLayerHitSample sample = new RaycastLayerHitSample
             {
-                if (!point.Hit)
-                {
-                    continue;
-                }
-
-                float halfSize = MARKER_SIZE / 2f;
-                overlayElements.Add(new UIElementInfo
-                {
-                    Label = point.Label,
-                    Name = point.HitGameObjectName ?? "",
-                    Path = point.HitGameObjectPath ?? "",
-                    Type = "RaycastHit",
-                    Interaction = "Raycast",
-                    SimX = point.InputX,
-                    SimY = point.InputY,
-                    BoundsMinX = point.InjectedUnityPositionX - halfSize,
-                    BoundsMinY = point.InjectedUnityPositionY - halfSize,
-                    BoundsMaxX = point.InjectedUnityPositionX + halfSize,
-                    BoundsMaxY = point.InjectedUnityPositionY + halfSize,
-                    SortingOrder = 0,
-                    SiblingIndex = 0
-                });
-            }
-
-            return overlayElements;
-        }
-
-        private static RaycastGridPointInfo CreatePointInfo(
-            string label,
-            Vector2 inputPosition,
-            GameViewRaycastResult raycastResult)
-        {
-            RaycastGridPointInfo pointInfo = new RaycastGridPointInfo
-            {
-                Label = label,
-                Hit = raycastResult.Hits.Length > 0,
-                InputX = inputPosition.x,
-                InputY = inputPosition.y,
-                InjectedUnityPositionX = raycastResult.Conversion.InjectedUnityPosition.x,
-                InjectedUnityPositionY = raycastResult.Conversion.InjectedUnityPosition.y
+                Hit = raycastResult.Hits.Length > 0
             };
 
-            if (!pointInfo.Hit)
+            if (!sample.Hit)
             {
-                return pointInfo;
+                return sample;
             }
 
             RaycastHit hit = raycastResult.Hits[0];
-            pointInfo.HitGameObjectName = hit.collider.gameObject.name;
-            pointInfo.HitGameObjectPath = GameObjectPathUtility.GetFullPath(hit.collider.gameObject);
-            pointInfo.HitLayerIndex = hit.collider.gameObject.layer;
-            pointInfo.HitLayer = LayerMask.LayerToName(hit.collider.gameObject.layer);
-            pointInfo.Distance = hit.distance;
-            return pointInfo;
+            sample.HitGameObjectPath = GameObjectPathUtility.GetFullPath(hit.collider.gameObject);
+            sample.HitLayerIndex = hit.collider.gameObject.layer;
+            sample.HitLayer = LayerMask.LayerToName(hit.collider.gameObject.layer);
+            return sample;
         }
 
-        internal static List<RaycastLayerSummaryInfo> CreateLayerSummaries(List<RaycastGridPointInfo> points)
+        internal static List<RaycastLayerSummaryInfo> CreateLayerSummaries(List<RaycastLayerHitSample> samples)
         {
             Dictionary<int, RaycastLayerSummaryAccumulator> accumulatorsByLayerIndex =
                 new Dictionary<int, RaycastLayerSummaryAccumulator>();
 
-            foreach (RaycastGridPointInfo point in points)
+            foreach (RaycastLayerHitSample sample in samples)
             {
-                if (!point.Hit || point.HitLayerIndex == null)
+                if (!sample.Hit || sample.HitLayerIndex == null)
                 {
                     continue;
                 }
 
-                int layerIndex = point.HitLayerIndex.Value;
+                int layerIndex = sample.HitLayerIndex.Value;
                 if (!accumulatorsByLayerIndex.ContainsKey(layerIndex))
                 {
                     accumulatorsByLayerIndex.Add(
                         layerIndex,
-                        new RaycastLayerSummaryAccumulator(point.HitLayer ?? "", layerIndex));
+                        new RaycastLayerSummaryAccumulator(sample.HitLayer ?? "", layerIndex));
                 }
 
                 RaycastLayerSummaryAccumulator accumulator = accumulatorsByLayerIndex[layerIndex];
-                accumulator.AddHit(point.HitGameObjectPath ?? "");
+                accumulator.AddHit(sample.HitGameObjectPath ?? "");
             }
 
             List<RaycastLayerSummaryInfo> summaries = new List<RaycastLayerSummaryInfo>();
@@ -577,5 +503,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 MaxY = maxY;
             }
         }
+    }
+
+    /// <summary>
+    /// Carries the raycast hit layer/object of one dense grid sample, for internal layer-summary aggregation only.
+    /// </summary>
+    internal sealed class RaycastLayerHitSample
+    {
+        public bool Hit { get; set; }
+        public string? HitGameObjectPath { get; set; }
+        public string? HitLayer { get; set; }
+        public int? HitLayerIndex { get; set; }
     }
 }
