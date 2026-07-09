@@ -77,10 +77,10 @@ All rows below assume the New Input System is installed.
 ## Examples
 
 ```bash
-# Left-click at the Game View center for runtime input
+# Left-click at a representative Game View point for runtime input
 uloop simulate-mouse-input --action Click --x 400 --y 300
 
-# Right-click at screen center
+# Right-click at a representative Game View point
 uloop simulate-mouse-input --action Click --x 400 --y 300 --button Right
 
 # Hold left-click for 2 seconds
