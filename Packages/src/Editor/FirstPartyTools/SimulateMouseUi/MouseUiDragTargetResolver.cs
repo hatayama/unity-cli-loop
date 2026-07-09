@@ -29,17 +29,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (parameters.BypassRaycast)
             {
-                if (!MouseUiPointerTargetResolver.TryResolveGameObjectPath(
-                    parameters.TargetPath,
-                    "TargetPath",
-                    action,
-                    inputPosition,
-                    out rawTarget,
-                    out SimulateMouseUiResponse? failureResponse))
+                (GameObject? Target, SimulateMouseUiResponse? FailureResponse) resolution =
+                    MouseUiPointerTargetResolver.ResolveGameObjectPath(
+                        parameters.TargetPath,
+                        "TargetPath",
+                        action,
+                        inputPosition);
+                if (resolution.FailureResponse != null)
                 {
-                    return (startRaycast, null, failureResponse);
+                    return (startRaycast, null, resolution.FailureResponse);
                 }
 
+                rawTarget = resolution.Target;
                 startRaycast = MouseUiPointerTargetResolver.CreateDirectRaycastResult(rawTarget!);
             }
             else if (hit != null)
