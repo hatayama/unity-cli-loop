@@ -1,9 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Net.Sockets;
 using UnityEditor;
-using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
@@ -38,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly UnityCliLoopServerRecoveryTrackingService _recoveryTrackingService;
         private readonly IUnityCliLoopServerDomainReloadLifecycle _domainReloadLifecycle;
         private IUnityCliLoopServerInstance _bridgeServer;
-        private readonly SemaphoreSlim _startupSemaphore = new SemaphoreSlim(1, 1);
+        private readonly UnityCliLoopServerRecoveryExecutor _recoveryExecutor;
 
         internal UnityCliLoopServerControllerService(
             IUnityCliLoopServerInstanceFactory serverInstanceFactory,
@@ -82,9 +80,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _startupProtectionService = startupProtectionService ?? throw new ArgumentNullException(nameof(startupProtectionService));
             _recoveryTrackingService = recoveryTrackingService ?? throw new ArgumentNullException(nameof(recoveryTrackingService));
             _domainReloadLifecycle = domainReloadLifecycle ?? throw new ArgumentNullException(nameof(domainReloadLifecycle));
+
+            _recoveryExecutor = new UnityCliLoopServerRecoveryExecutor(
+                serverInstanceFactory,
+                readinessService,
+                startupProtectionService,
+                sessionFlagsRepository,
+                toolRegistrarService,
+                () => _bridgeServer,
+                server => _bridgeServer = server);
         }
 
-        private bool IsBackgroundUnityProcess()
+        internal static bool IsBackgroundUnityProcess()
         {
             bool isAssetImportWorker = AssetDatabase.IsAssetImportWorkerProcess();
             return isAssetImportWorker;
@@ -363,158 +370,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// Centralized, coalesced recovery start.
         /// Attempts recovery on the project IPC endpoint for up to 5 seconds.
         /// </summary>
-        public async Task StartRecoveryIfNeededAsync(bool isAfterCompile, CancellationToken cancellationToken)
+        public Task StartRecoveryIfNeededAsync(bool isAfterCompile, CancellationToken cancellationToken)
         {
-            if (IsBackgroundUnityProcess())
-            {
-                VibeLogger.LogInfo("server_start_ignored", "background_process");
-                return;
-            }
-
-            if (_startupProtectionService.IsStartupProtectionActive())
-            {
-                VibeLogger.LogInfo("server_start_ignored", "startup_protection_active");
-                if (_bridgeServer?.IsRunning == true)
-                {
-                    await _readinessService.MarkServerReadyAsync("startup-protection-active", cancellationToken);
-                    return;
-                }
-
-                return;
-            }
-
-            VibeLogger.LogInfo("startup_request", "transport=project_ipc");
-
-            await _startupSemaphore.WaitAsync(cancellationToken);
-            try
-            {
-                // If any server is already running, ignore this request to prevent double-binding
-                if (_bridgeServer != null && _bridgeServer.IsRunning)
-                {
-                    VibeLogger.LogInfo("server_start_ignored", $"already_running endpoint={_bridgeServer.Endpoint}");
-                    await _readinessService.MarkServerReadyAsync("already-running", cancellationToken);
-                    return;
-                }
-
-                // Ensure previous instance is fully disposed before trying to bind a new one
-                if (_bridgeServer != null)
-                {
-                    try
-                    {
-                        _bridgeServer.Dispose();
-                        VibeLogger.LogInfo("server_disposed_before_bind", "disposed previous server instance");
-                    }
-                    catch (Exception ex)
-                    {
-                        VibeLogger.LogWarning("server_dispose_failed", ex.Message);
-                    }
-                    finally
-                    {
-                        _bridgeServer = null;
-                    }
-                }
-
-                bool started = await TryBindWithWaitAsync(
-                    5000,
-                    250,
-                    cancellationToken);
-
-                if (!started)
-                {
-                    // Ensure session reflects stopped state on failure
-                    _sessionFlagsRepository.ClearServerSession();
-                    _sessionFlagsRepository.ClearReconnectingFlags();
-                    string message = "Unity CLI Loop server recovery failed because the project IPC endpoint could not be bound within 5000ms.";
-                    Debug.LogError($"[{UnityCliLoopConstants.PROJECT_NAME}] {message}");
-                    throw new InvalidOperationException(message);
-                }
-
-                // Mark running and update settings
-                SaveRunningServerState();
-
-                // Clear reconnection-related flags on successful recovery
-                _sessionFlagsRepository.ClearReconnectingFlags();
-                _sessionFlagsRepository.ClearPostCompileReconnectingUI();
-                _toolRegistrarService.WarmupRegistry();
-                await _readinessService.MarkServerReadyAsync("server-recovery", cancellationToken);
-
-                _startupProtectionService.ActivateStartupProtection(5000);
-            }
-            finally
-            {
-                _startupSemaphore.Release();
-            }
-        }
-
-        private async Task<bool> TryBindWithWaitAsync(
-            int maxWaitMs,
-            int stepMs,
-            CancellationToken cancellationToken)
-        {
-            int remainingMs = maxWaitMs;
-            while (true)
-            {
-                VibeLogger.LogInfo("binding_attempt", "transport=project_ipc");
-                IUnityCliLoopServerInstance server = null;
-                try
-                {
-                    // Defensive: dispose any non-running stale instance before creating a new one
-                    if (_bridgeServer != null && !_bridgeServer.IsRunning)
-                    {
-                        try
-                        {
-                            _bridgeServer.Dispose();
-                            VibeLogger.LogInfo("server_disposed_before_bind", "disposed stale instance");
-                        }
-                        catch (Exception ex)
-                        {
-                            VibeLogger.LogWarning("server_dispose_failed", ex.Message);
-                        }
-                        finally
-                        {
-                            _bridgeServer = null;
-                        }
-                    }
-
-                    server = _serverInstanceFactory.Create();
-                    server.StartServer();
-                    _bridgeServer = server;
-                    VibeLogger.LogInfo(
-                        "binding_success",
-                        "Unity CLI Loop server bound the project IPC endpoint.",
-                        new { endpoint = server.Endpoint });
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    // Ensure partially created server is cleaned up on failure
-                    server?.Dispose();
-                    // Unwrap SocketException details if present
-                    SocketException sockEx = ex as SocketException;
-                    if (ex is InvalidOperationException && ex.InnerException is SocketException innerSock)
-                    {
-                        sockEx = innerSock;
-                    }
-
-                    if (sockEx != null)
-                    {
-                        VibeLogger.LogWarning("binding_failed", $"target=project_ipc code={sockEx.SocketErrorCode} hresult={sockEx.HResult} native={sockEx.ErrorCode}");
-                    }
-                    else
-                    {
-                        VibeLogger.LogWarning("binding_failed", $"target=project_ipc code=Unknown hresult={ex.HResult}");
-                    }
-
-                    if (remainingMs <= 0)
-                    {
-                        return false;
-                    }
-
-                    int delay = stepMs <= 0 ? remainingMs : Math.Min(stepMs, remainingMs);
-                    await TimerDelay.Wait(delay, cancellationToken);
-                    remainingMs -= delay;
-                }
-            }
+            return _recoveryExecutor.StartRecoveryIfNeededAsync(isAfterCompile, cancellationToken);
         }
 
         private void SaveRunningServerState()
