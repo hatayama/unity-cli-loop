@@ -657,6 +657,199 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(summaries, Is.Empty);
         }
 
+        [Test]
+        public void SplitIntoConnectedComponents_WhenSamplesForm4ConnectedRegion_ShouldReturnOneComponent()
+        {
+            // Tests that an L-shaped set of 4-connected samples collapses into a single connected component.
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
+            {
+                CreateSample(1, 10f, 10f, 1, 1),
+                CreateSample(1, 20f, 10f, 1, 2),
+                CreateSample(1, 10f, 20f, 2, 1)
+            };
+
+            List<List<RaycastClusterSample>> components =
+                RaycastHitClusterer.SplitIntoConnectedComponents(samples);
+
+            Assert.That(components.Count, Is.EqualTo(1));
+            Assert.That(components[0].Count, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void SplitIntoConnectedComponents_WhenSamplesFormTwoDisconnectedRegions_ShouldReturnTwoComponents()
+        {
+            // Tests that two spatially disconnected 4-connected regions come back as two separate components.
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
+            {
+                CreateSample(1, 10f, 10f, 1, 1),
+                CreateSample(1, 20f, 10f, 1, 2),
+                CreateSample(1, 50f, 50f, 5, 5),
+                CreateSample(1, 60f, 50f, 5, 6),
+                CreateSample(1, 60f, 60f, 6, 6)
+            };
+
+            List<List<RaycastClusterSample>> components =
+                RaycastHitClusterer.SplitIntoConnectedComponents(samples);
+
+            Assert.That(components.Count, Is.EqualTo(2));
+            List<int> sizes = new List<int> { components[0].Count, components[1].Count };
+            sizes.Sort();
+            Assert.That(sizes, Is.EqualTo(new List<int> { 2, 3 }));
+        }
+
+        [Test]
+        public void SplitIntoConnectedComponents_WhenSamplesAreOnlyDiagonallyAdjacent_ShouldReturnSeparateComponents()
+        {
+            // Tests that diagonal-only adjacency is not treated as 4-connectivity, so two samples become two components.
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
+            {
+                CreateSample(1, 10f, 10f, 1, 1),
+                CreateSample(1, 20f, 20f, 2, 2)
+            };
+
+            List<List<RaycastClusterSample>> components =
+                RaycastHitClusterer.SplitIntoConnectedComponents(samples);
+
+            Assert.That(components.Count, Is.EqualTo(2));
+            Assert.That(components[0].Count, Is.EqualTo(1));
+            Assert.That(components[1].Count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void SplitIntoConnectedComponents_WhenSamplesHaveNoGridCell_ShouldTreatEachAsSeparateComponent()
+        {
+            // Tests that samples without a grid cell (Row/Column <= 0) each become their own component instead of collapsing.
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>
+            {
+                CreateSample(1, 10f, 10f),
+                CreateSample(1, 20f, 20f),
+                CreateSample(1, 30f, 30f)
+            };
+
+            List<List<RaycastClusterSample>> components =
+                RaycastHitClusterer.SplitIntoConnectedComponents(samples);
+
+            Assert.That(components.Count, Is.EqualTo(3));
+            foreach (List<RaycastClusterSample> component in components)
+            {
+                Assert.That(component.Count, Is.EqualTo(1));
+            }
+        }
+
+        [Test]
+        public void SplitIntoConnectedComponents_WhenInputIsEmpty_ShouldReturnEmpty()
+        {
+            // Tests that an empty sample list produces an empty component list without exceptions.
+            List<RaycastClusterSample> samples = new List<RaycastClusterSample>();
+
+            List<List<RaycastClusterSample>> components =
+                RaycastHitClusterer.SplitIntoConnectedComponents(samples);
+
+            Assert.That(components, Is.Empty);
+        }
+
+        [Test]
+        public void CreateComponentElements_WhenReachableClusterSplitsIntoTwoRegions_ShouldEmitTwoEntriesWithSharedMetadataAndDistinctBoundsAndSim()
+        {
+            // Tests that a single reachable cluster split into two 4-connected regions produces two element entries
+            // that share metadata (Name/Path/Layer/Components) but carry distinct Label/Bounds/SimX/SimY/RaycastOutlineSegments.
+            RaycastClusterInfo reachableCluster = new RaycastClusterInfo
+            {
+                Representative = CreateSample(1, 10f, 10f, 1, 1),
+                SampleCount = 4,
+                Samples = new List<RaycastClusterSample>
+                {
+                    CreateSample(1, 10f, 10f, 1, 1),
+                    CreateSample(1, 20f, 10f, 1, 2),
+                    CreateSample(1, 80f, 80f, 8, 8),
+                    CreateSample(1, 90f, 80f, 8, 9)
+                }
+            };
+            RaycastColliderMetadata metadata = new RaycastColliderMetadata
+            {
+                Name = "SplitGrid",
+                Path = "Root/SplitGrid",
+                Layer = "Default",
+                Components = new List<string> { "BoxCollider" }
+            };
+            RaycastSampleCoverage coverage = CreateCoverage(5f, 5f, 0f, 0f, 200f, 200f);
+
+            List<UIElementInfo> elements =
+                RaycastGridAnnotator.CreateComponentElements(reachableCluster, metadata, coverage, 3);
+
+            Assert.That(elements.Count, Is.EqualTo(2));
+
+            // Shared metadata across component entries.
+            Assert.That(elements[0].Name, Is.EqualTo("SplitGrid"));
+            Assert.That(elements[1].Name, Is.EqualTo("SplitGrid"));
+            Assert.That(elements[0].Path, Is.EqualTo("Root/SplitGrid"));
+            Assert.That(elements[1].Path, Is.EqualTo("Root/SplitGrid"));
+            Assert.That(elements[0].Layer, Is.EqualTo("Default"));
+            Assert.That(elements[1].Layer, Is.EqualTo("Default"));
+            Assert.That(elements[0].Components, Is.EqualTo(elements[1].Components));
+
+            // Continuous labels starting at startLabelNumber.
+            Assert.That(elements[0].Label, Is.EqualTo("R3"));
+            Assert.That(elements[1].Label, Is.EqualTo("R4"));
+
+            // Top-left first: the (1,1)-(1,2) region must precede the (8,8)-(8,9) region.
+            Assert.That(elements[0].BoundsMinX, Is.LessThan(elements[1].BoundsMinX));
+            Assert.That(elements[0].BoundsMinY, Is.LessThan(elements[1].BoundsMinY));
+
+            // Distinct Sim positions.
+            Assert.That(elements[0].SimX, Is.Not.EqualTo(elements[1].SimX));
+            Assert.That(elements[0].SimY, Is.Not.EqualTo(elements[1].SimY));
+
+            // Both entries must have their own outline segments.
+            Assert.That(elements[0].RaycastOutlineSegments.Count, Is.GreaterThan(0));
+            Assert.That(elements[1].RaycastOutlineSegments.Count, Is.GreaterThan(0));
+        }
+
+        [Test]
+        public void CreateComponentElements_WhenComponentsShareMinInputYAndMinInputX_ShouldOrderByMinRowColumnLexicographically()
+        {
+            // Tests that when two components share the same min InputY and min InputX, the tie is broken by
+            // the lexicographic minimum (Row, Column). This guarantees fully deterministic label assignment.
+            // Component A: single cell at (Row=1, Column=1) -> min InputY=10, min InputX=10, min (Row,Column)=(1,1).
+            // Component B: L-shape reaching down to (Row=3, Column=1) -> min InputY=10, min InputX=10, min (Row,Column)=(1,3).
+            RaycastClusterInfo reachableCluster = new RaycastClusterInfo
+            {
+                Representative = CreateSample(1, 10f, 10f, 1, 1),
+                SampleCount = 6,
+                Samples = new List<RaycastClusterSample>
+                {
+                    // Component A: isolated single cell (1,1).
+                    CreateSample(1, 10f, 10f, 1, 1),
+                    // Component B: (1,3) -> (2,3) -> (3,3) -> (3,2) -> (3,1). Its column 1 cell sits at Row=3.
+                    CreateSample(1, 30f, 10f, 1, 3),
+                    CreateSample(1, 30f, 20f, 2, 3),
+                    CreateSample(1, 30f, 30f, 3, 3),
+                    CreateSample(1, 20f, 30f, 3, 2),
+                    CreateSample(1, 10f, 30f, 3, 1)
+                }
+            };
+            RaycastColliderMetadata metadata = new RaycastColliderMetadata
+            {
+                Name = "TieBreaker",
+                Path = "Root/TieBreaker",
+                Layer = "Default",
+                Components = new List<string> { "BoxCollider" }
+            };
+            RaycastSampleCoverage coverage = CreateCoverage(5f, 5f, 0f, 0f, 200f, 200f);
+
+            List<UIElementInfo> elements =
+                RaycastGridAnnotator.CreateComponentElements(reachableCluster, metadata, coverage, 1);
+
+            Assert.That(elements.Count, Is.EqualTo(2));
+            // Component A wins the third key: (1,1) < (1,3) lexicographically, so it must receive R1.
+            Assert.That(elements[0].Label, Is.EqualTo("R1"));
+            Assert.That(elements[1].Label, Is.EqualTo("R2"));
+            // Sanity: R1 has one cell (small bounds), R2 has the L-shape (wider bounds).
+            float widthA = elements[0].BoundsMaxX - elements[0].BoundsMinX;
+            float widthB = elements[1].BoundsMaxX - elements[1].BoundsMinX;
+            Assert.That(widthA, Is.LessThan(widthB));
+        }
+
         private static RaycastClusterSample CreateSample(
             int clusterKey,
             float inputX,
