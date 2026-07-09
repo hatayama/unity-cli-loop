@@ -18,6 +18,12 @@ Read this when using `uloop screenshot --capture-mode rendering --annotate-eleme
 - `SortingOrder`: Canvas sorting order. Higher values are in front.
 - `SiblingIndex`: Transform sibling index under the element's direct parent. Do not use it as a reliable z-order signal across nested UI hierarchies.
 
+### PhysicsCollider Entries Per Closed Region
+
+When a single `PhysicsCollider` GameObject's reachable raycast samples form multiple 4-connected regions on screen — typically because UI occlusion splits them apart — each region becomes its own `AnnotatedElements` entry. `Path`, `Name`, `Layer`, and `Components` are identical across those entries (they describe the same GameObject), while `Label`, `Bounds`, `SimX`, `SimY`, and `RaycastOutlineSegments` are independent per region so each closed area is separately addressable.
+
+When multiple entries share the same `Path`, use `SimX`/`SimY` (or the label position drawn on the PNG) to click a specific region. `simulate-mouse-ui --target-path <Path>` still works and reaches the GameObject through whichever region is clickable, so use it when the region choice does not matter.
+
 ## RaycastLayerSummaries Fields
 
 `RaycastLayerSummaries` is always populated when `--annotate-raycast-grid true` is used, regardless of `--raycast-layer-mask`. It is built from a dense 40x40 raycast sample pass over `Physics.DefaultRaycastLayers` (fixed, independent of `--raycast-layer-mask`), so it always tells you what else is hittable across every default-visible layer, even when you narrowed `AnnotatedElements` down to one layer with `--raycast-layer-mask`.
