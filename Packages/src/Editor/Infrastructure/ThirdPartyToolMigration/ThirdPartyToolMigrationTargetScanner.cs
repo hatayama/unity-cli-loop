@@ -11,6 +11,7 @@ using io.github.hatayama.UnityCliLoop.Domain;
 using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationAssemblyReferenceResolver;
 using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationAsmdefMigrationRequirementResolver;
 using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationFastAssemblyRequirementCollector;
+using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationFastFirstPartyScreenshotRequirementCollector;
 using static io.github.hatayama.UnityCliLoop.Infrastructure.ThirdPartyToolMigrationFastSourceTargetDetector;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
