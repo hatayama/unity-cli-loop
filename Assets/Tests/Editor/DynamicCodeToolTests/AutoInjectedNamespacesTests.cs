@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             string body = "StringBuilder builder = new StringBuilder();\nreturn builder.ToString();";
             string wrappedSource = WrapperTemplate.Build(
-                new List<string>(), "TestNs", "TestClass", body);
+                new List<string>(), System.Array.Empty<string>(), "TestNs", "TestClass", body);
 
             PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
 
@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             string body = "StringBuilder builder = new StringBuilder();\nreturn builder.ToString();";
             string wrappedSource = WrapperTemplate.Build(
-                new List<string>(), "TestNs", "TestClass", body);
+                new List<string>(), System.Array.Empty<string>(), "TestNs", "TestClass", body);
 
             PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
 
@@ -40,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             string body = "int x = 42;\nreturn x;";
             string wrappedSource = WrapperTemplate.Build(
-                new List<string>(), "TestNs", "TestClass", body);
+                new List<string>(), System.Array.Empty<string>(), "TestNs", "TestClass", body);
 
             PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
 
@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             string body = "StringBuilder sb = new StringBuilder();\nRegex r = new Regex(\"x\");\nreturn sb.ToString();";
             string wrappedSource = WrapperTemplate.Build(
-                new List<string>(), "TestNs", "TestClass", body);
+                new List<string>(), System.Array.Empty<string>(), "TestNs", "TestClass", body);
 
             PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
 
@@ -65,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             List<string> usings = new() { "using System.Text;" };
             string body = "StringBuilder builder = new StringBuilder();\nreturn builder.ToString();";
-            string wrappedSource = WrapperTemplate.Build(usings, "TestNs", "TestClass", body);
+            string wrappedSource = WrapperTemplate.Build(usings, System.Array.Empty<string>(), "TestNs", "TestClass", body);
 
             PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
 
