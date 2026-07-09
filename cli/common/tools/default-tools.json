@@ -470,12 +470,12 @@
           },
           "X": {
             "type": "number",
-            "description": "Target X position in screen pixels (origin: top-left). Used by Click and LongPress.",
+            "description": "Target X position in Game View pixels (origin: top-left). Used by Click and LongPress. Use AnnotatedElements[].SimX, RaycastGridPoints[].InputX, or raw image pixels converted with ScreenshotToInputFormula.",
             "default": 0
           },
           "Y": {
             "type": "number",
-            "description": "Target Y position in screen pixels (origin: top-left). Used by Click and LongPress.",
+            "description": "Target Y position in Game View pixels (origin: top-left). Used by Click and LongPress. Use AnnotatedElements[].SimY, RaycastGridPoints[].InputY, or raw image pixels converted with ScreenshotToInputFormula.",
             "default": 0
           },
           "Button": {
