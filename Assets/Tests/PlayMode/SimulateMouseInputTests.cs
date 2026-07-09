@@ -68,6 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.Greater(mouseUpdateFramePressObserver.LeftButtonPressedUpdateCount, 0, "Click should be visible to MonoBehaviour.Update via wasPressedThisFrame");
             // After click completes, button should be released
             Assert.IsFalse(mouse.leftButton.isPressed, "Left button should be released after click");
+            AssertCoordinateMetadata(400f, 300f);
         }
 
         [UnityTest]
@@ -193,6 +194,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.AreEqual("LongPress", lastResponse.Action);
             // After long press completes, button should be released
             Assert.IsFalse(mouse.leftButton.isPressed, "Button should be released after long press");
+            AssertCoordinateMetadata(400f, 300f);
         }
 
         [UnityTest]
@@ -373,6 +375,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
                 task.IsCompleted || Time.realtimeSinceStartup >= timeoutAt);
             Assert.IsTrue(task.IsCompleted, "Tool execution timed out.");
             Assert.IsFalse(task.IsFaulted, $"Tool execution should not fault: {task.Exception}");
+        }
+
+        private void AssertCoordinateMetadata(float inputX, float inputY)
+        {
+            Vector2 inputPosition = new(inputX, inputY);
+            Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
+            GameViewCoordinateConversion expected = GameViewCoordinateUtility.ConvertInputToUnity(inputPosition, gameViewSize);
+
+            Assert.AreEqual(UnityCliLoopConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW, lastResponse.InputCoordinateSystem);
+            Assert.AreEqual(UnityCliLoopConstants.COORDINATE_SYSTEM_BOTTOM_LEFT_GAME_VIEW, lastResponse.UnityCoordinateSystem);
+            Assert.AreEqual(UnityCliLoopConstants.COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY, lastResponse.CoordinateConversionFormula);
+            Assert.IsTrue(lastResponse.GameViewWidth.HasValue);
+            Assert.IsTrue(lastResponse.GameViewHeight.HasValue);
+            Assert.IsTrue(lastResponse.InputPositionX.HasValue);
+            Assert.IsTrue(lastResponse.InputPositionY.HasValue);
+            Assert.IsTrue(lastResponse.InjectedUnityPositionX.HasValue);
+            Assert.IsTrue(lastResponse.InjectedUnityPositionY.HasValue);
+            Assert.AreEqual(expected.GameViewSize.x, lastResponse.GameViewWidth!.Value);
+            Assert.AreEqual(expected.GameViewSize.y, lastResponse.GameViewHeight!.Value);
+            Assert.AreEqual(expected.InputPosition.x, lastResponse.InputPositionX!.Value);
+            Assert.AreEqual(expected.InputPosition.y, lastResponse.InputPositionY!.Value);
+            Assert.AreEqual(expected.InjectedUnityPosition.x, lastResponse.InjectedUnityPositionX!.Value);
+            Assert.AreEqual(expected.InjectedUnityPosition.y, lastResponse.InjectedUnityPositionY!.Value);
         }
 
         /// <summary>

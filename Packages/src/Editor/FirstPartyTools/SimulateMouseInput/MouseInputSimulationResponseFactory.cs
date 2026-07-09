@@ -13,6 +13,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class MouseInputSimulationResponseFactory
     {
+        // Echoes the full conversion so callers can verify the Y-flip math against a
+        // screenshot instead of trusting a hidden Screen.height-based flip.
+        internal static SimulateMouseInputResponse SuccessButtonResult(
+            UnityCliLoopMouseInputAction action,
+            string message,
+            string buttonName,
+            Vector2 inputPos,
+            GameViewCoordinateConversion conversion)
+        {
+            return new SimulateMouseInputResponse
+            {
+                Success = true,
+                Message = message,
+                Action = action.ToString(),
+                Button = buttonName,
+                PositionX = inputPos.x,
+                PositionY = inputPos.y,
+                InputCoordinateSystem = UnityCliLoopConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW,
+                UnityCoordinateSystem = UnityCliLoopConstants.COORDINATE_SYSTEM_BOTTOM_LEFT_GAME_VIEW,
+                GameViewWidth = conversion.GameViewSize.x,
+                GameViewHeight = conversion.GameViewSize.y,
+                InputPositionX = conversion.InputPosition.x,
+                InputPositionY = conversion.InputPosition.y,
+                InjectedUnityPositionX = conversion.InjectedUnityPosition.x,
+                InjectedUnityPositionY = conversion.InjectedUnityPosition.y,
+                CoordinateConversionFormula = UnityCliLoopConstants.COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY
+            };
+        }
+
         internal static SimulateMouseInputResponse InterruptedButtonResult(
             UnityCliLoopMouseInputAction action,
             string buttonName,
