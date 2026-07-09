@@ -605,6 +605,35 @@
           }
         }
       }
+    },
+    {
+      "name": "raycast",
+      "description": "Raycast from Camera.main through a top-left Game View coordinate",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "X": {
+            "type": "number",
+            "description": "Target X position in Game View pixels (origin: top-left)",
+            "default": 0
+          },
+          "Y": {
+            "type": "number",
+            "description": "Target Y position in Game View pixels (origin: top-left)",
+            "default": 0
+          },
+          "LayerMask": {
+            "type": "integer",
+            "description": "Physics layer mask used by the raycast",
+            "default": -5
+          },
+          "MaxDistance": {
+            "type": "number",
+            "description": "Maximum raycast distance in world units",
+            "default": 1000
+          }
+        }
+      }
     }
   ]
 }

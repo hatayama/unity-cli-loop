@@ -1,0 +1,20 @@
+{
+    "name": "UnityCLILoop.FirstPartyTools.Raycast.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
+    "references": [
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
+        "GUID:a2d87883023de4cf59b7d1962d5dd8aa",
+        "GUID:96b8d4624fb74ea2849fed17e7ad69d3"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
