@@ -40,13 +40,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             System.Diagnostics.Debug.Assert(getBridgeServer != null, "getBridgeServer must not be null");
             System.Diagnostics.Debug.Assert(setBridgeServer != null, "setBridgeServer must not be null");
 
-            _serverInstanceFactory = serverInstanceFactory ?? throw new ArgumentNullException(nameof(serverInstanceFactory));
-            _readinessService = readinessService ?? throw new ArgumentNullException(nameof(readinessService));
-            _startupProtectionService = startupProtectionService ?? throw new ArgumentNullException(nameof(startupProtectionService));
-            _sessionFlagsRepository = sessionFlagsRepository ?? throw new ArgumentNullException(nameof(sessionFlagsRepository));
-            _toolRegistrarService = toolRegistrarService ?? throw new ArgumentNullException(nameof(toolRegistrarService));
-            _getBridgeServer = getBridgeServer ?? throw new ArgumentNullException(nameof(getBridgeServer));
-            _setBridgeServer = setBridgeServer ?? throw new ArgumentNullException(nameof(setBridgeServer));
+            _serverInstanceFactory = serverInstanceFactory;
+            _readinessService = readinessService;
+            _startupProtectionService = startupProtectionService;
+            _sessionFlagsRepository = sessionFlagsRepository;
+            _toolRegistrarService = toolRegistrarService;
+            _getBridgeServer = getBridgeServer;
+            _setBridgeServer = setBridgeServer;
         }
 
         /// <summary>
