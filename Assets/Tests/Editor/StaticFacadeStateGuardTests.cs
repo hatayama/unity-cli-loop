@@ -64,6 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/FirstPartyTools/SimulateMouseInput/SimulateMouseInputUseCase.cs",
             "Packages/src/Editor/FirstPartyTools/SimulateMouseInput/MouseInputMainThreadCleanup.cs",
             "Packages/src/Editor/FirstPartyTools/SimulateMouseInput/MouseInputPressActionExecutor.cs",
+            "Packages/src/Editor/FirstPartyTools/SimulateMouseInput/MouseInputMotionActionExecutor.cs",
             "Packages/src/Editor/FirstPartyTools/SimulateKeyboard/SimulateKeyboardUseCase.cs"
         };
 
