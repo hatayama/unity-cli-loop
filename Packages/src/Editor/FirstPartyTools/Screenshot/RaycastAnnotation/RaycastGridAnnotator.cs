@@ -55,7 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         Physics.DefaultRaycastLayers,
                         false);
 
-                    samples.Add(CreatePointInfo(raycastResult));
+                    samples.Add(CreateLayerHitSample(raycastResult));
                 }
             }
 
@@ -122,7 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return elements;
         }
 
-        private static RaycastLayerHitSample CreatePointInfo(GameViewRaycastResult raycastResult)
+        private static RaycastLayerHitSample CreateLayerHitSample(GameViewRaycastResult raycastResult)
         {
             RaycastLayerHitSample sample = new RaycastLayerHitSample
             {
