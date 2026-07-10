@@ -99,6 +99,32 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         public static UloopPausePointSnapshot Hit(string id)
         {
+            return HitCore(id, Array.Empty<UloopCapturedVariable>(), false);
+        }
+
+        public static UloopPausePointSnapshot HitWithCapturedVariables(
+            string id, IReadOnlyList<UloopCapturedVariable> capturedVariables, bool capturedVariablesTruncated)
+        {
+            Debug.Assert(capturedVariables != null, "capturedVariables must not be null");
+
+            return HitCore(id, capturedVariables, capturedVariablesTruncated);
+        }
+
+        // id が armed でなければ辞書引き 1 回で return する。Harmony が注入した Capture 呼び出しは
+        // ほぼ常にこの不活性パスを通るため、ここでの割り当て・整形コストをゼロに保つことが重要。
+        public static bool IsArmed(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return false;
+            }
+
+            return Entries.TryGetValue(id, out UloopPausePointEntry entry) && entry.IsEnabled;
+        }
+
+        private static UloopPausePointSnapshot HitCore(
+            string id, IReadOnlyList<UloopCapturedVariable> capturedVariables, bool capturedVariablesTruncated)
+        {
             if (string.IsNullOrWhiteSpace(id))
             {
                 Debug.Assert(false, "id must not be null or empty");
@@ -120,7 +146,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             _pauseController.Pause();
             int hitSequence = ++_nextHitSequence;
-            entry.RecordHit(now, _pauseController.IsPlaying, _pauseController.IsPaused, hitSequence);
+            entry.RecordHitWithCapturedVariables(
+                now, _pauseController.IsPlaying, _pauseController.IsPaused, hitSequence,
+                capturedVariables, capturedVariablesTruncated);
             UloopPausePointSnapshot snapshot = entry.ToSnapshot(now, _pauseController);
             _latestHitSnapshot = snapshot;
             _hitSnapshots.RemoveAll(hitSnapshot => hitSnapshot.Id == id);

@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.Runtime
@@ -19,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             Status = UloopPausePointStatus.Enabled;
             IsEnabled = true;
             Message = "Pause point enabled.";
+            CapturedVariables = Array.Empty<UloopCapturedVariable>();
         }
 
         public string Id { get; }
@@ -36,6 +38,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public bool IsPlayingAtHit { get; private set; }
         public bool IsPausedAtHit { get; private set; }
         public string Message { get; private set; }
+        public IReadOnlyList<UloopCapturedVariable> CapturedVariables { get; private set; }
+        public bool CapturedVariablesTruncated { get; private set; }
 
         public void ExpireIfNeeded(DateTime nowUtc)
         {
@@ -63,7 +67,20 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         public void RecordHit(DateTime nowUtc, bool isPlaying, bool isPaused, int hitSequence)
         {
+            RecordHitWithCapturedVariables(
+                nowUtc, isPlaying, isPaused, hitSequence, Array.Empty<UloopCapturedVariable>(), false);
+        }
+
+        public void RecordHitWithCapturedVariables(
+            DateTime nowUtc,
+            bool isPlaying,
+            bool isPaused,
+            int hitSequence,
+            IReadOnlyList<UloopCapturedVariable> capturedVariables,
+            bool capturedVariablesTruncated)
+        {
             Debug.Assert(hitSequence > 0, "hitSequence must be greater than zero");
+            Debug.Assert(capturedVariables != null, "capturedVariables must not be null");
 
             if (HitCount == 0)
             {
@@ -79,6 +96,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             IsEnabled = false;
             Status = UloopPausePointStatus.Hit;
             Message = "Pause point hit; Unity pause was requested.";
+            CapturedVariables = capturedVariables;
+            CapturedVariablesTruncated = capturedVariablesTruncated;
         }
 
         public UloopPausePointSnapshot ToSnapshot(DateTime nowUtc, IUloopPausePointPauseController pauseController)
@@ -119,7 +138,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 FirstHitSequence,
                 LastHitSequence,
                 Message,
-                recommendedNextAction);
+                recommendedNextAction,
+                CapturedVariables,
+                CapturedVariablesTruncated);
         }
 
         private long CalculateRemainingMilliseconds(DateTime nowUtc)
