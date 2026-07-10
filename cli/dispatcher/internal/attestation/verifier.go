@@ -91,7 +91,8 @@ func Verify(trustedMaterial root.TrustedMaterial, opts VerifyOptions) error {
 
 	verifier, err := verify.NewVerifier(trustedMaterial,
 		verify.WithTransparencyLog(1),
-		verify.WithIntegratedTimestamps(1))
+		verify.WithIntegratedTimestamps(1),
+		verify.WithSignedCertificateTimestamps(1))
 	if err != nil {
 		return fmt.Errorf("%w: build verifier: %v", ErrVerificationFailed, err)
 	}

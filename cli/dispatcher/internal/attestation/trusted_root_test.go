@@ -105,9 +105,10 @@ func TestEmbeddedTrustedRoot_HasFutureCapableAuthorityPerCategory(t *testing.T) 
 }
 
 // isValidBeyond returns true when the entry is either unlimited (no end date)
-// or its end date is on/after the given horizon. Entries whose start hasn't
-// arrived yet are not considered "future-capable" — they cannot verify
-// present-day bundles.
+// or its end date is on/after the given horizon. The Sigstore public-good
+// root ships historical authorities with a Start value in the past, so we
+// only gate on End here — a Start-in-the-future entry has never appeared in
+// this root and is not part of the horizon contract this test enforces.
 func isValidBeyond(t *testing.T, v validFor, horizon time.Time) bool {
 	t.Helper()
 	if v.End == "" {

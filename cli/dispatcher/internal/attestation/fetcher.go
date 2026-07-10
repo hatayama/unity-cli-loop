@@ -42,12 +42,18 @@ func BundleAssetURL(repo, tag, assetName string) string {
 // are treated the same way as any other non-2xx: verification is not attempted
 // because we cannot distinguish rate-limit denial from an attacker denying the
 // bundle to skip verification.
+//
+// No Authorization header is set here: release download URLs
+// (github.com/.../releases/download) are not subject to the API rate limits
+// that GITHUB_TOKEN would relax, and Go's http.Client strips Authorization
+// across the cross-host redirect to objects.githubusercontent.com anyway, so
+// leaking the token would be pointless. Least-privilege: keep the token on
+// api.github.com calls only (see fetchGitRef).
 func FetchBundle(ctx context.Context, bundleURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, bundleURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: build request: %v", ErrBundleFetch, err)
 	}
-	setAuthorizationIfAvailable(req)
 	resp, err := DefaultHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrBundleFetch, err)
