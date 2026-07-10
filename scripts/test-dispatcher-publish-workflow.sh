@@ -102,6 +102,17 @@ test_package_release_sync_runs_after_dispatcher_publish() {
   assert_before "$WORKFLOW" "      - name: Publish draft dispatcher release" "      - name: Sync release-please package releases"
 }
 
+test_dispatcher_attestation_bundles_are_distributed_per_asset() {
+  assert_contains "$WORKFLOW" "      - name: Distribute attestation bundles per asset"
+  assert_contains "$WORKFLOW" "          scripts/distribute-attestation-bundles.sh \\"
+  assert_contains "$WORKFLOW" "            --bundle \"\${BUNDLE_PATH}\" \\"
+  assert_contains "$WORKFLOW" "            --release-dir dist/dispatcher-release"
+  assert_before "$WORKFLOW" "      - name: Verify dispatcher asset attestations" "      - name: Distribute attestation bundles per asset"
+  assert_before "$WORKFLOW" "      - name: Distribute attestation bundles per asset" "      - name: Upload dispatcher assets"
+  assert_contains "$WORKFLOW" "          BUNDLE_NAME=\"\${asset_name}.sigstore.json\""
+  assert_contains "$WORKFLOW" "              echo \"Missing remote dispatcher attestation bundle: \${BUNDLE_NAME}\" >&2"
+}
+
 test_dispatcher_resolver_is_used
 test_dispatcher_publish_is_serialized_by_branch
 test_dispatcher_assets_are_packaged_and_verified
@@ -110,3 +121,4 @@ test_existing_dispatcher_tag_target_is_checked
 test_dispatcher_draft_state_uses_runner_temp
 test_dispatcher_beta_releases_are_marked_prerelease
 test_package_release_sync_runs_after_dispatcher_publish
+test_dispatcher_attestation_bundles_are_distributed_per_asset
