@@ -38,6 +38,9 @@ var verifyReleaseAssetAttestation = defaultVerifyReleaseAssetAttestation
 // branch: bundle-missing, network-failure, digest-mismatch, identity-mismatch.
 // Callers must NOT run the asset when this returns a non-nil error.
 func defaultVerifyReleaseAssetAttestation(ctx context.Context, releaseTag string, assetURL string, assetPath string, workflowPath string) error {
+	if releaseTag == "" {
+		return fmt.Errorf("%w: releaseTag required to resolve the release's commit SHA", attestation.ErrVerificationFailed)
+	}
 	digestHex, err := computeAssetSHA256Hex(assetPath)
 	if err != nil {
 		return fmt.Errorf("compute asset digest for attestation: %w", err)
