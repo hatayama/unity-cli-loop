@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -564,6 +565,8 @@ func TestDownloadDispatcherRealCLIWritesDownloadStatus(t *testing.T) {
 			}, nil
 		}),
 	}
+	restoreAttestation := stubAttestationVerifyPasses()
+	defer restoreAttestation()
 
 	var stderr bytes.Buffer
 	realCLIPath, err := downloadDispatcherRealCLIForPin(
@@ -582,6 +585,132 @@ func TestDownloadDispatcherRealCLIWritesDownloadStatus(t *testing.T) {
 	}
 	assertFileContent(t, realCLIPath, "real")
 	assertFileContent(t, dispatcherRealCLIReadyPath(realCLIPath), "ready\n")
+}
+
+func TestDownloadDispatcherRealCLIFailsClosedOnAttestationError(t *testing.T) {
+	// Verifies pinned project runners are rejected when the attestation verifier reports a mismatch, so a compromised release cannot install a runner even if its .sha256 lines up.
+	tempDir := t.TempDir()
+	archivePath := filepath.Join(tempDir, "uloop-project-runner-darwin-arm64.tar.gz")
+	writeDispatcherTarGzArchive(t, archivePath, []dispatcherArchiveTestEntry{
+		{Name: "uloop-project-runner", Content: "real"},
+	})
+	archiveContent, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("failed to read archive: %v", err)
+	}
+	checksum := sha256.Sum256(archiveContent)
+	checksumContent := []byte(hex.EncodeToString(checksum[:]) + "  " + filepath.Base(archivePath) + "\n")
+
+	previousHTTPClient := dispatcherHTTPClient
+	defer func() {
+		dispatcherHTTPClient = previousHTTPClient
+	}()
+	dispatcherHTTPClient = &http.Client{
+		Transport: dispatcherRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+			content := []byte{}
+			statusCode := http.StatusNotFound
+			if strings.HasSuffix(request.URL.Path, "/uloop-project-runner-darwin-arm64.tar.gz") {
+				content = archiveContent
+				statusCode = http.StatusOK
+			}
+			if strings.HasSuffix(request.URL.Path, "/uloop-project-runner-darwin-arm64.tar.gz.sha256") {
+				content = checksumContent
+				statusCode = http.StatusOK
+			}
+			return &http.Response{
+				StatusCode: statusCode,
+				Status:     http.StatusText(statusCode),
+				Body:       io.NopCloser(bytes.NewReader(content)),
+			}, nil
+		}),
+	}
+	restoreAttestation := stubAttestationVerifyReturns(fmt.Errorf("simulated runner attestation failure"))
+	defer restoreAttestation()
+
+	var stderr bytes.Buffer
+	_, err = downloadDispatcherRealCLIForPin(
+		context.Background(),
+		t.TempDir(),
+		dispatcherPin{ProjectRunnerVersion: "3.0.0-beta.88"},
+		"darwin",
+		"arm64",
+		&stderr)
+	if err == nil || !strings.Contains(err.Error(), "simulated runner attestation failure") {
+		t.Fatalf("expected attestation failure to fail closed, got %v", err)
+	}
+}
+
+func TestDownloadDispatcherRealCLIPassesRunnerIdentityToAttestation(t *testing.T) {
+	// Verifies the runner-publish workflow SAN and the project runner release tag are what get sent to the attestation hook (Fable 5 review — SAN must match .github/workflows/native-cli-publish.yml, tag must be uloop-project-runner-v<version>).
+	tempDir := t.TempDir()
+	archivePath := filepath.Join(tempDir, "uloop-project-runner-darwin-arm64.tar.gz")
+	writeDispatcherTarGzArchive(t, archivePath, []dispatcherArchiveTestEntry{
+		{Name: "uloop-project-runner", Content: "real"},
+	})
+	archiveContent, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("failed to read archive: %v", err)
+	}
+	checksum := sha256.Sum256(archiveContent)
+	checksumContent := []byte(hex.EncodeToString(checksum[:]) + "  " + filepath.Base(archivePath) + "\n")
+
+	previousHTTPClient := dispatcherHTTPClient
+	defer func() {
+		dispatcherHTTPClient = previousHTTPClient
+	}()
+	dispatcherHTTPClient = &http.Client{
+		Transport: dispatcherRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+			content := []byte{}
+			statusCode := http.StatusNotFound
+			if strings.HasSuffix(request.URL.Path, "/uloop-project-runner-darwin-arm64.tar.gz") {
+				content = archiveContent
+				statusCode = http.StatusOK
+			}
+			if strings.HasSuffix(request.URL.Path, "/uloop-project-runner-darwin-arm64.tar.gz.sha256") {
+				content = checksumContent
+				statusCode = http.StatusOK
+			}
+			return &http.Response{
+				StatusCode: statusCode,
+				Status:     http.StatusText(statusCode),
+				Body:       io.NopCloser(bytes.NewReader(content)),
+			}, nil
+		}),
+	}
+
+	var seenReleaseTag string
+	var seenAssetURL string
+	var seenWorkflowPath string
+	previous := verifyReleaseAssetAttestation
+	verifyReleaseAssetAttestation = func(_ context.Context, releaseTag string, assetURL string, _ string, workflowPath string) error {
+		seenReleaseTag = releaseTag
+		seenAssetURL = assetURL
+		seenWorkflowPath = workflowPath
+		return nil
+	}
+	defer func() {
+		verifyReleaseAssetAttestation = previous
+	}()
+
+	var stderr bytes.Buffer
+	if _, err := downloadDispatcherRealCLIForPin(
+		context.Background(),
+		t.TempDir(),
+		dispatcherPin{ProjectRunnerVersion: "3.0.0-beta.88"},
+		"darwin",
+		"arm64",
+		&stderr); err != nil {
+		t.Fatalf("downloadDispatcherRealCLIForPin failed: %v", err)
+	}
+	if seenReleaseTag != "uloop-project-runner-v3.0.0-beta.88" {
+		t.Fatalf("attestation hook received wrong release tag: %s", seenReleaseTag)
+	}
+	if !strings.HasSuffix(seenAssetURL, "/uloop-project-runner-v3.0.0-beta.88/uloop-project-runner-darwin-arm64.tar.gz") {
+		t.Fatalf("attestation hook received wrong asset URL: %s", seenAssetURL)
+	}
+	if seenWorkflowPath != attestationRunnerPublishWorkflowPath {
+		t.Fatalf("attestation hook received wrong workflow path: %s", seenWorkflowPath)
+	}
 }
 
 func TestInstallDownloadedDispatcherRealCLIKeepsExistingExecutable(t *testing.T) {
