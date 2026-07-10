@@ -48,6 +48,7 @@ jobs:
           scripts/test-notify-release-workflow-failure.sh
           scripts/test-native-cli-publish-workflow.sh
           scripts/test-dispatcher-publish-workflow.sh
+          scripts/test-distribute-attestation-bundles.sh
           scripts/test-install-release-filter.sh
 
       - name: Check IPC protocol reminder

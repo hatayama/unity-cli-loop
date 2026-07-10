@@ -73,8 +73,20 @@ test_release_please_is_dispatched_after_publish() {
   assert_before "$WORKFLOW" "      - name: Dispatch release-please after native CLI publish" "      - name: Sync release-please package releases"
 }
 
+test_native_cli_attestation_bundles_are_distributed_per_asset() {
+  assert_contains "$WORKFLOW" "      - name: Distribute attestation bundles per asset"
+  assert_contains "$WORKFLOW" "          scripts/distribute-attestation-bundles.sh \\"
+  assert_contains "$WORKFLOW" "            --bundle \"\${BUNDLE_PATH}\" \\"
+  assert_contains "$WORKFLOW" "            --release-dir dist/release"
+  assert_before "$WORKFLOW" "      - name: Verify native CLI asset attestations" "      - name: Distribute attestation bundles per asset"
+  assert_before "$WORKFLOW" "      - name: Distribute attestation bundles per asset" "      - name: Upload native CLI assets"
+  assert_contains "$WORKFLOW" "          BUNDLE_NAME=\"\${asset_name}.sigstore.json\""
+  assert_contains "$WORKFLOW" "              echo \"Missing remote native CLI attestation bundle: \${BUNDLE_NAME}\" >&2"
+}
+
 test_attestation_permissions
 test_go_is_available_for_package_release_sync
 test_release_assets_are_attested
 test_release_asset_attestations_are_verified
 test_release_please_is_dispatched_after_publish
+test_native_cli_attestation_bundles_are_distributed_per_asset
