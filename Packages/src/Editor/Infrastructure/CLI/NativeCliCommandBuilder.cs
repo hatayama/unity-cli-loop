@@ -130,14 +130,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             // Why: Downloading with Invoke-WebRequest to a file and re-launching PowerShell with -File
             // replaces the previous `irm | iex` streaming path so the script is verified before it runs
-            // and so the child process owns exit-code propagation. The .sha256 file contains
-            // "<hex-hash>  <filename>", so the leading whitespace-delimited token is compared as lower
-            // case against Get-FileHash's upper-case output.
+            // and so the child process owns exit-code propagation. `$ErrorActionPreference = 'Stop'`
+            // upgrades cmdlet non-terminating errors (e.g. missing checksum file) into throws so the
+            // fail-close path does not depend on incidental null dereferences downstream. The .sha256
+            // file contains "<hex-hash>  <filename>", so the leading whitespace-delimited token is
+            // compared as lower case against Get-FileHash's upper-case output.
             string scriptName = CliConstants.WINDOWS_INSTALL_SCRIPT_NAME;
             return "$tmp_dir = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())) -Force; "
                 + $"$script_path = Join-Path $tmp_dir.FullName {QuotePowerShellSingleQuotedValue(scriptName)}; "
                 + $"$checksum_path = Join-Path $tmp_dir.FullName {QuotePowerShellSingleQuotedValue(scriptName + ".sha256")}; "
                 + "try { "
+                + "$ErrorActionPreference = 'Stop'; "
                 + "$ProgressPreference = 'SilentlyContinue'; "
                 + $"Invoke-WebRequest -UseBasicParsing -Uri {QuotePowerShellSingleQuotedValue(scriptUrl)} -OutFile $script_path; "
                 + $"Invoke-WebRequest -UseBasicParsing -Uri {QuotePowerShellSingleQuotedValue(checksumUrl)} -OutFile $checksum_path; "

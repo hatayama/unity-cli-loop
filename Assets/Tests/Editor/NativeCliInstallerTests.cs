@@ -92,6 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(command.Arguments, Does.Contain($"https://github.com/hatayama/unity-cli-loop/releases/download/{TestBetaReleaseTag}/install.ps1.sha256"));
             Assert.That(command.Arguments, Does.Contain($"$env:ULOOP_VERSION = '{TestBetaReleaseTag}'"));
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
+            Assert.That(command.ManualCommand, Does.Contain("$ErrorActionPreference = 'Stop'"));
             Assert.That(command.ManualCommand, Does.Contain("Invoke-WebRequest"));
             Assert.That(command.ManualCommand, Does.Contain("Get-FileHash"));
             Assert.That(command.ManualCommand, Does.Contain("-File $script_path"));
