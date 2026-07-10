@@ -379,6 +379,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void HitWithCapturedVariables_WhenPausePointIsEnabled_StoresCapturedVariablesInSnapshot()
+        {
+            // Verifies the source-pause-point hit path threads captured variables through to the snapshot.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopCapturedVariable[] capturedVariables =
+            {
+                new("speed", UloopCapturedVariableScope.Local, "System.Int32", "5", string.Empty, string.Empty, 0)
+            };
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.HitWithCapturedVariables(
+                "jump", capturedVariables, true);
+
+            Assert.That(snapshot.CapturedVariables, Is.EqualTo(capturedVariables));
+            Assert.That(snapshot.CapturedVariablesTruncated, Is.True);
+            Assert.That(_pauseController.PauseCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Hit_WhenPausePointIsEnabled_ReportsEmptyCapturedVariables()
+        {
+            // Verifies the plain marker path (no source pause point) reports an empty, non-null list.
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+            Assert.That(snapshot.CapturedVariables, Is.Empty);
+            Assert.That(snapshot.CapturedVariablesTruncated, Is.False);
+        }
+
+        [Test]
+        public void IsArmed_WhenPausePointIsEnabled_ReturnsTrue()
+        {
+            // Verifies the injected Capture code's fast path recognizes an armed marker.
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            Assert.That(UloopPausePointRegistry.IsArmed("jump"), Is.True);
+        }
+
+        [Test]
+        public void IsArmed_WhenPausePointIsNotEnabled_ReturnsFalse()
+        {
+            // Verifies the injected Capture code's fast path no-ops for an id that was never enabled.
+            Assert.That(UloopPausePointRegistry.IsArmed("jump"), Is.False);
+        }
+
+        [Test]
+        public void IsArmed_WhenPausePointWasAlreadyHit_ReturnsFalse()
+        {
+            // Verifies a one-shot marker disarms itself so a second pass through the same line no-ops.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            Assert.That(UloopPausePointRegistry.IsArmed("jump"), Is.False);
+        }
+
+        [Test]
         public void PauseMethod_WhenSourceIsScanned_UsesUnityEditorConditionalWithoutDebugBreak()
         {
             // Verifies the public marker follows Unity's conditional call-site removal pattern.

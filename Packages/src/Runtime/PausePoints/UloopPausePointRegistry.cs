@@ -1,18 +1,22 @@
 #if UNITY_EDITOR
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     /// <summary>
-    /// Stores enabled pause point state for the current Editor domain.
+    /// Stores enabled pause point state for the current Editor domain. All members except
+    /// IsArmed are main-thread-only by convention; IsArmed is the one entry point an
+    /// off-main-thread Harmony-injected Capture call may reach, so Entries is a
+    /// ConcurrentDictionary to make that cross-thread read safe.
     /// </summary>
     internal static class UloopPausePointRegistry
     {
         public const int DefaultTimeoutSeconds = 30;
 
-        private static readonly Dictionary<string, UloopPausePointEntry> Entries = new();
+        private static readonly ConcurrentDictionary<string, UloopPausePointEntry> Entries = new();
         private static IUloopPausePointPauseController _pauseController = new UnityEditorPausePointPauseController();
         private static Func<DateTime> _nowProvider = () => DateTime.UtcNow;
         private static int _nextGeneration;
@@ -99,6 +103,32 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         public static UloopPausePointSnapshot Hit(string id)
         {
+            return HitCore(id, Array.Empty<UloopCapturedVariable>(), false);
+        }
+
+        public static UloopPausePointSnapshot HitWithCapturedVariables(
+            string id, IReadOnlyList<UloopCapturedVariable> capturedVariables, bool capturedVariablesTruncated)
+        {
+            Debug.Assert(capturedVariables != null, "capturedVariables must not be null");
+
+            return HitCore(id, capturedVariables, capturedVariablesTruncated);
+        }
+
+        // Returns after a single dictionary lookup when the id is not armed. Harmony-injected
+        // Capture calls take this inactive path almost always, so keeping it allocation-free here matters.
+        public static bool IsArmed(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return false;
+            }
+
+            return Entries.TryGetValue(id, out UloopPausePointEntry entry) && entry.IsEnabled;
+        }
+
+        private static UloopPausePointSnapshot HitCore(
+            string id, IReadOnlyList<UloopCapturedVariable> capturedVariables, bool capturedVariablesTruncated)
+        {
             if (string.IsNullOrWhiteSpace(id))
             {
                 Debug.Assert(false, "id must not be null or empty");
@@ -120,7 +150,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             _pauseController.Pause();
             int hitSequence = ++_nextHitSequence;
-            entry.RecordHit(now, _pauseController.IsPlaying, _pauseController.IsPaused, hitSequence);
+            entry.RecordHitWithCapturedVariables(
+                now, _pauseController.IsPlaying, _pauseController.IsPaused, hitSequence,
+                capturedVariables, capturedVariablesTruncated);
             UloopPausePointSnapshot snapshot = entry.ToSnapshot(now, _pauseController);
             _latestHitSnapshot = snapshot;
             _hitSnapshots.RemoveAll(hitSnapshot => hitSnapshot.Id == id);
