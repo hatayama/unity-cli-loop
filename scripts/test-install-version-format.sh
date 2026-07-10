@@ -64,4 +64,10 @@ expect_fail ""
 expect_fail "not-a-version"
 expect_fail "3.0"
 
+# Embedded newline: grep -Eq alone matches per-line, so "evil\n3.0.0" would
+# smuggle a URL-poisoning first line past the ERE. The whole-string `case`
+# guard in front of the grep must catch this.
+expect_fail "$(printf 'evil\n3.0.0')"
+expect_fail "$(printf '3.0.0\n../evil')"
+
 echo "OK"

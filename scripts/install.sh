@@ -21,10 +21,22 @@ validate_uloop_version() {
   if [ "$candidate" = "$LATEST_VERSION" ] || [ "$candidate" = "$LATEST_BETA_VERSION" ]; then
     return
   fi
+  # Why: `grep -Eq` matches per line, so a value like
+  # printf '../evil\n3.0.0' would pass the ERE below on its second line
+  # while leaking the embedded newline into the URL builder downstream.
+  # Reject anything outside the semver tag alphabet at the whole-string
+  # level first — `case` sees the value as one string and cannot be
+  # smuggled past with embedded newlines or NULs.
+  case $candidate in
+    ''|*[!0-9A-Za-z.+-]*)
+      echo "Invalid ULOOP_VERSION: $candidate" >&2
+      echo "Expected 'latest', 'latest-beta', or a semver tag such as '3.0.0-beta.5' / 'dispatcher-v3.0.0-beta.5'." >&2
+      exit 1
+      ;;
+  esac
   # POSIX ERE: optional dispatcher-v / uloop-project-runner-v / v prefix,
   # then MAJOR.MINOR.PATCH, then optional -prerelease.identifiers or
-  # +build.metadata. Allow only [0-9A-Za-z-.] in the tail so path traversal
-  # (`/`, `..`) and query-string escapes (`?`, `#`, `%`) cannot survive.
+  # +build.metadata.
   if printf '%s' "$candidate" | grep -Eq '^(dispatcher-v|uloop-project-runner-v|v)?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
     return
   fi
