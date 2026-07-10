@@ -44,9 +44,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 string localScriptPath = ResolvePackageLocalInstallerScriptPath(
                     packageResolvedPath,
                     CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
+                string windowsScriptUrl = BuildInstallerScriptUrl(releaseTag, CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
                 string command = string.IsNullOrEmpty(localScriptPath)
                     ? BuildWindowsRemoteInstallScriptCommand(
-                        BuildInstallerScriptUrl(releaseTag, CliConstants.WINDOWS_INSTALL_SCRIPT_NAME),
+                        windowsScriptUrl,
+                        BuildInstallerChecksumUrl(windowsScriptUrl),
                         releaseTag)
                     : BuildWindowsLocalInstallScriptCommand(localScriptPath, releaseTag);
                 return new NativeCliInstallCommand(
@@ -58,9 +60,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string posixLocalScriptPath = ResolvePackageLocalInstallerScriptPath(
                 packageResolvedPath,
                 CliConstants.POSIX_INSTALL_SCRIPT_NAME);
+            string posixScriptUrl = BuildInstallerScriptUrl(releaseTag, CliConstants.POSIX_INSTALL_SCRIPT_NAME);
             string posixCommand = string.IsNullOrEmpty(posixLocalScriptPath)
                 ? BuildPosixRemoteInstallScriptCommand(
-                    BuildInstallerScriptUrl(releaseTag, CliConstants.POSIX_INSTALL_SCRIPT_NAME),
+                    posixScriptUrl,
+                    BuildInstallerChecksumUrl(posixScriptUrl),
                     releaseTag)
                 : BuildPosixLocalInstallScriptCommand(posixLocalScriptPath, releaseTag);
             string loginShellCommand = BuildLoginShellPosixInstallScriptCommand(posixCommand);
@@ -83,15 +87,25 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $"{QuoteProcessArgument(installPath)} uninstall");
         }
 
-        private static string BuildPosixRemoteInstallScriptCommand(string scriptUrl, string releaseTag)
+        private static string BuildPosixRemoteInstallScriptCommand(string scriptUrl, string checksumUrl, string releaseTag)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptUrl), "scriptUrl must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(checksumUrl), "checksumUrl must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
 
-            return "tmp_script=$(mktemp) && "
-                + "trap 'rm -f \"$tmp_script\"' EXIT && "
-                + $"curl -fsSL {QuotePosixShellValue(scriptUrl)} -o \"$tmp_script\" && "
-                + $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePosixShellValue(releaseTag)} sh \"$tmp_script\"";
+            // Why: The whole command runs as a single /bin/sh -c string where `set -e` is not applied
+            // for us, so every step is && chained to fail fast when curl, checksum verification, or
+            // execution fails. `trap ... EXIT` ensures the temp directory is removed even on failure.
+            string scriptName = CliConstants.POSIX_INSTALL_SCRIPT_NAME;
+            return "tmp_dir=$(mktemp -d) && "
+                + "trap 'rm -rf \"$tmp_dir\"' EXIT && "
+                + $"curl -fsSL {QuotePosixShellValue(scriptUrl)} -o \"$tmp_dir/{scriptName}\" && "
+                + $"curl -fsSL {QuotePosixShellValue(checksumUrl)} -o \"$tmp_dir/{scriptName}.sha256\" && "
+                + "( cd \"$tmp_dir\" && "
+                + $"if command -v sha256sum >/dev/null 2>&1; then sha256sum -c {scriptName}.sha256; "
+                + $"elif command -v shasum >/dev/null 2>&1; then shasum -a 256 -c {scriptName}.sha256; "
+                + $"else echo 'sha256sum or shasum is required to verify {scriptName}' >&2; exit 1; fi ) && "
+                + $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePosixShellValue(releaseTag)} sh \"$tmp_dir/{scriptName}\"";
         }
 
         private static string BuildPosixLocalInstallScriptCommand(string scriptPath, string releaseTag)
@@ -108,13 +122,34 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return $"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c {QuotePosixShellValue(posixCommand)}";
         }
 
-        private static string BuildWindowsRemoteInstallScriptCommand(string scriptUrl, string releaseTag)
+        private static string BuildWindowsRemoteInstallScriptCommand(string scriptUrl, string checksumUrl, string releaseTag)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptUrl), "scriptUrl must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(checksumUrl), "checksumUrl must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
 
-            return $"$env:{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePowerShellSingleQuotedValue(releaseTag)}; "
-                + $"irm {QuotePowerShellSingleQuotedValue(scriptUrl)} | iex";
+            // Why: Downloading with Invoke-WebRequest to a file and re-launching PowerShell with -File
+            // replaces the previous `irm | iex` streaming path so the script is verified before it runs
+            // and so the child process owns exit-code propagation. The .sha256 file contains
+            // "<hex-hash>  <filename>", so the leading whitespace-delimited token is compared as lower
+            // case against Get-FileHash's upper-case output.
+            string scriptName = CliConstants.WINDOWS_INSTALL_SCRIPT_NAME;
+            return "$tmp_dir = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())) -Force; "
+                + $"$script_path = Join-Path $tmp_dir.FullName {QuotePowerShellSingleQuotedValue(scriptName)}; "
+                + $"$checksum_path = Join-Path $tmp_dir.FullName {QuotePowerShellSingleQuotedValue(scriptName + ".sha256")}; "
+                + "try { "
+                + "$ProgressPreference = 'SilentlyContinue'; "
+                + $"Invoke-WebRequest -UseBasicParsing -Uri {QuotePowerShellSingleQuotedValue(scriptUrl)} -OutFile $script_path; "
+                + $"Invoke-WebRequest -UseBasicParsing -Uri {QuotePowerShellSingleQuotedValue(checksumUrl)} -OutFile $checksum_path; "
+                + "$expected_hash = ((Get-Content -Raw -Encoding UTF8 $checksum_path) -split '\\s+')[0].ToLowerInvariant(); "
+                + "$actual_hash = (Get-FileHash -Algorithm SHA256 -Path $script_path).Hash.ToLowerInvariant(); "
+                + $"if ($actual_hash -ne $expected_hash) {{ throw ('Checksum mismatch for {scriptName}: expected=' + $expected_hash + ' actual=' + $actual_hash) }}; "
+                + $"$env:{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE} = {QuotePowerShellSingleQuotedValue(releaseTag)}; "
+                + "& powershell -NoProfile -ExecutionPolicy Bypass -File $script_path; "
+                + $"if ($LASTEXITCODE -ne 0) {{ throw ('{scriptName} exited with code ' + $LASTEXITCODE) }} "
+                + "} finally { "
+                + "Remove-Item -Recurse -Force -LiteralPath $tmp_dir.FullName -ErrorAction SilentlyContinue "
+                + "}";
         }
 
         private static string BuildWindowsLocalInstallScriptCommand(string scriptPath, string releaseTag)
@@ -196,7 +231,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(assetName), "assetName must not be null or empty");
 
-            return $"{CliConstants.RAW_CONTENT_BASE_URL}/{releaseTag}/{CliConstants.SCRIPTS_DIR_NAME}/{assetName}";
+            // Why: Installer scripts are shipped as dispatcher release assets alongside their .sha256
+            // sidecars, so the release download URL is used instead of raw content refs to keep the
+            // Unity install path in sync with `uloop update`'s verified installer download.
+            return $"{CliConstants.RELEASE_DOWNLOAD_BASE_URL}/{releaseTag}/{assetName}";
+        }
+
+        internal static string BuildInstallerChecksumUrl(string scriptUrl)
+        {
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptUrl), "scriptUrl must not be null or empty");
+
+            return scriptUrl + ".sha256";
         }
     }
 }
