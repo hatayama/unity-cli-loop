@@ -117,6 +117,9 @@ func downloadVerifiedUpdateInstaller(ctx context.Context, updateCommand update.C
 	if err := verifyDispatcherChecksum(installerPath, checksumPath); err != nil {
 		return "", err
 	}
+	if err := verifyReleaseAssetAttestation(ctx, updateCommand.ReleaseTag, updateCommand.InstallerURL, installerPath, attestationDispatcherPublishWorkflowPath); err != nil {
+		return "", err
+	}
 	return installerPath, nil
 }
 
