@@ -23,6 +23,12 @@ type Command struct {
 	InstallerName        string
 	InstallerURL         string
 	InstallerChecksumURL string
+	// ReleaseTag is the dispatcher release tag the InstallerURL resolves to
+	// (e.g. "dispatcher-v3.0.1-beta.12"). The attestation verifier resolves
+	// this to a commit SHA and binds it to the certificate's Source Repository
+	// Digest extension so a stolen OIDC token cannot be reused on an unrelated
+	// tag.
+	ReleaseTag string
 }
 
 func CommandForOS(goos string, options Options) (Command, error) {
@@ -46,6 +52,7 @@ func commandForScript(name string, scriptName string, version string, updateSele
 		InstallerName:        scriptName,
 		InstallerURL:         installerURL,
 		InstallerChecksumURL: installerURL + ".sha256",
+		ReleaseTag:           DispatcherReleaseTag(version),
 	}
 }
 

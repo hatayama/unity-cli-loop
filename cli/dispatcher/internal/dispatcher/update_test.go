@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -205,6 +206,8 @@ func TestDownloadVerifiedUpdateInstallerRejectsChecksumMismatch(t *testing.T) {
 	// Verifies update installers are not executable unless the downloaded checksum matches.
 	restoreHTTPClient := stubUpdateInstallerHTTPClient([]byte("echo install\n"), []byte("bad  install.sh\n"))
 	defer restoreHTTPClient()
+	restoreAttestation := stubAttestationVerifyPasses()
+	defer restoreAttestation()
 
 	_, err := downloadVerifiedUpdateInstaller(context.Background(), update.Command{
 		InstallerName:        update.PosixScriptName,
@@ -224,11 +227,14 @@ func TestDownloadVerifiedUpdateInstallerReturnsVerifiedFile(t *testing.T) {
 	checksumContent := []byte(hex.EncodeToString(checksum[:]) + "  install.sh\n")
 	restoreHTTPClient := stubUpdateInstallerHTTPClient(installerContent, checksumContent)
 	defer restoreHTTPClient()
+	restoreAttestation := stubAttestationVerifyPasses()
+	defer restoreAttestation()
 
 	installerPath, err := downloadVerifiedUpdateInstaller(context.Background(), update.Command{
 		InstallerName:        update.PosixScriptName,
 		InstallerURL:         "https://example.test/install.sh",
 		InstallerChecksumURL: "https://example.test/install.sh.sha256",
+		ReleaseTag:           "dispatcher-v9.9.9",
 	}, t.TempDir())
 	if err != nil {
 		t.Fatalf("downloadVerifiedUpdateInstaller failed: %v", err)
@@ -237,6 +243,69 @@ func TestDownloadVerifiedUpdateInstallerReturnsVerifiedFile(t *testing.T) {
 	assertFileContent(t, installerPath, string(installerContent))
 	if filepath.Base(installerPath) != update.PosixScriptName {
 		t.Fatalf("installer path mismatch: %s", installerPath)
+	}
+}
+
+func TestDownloadVerifiedUpdateInstallerFailsClosedOnAttestationError(t *testing.T) {
+	// Verifies installers are rejected when attestation verification fails, even when the sha256 file matches.
+	installerContent := []byte("echo install\n")
+	checksum := sha256.Sum256(installerContent)
+	checksumContent := []byte(hex.EncodeToString(checksum[:]) + "  install.sh\n")
+	restoreHTTPClient := stubUpdateInstallerHTTPClient(installerContent, checksumContent)
+	defer restoreHTTPClient()
+	restoreAttestation := stubAttestationVerifyReturns(fmt.Errorf("simulated attestation failure"))
+	defer restoreAttestation()
+
+	_, err := downloadVerifiedUpdateInstaller(context.Background(), update.Command{
+		InstallerName:        update.PosixScriptName,
+		InstallerURL:         "https://example.test/install.sh",
+		InstallerChecksumURL: "https://example.test/install.sh.sha256",
+		ReleaseTag:           "dispatcher-v9.9.9",
+	}, t.TempDir())
+
+	if err == nil || !strings.Contains(err.Error(), "simulated attestation failure") {
+		t.Fatalf("expected attestation failure to fail closed, got %v", err)
+	}
+}
+
+func TestDownloadVerifiedUpdateInstallerPassesInstallerIdentityToAttestation(t *testing.T) {
+	// Verifies the dispatcher-publish workflow SAN and dispatcher release tag are what get sent to the attestation hook.
+	installerContent := []byte("echo install\n")
+	checksum := sha256.Sum256(installerContent)
+	checksumContent := []byte(hex.EncodeToString(checksum[:]) + "  install.sh\n")
+	restoreHTTPClient := stubUpdateInstallerHTTPClient(installerContent, checksumContent)
+	defer restoreHTTPClient()
+
+	var seenReleaseTag string
+	var seenAssetURL string
+	var seenWorkflowPath string
+	previous := verifyReleaseAssetAttestation
+	verifyReleaseAssetAttestation = func(_ context.Context, releaseTag string, assetURL string, _ string, workflowPath string) error {
+		seenReleaseTag = releaseTag
+		seenAssetURL = assetURL
+		seenWorkflowPath = workflowPath
+		return nil
+	}
+	defer func() {
+		verifyReleaseAssetAttestation = previous
+	}()
+
+	if _, err := downloadVerifiedUpdateInstaller(context.Background(), update.Command{
+		InstallerName:        update.PosixScriptName,
+		InstallerURL:         "https://example.test/install.sh",
+		InstallerChecksumURL: "https://example.test/install.sh.sha256",
+		ReleaseTag:           "dispatcher-v3.0.1-beta.12",
+	}, t.TempDir()); err != nil {
+		t.Fatalf("downloadVerifiedUpdateInstaller failed: %v", err)
+	}
+	if seenReleaseTag != "dispatcher-v3.0.1-beta.12" {
+		t.Fatalf("attestation hook received wrong release tag: %s", seenReleaseTag)
+	}
+	if seenAssetURL != "https://example.test/install.sh" {
+		t.Fatalf("attestation hook received wrong asset URL: %s", seenAssetURL)
+	}
+	if seenWorkflowPath != attestationDispatcherPublishWorkflowPath {
+		t.Fatalf("attestation hook received wrong workflow path: %s", seenWorkflowPath)
 	}
 }
 
@@ -338,6 +407,20 @@ func stubManualUpdateHooks(t *testing.T, updatedVersion string) func() {
 	return func() {
 		updateRunCommand = previousRunner
 		dispatcherReadInstalledVersion = previousReader
+	}
+}
+
+func stubAttestationVerifyPasses() func() {
+	return stubAttestationVerifyReturns(nil)
+}
+
+func stubAttestationVerifyReturns(returnErr error) func() {
+	previous := verifyReleaseAssetAttestation
+	verifyReleaseAssetAttestation = func(context.Context, string, string, string, string) error {
+		return returnErr
+	}
+	return func() {
+		verifyReleaseAssetAttestation = previous
 	}
 }
 
