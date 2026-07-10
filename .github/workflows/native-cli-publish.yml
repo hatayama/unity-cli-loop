@@ -97,6 +97,7 @@ jobs:
         run: scripts/verify-native-cli-release-assets.sh
 
       - name: Attest native CLI release assets
+        id: attest
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
         with:
@@ -116,6 +117,15 @@ jobs:
               --repo "${GITHUB_REPOSITORY}" \
               --signer-workflow "${SIGNER_WORKFLOW}"
           done
+
+      - name: Distribute attestation bundles per asset
+        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
+        env:
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          scripts/distribute-attestation-bundles.sh \
+            --bundle "${BUNDLE_PATH}" \
+            --release-dir dist/release
 
       - name: Upload packaged release assets artifact
         if: steps.release.outputs.publish == 'true'
@@ -232,6 +242,18 @@ jobs:
 
             if [ "${ASSET_SIZE}" -le 0 ]; then
               echo "Remote release asset is empty: ${asset_name}" >&2
+              exit 1
+            fi
+
+            BUNDLE_NAME="${asset_name}.sigstore.json"
+            BUNDLE_SIZE=$(printf '%s' "${ASSETS_JSON}" | jq -r --arg name "${BUNDLE_NAME}" '.assets[] | select(.name == $name) | .size')
+            if [ -z "${BUNDLE_SIZE}" ] || [ "${BUNDLE_SIZE}" = "null" ]; then
+              echo "Missing remote native CLI attestation bundle: ${BUNDLE_NAME}" >&2
+              exit 1
+            fi
+
+            if [ "${BUNDLE_SIZE}" -le 0 ]; then
+              echo "Remote native CLI attestation bundle is empty: ${BUNDLE_NAME}" >&2
               exit 1
             fi
           done
