@@ -7,6 +7,46 @@ VERSION="${ULOOP_VERSION:-latest}"
 LATEST_VERSION="latest"
 LATEST_BETA_VERSION="latest-beta"
 
+# Why: install.sh interpolates $VERSION into
+# "https://github.com/$REPOSITORY/releases/download/$VERSION/..." without
+# curl normalizing dot segments, so a value like
+# "../../evil/repo/releases/download/v1" would break out of the intended
+# release path even though the ambient attacker who can already set env
+# usually has bigger wins. Fail-close early on any value that is neither
+# the two well-known channel selectors nor a semantic-version-shaped tag,
+# so downstream users of $VERSION (asset URL, ULOOP_VERSION passthrough,
+# release tag prefixing) never see a value they weren't designed for.
+validate_uloop_version() {
+  candidate=$1
+  if [ "$candidate" = "$LATEST_VERSION" ] || [ "$candidate" = "$LATEST_BETA_VERSION" ]; then
+    return
+  fi
+  # Why: `grep -Eq` matches per line, so a value like
+  # printf '../evil\n3.0.0' would pass the ERE below on its second line
+  # while leaking the embedded newline into the URL builder downstream.
+  # Reject anything outside the semver tag alphabet at the whole-string
+  # level first — `case` sees the value as one string and cannot be
+  # smuggled past with embedded newlines or NULs.
+  case $candidate in
+    ''|*[!0-9A-Za-z.+-]*)
+      echo "Invalid ULOOP_VERSION: $candidate" >&2
+      echo "Expected 'latest', 'latest-beta', or a semver tag such as '3.0.0-beta.5' / 'dispatcher-v3.0.0-beta.5'." >&2
+      exit 1
+      ;;
+  esac
+  # POSIX ERE: optional dispatcher-v / uloop-project-runner-v / v prefix,
+  # then MAJOR.MINOR.PATCH, then optional -prerelease.identifiers or
+  # +build.metadata.
+  if printf '%s' "$candidate" | grep -Eq '^(dispatcher-v|uloop-project-runner-v|v)?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+    return
+  fi
+  echo "Invalid ULOOP_VERSION: $candidate" >&2
+  echo "Expected 'latest', 'latest-beta', or a semver tag such as '3.0.0-beta.5' / 'dispatcher-v3.0.0-beta.5'." >&2
+  exit 1
+}
+
+validate_uloop_version "$VERSION"
+
 report_path_shadowing() {
   resolved_uloop=$(command -v uloop 2>/dev/null || true)
   expected_uloop="$INSTALL_DIR/$installed_command_name"
