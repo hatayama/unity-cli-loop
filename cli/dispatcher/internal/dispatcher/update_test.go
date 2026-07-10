@@ -398,15 +398,28 @@ func stubManualUpdateHooks(t *testing.T, updatedVersion string) func() {
 	t.Helper()
 	previousRunner := updateRunCommand
 	previousReader := dispatcherReadInstalledVersion
+	previousResolver := resolveUpdateTargetVersionFunc
+	previousManifest := fetchAttestationSubjectManifestFunc
 	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
 		return nil
 	}
 	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
 		return updatedVersion, nil
 	}
+	resolveUpdateTargetVersionFunc = func(ctx context.Context, options update.Options) (update.Options, error) {
+		if options.TargetVersion == "" {
+			options.TargetVersion = "9.9.9"
+		}
+		return options, nil
+	}
+	fetchAttestationSubjectManifestFunc = func(ctx context.Context, tag string) (string, error) {
+		return "deadbeef  install.sh\n", nil
+	}
 	return func() {
 		updateRunCommand = previousRunner
 		dispatcherReadInstalledVersion = previousReader
+		resolveUpdateTargetVersionFunc = previousResolver
+		fetchAttestationSubjectManifestFunc = previousManifest
 	}
 }
 

@@ -413,33 +413,72 @@ tmp_dir=$(mktemp -d)
 staged_uloop_path=""
 trap 'rm -rf "$tmp_dir"; if [ -n "$staged_uloop_path" ]; then rm -f "$staged_uloop_path"; fi' EXIT
 
-verify_checksum() {
+compute_asset_sha256() {
+  # Why: install.sh runs on macOS (shasum) and MINGW/MSYS (sha256sum). We do the
+  # computation once here so both the same-origin .sha256 check and the trusted
+  # manifest check share one hex string.
   if command -v sha256sum >/dev/null 2>&1; then
-    (
-      cd "$tmp_dir"
-      sha256sum -c "$asset_name.sha256"
-    )
+    sha256sum "$tmp_dir/$asset_name" | awk '{print $1}'
     return
   fi
-
   if command -v shasum >/dev/null 2>&1; then
-    expected_hash=$(awk '{print $1}' "$tmp_dir/$asset_name.sha256")
-    actual_hash=$(shasum -a 256 "$tmp_dir/$asset_name" | awk '{print $1}')
-    if [ "$expected_hash" != "$actual_hash" ]; then
-      echo "Checksum mismatch for $asset_name" >&2
-      exit 1
-    fi
+    shasum -a 256 "$tmp_dir/$asset_name" | awk '{print $1}'
     return
   fi
-
   echo "sha256sum or shasum is required to verify $asset_name" >&2
   exit 1
+}
+
+verify_checksum() {
+  actual_hash=$(compute_asset_sha256)
+  expected_hash=$(awk '{print $1}' "$tmp_dir/$asset_name.sha256")
+  if [ -z "$expected_hash" ]; then
+    echo "Missing checksum entry for $asset_name" >&2
+    exit 1
+  fi
+  if [ "$expected_hash" != "$actual_hash" ]; then
+    echo "Checksum mismatch for $asset_name" >&2
+    exit 1
+  fi
+}
+
+verify_archive_attestation_manifest() {
+  # Why: when the dispatcher self-update path invokes this script it passes an
+  # ULOOP_ARCHIVE_MANIFEST env carrying "<digest>  <filename>" lines that were
+  # extracted from a Sigstore attestation bundle already verified against the
+  # release commit SHA. Enforce that the digest we just computed matches the
+  # entry for our asset_name so a compromised same-origin .sha256 file alone
+  # cannot bless a swapped archive. When the env is unset (README curl|sh
+  # bootstrap), we skip: bootstrap trust rests on TLS + repo ownership, and
+  # promoting that missing-manifest path to a hard failure would break every
+  # first-time install.
+  if [ -z "${ULOOP_ARCHIVE_MANIFEST:-}" ]; then
+    return
+  fi
+  manifest_hash=$(
+    printf '%s\n' "$ULOOP_ARCHIVE_MANIFEST" | awk -v name="$asset_name" '
+      $2 == name { print $1; found = 1; exit }
+      END { if (!found) exit 1 }
+    '
+  ) || {
+    echo "Attestation manifest has no entry for $asset_name" >&2
+    exit 1
+  }
+  if [ -z "$manifest_hash" ]; then
+    echo "Attestation manifest entry for $asset_name is empty" >&2
+    exit 1
+  fi
+  if [ "$manifest_hash" != "$actual_hash" ]; then
+    echo "Attestation manifest hash mismatch for $asset_name" >&2
+    exit 1
+  fi
 }
 
 mkdir -p "$INSTALL_DIR"
 curl -fsSL "$download_url" -o "$tmp_dir/$asset_name"
 curl -fsSL "$checksum_url" -o "$tmp_dir/$asset_name.sha256"
 verify_checksum
+verify_archive_attestation_manifest
 extract_asset
 staged_uloop_path="$INSTALL_DIR/.uloop-install-$$"
 if [ "$installed_command_name" = "uloop.exe" ]; then
