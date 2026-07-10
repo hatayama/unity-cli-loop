@@ -1,9 +1,9 @@
 {
-    "name": "UnityCLILoop.FirstPartyTools.PausePoint.Editor",
-    "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
+    "name": "UnityCLILoop.Tests.Editor.HarmonyVendoringSmoke",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.Tests.Editor",
     "references": [
-        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
-        "GUID:527f26a36b5043c2bd4d4036d04cd76d"
+        "GUID:0acc523941302664db1f4e527237feb3",
+        "GUID:27619889b8ba8c24980f49ee34dbb44a"
     ],
     "includePlatforms": [
         "Editor"
@@ -12,8 +12,7 @@
     "allowUnsafeCode": false,
     "overrideReferences": true,
     "precompiledReferences": [
-        "UnityCliLoop.0Harmony.dll",
-        "Mono.Cecil.dll"
+        "UnityCliLoop.0Harmony.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [],
