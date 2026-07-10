@@ -70,6 +70,80 @@ func TestVerify_HappyPath(t *testing.T) {
 	}
 }
 
+// Verifies VerifySubjects returns the release's per-asset SHA-256 digests when the bundle is valid.
+func TestVerifySubjects_HappyPath(t *testing.T) {
+	f := loadHappyFixture(t)
+	trusted, err := LoadEmbeddedTrustedMaterial()
+	if err != nil {
+		t.Fatalf("load trusted root: %v", err)
+	}
+	subjects, err := VerifySubjects(trusted, SubjectsOptions{
+		BundleData:        f.bundle,
+		ExpectedCommitSHA: f.commitSHA,
+		Identity:          f.identity,
+	})
+	if err != nil {
+		t.Fatalf("expected VerifySubjects to succeed, got: %v", err)
+	}
+	if len(subjects) == 0 {
+		t.Fatal("expected at least one subject digest")
+	}
+	// The fixture digest belongs to the arm64 archive subject — confirm the map includes it.
+	found := false
+	for name, hex := range subjects {
+		if hex == f.digest {
+			if !strings.Contains(name, "arm64") {
+				t.Fatalf("expected arm64-shaped subject name for the fixture digest, got %q", name)
+			}
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected fixture digest %s to appear in subjects map: %v", f.digest, subjects)
+	}
+}
+
+// Verifies VerifySubjects fail-closed when the certificate's Source Repository Digest differs from ExpectedCommitSHA.
+func TestVerifySubjects_CommitMismatchFailsClosed(t *testing.T) {
+	f := loadHappyFixture(t)
+	trusted, err := LoadEmbeddedTrustedMaterial()
+	if err != nil {
+		t.Fatalf("load trusted root: %v", err)
+	}
+	badCommit := "1111111111111111111111111111111111111111"
+	_, err = VerifySubjects(trusted, SubjectsOptions{
+		BundleData:        f.bundle,
+		ExpectedCommitSHA: badCommit,
+		Identity:          f.identity,
+	})
+	if err == nil {
+		t.Fatal("expected commit SHA mismatch to fail, got nil")
+	}
+	if !errors.Is(err, ErrVerificationFailed) {
+		t.Fatalf("expected ErrVerificationFailed, got %v", err)
+	}
+}
+
+// Verifies VerifySubjects rejects bundles it cannot parse as Sigstore JSON.
+func TestVerifySubjects_MalformedBundleFailsClosed(t *testing.T) {
+	f := loadHappyFixture(t)
+	trusted, err := LoadEmbeddedTrustedMaterial()
+	if err != nil {
+		t.Fatalf("load trusted root: %v", err)
+	}
+	_, err = VerifySubjects(trusted, SubjectsOptions{
+		BundleData:        []byte("{not-a-bundle}"),
+		ExpectedCommitSHA: f.commitSHA,
+		Identity:          f.identity,
+	})
+	if err == nil {
+		t.Fatal("expected malformed bundle to fail, got nil")
+	}
+	if !errors.Is(err, ErrMalformedBundle) {
+		t.Fatalf("expected ErrMalformedBundle, got %v", err)
+	}
+}
+
 // Verifies fail-closed when the local asset digest is not one of the bundle's subjects.
 func TestVerify_DigestMismatch(t *testing.T) {
 	f := loadHappyFixture(t)

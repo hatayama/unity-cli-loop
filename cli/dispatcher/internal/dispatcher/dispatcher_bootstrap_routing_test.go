@@ -66,9 +66,13 @@ func TestRunDispatcherUpdateRunsInDispatcherProcess(t *testing.T) {
 
 	previousRun := updateRunCommand
 	previousReader := dispatcherReadInstalledVersion
+	previousResolver := resolveUpdateTargetVersionFunc
+	previousManifest := fetchAttestationSubjectManifestFunc
 	defer func() {
 		updateRunCommand = previousRun
 		dispatcherReadInstalledVersion = previousReader
+		resolveUpdateTargetVersionFunc = previousResolver
+		fetchAttestationSubjectManifestFunc = previousManifest
 	}()
 	updateExecuted := false
 	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
@@ -77,6 +81,15 @@ func TestRunDispatcherUpdateRunsInDispatcherProcess(t *testing.T) {
 	}
 	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
 		return dispatcherVersion, nil
+	}
+	resolveUpdateTargetVersionFunc = func(ctx context.Context, options update.Options) (update.Options, error) {
+		if options.TargetVersion == "" {
+			options.TargetVersion = dispatcherVersion
+		}
+		return options, nil
+	}
+	fetchAttestationSubjectManifestFunc = func(ctx context.Context, tag string) (string, error) {
+		return "deadbeef  install.sh\n", nil
 	}
 
 	var stdout bytes.Buffer
