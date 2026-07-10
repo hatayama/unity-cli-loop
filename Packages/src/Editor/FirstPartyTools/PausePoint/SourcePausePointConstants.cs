@@ -8,5 +8,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string ScriptAssembliesRelativeDirectory = "Library/ScriptAssemblies";
         public const string CompiledAssemblyExtension = ".dll";
         public const string DebugSymbolsExtension = ".pdb";
+        public const string IsByRefLikeAttributeFullName = "System.Runtime.CompilerServices.IsByRefLikeAttribute";
     }
 }

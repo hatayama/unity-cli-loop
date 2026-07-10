@@ -12,6 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int MetadataToken { get; }
         public string MethodDisplayName { get; }
         public bool IsStatic { get; }
+        public bool IsDeclaringTypeValueType { get; }
         public int InstructionIndex { get; }
         public int IlOffset { get; }
         public int ResolvedLine { get; }
@@ -23,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int metadataToken,
             string methodDisplayName,
             bool isStatic,
+            bool isDeclaringTypeValueType,
             int instructionIndex,
             int ilOffset,
             int resolvedLine,
@@ -33,6 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MetadataToken = metadataToken;
             MethodDisplayName = methodDisplayName;
             IsStatic = isStatic;
+            IsDeclaringTypeValueType = isDeclaringTypeValueType;
             InstructionIndex = instructionIndex;
             IlOffset = ilOffset;
             ResolvedLine = resolvedLine;

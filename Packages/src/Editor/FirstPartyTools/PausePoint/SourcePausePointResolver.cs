@@ -101,6 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 method.MetadataToken.ToInt32(),
                 method.FullName,
                 method.IsStatic,
+                method.DeclaringType.IsValueType,
                 instructionIndex,
                 sequencePoint.Offset,
                 sequencePoint.StartLine,
@@ -116,7 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MethodDefinition bestMethod = null;
             SequencePoint bestSequencePoint = null;
 
-            foreach (MethodDefinition method in EnumerateMethods(module))
+            foreach (MethodDefinition method in EnumerateMethodsInModule(module))
             {
                 if (!method.HasBody)
                 {
@@ -152,18 +153,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (bestMethod, bestSequencePoint);
         }
 
-        private static IEnumerable<MethodDefinition> EnumerateMethods(ModuleDefinition module)
+        private static IEnumerable<MethodDefinition> EnumerateMethodsInModule(ModuleDefinition module)
         {
             foreach (TypeDefinition type in module.Types)
             {
-                foreach (MethodDefinition method in EnumerateMethods(type))
+                foreach (MethodDefinition method in EnumerateMethodsInType(type))
                 {
                     yield return method;
                 }
             }
         }
 
-        private static IEnumerable<MethodDefinition> EnumerateMethods(TypeDefinition type)
+        private static IEnumerable<MethodDefinition> EnumerateMethodsInType(TypeDefinition type)
         {
             foreach (MethodDefinition method in type.Methods)
             {
@@ -172,7 +173,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (TypeDefinition nestedType in type.NestedTypes)
             {
-                foreach (MethodDefinition method in EnumerateMethods(nestedType))
+                foreach (MethodDefinition method in EnumerateMethodsInType(nestedType))
                 {
                     yield return method;
                 }
@@ -269,15 +270,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             results.Add(new SourcePausePointLocalVariable(name, slotIndex, variableType.FullName));
         }
 
-        private static bool IsCaptureExcluded(TypeReference variableType)
+        private static bool IsCaptureExcluded(TypeReference type)
         {
-            // byref locals and pointers cannot be boxed; ref structs (Span<T> etc.) cannot be boxed either.
-            return variableType.IsByReference || variableType.IsPointer || IsKnownRefStructType(variableType);
+            // byref locals/parameters (ref, out, in) and pointers cannot be boxed; ref structs
+            // (Span<T>, and any user-defined "ref struct") cannot be boxed either.
+            return type.IsByReference || type.IsPointer || IsRefStructType(type);
         }
 
-        private static bool IsKnownRefStructType(TypeReference variableType)
+        private static bool IsRefStructType(TypeReference type)
         {
-            TypeReference elementType = variableType.IsGenericInstance ? variableType.GetElementType() : variableType;
+            if (IsKnownFrameworkRefStructType(type))
+            {
+                return true;
+            }
+
+            // Only inspect user-defined ref structs when the reference already points directly at
+            // a TypeDefinition, i.e. it is declared in the very assembly being read. Resolving an
+            // external TypeReference (e.g. any corlib value type such as System.Int32) requires
+            // Mono.Cecil's assembly resolver to locate that assembly, which is not reliably
+            // resolvable against the Unity Editor's Mono/.NET layout and would throw for ordinary
+            // primitives that are not ref structs at all.
+            if (!(type is TypeDefinition typeDefinition) || !typeDefinition.IsValueType || !typeDefinition.HasCustomAttributes)
+            {
+                return false;
+            }
+
+            foreach (CustomAttribute attribute in typeDefinition.CustomAttributes)
+            {
+                if (attribute.AttributeType.FullName == SourcePausePointConstants.IsByRefLikeAttributeFullName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsKnownFrameworkRefStructType(TypeReference type)
+        {
+            // Span<T>/ReadOnlySpan<T> are ref structs defined in corlib; checking their FullName
+            // avoids forcing assembly resolution for a framework type on the hot path.
+            TypeReference elementType = type.IsGenericInstance ? type.GetElementType() : type;
             return elementType.FullName == "System.Span`1" || elementType.FullName == "System.ReadOnlySpan`1";
         }
 
@@ -286,6 +319,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<SourcePausePointParameter> parameters = new List<SourcePausePointParameter>();
             foreach (ParameterDefinition parameter in method.Parameters)
             {
+                if (IsCaptureExcluded(parameter.ParameterType))
+                {
+                    continue;
+                }
+
                 parameters.Add(new SourcePausePointParameter(parameter.Name, parameter.Index, parameter.ParameterType.FullName));
             }
 

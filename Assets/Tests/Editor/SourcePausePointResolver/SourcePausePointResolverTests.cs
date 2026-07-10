@@ -111,6 +111,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Resolve_RefStructAndByRefMethod_ExcludesNonCapturableLocalsAndParameters()
+        {
+            // Verifies ref-struct locals (user-defined and Span<T>) and ref/out/in parameters
+            // are excluded, since none of them can be boxed for capture.
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "RefStructAndByRefFixture.cs", 22);
+
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Resolution.Locals.Select(l => l.Name), Is.EquivalentTo(new[] { "result" }));
+            Assert.That(result.Resolution.Parameters.Select(p => p.Name), Is.EqualTo(new[] { "value" }));
+        }
+
+        [Test]
         public void Resolve_WhenPathIsOutsideAnyScriptFolder_ReturnsScriptNotInAnyAssemblyFailure()
         {
             // Verifies a path outside Assets/Packages (no owning assembly) is reported with a specific
