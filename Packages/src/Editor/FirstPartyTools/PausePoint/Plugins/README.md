@@ -48,17 +48,45 @@ unsigned (zero-sized public key), so no strong-name stripping was needed.
 
 1. Download the nupkg:
    `curl -sL -o lib.harmony.2.4.2.nupkg https://api.nuget.org/v3-flatcontainer/lib.harmony/2.4.2/lib.harmony.2.4.2.nupkg`
-2. Extract `lib/net472/0Harmony.dll` from the nupkg (it is a zip archive).
-3. Rewrite the assembly identity with Mono.Cecil (`AssemblyDefinition.Name.Name`
-   and `MainModule.Name`) from `0Harmony` to `UnityCliLoop.0Harmony`, then
-   write the result out as `UnityCliLoop.0Harmony.dll`. No other bytes are
-   modified; namespaces, types, and IL are untouched. There is a single
-   assembly here (a fat build), so there are no cross-assembly `AssemblyRef`
-   entries that also need renaming.
-4. Verify the rename with `monodis --assembly UnityCliLoop.0Harmony.dll`
-   (expect `Name: UnityCliLoop.0Harmony`) and confirm the original namespaces
-   are intact (e.g. `strings UnityCliLoop.0Harmony.dll | grep '^HarmonyLib'`).
-5. Place the renamed DLL next to a `.meta` with `isExplicitlyReferenced: 1`
+2. Verify the download against the checksum table above before doing anything
+   else with it, and stop if it does not match:
+   `shasum -a 256 lib.harmony.2.4.2.nupkg` (expect
+   `d64592e53090464559fce48612c9ca7c8dc73113841376b7aa3455f46fc5d579`).
+3. Extract `lib/net472/0Harmony.dll` from the nupkg (it is a zip archive) and
+   verify it against the checksum table above the same way (expect
+   `7b9e756306fa3d7620e02a857c8927a6ab04973f9bd8a77d3866700a6deac55c`).
+4. Rewrite the assembly identity with Mono.Cecil 0.11.5 (the same version
+   `com.unity.nuget.mono-cecil` 1.11.6 wraps) via a small console script:
+
+   ```csharp
+   // dotnet add package Mono.Cecil --version 0.11.5
+   using Mono.Cecil;
+
+   var readerParams = new ReaderParameters { ReadSymbols = false };
+   using var assembly = AssemblyDefinition.ReadAssembly(inputPath, readerParams);
+
+   assembly.Name.Name = "UnityCliLoop.0Harmony";
+   assembly.MainModule.Name = "UnityCliLoop.0Harmony.dll";
+
+   assembly.Write(outputPath);
+   ```
+
+   This changes only the assembly's `AssemblyName` and module name;
+   namespaces, type names, IL, and `AssemblyRef` entries are untouched. Note
+   that the underlying PE/metadata bytes at those two fields necessarily
+   differ from the original file as a result (that is the entire point of
+   the rewrite) — the checksum in the table below is for the resulting file,
+   not a claim that the file is otherwise byte-identical to the original.
+   There is a single assembly here (a fat build), so there are no
+   cross-assembly `AssemblyRef` entries pointing at other vendored DLLs that
+   also need renaming.
+5. Verify the rename with `monodis --assembly UnityCliLoop.0Harmony.dll`
+   (expect `Name: UnityCliLoop.0Harmony`), confirm the original namespaces
+   are intact (e.g. `strings UnityCliLoop.0Harmony.dll | grep '^HarmonyLib'`),
+   and verify the result against the checksum table above:
+   `shasum -a 256 UnityCliLoop.0Harmony.dll` (expect
+   `cf9ad14a6dbc061f8b75dd0f17a3e2fdd427af5c746d243fcb39e7a6f6c5c039`).
+6. Place the renamed DLL next to a `.meta` with `isExplicitlyReferenced: 1`
    and Editor-only platform data (see `UnityCliLoop.0Harmony.dll.meta` in
    this directory), and reference it from the consuming asmdef via
    `overrideReferences: true` + `precompiledReferences`.
