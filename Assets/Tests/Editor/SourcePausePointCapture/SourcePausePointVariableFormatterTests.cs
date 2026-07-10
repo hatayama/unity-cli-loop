@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 
 using NUnit.Framework;
 
+using UnityEditor;
+using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -101,6 +103,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Format_WhenOneValueExceedsMaxLength_StillCapturesSubsequentVariables()
+        {
+            // Regression test: an over-long value must only clip itself, never abort capture of
+            // the parameters/instance fields that come after it in the same call.
+            string longValue = new string('a', SourcePausePointConstants.MaxCapturedVariableValueLength + 10);
+            object[] locals = { "longText", longValue };
+            object[] parameters = { "hp", 42 };
+            InstanceFieldFixture instance = new() { PublicField = 5 };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                instance, parameters, locals);
+
+            Assert.That(variables.Select(v => v.Name), Is.EqualTo(new[] { "longText", "hp", "PublicField" }));
+            Assert.That(variables.Single(v => v.Name == "hp").Value, Is.EqualTo("42"));
+            Assert.That(variables.Single(v => v.Name == "PublicField").Value, Is.EqualTo("5"));
+            Assert.That(truncated, Is.True);
+        }
+
+        [Test]
         public void Format_WhenVariableCountExceedsMax_StopsAtCapAndSetsTruncatedFlag()
         {
             // Verifies capture stops at MaxCapturedVariableCount rather than growing unbounded.
@@ -155,6 +176,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Format_WithHoistedAsyncParameterField_ReportsItAsParameterScope()
+        {
+            // Verifies a hoisted parameter (stored under its plain source name, unlike locals)
+            // reports Scope=Parameter rather than InstanceField, since it belongs to the
+            // compiler-generated state machine type rather than the calling object's own class.
+            AsyncStateMachineFixture fixture = new();
+            (object stateMachine, _) = CreateStateMachine(fixture);
+
+            (List<UloopCapturedVariable> variables, _) = SourcePausePointVariableFormatter.Format(
+                stateMachine, Array.Empty<object>(), Array.Empty<object>());
+
+            UloopCapturedVariable variable = variables.Single(v => v.Name == "seed");
+            Assert.That(variable.Scope, Is.EqualTo(UloopCapturedVariableScope.Parameter));
+        }
+
+        [Test]
         public void Format_WithStateMachineOuterThisField_FollowsItOneLevelDeep()
         {
             // Verifies "<>4__this" is followed exactly one level to surface the real instance's fields.
@@ -188,6 +225,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(variable.UnityObjectKind, Is.EqualTo(UloopCapturedVariableUnityObjectKind.SceneObject));
             Assert.That(variable.Value, Is.EqualTo("PausePointFormatterSceneFixture"));
             Assert.That(variable.UnityObjectPath, Does.Contain("PausePointFormatterSceneFixture"));
+        }
+
+        [Test]
+        public void Format_WithSceneComponentValue_ClassifiesAsSceneObjectUsingComponentHandle()
+        {
+            // Verifies the Component branch (as opposed to GameObject) resolves its handle via
+            // the component itself, not the owning GameObject.
+            _testGameObject = new GameObject("PausePointFormatterComponentFixture");
+            Transform componentValue = _testGameObject.transform;
+            object[] locals = { "target", componentValue };
+
+            (List<UloopCapturedVariable> variables, _) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            UloopCapturedVariable variable = variables.Single();
+            Assert.That(variable.UnityObjectKind, Is.EqualTo(UloopCapturedVariableUnityObjectKind.SceneObject));
+            Assert.That(variable.UnityObjectPath, Does.Contain("PausePointFormatterComponentFixture"));
+            Assert.That(variable.UnityObjectInstanceId, Is.EqualTo(componentValue.GetInstanceID()));
+        }
+
+        [Test]
+        public void Format_WithPrefabAssetGameObjectValue_ClassifiesAsPrefabAsset()
+        {
+            // Verifies a GameObject loaded from a saved prefab asset (invalid scene, resolvable
+            // asset path) classifies as PrefabAsset rather than SceneObject.
+            const string prefabPath = "Assets/PausePointFormatterPrefabAssetFixture.prefab";
+            GameObject source = new("PausePointFormatterPrefabAssetFixture");
+            GameObject prefabAsset;
+            try
+            {
+                prefabAsset = PrefabUtility.SaveAsPrefabAsset(source, prefabPath);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(source);
+            }
+
+            try
+            {
+                object[] locals = { "target", prefabAsset };
+
+                (List<UloopCapturedVariable> variables, _) = SourcePausePointVariableFormatter.Format(
+                    null, Array.Empty<object>(), locals);
+
+                UloopCapturedVariable variable = variables.Single();
+                Assert.That(variable.UnityObjectKind, Is.EqualTo(UloopCapturedVariableUnityObjectKind.PrefabAsset));
+                Assert.That(variable.UnityObjectPath, Is.EqualTo(prefabPath));
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(prefabPath);
+            }
+        }
+
+        [Test]
+        public void Format_WithPersistedAssetValue_ClassifiesAsAsset()
+        {
+            // Verifies a non-GameObject persisted asset classifies as Asset with its asset path.
+            // Loads this test project's own asmdef file rather than creating a throwaway asset.
+            const string assetPath =
+                "Assets/Tests/Editor/SourcePausePointCapture/UnityCLILoop.Tests.Editor.SourcePausePointCapture.asmdef";
+            AssemblyDefinitionAsset asset = AssetDatabase.LoadAssetAtPath<AssemblyDefinitionAsset>(assetPath);
+            Assert.That(asset, Is.Not.Null, "fixture asmdef asset must exist at the expected path");
+            object[] locals = { "target", asset };
+
+            (List<UloopCapturedVariable> variables, _) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            UloopCapturedVariable variable = variables.Single();
+            Assert.That(variable.UnityObjectKind, Is.EqualTo(UloopCapturedVariableUnityObjectKind.Asset));
+            Assert.That(variable.UnityObjectPath, Is.EqualTo(assetPath));
         }
 
         [Test]

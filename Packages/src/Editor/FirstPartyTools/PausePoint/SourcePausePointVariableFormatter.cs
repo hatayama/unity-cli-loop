@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 
 using UnityEngine;
@@ -33,6 +34,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(localNamesAndValues.Length % 2 == 0, "localNamesAndValues must contain name/value pairs");
 
             List<UloopCapturedVariable> results = new();
+            // Reports whether ANY value was clipped or the count cap was hit; a single over-long
+            // value must not stop enumeration of the remaining locals/parameters/instance fields.
             bool truncated = false;
             // An async state machine's own fields include hoisted copies of the original method's
             // parameters under their plain source name (only true locals get the "<name>5__N"
@@ -40,10 +43,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // once as Parameter (from the array below) and again as InstanceField (from the walk).
             HashSet<string> capturedNames = new();
 
-            AppendPairs(results, capturedNames, ref truncated, localNamesAndValues, UloopCapturedVariableScope.Local);
-            AppendPairs(results, capturedNames, ref truncated, parameterNamesAndValues, UloopCapturedVariableScope.Parameter);
+            bool countCapReached = AppendPairs(
+                results, capturedNames, ref truncated, localNamesAndValues, UloopCapturedVariableScope.Local);
+            if (!countCapReached)
+            {
+                countCapReached = AppendPairs(
+                    results, capturedNames, ref truncated, parameterNamesAndValues, UloopCapturedVariableScope.Parameter);
+            }
 
-            if (instance != null && !truncated)
+            if (instance != null && !countCapReached)
             {
                 CollectInstanceFieldVariables(instance, results, capturedNames, ref truncated);
             }
@@ -51,24 +59,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (results, truncated);
         }
 
-        private static void AppendPairs(
+        // Returns true once the count cap is hit, so the caller can stop enumerating further
+        // arrays/fields; a per-value length truncation alone must not signal this.
+        private static bool AppendPairs(
             List<UloopCapturedVariable> results, HashSet<string> capturedNames, ref bool truncated,
             object[] namesAndValues, string scope)
         {
             for (int i = 0; i < namesAndValues.Length; i += 2)
             {
-                if (truncated)
-                {
-                    return;
-                }
-
                 string name = (string)namesAndValues[i];
                 object value = namesAndValues[i + 1];
                 if (!TryAppendVariable(results, capturedNames, ref truncated, name, scope, value))
                 {
-                    return;
+                    return true;
                 }
             }
+
+            return false;
         }
 
         // Async/iterator state machines hoist the original `this` into a `<>4__this` field; this
@@ -77,8 +84,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void CollectInstanceFieldVariables(
             object instance, List<UloopCapturedVariable> results, HashSet<string> capturedNames, ref bool truncated)
         {
-            object outerThis = CollectDirectFieldVariables(instance, results, capturedNames, ref truncated, followOuterThis: true);
-            if (truncated || outerThis == null)
+            (object outerThis, bool countCapReached) = CollectDirectFieldVariables(
+                instance, results, capturedNames, ref truncated, followOuterThis: true);
+            if (countCapReached || outerThis == null)
             {
                 return;
             }
@@ -86,18 +94,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CollectDirectFieldVariables(outerThis, results, capturedNames, ref truncated, followOuterThis: false);
         }
 
-        private static object CollectDirectFieldVariables(
+        private static (object OuterThis, bool CountCapReached) CollectDirectFieldVariables(
             object source, List<UloopCapturedVariable> results, HashSet<string> capturedNames, ref bool truncated,
             bool followOuterThis)
         {
             object outerThis = null;
+            // A compiler-generated state machine hoists the original method's parameters as
+            // plain-named fields (only true locals get the "<name>5__N" treatment), so those
+            // fields are the method's Parameter scope, not this type's own InstanceField scope.
+            bool isCompilerGeneratedStateMachine = Attribute.IsDefined(source.GetType(), typeof(CompilerGeneratedAttribute));
+            string plainFieldScope = isCompilerGeneratedStateMachine
+                ? UloopCapturedVariableScope.Parameter
+                : UloopCapturedVariableScope.InstanceField;
+
             foreach (FieldInfo field in EnumerateInstanceFields(source.GetType()))
             {
-                if (truncated)
-                {
-                    return outerThis;
-                }
-
                 if (followOuterThis && field.Name == StateMachineOuterThisFieldName)
                 {
                     outerThis = field.GetValue(source);
@@ -107,9 +118,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Match hoistedLocalMatch = HoistedLocalFieldNamePattern.Match(field.Name);
                 if (hoistedLocalMatch.Success)
                 {
-                    TryAppendVariable(
+                    if (!TryAppendVariable(
                         results, capturedNames, ref truncated, hoistedLocalMatch.Groups[1].Value,
-                        UloopCapturedVariableScope.Local, field.GetValue(source));
+                        UloopCapturedVariableScope.Local, field.GetValue(source)))
+                    {
+                        return (outerThis, true);
+                    }
+
                     continue;
                 }
 
@@ -120,12 +135,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                TryAppendVariable(
-                    results, capturedNames, ref truncated, field.Name, UloopCapturedVariableScope.InstanceField,
-                    field.GetValue(source));
+                if (!TryAppendVariable(results, capturedNames, ref truncated, field.Name, plainFieldScope, field.GetValue(source)))
+                {
+                    return (outerThis, true);
+                }
             }
 
-            return outerThis;
+            return (outerThis, false);
         }
 
         private static IEnumerable<FieldInfo> EnumerateInstanceFields(Type type)

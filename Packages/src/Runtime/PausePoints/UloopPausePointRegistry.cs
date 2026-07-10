@@ -1,18 +1,22 @@
 #if UNITY_EDITOR
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     /// <summary>
-    /// Stores enabled pause point state for the current Editor domain.
+    /// Stores enabled pause point state for the current Editor domain. All members except
+    /// IsArmed are main-thread-only by convention; IsArmed is the one entry point an
+    /// off-main-thread Harmony-injected Capture call may reach, so Entries is a
+    /// ConcurrentDictionary to make that cross-thread read safe.
     /// </summary>
     internal static class UloopPausePointRegistry
     {
         public const int DefaultTimeoutSeconds = 30;
 
-        private static readonly Dictionary<string, UloopPausePointEntry> Entries = new();
+        private static readonly ConcurrentDictionary<string, UloopPausePointEntry> Entries = new();
         private static IUloopPausePointPauseController _pauseController = new UnityEditorPausePointPauseController();
         private static Func<DateTime> _nowProvider = () => DateTime.UtcNow;
         private static int _nextGeneration;
@@ -110,8 +114,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return HitCore(id, capturedVariables, capturedVariablesTruncated);
         }
 
-        // id が armed でなければ辞書引き 1 回で return する。Harmony が注入した Capture 呼び出しは
-        // ほぼ常にこの不活性パスを通るため、ここでの割り当て・整形コストをゼロに保つことが重要。
+        // Returns after a single dictionary lookup when the id is not armed. Harmony-injected
+        // Capture calls take this inactive path almost always, so keeping it allocation-free here matters.
         public static bool IsArmed(string id)
         {
             if (string.IsNullOrWhiteSpace(id))

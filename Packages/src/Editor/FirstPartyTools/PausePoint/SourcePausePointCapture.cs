@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -27,7 +28,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
                 instance, parameterNamesAndValues, localNamesAndValues);
 
-            UloopPausePointRegistry.HitWithCapturedVariables(id, variables, truncated);
+            if (MainThreadSwitcher.IsMainThread)
+            {
+                UloopPausePointRegistry.HitWithCapturedVariables(id, variables, truncated);
+                return;
+            }
+
+            // EditorApplication.isPaused (and the registry's own bookkeeping) may only be
+            // touched from the main thread, so an off-thread hit is recorded on the next
+            // main-thread tick instead of inline. HitCore re-checks IsEnabled at that point, so a
+            // marker that already got disarmed by a faster hit safely no-ops there.
+            MainThreadSwitcher.AddContinuation(() => UloopPausePointRegistry.HitWithCapturedVariables(id, variables, truncated));
         }
     }
 }

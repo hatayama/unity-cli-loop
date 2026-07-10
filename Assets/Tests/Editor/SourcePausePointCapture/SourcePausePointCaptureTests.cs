@@ -1,7 +1,12 @@
 using System;
+using System.Collections;
 using System.Linq;
+using System.Threading.Tasks;
 
 using NUnit.Framework;
+
+using UnityEngine;
+using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Runtime;
@@ -67,6 +72,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), Array.Empty<object>());
 
+            Assert.That(_pauseController.PauseCount, Is.EqualTo(1));
+        }
+
+        [UnityTest]
+        public IEnumerator Capture_WhenCalledOffMainThread_RecordsHitOnNextMainThreadTick()
+        {
+            // Verifies an off-main-thread Capture call is marshalled to the main thread
+            // (must-fix 2): EditorApplication.isPaused and the registry's own bookkeeping are
+            // main-thread-only, so the hit must land via MainThreadSwitcher's continuation queue
+            // rather than running inline on the calling background thread.
+            UloopPausePointRegistry.Enable("jump", 30);
+            object[] locals = { "speed", 5 };
+
+            Task.Run(() => SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), locals));
+
+            float timeoutTime = Time.realtimeSinceStartup + 5f;
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+            while (!snapshot.IsHit && Time.realtimeSinceStartup < timeoutTime)
+            {
+                yield return null;
+                snapshot = UloopPausePointRegistry.GetStatus("jump");
+            }
+
+            Assert.That(snapshot.IsHit, Is.True, "hit should be recorded on the main thread within timeout");
+            Assert.That(snapshot.CapturedVariables.Select(v => v.Name), Is.EquivalentTo(new[] { "speed" }));
             Assert.That(_pauseController.PauseCount, Is.EqualTo(1));
         }
 
