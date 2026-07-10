@@ -11,6 +11,29 @@ $InstallDir = if ($env:ULOOP_INSTALL_DIR) {
 }
 $AssetName = "uloop-dispatcher-windows-amd64.zip"
 
+function Test-UloopVersionFormat {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Candidate
+    )
+
+    # Why: mirror install.sh — Uri.Combine and .NET's WebClient do not
+    # normalize away path segments, so a value like
+    # "../../evil/repo/releases/download/v1" would traverse out of the
+    # expected release path. Fail-close on anything that is not one of the
+    # two well-known channel selectors or a semver-shaped tag.
+    if ($Candidate -eq $LatestVersion -or $Candidate -eq $LatestBetaVersion) {
+        return
+    }
+    $Pattern = '^(dispatcher-v|uloop-project-runner-v|v)?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+    if ($Candidate -match $Pattern) {
+        return
+    }
+    throw "Invalid ULOOP_VERSION: $Candidate. Expected 'latest', 'latest-beta', or a semver tag such as '3.0.0-beta.5' / 'dispatcher-v3.0.0-beta.5'."
+}
+
+Test-UloopVersionFormat -Candidate $Version
+
 function Find-LatestAssetUrl {
     param(
         [Parameter(Mandatory = $true)]
