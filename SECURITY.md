@@ -17,9 +17,10 @@ When reporting a vulnerability, please include:
 
 ### Untrusted Unity projects can drive the runner version
 
-`uloop` reads `.uloop/project-runner-pin.json` (or the mirrored
-`Packages/src/project-runner-pin.json`) from the current Unity project to
-decide which project-runner release to download and execute. The pin is
+`uloop` reads `Packages/src/project-runner-pin.json` (which
+`CliPinSynchronizer` mirrors byte-identically to
+`.uloop/project-runner-pin.json`) from the current Unity project to decide
+which project-runner release to download and execute. The pin is
 project-local data: opening or cloning a third-party Unity project and
 running `uloop` inside it means the project's pin controls which release
 `uloop` will pull down and launch.
@@ -29,7 +30,8 @@ Concrete implications:
 - A hostile project can pin the runner to a known-vulnerable published
   release and downgrade you to it. `uloop` verifies the release's Sigstore
   attestation before extracting the archive, so an attacker cannot forge a
-  new asset — but they *can* select an older asset the project owns.
+  new asset — but they *can* select an older release already published by
+  this repository.
 - Setting `ULOOP_DISABLE_SELF_UPDATE=1` only disables the dispatcher's own
   auto-update. It does not disable pin-driven runner selection, because the
   runner version is part of the project contract, not the dispatcher's
@@ -42,10 +44,10 @@ Guidance:
 
 - Only run `uloop` inside Unity projects whose maintainers you trust to
   choose your runner version.
-- When auditing a third-party project, inspect
-  `.uloop/project-runner-pin.json` and
-  `Packages/src/project-runner-pin.json` before running any `uloop`
-  command in it.
+- When auditing a third-party project, inspect the source pin at
+  `Packages/src/project-runner-pin.json` (and its mirror at
+  `.uloop/project-runner-pin.json` if only that path is present)
+  before running any `uloop` command in it.
 - `ULOOP_DISABLE_SELF_UPDATE=1` is still worth setting in one-off audit
   environments because it prevents the dispatcher from silently
   upgrading itself while you are investigating, but treat it as a
