@@ -115,6 +115,94 @@ func Verify(trustedMaterial root.TrustedMaterial, opts VerifyOptions) error {
 	return nil
 }
 
+// SubjectsOptions parameterizes VerifySubjects. Unlike VerifyOptions there is
+// no AssetDigest — the whole point of VerifySubjects is to obtain the digests
+// of the release's assets from the verified statement, so the caller does not
+// know them ahead of time.
+type SubjectsOptions struct {
+	BundleData        []byte
+	ExpectedCommitSHA string
+	Identity          Identity
+}
+
+// VerifySubjects performs full Sigstore verification of the bundle (signature,
+// transparency log, integrated timestamps, SCT, certificate identity, source
+// repository digest binding) and returns a map of subject filename → lowercase
+// hex-encoded SHA-256 digest extracted from the verified in-toto statement.
+//
+// This is the "manifest" surface B4 uses: the dispatcher pins a set of trusted
+// archive digests here, then hands the manifest to install.sh so the shell
+// script can compare against a digest that is cryptographically bound to the
+// release commit, rather than the sibling `.sha256` file which ships from the
+// same origin as the archive and thus offers no authenticity guarantee.
+//
+// The sigstore-go policy option is called WithoutArtifactUnsafe — the name is
+// alarming but correct here: verification without a caller-provided artifact
+// is unsafe when the caller then uses the certificate for something else
+// (e.g. claiming a local file is trusted). Here the "artifact" IS the subject
+// list we return, and callers must not skip the second-stage digest comparison
+// against the specific asset they downloaded. Verify() still enforces artifact
+// binding for the installer script path.
+func VerifySubjects(trustedMaterial root.TrustedMaterial, opts SubjectsOptions) (map[string]string, error) {
+	if len(opts.BundleData) == 0 {
+		return nil, fmt.Errorf("%w: BundleData required", ErrVerificationFailed)
+	}
+	if !isHexCommitSHA(opts.ExpectedCommitSHA) {
+		return nil, fmt.Errorf("%w: ExpectedCommitSHA must be 40-char hex", ErrVerificationFailed)
+	}
+	if opts.Identity.Repository == "" || opts.Identity.WorkflowPath == "" || len(opts.Identity.Refs) == 0 {
+		return nil, fmt.Errorf("%w: Identity.Repository, WorkflowPath, and at least one Ref required", ErrVerificationFailed)
+	}
+
+	var b bundle.Bundle
+	if err := b.UnmarshalJSON(opts.BundleData); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformedBundle, err)
+	}
+
+	verifier, err := verify.NewVerifier(trustedMaterial,
+		verify.WithTransparencyLog(1),
+		verify.WithIntegratedTimestamps(1),
+		verify.WithSignedCertificateTimestamps(1))
+	if err != nil {
+		return nil, fmt.Errorf("%w: build verifier: %v", ErrVerificationFailed, err)
+	}
+
+	identities, err := buildCertificateIdentities(opts.Identity, opts.ExpectedCommitSHA)
+	if err != nil {
+		return nil, fmt.Errorf("%w: build identities: %v", ErrVerificationFailed, err)
+	}
+
+	policyOpts := make([]verify.PolicyOption, 0, len(identities))
+	for _, id := range identities {
+		policyOpts = append(policyOpts, verify.WithCertificateIdentity(id))
+	}
+
+	policy := verify.NewPolicy(verify.WithoutArtifactUnsafe(), policyOpts...)
+
+	result, err := verifier.Verify(&b, policy)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrVerificationFailed, err)
+	}
+	if result == nil || result.Statement == nil {
+		return nil, fmt.Errorf("%w: verified bundle had no statement", ErrVerificationFailed)
+	}
+	subjects := make(map[string]string, len(result.Statement.Subject))
+	for _, subject := range result.Statement.Subject {
+		if subject == nil {
+			continue
+		}
+		hex, ok := subject.Digest["sha256"]
+		if !ok || hex == "" {
+			continue
+		}
+		subjects[subject.Name] = hex
+	}
+	if len(subjects) == 0 {
+		return nil, fmt.Errorf("%w: verified bundle had no sha256 subjects", ErrVerificationFailed)
+	}
+	return subjects, nil
+}
+
 func (o VerifyOptions) validate() error {
 	if o.AssetDigest == "" {
 		return fmt.Errorf("%w: AssetDigest required", ErrVerificationFailed)

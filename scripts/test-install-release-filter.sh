@@ -191,6 +191,17 @@ if [ "$1" = "-c" ]; then
   exit 0
 fi
 
+# install.sh now computes the digest with `sha256sum <path>` and compares
+# against the parsed .sha256 file so the same hash string is available for
+# both the same-origin check and the attestation-manifest cross-check. The
+# .sha256 fixtures written above use the literal "fakehash", so emit that
+# whenever a single-file digest is requested. Any other invocation shape is
+# unexpected and should fail loud.
+if [ "$#" -ge 1 ] && [ -f "$1" ]; then
+  printf 'fakehash  %s\n' "$1"
+  exit 0
+fi
+
 echo "unexpected sha256sum arguments: $*" >&2
 exit 1
 MOCK_SHA256SUM

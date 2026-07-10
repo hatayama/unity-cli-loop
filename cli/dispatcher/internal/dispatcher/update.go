@@ -39,10 +39,15 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 		return true, 1
 	}
 
-	updateCommand, err := update.CommandForOS(runtime.GOOS, update.Options{
+	resolvedOptions, err := resolveUpdateTargetVersionFunc(ctx, update.Options{
 		CurrentVersion: dispatcherVersion,
 		TargetVersion:  options.targetVersion,
 	})
+	if err != nil {
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.UpdateCommandName})
+		return true, 1
+	}
+	updateCommand, err := update.CommandForOS(runtime.GOOS, resolvedOptions)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clierrors.ErrorContext{Command: clicore.UpdateCommandName})
 		return true, 1
@@ -97,11 +102,18 @@ func runUpdateCommand(ctx context.Context, updateCommand update.Command, stdout 
 		return err
 	}
 
+	manifest, err := fetchAttestationSubjectManifestFunc(ctx, updateCommand.ReleaseTag)
+	if err != nil {
+		return err
+	}
+
 	args := updateExecutionArgs(updateCommand, installerPath)
 	command := exec.CommandContext(ctx, updateCommand.Name, args...)
 	command.Stdout = stdout
 	command.Stderr = stderr
-	command.Env = append(os.Environ(), updateCommand.Env...)
+	env := append(os.Environ(), updateCommand.Env...)
+	env = append(env, updateArchiveManifestEnvName+"="+manifest)
+	command.Env = env
 	return command.Run()
 }
 
