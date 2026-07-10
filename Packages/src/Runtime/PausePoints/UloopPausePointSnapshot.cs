@@ -1,4 +1,7 @@
 #if UNITY_EDITOR
+using System;
+using System.Collections.Generic;
+
 using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.Runtime
@@ -26,7 +29,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int firstHitSequence,
             int lastHitSequence,
             string message,
-            string recommendedNextAction)
+            string recommendedNextAction,
+            IReadOnlyList<UloopCapturedVariable> capturedVariables,
+            bool capturedVariablesTruncated)
         {
             Debug.Assert(editorState != null, "editorState must not be null");
 
@@ -48,6 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             LastHitSequence = lastHitSequence;
             Message = message ?? string.Empty;
             RecommendedNextAction = recommendedNextAction ?? string.Empty;
+            CapturedVariables = capturedVariables ?? Array.Empty<UloopCapturedVariable>();
+            CapturedVariablesTruncated = capturedVariablesTruncated;
         }
 
         public string Id { get; }
@@ -68,6 +75,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public int LastHitSequence { get; }
         public string Message { get; }
         public string RecommendedNextAction { get; }
+        public IReadOnlyList<UloopCapturedVariable> CapturedVariables { get; }
+        public bool CapturedVariablesTruncated { get; }
 
         public static UloopPausePointSnapshot NotEnabled(string id, IUloopPausePointPauseController pauseController)
         {
@@ -93,7 +102,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 0,
                 0,
                 "Pause point is not enabled.",
-                string.Empty);
+                string.Empty,
+                Array.Empty<UloopCapturedVariable>(),
+                false);
         }
     }
 }
