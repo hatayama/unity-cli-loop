@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GetInstallCommand_OnMacKeepsDispatcherCurlInstallerAvailable()
         {
-            // Verifies that editor installs use the dispatcher installer script, not npm.
+            // Verifies that editor installs download the dispatcher installer script and its checksum from the release, then execute it, and never fall back to npm.
             NativeCliInstallCommand command = NativeCliCommandBuilder.BuildRemoteInstallCommand(
                 RuntimePlatform.OSXEditor,
                 TestBetaCliVersion,
@@ -31,19 +31,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(command.FileName, Is.EqualTo("/bin/zsh"));
             Assert.That(command.Arguments, Does.Contain("-l -i -c"));
-            Assert.That(command.Arguments, Does.Contain($"https://raw.githubusercontent.com/hatayama/unity-cli-loop/{TestBetaReleaseTag}/scripts/install.sh"));
+            Assert.That(command.Arguments, Does.Contain($"https://github.com/hatayama/unity-cli-loop/releases/download/{TestBetaReleaseTag}/install.sh"));
+            Assert.That(command.Arguments, Does.Contain($"https://github.com/hatayama/unity-cli-loop/releases/download/{TestBetaReleaseTag}/install.sh.sha256"));
             Assert.That(command.Arguments, Does.Contain($"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c"));
             Assert.That(command.Arguments, Does.Contain("ULOOP_VERSION"));
             Assert.That(command.Arguments, Does.Contain(TestBetaReleaseTag));
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
             Assert.That(command.ManualCommand, Does.Contain("curl -fsSL"));
             Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
+            Assert.That(command.ManualCommand, Does.Not.Contain("raw.githubusercontent.com"));
         }
 
         [Test]
         public void GetInstallCommand_OnMacDelegatesPosixSnippetThroughSh()
         {
-            // Verifies that fish or other login shells only load environment before POSIX script execution.
+            // Verifies that fish or other login shells only load environment before the POSIX script downloads, verifies, and executes.
             NativeCliInstallCommand command = NativeCliCommandBuilder.BuildRemoteInstallCommand(
                 RuntimePlatform.OSXEditor,
                 TestBetaCliVersion,
@@ -53,14 +55,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(command.FileName, Is.EqualTo("/opt/homebrew/bin/fish"));
             Assert.That(command.Arguments, Does.Contain("-l -i -c"));
             Assert.That(command.ManualCommand, Does.StartWith($"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c "));
-            Assert.That(command.ManualCommand, Does.Contain("tmp_script=$(mktemp)"));
+            Assert.That(command.ManualCommand, Does.Contain("tmp_dir=$(mktemp -d)"));
             Assert.That(command.ManualCommand, Does.Contain("curl -fsSL"));
+            Assert.That(command.ManualCommand, Does.Contain("sha256sum -c install.sh.sha256"));
+            Assert.That(command.ManualCommand, Does.Contain("shasum -a 256 -c install.sh.sha256"));
         }
 
         [Test]
         public void GetInstallCommand_OnMacPropagatesInstallerDownloadFailure()
         {
-            // Verifies that editor installs do not report success when curl fails before script execution.
+            // Verifies that editor installs do not report success when curl or checksum verification fails before script execution.
             NativeCliInstallCommand command = NativeCliCommandBuilder.BuildRemoteInstallCommand(
                 RuntimePlatform.OSXEditor,
                 TestBetaCliVersion,
@@ -76,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GetInstallCommand_OnWindowsKeepsDispatcherPowerShellInstallerAvailable()
         {
-            // Verifies that editor installs use the dispatcher PowerShell installer script.
+            // Verifies that editor installs download the dispatcher PowerShell installer script and its checksum from the release, verify SHA-256, and run via -File, not `irm | iex`.
             NativeCliInstallCommand command = NativeCliCommandBuilder.BuildRemoteInstallCommand(
                 RuntimePlatform.WindowsEditor,
                 TestBetaCliVersion,
@@ -84,10 +88,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "/bin/zsh");
 
             Assert.That(command.FileName, Is.EqualTo("powershell"));
-            Assert.That(command.Arguments, Does.Contain($"https://raw.githubusercontent.com/hatayama/unity-cli-loop/{TestBetaReleaseTag}/scripts/install.ps1"));
-            Assert.That(command.Arguments, Does.Contain($"$env:ULOOP_VERSION='{TestBetaReleaseTag}'"));
+            Assert.That(command.Arguments, Does.Contain($"https://github.com/hatayama/unity-cli-loop/releases/download/{TestBetaReleaseTag}/install.ps1"));
+            Assert.That(command.Arguments, Does.Contain($"https://github.com/hatayama/unity-cli-loop/releases/download/{TestBetaReleaseTag}/install.ps1.sha256"));
+            Assert.That(command.Arguments, Does.Contain($"$env:ULOOP_VERSION = '{TestBetaReleaseTag}'"));
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
-            Assert.That(command.ManualCommand, Does.Contain("irm"));
+            Assert.That(command.ManualCommand, Does.Contain("$ErrorActionPreference = 'Stop'"));
+            Assert.That(command.ManualCommand, Does.Contain("Invoke-WebRequest"));
+            Assert.That(command.ManualCommand, Does.Contain("Get-FileHash"));
+            Assert.That(command.ManualCommand, Does.Contain("-File $script_path"));
+            Assert.That(command.ManualCommand, Does.Not.Contain("irm"));
+            Assert.That(command.ManualCommand, Does.Not.Contain("| iex"));
+            Assert.That(command.ManualCommand, Does.Not.Contain("raw.githubusercontent.com"));
             Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
         }
 
@@ -132,7 +143,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(command.Arguments, Does.Contain("dispatcher-v3.0.0"));
             Assert.That(
                 command.Arguments,
-                Does.Contain("https://raw.githubusercontent.com/hatayama/unity-cli-loop/dispatcher-v3.0.0/scripts/install.sh"));
+                Does.Contain("https://github.com/hatayama/unity-cli-loop/releases/download/dispatcher-v3.0.0/install.sh"));
         }
 
         [Test]
@@ -225,25 +236,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void BuildInstallerScriptUrl_WhenBetaVersionUsesReleaseInstallerScript()
+        public void BuildInstallerScriptUrl_WhenBetaVersionUsesReleaseInstallerAsset()
         {
-            // Verifies that beta editor installs use the script shipped with the selected dispatcher release.
+            // Verifies that beta editor installs point at the release-asset install.sh, matching `uloop update`'s verified download URL.
             string url = NativeCliCommandBuilder.BuildInstallerScriptUrl(
                 TestBetaReleaseTag,
                 CliConstants.POSIX_INSTALL_SCRIPT_NAME);
 
-            Assert.That(url, Is.EqualTo($"https://raw.githubusercontent.com/hatayama/unity-cli-loop/{TestBetaReleaseTag}/scripts/install.sh"));
+            Assert.That(url, Is.EqualTo($"https://github.com/hatayama/unity-cli-loop/releases/download/{TestBetaReleaseTag}/install.sh"));
         }
 
         [Test]
-        public void BuildInstallerScriptUrl_WhenStableVersionUsesReleaseInstallerScript()
+        public void BuildInstallerScriptUrl_WhenStableVersionUsesReleaseInstallerAsset()
         {
-            // Verifies that stable editor installs use the script shipped with the selected dispatcher release.
+            // Verifies that stable editor installs point at the release-asset install.ps1, matching `uloop update`'s verified download URL.
             string url = NativeCliCommandBuilder.BuildInstallerScriptUrl(
                 TestStableReleaseTag,
                 CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
 
-            Assert.That(url, Is.EqualTo($"https://raw.githubusercontent.com/hatayama/unity-cli-loop/{TestStableReleaseTag}/scripts/install.ps1"));
+            Assert.That(url, Is.EqualTo($"https://github.com/hatayama/unity-cli-loop/releases/download/{TestStableReleaseTag}/install.ps1"));
+        }
+
+        [Test]
+        public void BuildInstallerChecksumUrl_AppendsShaSuffixToScriptUrl()
+        {
+            // Verifies the checksum URL points at the release-asset .sha256 sidecar next to the installer script.
+            string scriptUrl = NativeCliCommandBuilder.BuildInstallerScriptUrl(
+                TestBetaReleaseTag,
+                CliConstants.POSIX_INSTALL_SCRIPT_NAME);
+            string checksumUrl = NativeCliCommandBuilder.BuildInstallerChecksumUrl(scriptUrl);
+
+            Assert.That(checksumUrl, Is.EqualTo(scriptUrl + ".sha256"));
         }
 
         [Test]
