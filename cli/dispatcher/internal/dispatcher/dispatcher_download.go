@@ -139,6 +139,7 @@ func downloadDispatcherRealCLIForPin(ctx context.Context, cacheRoot string, pin 
 	archivePath := filepath.Join(tempDir, assetName)
 	checksumPath := archivePath + ".sha256"
 	assetURL := dispatcherReleaseAssetURL(pin.ProjectRunnerVersion, assetName)
+	releaseTag := sharedupdate.ProjectRunnerReleaseTag(pin.ProjectRunnerVersion)
 	clicore.WriteFormat(stderr, "uloop: downloading pinned project runner %s for %s...\n", pin.ProjectRunnerVersion, dispatcherPlatformName(goos, goarch))
 	if err := downloadDispatcherFile(ctx, assetURL, archivePath); err != nil {
 		return "", err
@@ -147,6 +148,9 @@ func downloadDispatcherRealCLIForPin(ctx context.Context, cacheRoot string, pin 
 		return "", err
 	}
 	if err := verifyDispatcherChecksum(archivePath, checksumPath); err != nil {
+		return "", err
+	}
+	if err := verifyReleaseAssetAttestation(ctx, releaseTag, assetURL, archivePath, attestationRunnerPublishWorkflowPath); err != nil {
 		return "", err
 	}
 
