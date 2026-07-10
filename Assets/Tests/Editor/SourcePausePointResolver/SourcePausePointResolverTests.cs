@@ -113,10 +113,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Resolve_RefStructAndByRefMethod_ExcludesNonCapturableLocalsAndParameters()
         {
-            // Verifies ref-struct locals (user-defined and Span<T>) and ref/out/in parameters
-            // are excluded, since none of them can be boxed for capture.
+            // Verifies ref-struct locals (user-defined, generic user-defined, and Span<T>) and
+            // ref/out/in parameters are excluded, since none of them can be boxed for capture.
             SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(
-                FixturesDirectory + "RefStructAndByRefFixture.cs", 22);
+                FixturesDirectory + "RefStructAndByRefFixture.cs", 28);
 
             Assert.That(result.Success, Is.True);
             Assert.That(result.Resolution.Locals.Select(l => l.Name), Is.EquivalentTo(new[] { "result" }));

@@ -284,13 +284,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return true;
             }
 
+            // A generic instance (e.g. MyRefStruct<int>) must be unwrapped to its open generic
+            // definition before the TypeDefinition check below, the same way the framework check
+            // above unwraps Span<T>/ReadOnlySpan<T>.
+            TypeReference elementType = type.IsGenericInstance ? type.GetElementType() : type;
+
             // Only inspect user-defined ref structs when the reference already points directly at
             // a TypeDefinition, i.e. it is declared in the very assembly being read. Resolving an
             // external TypeReference (e.g. any corlib value type such as System.Int32) requires
             // Mono.Cecil's assembly resolver to locate that assembly, which is not reliably
             // resolvable against the Unity Editor's Mono/.NET layout and would throw for ordinary
             // primitives that are not ref structs at all.
-            if (!(type is TypeDefinition typeDefinition) || !typeDefinition.IsValueType || !typeDefinition.HasCustomAttributes)
+            if (!(elementType is TypeDefinition typeDefinition) || !typeDefinition.IsValueType || !typeDefinition.HasCustomAttributes)
             {
                 return false;
             }
