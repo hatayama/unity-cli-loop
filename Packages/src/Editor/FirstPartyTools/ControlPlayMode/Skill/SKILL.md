@@ -34,5 +34,5 @@ Returns JSON with the current play mode state:
 ## Notes
 
 - Stop on an already-stopped Editor sets `Changed: false`, `WasAlreadyStopped: true`
-- `Step` advances exactly one frame while paused (the Editor's Next Frame button); it is independent of `Time.timeScale` and requires PlayMode to be running
+- `Step` advances exactly one frame and leaves PlayMode paused (the Editor's Next Frame button); it is independent of `Time.timeScale` and requires PlayMode to be running
 - The command waits for the requested state before returning. Increase `--timeout-seconds` for projects with slow PlayMode entry.
