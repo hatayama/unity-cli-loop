@@ -58,12 +58,6 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 - `DragEnd` must be called to release an active drag — failing to call it leaves drag state stuck
 - Calling `DragMove` or `DragEnd` without an active drag returns an error
 
-### Global Options (all optional, mutually exclusive)
-
-| Option | Description |
-|--------|-------------|
-| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
-
 ## Coordinate System
 
 - Origin is **top-left** (0, 0)

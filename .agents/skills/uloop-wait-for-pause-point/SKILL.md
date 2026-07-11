@@ -1,6 +1,6 @@
 ---
 name: uloop-wait-for-pause-point
-description: "Pauses Unity playback at any source file:line without editing code or recompiling, and returns a snapshot of the locals, parameters, and instance fields at that exact frame. Use this for bug investigation or PlayMode/E2E testing. It's the most convenient yet rigorous method for verifying variable states at specific frames or confirming whether particular code has been executed."
+description: "Pauses Unity playback at any source file:line without editing code or recompiling, and returns a snapshot of the locals, parameters, and instance fields at that exact frame. Use for bug investigation, PlayMode/E2E verification, checking variable values at a specific frame, or confirming that a code path executed."
 ---
 
 # uloop wait-for-pause-point

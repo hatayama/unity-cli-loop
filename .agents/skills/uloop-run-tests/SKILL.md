@@ -31,31 +31,6 @@ uloop run-tests [options]
 | `--filter-value` | string | - | Filter value (test name, pattern, or assembly) |
 | `--fail-on-unsaved-changes` | flag | - | Fail before test execution if unsaved editor changes remain instead of auto-saving them |
 
-## Global Options
-
-| Option | Description |
-|--------|-------------|
-| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
-
-## Examples
-
-```bash
-# Run all EditMode tests
-uloop run-tests
-
-# Run PlayMode tests
-uloop run-tests --test-mode PlayMode
-
-# Fail instead of auto-saving when editor changes are unsaved
-uloop run-tests --fail-on-unsaved-changes
-
-# Run specific test
-uloop run-tests --filter-type exact --filter-value "MyTest.TestMethod"
-
-# Run tests matching pattern
-uloop run-tests --filter-type regex --filter-value ".*Integration.*"
-```
-
 ## Output
 
 Returns JSON with:

@@ -28,31 +28,6 @@ uloop get-hierarchy [options]
 | `--use-components-lut` | string | `auto` | Use LUT for components (`auto`, `true`, `false`) |
 | `--use-selection` | flag | - | Use selected GameObject(s) as root(s). When set, `--root-path` is ignored. |
 
-## Global Options
-
-| Option | Description |
-|--------|-------------|
-| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
-
-## Examples
-
-```bash
-# Get entire hierarchy
-uloop get-hierarchy
-
-# Get hierarchy from specific root
-uloop get-hierarchy --root-path "Canvas/UI"
-
-# Limit depth
-uloop get-hierarchy --max-depth 2
-
-# Without components
-uloop get-hierarchy --no-include-components
-
-# Get hierarchy from currently selected GameObjects
-uloop get-hierarchy --use-selection
-```
-
 ## Output
 
 Returns JSON with:

@@ -1,6 +1,6 @@
 ---
 name: uloop-launch
-description: "Launch or restart Unity Editor. Use when Unity needs to be opened or restarted."
+description: "Launch or restart Unity Editor. Use when Unity is not running or unresponsive."
 ---
 
 # uloop launch
@@ -26,28 +26,6 @@ uloop launch [project-path] [options]
 | `--editor-version <version>` | string | Use this Unity Editor version instead of ProjectVersion.txt |
 | `-p, --platform <P>` | string | Build target (e.g., StandaloneOSX, Android, iOS) |
 | `--max-depth <N>` | number | Search depth when project-path is omitted (default: 3, -1 for unlimited) |
-
-## Examples
-
-```bash
-# Search for Unity project in current directory and launch
-uloop launch
-
-# Launch specific project
-uloop launch /path/to/project
-
-# Restart Unity (kill existing and relaunch)
-uloop launch -r
-
-# Launch with build target
-uloop launch -p Android
-
-# Launch with a specific installed Editor version
-uloop launch --editor-version 6000.0.0f1
-
-# Quit running Unity without launching
-uloop launch --quit
-```
 
 ## Output
 
