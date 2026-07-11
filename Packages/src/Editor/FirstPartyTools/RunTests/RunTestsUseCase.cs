@@ -79,8 +79,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateFailureResponse(validation.ErrorMessage);
             }
 
-            string[] clearedPausePointIds = _clearActivePausePoints();
-
             // 1. Test filter creation
             TestExecutionFilter filter = null;
             if (parameters.FilterType != TestFilterType.all)
@@ -92,6 +90,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
                 filter = createdFilter;
             }
+
+            string[] clearedPausePointIds = _clearActivePausePoints();
 
             // 2. Test execution
             // Why these awaits do not use ConfigureAwait(false): the entry clears all active

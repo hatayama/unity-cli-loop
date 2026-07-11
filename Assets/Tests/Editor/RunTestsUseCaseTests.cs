@@ -379,6 +379,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.ClearedPausePointIds, Is.Null);
         }
 
+        [Test]
+        public async Task ExecuteAsync_WithUnsupportedFilterType_ShouldNotClearPausePoints()
+        {
+            // Verifies filter creation failure does not silently clear active pause points.
+            bool clearCalled = false;
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                clearActivePausePoints: () =>
+                {
+                    clearCalled = true;
+                    return new[] { "file.cs:10" };
+                },
+                waitForTestRunnerCleanupAsync: NoCleanupWait
+            );
+            RunTestsSchema parameters = new()
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = (TestFilterType)999,
+                FilterValue = "value"
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(clearCalled, Is.False);
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.ClearedPausePointIds, Is.Null);
+        }
+
         private static Task NoCleanupWait(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();

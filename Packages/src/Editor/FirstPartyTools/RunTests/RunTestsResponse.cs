@@ -79,6 +79,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public string XmlPath { get; set; }
 
+        /// <summary>
+        /// IDs of pause points that were cleared before test execution, or null when none were active
+        /// </summary>
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string[] ClearedPausePointIds { get; set; }
 

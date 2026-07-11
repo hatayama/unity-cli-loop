@@ -12,7 +12,7 @@ Before running tests, run `uloop compile` first if you created, deleted, renamed
 
 Before executing tests, `uloop run-tests` saves unsaved loaded Scene changes and unsaved current Prefab Stage changes by default. If saving fails, it returns `Success: false`, keeps `TestCount` at `0`, lists the unsaved items in `Message`, and does not start the Unity Test Runner.
 
-Active pause points are automatically cleared (including Harmony unpatching) before test execution begins. Cleared IDs are reported in the response's `ClearedPausePointIds` field.
+Active pause points are automatically cleared (the underlying code patches are removed as well) before test execution begins. Cleared IDs are reported in the response's `ClearedPausePointIds` field.
 
 `NoTestsFound` means zero tests matched — not a test failure. Check `NoTestsFoundExplanation` and `Message` for asmdef hints.
 
