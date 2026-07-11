@@ -47,6 +47,14 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// <summary>
         /// Execute tool with type-safe Schema parameters.
         /// </summary>
+        /// <remarks>
+        /// Implementations must use <c>ConfigureAwait(false)</c> on every await in this method
+        /// and everything it calls into. Continuations posted to Unity's SynchronizationContext
+        /// are not executed while Play Mode is paused (observed: a pause-point hit mid-command
+        /// left a captured continuation unexecuted while EditorApplication.update kept ticking),
+        /// so a single captured await anywhere in the chain can hang a tool forever once the
+        /// Editor pauses mid-command.
+        /// </remarks>
         /// <param name="parameters">Strongly typed parameters</param>
         /// <param name="ct">Cancellation token for timeout control</param>
         /// <returns>Strongly typed tool execution result</returns>

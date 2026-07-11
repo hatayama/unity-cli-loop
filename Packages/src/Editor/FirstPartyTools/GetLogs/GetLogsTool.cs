@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         protected override async Task<GetLogsResponse> ExecuteAsync(GetLogsSchema parameters, CancellationToken ct)
         {
             GetLogsUseCase useCase = new(new LogRetrievalService(), new LogFilteringService());
-            return await useCase.ExecuteAsync(parameters, ct);
+            return await useCase.ExecuteAsync(parameters, ct).ConfigureAwait(false);
         }
     }
 }

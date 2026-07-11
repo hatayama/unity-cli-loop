@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         protected override async Task<ReplayInputResponse> ExecuteAsync(ReplayInputSchema parameters, CancellationToken ct)
         {
             ReplayInputUseCase useCase = new();
-            return await useCase.ReplayInputAsync(parameters, ct);
+            return await useCase.ReplayInputAsync(parameters, ct).ConfigureAwait(false);
         }
     }
 }

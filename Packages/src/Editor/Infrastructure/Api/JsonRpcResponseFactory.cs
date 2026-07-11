@@ -78,7 +78,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     busyEx.RequestedToolName,
                     busyEx.IsPlaying,
                     busyEx.IsPaused,
-                    exceptionResponse.Explanation ?? ex.Message);
+                    exceptionResponse.Explanation ?? ex.Message,
+                    EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick());
             }
             else
             {
