@@ -42,6 +42,9 @@ dispatcher_asset_json() {
     complete)
       printf '[{"name":"install.sh","size":1},{"name":"install.sh.sha256","size":1},{"name":"install.ps1","size":1},{"name":"install.ps1.sha256","size":1},{"name":"uloop-dispatcher-darwin-amd64.tar.gz","size":1},{"name":"uloop-dispatcher-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-dispatcher-darwin-arm64.tar.gz","size":1},{"name":"uloop-dispatcher-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-dispatcher-windows-amd64.zip","size":1},{"name":"uloop-dispatcher-windows-amd64.zip.sha256","size":1}]'
       ;;
+    legacy)
+      printf '[{"name":"install.sh","size":1},{"name":"install.ps1","size":1},{"name":"uloop-dispatcher-darwin-amd64.tar.gz","size":1},{"name":"uloop-dispatcher-darwin-amd64.tar.gz.sha256","size":1},{"name":"uloop-dispatcher-darwin-arm64.tar.gz","size":1},{"name":"uloop-dispatcher-darwin-arm64.tar.gz.sha256","size":1},{"name":"uloop-dispatcher-windows-amd64.zip","size":1},{"name":"uloop-dispatcher-windows-amd64.zip.sha256","size":1}]'
+      ;;
     missing)
       printf '[]'
       ;;
@@ -564,6 +567,85 @@ test_waits_when_dispatcher_asset_list_fails() {
   assert_contains "$work_dir/github-output.txt" "ready=false"
 }
 
+# Verifies dispatcher floor readiness checks assets against the floor release's own tag generation, not HEAD's grown list.
+test_dispatcher_release_ready_uses_tag_generation_asset_list() {
+  work_dir=$(create_release_repo dispatcher-tag-generation-assets)
+
+  (
+    cd "$work_dir"
+    cat > scripts/verify-dispatcher-release-assets.sh <<'EOF_VERIFY_DISPATCHER_LEGACY'
+#!/bin/sh
+set -eu
+
+if [ "${1:-}" = "--list" ]; then
+  printf '%s\n' \
+    install.sh \
+    install.ps1 \
+    uloop-dispatcher-darwin-amd64.tar.gz \
+    uloop-dispatcher-darwin-amd64.tar.gz.sha256 \
+    uloop-dispatcher-darwin-arm64.tar.gz \
+    uloop-dispatcher-darwin-arm64.tar.gz.sha256 \
+    uloop-dispatcher-windows-amd64.zip \
+    uloop-dispatcher-windows-amd64.zip.sha256
+  exit 0
+fi
+
+exit 1
+EOF_VERIFY_DISPATCHER_LEGACY
+    git add scripts/verify-dispatcher-release-assets.sh
+    git commit -q -m "fix: dispatcher floor generation asset requirements"
+    git tag dispatcher-v3.0.0
+
+    write_release_files 3.0.0-beta.6
+    git add .
+    git commit -q -m "fix: require installer checksums"
+  )
+
+  run_sync "$work_dir" "" false "" published complete 0 0 "" published legacy
+
+  assert_not_contains "$work_dir/output.txt" "Dispatcher release dispatcher-v3.0.0 is not published with complete assets"
+  assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
+  assert_contains "$work_dir/github-output.txt" "ready=true"
+  assert_not_contains "$work_dir/github-output.txt" "ready=false"
+}
+
+# Verifies Project runner readiness checks assets against the runner release's own tag generation, not HEAD's grown list.
+test_cli_release_ready_uses_tag_generation_asset_list() {
+  work_dir=$(create_release_repo cli-tag-generation-assets)
+
+  (
+    cd "$work_dir"
+    cat > scripts/verify-native-cli-release-assets.sh <<'EOF_VERIFY_GROWN'
+#!/bin/sh
+set -eu
+
+if [ "${1:-}" = "--list" ]; then
+  printf '%s\n' \
+    uloop-project-runner-darwin-amd64.tar.gz \
+    uloop-project-runner-darwin-amd64.tar.gz.sha256 \
+    uloop-project-runner-darwin-arm64.tar.gz \
+    uloop-project-runner-darwin-arm64.tar.gz.sha256 \
+    uloop-project-runner-windows-amd64.zip \
+    uloop-project-runner-windows-amd64.zip.sha256 \
+    uloop-project-runner-linux-amd64.tar.gz \
+    uloop-project-runner-linux-amd64.tar.gz.sha256
+  exit 0
+fi
+
+exit 1
+EOF_VERIFY_GROWN
+    git add scripts/verify-native-cli-release-assets.sh
+    git commit -q -m "fix: require linux runner assets"
+  )
+
+  run_sync "$work_dir" "" false ""
+
+  assert_not_contains "$work_dir/output.txt" "Project runner release uloop-project-runner-v3.0.0-beta.6 is not published with complete assets"
+  assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
+  assert_contains "$work_dir/github-output.txt" "ready=true"
+  assert_not_contains "$work_dir/github-output.txt" "ready=false"
+}
+
 # Verifies the release sync waits for a concurrently publishing Project runner release before creating package releases.
 test_retries_until_cli_assets_are_ready() {
   work_dir=$(create_release_repo retries-until-cli-ready)
@@ -637,6 +719,8 @@ test_waits_for_cli_release_before_creating_root_release
 test_waits_for_cli_assets_before_creating_root_release
 test_waits_for_dispatcher_assets_before_creating_root_release
 test_waits_when_dispatcher_asset_list_fails
+test_dispatcher_release_ready_uses_tag_generation_asset_list
+test_cli_release_ready_uses_tag_generation_asset_list
 test_retries_until_cli_assets_are_ready
 test_key_rename_commit_is_not_treated_as_release_commit
 test_changelog_move_commit_is_not_treated_as_release_commit

@@ -299,10 +299,29 @@ create_package_release() {
   esac
 }
 
+# Required asset lists grow over time, and a published release only ships the
+# assets its own generation required. Reading the list from HEAD would demand
+# assets an older release (for example the pinned dispatcher floor) never had,
+# deadlocking the sync forever. A release without a local tag is being cut from
+# HEAD right now, so HEAD's list is correct for it.
+release_asset_requirements() {
+  verify_script_path=$1
+  release_tag=$2
+  tag_script_file="$TMP_DIR/$release_tag-$(basename "$verify_script_path")"
+
+  if git show "refs/tags/$release_tag:$verify_script_path" > "$tag_script_file" 2>/dev/null; then
+    sh "$tag_script_file" --list
+    return
+  fi
+
+  "$ROOT_DIR/$verify_script_path" --list
+}
+
 release_has_all_cli_assets() {
   release_data=$1
+  release_tag=$2
 
-  asset_names=$("${ROOT_DIR}/scripts/verify-native-cli-release-assets.sh" --list) || return 1
+  asset_names=$(release_asset_requirements "scripts/verify-native-cli-release-assets.sh" "$release_tag") || return 1
   for asset_name in $asset_names; do
     asset_count=$(printf '%s\n' "$release_data" | jq --arg name "$asset_name" '[.assets[]? | select(.name == $name and .size > 0)] | length' | strip_carriage_returns)
     if [ "$asset_count" -eq 0 ]; then
@@ -313,8 +332,9 @@ release_has_all_cli_assets() {
 
 release_has_all_dispatcher_assets() {
   release_data=$1
+  release_tag=$2
 
-  asset_names=$("${ROOT_DIR}/scripts/verify-dispatcher-release-assets.sh" --list) || return 1
+  asset_names=$(release_asset_requirements "scripts/verify-dispatcher-release-assets.sh" "$release_tag") || return 1
   for asset_name in $asset_names; do
     asset_count=$(printf '%s\n' "$release_data" | jq --arg name "$asset_name" '[.assets[]? | select(.name == $name and .size > 0)] | length' | strip_carriage_returns)
     if [ "$asset_count" -eq 0 ]; then
@@ -338,7 +358,7 @@ cli_release_is_ready() {
         return 1
       fi
 
-      release_has_all_cli_assets "$release_data"
+      release_has_all_cli_assets "$release_data" "$release_tag"
       ;;
     1)
       return 1
@@ -364,7 +384,7 @@ dispatcher_release_is_ready() {
         return 1
       fi
 
-      release_has_all_dispatcher_assets "$release_data"
+      release_has_all_dispatcher_assets "$release_data" "$release_tag"
       ;;
     1)
       return 1
