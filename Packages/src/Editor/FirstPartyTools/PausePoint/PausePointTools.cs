@@ -207,7 +207,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (parameters.All)
             {
-                SourcePausePointPatcher.UnpatchAll();
+                // Registry.ClearAll unpatches any source pause points via the hook
+                // SourcePausePointPatcher wires into it; this use case never references the
+                // Patcher directly.
                 UloopPausePointClearAllResult clearAllResult = UloopPausePointRegistry.ClearAll();
                 return PausePointResponse.FromClearAll(clearAllResult);
             }
@@ -218,7 +220,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateValidationFailure(idError);
             }
 
-            SourcePausePointPatcher.Unpatch(parameters.Id);
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear(parameters.Id);
             return PausePointResponse.FromSnapshot(snapshot);
         }

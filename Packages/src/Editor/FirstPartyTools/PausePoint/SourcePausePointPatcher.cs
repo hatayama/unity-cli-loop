@@ -32,6 +32,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static readonly Dictionary<MethodBase, List<SourcePausePointPatchInjection>> InjectionsByMethod = new();
         private static readonly Dictionary<string, MethodBase> MethodById = new();
 
+        // The registry lives in a Runtime assembly this Editor-only tool assembly may depend on,
+        // but not the reverse (patching is an outer/implementation concern the registry's inner
+        // layer must not know about). Wiring these hooks here - rather than having every Clear
+        // caller reference this class directly - lets the Infrastructure CLI bridge call
+        // UloopPausePointRegistry.Clear/ClearAll without ever referencing this assembly.
+        static SourcePausePointPatcher()
+        {
+            UloopPausePointRegistry.OnCleared = Unpatch;
+            UloopPausePointRegistry.OnClearedAll = UnpatchAll;
+        }
+
         public static SourcePausePointPatchResult Patch(string id, SourcePausePointResolution resolution)
         {
             Debug.Assert(!string.IsNullOrEmpty(id), "id must not be null or empty.");
