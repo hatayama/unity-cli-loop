@@ -98,6 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             SourcePausePointResolution resolution = new SourcePausePointResolution(
                 assemblyName,
+                assemblyDefinition.MainModule.Mvid.ToString(),
                 method.MetadataToken.ToInt32(),
                 method.FullName,
                 method.IsStatic,
@@ -267,7 +268,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            results.Add(new SourcePausePointLocalVariable(name, slotIndex, variableType.FullName));
+            results.Add(new SourcePausePointLocalVariable(name, slotIndex, variableType.FullName, variableType.IsValueType));
         }
 
         private static bool IsCaptureExcluded(TypeReference type)
@@ -329,7 +330,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                parameters.Add(new SourcePausePointParameter(parameter.Name, parameter.Index, parameter.ParameterType.FullName));
+                parameters.Add(new SourcePausePointParameter(
+                    parameter.Name, parameter.Index, parameter.ParameterType.FullName, parameter.ParameterType.IsValueType));
             }
 
             return parameters;

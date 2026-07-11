@@ -8,12 +8,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Name { get; }
         public int Index { get; }
         public string TypeName { get; }
+        public bool IsValueType { get; }
 
-        public SourcePausePointParameter(string name, int index, string typeName)
+        public SourcePausePointParameter(string name, int index, string typeName, bool isValueType)
         {
             Name = name;
             Index = index;
             TypeName = typeName;
+            IsValueType = isValueType;
         }
     }
 }
