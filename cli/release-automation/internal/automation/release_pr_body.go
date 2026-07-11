@@ -69,17 +69,16 @@ func clarifyReleasePRCheckComponentHeadingBlock(block string) (string, bool) {
 
 	component := matches[1]
 	version := matches[2]
-	changed := false
-
-	if summarySlug, found := releasePRCheckComponentSummarySlug(component); found {
-		clarifiedSummary := "<details><summary>" + summarySlug + ": " + version + "</summary>"
-		block = strings.Replace(block, matches[0], clarifiedSummary, 1)
-		changed = true
+	displaySlug, found := releasePRCheckComponentDisplaySlug(component)
+	if !found {
+		return block, false
 	}
 
-	displayName, found := releasePRCheckComponentDisplayName(component)
-	if !found {
-		return block, changed
+	changed := false
+	if displaySlug != component {
+		clarifiedSummary := "<details><summary>" + displaySlug + ": " + version + "</summary>"
+		block = strings.Replace(block, matches[0], clarifiedSummary, 1)
+		changed = true
 	}
 
 	heading := "## [" + version + "]("
@@ -87,30 +86,22 @@ func clarifyReleasePRCheckComponentHeadingBlock(block string) (string, bool) {
 		return block, changed
 	}
 
-	clarifiedHeading := "## [" + displayName + " " + version + "]("
+	clarifiedHeading := "## [" + displaySlug + ": " + version + "]("
 	return strings.Replace(block, heading, clarifiedHeading, 1), true
 }
 
-// releasePRCheckComponentSummarySlug renames component summary labels whose
-// release-please component id lacks the uloop prefix. The release tag keeps
-// the bare component id, so consumers that resolve tags from summaries must
-// also accept the renamed slug (see release_tag_from_body in
+// releasePRCheckComponentDisplaySlug labels both the collapsible summary and
+// the changelog heading of a component block with the same slug. The
+// dispatcher slug gains the uloop prefix for display, while its release tag
+// keeps the bare component id, so consumers that resolve tags from summaries
+// must also accept the renamed slug (see release_tag_from_body in
 // scripts/sync-published-release-pr-labels.sh).
-func releasePRCheckComponentSummarySlug(component string) (string, bool) {
-	if component == "dispatcher" {
-		return "uloop-dispatcher", true
-	}
-	return "", false
-}
-
-func releasePRCheckComponentDisplayName(component string) (string, bool) {
+func releasePRCheckComponentDisplaySlug(component string) (string, bool) {
 	switch component {
-	case "unity-package":
-		return "Unity Package", true
+	case "unity-package", "uloop-project-runner":
+		return component, true
 	case "dispatcher", "uloop-dispatcher":
-		return "uloop Dispatcher", true
-	case "uloop-project-runner":
-		return "uloop Project Runner", true
+		return "uloop-dispatcher", true
 	default:
 		return "", false
 	}
