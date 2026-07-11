@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 
 using NUnit.Framework;
 
@@ -239,6 +240,134 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(UloopPausePointRegistry.GetStatus(id).IsHit, Is.True);
         }
 
+        [Test]
+        public void Patch_AbstractMethod_ReturnsUnpatchableAbstractFailure()
+        {
+            // Verifies an abstract method (no method body to patch) is rejected before ever calling Harmony.Patch.
+            MethodBase method = typeof(AbstractMethodFixture).GetMethod(nameof(AbstractMethodFixture.DoWork));
+            SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
+                "patcher-abstract-method", BuildSyntheticResolution(method));
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.FailureReason, Is.EqualTo(SourcePausePointPatchFailureReason.UnpatchableAbstract));
+            Assert.That(result.Hint, Is.Not.Empty);
+        }
+
+        [Test]
+        public void Patch_ExternMethod_ReturnsUnpatchableExternFailure()
+        {
+            // Verifies a method with no IL body (an internal call, the same shape a DllImport extern
+            // method has) is rejected.
+            MethodBase method = typeof(object).GetMethod("MemberwiseClone", BindingFlags.NonPublic | BindingFlags.Instance);
+            SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
+                "patcher-extern-method", BuildSyntheticResolution(method));
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.FailureReason, Is.EqualTo(SourcePausePointPatchFailureReason.UnpatchableExtern));
+        }
+
+        [Test]
+        public void Patch_OpenGenericMethod_ReturnsUnpatchableOpenGenericFailure()
+        {
+            // Verifies a method with an unbound generic type parameter of its own is rejected.
+            MethodBase method = typeof(GenericMethodFixture).GetMethod(nameof(GenericMethodFixture.DoWork));
+            SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
+                "patcher-open-generic-method", BuildSyntheticResolution(method));
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.FailureReason, Is.EqualTo(SourcePausePointPatchFailureReason.UnpatchableOpenGeneric));
+        }
+
+        [Test]
+        public void Patch_NonGenericMethodInsideOpenGenericType_ReturnsUnpatchableOpenGenericFailure()
+        {
+            // Verifies a plain (non-generic) method declared inside an open generic type is also
+            // rejected, since its declaring type's unbound T makes it just as unsafe to patch.
+            MethodBase method = typeof(GenericTypeFixture<>).GetMethod(nameof(GenericTypeFixture<object>.PlainMethod));
+            SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
+                "patcher-open-generic-type", BuildSyntheticResolution(method));
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.FailureReason, Is.EqualTo(SourcePausePointPatchFailureReason.UnpatchableOpenGeneric));
+        }
+
+        [Test]
+        public void Patch_BurstCompiledMethod_ReturnsUnpatchableBurstCompiledFailure()
+        {
+            // Verifies a method itself marked [BurstCompile] is rejected.
+            MethodBase method = typeof(BurstMethodFixture).GetMethod(nameof(BurstMethodFixture.DoWork));
+            SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
+                "patcher-burst-method", BuildSyntheticResolution(method));
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.FailureReason, Is.EqualTo(SourcePausePointPatchFailureReason.UnpatchableBurstCompiled));
+        }
+
+        [Test]
+        public void Patch_MethodInsideBurstCompiledType_ReturnsUnpatchableBurstCompiledFailure()
+        {
+            // Verifies a plain method whose declaring type is marked [BurstCompile] is also rejected,
+            // mirroring how Unity's Burst-compiled job structs place the attribute on the struct, not the method.
+            MethodBase method = typeof(BurstTypeFixture).GetMethod(nameof(BurstTypeFixture.Execute));
+            SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
+                "patcher-burst-type", BuildSyntheticResolution(method));
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.FailureReason, Is.EqualTo(SourcePausePointPatchFailureReason.UnpatchableBurstCompiled));
+        }
+
+        // Builds a resolution good enough to reach SourcePausePointPatcher's patchability gate; the
+        // instruction index and locals/parameters are never read because every case here fails before that.
+        private static SourcePausePointResolution BuildSyntheticResolution(MethodBase method)
+        {
+            return new SourcePausePointResolution(
+                method.Module.Assembly.GetName().Name,
+                method.MetadataToken,
+                method.ToString(),
+                method.IsStatic,
+                method.DeclaringType.IsValueType,
+                0,
+                0,
+                1,
+                Array.Empty<SourcePausePointLocalVariable>(),
+                Array.Empty<SourcePausePointParameter>());
+        }
+
+        private abstract class AbstractMethodFixture
+        {
+            public abstract void DoWork();
+        }
+
+        private static class GenericMethodFixture
+        {
+            public static void DoWork<T>(T value)
+            {
+            }
+        }
+
+        private static class GenericTypeFixture<T>
+        {
+            public static void PlainMethod()
+            {
+            }
+        }
+
+        private static class BurstMethodFixture
+        {
+            [Unity.Burst.BurstCompile]
+            public static void DoWork()
+            {
+            }
+        }
+
+        [Unity.Burst.BurstCompile]
+        private struct BurstTypeFixture
+        {
+            public static void Execute()
+            {
+            }
+        }
+
         private sealed class FakePausePointPauseController : IUloopPausePointPauseController
         {
             public int PauseCount { get; private set; }
@@ -250,5 +379,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 PauseCount++;
             }
         }
+    }
+}
+
+namespace Unity.Burst
+{
+    // Test-only shadow of Unity.Burst.BurstCompileAttribute's FullName: this project does not
+    // depend on com.unity.burst, and SourcePausePointPatcher only ever compares the FullName string.
+    internal sealed class BurstCompileAttribute : Attribute
+    {
     }
 }
