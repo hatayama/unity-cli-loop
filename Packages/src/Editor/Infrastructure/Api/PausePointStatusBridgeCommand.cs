@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
@@ -23,6 +25,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public static PausePointStatusResponse Clear(JToken paramsToken)
         {
             string id = ReadId(paramsToken);
+            // Registry.Clear unpatches any source pause point via the hook
+            // SourcePausePointPatcher wires into it, so this bridge - which must not reference
+            // that Editor-only tool assembly directly - never leaves a Harmony injection attached
+            // after the marker itself reports Cleared.
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear(id);
             return PausePointStatusResponse.FromSnapshot(snapshot);
         }
@@ -62,6 +68,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public int LastHitSequence { get; set; }
         public string Message { get; set; } = string.Empty;
         public string RecommendedNextAction { get; set; } = string.Empty;
+        public IReadOnlyList<PausePointStatusCapturedVariable> CapturedVariables { get; set; } =
+            Array.Empty<PausePointStatusCapturedVariable>();
+        public bool CapturedVariablesTruncated { get; set; }
 
         internal static PausePointStatusResponse FromSnapshot(UloopPausePointSnapshot snapshot)
         {
@@ -89,7 +98,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 FirstHitSequence = snapshot.FirstHitSequence,
                 LastHitSequence = snapshot.LastHitSequence,
                 Message = snapshot.Message,
-                RecommendedNextAction = snapshot.RecommendedNextAction
+                RecommendedNextAction = snapshot.RecommendedNextAction,
+                CapturedVariables = snapshot.CapturedVariables
+                    .Select(PausePointStatusCapturedVariable.FromCapturedVariable)
+                    .ToList(),
+                CapturedVariablesTruncated = snapshot.CapturedVariablesTruncated
             };
         }
     }
@@ -115,6 +128,40 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 IsPlaying = snapshot.IsPlaying,
                 IsPaused = snapshot.IsPaused,
                 CapturedAt = snapshot.CapturedAt
+            };
+        }
+    }
+
+    /// <summary>
+    /// One variable captured at a source pause point, mirroring Runtime.UloopCapturedVariable's
+    /// fields for the CLI polling bridge response.
+    /// </summary>
+    public class PausePointStatusCapturedVariable
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Scope { get; set; } = string.Empty;
+        public string TypeName { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
+        public string UnityObjectKind { get; set; } = string.Empty;
+        public string UnityObjectPath { get; set; } = string.Empty;
+        public int UnityObjectInstanceId { get; set; }
+
+        internal static PausePointStatusCapturedVariable FromCapturedVariable(UloopCapturedVariable capturedVariable)
+        {
+            if (capturedVariable == null)
+            {
+                throw new ArgumentNullException(nameof(capturedVariable));
+            }
+
+            return new PausePointStatusCapturedVariable
+            {
+                Name = capturedVariable.Name,
+                Scope = capturedVariable.Scope,
+                TypeName = capturedVariable.TypeName,
+                Value = capturedVariable.Value,
+                UnityObjectKind = capturedVariable.UnityObjectKind,
+                UnityObjectPath = capturedVariable.UnityObjectPath,
+                UnityObjectInstanceId = capturedVariable.UnityObjectInstanceId
             };
         }
     }

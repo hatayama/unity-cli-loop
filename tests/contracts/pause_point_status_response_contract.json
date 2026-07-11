@@ -1,0 +1,36 @@
+{
+  "Id": "Assets/Scripts/Enemy.cs:42",
+  "Status": "Hit",
+  "IsEnabled": true,
+  "IsHit": true,
+  "HitCount": 1,
+  "TimeoutSeconds": 30,
+  "Expired": false,
+  "EnabledAtUtc": "2026-06-03T00:00:00.0000000Z",
+  "ElapsedSinceEnabledMilliseconds": 1200,
+  "RemainingMilliseconds": 28800,
+  "Generation": 3,
+  "EditorState": {
+    "IsPlaying": true,
+    "IsPaused": true,
+    "CapturedAt": "PausePointHit"
+  },
+  "FirstHitAtUtc": "2026-06-03T00:00:01.0000000Z",
+  "LastHitAtUtc": "2026-06-03T00:00:01.0000000Z",
+  "FirstHitSequence": 1,
+  "LastHitSequence": 1,
+  "Message": "Pause point hit.",
+  "RecommendedNextAction": "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values.",
+  "CapturedVariables": [
+    {
+      "Name": "target",
+      "Scope": "InstanceField",
+      "TypeName": "UnityEngine.GameObject",
+      "Value": "Enemy",
+      "UnityObjectKind": "SceneObject",
+      "UnityObjectPath": "MainScene:/Root/Enemy",
+      "UnityObjectInstanceId": -1234
+    }
+  ],
+  "CapturedVariablesTruncated": true
+}

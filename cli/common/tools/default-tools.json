@@ -340,13 +340,21 @@
     },
     {
       "name": "enable-pause-point",
-      "description": "Enable a named UloopPausePoint.Pause marker so Unity pauses when that code path is reached",
+      "description": "Enable a pause point so Unity pauses when that code path is reached, either by a named UloopPausePoint.Pause marker (Id) or by resolving a source file and line (File+Line)",
       "inputSchema": {
         "type": "object",
         "properties": {
           "Id": {
             "type": "string",
-            "description": "Named pause point id passed to UloopPausePoint.Pause"
+            "description": "Named pause point id passed to UloopPausePoint.Pause. Mutually exclusive with File/Line"
+          },
+          "File": {
+            "type": "string",
+            "description": "Project-relative source file path to patch a pause point into. Requires Line; mutually exclusive with Id"
+          },
+          "Line": {
+            "type": "integer",
+            "description": "1-based source line to resolve within File. Requires File; mutually exclusive with Id"
           },
           "TimeoutSeconds": {
             "type": "integer",

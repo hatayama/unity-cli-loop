@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -920,6 +921,115 @@ func TestRunPausePointStatusReturnsCurrentStatus(t *testing.T) {
 	}
 	if response.RecommendedNextAction != "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values." {
 		t.Fatalf("recommendedNextAction mismatch: %#v", response)
+	}
+}
+
+// Verifies pause-point-status passes captured variables and the truncated flag through to stdout.
+func TestRunPausePointStatusReturnsCapturedVariables(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	defer func() {
+		queryPausePointStatus = originalQuery
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:        id,
+			Status:    pausePointStatusHit,
+			IsEnabled: true,
+			IsHit:     true,
+			CapturedVariables: []pausePointCapturedVariable{
+				{
+					Name:     "speed",
+					Scope:    "Local",
+					TypeName: "System.Int32",
+					Value:    "5",
+				},
+				{
+					Name:                  "enemy",
+					Scope:                 "InstanceField",
+					TypeName:              "UnityEngine.GameObject",
+					Value:                 "Enemy",
+					UnityObjectKind:       "SceneObject",
+					UnityObjectPath:       "MainScene:/Root/Enemy",
+					UnityObjectInstanceId: -1234,
+				},
+			},
+			CapturedVariablesTruncated: true,
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointStatusCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+	var response pausePointStatusResponse
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
+	}
+	if !response.CapturedVariablesTruncated {
+		t.Fatalf("expected CapturedVariablesTruncated to be true: %#v", response)
+	}
+	if len(response.CapturedVariables) != 2 {
+		t.Fatalf("expected 2 captured variables, got %#v", response.CapturedVariables)
+	}
+	if response.CapturedVariables[0].Name != "speed" || response.CapturedVariables[0].Value != "5" {
+		t.Fatalf("first captured variable mismatch: %#v", response.CapturedVariables[0])
+	}
+	second := response.CapturedVariables[1]
+	if second.Name != "enemy" || second.UnityObjectKind != "SceneObject" ||
+		second.UnityObjectPath != "MainScene:/Root/Enemy" || second.UnityObjectInstanceId != -1234 {
+		t.Fatalf("second captured variable mismatch: %#v", second)
+	}
+}
+
+// Verifies pausePointCapturedVariable round-trips through JSON without losing or reordering fields.
+func TestPausePointStatusResponseCapturedVariablesJSONRoundTrip(t *testing.T) {
+	original := pausePointStatusResponse{
+		Id:     "jump",
+		Status: pausePointStatusHit,
+		CapturedVariables: []pausePointCapturedVariable{
+			{
+				Name:                  "speed",
+				Scope:                 "Local",
+				TypeName:              "System.Int32",
+				Value:                 "5",
+				UnityObjectKind:       "SceneObject",
+				UnityObjectPath:       "MainScene:/Root/Enemy",
+				UnityObjectInstanceId: -1234,
+			},
+		},
+		CapturedVariablesTruncated: true,
+	}
+
+	marshaled, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	var roundTripped pausePointStatusResponse
+	if err := json.Unmarshal(marshaled, &roundTripped); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	if !reflect.DeepEqual(original.CapturedVariables, roundTripped.CapturedVariables) {
+		t.Fatalf("captured variables mismatch after round trip: got %#v, want %#v",
+			roundTripped.CapturedVariables, original.CapturedVariables)
+	}
+	if original.CapturedVariablesTruncated != roundTripped.CapturedVariablesTruncated {
+		t.Fatalf("capturedVariablesTruncated mismatch after round trip: got %v, want %v",
+			roundTripped.CapturedVariablesTruncated, original.CapturedVariablesTruncated)
 	}
 }
 

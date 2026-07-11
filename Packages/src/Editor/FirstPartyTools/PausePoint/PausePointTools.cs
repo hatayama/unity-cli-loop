@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
+using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -9,11 +10,17 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Parameters for enabling one named pause point marker.
+    /// Parameters for enabling one pause point, either by a hand-written marker id or by
+    /// resolving a source file:line to a patch location. Exactly one of "Id" or "File"+"Line"
+    /// must be provided.
     /// </summary>
     public class EnablePausePointSchema : UnityCliLoopToolSchema
     {
         public string Id { get; set; } = string.Empty;
+
+        public string File { get; set; } = string.Empty;
+
+        public int Line { get; set; }
 
         public int TimeoutSeconds { get; set; } = UloopPausePointRegistry.DefaultTimeoutSeconds;
     }
@@ -37,6 +44,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Only explicit validation failures set this to false.
         public bool Success { get; set; } = true;
         public string Id { get; set; } = string.Empty;
+        public int ResolvedLine { get; set; }
+        public string ResolvedMethod { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
         public bool IsEnabled { get; set; }
         public bool IsHit { get; set; }
@@ -172,15 +181,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public PausePointResponse Enable(EnablePausePointSchema parameters)
         {
-            string idError = ValidateId(parameters.Id);
-            if (idError != null)
+            string modeError = ValidateEnableMode(parameters);
+            if (modeError != null)
             {
-                return CreateValidationFailure(idError);
+                return CreateValidationFailure(modeError);
             }
 
             if (parameters.TimeoutSeconds <= 0)
             {
                 return CreateValidationFailure("TimeoutSeconds must be greater than zero.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(parameters.File))
+            {
+                return EnableBySourceLocation(parameters);
             }
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(parameters.Id, parameters.TimeoutSeconds);
@@ -193,6 +207,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (parameters.All)
             {
+                // Registry.ClearAll unpatches any source pause points via the hook
+                // SourcePausePointPatcher wires into it; this use case never references the
+                // Patcher directly.
                 UloopPausePointClearAllResult clearAllResult = UloopPausePointRegistry.ClearAll();
                 return PausePointResponse.FromClearAll(clearAllResult);
             }
@@ -205,6 +222,89 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear(parameters.Id);
             return PausePointResponse.FromSnapshot(snapshot);
+        }
+
+        // Resolves File:Line to a patch location via the Resolver, patches it via Harmony, then
+        // arms the same registry state machine the Id path uses, keyed by the derived source id.
+        private static PausePointResponse EnableBySourceLocation(EnablePausePointSchema parameters)
+        {
+            if (CompilationPipeline.codeOptimization == CodeOptimization.Release)
+            {
+                return CreateValidationFailure(SourcePausePointConstants.ReleaseCodeOptimizationRejectionMessage);
+            }
+
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(parameters.File, parameters.Line);
+            if (!resolveResult.Success)
+            {
+                return CreateValidationFailure(resolveResult.ErrorMessage);
+            }
+
+            string id = BuildSourcePausePointId(parameters.File, parameters.Line);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+            if (!patchResult.Success)
+            {
+                return new PausePointResponse
+                {
+                    Success = false,
+                    Message = patchResult.ErrorMessage,
+                    RecommendedNextAction = patchResult.Hint
+                };
+            }
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(id, parameters.TimeoutSeconds);
+            PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
+            response.ResolvedLine = resolveResult.Resolution.ResolvedLine;
+            response.ResolvedMethod = resolveResult.Resolution.MethodDisplayName;
+            response.Warning = MergeWarnings(CreateEnableWarning(), patchResult.Warning);
+            return response;
+        }
+
+        // The derived id must use the originally requested file/line (not the resolved/rounded
+        // line) so repeated calls at the same requested location stay idempotent.
+        private static string BuildSourcePausePointId(string file, int line)
+        {
+            return SourcePausePointPathNormalizer.ToForwardSlashes(file) + ":" + line;
+        }
+
+        private static string MergeWarnings(string first, string second)
+        {
+            if (string.IsNullOrEmpty(first))
+            {
+                return second;
+            }
+
+            if (string.IsNullOrEmpty(second))
+            {
+                return first;
+            }
+
+            return first + " " + second;
+        }
+
+        // Returns an error message when the Id/File/Line combination fails validation, or null
+        // when exactly one of "Id" or "File"+"Line" is provided.
+        private static string ValidateEnableMode(EnablePausePointSchema parameters)
+        {
+            bool hasId = !string.IsNullOrWhiteSpace(parameters.Id);
+            bool hasFile = !string.IsNullOrWhiteSpace(parameters.File);
+            bool hasLine = parameters.Line > 0;
+
+            if (hasId && (hasFile || hasLine))
+            {
+                return "Specify either Id or File and Line, not both.";
+            }
+
+            if (!hasId && !hasFile && !hasLine)
+            {
+                return "Id must not be null or empty.";
+            }
+
+            if (!hasId && hasFile != hasLine)
+            {
+                return "File and Line must both be provided together.";
+            }
+
+            return null;
         }
 
         // Returns an error message when id fails validation, or null when it is valid.

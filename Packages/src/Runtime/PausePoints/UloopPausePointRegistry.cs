@@ -26,6 +26,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // not just the latest hit, to report every marker that interrupted them.
         private static readonly List<UloopPausePointSnapshot> _hitSnapshots = new();
 
+        // Source pause points are patched into IL by an Editor-only tool assembly this Runtime
+        // assembly must not reference directly (patching is an outer/implementation concern; this
+        // registry is the inner layer). That tool assembly wires its own Unpatch/UnpatchAll into
+        // these hooks the first time it patches a method, so every Clear/ClearAll caller -
+        // including the Infrastructure CLI bridge, which also must not reference the tool
+        // assembly - removes the underlying Harmony patch without knowing it exists.
+        public static Action<string> OnCleared { get; set; }
+        public static Action OnClearedAll { get; set; }
+
         public static UloopPausePointSnapshot Enable(string id, int timeoutSeconds)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
@@ -42,6 +51,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public static UloopPausePointSnapshot Clear(string id)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
+
+            OnCleared?.Invoke(id);
 
             DateTime now = NowUtc();
             if (!Entries.ContainsKey(id))
@@ -66,6 +77,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         public static UloopPausePointClearAllResult ClearAll()
         {
+            OnClearedAll?.Invoke();
+
             DateTime now = NowUtc();
             int clearedCount = 0;
             foreach (UloopPausePointEntry entry in Entries.Values)
