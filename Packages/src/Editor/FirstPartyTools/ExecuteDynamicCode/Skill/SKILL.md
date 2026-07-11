@@ -43,7 +43,7 @@ Prefer terminal commands for file operations and keep snippets focused on Unity 
 
 ## When To Use Input Simulation Tools Instead
 
-The snippets here call UI handlers or runtime methods directly, which is the better choice for targeted automation, direct state control, or quick diagnostics. Switch to the dedicated input tools only when the input route itself is part of what you need to verify:
+Calling UI handlers or runtime methods directly from a snippet is the better choice for targeted automation, direct state control, or quick diagnostics. Switch to the dedicated input tools only when the input route itself is part of what you need to verify:
 
 | Scenario | Recommended tool | Why |
 |----------|------------------|-----|
