@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
@@ -10,6 +11,7 @@ using UnityEditor;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.Tests.PausePointToolsFixtures;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -474,12 +476,132 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Warning, Is.Empty);
         }
 
+        // NOTE: Enabling by File/Line is rejected in Debug-only when
+        // CompilationPipeline.codeOptimization == CodeOptimization.Release. There is no seam to
+        // fake that Editor-global static property in an EditMode test, and flipping it for real
+        // would trigger a recompilation mid-test (forbidden by this repo's Unity Freeze Prevention
+        // guardrails). This branch is verified manually/E2E instead (see PR 6).
+
+        [Test]
+        public async Task Enable_WhenFileAndLineResolveToRealMethod_PatchesAndCapturesVariablesOnHit()
+        {
+            // Verifies the File/Line path resolves a real fixture method, patches it via Harmony
+            // through the full public tool surface, and a subsequent call to the patched method
+            // hits the registry with its locals, parameters, and instance field captured.
+            PausePointResponse response = await EnablePausePointByFileLineAsync(FixtureFilePath, FixtureLine);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Id, Is.EqualTo($"{FixtureFilePath}:{FixtureLine}"));
+            Assert.That(response.ResolvedLine, Is.EqualTo(FixtureLine));
+            Assert.That(response.ResolvedMethod, Does.Contain("Add"));
+
+            EnableBySourceLocationFixture fixture = new();
+            int sum = fixture.Add(2, 3);
+
+            Assert.That(sum, Is.EqualTo(5));
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(response.Id);
+            Assert.That(snapshot.IsHit, Is.True);
+            Assert.That(
+                snapshot.CapturedVariables.Select(v => v.Name),
+                Is.EquivalentTo(new[] { "left", "right", "sum", "Tag" }));
+        }
+
+        [Test]
+        public async Task Enable_WhenIdAndFileBothProvided_ReturnsValidationFailureResponse()
+        {
+            // Verifies Id and File/Line are mutually exclusive.
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["file"] = FixtureFilePath,
+                ["line"] = FixtureLine,
+                ["timeoutSeconds"] = 30
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Specify either Id or File and Line, not both."));
+        }
+
+        [Test]
+        public async Task Enable_WhenFileProvidedWithoutLine_ReturnsValidationFailureResponse()
+        {
+            // Verifies File requires Line to be provided together.
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["file"] = FixtureFilePath,
+                ["timeoutSeconds"] = 30
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("File and Line must both be provided together."));
+        }
+
+        [Test]
+        public async Task Enable_WhenLineProvidedWithoutFile_ReturnsValidationFailureResponse()
+        {
+            // Verifies Line requires File to be provided together.
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["line"] = FixtureLine,
+                ["timeoutSeconds"] = 30
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("File and Line must both be provided together."));
+        }
+
+        [Test]
+        public async Task Enable_WhenLineHasNoSequencePoint_ReturnsResolverErrorAsValidationFailure()
+        {
+            // Verifies a line with no sequence point on or after it (deliberately far past the
+            // fixture file's end) surfaces the Resolver's error message as a Success=false
+            // response instead of throwing.
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["file"] = FixtureFilePath,
+                ["line"] = 9999,
+                ["timeoutSeconds"] = 30
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("No sequence point found on or after line"));
+        }
+
+        private const string FixtureFilePath = "Assets/Tests/Editor/PausePointToolsFixture.cs";
+        private const int FixtureLine = 12;
+
         private static async Task<PausePointResponse> EnablePausePointAsync(string id)
         {
             EnablePausePointTool tool = new();
             JObject parameters = new()
             {
                 ["id"] = id,
+                ["timeoutSeconds"] = 30
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+            return response;
+        }
+
+        private static async Task<PausePointResponse> EnablePausePointByFileLineAsync(string file, int line)
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["file"] = file,
+                ["line"] = line,
                 ["timeoutSeconds"] = 30
             };
 

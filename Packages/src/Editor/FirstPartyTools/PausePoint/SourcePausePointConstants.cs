@@ -43,5 +43,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string RefStructInstanceNotCapturedWarning =
             "The declaring type is a ref struct; this-instance fields are not captured "
             + "(locals and parameters are still captured normally).";
+
+        // Release code optimization strips most sequence points and hoists/elides locals, so the
+        // Resolver's PDB-driven lookup cannot reliably find a patch location; rejecting up front
+        // avoids patching the wrong instruction instead of failing later in a confusing way.
+        public const string ReleaseCodeOptimizationRejectionMessage =
+            "Enabling a pause point by file and line requires Debug code optimization. The project "
+            + "is currently set to Release; switch the Editor's Code Optimization mode to Debug "
+            + "(the bug icon in the main toolbar) and recompile, then retry.";
     }
 }
