@@ -23,7 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
-                NoCleanupWait
+                waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
             {
@@ -58,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
-                NoCleanupWait
+                waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
             {
@@ -83,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
-                NoCleanupWait
+                waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new();
 
@@ -107,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
-                NoCleanupWait
+                waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
             {
@@ -155,7 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
-                NoCleanupWait
+                waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
             {
@@ -186,7 +186,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
-                NoCleanupWait
+                waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
             {
@@ -214,7 +214,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
-                ct =>
+                waitForTestRunnerCleanupAsync: ct =>
                 {
                     ct.ThrowIfCancellationRequested();
                     cleanupWaitCount++;
@@ -241,7 +241,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
-                ct =>
+                waitForTestRunnerCleanupAsync: ct =>
                 {
                     ct.ThrowIfCancellationRequested();
                     cleanupWaitCount++;
@@ -270,7 +270,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
-                ct =>
+                waitForTestRunnerCleanupAsync: ct =>
                 {
                     ct.ThrowIfCancellationRequested();
                     cleanupWaitCount++;
@@ -283,6 +283,100 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(cleanupWaitCount, Is.EqualTo(0));
             Assert.That(executionService.WasCalled, Is.False);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_AfterValidationPasses_ShouldClearActivePausePoints()
+        {
+            // Verifies pause points are cleared after validation succeeds but before test execution.
+            bool clearCalled = false;
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                clearActivePausePoints: () =>
+                {
+                    clearCalled = true;
+                    return new[] { "file.cs:10" };
+                },
+                waitForTestRunnerCleanupAsync: NoCleanupWait
+            );
+            RunTestsSchema parameters = new();
+
+            await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(clearCalled, Is.True);
+            Assert.That(executionService.WasCalled, Is.True);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenValidationFails_ShouldNotClearPausePoints()
+        {
+            // Verifies rejected calls produce zero side effects on pause point state.
+            bool clearCalled = false;
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(
+                ValidationResult.Failure("EditMode tests cannot run during play mode"));
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                clearActivePausePoints: () =>
+                {
+                    clearCalled = true;
+                    return new[] { "file.cs:10" };
+                },
+                waitForTestRunnerCleanupAsync: NoCleanupWait
+            );
+            RunTestsSchema parameters = new();
+
+            await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(clearCalled, Is.False);
+            Assert.That(executionService.WasCalled, Is.False);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPausePointsCleared_ShouldReportClearedIdsInResponse()
+        {
+            // Verifies cleared pause point IDs appear in the response for agent transparency.
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                clearActivePausePoints: () => new[] { "Assets/Scripts/Foo.cs:42", "my-custom-marker" },
+                waitForTestRunnerCleanupAsync: NoCleanupWait
+            );
+            RunTestsSchema parameters = new();
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.ClearedPausePointIds, Is.Not.Null);
+            Assert.That(response.ClearedPausePointIds, Is.EqualTo(new[] { "Assets/Scripts/Foo.cs:42", "my-custom-marker" }));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenNoPausePointsActive_ShouldNotReportClearedIds()
+        {
+            // Verifies ClearedPausePointIds stays null when no markers were armed.
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                clearActivePausePoints: () => null,
+                waitForTestRunnerCleanupAsync: NoCleanupWait
+            );
+            RunTestsSchema parameters = new();
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.ClearedPausePointIds, Is.Null);
         }
 
         private static Task NoCleanupWait(CancellationToken ct)

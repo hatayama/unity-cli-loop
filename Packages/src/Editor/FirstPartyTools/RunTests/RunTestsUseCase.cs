@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -18,6 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly TestExecutionService _executionService;
         private readonly TestExecutionStateValidationService _validationService;
         private readonly RunTestsNoTestsDiagnosticService _noTestsDiagnosticService;
+        private readonly Func<string[]> _clearActivePausePoints;
         private readonly Func<CancellationToken, Task> _waitForTestRunnerCleanupAsync;
         private const int TestRunnerCleanupFallbackDelayMilliseconds = 3000;
 
@@ -33,6 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TestFilterCreationService filterService,
             TestExecutionService executionService,
             TestExecutionStateValidationService validationService,
+            Func<string[]> clearActivePausePoints = null,
             Func<CancellationToken, Task> waitForTestRunnerCleanupAsync = null)
         {
             Debug.Assert(filterService != null, "filterService must not be null");
@@ -42,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _executionService = executionService;
             _validationService = validationService;
             _noTestsDiagnosticService = new RunTestsNoTestsDiagnosticService();
+            _clearActivePausePoints = clearActivePausePoints ?? ClearActivePausePointsDefault;
             _waitForTestRunnerCleanupAsync = waitForTestRunnerCleanupAsync ?? WaitForTestRunnerCleanupAsync;
         }
 
@@ -75,6 +79,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateFailureResponse(validation.ErrorMessage);
             }
 
+            string[] clearedPausePointIds = _clearActivePausePoints();
+
             // 1. Test filter creation
             TestExecutionFilter filter = null;
             if (parameters.FilterType != TestFilterType.all)
@@ -88,10 +94,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             // 2. Test execution
-            // Why these awaits do not use ConfigureAwait(false): the entry preflight rejects
-            // paused PlayMode, so the only remaining path where a pause could hang these awaits
-            // is a pause point hitting mid-test. In that case the Test Runner itself stalls and
-            // the hang is not solvable at the tool layer (see issue #1686).
+            // Why these awaits do not use ConfigureAwait(false): the entry clears all active
+            // pause points and the server is single-flight (BUSY rejects concurrent commands),
+            // so no CLI-originated pause can fire during test execution. The only remaining
+            // pause source is a human manually pausing via the Editor UI, which is native
+            // Unity behavior and out of scope.
             ct.ThrowIfCancellationRequested();
             SerializableTestResult result;
             if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
@@ -119,6 +126,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hasFailures: result.hasFailures,
                 noTestsFound: result.noTestsFound,
                 noTestsFoundExplanation: result.noTestsFoundExplanation);
+            if (clearedPausePointIds != null && clearedPausePointIds.Length > 0)
+            {
+                response.ClearedPausePointIds = clearedPausePointIds;
+            }
             response.Message = RunTestsNoTestsDiagnosticService.AppendDiagnosticsOrOriginalMessage(
                 response.Message,
                 () => _noTestsDiagnosticService.AppendDiagnosticsIfNeeded(
@@ -149,6 +160,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hasFailures: false,
                 noTestsFound: false,
                 noTestsFoundExplanation: string.Empty);
+        }
+
+        private static string[] ClearActivePausePointsDefault()
+        {
+            UloopPausePointClearAllResult result = UloopPausePointRegistry.ClearAll();
+            if (result.ClearedCount == 0)
+            {
+                return null;
+            }
+            return result.ClearedIds;
         }
 
         private static async Task WaitForTestRunnerCleanupAsync(CancellationToken ct)
