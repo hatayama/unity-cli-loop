@@ -76,9 +76,10 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 
 ## Pause Point Inspection (Standard for E2E)
 
-For standard frame proof when this UI input drives a state transition, follow the `uloop-wait-for-pause-point` skill. Place markers after the app consumed the UI event, not immediately after `simulate-mouse-ui`.
+For standard frame proof when this UI input drives a state transition, follow the `uloop-wait-for-pause-point` skill. Pausing on the line that handles the UI event is safe: when the pause lands mid-command, `simulate-mouse-ui` returns promptly with `InterruptedByPausePoint: true` instead of running to completion. Prefer a line after the app consumed the event when you want the settled result state rather than the input-handling moment.
 
-- Remove temporary pause-point/log instrumentation before final validation when it was added only for inspection.
+- If `InterruptedByPausePoint: true`, Unity is paused and `Success: true` only means the command ended cleanly. Read `Message` first: it states whether the pointer event was already dispatched before the pause (only the overlay animation was interrupted) or the pause landed first (no pointer event was fired).
+- Clear pause points (`uloop clear-pause-point --all`) before final validation when they were enabled only for inspection.
 
 ## Examples
 
@@ -133,6 +134,10 @@ Returns JSON with:
 - `PositionY`: Target Y coordinate that was used
 - `EndPositionX`: Drag end X coordinate (nullable float; populated for drag actions only)
 - `EndPositionY`: Drag end Y coordinate (nullable float; populated for drag actions only)
+- `InterruptedByPausePoint`: True when Unity paused during Pause Point inspection and the command returned early instead of running to completion. `Message` states whether the pointer event was already dispatched before the pause
+- `PausePointId`: The derived `<file>:<line>` pause point id that caused the interruption (nullable string; the `Id` returned by `enable-pause-point`)
+- `PausePointHitCount`: The hit count for that pause point when it caused the interruption (nullable integer)
+- `PausePointHits`: Every marker hit during this input as `{Id, HitCount}` entries, in hit order (nullable array). Read this when one input may trigger several markers; `PausePointId` only names the latest one
 
 Verify the visual outcome with a follow-up `uloop screenshot --capture-mode rendering --annotate-elements`.
 
