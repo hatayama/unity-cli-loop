@@ -161,6 +161,84 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.CapturedVariables.First(v => v.Name == "denominator").Value, Is.EqualTo("2"));
         }
 
+        [Test]
+        public void Patch_TwoPausePointsInSameMethod_BothHitIndependentlyWithCorrectState()
+        {
+            // Verifies multiple injections into the same method insert correctly regardless of
+            // instruction order, each capturing the local's value at its own point in execution.
+            const string idBeforeAssignment = "patcher-multi-before-assignment";
+            const string idBeforeReturn = "patcher-multi-before-return";
+
+            SourcePausePointResolveResult beforeAssignment = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherNormalMethodFixture.cs", 11);
+            SourcePausePointResolveResult beforeReturn = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherNormalMethodFixture.cs", 12);
+            Assert.That(beforeAssignment.Success, Is.True);
+            Assert.That(beforeReturn.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(idBeforeAssignment, 30);
+            UloopPausePointRegistry.Enable(idBeforeReturn, 30);
+            Assert.That(SourcePausePointPatcher.Patch(idBeforeAssignment, beforeAssignment.Resolution).Success, Is.True);
+            Assert.That(SourcePausePointPatcher.Patch(idBeforeReturn, beforeReturn.Resolution).Success, Is.True);
+
+            PatcherNormalMethodFixture fixture = new();
+            int sum = fixture.Add(2, 3);
+
+            Assert.That(sum, Is.EqualTo(5));
+            UloopPausePointSnapshot beforeAssignmentSnapshot = UloopPausePointRegistry.GetStatus(idBeforeAssignment);
+            UloopPausePointSnapshot beforeReturnSnapshot = UloopPausePointRegistry.GetStatus(idBeforeReturn);
+            Assert.That(beforeAssignmentSnapshot.IsHit, Is.True);
+            Assert.That(beforeAssignmentSnapshot.CapturedVariables.First(v => v.Name == "sum").Value, Is.EqualTo("0"));
+            Assert.That(beforeReturnSnapshot.IsHit, Is.True);
+            Assert.That(beforeReturnSnapshot.CapturedVariables.First(v => v.Name == "sum").Value, Is.EqualTo("5"));
+        }
+
+        [Test]
+        public void Patch_SameIdPatchedTwice_IsIdempotentAndStillHits()
+        {
+            // Verifies re-patching the same already-patched id is a no-op per Patch's documented
+            // contract, and the already-injected call site still fires correctly.
+            const string id = "patcher-idempotent";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherStaticMethodFixture.cs", 9);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            Assert.That(SourcePausePointPatcher.Patch(id, resolveResult.Resolution).Success, Is.True);
+            Assert.That(SourcePausePointPatcher.Patch(id, resolveResult.Resolution).Success, Is.True);
+
+            int sum = PatcherStaticMethodFixture.Add(1, 1);
+
+            Assert.That(sum, Is.EqualTo(2));
+            Assert.That(UloopPausePointRegistry.GetStatus(id).IsHit, Is.True);
+        }
+
+        [Test]
+        public void Unpatch_ThenRepatch_RestoresOriginalBehaviorThenCapturesAgain()
+        {
+            // Verifies Unpatch removes the injected call site (no more capture/hit) and a
+            // subsequent Patch with the same id re-injects it correctly.
+            const string id = "patcher-unpatch-repatch";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherStaticMethodFixture.cs", 9);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            Assert.That(SourcePausePointPatcher.Patch(id, resolveResult.Resolution).Success, Is.True);
+            SourcePausePointPatcher.Unpatch(id);
+
+            int sumWhileUnpatched = PatcherStaticMethodFixture.Add(4, 5);
+            Assert.That(sumWhileUnpatched, Is.EqualTo(9));
+            Assert.That(UloopPausePointRegistry.GetStatus(id).IsHit, Is.False);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            Assert.That(SourcePausePointPatcher.Patch(id, resolveResult.Resolution).Success, Is.True);
+            int sumAfterRepatch = PatcherStaticMethodFixture.Add(6, 7);
+
+            Assert.That(sumAfterRepatch, Is.EqualTo(13));
+            Assert.That(UloopPausePointRegistry.GetStatus(id).IsHit, Is.True);
+        }
+
         private sealed class FakePausePointPauseController : IUloopPausePointPauseController
         {
             public int PauseCount { get; private set; }
