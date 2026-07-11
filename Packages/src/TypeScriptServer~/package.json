@@ -84,7 +84,7 @@
     "jest": "30.4.2",
     "knip": "6.25.0",
     "lint-staged": "17.0.8",
-    "prettier": "3.9.4",
+    "prettier": "3.9.5",
     "ts-jest": "29.4.11",
     "tsx": "4.23.0",
     "typescript": "6.0.3",
