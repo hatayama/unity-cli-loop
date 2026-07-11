@@ -74,14 +74,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             injections.Add(injection);
             MethodById[id] = method;
 
-            if (methodAlreadyPatched)
+            // The ledger above is written before Harmony actually rebuilds the method. If
+            // Unpatch/Patch throws (e.g. a byref-like `this` produces invalid IL at JIT time), a
+            // plain rethrow would leave this id's ledger entry claiming success while Harmony
+            // never attached the transpiler; a later caller would then see a false "already
+            // patched" and silently miss the pause point. try-finally (not catch) restores the
+            // ledger to its honest pre-call shape while letting the original exception propagate
+            // unchanged, keeping this Fail Fast rather than swallowing the failure.
+            bool committed = false;
+            try
             {
-                // Harmony only regenerates a method's replacement when Patch/Unpatch is called;
-                // re-declaring the same transpiler risks double-registration, so drop and redo it
-                // to force a clean rebuild from the (untouched) original IL against the new injection set.
-                HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, SourcePausePointConstants.HarmonyId);
+                if (methodAlreadyPatched)
+                {
+                    // Harmony only regenerates a method's replacement when Patch/Unpatch is called;
+                    // re-declaring the same transpiler risks double-registration, so drop and redo it
+                    // to force a clean rebuild from the (untouched) original IL against the new injection set.
+                    HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, SourcePausePointConstants.HarmonyId);
+                }
+                HarmonyInstance.Patch(method, transpiler: new HarmonyMethod(TranspilerMethodInfo));
+                committed = true;
             }
-            HarmonyInstance.Patch(method, transpiler: new HarmonyMethod(TranspilerMethodInfo));
+            finally
+            {
+                if (!committed)
+                {
+                    injections.Remove(injection);
+                    if (injections.Count == 0)
+                    {
+                        InjectionsByMethod.Remove(method);
+                    }
+                    MethodById.Remove(id);
+                }
+            }
 
             return SourcePausePointPatchResult.SuccessResult();
         }
@@ -103,10 +127,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (injections.Count == 0)
             {
                 InjectionsByMethod.Remove(method);
+                return;
             }
-            else
+
+            // If re-patching the remaining injections throws, Harmony is left with no transpiler
+            // attached at all, yet the ledger would still claim the other ids are patched. Wipe
+            // this method's ledger entries entirely on failure so a later call sees the honest
+            // "not patched" state instead of a silently stale success (see the same reasoning in Patch).
+            bool committed = false;
+            try
             {
                 HarmonyInstance.Patch(method, transpiler: new HarmonyMethod(TranspilerMethodInfo));
+                committed = true;
+            }
+            finally
+            {
+                if (!committed)
+                {
+                    foreach (string remainingId in injections.Select(remaining => remaining.Id).ToList())
+                    {
+                        MethodById.Remove(remainingId);
+                    }
+                    InjectionsByMethod.Remove(method);
+                }
             }
         }
 
