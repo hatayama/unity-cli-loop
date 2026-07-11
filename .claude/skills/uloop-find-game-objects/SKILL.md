@@ -39,34 +39,6 @@ uloop find-game-objects [options]
 | `Contains` | Partial name match |
 | `Selected` | Get currently selected GameObjects in Unity Editor |
 
-## Global Options
-
-| Option | Description |
-|--------|-------------|
-| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
-
-## Examples
-
-```bash
-# Find by name
-uloop find-game-objects --name-pattern "Player"
-
-# Find with component
-uloop find-game-objects --required-components Rigidbody
-
-# Find by tag
-uloop find-game-objects --tag "Enemy"
-
-# Regex search
-uloop find-game-objects --name-pattern "UI_.*" --search-mode Regex
-
-# Get selected GameObjects
-uloop find-game-objects --search-mode Selected
-
-# Get selected including inactive
-uloop find-game-objects --search-mode Selected --include-inactive
-```
-
 ## Output
 
 Returns JSON with:

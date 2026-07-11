@@ -57,12 +57,6 @@ For standard frame proof when this input drives a state transition, follow the `
 - All held keys are automatically released when PlayMode exits
 - To hold a key for a fixed duration, prefer `--action Press --duration <seconds>` (one-shot, blocks until release). For multi-key holds (e.g. Shift+W), issue separate `KeyDown` calls, then `sleep <seconds>` between them and the `KeyUp` calls.
 
-### Global Options
-
-| Option | Description |
-|--------|-------------|
-| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
-
 ## Examples
 
 ```bash

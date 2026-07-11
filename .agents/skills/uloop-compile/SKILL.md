@@ -22,25 +22,6 @@ uloop compile [--force-recompile] [--no-wait-for-domain-reload] [--stop-on-exter
 | `--no-wait-for-domain-reload` | flag | - | Return before Domain Reload completion |
 | `--stop-on-external-scene-changes` | flag | - | Stop before compilation if open Scene files changed externally instead of auto-reloading them |
 
-## Global Options
-
-| Option | Description |
-|--------|-------------|
-| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
-
-## Examples
-
-```bash
-# Check compilation
-uloop compile
-
-# Start compilation without waiting for Domain Reload completion
-uloop compile --no-wait-for-domain-reload
-
-# Stop instead of auto-reloading externally changed open Scene files
-uloop compile --stop-on-external-scene-changes
-```
-
 ## Output
 
 Returns JSON:

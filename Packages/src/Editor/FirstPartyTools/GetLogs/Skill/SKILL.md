@@ -25,28 +25,6 @@ uloop get-logs [options]
 | `--use-regex` | flag | - | Use regex for search |
 | `--search-in-stack-trace` | flag | - | Search within stack trace |
 
-## Global Options
-
-| Option | Description |
-|--------|-------------|
-| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
-
-## Examples
-
-```bash
-# Get all logs
-uloop get-logs
-
-# Get only errors
-uloop get-logs --log-type Error
-
-# Search for specific text
-uloop get-logs --search-text "NullReference"
-
-# Regex search
-uloop get-logs --search-text "Missing.*Component" --use-regex
-```
-
 ## Output
 
 Returns JSON with:
