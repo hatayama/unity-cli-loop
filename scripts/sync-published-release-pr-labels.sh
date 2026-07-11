@@ -24,7 +24,7 @@ release_tag_from_body() {
         "v" + $version
       elif $component == "uloop-project-runner" then
         "uloop-project-runner-v" + $version
-      elif $component == "dispatcher" then
+      elif $component == "dispatcher" or $component == "uloop-dispatcher" then
         "dispatcher-v" + $version
       else
         ""
