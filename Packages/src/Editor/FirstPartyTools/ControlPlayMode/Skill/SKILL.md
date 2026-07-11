@@ -21,31 +21,6 @@ uloop control-play-mode [options]
 | `--action` | string | `Play` | Action to perform: `Play`, `Stop`, `Pause`, `Step` |
 | `--timeout-seconds` | integer | `180` | Maximum seconds to wait for the requested play mode state |
 
-## Global Options
-
-| Option | Description |
-|--------|-------------|
-| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
-
-## Examples
-
-```bash
-# Start play mode
-uloop control-play-mode --action Play
-
-# Start play mode with a longer wait budget
-uloop control-play-mode --action Play --timeout-seconds 600
-
-# Stop play mode
-uloop control-play-mode --action Stop
-
-# Pause play mode
-uloop control-play-mode --action Pause
-
-# Advance exactly one frame while paused (Next Frame button)
-uloop control-play-mode --action Step
-```
-
 ## Output
 
 Returns JSON with the current play mode state:
@@ -59,5 +34,5 @@ Returns JSON with the current play mode state:
 ## Notes
 
 - Stop on an already-stopped Editor sets `Changed: false`, `WasAlreadyStopped: true`
-- Step is independent of `Time.timeScale`; requires PlayMode to be running
+- `Step` advances exactly one frame while paused (the Editor's Next Frame button); it is independent of `Time.timeScale` and requires PlayMode to be running
 - The command waits for the requested state before returning. Increase `--timeout-seconds` for projects with slow PlayMode entry.

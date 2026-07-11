@@ -20,22 +20,6 @@ uloop clear-console [--add-confirmation-message]
 |-----------|------|---------|-------------|
 | `--add-confirmation-message` | flag | - | Add confirmation message after clearing |
 
-## Global Options
-
-| Option | Description |
-|--------|-------------|
-| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
-
-## Examples
-
-```bash
-# Clear console
-uloop clear-console
-
-# Clear with confirmation
-uloop clear-console --add-confirmation-message
-```
-
 ## Output
 
 Returns JSON with:

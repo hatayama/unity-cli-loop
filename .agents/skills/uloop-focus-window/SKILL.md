@@ -13,19 +13,6 @@ Bring Unity Editor window to front using OS-level commands.
 uloop focus-window
 ```
 
-## Global Options
-
-| Option | Description |
-|--------|-------------|
-| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
-
-## Examples
-
-```bash
-# Focus Unity Editor
-uloop focus-window
-```
-
 ## Output
 
 Returns JSON with:
@@ -36,4 +23,4 @@ Returns JSON with:
 ## Notes
 
 - **Works even when Unity is busy** (compiling, domain reload, etc.)
-- Useful before `uloop capture-unity-window` to ensure the target window is visible
+- Useful before `uloop screenshot` to ensure the target window is visible

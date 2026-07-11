@@ -55,12 +55,6 @@ For standard frame proof when this input drives a state transition, follow the `
 - If `InterruptedByPausePoint: true`, Unity is paused and input bookkeeping was released. `PausePointId` and `PausePointHitCount` identify the marker.
 - Clear pause points (`uloop clear-pause-point --all`) before final validation when they were enabled only for inspection.
 
-### Global Options (optional)
-
-| Option | Description |
-|--------|-------------|
-| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
-
 ## When to use this vs simulate-mouse-ui
 
 All rows below assume the New Input System is installed.

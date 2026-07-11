@@ -38,37 +38,6 @@ uloop screenshot [--window-name <name>] [--resolution-scale <scale>] [--match-mo
 
 The window name is the text displayed in the window's title bar (tab). Common names: Game, Scene, Console, Inspector, Project, Hierarchy, Animation, Animator, Profiler. Custom EditorWindow titles are also supported.
 
-## Global Options
-
-| Option | Description |
-|--------|-------------|
-| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
-
-## Examples
-
-```bash
-# Take a screenshot of Game View (default)
-uloop screenshot
-
-# Capture game rendering (coordinates match simulate-mouse, PlayMode required)
-uloop screenshot --capture-mode rendering
-
-# Annotate interactive UI elements with index labels (for simulate-mouse workflow)
-uloop screenshot --capture-mode rendering --annotate-elements
-
-# Get UI element coordinates without capturing an image (fastest)
-uloop screenshot --capture-mode rendering --annotate-elements --elements-only
-
-# Take a screenshot of Scene View
-uloop screenshot --window-name Scene
-
-# Capture all windows starting with "Project" (prefix match)
-uloop screenshot --window-name Project --match-mode prefix
-
-# Save screenshot to a specific directory
-uloop screenshot --output-directory /tmp/screenshots
-```
-
 ## Output
 
 Returns JSON with:
