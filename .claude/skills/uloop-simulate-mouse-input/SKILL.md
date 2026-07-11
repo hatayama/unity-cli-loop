@@ -50,10 +50,10 @@ uloop simulate-mouse-input --action <action> [options]
 
 ### Pause Point Inspection (Standard for E2E)
 
-For standard frame proof when this input drives a state transition, follow the `uloop-wait-for-pause-point` skill. Place markers after the app consumed the mouse input, not immediately after `simulate-mouse-input`.
+For standard frame proof when this input drives a state transition, follow the `uloop-wait-for-pause-point` skill. Pausing on the line that handles the mouse input is safe: when the pause lands mid-command, `simulate-mouse-input` returns promptly with `InterruptedByPausePoint: true` instead of running to completion. Prefer a line after the app consumed the input when you want the settled result state rather than the input-handling moment.
 
 - If `InterruptedByPausePoint: true`, Unity is paused and input bookkeeping was released. `PausePointId` and `PausePointHitCount` identify the marker.
-- Remove temporary pause-point/log instrumentation before final validation when it was added only for inspection.
+- Clear pause points (`uloop clear-pause-point --all`) before final validation when they were enabled only for inspection.
 
 ### Global Options (optional)
 
@@ -135,8 +135,8 @@ Returns JSON with:
 - `InjectedUnityPositionX` / `InjectedUnityPositionY`: Coordinates injected into `Mouse.current.position`
 - `CoordinateConversionFormula`: Conversion formula used by the tool
 - `InterruptedByPausePoint`: True when Unity paused during Pause Point inspection and the input bookkeeping was safely released
-- `PausePointId`: The id from `UloopPausePoint.Pause("<id>")` when it caused the interruption
-- `PausePointHitCount`: The hit count for that `UloopPausePoint.Pause("<id>")`
+- `PausePointId`: The derived `<file>:<line>` pause point id that caused the interruption (the `Id` returned by `enable-pause-point`)
+- `PausePointHitCount`: The hit count for that pause point when it caused the interruption
 - `PausePointHits` (array, nullable): Every marker hit during this input as `{Id, HitCount}` entries, in hit order. Read this when one input may trigger several markers; `PausePointId` only names the latest one
 
 Verify visual outcome with a follow-up screenshot.
