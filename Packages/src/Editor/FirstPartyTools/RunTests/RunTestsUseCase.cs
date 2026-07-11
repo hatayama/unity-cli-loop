@@ -88,6 +88,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             // 2. Test execution
+            // Why these awaits do not use ConfigureAwait(false): the entry preflight rejects
+            // paused PlayMode, so the only remaining path where a pause could hang these awaits
+            // is a pause point hitting mid-test. In that case the Test Runner itself stalls and
+            // the hang is not solvable at the tool layer (see issue #1686).
             ct.ThrowIfCancellationRequested();
             SerializableTestResult result;
             if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
