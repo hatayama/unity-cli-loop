@@ -86,6 +86,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void CreateErrorResponse_ForBusyException_IncludesSecondsSinceLastMainThreadTick()
+        {
+            // Verifies busy error responses carry secondsSinceLastMainThreadTick so clients can
+            // distinguish a live main thread from a frozen Editor while BUSY.
+            UnityCliLoopToolBusyException busyException = new(
+                "running-tool", "requested-tool", isPlaying: true, isPaused: true);
+
+            string response = JsonRpcResponseFactory.CreateErrorResponse(1, busyException);
+
+            JObject json = JObject.Parse(response);
+            JToken dataToken = json["error"]!["data"]!;
+            Assert.That(dataToken["type"]!.Value<string>(), Is.EqualTo(JsonRpcErrorTypes.ServerBusy));
+            Assert.That(dataToken["secondsSinceLastMainThreadTick"], Is.Not.Null);
+            Assert.That(dataToken["secondsSinceLastMainThreadTick"]!.Value<double>(), Is.GreaterThanOrEqualTo(0));
+        }
+
+        [Test]
         public async Task ProcessRequest_WhenProtocolVersionIsTooOld_ProducesFrozenMismatchJson()
         {
             // Verifies the CLI-update-required wire shape is byte-equal to the frozen baseline.
