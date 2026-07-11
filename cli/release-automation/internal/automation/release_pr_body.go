@@ -67,26 +67,47 @@ func clarifyReleasePRCheckComponentHeadingBlock(block string) (string, bool) {
 		return block, false
 	}
 
-	displayName, found := releasePRCheckComponentDisplayName(matches[1])
-	if !found {
-		return block, false
+	component := matches[1]
+	version := matches[2]
+	changed := false
+
+	if summarySlug, found := releasePRCheckComponentSummarySlug(component); found {
+		clarifiedSummary := "<details><summary>" + summarySlug + ": " + version + "</summary>"
+		block = strings.Replace(block, matches[0], clarifiedSummary, 1)
+		changed = true
 	}
 
-	version := matches[2]
+	displayName, found := releasePRCheckComponentDisplayName(component)
+	if !found {
+		return block, changed
+	}
+
 	heading := "## [" + version + "]("
 	if !strings.Contains(block, heading) {
-		return block, false
+		return block, changed
 	}
 
 	clarifiedHeading := "## [" + displayName + " " + version + "]("
 	return strings.Replace(block, heading, clarifiedHeading, 1), true
 }
 
+// releasePRCheckComponentSummarySlug renames component summary labels whose
+// release-please component id lacks the uloop prefix. The release tag keeps
+// the bare component id, so consumers that resolve tags from summaries must
+// also accept the renamed slug (see release_tag_from_body in
+// scripts/sync-published-release-pr-labels.sh).
+func releasePRCheckComponentSummarySlug(component string) (string, bool) {
+	if component == "dispatcher" {
+		return "uloop-dispatcher", true
+	}
+	return "", false
+}
+
 func releasePRCheckComponentDisplayName(component string) (string, bool) {
 	switch component {
 	case "unity-package":
 		return "Unity Package", true
-	case "dispatcher":
+	case "dispatcher", "uloop-dispatcher":
 		return "uloop Dispatcher", true
 	case "uloop-project-runner":
 		return "uloop Project Runner", true
