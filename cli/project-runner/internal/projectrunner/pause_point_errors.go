@@ -114,7 +114,7 @@ func pausePointStateError(
 		Retryable:   retryable,
 		SafeToRetry: retryable,
 		ProjectRoot: projectRoot,
-		Command:     clicore.PausePointWaitCommandName,
+		Command:     clicore.PausePointAwaitCommandName,
 		NextActions: []string{
 			"Run `uloop enable-pause-point --id <marker-id>` before waiting.",
 			"Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id.",

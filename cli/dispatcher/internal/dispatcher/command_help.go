@@ -114,7 +114,7 @@ func nativeCommandDescription(command string) (string, bool) {
 
 func nativeCommandUsesProject(command string) bool {
 	switch command {
-	case clicore.LaunchCommandName, "list", "sync", "focus-window", clicore.SkillsCommandName, clicore.PausePointWaitCommandName, clicore.PausePointStatusUserCommandName:
+	case clicore.LaunchCommandName, "list", "sync", "focus-window", clicore.SkillsCommandName, clicore.PausePointAwaitCommandName, clicore.PausePointStatusUserCommandName:
 		return true
 	default:
 		return false

@@ -32,7 +32,7 @@ func runResolvedProjectCommand(
 		return runSync(ctx, connection, stdout, stderr)
 	case "focus-window":
 		return clicore.RunFocusWindow(ctx, connection.ProjectRoot, stdout, stderr)
-	case clicore.PausePointWaitCommandName:
+	case clicore.PausePointAwaitCommandName:
 		return runWaitForPausePointCommand(ctx, connection, commandArgs, stdout, stderr)
 	case clicore.PausePointStatusUserCommandName:
 		return runPausePointStatusCommand(ctx, connection, commandArgs, stdout, stderr)

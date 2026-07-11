@@ -398,7 +398,7 @@ func TestRunDispatcherPausePointWaitHelpShowsDescriptionAndOptions(t *testing.T)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunDispatcher(context.Background(), []string{clicore.PausePointWaitCommandName, "--help"}, &stdout, &stderr)
+	code := RunDispatcher(context.Background(), []string{clicore.PausePointAwaitCommandName, "--help"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("pause-point-wait help failed: code=%d stderr=%s", code, stderr.String())
@@ -406,7 +406,7 @@ func TestRunDispatcherPausePointWaitHelpShowsDescriptionAndOptions(t *testing.T)
 	output := stdout.String()
 	for _, expected := range []string{
 		"Usage:",
-		"uloop " + clicore.PausePointWaitCommandName + " [options]",
+		"uloop " + clicore.PausePointAwaitCommandName + " [options]",
 		"Wait until a named UloopPausePoint.Pause marker pauses Unity",
 		"Options:",
 		"--" + clicore.PausePointIDFlagName,

@@ -7,7 +7,7 @@ import (
 
 func isSettingsManagedNativeToolCommand(command string) bool {
 	switch command {
-	case clicore.PausePointWaitCommandName, clicore.PausePointStatusUserCommandName:
+	case clicore.PausePointAwaitCommandName, clicore.PausePointStatusUserCommandName:
 		return true
 	default:
 		return false
