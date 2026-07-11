@@ -9,6 +9,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class SourcePausePointResolution
     {
         public string AssemblyName { get; }
+        public string Mvid { get; }
         public int MetadataToken { get; }
         public string MethodDisplayName { get; }
         public bool IsStatic { get; }
@@ -21,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public SourcePausePointResolution(
             string assemblyName,
+            string mvid,
             int metadataToken,
             string methodDisplayName,
             bool isStatic,
@@ -32,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<SourcePausePointParameter> parameters)
         {
             AssemblyName = assemblyName;
+            Mvid = mvid;
             MetadataToken = metadataToken;
             MethodDisplayName = methodDisplayName;
             IsStatic = isStatic;

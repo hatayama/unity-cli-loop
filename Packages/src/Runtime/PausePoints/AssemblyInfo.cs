@@ -7,3 +7,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.PlayMode")]
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor.SourcePausePointCapture")]
+[assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor.SourcePausePointPatcher")]

@@ -28,8 +28,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Resolution.IsStatic, Is.False);
             Assert.That(result.Resolution.Locals.Select(l => l.Name), Is.EquivalentTo(new[] { "sum" }));
             Assert.That(result.Resolution.Locals.Single().TypeName, Is.EqualTo("System.Int32"));
+            Assert.That(result.Resolution.Locals.Single().IsValueType, Is.True);
             Assert.That(result.Resolution.Parameters.Select(p => p.Name), Is.EqualTo(new[] { "left", "right" }));
             Assert.That(result.Resolution.Parameters.Select(p => p.TypeName), Is.EqualTo(new[] { "System.Int32", "System.Int32" }));
+            Assert.That(result.Resolution.Parameters.Select(p => p.IsValueType), Is.EqualTo(new[] { true, true }));
+        }
+
+        [Test]
+        public void Resolve_ReferenceTypeLocalMethod_ReportsIsValueTypeFalse()
+        {
+            // Verifies a string (reference type) local/parameter is reported with IsValueType=false,
+            // the counterpart to the int (value type) assertions in Resolve_NormalMethod above.
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "ReferenceTypeLocalFixture.cs", 9);
+
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Resolution.Locals.Select(l => l.Name), Is.EquivalentTo(new[] { "message" }));
+            Assert.That(result.Resolution.Locals.Single().IsValueType, Is.False);
+            Assert.That(result.Resolution.Parameters.Select(p => p.Name), Is.EqualTo(new[] { "label" }));
+            Assert.That(result.Resolution.Parameters.Single().IsValueType, Is.False);
         }
 
         [Test]
