@@ -13,12 +13,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class TestExecutionStateValidationService
     {
+        private const string PlayModePausedMessage =
+            "PlayMode is paused. Tests cannot run while paused because tool continuations " +
+            "are not executed during pause, which would hang the test runner. " +
+            "Use control-play-mode --action Play to resume, " +
+            "or clear-pause-point --all if a pause point caused the pause.";
+
         private const string UnsavedEditorChangesFailureMessage =
             "Tests cannot run while the editor has unsaved scene or prefab changes. Save or discard these changes before running tests.";
         private const string UnsavedEditorChangesSaveFailureMessage =
             "Tests cannot save unsaved scene or prefab changes before running tests.";
 
         protected virtual bool IsPlaying => EditorApplication.isPlaying;
+        protected virtual bool IsPaused => EditorApplication.isPaused;
         protected virtual bool IsCompiling => EditorApplication.isCompiling;
         protected virtual bool IsUpdating => EditorApplication.isUpdating;
         protected virtual string[] DetectUnsavedEditorChanges()
@@ -45,6 +52,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (testMode == UnityCliLoopTestMode.EditMode && IsPlaying)
             {
                 return ValidationResult.Failure("EditMode tests cannot run during play mode");
+            }
+
+            if (testMode == UnityCliLoopTestMode.PlayMode && IsPaused)
+            {
+                return ValidationResult.Failure(PlayModePausedMessage);
             }
 
             if (saveBeforeRun)

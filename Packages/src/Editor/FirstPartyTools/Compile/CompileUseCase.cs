@@ -160,6 +160,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return successResponse;
         }
 
+        // Why these awaits do not use ConfigureAwait(false): StopPlayMode() clears isPaused
+        // before setting isPlaying=false, so by the time the poll loop's TimerDelay continuation
+        // is posted to UnitySynchronizationContext the pause is already lifted and the queue
+        // drains normally. Measured 2026-07-11: compile during pause self-resolved in ~5s.
         private async Task<bool> WaitForPlayModeExitAsync(CancellationToken ct)
         {
             int waitedMs = 0;

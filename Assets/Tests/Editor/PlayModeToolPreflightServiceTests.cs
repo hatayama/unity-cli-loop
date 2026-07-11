@@ -86,5 +86,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 PlayModeToolPreflightService.FormatPausedMessage(SimulateMouseUiUseCase.PausedActionDescription),
                 Is.EqualTo("PlayMode is paused. Resume PlayMode before simulating UI input."));
         }
+
     }
 }

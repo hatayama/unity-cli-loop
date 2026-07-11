@@ -70,6 +70,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Validate_WithPlayModeWhilePaused_ShouldReturnFailure()
+        {
+            // Verifies that PlayMode tests are rejected when Play Mode is paused.
+            TestExecutionStateValidationService service = new StubTestExecutionStateValidationService(
+                isPlaying: true,
+                isPaused: true);
+
+            ValidationResult result = service.Validate(UnityCliLoopTestMode.PlayMode, saveBeforeRun: false);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("paused"));
+            Assert.That(result.ErrorMessage, Does.Contain("control-play-mode"));
+            Assert.That(result.ErrorMessage, Does.Contain("clear-pause-point"));
+        }
+
+        [Test]
+        public void Validate_WithEditModeWhilePaused_ShouldReturnPlayModeFailureNotPausedFailure()
+        {
+            // Verifies that the existing "cannot run during play mode" check takes precedence over the paused check for EditMode.
+            TestExecutionStateValidationService service = new StubTestExecutionStateValidationService(
+                isPlaying: true,
+                isPaused: true);
+
+            ValidationResult result = service.Validate(UnityCliLoopTestMode.EditMode, saveBeforeRun: false);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.ErrorMessage, Is.EqualTo("EditMode tests cannot run during play mode"));
+        }
+
+        [Test]
+        public void Validate_WithPlayModeWhilePlayingNotPaused_ShouldReturnSuccess()
+        {
+            // Verifies that PlayMode tests pass validation when playing but not paused.
+            TestExecutionStateValidationService service = new StubTestExecutionStateValidationService(
+                isPlaying: true,
+                isPaused: false);
+
+            ValidationResult result = service.Validate(UnityCliLoopTestMode.PlayMode, saveBeforeRun: false);
+
+            Assert.That(result.IsValid, Is.True);
+        }
+
+        [Test]
         public void Validate_WhenEditorHasUnsavedChangesAndSaveBeforeRunIsFalse_ShouldReturnFailure()
         {
             string[] unsavedEditorChanges =
@@ -134,6 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private sealed class StubTestExecutionStateValidationService : TestExecutionStateValidationService
         {
             private readonly bool _isPlaying;
+            private readonly bool _isPaused;
             private readonly bool _isCompiling;
             private readonly bool _isUpdating;
             private readonly ValidationResult _saveResult;
@@ -144,6 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public StubTestExecutionStateValidationService(
                 bool isPlaying,
+                bool isPaused = false,
                 bool isCompiling = false,
                 bool isUpdating = false,
                 string[] unsavedEditorChanges = null,
@@ -151,6 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 bool clearUnsavedChangesAfterSave = false)
             {
                 _isPlaying = isPlaying;
+                _isPaused = isPaused;
                 _isCompiling = isCompiling;
                 _isUpdating = isUpdating;
                 _unsavedEditorChanges = unsavedEditorChanges ?? new string[0];
@@ -159,6 +205,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             protected override bool IsPlaying => _isPlaying;
+            protected override bool IsPaused => _isPaused;
             protected override bool IsCompiling => _isCompiling;
             protected override bool IsUpdating => _isUpdating;
             protected override string[] DetectUnsavedEditorChanges()
