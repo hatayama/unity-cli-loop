@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.0.0-beta.47](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.46...uloop-project-runner-v3.0.0-beta.47) (2026-07-11)
+
+
+### Features
+
+* Enable pause points by source file and line ([#1684](https://github.com/hatayama/unity-cli-loop/issues/1684)) ([272edb3](https://github.com/hatayama/unity-cli-loop/commit/272edb3d665bc54bfe15e84a1d71b36d9cd20c7c))
+
+
+### Bug Fixes
+
+* Avoid misclassifying copied project error text ([0e821cc](https://github.com/hatayama/unity-cli-loop/commit/0e821cc94b12a03a0131ca64f76da2385432b23e))
+* Busy responses now use the standard error envelope ([0aa2e7e](https://github.com/hatayama/unity-cli-loop/commit/0aa2e7e3355cb5e808c460cd3707a5f2ec0e7525))
+* Local skill packages no longer include stale cached skills ([#1615](https://github.com/hatayama/unity-cli-loop/issues/1615)) ([9388b91](https://github.com/hatayama/unity-cli-loop/commit/9388b91801ea4ed76aa5c1251861a0efb9210d6c))
+* Prefer synced tool definitions for help and completion ([603d178](https://github.com/hatayama/unity-cli-loop/commit/603d1783b0f67116d2f14091a02016d5e343d9f6))
+* Preserve get-logs response metadata in pause point evidence ([cec6fae](https://github.com/hatayama/unity-cli-loop/commit/cec6fae309215b4783ee668386beaa19cdaa3db4))
+* Remove the dispatcher contract integer generation ([#1504](https://github.com/hatayama/unity-cli-loop/issues/1504)) ([d2ddbce](https://github.com/hatayama/unity-cli-loop/commit/d2ddbce87d9bd68b53a1e202e9ce43996b61acf6))
+* Retry incomplete project runner downloads ([3c8cea0](https://github.com/hatayama/unity-cli-loop/commit/3c8cea0e80c514e7f72684d11b13dbb38ffc600b))
+* Shared IPC clients assign request IDs safely ([b7d6acc](https://github.com/hatayama/unity-cli-loop/commit/b7d6acc161083a3bd62ce9e66ba0d4f00937f05f))
+
 ## [3.0.0-beta.46](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.45...uloop-project-runner-v3.0.0-beta.46) (2026-07-02)
 
 
