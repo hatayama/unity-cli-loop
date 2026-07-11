@@ -1,6 +1,7 @@
 using System;
 using Newtonsoft.Json.Linq;
 
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -23,6 +24,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public static PausePointStatusResponse Clear(JToken paramsToken)
         {
             string id = ReadId(paramsToken);
+            // This is the path the Go CLI's wait-for-pause-point timeout auto-clear and
+            // clear-pause-point-status hit; a source pause point left un-unpatched here would keep
+            // its Harmony injection attached (inert but never cleaned up) after the marker itself
+            // reports Cleared.
+            SourcePausePointPatcher.Unpatch(id);
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear(id);
             return PausePointStatusResponse.FromSnapshot(snapshot);
         }

@@ -207,6 +207,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (parameters.All)
             {
+                SourcePausePointPatcher.UnpatchAll();
                 UloopPausePointClearAllResult clearAllResult = UloopPausePointRegistry.ClearAll();
                 return PausePointResponse.FromClearAll(clearAllResult);
             }
@@ -217,6 +218,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateValidationFailure(idError);
             }
 
+            SourcePausePointPatcher.Unpatch(parameters.Id);
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear(parameters.Id);
             return PausePointResponse.FromSnapshot(snapshot);
         }

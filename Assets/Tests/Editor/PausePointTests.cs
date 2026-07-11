@@ -41,6 +41,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             EditorSettings.enterPlayModeOptionsEnabled = _originalEnterPlayModeOptionsEnabled;
             EditorSettings.enterPlayModeOptions = _originalEnterPlayModeOptions;
+            // Tests that enable pause points by File/Line leave a Harmony transpiler attached to
+            // the fixture method; clear it so later tests re-patch cleanly instead of hitting the
+            // Patcher's "already patched" no-op path against a previous test's ledger entry.
+            SourcePausePointPatcher.UnpatchAll();
             UloopPausePointRegistry.ResetForTests();
         }
 
@@ -579,8 +583,95 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Message, Does.Contain("No sequence point found on or after line"));
         }
 
+        [Test]
+        public async Task Clear_WhenSpecificIdCleared_CallsPatcherUnpatchSoTheIdCanBeFreshlyRePatched()
+        {
+            // Verifies PausePointUseCase.Clear actually calls SourcePausePointPatcher.Unpatch (not
+            // just the registry): after clearing, re-Patch-ing the same id with a deliberately
+            // stale Mvid must reach the Patcher's stale-assembly gate again, which only runs when
+            // the id is no longer in the Patcher's ledger (an "already patched" id short-circuits
+            // before that gate ever runs, per SourcePausePointPatcherTests coverage from PR 4).
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(FixtureFilePath, FixtureLine);
+            Assert.That(resolveResult.Success, Is.True);
+            string id = $"{FixtureFilePath}:{FixtureLine}";
+
+            UloopPausePointRegistry.Enable(id, 30);
+            Assert.That(SourcePausePointPatcher.Patch(id, resolveResult.Resolution).Success, Is.True);
+
+            ClearPausePointTool clearTool = new();
+            JObject clearParameters = new() { ["id"] = id, ["all"] = false };
+            await clearTool.ExecuteAsync(clearParameters, CancellationToken.None);
+
+            SourcePausePointPatchResult rePatchResult = SourcePausePointPatcher.Patch(id, WithStaleMvid(resolveResult.Resolution));
+
+            Assert.That(rePatchResult.Success, Is.False);
+            Assert.That(rePatchResult.FailureReason, Is.EqualTo(SourcePausePointPatchFailureReason.StaleAssembly));
+        }
+
+        [Test]
+        public async Task ClearAll_WhenSourcePausePointsExist_CallsPatcherUnpatchAllSoIdsCanBeFreshlyRePatched()
+        {
+            // Verifies PausePointUseCase.Clear(All) calls SourcePausePointPatcher.UnpatchAll,
+            // using the same stale-Mvid gate signal as the --id case above to prove the ledger
+            // entry was actually removed rather than only clearing the registry.
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(FixtureFilePath, FixtureLine);
+            Assert.That(resolveResult.Success, Is.True);
+            string id = $"{FixtureFilePath}:{FixtureLine}";
+
+            UloopPausePointRegistry.Enable(id, 30);
+            Assert.That(SourcePausePointPatcher.Patch(id, resolveResult.Resolution).Success, Is.True);
+
+            ClearPausePointTool clearTool = new();
+            JObject clearParameters = new() { ["all"] = true };
+            await clearTool.ExecuteAsync(clearParameters, CancellationToken.None);
+
+            SourcePausePointPatchResult rePatchResult = SourcePausePointPatcher.Patch(id, WithStaleMvid(resolveResult.Resolution));
+
+            Assert.That(rePatchResult.Success, Is.False);
+            Assert.That(rePatchResult.FailureReason, Is.EqualTo(SourcePausePointPatchFailureReason.StaleAssembly));
+        }
+
+        [Test]
+        public void PausePointStatusBridgeCommand_Clear_CallsPatcherUnpatchSoTheIdCanBeFreshlyRePatched()
+        {
+            // Verifies the CLI bridge's Clear (the path Go's wait-for-pause-point timeout
+            // auto-clear and clear-pause-point-status hit) also calls
+            // SourcePausePointPatcher.Unpatch, using the same stale-Mvid gate signal as the tool
+            // tests above to prove the ledger entry was actually removed.
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(FixtureFilePath, FixtureLine);
+            Assert.That(resolveResult.Success, Is.True);
+            string id = $"{FixtureFilePath}:{FixtureLine}";
+
+            UloopPausePointRegistry.Enable(id, 30);
+            Assert.That(SourcePausePointPatcher.Patch(id, resolveResult.Resolution).Success, Is.True);
+
+            JObject bridgeParameters = new() { ["Id"] = id };
+            PausePointStatusBridgeCommand.Clear(bridgeParameters);
+
+            SourcePausePointPatchResult rePatchResult = SourcePausePointPatcher.Patch(id, WithStaleMvid(resolveResult.Resolution));
+
+            Assert.That(rePatchResult.Success, Is.False);
+            Assert.That(rePatchResult.FailureReason, Is.EqualTo(SourcePausePointPatchFailureReason.StaleAssembly));
+        }
+
         private const string FixtureFilePath = "Assets/Tests/Editor/PausePointToolsFixture.cs";
         private const int FixtureLine = 12;
+
+        private static SourcePausePointResolution WithStaleMvid(SourcePausePointResolution resolution)
+        {
+            return new SourcePausePointResolution(
+                resolution.AssemblyName,
+                Guid.NewGuid().ToString(),
+                resolution.MetadataToken,
+                resolution.MethodDisplayName,
+                resolution.IsStatic,
+                resolution.IsDeclaringTypeValueType,
+                resolution.InstructionIndex,
+                resolution.IlOffset,
+                resolution.ResolvedLine,
+                resolution.Locals,
+                resolution.Parameters);
+        }
 
         private static async Task<PausePointResponse> EnablePausePointAsync(string id)
         {
