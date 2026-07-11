@@ -64,6 +64,9 @@ func TestReleasePRCheckComponentHeadingsAreClarified(t *testing.T) {
 	body := "<details><summary>unity-package: 3.0.0-beta.48</summary>\n\n" +
 		"## [3.0.0-beta.48](https://example.test/compare/v3.0.0-beta.47...v3.0.0-beta.48) (2026-07-01)\n" +
 		"</details>\n" +
+		"<details><summary>dispatcher: 3.0.1-beta.13</summary>\n\n" +
+		"## [3.0.1-beta.13](https://example.test/compare/dispatcher-v3.0.1-beta.12...dispatcher-v3.0.1-beta.13) (2026-07-11)\n" +
+		"</details>\n" +
 		"<details><summary>uloop-project-runner: 3.0.0-beta.45</summary>\n\n" +
 		"## [3.0.0-beta.45](https://example.test/compare/uloop-project-runner-v3.0.0-beta.44...uloop-project-runner-v3.0.0-beta.45) (2026-07-01)\n" +
 		"</details>\n"
@@ -74,6 +77,7 @@ func TestReleasePRCheckComponentHeadingsAreClarified(t *testing.T) {
 		t.Fatal("expected component release headings to change")
 	}
 	assertReleasePRCheckLogContains(t, clarifiedBody, "## [Unity Package 3.0.0-beta.48](https://example.test/compare/v3.0.0-beta.47...v3.0.0-beta.48) (2026-07-01)")
+	assertReleasePRCheckLogContains(t, clarifiedBody, "## [Dispatcher 3.0.1-beta.13](https://example.test/compare/dispatcher-v3.0.1-beta.12...dispatcher-v3.0.1-beta.13) (2026-07-11)")
 	assertReleasePRCheckLogContains(t, clarifiedBody, "## [uloop Project Runner 3.0.0-beta.45](https://example.test/compare/uloop-project-runner-v3.0.0-beta.44...uloop-project-runner-v3.0.0-beta.45) (2026-07-01)")
 }
 
