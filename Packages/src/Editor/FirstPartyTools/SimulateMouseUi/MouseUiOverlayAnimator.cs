@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class MouseUiOverlayAnimator
     {
-        internal static async Task<bool> PlayExpandAnimation(CancellationToken ct)
+        internal static async Task<MouseUiFrameWaitOutcome> PlayExpandAnimation(CancellationToken ct)
         {
             SimulateMouseUiOverlay overlay = OverlayCanvasFactory.VisualizationCanvas.MouseUiOverlay;
 
@@ -26,19 +26,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 float t = elapsed / SimulateMouseUiAnimationConstants.EXPAND_DURATION;
                 overlay.SetCursorScale(Mathf.Lerp(SimulateMouseUiAnimationConstants.EXPAND_START_SCALE, 1f, t));
-                bool frameReady = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
-                if (!frameReady)
+                MouseUiFrameWaitOutcome frameOutcome = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
+                if (frameOutcome != MouseUiFrameWaitOutcome.Completed)
                 {
-                    return false;
+                    return frameOutcome;
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
                 elapsed = Time.realtimeSinceStartup - startTime;
             }
             overlay.SetCursorScale(1f);
-            return true;
+            return MouseUiFrameWaitOutcome.Completed;
         }
 
-        internal static async Task<bool> PlayDissipateAnimation(CancellationToken ct)
+        internal static async Task<MouseUiFrameWaitOutcome> PlayDissipateAnimation(CancellationToken ct)
         {
             SimulateMouseUiOverlay overlay = OverlayCanvasFactory.VisualizationCanvas.MouseUiOverlay;
 
@@ -49,10 +49,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 float t = elapsed / SimulateMouseUiAnimationConstants.DISSIPATE_DURATION;
                 overlay.SetCursorScale(Mathf.Lerp(1f, 0f, t));
                 overlay.SetAlpha(Mathf.Lerp(1f, 0f, t));
-                bool frameReady = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
-                if (!frameReady)
+                MouseUiFrameWaitOutcome frameOutcome = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
+                if (frameOutcome != MouseUiFrameWaitOutcome.Completed)
                 {
-                    return false;
+                    return frameOutcome;
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
                 elapsed = Time.realtimeSinceStartup - startTime;
@@ -60,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             overlay!.SetCursorScale(0f);
             overlay!.SetAlpha(0f);
             SimulateMouseUiOverlayState.Clear();
-            return true;
+            return MouseUiFrameWaitOutcome.Completed;
         }
     }
 }

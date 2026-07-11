@@ -51,19 +51,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 SimulateMouseUiOverlayState.Update(
                     MouseAction.Drag, inputStart, null, null, Handles.GetMainGameViewSize());
-                bool expandCompleted = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
-                if (!expandCompleted)
+                MouseUiFrameWaitOutcome noTargetExpandOutcome = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
+                if (noTargetExpandOutcome == MouseUiFrameWaitOutcome.TimedOut)
                 {
                     cleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, null);
                 }
+                if (noTargetExpandOutcome == MouseUiFrameWaitOutcome.Paused)
+                {
+                    cleanupScheduler.QueueOverlayClear();
+                    return MouseUiSimulationResponseFactory.CreateInterruptedResult(
+                        MouseAction.Drag, inputStart, null,
+                        "Drag stopped because Unity paused during Pause Point inspection. No draggable target was found at the start position, so no drag was initiated.");
+                }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
-                bool dissipateCompleted = await MouseUiOverlayAnimator.PlayDissipateAnimation(ct).ConfigureAwait(false);
-                if (!dissipateCompleted)
+                MouseUiFrameWaitOutcome noTargetDissipateOutcome = await MouseUiOverlayAnimator.PlayDissipateAnimation(ct).ConfigureAwait(false);
+                if (noTargetDissipateOutcome == MouseUiFrameWaitOutcome.TimedOut)
                 {
                     cleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, null);
+                }
+                if (noTargetDissipateOutcome == MouseUiFrameWaitOutcome.Paused)
+                {
+                    cleanupScheduler.QueueOverlayClear();
+                    return MouseUiSimulationResponseFactory.CreateInterruptedResult(
+                        MouseAction.Drag, inputStart, null,
+                        "Drag stopped because Unity paused during Pause Point inspection. No draggable target was found at the start position, so no drag was initiated.");
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -90,30 +104,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SimulateMouseUiOverlayState.Update(
                 MouseAction.Drag, inputStart, inputStart, targetName, Handles.GetMainGameViewSize());
 
+            // Any Paused exit inside this try still runs FinalizeDrag in the finally below
+            // (pointerUp/drop/endDrag), so every branch reports the drag as finalized early
+            // rather than merely "not yet dispatched" like Click/LongPress's pre-input pause.
+            const string DragInterruptedDuringMotionMessage =
+                "Drag was finalized early (pointerUp/drop/endDrag dispatched via cleanup) because Unity paused during Pause Point inspection before the drag motion finished. The drag may have stopped short of the target position.";
+
             try
             {
-                bool expandCompleted = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
-                if (!expandCompleted)
+                MouseUiFrameWaitOutcome expandOutcome = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
+                if (expandOutcome == MouseUiFrameWaitOutcome.TimedOut)
                 {
                     cleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
                 }
+                if (expandOutcome == MouseUiFrameWaitOutcome.Paused)
+                {
+                    cleanupScheduler.QueueOverlayClear();
+                    return MouseUiSimulationResponseFactory.CreateInterruptedResult(
+                        MouseAction.Drag, inputStart, targetName, DragInterruptedDuringMotionMessage);
+                }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
-                bool dragCompleted = await MouseUiDragEventExecutor.InterpolateDragPosition(pointerData, target, screenEnd, parameters.DragSpeed, ct)
+                MouseUiFrameWaitOutcome dragOutcome = await MouseUiDragEventExecutor.InterpolateDragPosition(pointerData, target, screenEnd, parameters.DragSpeed, ct)
                     .ConfigureAwait(false);
-                if (!dragCompleted)
+                if (dragOutcome == MouseUiFrameWaitOutcome.TimedOut)
                 {
                     cleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
                 }
+                if (dragOutcome == MouseUiFrameWaitOutcome.Paused)
+                {
+                    cleanupScheduler.QueueOverlayClear();
+                    return MouseUiSimulationResponseFactory.CreateInterruptedResult(
+                        MouseAction.Drag, inputStart, targetName, DragInterruptedDuringMotionMessage);
+                }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
-                bool frameReady = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
-                if (!frameReady)
+                MouseUiFrameWaitOutcome settleOutcome = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
+                if (settleOutcome == MouseUiFrameWaitOutcome.TimedOut)
                 {
                     cleanupScheduler.QueueOverlayClear();
                     return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
+                }
+                if (settleOutcome == MouseUiFrameWaitOutcome.Paused)
+                {
+                    cleanupScheduler.QueueOverlayClear();
+                    return MouseUiSimulationResponseFactory.CreateInterruptedResult(
+                        MouseAction.Drag, inputStart, targetName, DragInterruptedDuringMotionMessage);
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
             }
@@ -125,11 +163,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SimulateMouseUiOverlayState.Update(
                 MouseAction.Drag, inputEnd, inputStart, targetName, Handles.GetMainGameViewSize());
 
-            bool completedDissipate = await MouseUiOverlayAnimator.PlayDissipateAnimation(ct).ConfigureAwait(false);
-            if (!completedDissipate)
+            MouseUiFrameWaitOutcome dissipateOutcome = await MouseUiOverlayAnimator.PlayDissipateAnimation(ct).ConfigureAwait(false);
+            if (dissipateOutcome == MouseUiFrameWaitOutcome.TimedOut)
             {
                 cleanupScheduler.QueueOverlayClear();
                 return MouseUiSimulationResponseFactory.CreateDragResult(parameters, inputStart, inputEnd, targetName);
+            }
+            if (dissipateOutcome == MouseUiFrameWaitOutcome.Paused)
+            {
+                cleanupScheduler.QueueOverlayClear();
+                return MouseUiSimulationResponseFactory.CreateInterruptedResult(
+                    MouseAction.Drag, inputStart, targetName,
+                    "Drag was already completed (target position reached, pointerUp/drop/endDrag dispatched). Unity paused during Pause Point inspection while the overlay animation was still playing; only the animation was interrupted.");
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
 

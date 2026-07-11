@@ -81,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             pointerData.pointerCurrentRaycast = hit ?? new RaycastResult();
         }
 
-        internal static async Task<bool> InterpolateDragPosition(
+        internal static async Task<MouseUiFrameWaitOutcome> InterpolateDragPosition(
             PointerEventData pointerData,
             GameObject target,
             Vector2 endPos,
@@ -96,10 +96,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (duration <= 0f)
             {
-                bool frameReady = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
-                if (!frameReady)
+                MouseUiFrameWaitOutcome frameOutcome = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
+                if (frameOutcome != MouseUiFrameWaitOutcome.Completed)
                 {
-                    return false;
+                    return frameOutcome;
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -110,7 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ExecuteEvents.Execute(target, pointerData, ExecuteEvents.dragHandler);
 
                 SimulateMouseUiOverlayState.UpdatePosition(MouseUiCoordinateConverter.ScreenToInput(endPos));
-                return true;
+                return MouseUiFrameWaitOutcome.Completed;
             }
 
             float startTime = Time.realtimeSinceStartup;
@@ -118,10 +118,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             do
             {
-                bool frameReady = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
-                if (!frameReady)
+                MouseUiFrameWaitOutcome frameOutcome = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
+                if (frameOutcome != MouseUiFrameWaitOutcome.Completed)
                 {
-                    return false;
+                    return frameOutcome;
                 }
                 await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -140,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             while (t < 1.0f);
 
-            return true;
+            return MouseUiFrameWaitOutcome.Completed;
         }
     }
 }
