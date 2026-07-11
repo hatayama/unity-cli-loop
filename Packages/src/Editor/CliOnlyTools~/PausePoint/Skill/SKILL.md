@@ -1,9 +1,10 @@
 ---
-name: uloop-wait-for-pause-point
+name: uloop-pause-point
+toolName: await-pause-point
 description: "Pauses Unity playback at any source file:line without editing code or recompiling, and returns a snapshot of the locals, parameters, and instance fields at that exact frame. Use for bug investigation, PlayMode/E2E verification, checking variable values at a specific frame, or confirming that a code path executed."
 ---
 
-# uloop wait-for-pause-point
+# uloop await-pause-point
 
 ## Quick Check Template
 
@@ -21,7 +22,7 @@ The response returns the derived marker `Id` (`Assets/Scripts/Enemy.cs:42`), the
 3. Wait for the hit, even if the trigger command already returned `InterruptedByPausePoint=true`:
 
 ```bash
-uloop wait-for-pause-point --id "Assets/Scripts/Enemy.cs:42" --timeout-seconds 30
+uloop await-pause-point --id "Assets/Scripts/Enemy.cs:42" --timeout-seconds 30
 ```
 
 4. Read `CapturedVariables` in the hit response first: the locals, parameters, and `this` instance fields at the paused line are already there (see the next section). Adding a temporary `Debug.Log` just to see a local variable is no longer necessary.
@@ -55,7 +56,7 @@ Use `Generation`, `EnabledAtUtc`, and the hit sequence fields from the hit or st
 
 ## Timeout Checks
 
-If this command times out, the patched line was not reached while the command waited. Read `Error.Details.Hint` first: it names the most likely cause when PlayMode is not running, Unity is already paused, or the marker was enabled but never hit. A `PAUSE_POINT_EXPIRED` error carries the same hint and shell-neutral `Error.Details.RecommendedNextAction`: it means the marker's own `enable-pause-point --timeout-seconds` window (measured from enable, not from wait) ran out first, so clear and re-enable the pause point using the returned `Id` and `TimeoutSeconds`. Then inspect `Error.Details.Status`, `HitCount`, `Generation`, `EnabledAtUtc`, `EditorState`, `ElapsedSinceEnabledMilliseconds`, and `RemainingMilliseconds` to distinguish input not being consumed, stale evidence from an older marker generation, runtime conditions not being met, an id mismatch, or Unity already being paused. `ElapsedSinceEnabledMilliseconds` is measured from `enable-pause-point`, not from `wait-for-pause-point`.
+If this command times out, the patched line was not reached while the command waited. Read `Error.Details.Hint` first: it names the most likely cause when PlayMode is not running, Unity is already paused, or the marker was enabled but never hit. A `PAUSE_POINT_EXPIRED` error carries the same hint and shell-neutral `Error.Details.RecommendedNextAction`: it means the marker's own `enable-pause-point --timeout-seconds` window (measured from enable, not from wait) ran out first, so clear and re-enable the pause point using the returned `Id` and `TimeoutSeconds`. Then inspect `Error.Details.Status`, `HitCount`, `Generation`, `EnabledAtUtc`, `EditorState`, `ElapsedSinceEnabledMilliseconds`, and `RemainingMilliseconds` to distinguish input not being consumed, stale evidence from an older marker generation, runtime conditions not being met, an id mismatch, or Unity already being paused. `ElapsedSinceEnabledMilliseconds` is measured from `enable-pause-point`, not from `await-pause-point`.
 
 Use `uloop pause-point-status --id "Assets/Scripts/Enemy.cs:42"` only when you need to confirm the marker is armed or inspect the current hit state.
 

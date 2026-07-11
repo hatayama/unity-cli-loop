@@ -14,7 +14,7 @@ func TestNativeCommandEntriesDeclareOwners(t *testing.T) {
 		"list":                          RunnerOwned,
 		"sync":                          RunnerOwned,
 		"focus-window":                  RunnerOwned,
-		PausePointWaitCommandName:       RunnerOwned,
+		PausePointAwaitCommandName:      RunnerOwned,
 		PausePointStatusUserCommandName: RunnerOwned,
 	}
 	if len(NativeCommands) != len(expectedOwners) {
@@ -65,7 +65,7 @@ func TestIsRunnerOwnedCommandName(t *testing.T) {
 		"list",
 		"sync",
 		"focus-window",
-		PausePointWaitCommandName,
+		PausePointAwaitCommandName,
 		PausePointStatusUserCommandName,
 	} {
 		if !IsRunnerOwnedCommandName(command) {

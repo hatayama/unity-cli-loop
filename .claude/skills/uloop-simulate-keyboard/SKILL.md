@@ -45,7 +45,7 @@ If a successful `Press` or `KeyDown` leaves `Keyboard.current.<key>.isPressed` t
 
 ### Pause Point Inspection (Standard for E2E)
 
-For standard frame proof when this input drives a state transition, follow the `uloop-wait-for-pause-point` skill. Pausing on the line that handles the key is safe: when the pause lands mid-command, `simulate-keyboard` returns promptly with `InterruptedByPausePoint: true` instead of running to completion. Prefer a line after the app consumed the key when you want the settled result state rather than the input-handling moment.
+For standard frame proof when this input drives a state transition, follow the `uloop-pause-point` skill. Pausing on the line that handles the key is safe: when the pause lands mid-command, `simulate-keyboard` returns promptly with `InterruptedByPausePoint: true` instead of running to completion. Prefer a line after the app consumed the key when you want the settled result state rather than the input-handling moment.
 
 - If `InterruptedByPausePoint: true`, Unity is paused and input bookkeeping was released. `PausePointId` and `PausePointHitCount` identify the marker. `PressEdgeObserved` is still reported on pause-point interruptions.
 

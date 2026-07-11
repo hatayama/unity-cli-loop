@@ -15,7 +15,7 @@ conflicts, keep the identifier and document the mismatch here instead.
 The following public identifiers are kept by policy even though their names do not fully
 match the current glossary:
 
-- `UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT` and
+- `UnityCliLoopConstants.COMMAND_NAME_AWAIT_PAUSE_POINT` and
   `UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS` are used as tool catalog names,
   not internal bridge commands.
 - The skill target types `SkillsTarget`, `SkillSetupTargetInfo`,
@@ -103,7 +103,7 @@ editor state access; they are the only layer that sequences multi-step tool work
 ### Pause point
 
 A registry entry (`UloopPausePointRegistry`) that freezes PlayMode when a specific code path
-is reached, then reports execution state through `wait-for-pause-point`/`pause-point-status`.
+is reached, then reports execution state through `await-pause-point`/`pause-point-status`.
 A pause point is enabled either by a hand-written `UloopPausePoint.Pause(id)` marker call, or
 as a source pause point resolved from a `--file`/`--line` location with no source edit.
 

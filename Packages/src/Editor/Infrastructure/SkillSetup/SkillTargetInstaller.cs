@@ -12,6 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private static readonly string[] DeprecatedSkillNames =
         {
+            "uloop-wait-for-pause-point",
             "uloop-capture-window",
             "uloop-get-provider-details",
             "uloop-unity-search",
