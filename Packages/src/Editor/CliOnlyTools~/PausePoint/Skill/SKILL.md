@@ -4,7 +4,7 @@ toolName: await-pause-point
 description: "Pauses Unity playback at any source file:line without editing code or recompiling, and returns a snapshot of the locals, parameters, and instance fields at that exact frame. Use for bug investigation, PlayMode/E2E verification, checking variable values at a specific frame, or confirming that a code path executed."
 ---
 
-# uloop pause-point
+# uloop await-pause-point
 
 ## Quick Check Template
 
