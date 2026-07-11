@@ -36,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string[] toolNames = allTools.Select(tool => tool.Name).ToArray();
 
             Assert.That(isAvailable, Is.True);
-            Assert.That(toolNames, Does.Contain(UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT));
+            Assert.That(toolNames, Does.Contain(UnityCliLoopConstants.COMMAND_NAME_AWAIT_PAUSE_POINT));
             Assert.That(toolNames, Does.Not.Contain(UnityCliLoopConstants.TOOL_NAME_ENABLE_PAUSE_POINT));
             Assert.That(toolNames, Does.Not.Contain(UnityCliLoopConstants.TOOL_NAME_CLEAR_PAUSE_POINT));
             Assert.That(toolNames, Does.Not.Contain(UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS));
@@ -45,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void IsToolEnabled_WhenWaitForPausePointDisabled_DisablesPausePointAuxiliaryTools()
         {
-            // Verifies pause point auxiliary tools follow the wait-for-pause-point setting.
+            // Verifies pause point auxiliary tools follow the await-pause-point setting.
             IToolSettingsPort toolSettingsPort = new InMemoryToolSettingsPort();
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new EmptyInternalToolNameProvider(),
@@ -57,9 +57,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 toolRegistrarService,
                 new StaticToolSkillDescriptionProvider(new Dictionary<string, string>()));
 
-            useCase.SetToolEnabled(UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT, false);
+            useCase.SetToolEnabled(UnityCliLoopConstants.COMMAND_NAME_AWAIT_PAUSE_POINT, false);
 
-            Assert.That(useCase.IsToolEnabled(UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT), Is.False);
+            Assert.That(useCase.IsToolEnabled(UnityCliLoopConstants.COMMAND_NAME_AWAIT_PAUSE_POINT), Is.False);
             Assert.That(useCase.IsToolEnabled(UnityCliLoopConstants.TOOL_NAME_ENABLE_PAUSE_POINT), Is.False);
             Assert.That(useCase.IsToolEnabled(UnityCliLoopConstants.TOOL_NAME_CLEAR_PAUSE_POINT), Is.False);
             Assert.That(useCase.IsToolEnabled(UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS), Is.False);
@@ -77,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UnityCliLoopToolDiscovery.DiscoverTools);
             Dictionary<string, string> descriptions = new()
             {
-                [UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT] = "Pause point description"
+                [UnityCliLoopConstants.COMMAND_NAME_AWAIT_PAUSE_POINT] = "Pause point description"
             };
             ToolSettingsUseCase useCase = new(
                 toolSettingsPort,
@@ -87,7 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             bool isAvailable = useCase.TryGetToolCatalog(out ToolSettingsUseCase.ToolCatalogItem[] allTools);
             ToolSettingsUseCase.ToolCatalogItem waitTool = allTools
-                .Single(tool => tool.Name == UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT);
+                .Single(tool => tool.Name == UnityCliLoopConstants.COMMAND_NAME_AWAIT_PAUSE_POINT);
 
             Assert.That(isAvailable, Is.True);
             Assert.That(waitTool.SkillDescription, Is.EqualTo("Pause point description"));

@@ -654,7 +654,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void PausePointStatusBridgeCommand_Clear_CallsPatcherUnpatchSoTheIdCanBeFreshlyRePatched()
         {
-            // Verifies the CLI bridge's Clear (the path Go's wait-for-pause-point timeout
+            // Verifies the CLI bridge's Clear (the path Go's await-pause-point timeout
             // auto-clear and clear-pause-point-status hit) also calls
             // SourcePausePointPatcher.Unpatch, using the same stale-Mvid gate signal as the tool
             // tests above to prove the ledger entry was actually removed.
