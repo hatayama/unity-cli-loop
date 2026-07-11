@@ -82,7 +82,7 @@ A pause point hit leaves Unity in this same paused state, so `Step` also works r
 - Prefer natural runtime points after input has been consumed, such as after a command is accepted, a state value changes, an evaluation step resolves, or a dependent component is updated.
 - For frame-specific bugs, target the suspicious state branch or the line right after the mutation you need to freeze (the snapshot is taken before the target line runs).
 - Enable pause points after PlayMode is running: entering PlayMode with Domain Reload enabled reloads the domain and silently removes every source pause point (see Requirements & Safety).
-- Avoid targeting the line that directly handles simulated input unless that exact line is the state you need to inspect. An immediate pause can interrupt the input command before the resulting runtime state settles.
+- Targeting the line that directly handles simulated input is safe: when the pause lands mid-command, the `simulate-*` command returns promptly with `InterruptedByPausePoint=true` instead of running to completion, and `simulate-mouse-ui` additionally states in `Message` whether the pointer event was already dispatched before the pause. Prefer a line after the input is consumed when you want the settled result state rather than the input-handling moment.
 - Use separate pause points on distinct lines for strict phases, for example input read, state updated, and result committed, instead of one broad pause point.
 
 ## Requirements & Safety
@@ -90,5 +90,7 @@ A pause point hit leaves Unity in this same paused state, so `Step` also works r
 - **Debug code optimization is required.** When the Editor's Code Optimization mode is Release, enable is rejected with instructions; switch to Debug via the bug icon in the main toolbar, recompile, then retry.
 - **Patches do not survive compiles or domain reloads.** Any script compile or domain reload removes every source pause point together with its marker, leaving the code exactly as compiled. Re-enable after the reload finishes. This is also why an interrupted CLI session never leaves stale patches behind.
 - If `enable-pause-point` fails, read the failure `Message` and `RecommendedNextAction`: they name the exact next step, for example waiting for a reload to finish, re-resolving after a recompile, or what to do when the method cannot be patched.
+- For scripts under `Packages/`, pass the package-id form of the path — `Packages/<package-id>/...`, exactly as the Unity Project window and console stack traces show it. The physical checkout path of an embedded package does not resolve.
+- If enable fails with a "No sequence point found" error even for clearly executable lines, that script's assembly lacks debug sequence points and no line in the file can be patched. Move the pause point to a script in an assembly that carries them, such as a script under `Assets/`.
 - Very small methods can be inlined by Mono's JIT into callers, in which case the pause point never hits even though the line executes. If a line demonstrably runs but the pause point stays unhit, move the pause point into the calling method.
 - If `enable-pause-point` warns about Domain Reload before PlayMode, the pause point may be cleared when entering PlayMode. Domain Reload disabled is suitable for this workflow; otherwise enable it again after PlayMode starts.
