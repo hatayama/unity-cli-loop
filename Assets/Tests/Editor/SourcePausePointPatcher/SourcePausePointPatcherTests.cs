@@ -163,6 +163,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Patch_NeverArmedId_SkipsCaptureArrayBuildAndExecutesNormally()
+        {
+            // Verifies the not-armed guard: when Patch is called without ever Enable-ing the id,
+            // the injected IsArmed check short-circuits straight to the original instruction
+            // (skipping the parameter/local array build and the Capture call entirely) and the
+            // method's own result is unaffected.
+            const string id = "patcher-never-armed";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherStaticMethodFixture.cs", 9);
+            Assert.That(resolveResult.Success, Is.True);
+
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+            Assert.That(patchResult.Success, Is.True);
+
+            int sum = PatcherStaticMethodFixture.Add(4, 5);
+
+            Assert.That(sum, Is.EqualTo(9));
+            Assert.That(UloopPausePointRegistry.GetStatus(id).IsHit, Is.False);
+        }
+
+        [Test]
         public void Patch_TwoPausePointsInSameMethod_BothHitIndependentlyWithCorrectState()
         {
             // Verifies multiple injections into the same method insert correctly regardless of

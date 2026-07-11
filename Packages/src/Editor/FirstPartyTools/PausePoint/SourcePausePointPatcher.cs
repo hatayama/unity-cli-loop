@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 
 using HarmonyLib;
+using UnityEngine;
+
+using io.github.hatayama.UnityCliLoop.Runtime;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -24,6 +26,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             typeof(SourcePausePointPatcher).GetMethod(nameof(Transpiler), BindingFlags.NonPublic | BindingFlags.Static);
         private static readonly MethodInfo CaptureMethodInfo =
             typeof(SourcePausePointCapture).GetMethod(nameof(SourcePausePointCapture.Capture));
+        private static readonly MethodInfo IsArmedMethodInfo =
+            typeof(UloopPausePointRegistry).GetMethod(nameof(UloopPausePointRegistry.IsArmed));
 
         private static readonly Dictionary<MethodBase, List<SourcePausePointPatchInjection>> InjectionsByMethod = new();
         private static readonly Dictionary<string, MethodBase> MethodById = new();
@@ -183,7 +187,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
+        private static IEnumerable<CodeInstruction> Transpiler(
+            IEnumerable<CodeInstruction> instructions, ILGenerator generator, MethodBase original)
         {
             List<CodeInstruction> list = new(instructions);
             if (!InjectionsByMethod.TryGetValue(original, out List<SourcePausePointPatchInjection> injections))
@@ -193,7 +198,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (SourcePausePointPatchInjection injection in injections.OrderByDescending(i => i.InstructionIndex))
             {
-                List<CodeInstruction> emitted = BuildInjection(injection, original);
+                Label skip = generator.DefineLabel();
+                List<CodeInstruction> emitted = BuildInjection(injection, original, skip);
 
                 // The instruction we insert before may be a branch target or a try/catch/finally
                 // boundary marker; both must move to the new first instruction so control flow and
@@ -204,15 +210,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 emitted[0].blocks.AddRange(displaced.blocks);
                 displaced.blocks.Clear();
 
+                // The not-armed guard above skips straight to the original displaced instruction,
+                // so it needs its own label there to land on.
+                displaced.labels.Add(skip);
+
                 list.InsertRange(injection.InstructionIndex, emitted);
             }
 
             return list;
         }
 
-        private static List<CodeInstruction> BuildInjection(SourcePausePointPatchInjection injection, MethodBase method)
+        private static List<CodeInstruction> BuildInjection(SourcePausePointPatchInjection injection, MethodBase method, Label skip)
         {
-            List<CodeInstruction> emitted = new() { new CodeInstruction(OpCodes.Ldstr, injection.Id) };
+            // Checking IsArmed before building the parameter/local object array (rather than
+            // relying on Capture's own check) keeps the overwhelmingly common not-armed hit
+            // allocation-free: the array-build and boxing instructions below never execute unless armed.
+            List<CodeInstruction> emitted = new()
+            {
+                new CodeInstruction(OpCodes.Ldstr, injection.Id),
+                new CodeInstruction(OpCodes.Call, IsArmedMethodInfo),
+                new CodeInstruction(OpCodes.Brfalse, skip),
+                new CodeInstruction(OpCodes.Ldstr, injection.Id),
+            };
 
             AppendInstanceLoad(emitted, injection, method);
 
@@ -226,6 +245,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 p => p.Name);
 
             IList<LocalVariableInfo> runtimeLocals = method.GetMethodBody().LocalVariables;
+            foreach (SourcePausePointLocalVariable local in injection.Locals)
+            {
+                Debug.Assert(
+                    runtimeLocals[local.SlotIndex].LocalIndex == local.SlotIndex,
+                    "LocalVariableInfo order must match the resolved slot index.");
+            }
             AppendNameValueArray(
                 emitted,
                 injection.Locals,
