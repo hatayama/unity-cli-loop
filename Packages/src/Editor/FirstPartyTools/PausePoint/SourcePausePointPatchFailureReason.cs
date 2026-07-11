@@ -7,6 +7,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         None,
         AssemblyNotLoaded,
+        StaleAssembly,
         UnpatchableAbstract,
         UnpatchableExtern,
         UnpatchableOpenGeneric,

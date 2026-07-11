@@ -127,6 +127,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                if (assembly.ManifestModule.ModuleVersionId.ToString() != resolution.Mvid)
+                {
+                    return SourcePausePointPatchResult.Failure(
+                        SourcePausePointPatchFailureReason.StaleAssembly,
+                        $"The loaded assembly '{resolution.AssemblyName}' no longer matches the "
+                        + "compiled assembly this resolution was taken from.",
+                        SourcePausePointConstants.StaleAssemblyHint);
+                }
+
                 method = assembly.ManifestModule.ResolveMethod(resolution.MetadataToken);
                 return SourcePausePointPatchResult.SuccessResult();
             }
@@ -134,7 +143,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return SourcePausePointPatchResult.Failure(
                 SourcePausePointPatchFailureReason.AssemblyNotLoaded,
                 $"Assembly '{resolution.AssemblyName}' is not currently loaded in the AppDomain.",
-                SourcePausePointConstants.ManualMarkerFallbackHint);
+                SourcePausePointConstants.AssemblyNotLoadedHint);
         }
 
         private static SourcePausePointPatchResult CheckPatchable(MethodBase method)

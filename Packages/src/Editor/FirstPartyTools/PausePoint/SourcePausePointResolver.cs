@@ -98,6 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             SourcePausePointResolution resolution = new SourcePausePointResolution(
                 assemblyName,
+                assemblyDefinition.MainModule.Mvid.ToString(),
                 method.MetadataToken.ToInt32(),
                 method.FullName,
                 method.IsStatic,

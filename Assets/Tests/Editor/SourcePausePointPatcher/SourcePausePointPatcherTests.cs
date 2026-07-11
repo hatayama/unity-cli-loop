@@ -184,6 +184,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Patch_TryFinallyMethod_AtExceptionRegionEndBoundary_ExecutesNormally()
+        {
+            // Verifies the displaced instruction case at the opposite exception-region boundary
+            // from the existing try/finally test above: line 21 is the first instruction after
+            // the whole try/finally construct, so it carries an end-of-region block marker
+            // rather than a begin marker, and must move to the injected sequence the same way.
+            const string id = "patcher-try-finally-end-boundary";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherTryFinallyMethodFixture.cs", 21);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+            Assert.That(patchResult.Success, Is.True);
+
+            int result = PatcherTryFinallyMethodFixture.Divide(10, 2);
+
+            Assert.That(result, Is.EqualTo(5));
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(id);
+            Assert.That(snapshot.IsHit, Is.True);
+            Assert.That(snapshot.CapturedVariables.Select(v => v.Name), Is.EquivalentTo(new[] { "numerator", "denominator", "result" }));
+            Assert.That(snapshot.CapturedVariables.First(v => v.Name == "result").Value, Is.EqualTo("5"));
+        }
+
+        [Test]
         public void Patch_TwoPausePointsInSameMethod_BothHitIndependentlyWithCorrectState()
         {
             // Verifies multiple injections into the same method insert correctly regardless of
@@ -337,12 +362,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.FailureReason, Is.EqualTo(SourcePausePointPatchFailureReason.UnpatchableBurstCompiled));
         }
 
+        [Test]
+        public void Patch_ResolutionWithStaleMvid_ReturnsStaleAssemblyFailure()
+        {
+            // Verifies a resolution taken from a since-recompiled assembly (simulated here by a
+            // deliberately wrong Mvid) is rejected before ResolveMethod ever runs against a
+            // metadata token that may no longer mean the same thing in the now-loaded assembly.
+            MethodBase method = typeof(PatcherStaticMethodFixture).GetMethod(nameof(PatcherStaticMethodFixture.Add));
+            SourcePausePointResolution staleResolution = BuildSyntheticResolutionWithMvid(method, Guid.NewGuid().ToString());
+
+            SourcePausePointPatchResult result = SourcePausePointPatcher.Patch("patcher-stale-assembly", staleResolution);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.FailureReason, Is.EqualTo(SourcePausePointPatchFailureReason.StaleAssembly));
+            Assert.That(result.Hint, Is.Not.Empty);
+        }
+
         // Builds a resolution good enough to reach SourcePausePointPatcher's patchability gate; the
         // instruction index and locals/parameters are never read because every case here fails before that.
         private static SourcePausePointResolution BuildSyntheticResolution(MethodBase method)
         {
+            return BuildSyntheticResolutionWithMvid(method, method.Module.ModuleVersionId.ToString());
+        }
+
+        // Same as BuildSyntheticResolution but lets a test supply a deliberately wrong Mvid, to
+        // exercise the stale-assembly gate without needing a second compiled assembly.
+        private static SourcePausePointResolution BuildSyntheticResolutionWithMvid(MethodBase method, string mvid)
+        {
             return new SourcePausePointResolution(
                 method.Module.Assembly.GetName().Name,
+                mvid,
                 method.MetadataToken,
                 method.ToString(),
                 method.IsStatic,

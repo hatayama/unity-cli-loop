@@ -23,5 +23,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string ManualMarkerFallbackHint =
             "This method cannot be safely patched by file:line. Add UloopPausePoint.Pause(\"id\") "
             + "directly in the source instead, then arm it with enable-pause-point --id \"id\".";
+
+        // The manual-marker fallback would not run here either: it lives in a source file that
+        // belongs to the very assembly that is not loaded yet.
+        public const string AssemblyNotLoadedHint =
+            "The assembly this pause point resolves to is not currently loaded in this AppDomain. "
+            + "Ensure the code path that loads it (e.g. entering Play Mode) has run, then retry.";
+
+        // A stale resolution means the assembly was recompiled after Resolve ran; re-resolving
+        // against the current compiled output (rather than falling back to a manual marker) is
+        // the correct next step here.
+        public const string StaleAssemblyHint =
+            "The loaded assembly no longer matches the compiled assembly this pause point was "
+            + "resolved from (a script compile or domain reload may have happened since). Wait for "
+            + "compilation/domain reload to finish, then resolve and patch again.";
     }
 }
