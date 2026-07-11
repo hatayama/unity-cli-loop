@@ -80,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             OnClearedAll?.Invoke();
 
             DateTime now = NowUtc();
-            int clearedCount = 0;
+            List<string> clearedIds = new();
             foreach (UloopPausePointEntry entry in Entries.Values)
             {
                 if (entry.Status == UloopPausePointStatus.Cleared)
@@ -88,15 +88,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                     continue;
                 }
 
+                clearedIds.Add(entry.Id);
                 entry.MarkCleared();
-                clearedCount++;
             }
             ClearLatestHitSnapshot();
 
             UloopPausePointEditorStateSnapshot editorState = UloopPausePointEditorStateSnapshot.FromController(
                 _pauseController,
                 UloopPausePointEditorStateCapturedAt.ClearAll);
-            return new UloopPausePointClearAllResult(clearedCount, now, editorState);
+            return new UloopPausePointClearAllResult(clearedIds.Count, now, editorState, clearedIds.ToArray());
         }
 
         public static UloopPausePointSnapshot GetStatus(string id)
