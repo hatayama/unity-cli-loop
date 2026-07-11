@@ -37,5 +37,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "The loaded assembly no longer matches the compiled assembly this pause point was "
             + "resolved from (a script compile or domain reload may have happened since). Wait for "
             + "compilation/domain reload to finish, then resolve and patch again.";
+
+        // A byref-like `this` cannot be boxed, so the patcher degrades to a null instance rather
+        // than rejecting the patch outright; locals and parameters are still captured normally.
+        public const string RefStructInstanceNotCapturedWarning =
+            "The declaring type is a ref struct; this-instance fields are not captured "
+            + "(locals and parameters are still captured normally).";
     }
 }

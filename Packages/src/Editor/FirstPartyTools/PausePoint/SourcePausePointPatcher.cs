@@ -107,7 +107,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            return SourcePausePointPatchResult.SuccessResult();
+            string warning = !method.IsStatic && IsByRefLikeType(method.DeclaringType)
+                ? SourcePausePointConstants.RefStructInstanceNotCapturedWarning
+                : string.Empty;
+            return SourcePausePointPatchResult.SuccessResult(warning);
         }
 
         public static void Unpatch(string id)
@@ -239,6 +242,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
+        private static bool IsByRefLikeType(Type type)
+        {
+            foreach (object attribute in type.GetCustomAttributes(inherit: false))
+            {
+                if (attribute.GetType().FullName == SourcePausePointConstants.IsByRefLikeAttributeFullName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static IEnumerable<CodeInstruction> Transpiler(
             IEnumerable<CodeInstruction> instructions, ILGenerator generator, MethodBase original)
         {
@@ -318,6 +334,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (injection.IsStatic)
             {
+                emitted.Add(new CodeInstruction(OpCodes.Ldnull));
+                return;
+            }
+
+            if (injection.IsDeclaringTypeValueType && IsByRefLikeType(method.DeclaringType))
+            {
+                // A byref-like (ref struct) `this` cannot be boxed at all (illegal IL); degrade to
+                // a null instance so locals and parameters can still be captured, rather than
+                // rejecting the whole patch over the instance fields alone.
                 emitted.Add(new CodeInstruction(OpCodes.Ldnull));
                 return;
             }

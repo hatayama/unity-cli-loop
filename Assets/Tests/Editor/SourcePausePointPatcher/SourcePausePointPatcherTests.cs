@@ -111,6 +111,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Patch_RefStructInstanceMethod_DegradesToNullInstanceAndCapturesLocalsWithWarning()
+        {
+            // Verifies the byref-like (ref struct) declaring-type degradation: boxing a ref
+            // struct's `this` is illegal IL, so the injected instance load must fall back to a
+            // null instance instead. Locals are still captured normally, the instance field
+            // ("Value") is absent since there is no boxed instance to read it from, and Patch
+            // reports a non-empty Warning explaining the degradation.
+            const string id = "patcher-ref-struct-instance-method";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherRefStructInstanceMethodFixture.cs", 11);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+            Assert.That(patchResult.Success, Is.True);
+            Assert.That(patchResult.Warning, Is.Not.Empty);
+
+            PatcherRefStructInstanceMethodFixture fixture = new() { Value = 5 };
+            int doubled = fixture.Double();
+
+            Assert.That(doubled, Is.EqualTo(10));
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(id);
+            Assert.That(snapshot.IsHit, Is.True);
+            Assert.That(snapshot.CapturedVariables.Select(v => v.Name), Is.EquivalentTo(new[] { "doubled" }));
+        }
+
+        [Test]
         public void Patch_LoopMethod_PreservesBackEdgeBranchTargetAndCapturesFirstIterationState()
         {
             // Verifies CodeInstruction.labels are moved to the injected sequence's first instruction
