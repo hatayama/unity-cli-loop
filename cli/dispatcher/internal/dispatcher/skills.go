@@ -66,6 +66,7 @@ func buildDefaultSkillTargetIDs() []string {
 }
 
 var deprecatedSkillNames = []string{
+	"uloop-wait-for-pause-point",
 	"uloop-capture-window",
 	"uloop-get-provider-details",
 	"uloop-unity-search",

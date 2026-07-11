@@ -17,7 +17,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
-// Verifies wait-for-pause-point polls until Unity reports the marker hit.
+// Verifies await-pause-point polls until Unity reports the marker hit.
 func TestWaitForPausePointReturnsHitAfterEnabledStatus(t *testing.T) {
 	originalQuery := queryPausePointStatus
 	originalPoll := pausePointStatusPoll
@@ -70,7 +70,7 @@ func TestWaitForPausePointReturnsHitAfterEnabledStatus(t *testing.T) {
 	}
 }
 
-// Verifies wait-for-pause-point clears the enabled marker after its own timeout.
+// Verifies await-pause-point clears the enabled marker after its own timeout.
 func TestRunWaitForPausePointClearsEnabledMarkerAfterTimeout(t *testing.T) {
 	originalQuery := queryPausePointStatus
 	originalClear := clearPausePointStatus
@@ -215,7 +215,7 @@ func TestPausePointExpiredErrorDerivesExpiredFromStatus(t *testing.T) {
 	}
 }
 
-// Verifies wait-for-pause-point does one final status probe before treating timeout as missed.
+// Verifies await-pause-point does one final status probe before treating timeout as missed.
 func TestRunWaitForPausePointReturnsFinalHitAtTimeoutBoundary(t *testing.T) {
 	originalQuery := queryPausePointStatus
 	originalClear := clearPausePointStatus
@@ -283,7 +283,7 @@ func TestRunWaitForPausePointReturnsFinalHitAtTimeoutBoundary(t *testing.T) {
 	}
 }
 
-// Verifies wait-for-pause-point rejects calls before the marker is enabled.
+// Verifies await-pause-point rejects calls before the marker is enabled.
 func TestWaitForPausePointReturnsNotEnabledStateImmediately(t *testing.T) {
 	originalQuery := queryPausePointStatus
 	defer func() {
@@ -829,14 +829,14 @@ func TestPausePointExpiredErrorReportsNoRemainingTime(t *testing.T) {
 // Verifies disabled native pause-point commands are rejected before Unity dispatch.
 func TestRunProjectLocalWaitForPausePointRespectsToolSettings(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)
-	writeToolSettings(t, projectRoot, `{"disabledTools":["wait-for-pause-point"]}`)
+	writeToolSettings(t, projectRoot, `{"disabledTools":["await-pause-point"]}`)
 	t.Chdir(filepath.Dir(projectRoot))
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	code := RunProjectLocal(
 		context.Background(),
-		[]string{"--project-path", projectRoot, clicore.PausePointWaitCommandName, "--id", "jump"},
+		[]string{"--project-path", projectRoot, clicore.PausePointAwaitCommandName, "--id", "jump"},
 		&stdout,
 		&stderr)
 
@@ -847,12 +847,12 @@ func TestRunProjectLocalWaitForPausePointRespectsToolSettings(t *testing.T) {
 	if envelope.Error.ErrorCode != clierrors.ErrorCodeToolDisabled {
 		t.Fatalf("error code mismatch: %#v", envelope.Error)
 	}
-	if envelope.Error.Command != clicore.PausePointWaitCommandName {
+	if envelope.Error.Command != clicore.PausePointAwaitCommandName {
 		t.Fatalf("command mismatch: %#v", envelope.Error)
 	}
 }
 
-// Verifies wait-for-pause-point requires a marker id.
+// Verifies await-pause-point requires a marker id.
 func TestParseWaitForPausePointOptionsRequiresID(t *testing.T) {
 	_, err := parseWaitForPausePointOptions([]string{"--timeout-seconds", "1"})
 

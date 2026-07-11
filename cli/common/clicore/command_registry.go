@@ -8,7 +8,7 @@ const (
 	SkillsCommandName               = "skills"
 	CompileCommandName              = "compile"
 	ExecuteDynamicCodeCommandName   = "execute-dynamic-code"
-	PausePointWaitCommandName       = "wait-for-pause-point"
+	PausePointAwaitCommandName      = "await-pause-point"
 	PausePointStatusUserCommandName = "pause-point-status"
 	RunTestsCommandName             = "run-tests"
 	CompletionCommand               = "completion"
@@ -37,7 +37,7 @@ var NativeCommands = []NativeCommandEntry{
 	{Name: "list", Description: "Show Unity tools currently exposed by the Editor", Owner: RunnerOwned},
 	{Name: "sync", Description: "Refresh .uloop/tools.json from the running Editor", Owner: RunnerOwned},
 	{Name: "focus-window", Description: "Bring the Unity Editor window to the foreground", Owner: RunnerOwned},
-	{Name: PausePointWaitCommandName, Description: "Wait until a named UloopPausePoint.Pause marker pauses Unity", Owner: RunnerOwned},
+	{Name: PausePointAwaitCommandName, Description: "Wait until a named UloopPausePoint.Pause marker pauses Unity", Owner: RunnerOwned},
 	{Name: PausePointStatusUserCommandName, Description: "Show the state of a named UloopPausePoint.Pause marker", Owner: RunnerOwned},
 	{Name: SkillsCommandName, Description: "List, install, or uninstall agent skills", Owner: DispatcherOwned},
 	{Name: CompletionCommand, Description: "Print or install shell completion", Owner: DispatcherOwned},

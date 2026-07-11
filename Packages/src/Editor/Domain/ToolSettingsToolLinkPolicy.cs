@@ -38,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
             if (PausePointAuxiliaryToolNames.Contains(toolName))
             {
-                return UnityCliLoopConstants.COMMAND_NAME_WAIT_FOR_PAUSE_POINT;
+                return UnityCliLoopConstants.COMMAND_NAME_AWAIT_PAUSE_POINT;
             }
 
             return toolName;

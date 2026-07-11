@@ -70,7 +70,7 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 
 ## Pause Point Inspection (Standard for E2E)
 
-For standard frame proof when this UI input drives a state transition, follow the `uloop-wait-for-pause-point` skill. Pausing on the line that handles the UI event is safe: when the pause lands mid-command, `simulate-mouse-ui` returns promptly with `InterruptedByPausePoint: true` instead of running to completion. Prefer a line after the app consumed the event when you want the settled result state rather than the input-handling moment.
+For standard frame proof when this UI input drives a state transition, follow the `uloop-pause-point` skill. Pausing on the line that handles the UI event is safe: when the pause lands mid-command, `simulate-mouse-ui` returns promptly with `InterruptedByPausePoint: true` instead of running to completion. Prefer a line after the app consumed the event when you want the settled result state rather than the input-handling moment.
 
 - If `InterruptedByPausePoint: true`, Unity is paused and `Success: true` only means the command ended cleanly. Read `Message` first: it states whether the pointer event was already dispatched before the pause (only the overlay animation was interrupted) or the pause landed first (no pointer event was fired).
 - Clear pause points (`uloop clear-pause-point --all`) before final validation when they were enabled only for inspection.

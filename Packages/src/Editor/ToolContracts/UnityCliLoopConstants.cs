@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string COMMAND_NAME_GET_TOOL_DETAILS = "get-tool-details";
         public const string COMMAND_NAME_GET_VERSION = "get-version";
         public const string COMMAND_NAME_GET_COMPILE_STATUS = "get-compile-status";
-        public const string COMMAND_NAME_WAIT_FOR_PAUSE_POINT = "wait-for-pause-point";
+        public const string COMMAND_NAME_AWAIT_PAUSE_POINT = "await-pause-point";
         public const string COMMAND_NAME_PAUSE_POINT_STATUS = "pause-point-status";
         public const string COMMAND_NAME_GET_PAUSE_POINT_STATUS = "get-pause-point-status";
         public const string COMMAND_NAME_CLEAR_PAUSE_POINT_STATUS = "clear-pause-point-status";
