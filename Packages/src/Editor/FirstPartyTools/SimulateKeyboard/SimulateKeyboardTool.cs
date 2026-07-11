@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         protected override async Task<SimulateKeyboardResponse> ExecuteAsync(SimulateKeyboardSchema parameters, CancellationToken ct)
         {
             SimulateKeyboardUseCase useCase = new();
-            return await useCase.ExecuteAsync(parameters, ct);
+            return await useCase.ExecuteAsync(parameters, ct).ConfigureAwait(false);
         }
     }
 }

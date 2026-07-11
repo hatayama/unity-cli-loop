@@ -1,4 +1,5 @@
 #nullable enable
+using System.Collections.Generic;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
@@ -119,6 +120,79 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PositionX = inputEnd.x,
                 PositionY = inputEnd.y
             };
+        }
+
+        // Message must state whether the pointer event was already dispatched, since AI
+        // callers rely on this text to decide whether the click/press actually reached the
+        // target instead of only its overlay animation being interrupted.
+        internal static SimulateMouseUiResponse CreateInterruptedResult(
+            MouseAction action,
+            Vector2 position,
+            string? hitGameObjectName,
+            string message)
+        {
+            SimulateMouseUiResponse result = new()
+            {
+                Success = true,
+                Message = message,
+                Action = action.ToString(),
+                HitGameObjectName = hitGameObjectName,
+                PositionX = position.x,
+                PositionY = position.y,
+                InterruptedByPausePoint = true
+            };
+            AttachPausePointHit(result);
+            return result;
+        }
+
+        private static void AttachPausePointHit(SimulateMouseUiResponse result)
+        {
+            if (result == null)
+            {
+                Debug.Assert(false, "result must not be null");
+                return;
+            }
+
+            UloopPausePointSnapshot? snapshot = UloopPausePointRegistry.GetLatestHitSnapshot();
+            if (snapshot == null)
+            {
+                return;
+            }
+
+            if (!snapshot.IsHit)
+            {
+                return;
+            }
+
+            string? snapshotId = snapshot.Id;
+            if (string.IsNullOrEmpty(snapshotId))
+            {
+                return;
+            }
+
+            result.PausePointId = snapshotId;
+            result.PausePointHitCount = snapshot.HitCount;
+            result.PausePointHits = CollectPausePointHits();
+        }
+
+        // One input can hit several markers in the same frame; the representative
+        // PausePointId alone forced agents into extra status calls to find the others.
+        private static List<UnityCliLoopPausePointHit> CollectPausePointHits()
+        {
+            List<UnityCliLoopPausePointHit> hits = new();
+            foreach (UloopPausePointSnapshot snapshot in UloopPausePointRegistry.GetHitSnapshots())
+            {
+                if (!snapshot.IsHit || string.IsNullOrEmpty(snapshot.Id))
+                {
+                    continue;
+                }
+                hits.Add(new UnityCliLoopPausePointHit
+                {
+                    Id = snapshot.Id,
+                    HitCount = snapshot.HitCount
+                });
+            }
+            return hits;
         }
     }
 }

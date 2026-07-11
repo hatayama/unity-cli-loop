@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         protected override async Task<FindGameObjectsResponse> ExecuteAsync(FindGameObjectsSchema parameters, CancellationToken ct)
         {
             FindGameObjectsUseCase useCase = new(new GameObjectFinderService(), new ComponentSerializer());
-            return await useCase.ExecuteAsync(parameters, ct);
+            return await useCase.ExecuteAsync(parameters, ct).ConfigureAwait(false);
         }
     }
 }

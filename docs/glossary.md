@@ -99,3 +99,29 @@ Cursor). Each target defines where its skill copies live and which folder layout
 An Application-layer orchestration class that coordinates one tool execution flow across
 domain services and infrastructure ports. UseCases contain no UI and no direct Unity
 editor state access; they are the only layer that sequences multi-step tool work.
+
+### Pause point
+
+A registry entry (`UloopPausePointRegistry`) that freezes PlayMode when a specific code path
+is reached, then reports execution state through `wait-for-pause-point`/`pause-point-status`.
+A pause point is enabled either by a hand-written `UloopPausePoint.Pause(id)` marker call, or
+as a source pause point resolved from a `--file`/`--line` location with no source edit.
+
+### Source pause point
+
+A pause point enabled by `enable-pause-point --file <path> --line <N>` instead of a marker
+`Id`. `SourcePausePointResolver` maps the file and line to a patch location over the
+method's portable PDB, and `SourcePausePointPatcher` injects the capture call at that
+instruction via a Harmony transpiler — no source edit or recompile is required. Source
+pause points are removed automatically on `clear-pause-point`/`ClearAll` and never survive a
+script compile or domain reload.
+
+### Captured variable
+
+One local, parameter, or `this` instance field snapshotted at the moment execution reaches
+a pause point, represented by `UloopCapturedVariable` internally and exposed as
+`CapturedVariables` in tool and status responses. Its `Scope` is `Local`, `Parameter`, or
+`InstanceField`; `UnityEngine.Object` values additionally carry `UnityObjectKind`,
+`UnityObjectPath`, and `UnityObjectInstanceId`. The snapshot is taken before the resolved
+line executes, and `CapturedVariablesTruncated` reports whether the length or count cap
+clipped any evidence.

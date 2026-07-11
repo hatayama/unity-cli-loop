@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         protected override async Task<GetHierarchyResponse> ExecuteAsync(GetHierarchySchema parameters, CancellationToken ct)
         {
             GetHierarchyUseCase useCase = new(new HierarchyService(), new HierarchySerializer());
-            return await useCase.ExecuteAsync(parameters, ct);
+            return await useCase.ExecuteAsync(parameters, ct).ConfigureAwait(false);
         }
     }
 }
