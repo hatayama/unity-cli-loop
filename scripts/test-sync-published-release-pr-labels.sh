@@ -175,6 +175,17 @@ test_marks_dispatcher_component_summary_release_pr_from_body() {
   assert_contains "$TMP_DIR/dispatcher-component-summary/output.txt" "Marked release PR #1470 as tagged for dispatcher-v3.0.1-beta.12."
 }
 
+# Verifies uloop-prefixed dispatcher summaries written by the release PR clarifier still resolve the dispatcher release tag.
+test_marks_uloop_dispatcher_component_summary_release_pr_from_body() {
+  run_case uloop-dispatcher-component-summary \
+    '[{"number":1696,"title":"chore: release v3-beta","body":"<details><summary>uloop-dispatcher: 3.0.1-beta.13</summary></details>","mergeCommit":{"oid":"abc123"}}]' \
+    '{"dispatcher-v3.0.1-beta.13":{"isDraft":false,"targetCommitish":"abc123"}}'
+
+  assert_file_equals "$TMP_DIR/uloop-dispatcher-component-summary/status.txt" "0"
+  assert_contains "$TMP_DIR/uloop-dispatcher-component-summary/gh.log" "release view dispatcher-v3.0.1-beta.13 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
+  assert_contains "$TMP_DIR/uloop-dispatcher-component-summary/output.txt" "Marked release PR #1696 as tagged for dispatcher-v3.0.1-beta.13."
+}
+
 # Verifies component summaries take precedence over legacy numeric release titles.
 test_marks_project_runner_component_summary_release_pr_before_numeric_title() {
   run_case project-runner-component-before-title \
@@ -234,6 +245,7 @@ test_marks_stale_pending_release_pr
 test_marks_branch_title_release_pr_from_body
 test_marks_component_summary_release_pr_from_body
 test_marks_dispatcher_component_summary_release_pr_from_body
+test_marks_uloop_dispatcher_component_summary_release_pr_from_body
 test_marks_project_runner_component_summary_release_pr_from_body
 test_marks_project_runner_component_summary_release_pr_before_numeric_title
 test_keeps_draft_release_pending
