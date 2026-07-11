@@ -306,6 +306,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void PausePointStatusBridge_WhenPausePointHitWithCapturedVariables_ReturnsCapturedVariables()
+        {
+            // Verifies the CLI status bridge surfaces captured variables and the truncated flag
+            // from the registry snapshot, not just the marker/hit bookkeeping fields.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopCapturedVariable[] capturedVariables =
+            {
+                new("speed", UloopCapturedVariableScope.Local, "System.Int32", "5", string.Empty, string.Empty, 0)
+            };
+            UloopPausePointRegistry.HitWithCapturedVariables("jump", capturedVariables, true);
+            JObject parameters = new() { ["id"] = "jump" };
+
+            PausePointStatusResponse response = PausePointStatusBridgeCommand.Execute(parameters);
+
+            Assert.That(response.CapturedVariablesTruncated, Is.True);
+            Assert.That(response.CapturedVariables.Select(v => v.Name), Is.EquivalentTo(new[] { "speed" }));
+            Assert.That(response.CapturedVariables[0].Value, Is.EqualTo("5"));
+        }
+
+        [Test]
         public void Enable_WhenSamePausePointWasHit_ClearsLatestHitSnapshot()
         {
             // Verifies re-enabling a marker does not leave stale hit details for input tools.
