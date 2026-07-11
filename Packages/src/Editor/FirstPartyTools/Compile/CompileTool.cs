@@ -25,7 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 UnityCliLoopCompileSessionLifecycleFacade.Service,
                 UnityCliLoopCompileResultSessionRepositoryFacade.Repository,
                 UnityCliLoopPendingCompileSessionRepositoryFacade.Repository);
-            return await useCase.CompileAsync(parameters, ct);
+            return await useCase.CompileAsync(parameters, ct).ConfigureAwait(false);
         }
     }
 }
