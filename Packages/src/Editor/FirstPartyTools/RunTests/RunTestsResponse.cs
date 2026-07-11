@@ -1,4 +1,5 @@
 using System;
+using Newtonsoft.Json;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -77,6 +78,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Path to XML result file (if saved)
         /// </summary>
         public string XmlPath { get; set; }
+
+        /// <summary>
+        /// IDs of pause points that were cleared before test execution, or null when none were active
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string[] ClearedPausePointIds { get; set; }
 
         /// <summary>
         /// Create a new RunTestsResponse. Every field is required so classification decisions

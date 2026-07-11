@@ -12,18 +12,22 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public UloopPausePointClearAllResult(
             int clearedCount,
             DateTime clearedAtUtc,
-            UloopPausePointEditorStateSnapshot editorState)
+            UloopPausePointEditorStateSnapshot editorState,
+            string[] clearedIds)
         {
             Debug.Assert(editorState != null, "editorState must not be null");
+            Debug.Assert(clearedIds != null, "clearedIds must not be null");
 
             ClearedCount = clearedCount;
             ClearedAtUtc = clearedAtUtc;
             EditorState = editorState;
+            ClearedIds = clearedIds;
         }
 
         public int ClearedCount { get; }
         public DateTime ClearedAtUtc { get; }
         public UloopPausePointEditorStateSnapshot EditorState { get; }
+        public string[] ClearedIds { get; }
     }
 }
 #endif
