@@ -19,6 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             "that call uloop.\nThe skill teaches your AI agent how to search, inspect context, and update only " +
             "real V2 CLI usage. This window only installs or removes it.";
         internal const string AiMigrationSkillUsageFoldoutTitle = "Prompt for your AI agent";
+        internal const string AiMigrationSkillTemporaryNoteText =
+            "This skill is temporary. Remove it once your docs and scripts are migrated to V3 CLI syntax.";
         internal const string AiMigrationSkillPromptText =
             "Use the v3-cli-invocation-migration skill in this project to update Unity CLI Loop V2 CLI usage " +
             "for V3.\n\n" +

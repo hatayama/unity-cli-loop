@@ -18,6 +18,10 @@ syntax in agent-facing docs and automation.
 4. Edit only files that clearly contain V2 `uloop` option syntax.
 5. Repeat the searches after editing and report any remaining V2
    candidates with the reason each one was left unchanged.
+6. After every Required Search Pass reports zero remaining V2 candidates,
+   tell the user this temporary skill has finished its job and can be
+   removed with `uloop skills uninstall-v3-migration --<target>` (for
+   example `--claude` or `--codex`). Do not uninstall the skill yourself.
 
 Prefer `rg` for searches when available. If `rg` is unavailable, use the best available project search tool. Candidate discovery should be repository search plus context inspection, not a generated candidate list.
 

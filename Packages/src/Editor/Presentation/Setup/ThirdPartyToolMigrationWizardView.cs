@@ -22,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly Button _migrateButton;
         private readonly EnumField _migrationSkillTargetField;
         private readonly Button _migrationSkillButton;
+        private readonly TextField _migrationSkillTemporaryNoteTextField;
         private readonly Button _refreshButton;
         private readonly Button _closeButton;
 
@@ -33,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Button migrateButton,
             EnumField migrationSkillTargetField,
             Button migrationSkillButton,
+            TextField migrationSkillTemporaryNoteTextField,
             Button refreshButton,
             Button closeButton)
         {
@@ -43,6 +45,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(migrateButton != null, "migrateButton must not be null");
             Debug.Assert(migrationSkillTargetField != null, "migrationSkillTargetField must not be null");
             Debug.Assert(migrationSkillButton != null, "migrationSkillButton must not be null");
+            Debug.Assert(
+                migrationSkillTemporaryNoteTextField != null,
+                "migrationSkillTemporaryNoteTextField must not be null");
             Debug.Assert(refreshButton != null, "refreshButton must not be null");
             Debug.Assert(closeButton != null, "closeButton must not be null");
 
@@ -53,6 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _migrateButton = migrateButton;
             _migrationSkillTargetField = migrationSkillTargetField;
             _migrationSkillButton = migrationSkillButton;
+            _migrationSkillTemporaryNoteTextField = migrationSkillTemporaryNoteTextField;
             _refreshButton = refreshButton;
             _closeButton = closeButton;
         }
@@ -87,7 +93,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Button migrateButton = CreateMigrateButton(migrationButtonRow);
             (Button refreshButton, Button closeButton) = CreateCSharpMigrationActionSection(mainScrollView);
             CreateSectionDivider(mainScrollView);
-            (EnumField migrationSkillTargetField, Button migrationSkillButton) =
+            (EnumField migrationSkillTargetField, Button migrationSkillButton, TextField temporaryNoteTextField) =
                 CreateAiMigrationSkillSection(mainScrollView);
             CreateFooter(mainScrollView);
 
@@ -99,6 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 migrateButton,
                 migrationSkillTargetField,
                 migrationSkillButton,
+                temporaryNoteTextField,
                 refreshButton,
                 closeButton);
             view.BindEvents(refresh, migrate, migrationSkillTargetChanged, toggleMigrationSkill, close);
@@ -116,6 +123,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 installState);
             _migrationSkillTargetField.SetEnabled(!isUpdating);
             _migrationSkillButton.SetEnabled(!isUpdating);
+            ViewDataBinder.SetVisible(
+                _migrationSkillTemporaryNoteTextField,
+                ThirdPartyToolMigrationWizardStateRules.ShouldShowTemporarySkillNote(installState));
         }
 
         internal void ShowNotCheckedState(bool isMigrating)
@@ -284,7 +294,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             mainScrollView.Add(divider);
         }
 
-        private static (EnumField migrationSkillTargetField, Button migrationSkillButton)
+        private static (EnumField migrationSkillTargetField, Button migrationSkillButton, TextField temporaryNoteTextField)
             CreateAiMigrationSkillSection(ScrollView mainScrollView)
         {
             VisualElement migrationSkillSection = new VisualElement();
@@ -334,9 +344,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             migrationSkillButton.AddToClassList("setup-button");
             migrationSkillButton.AddToClassList("setup-button--primary");
             buttonRow.Add(migrationSkillButton);
+
+            TextField temporaryNoteTextField = CreateSelectableText(
+                ThirdPartyToolMigrationWizardText.AiMigrationSkillTemporaryNoteText,
+                "setup-step__description-label");
+            actionSection.Add(temporaryNoteTextField);
+            // Missing is the default create-time install state; hide until SetMigrationSkillState
+            // reports an installed or outdated skill.
+            ViewDataBinder.SetVisible(temporaryNoteTextField, false);
+
             CreateMigrationSkillUsageFoldout(actionSection);
             CreateMigrationSkillPromptCopyButton(actionSection);
-            return (migrationSkillTargetField, migrationSkillButton);
+            return (migrationSkillTargetField, migrationSkillButton, temporaryNoteTextField);
         }
 
         private static void CreateMigrationSkillUsageFoldout(VisualElement content)
