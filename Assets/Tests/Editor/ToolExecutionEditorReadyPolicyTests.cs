@@ -48,6 +48,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Evaluate_WhenDynamicCodeRunsDuringCompilationAndUpdate_ShouldReportBothEditorFlags()
+        {
+            // Verifies busy decisions copy live compile and import flags instead of inferring mutual exclusion.
+            ToolExecutionEditorState editorState = new ToolExecutionEditorState(
+                isCompiling: true,
+                isUpdating: true,
+                isPlaying: false,
+                isPaused: false);
+
+            ToolExecutionEditorReadyDecision decision = ToolExecutionEditorReadyPolicy.Evaluate(
+                UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                editorState);
+
+            Assert.That(decision.IsReady, Is.False);
+            Assert.That(decision.IsCompiling, Is.True);
+            Assert.That(decision.IsUpdating, Is.True);
+        }
+
+        [Test]
         public void Evaluate_WhenReadOnlyToolRunsDuringBusyEditorState_ShouldReturnReadyDecision()
         {
             // Tests that read-only tools bypass state guards that only protect mutating commands.

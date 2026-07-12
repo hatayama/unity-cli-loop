@@ -140,6 +140,10 @@ func unityServerBusyError(
 	data map[string]any,
 	context ErrorContext,
 ) CLIError {
+	if editorActivity := unityServerBusyEditorActivitySummary(data); editorActivity != nil {
+		details["EditorActivity"] = editorActivity
+	}
+
 	return CLIError{
 		ErrorCode:   errorCodeUnityServerBusy,
 		Phase:       ErrorPhaseDispatch,
@@ -148,11 +152,8 @@ func unityServerBusyError(
 		SafeToRetry: true,
 		ProjectRoot: context.ProjectRoot,
 		Command:     context.Command,
-		NextActions: []string{
-			"Wait for the running Unity command to complete.",
-			"Retry the command after Unity reports it is no longer busy.",
-		},
-		Details: details,
+		NextActions: unityServerBusyNextActions(data),
+		Details:     details,
 	}
 }
 
