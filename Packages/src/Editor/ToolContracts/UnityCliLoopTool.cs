@@ -15,7 +15,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         // Both JsonSerializer and the resolver are thread-safe once configured.
         internal static readonly JsonSerializer CamelCaseSerializer = JsonSerializer.Create(new JsonSerializerSettings
         {
-            ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
+            ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver(),
+            Converters = { new CaseInsensitiveStringEnumConverter() }
         });
     }
 

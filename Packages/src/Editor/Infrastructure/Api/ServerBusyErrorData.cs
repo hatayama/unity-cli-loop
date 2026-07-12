@@ -19,6 +19,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public bool? isPaused { get; }
 
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public bool? isCompiling { get; }
+
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public bool? isUpdating { get; }
+
         // Lets a client distinguish "main thread still ticking, tool genuinely running long" from
         // a frozen/deadlocked Editor while BUSY, without needing native stack sampling.
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
@@ -30,13 +36,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool? isPlaying,
             bool? isPaused,
             string message,
-            double? secondsSinceLastMainThreadTick = null)
+            double? secondsSinceLastMainThreadTick = null,
+            bool? isCompiling = null,
+            bool? isUpdating = null)
             : base(message)
         {
             this.runningToolName = runningToolName;
             this.requestedToolName = requestedToolName;
             this.isPlaying = isPlaying;
             this.isPaused = isPaused;
+            this.isCompiling = isCompiling;
+            this.isUpdating = isUpdating;
             this.secondsSinceLastMainThreadTick = secondsSinceLastMainThreadTick;
         }
     }

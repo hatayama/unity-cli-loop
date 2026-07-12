@@ -1,6 +1,7 @@
 package dispatcher
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
 func TestClassifyLaunchStartupTimeoutError(t *testing.T) {
@@ -76,6 +78,30 @@ func TestClassifyInstallUnsupportedOS(t *testing.T) {
 	}
 	expectedAction := "Run `uloop install` on macOS or Windows."
 	if len(cliErr.NextActions) == 0 || cliErr.NextActions[0] != expectedAction {
+		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
+	}
+}
+
+func TestClassifyServerBusyRPCError_WhenCompiling_IncludesEditorActivity(t *testing.T) {
+	// Verifies dispatcher-side busy classification surfaces compile-specific editor activity guidance.
+	cliErr := clierrors.ClassifyError(
+		&unityipc.RPCError{
+			Code:    -32603,
+			Message: "Unity is busy running 'unity-compile'.",
+			Data: json.RawMessage(
+				`{"type":"server_busy","runningToolName":"unity-compile","requestedToolName":"get-logs","isCompiling":true}`),
+		},
+		clierrors.ErrorContext{ProjectRoot: "/tmp/MyProject", Command: "get-logs"},
+	)
+
+	editorActivity, ok := cliErr.Details["EditorActivity"].(map[string]any)
+	if !ok {
+		t.Fatalf("editor activity missing: %#v", cliErr.Details)
+	}
+	if editorActivity["isCompiling"] != true {
+		t.Fatalf("isCompiling mismatch: %#v", editorActivity)
+	}
+	if cliErr.NextActions[0] != "Unity is compiling scripts; wait for compilation to finish before retrying." {
 		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
 	}
 }
