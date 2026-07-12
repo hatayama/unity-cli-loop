@@ -11,13 +11,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         internal const int MigrationProgressUiUpdateIntervalMilliseconds = 100;
 
-        internal static bool ShouldStartInitialRefresh(
-            bool shouldRefreshAfterCreateGui,
-            bool shouldAutoScanThirdPartyToolMigration)
-        {
-            return shouldRefreshAfterCreateGui && shouldAutoScanThirdPartyToolMigration;
-        }
-
         internal static bool ShouldReportMigrationProgress(
             long lastReportTimestamp,
             long currentTimestamp,
