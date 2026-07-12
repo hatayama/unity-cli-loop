@@ -713,7 +713,9 @@ func TestSendWithTransientConnectionRetryReturnsBusyAfterRetryWindow(t *testing.
 	}
 }
 
-// Verifies persistent busy retries focus Unity once after the busy stall threshold and restore focus on exit.
+// TDD repro for B-7a: before busy_stall focus rescue, persistent server_busy never called
+// focusUnityProcess (focusCallCount stayed 0). This assertion was Red on pre-fix
+// connection_retry.go and turns Green after the busy stall threshold hook.
 func TestSendWithTransientConnectionRetryFocusesOnceAfterPersistentBusy(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")

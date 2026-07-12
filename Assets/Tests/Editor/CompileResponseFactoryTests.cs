@@ -215,6 +215,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void CreateResponse_WhenExternalSceneCannotBeReloaded_AddsNextActions()
+        {
+            // Verifies reload-failure messages from ExternalSceneChangeResolver also surface reload guidance.
+            CompilerMessage error = new CompilerMessage
+            {
+                type = CompilerMessageType.Error,
+                message =
+                    "Compilation cannot reload externally changed Scene files before compile. " +
+                    "Scenes that could not be reloaded: Assets/Scenes/SampleScene.unity.",
+                file = "Assets/Scenes/SampleScene.unity",
+                line = 0
+            };
+            CompileResult result = new CompileResult(
+                success: false,
+                errorCount: 1,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: new[] { error },
+                errors: new[] { error },
+                warnings: Array.Empty<CompilerMessage>(),
+                message: error.message);
+
+            CompileResponse response =
+                CompileResponseFactory.CreateResponse(result, forceRecompile: false);
+
+            Assert.That(response.NextActions, Is.Not.Null);
+            Assert.That(response.NextActions, Has.Length.EqualTo(2));
+        }
+
+        [Test]
+        public void CreateResponse_WhenExternalSceneStopMessageUsesDifferentWording_DoesNotAddNextActions()
+        {
+            // Verifies the stopped variant ("changed externally") does not match the NextActions substring gate.
+            CompilerMessage error = new CompilerMessage
+            {
+                type = CompilerMessageType.Error,
+                message =
+                    "Compilation stopped because open Scene files changed externally. " +
+                    "External Scene changes: Assets/Scenes/SampleScene.unity.",
+                file = "Assets/Scenes/SampleScene.unity",
+                line = 0
+            };
+            CompileResult result = new CompileResult(
+                success: false,
+                errorCount: 1,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: new[] { error },
+                errors: new[] { error },
+                warnings: Array.Empty<CompilerMessage>(),
+                message: error.message);
+
+            CompileResponse response =
+                CompileResponseFactory.CreateResponse(result, forceRecompile: false);
+
+            Assert.That(response.NextActions, Is.Null);
+        }
+
+        [Test]
         public void CreateResponse_WhenUnityTestFrameworkSymbolIsMissing_AddsTestAsmdefHint()
         {
             // Verifies compile failures from unmarked test asmdefs include the TestAssemblies fix.
