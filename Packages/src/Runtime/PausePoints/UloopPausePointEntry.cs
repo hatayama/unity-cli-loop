@@ -63,15 +63,19 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         public void MarkCleared(string clearedReason, string message = "Pause point cleared.")
         {
+            // Why: a second clear must not erase the first reason (e.g. RunTestsAutoClear).
+            if (Status == UloopPausePointStatus.Cleared)
+            {
+                IsEnabled = false;
+                Message = message;
+                return;
+            }
+
             // Why: keep the pre-clear status so agents can still see Expired/Hit after Cleared overwrites Status.
             StatusBeforeClear = Status;
             if (Status == UloopPausePointStatus.Expired)
             {
                 ClearedReason = UloopPausePointClearedReason.AfterExpired;
-            }
-            else if (Status == UloopPausePointStatus.Cleared)
-            {
-                ClearedReason = UloopPausePointClearedReason.AlreadyCleared;
             }
             else if (Status == UloopPausePointStatus.Hit &&
                 clearedReason == UloopPausePointClearedReason.ExplicitClear)

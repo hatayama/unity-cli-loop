@@ -140,6 +140,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Clear_WhenAlreadyClearedByRunTests_PreservesOriginalReason()
+        {
+            // Verifies a later explicit clear does not erase run-tests auto-clear evidence.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.ClearAll(UloopPausePointClearedReason.RunTestsAutoClear);
+
+            UloopPausePointRegistry.Clear("jump");
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(snapshot.ClearedReason, Is.EqualTo(UloopPausePointClearedReason.RunTestsAutoClear));
+            Assert.That(snapshot.StatusBeforeClear, Is.EqualTo(UloopPausePointStatus.Enabled));
+        }
+
+        [Test]
         public void ClearAll_WhenEnabled_SetsRunTestsAutoClearReason()
         {
             // Verifies run-tests-style ClearAll is visible on status after wiping an enabled marker.
