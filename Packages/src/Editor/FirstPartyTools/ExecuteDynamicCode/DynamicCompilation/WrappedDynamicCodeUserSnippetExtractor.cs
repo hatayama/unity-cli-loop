@@ -55,7 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 normalizedLines[index] = rawLines[index].TrimStart().TrimEnd('\r');
             }
 
-            return normalizedLines;
+            return DynamicCodeUserSnippetLines.TrimTrailingEmptyLines(normalizedLines);
         }
     }
 }

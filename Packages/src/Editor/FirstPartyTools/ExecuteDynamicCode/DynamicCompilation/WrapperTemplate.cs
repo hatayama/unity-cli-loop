@@ -13,6 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         internal const string UserCodeStartMarker = "#line 1 \"user-snippet.cs\"";
         internal const string UserCodeEndMarker = "#line default";
+        internal const int UserBodyIndentSpaces = 12;
 
         private static readonly DefaultUsingAlias[] DefaultUsingAliases =
         {
@@ -71,7 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (string line in body.Split('\n'))
             {
-                sb.AppendLine($"            {line.TrimEnd('\r')}");
+                sb.AppendLine($"{new string(' ', UserBodyIndentSpaces)}{line.TrimEnd('\r')}");
             }
 
             sb.AppendLine(UserCodeEndMarker);

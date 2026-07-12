@@ -40,7 +40,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        internal ExecuteDynamicCodeResponse ConvertExecutionResultToResponse(ExecutionResult result)
+        internal ExecuteDynamicCodeResponse ConvertExecutionResultToResponse(
+            ExecutionResult result,
+            string originalUserSnippet = null)
         {
             ExecuteDynamicCodeResponse response = new()            {
                 Success = result.Success,
@@ -53,7 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!result.Success)
             {
-                ApplyFailureResponseDetails(response, result);
+                ApplyFailureResponseDetails(response, result, originalUserSnippet);
             }
 
             if (result.Exception != null)
@@ -71,19 +73,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private void ApplyFailureResponseDetails(
             ExecuteDynamicCodeResponse response,
-            ExecutionResult result)
+            ExecutionResult result,
+            string originalUserSnippet)
         {
             DynamicCodeFriendlyError friendlyError = _friendlyErrorConverter.Convert(result);
             response.ErrorMessage = friendlyError.FriendlyMessage;
             response.Logs = result.Logs != null ? new List<string>(result.Logs) : new List<string>();
             AddFriendlyFailureDetails(response.Logs, friendlyError);
-            ApplyCompilationDiagnostics(response, result);
+            ApplyCompilationDiagnostics(response, result, originalUserSnippet);
             response.UpdatedCode = result.UpdatedCode ?? response.UpdatedCode;
         }
 
         private static void ApplyCompilationDiagnostics(
             ExecuteDynamicCodeResponse response,
-            ExecutionResult result)
+            ExecutionResult result,
+            string originalUserSnippet)
         {
             if (result.CompilationErrors?.Any() != true)
             {
@@ -93,6 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.Diagnostics = BuildDiagnostics(
                 result.CompilationErrors,
                 result.UpdatedCode,
+                originalUserSnippet,
                 result.AmbiguousTypeCandidates);
             response.CompilationErrors = response.Diagnostics;
             response.DiagnosticsSummary = CreateDiagnosticsSummary(response.Diagnostics);
@@ -167,24 +172,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static List<CompilationErrorDto> BuildDiagnostics(
             List<CompilationError> errors,
             string updatedCode,
+            string originalUserSnippet,
             Dictionary<string, List<string>> ambiguousCandidates = null)
         {
             List<CompilationErrorDto> list = new();
-            string[] userSnippetLines = ResolveUserSnippetLines(updatedCode);
+            bool hasUserSnippetRegion = WrappedDynamicCodeUserSnippetExtractor.TryExtract(updatedCode, out _);
+            string[] originalUserLines = DynamicCodeUserSnippetLines.Split(originalUserSnippet);
             string[] fallbackLines = string.IsNullOrEmpty(updatedCode)
-                ? Array.Empty<string>()
+                ? System.Array.Empty<string>()
                 : updatedCode.Split(new[] { '\n' }, StringSplitOptions.None);
 
             foreach (CompilationError error in errors)
             {
                 (string hint, List<string> suggestions) = GetHintAndSuggestions(error, ambiguousCandidates);
-                bool hasUserSnippetRegion = WrappedDynamicCodeUserSnippetExtractor.TryExtract(updatedCode, out _);
-                bool useUserSnippetContext = DynamicCodeDiagnosticContextBuilder.IsUserSnippetLineInRange(
-                    userSnippetLines,
-                    error.Line);
-                string[] contextLines = useUserSnippetContext ? userSnippetLines : fallbackLines;
-                string context = ExtractContext(contextLines, error.Line, error.Column);
-                if (hasUserSnippetRegion && !useUserSnippetContext && error.Line > 0)
+                bool useOriginalUserContext = hasUserSnippetRegion
+                    && DynamicCodeDiagnosticContextBuilder.IsUserSnippetLineInRange(originalUserLines, error.Line);
+                string[] contextLines = useOriginalUserContext ? originalUserLines : fallbackLines;
+                int contextColumn = useOriginalUserContext
+                    ? DynamicCodeDiagnosticColumnMapper.MapWrappedColumnToUserColumn(error.Column)
+                    : error.Column;
+                int reportedColumn = useOriginalUserContext ? contextColumn : error.Column;
+                string context = ExtractContext(contextLines, error.Line, contextColumn);
+                if (hasUserSnippetRegion && !useOriginalUserContext && error.Line > 0)
                 {
                     hint = AppendWrapperOriginHint(hint);
                 }
@@ -192,13 +201,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 list.Add(new CompilationErrorDto
                 {
                     Line = error.Line,
-                    Column = error.Column,
+                    Column = reportedColumn,
                     Message = error.Message,
                     ErrorCode = error.ErrorCode,
                     Hint = hint,
                     Suggestions = suggestions,
                     Context = context,
-                    PointerColumn = error.Column
+                    PointerColumn = reportedColumn
                 });
             }
 
@@ -212,16 +221,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 })
                 .Select(group => group.First())
                 .ToList();
-        }
-
-        private static string[] ResolveUserSnippetLines(string updatedCode)
-        {
-            if (!WrappedDynamicCodeUserSnippetExtractor.TryExtract(updatedCode, out string userSnippet))
-            {
-                return Array.Empty<string>();
-            }
-
-            return WrappedDynamicCodeUserSnippetExtractor.SplitNormalizedLines(userSnippet);
         }
 
         private static string AppendWrapperOriginHint(string hint)
