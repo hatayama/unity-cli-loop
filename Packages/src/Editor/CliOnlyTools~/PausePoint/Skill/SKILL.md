@@ -84,7 +84,7 @@ uloop enable-watch --id "speed" --expression "UloopPausePoint.TryGetCapturedValu
 uloop get-watch-values --id "speed"
 ```
 
-`enable-watch` compiles the C# expression once, evaluates it immediately for a baseline, and then evaluates it once per changed `Time.frameCount` while Unity is both playing and paused. Multiple watches run in registration order. `enable-watch` rejects a duplicate id instead of overwriting; clear with `clear-watch --id <id>` before re-registering a changed expression. `clear-watch --id <id>` removes one watch; `clear-watch --all` removes all watches. `get-watch-values` without `--id` returns every registered watch.
+`enable-watch` compiles the C# expression once, evaluates it immediately for a baseline, and then evaluates it once per changed `Time.frameCount`, but only while Play Mode is running and the Editor is paused (each hit pause and each `Step`); nothing is recorded while the game runs unpaused. Multiple watches run in registration order. `enable-watch` rejects a duplicate id instead of overwriting; clear with `clear-watch --id <id>` before re-registering a changed expression. `clear-watch --id <id>` removes one watch; `clear-watch --all` removes all watches. `get-watch-values` without `--id` returns every registered watch.
 
 The expression may use `UloopPausePoint.TryGetCapturedValue("name")` to inspect the latest raw pause-point capture while paused. Each history entry includes the frame and either a stringified value or an explicit error type and message. A throwing expression is recorded as an error and does not stop the Editor update loop. `--max-history` accepts 1 through 100 and drops the oldest entries after the limit.
 
