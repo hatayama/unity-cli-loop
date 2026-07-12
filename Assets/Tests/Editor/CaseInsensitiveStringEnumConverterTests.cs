@@ -9,7 +9,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     [TestFixture]
     public class CaseInsensitiveStringEnumConverterTests
     {
-        // Verifies control-play-mode accepts lowercase enum tokens from the CLI.
+        // Locks lowercase enum strings that already worked before the converter was added.
         [Test]
         public void Deserialize_PlayModeAction_AcceptsLowercaseAction()
         {
@@ -35,6 +35,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(exception.Message, Does.Contain("Stop"));
             Assert.That(exception.Message, Does.Contain("Pause"));
             Assert.That(exception.Message, Does.Contain("Step"));
+        }
+
+        // Verifies integer enum tokens are rejected with an explicit string-only message.
+        [Test]
+        public void Deserialize_PlayModeAction_IntegerToken_RejectedWithExplicitMessage()
+        {
+            JObject token = JObject.Parse("{\"action\":1}");
+
+            JsonSerializationException exception = Assert.Throws<JsonSerializationException>(() =>
+                token.ToObject<ControlPlayModeSchema>(UnityCliLoopToolParameterSerializer.CamelCaseSerializer));
+
+            Assert.That(exception.Message, Does.Contain("Enum parameter values must be JSON strings"));
+            Assert.That(exception.Message, Does.Contain("Integer"));
+            Assert.That(exception.Message, Does.Contain("PlayModeAction"));
         }
     }
 }

@@ -38,8 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int index = 0; index < allNames.Length; index++)
             {
                 string name = allNames[index];
-                if (name.StartsWith(trimmed, comparison) ||
-                    name.Contains(trimmed, comparison))
+                if (name.Contains(trimmed, comparison))
                 {
                     AddUnique(suggestions, name);
                     if (suggestions.Count >= MaxSuggestions)

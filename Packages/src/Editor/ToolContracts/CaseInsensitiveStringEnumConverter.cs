@@ -4,7 +4,10 @@ using Newtonsoft.Json;
 namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
     /// <summary>
-    /// Deserializes string tokens into enum values using case-insensitive name matching.
+    /// Parses tool enum parameters from JSON string tokens and lists valid enum names on failure.
+    /// Case-insensitive string matching already worked with the default Newtonsoft enum reader;
+    /// this converter exists so invalid values return an explicit Valid values list.
+    /// Integer tokens are rejected because the CLI only sends string enum values.
     /// </summary>
     internal sealed class CaseInsensitiveStringEnumConverter : JsonConverter
     {
@@ -32,14 +35,16 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                     $"Cannot convert null value to {objectType.Name}.");
             }
 
+            Type enumType = Nullable.GetUnderlyingType(objectType) ?? objectType;
+
             if (reader.TokenType != JsonToken.String)
             {
                 throw new JsonSerializationException(
-                    $"Unexpected token {reader.TokenType} when parsing enum.");
+                    $"Enum parameter values must be JSON strings. Received {reader.TokenType} token " +
+                    $"'{reader.Value}' for type '{enumType.Name}'.");
             }
 
             string rawValue = reader.Value?.ToString() ?? string.Empty;
-            Type enumType = Nullable.GetUnderlyingType(objectType) ?? objectType;
             if (Enum.TryParse(enumType, rawValue, ignoreCase: true, out object parsed))
             {
                 return parsed;
