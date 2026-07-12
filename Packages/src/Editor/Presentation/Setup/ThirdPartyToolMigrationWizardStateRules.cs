@@ -99,5 +99,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             return isMigrationCompletionPending && !isCancellationRequested;
         }
+
+        /// <summary>
+        /// Returns whether the temporary V3 migration skill note should be visible.
+        /// </summary>
+        internal static bool ShouldShowTemporarySkillNote(SkillInstallState installState)
+        {
+            // C# scan results are not a completion signal for this skill (docs/scripts remain
+            // in scope), so only the install state decides whether the temporary note shows.
+            return installState != SkillInstallState.Missing;
+        }
     }
 }
