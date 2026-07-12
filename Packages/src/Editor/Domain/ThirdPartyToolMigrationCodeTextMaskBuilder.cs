@@ -62,6 +62,16 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             int index = 0;
             while (index < source.Length)
             {
+                if (IsPreprocessorDirectiveAt(source, index))
+                {
+                    // Preprocessor text is not C# code; skipping the whole directive line prevents
+                    // apostrophes in titles like #region Bob's helpers from opening a char literal.
+                    int directiveEndIndex = FindLineCommentEndIndex(source, index);
+                    MarkRangeAsIgnored(codeCharacters, index, directiveEndIndex);
+                    index = directiveEndIndex;
+                    continue;
+                }
+
                 if (IsInterpolatedRawStringStart(source, index))
                 {
                     index = MarkInterpolatedRawStringAsIgnored(codeCharacters, source, index);
@@ -244,7 +254,10 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public static int FindCharLiteralEndIndex(string source, int quoteIndex)
         {
             int index = quoteIndex + 1;
-            while (index < source.Length)
+            // Longest valid C# char literal content is \Uxxxxxxxx (10 chars). An unmatched apostrophe
+            // beyond that bound is ordinary code, not an open-ended char literal that masks the file.
+            int maxClosingQuoteIndex = quoteIndex + 1 + MaxCharLiteralContentLength;
+            while (index <= maxClosingQuoteIndex && index < source.Length)
             {
                 if (source[index] == '\\')
                 {
@@ -260,7 +273,32 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 index++;
             }
 
-            return source.Length;
+            return quoteIndex;
+        }
+
+        public static bool IsPreprocessorDirectiveAt(string source, int index)
+        {
+            Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(index >= 0, "index must not be negative");
+
+            if (index >= source.Length || source[index] != '#')
+            {
+                return false;
+            }
+
+            int lineStartIndex = index;
+            while (lineStartIndex > 0 && source[lineStartIndex - 1] != '\n')
+            {
+                lineStartIndex--;
+            }
+
+            int cursor = lineStartIndex;
+            while (cursor < index && (source[cursor] == ' ' || source[cursor] == '\t'))
+            {
+                cursor++;
+            }
+
+            return cursor == index;
         }
 
         public static void MarkRangeAsIgnored(bool[] codeCharacters, int startIndex, int endIndex)

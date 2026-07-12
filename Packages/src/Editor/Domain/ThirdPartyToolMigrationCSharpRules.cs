@@ -371,10 +371,12 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 _migratedContent = ReplaceLegacyDomainTypeNamesInCode(
                     _migratedContent,
                     _legacyNamespaceAliases,
+                    _assemblyDeclaredTypeNames,
                     ref _replacementCount);
                 _migratedContent = ReplaceLegacyContractTypeNamesInCode(
                     _migratedContent,
                     _legacyNamespaceAliases,
+                    _assemblyDeclaredTypeNames,
                     ref _replacementCount);
                 ApplyCSharpReplacementRules();
             }
@@ -396,6 +398,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 ApplyRegistrarReplacementRules();
                 _migratedContent = ReplaceLegacyToolInfoTypeReferencesInCode(
                     _migratedContent,
+                    _assemblyDeclaredTypeNames,
                     ref _replacementCount);
             }
 

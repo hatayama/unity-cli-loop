@@ -270,6 +270,13 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         {
             Debug.Assert(!string.IsNullOrEmpty(directoryName), "directoryName must not be null or empty");
 
+            // Unity ignores trailing-~ folders (Samples~) and hidden/dot folders; keep them out of scans.
+            if (directoryName.StartsWith(".", StringComparison.Ordinal) ||
+                directoryName.EndsWith("~", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
             return ExcludedDirectoryNames.Any(
                 excludedDirectoryName => string.Equals(
                     excludedDirectoryName,

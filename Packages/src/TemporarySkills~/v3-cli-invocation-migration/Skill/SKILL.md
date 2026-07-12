@@ -5,6 +5,8 @@ description: Migrate only uloop V2 CLI option syntax in agent skills, Markdown, 
 
 # V3 CLI Invocation Migration
 
+Agent-facing CLI migration candidates live in this skill. Installed-skill cleanup names stay in `SkillTargetInstaller` / `skills.go` `deprecatedSkillNames`.
+
 Use this skill to update V2-era `uloop` CLI option syntax to V3
 syntax in agent-facing docs and automation.
 
@@ -37,8 +39,9 @@ Prefer `rg` for searches when available. If `rg` is unavailable, use the best av
 - For third-party tools, check the tool's current schema or documentation
   before deciding whether `false` means removal, a `--no-*` flag, or a
   renamed option.
-- For first-party tools, use the reference table. `compile` and `run-tests`
-  have special renamed negative flags.
+- For first-party tools, use the reference table. `compile`, `run-tests`,
+  `get-hierarchy`, `record-input`, and `replay-input` have special renamed
+  negative flags.
 - A valid edit is limited to replacing, adding, or removing a `uloop` option
   token and the boolean value attached to that option in the same invocation.
 - Preserve surrounding Markdown, shell, and PowerShell formatting. Do not
@@ -63,6 +66,8 @@ Prefer `rg` for searches when available. If `rg` is unavailable, use the best av
 - `uloop` command lines and examples.
 - Boolean-looking CLI options: `--* true`, `--*=true`, `--* false`, `--*=false`.
 - First-party renamed options from the reference, including bare flags.
-- Removed commands: `get-project-info` and `get-version`. Report these as
-  out-of-scope command migration candidates unless the user explicitly asked
-  to migrate removed commands.
+- Removed or renamed commands: `get-project-info`, `get-version`,
+  `unity-search`, `execute-menu-item`, `get-menu-items`,
+  `get-unity-search-providers`, `get-provider-details`, and `capture-window`
+  (renamed to `screenshot`). Report these as out-of-scope command migration
+  candidates unless the user explicitly asked to migrate removed commands.

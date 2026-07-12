@@ -10,12 +10,38 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     internal static class ThirdPartyToolMigrationWizardStateRules
     {
         internal const int MigrationProgressUiUpdateIntervalMilliseconds = 100;
+        internal const int MaxMigrationTargetPathsInStatus = 50;
 
-        internal static bool ShouldStartInitialRefresh(
-            bool shouldRefreshAfterCreateGui,
-            bool shouldAutoScanThirdPartyToolMigration)
+        internal static int GetMigrationTargetPathsOverflowCount(int totalPathCount, int maxPaths)
         {
-            return shouldRefreshAfterCreateGui && shouldAutoScanThirdPartyToolMigration;
+            Debug.Assert(totalPathCount >= 0, "totalPathCount must not be negative");
+            Debug.Assert(maxPaths > 0, "maxPaths must be positive");
+
+            if (totalPathCount <= maxPaths)
+            {
+                return 0;
+            }
+
+            return totalPathCount - maxPaths;
+        }
+
+        internal static string NormalizeDisplayPathSeparators(string path)
+        {
+            Debug.Assert(path != null, "path must not be null");
+
+            // Status text must stay Windows-safe: never leave backslashes in displayed relative paths.
+            return path.Replace('\\', '/');
+        }
+
+        internal static string ToProjectRelativeDisplayPath(string filePath, string projectRoot)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            string relativePath = System.IO.Path.GetRelativePath(
+                System.IO.Path.GetFullPath(projectRoot),
+                System.IO.Path.GetFullPath(filePath));
+            return NormalizeDisplayPathSeparators(relativePath);
         }
 
         internal static bool ShouldReportMigrationProgress(

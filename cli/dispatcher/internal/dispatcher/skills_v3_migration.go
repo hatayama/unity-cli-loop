@@ -70,16 +70,18 @@ func installV3MigrationSkillForTarget(projectRoot string, target skillTarget, sk
 			return skillInstallResult{}, err
 		}
 		destinationDir := getPreferredSkillDir(baseDir, skill.name, grouped)
-		if status == "installed" {
-			result.skipped++
-			continue
-		}
-		if err := syncSkillDirectory(skill.sourceDirectory, destinationDir); err != nil {
-			return skillInstallResult{}, err
+		if status != "installed" {
+			if err := syncSkillDirectory(skill.sourceDirectory, destinationDir); err != nil {
+				return skillInstallResult{}, err
+			}
 		}
 		alternateDir := getPreferredSkillDir(baseDir, skill.name, !grouped)
 		if err := os.RemoveAll(alternateDir); err != nil {
 			return skillInstallResult{}, err
+		}
+		if status == "installed" {
+			result.skipped++
+			continue
 		}
 		if status == "outdated" {
 			result.updated++
