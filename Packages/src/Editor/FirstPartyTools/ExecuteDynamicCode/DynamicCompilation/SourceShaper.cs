@@ -147,11 +147,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int segmentStart,
             int semiEnd)
         {
-            if (result.TopLevelBodyBuilder.Length == 0)
-            {
-                result.ExtractedLeadingUsingLineCount++;
-            }
-
             result.UsingDirectives.Add(source.Substring(segmentStart, semiEnd - segmentStart + 1).TrimEnd());
 
             string aliasName = ExtractUsingAliasName(source, segmentStart, semiEnd);
@@ -328,8 +323,56 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             result.HasTopLevelStatements = true;
             int nextBraceDepth = braceDepth;
             int stmtEnd = FindStatementEnd(source, pos, ref nextBraceDepth);
-            result.TopLevelBodyBuilder.AppendLine(source.Substring(pos, stmtEnd - pos + 1).TrimEnd());
+            int originalLineNumber1Based = GetLineNumber1Based(source, pos);
+            PadTopLevelBodyBuilderToOriginalLine(result, originalLineNumber1Based);
+            string statementText = source.Substring(pos, stmtEnd - pos + 1).TrimEnd();
+            result.TopLevelBodyBuilder.AppendLine(statementText);
+            result.NextBodyLineNumber1Based = originalLineNumber1Based + CountLinesInText(statementText);
             return new SourceTopLevelStep(stmtEnd + 1, nextBraceDepth);
+        }
+
+        private static void PadTopLevelBodyBuilderToOriginalLine(
+            SourceShapeResult result,
+            int originalLineNumber1Based)
+        {
+            while (result.NextBodyLineNumber1Based < originalLineNumber1Based)
+            {
+                result.TopLevelBodyBuilder.AppendLine();
+                result.NextBodyLineNumber1Based++;
+            }
+        }
+
+        private static int GetLineNumber1Based(string source, int index)
+        {
+            int lineNumber = 1;
+            for (int position = 0; position < index && position < source.Length; position++)
+            {
+                if (source[position] == '\n')
+                {
+                    lineNumber++;
+                }
+            }
+
+            return lineNumber;
+        }
+
+        private static int CountLinesInText(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return 0;
+            }
+
+            int lineCount = 1;
+            for (int index = 0; index < text.Length; index++)
+            {
+                if (text[index] == '\n')
+                {
+                    lineCount++;
+                }
+            }
+
+            return lineCount;
         }
 
         private static SourceTopLevelStep SkipTopLevelBlock(string source, int pos, int braceDepth)
@@ -366,13 +409,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     : body + "\nreturn null;";
             }
 
-            return WrapperTemplate.Build(
-                shape.UsingDirectives,
-                shape.AliasedNames,
-                namespaceName,
-                className,
-                body,
-                extractedLeadingUsingLinePlaceholderCount: shape.ExtractedLeadingUsingLineCount);
+            return WrapperTemplate.Build(shape.UsingDirectives, shape.AliasedNames, namespaceName, className, body);
         }
 
         internal static int SkipWhitespace(string s, int pos)
@@ -829,7 +866,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class SourceShapeResult
     {
         public List<string> UsingDirectives { get; } = new List<string>();
-        public int ExtractedLeadingUsingLineCount { get; set; }
+        public int NextBodyLineNumber1Based { get; set; } = 1;
         public HashSet<string> AliasedNames { get; } = new HashSet<string>(System.StringComparer.Ordinal);
         public bool HasNamespaceDeclaration { get; set; }
         public bool HasTypeDeclaration { get; set; }

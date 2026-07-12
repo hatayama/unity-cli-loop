@@ -27,8 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string namespaceName,
             string className,
             string body,
-            IReadOnlyList<string> preambleLines = null,
-            int extractedLeadingUsingLinePlaceholderCount = 0)
+            IReadOnlyList<string> preambleLines = null)
         {
             Debug.Assert(usingDirectives != null, "usingDirectives must not be null");
             Debug.Assert(aliasedNames != null, "aliasedNames must not be null");
@@ -70,12 +69,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             sb.AppendLine(UserCodeStartMarker);
-
-            string bodyIndent = new string(' ', UserBodyIndentSpaces);
-            for (int placeholderIndex = 0; placeholderIndex < extractedLeadingUsingLinePlaceholderCount; placeholderIndex++)
-            {
-                sb.AppendLine(bodyIndent);
-            }
 
             foreach (string line in body.Split('\n'))
             {

@@ -64,8 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 namespaceName,
                 className,
                 hoistedResult.RewrittenSource,
-                hoistedResult.DeclarationLines,
-                shape.ExtractedLeadingUsingLineCount);
+                hoistedResult.DeclarationLines);
 
             return new PreparedDynamicCode(preparedSource, true, hoistedResult.Bindings);
         }
