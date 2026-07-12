@@ -31,6 +31,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 IsHit = true,
                 HitCount = 1,
                 TimeoutSeconds = 30,
+                Mode = "continuous",
+                MaxHistory = 20,
+                CapturedVariableHistory = new List<PausePointStatusCapturedHistoryFrame>
+                {
+                    new()
+                    {
+                        HitSequence = 1,
+                        FrameCount = 42,
+                        HitAtUtc = "2026-06-03T00:00:01.0000000Z",
+                        CapturedVariables = new List<PausePointStatusCapturedVariable>(),
+                        Truncated = false
+                    }
+                },
+                HistoryDroppedCount = 0,
                 Expired = false,
                 EnabledAtUtc = "2026-06-03T00:00:00.0000000Z",
                 ElapsedSinceEnabledMilliseconds = 1200,

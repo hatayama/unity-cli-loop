@@ -30,6 +30,25 @@ uloop await-pause-point --id "Assets/Scripts/Enemy.cs:42" --timeout-seconds 30
 5. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
 6. Clear the marker with `uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"` or stop PlayMode before moving on. Use `uloop clear-pause-point --all` to clear every active marker at once, for example when resetting between E2E scenarios. Clearing also removes the underlying code patch, so the method runs untouched afterwards.
 
+## Capture Modes and History
+
+Choose the capture mode when enabling a pause point:
+
+- `single-shot` is the default. The first hit pauses Unity and disarms the marker.
+- `continuous` pauses Unity on every hit and remains armed. Each hit adds a frame to `CapturedVariableHistory`, while `CapturedVariables` remains the latest-hit compatibility view.
+- `trace` remains armed and records each hit without pausing Unity.
+
+`--max-history` defaults to 20 and accepts values from 1 through 100. When the limit is exceeded, the oldest frames are dropped and `HistoryDroppedCount` reports how many were removed. `pause-point-status` returns the current `Mode`, `MaxHistory`, history frames, and dropped count.
+
+To inspect value changes one Editor Step at a time, enable a `continuous` pause point on a line inside `Update` or `FixedUpdate`, trigger the first hit, then run:
+
+```bash
+uloop control-play-mode --action Step
+uloop pause-point-status --id "Assets/Scripts/Enemy.cs:42"
+```
+
+Repeat the Step/status pair to inspect the history tail. A new frame is captured only when the patched line executes during that frame; event handlers such as `OnCollisionEnter` update only when the event occurs again. Use a longer `--timeout-seconds` for a Step session because the enable-time timeout does not extend after hits.
+
 ## Reading CapturedVariables
 
 Every hit response embeds `CapturedVariables`: the method's in-scope locals, its parameters, and the `this` instance fields, captured at the exact moment execution reached the patched line. Values are point-in-time strings, not live references, so they stay valid as evidence even after Unity resumes.

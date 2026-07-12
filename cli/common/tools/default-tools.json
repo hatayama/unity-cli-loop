@@ -360,6 +360,21 @@
             "type": "integer",
             "description": "Seconds before the enable request expires and stops pausing late hits",
             "default": 30
+          },
+          "Mode": {
+            "type": "string",
+            "description": "Capture mode: single-shot pauses once, continuous pauses on every hit, trace records hits without pausing",
+            "enum": [
+              "single-shot",
+              "continuous",
+              "trace"
+            ],
+            "default": "single-shot"
+          },
+          "MaxHistory": {
+            "type": "integer",
+            "description": "Maximum number of captured hit frames to retain (1-100)",
+            "default": 20
           }
         }
       }
