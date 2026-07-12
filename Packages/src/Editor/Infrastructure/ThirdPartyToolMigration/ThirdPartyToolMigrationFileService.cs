@@ -92,10 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string normalizedProjectRoot = NormalizeProjectRoot(projectRoot);
             MigrationPlan plan = GetCurrentMigrationPlan(normalizedProjectRoot);
             InvalidatePreviewCache();
-            foreach (MigrationFileChange change in plan.Changes)
-            {
-                ThirdPartyToolMigrationFileWriter.Write(change.FilePath, change.Content);
-            }
+            ThirdPartyToolMigrationFileWriter.WriteBatch(plan.Changes);
 
             return new ThirdPartyToolMigrationResult(
                 plan.ChangedFilePaths.Count,
@@ -120,15 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             InvalidatePreviewCache();
-            for (int index = 0; index < plan.Changes.Count; index++)
-            {
-                MigrationFileChange change = plan.Changes[index];
-                ThirdPartyToolMigrationFileWriter.Write(change.FilePath, change.Content);
-                if ((index + 1) % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
-                {
-                    await Task.Yield();
-                }
-            }
+            await ThirdPartyToolMigrationFileWriter.WriteBatchAsync(plan.Changes);
 
             return new ThirdPartyToolMigrationResult(
                 plan.ChangedFilePaths.Count,
