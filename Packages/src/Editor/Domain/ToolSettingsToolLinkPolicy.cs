@@ -12,6 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     {
         private static readonly HashSet<string> PausePointAuxiliaryToolNames = new(System.StringComparer.Ordinal)
         {
+            UnityCliLoopConstants.COMMAND_NAME_AWAIT_PAUSE_POINT,
             UnityCliLoopConstants.TOOL_NAME_ENABLE_PAUSE_POINT,
             UnityCliLoopConstants.TOOL_NAME_CLEAR_PAUSE_POINT,
             UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS
@@ -38,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
             if (PausePointAuxiliaryToolNames.Contains(toolName))
             {
-                return UnityCliLoopConstants.COMMAND_NAME_AWAIT_PAUSE_POINT;
+                return UnityCliLoopConstants.SETTINGS_TOOL_NAME_PAUSE_POINT;
             }
 
             return toolName;

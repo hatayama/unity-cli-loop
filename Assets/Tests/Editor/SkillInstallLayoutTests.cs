@@ -164,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             IReadOnlyDictionary<string, string> descriptions = SkillInstallLayout.GetToolDescriptionsByToolName(_projectRoot);
 
             Assert.That(descriptions["compile"], Is.EqualTo("Compile the Unity project and report errors/warnings. Use after C# edits."));
-            Assert.That(descriptions[UnityCliLoopConstants.COMMAND_NAME_AWAIT_PAUSE_POINT], Does.StartWith("Pauses Unity playback"));
+            Assert.That(descriptions[UnityCliLoopConstants.SETTINGS_TOOL_NAME_PAUSE_POINT], Does.StartWith("Pauses Unity playback"));
         }
 
         // Tests that duplicate skill names use the earlier source root across each precedence boundary.
