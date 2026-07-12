@@ -56,13 +56,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private void OnPlayModeStateChanged(PlayModeStateChange state)
         {
-            // Why: ExitingPlayMode covers both CLI Stop and the Editor toolbar Stop button.
-            if (state != PlayModeStateChange.ExitingPlayMode)
+            // Why: ExitingPlayMode covers CLI Stop and the toolbar Stop button, but Unity may
+            // overwrite runInBackground during the transition or domain-reload afterward.
+            // Peek+apply early, then commit clear on EnteredEditMode (or OnEditorStartup if reload).
+            if (state == PlayModeStateChange.ExitingPlayMode)
+            {
+                bool? originalRunInBackground = _controller.PeekOriginalIfActive();
+                if (originalRunInBackground.HasValue)
+                {
+                    Application.runInBackground = originalRunInBackground.Value;
+                }
+
+                return;
+            }
+
+            if (state != PlayModeStateChange.EnteredEditMode)
             {
                 return;
             }
 
-            bool? restoredRunInBackground = _controller.OnPlayModeExiting();
+            bool? restoredRunInBackground = _controller.CommitRestoreAfterPlayModeExit();
             if (restoredRunInBackground.HasValue)
             {
                 Application.runInBackground = restoredRunInBackground.Value;

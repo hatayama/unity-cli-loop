@@ -40,27 +40,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void OnPlayModeExiting_WhenActive_RestoresOriginalAndClears()
+        public void PeekOriginalIfActive_WhenActive_ReturnsOriginalWithoutClearing()
         {
-            // Verifies PlayMode exit (CLI Stop or manual Stop) restores the saved original value.
+            // Verifies early exit restore can re-apply the original without dropping ownership yet.
             InMemoryCliPlayModeRunInBackgroundStore store = new InMemoryCliPlayModeRunInBackgroundStore();
             CliPlayModeRunInBackgroundController controller = new CliPlayModeRunInBackgroundController(store);
             controller.OnCliPlayStarting(currentRunInBackground: false);
 
-            bool? restored = controller.OnPlayModeExiting();
+            bool? peeked = controller.PeekOriginalIfActive();
+
+            Assert.That(peeked, Is.False);
+            Assert.That(store.IsActive, Is.True);
+            Assert.That(store.OriginalRunInBackground, Is.False);
+        }
+
+        [Test]
+        public void CommitRestoreAfterPlayModeExit_WhenActive_RestoresOriginalAndClears()
+        {
+            // Verifies stable EditMode exit (CLI Stop or manual Stop) restores and clears ownership.
+            InMemoryCliPlayModeRunInBackgroundStore store = new InMemoryCliPlayModeRunInBackgroundStore();
+            CliPlayModeRunInBackgroundController controller = new CliPlayModeRunInBackgroundController(store);
+            controller.OnCliPlayStarting(currentRunInBackground: false);
+
+            bool? restored = controller.CommitRestoreAfterPlayModeExit();
 
             Assert.That(restored, Is.False);
             Assert.That(store.IsActive, Is.False);
         }
 
         [Test]
-        public void OnPlayModeExiting_WhenInactive_ReturnsNull()
+        public void CommitRestoreAfterPlayModeExit_WhenInactive_ReturnsNull()
         {
             // Verifies manual Play sessions that never went through CLI Play leave runInBackground alone.
             InMemoryCliPlayModeRunInBackgroundStore store = new InMemoryCliPlayModeRunInBackgroundStore();
             CliPlayModeRunInBackgroundController controller = new CliPlayModeRunInBackgroundController(store);
 
-            bool? restored = controller.OnPlayModeExiting();
+            bool? restored = controller.CommitRestoreAfterPlayModeExit();
 
             Assert.That(restored, Is.Null);
             Assert.That(store.IsActive, Is.False);
@@ -84,7 +99,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void OnEditorStartup_WhenActiveButNotPlaying_RestoresOriginalAndClears()
         {
-            // Verifies an orphaned active flag after Play already ended is cleaned up on startup.
+            // Verifies domain reload after Play exit still restores when ownership was not committed yet.
             InMemoryCliPlayModeRunInBackgroundStore store = new InMemoryCliPlayModeRunInBackgroundStore();
             store.Activate(originalRunInBackground: false);
             CliPlayModeRunInBackgroundController controller = new CliPlayModeRunInBackgroundController(store);
@@ -108,17 +123,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void OnPlayModeExiting_WhenOriginalWasTrue_RestoresTrue()
+        public void CommitRestoreAfterPlayModeExit_WhenOriginalWasTrue_RestoresTrue()
         {
             // Verifies projects that already had runInBackground enabled stay enabled after CLI Play ends.
             InMemoryCliPlayModeRunInBackgroundStore store = new InMemoryCliPlayModeRunInBackgroundStore();
             CliPlayModeRunInBackgroundController controller = new CliPlayModeRunInBackgroundController(store);
             controller.OnCliPlayStarting(currentRunInBackground: true);
 
-            bool? restored = controller.OnPlayModeExiting();
+            bool? restored = controller.CommitRestoreAfterPlayModeExit();
 
             Assert.That(restored, Is.True);
             Assert.That(store.IsActive, Is.False);
+        }
+
+        [Test]
+        public void ExitSequence_PeekThenCommit_SurvivesTransitionOverwriteModel()
+        {
+            // Verifies early peek restore + later commit matches the ExitingPlayMode → EnteredEditMode path.
+            InMemoryCliPlayModeRunInBackgroundStore store = new InMemoryCliPlayModeRunInBackgroundStore();
+            CliPlayModeRunInBackgroundController controller = new CliPlayModeRunInBackgroundController(store);
+            controller.OnCliPlayStarting(currentRunInBackground: false);
+
+            bool? peeked = controller.PeekOriginalIfActive();
+            bool? committed = controller.CommitRestoreAfterPlayModeExit();
+
+            Assert.That(peeked, Is.False);
+            Assert.That(committed, Is.False);
+            Assert.That(store.IsActive, Is.False);
+            Assert.That(controller.PeekOriginalIfActive(), Is.Null);
+            Assert.That(controller.CommitRestoreAfterPlayModeExit(), Is.Null);
         }
 
         private sealed class InMemoryCliPlayModeRunInBackgroundStore : ICliPlayModeRunInBackgroundStore

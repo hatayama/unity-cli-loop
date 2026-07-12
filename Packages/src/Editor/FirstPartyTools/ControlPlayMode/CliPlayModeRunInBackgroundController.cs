@@ -47,10 +47,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Restores the original runInBackground value when PlayMode ends (CLI Stop or manual).
+        /// Returns the original value to re-apply while exiting PlayMode without clearing ownership.
+        /// Why: Unity may domain-reload or overwrite Application.runInBackground during the exit
+        /// transition; SessionState must stay active until EditMode is stable.
+        /// </summary>
+        public bool? PeekOriginalIfActive()
+        {
+            if (!_store.IsActive)
+            {
+                return null;
+            }
+
+            return _store.OriginalRunInBackground;
+        }
+
+        /// <summary>
+        /// Restores the original runInBackground value when EditMode is stable after Play ends.
         /// Returns null when this controller did not own an override.
         /// </summary>
-        public bool? OnPlayModeExiting()
+        public bool? CommitRestoreAfterPlayModeExit()
         {
             if (!_store.IsActive)
             {
