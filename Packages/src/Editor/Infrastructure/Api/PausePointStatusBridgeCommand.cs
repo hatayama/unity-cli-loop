@@ -56,6 +56,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public bool IsHit { get; set; }
         public int HitCount { get; set; }
         public int TimeoutSeconds { get; set; }
+        public string Mode { get; set; } = string.Empty;
+        public int MaxHistory { get; set; }
+        public IReadOnlyList<PausePointStatusCapturedHistoryFrame> CapturedVariableHistory { get; set; } =
+            Array.Empty<PausePointStatusCapturedHistoryFrame>();
+        public int HistoryDroppedCount { get; set; }
         public bool Expired { get; set; }
         public string EnabledAtUtc { get; set; } = string.Empty;
         public long ElapsedSinceEnabledMilliseconds { get; set; }
@@ -90,6 +95,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 IsHit = snapshot.IsHit,
                 HitCount = snapshot.HitCount,
                 TimeoutSeconds = snapshot.TimeoutSeconds,
+                Mode = snapshot.Mode,
+                MaxHistory = snapshot.MaxHistory,
+                CapturedVariableHistory = snapshot.CapturedVariableHistory
+                    .Select(PausePointStatusCapturedHistoryFrame.FromSnapshot)
+                    .ToList(),
+                HistoryDroppedCount = snapshot.HistoryDroppedCount,
                 Expired = snapshot.Expired,
                 EnabledAtUtc = snapshot.EnabledAtUtc,
                 ElapsedSinceEnabledMilliseconds = snapshot.ElapsedSinceEnabledMilliseconds,
@@ -109,6 +120,39 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ClearedReason = snapshot.ClearedReason,
                 StatusBeforeClear = snapshot.StatusBeforeClear,
                 LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear
+            };
+        }
+    }
+
+    /// <summary>
+    /// One formatted capture frame included in the CLI-only pause point status response history.
+    /// </summary>
+    public class PausePointStatusCapturedHistoryFrame
+    {
+        public int HitSequence { get; set; }
+        public int FrameCount { get; set; }
+        public string HitAtUtc { get; set; } = string.Empty;
+        public IReadOnlyList<PausePointStatusCapturedVariable> CapturedVariables { get; set; } =
+            Array.Empty<PausePointStatusCapturedVariable>();
+        public bool Truncated { get; set; }
+
+        internal static PausePointStatusCapturedHistoryFrame FromSnapshot(
+            UloopPausePointCapturedHistoryFrame snapshot)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            return new PausePointStatusCapturedHistoryFrame
+            {
+                HitSequence = snapshot.HitSequence,
+                FrameCount = snapshot.FrameCount,
+                HitAtUtc = snapshot.HitAtUtc,
+                CapturedVariables = snapshot.CapturedVariables
+                    .Select(PausePointStatusCapturedVariable.FromCapturedVariable)
+                    .ToList(),
+                Truncated = snapshot.Truncated
             };
         }
     }
