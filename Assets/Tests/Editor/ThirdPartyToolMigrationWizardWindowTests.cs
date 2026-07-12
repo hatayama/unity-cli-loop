@@ -16,21 +16,78 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public sealed class ThirdPartyToolMigrationWizardWindowTests
     {
-        [TestCase(false, true, false)]
-        [TestCase(true, false, false)]
-        [TestCase(true, true, true)]
-        public void ShouldStartInitialRefresh_ReturnsExpectedValue(
-            bool shouldRefreshAfterCreateGui,
-            bool shouldAutoScanThirdPartyToolMigration,
-            bool expected)
+        [Test]
+        public void ConsumeShouldStartInitialRefresh_WhenPreparedForAutoScan_ReturnsTrueWithoutSessionFlag()
         {
-            // Verifies that automatic scanning requires both auto-open intent and the session scan flag.
-            bool shouldStartInitialRefresh =
-                ThirdPartyToolMigrationWizardWindow.ShouldStartInitialRefresh(
-                    shouldRefreshAfterCreateGui,
-                    shouldAutoScanThirdPartyToolMigration);
+            // Verifies auto-open windows start scanning from the serialized refresh flag alone.
+            ThirdPartyToolMigrationWizardWindow window =
+                ScriptableObject.CreateInstance<ThirdPartyToolMigrationWizardWindow>();
+            try
+            {
+                ThirdPartyToolMigrationWizardWindow.PrepareForOpen(
+                    window,
+                    "Unity CLI Loop Migration",
+                    new Rect(12f, 34f, 360f, 220f),
+                    shouldRefreshAfterCreateGui: true);
 
-            Assert.That(shouldStartInitialRefresh, Is.EqualTo(expected));
+                bool shouldStartInitialRefresh = window.ConsumeShouldStartInitialRefresh();
+
+                Assert.That(shouldStartInitialRefresh, Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(window);
+            }
+        }
+
+        [Test]
+        public void ConsumeShouldStartInitialRefresh_WhenConsumedTwice_ReturnsFalseOnSecondCall()
+        {
+            // Verifies the initial-refresh flag is one-shot so CreateGUI cannot double-scan.
+            ThirdPartyToolMigrationWizardWindow window =
+                ScriptableObject.CreateInstance<ThirdPartyToolMigrationWizardWindow>();
+            try
+            {
+                ThirdPartyToolMigrationWizardWindow.PrepareForOpen(
+                    window,
+                    "Unity CLI Loop Migration",
+                    new Rect(12f, 34f, 360f, 220f),
+                    shouldRefreshAfterCreateGui: true);
+
+                bool first = window.ConsumeShouldStartInitialRefresh();
+                bool second = window.ConsumeShouldStartInitialRefresh();
+
+                Assert.That(first, Is.True);
+                Assert.That(second, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(window);
+            }
+        }
+
+        [Test]
+        public void ConsumeShouldStartInitialRefresh_WhenManualOpen_ReturnsFalse()
+        {
+            // Verifies manually opened windows wait for an explicit Check instead of auto-scanning.
+            ThirdPartyToolMigrationWizardWindow window =
+                ScriptableObject.CreateInstance<ThirdPartyToolMigrationWizardWindow>();
+            try
+            {
+                ThirdPartyToolMigrationWizardWindow.PrepareForOpen(
+                    window,
+                    "Unity CLI Loop Migration",
+                    new Rect(12f, 34f, 360f, 220f),
+                    shouldRefreshAfterCreateGui: false);
+
+                bool shouldStartInitialRefresh = window.ConsumeShouldStartInitialRefresh();
+
+                Assert.That(shouldStartInitialRefresh, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(window);
+            }
         }
 
         [TestCase(false, false, false)]
