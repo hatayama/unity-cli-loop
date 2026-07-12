@@ -45,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             KeyboardKeyState.RegisterTransientKey(key);
             bool pressWasApplied = false;
             bool pressEdgeObserved = false;
+            int pressHoldExtendedFrames = 0;
             InputSimulationWaitOutcome waitOutcome = InputSimulationWaitOutcome.Completed;
 
             // The edge must be probed inside gameplay input updates: editor-tick polling can
@@ -62,8 +63,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (waitOutcome == InputSimulationWaitOutcome.Completed)
                 {
                     pressWasApplied = true;
-                    waitOutcome = await InputSystemUpdateHelper.WaitForPressLifetime(duration, ct)
-                        .ConfigureAwait(false);
+                    InputSystemUpdateHelper.PressLifetimeWaitResult pressWaitResult =
+                        await InputSystemUpdateHelper.WaitForPressLifetime(
+                            duration,
+                            () => pressEdgeObserved,
+                            ct).ConfigureAwait(false);
+                    waitOutcome = pressWaitResult.Outcome;
+                    pressHoldExtendedFrames = pressWaitResult.ExtendedObservationFrames;
                 }
             }
             finally
@@ -123,16 +129,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string durationText = duration > 0f ? $" for {InputSimulationDurationFormatter.FormatSeconds(duration)}s" : "";
-            string edgeText = pressEdgeObserved
-                ? ""
-                : " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it, so retry or verify with a focused log)";
+            string edgeText;
+            if (pressEdgeObserved && pressHoldExtendedFrames > 0)
+            {
+                edgeText =
+                    $" (release delayed {pressHoldExtendedFrames} frame(s) until wasPressedThisFrame was observed)";
+            }
+            else if (pressEdgeObserved)
+            {
+                edgeText = "";
+            }
+            else
+            {
+                edgeText =
+                    " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it, so retry or verify with a focused log)";
+            }
+
             return new SimulateKeyboardResponse
             {
                 Success = true,
                 Message = $"Pressed '{keyName}'{durationText}{edgeText}",
                 Action = UnityCliLoopKeyboardAction.Press.ToString(),
                 KeyName = keyName,
-                PressEdgeObserved = pressEdgeObserved
+                PressEdgeObserved = pressEdgeObserved,
+                PressHoldExtendedFrames = pressHoldExtendedFrames > 0 ? pressHoldExtendedFrames : null
             };
         }
 
