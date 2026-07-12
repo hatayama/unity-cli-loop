@@ -20,6 +20,19 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
+// Verifies the default busy-stall focus threshold fires before the bounded busy retry window ends.
+func TestDefaultBusyFocusStallThresholdFitsWithinBusyRetryWindow(t *testing.T) {
+	deps := defaultConnectionRetryDeps()
+	threshold := busyFocusStallThresholdFor(deps)
+	if threshold >= deps.retryTimeout {
+		t.Fatalf(
+			"busy focus stall threshold must stay below the busy retry window: threshold=%s window=%s",
+			threshold,
+			deps.retryTimeout,
+		)
+	}
+}
+
 // Verifies transient IPC connection failures focus Unity once and restore focus before reporting server-not-responding.
 func TestSendWithTransientConnectionRetryReportsUnityServerNotResponding(t *testing.T) {
 	deps := defaultConnectionRetryDeps()
@@ -710,6 +723,85 @@ func TestSendWithTransientConnectionRetryReturnsBusyAfterRetryWindow(t *testing.
 	var rpcErr *unityipc.RPCError
 	if !errors.As(err, &rpcErr) {
 		t.Fatalf("busy must surface as the original RPC error, got: %v", err)
+	}
+}
+
+// TDD repro for B-7a: before busy_stall focus rescue, persistent server_busy never called
+// focusUnityProcess (focusCallCount stayed 0). This assertion was Red on pre-fix
+// connection_retry.go and turns Green after the busy stall threshold hook.
+func TestSendWithTransientConnectionRetryFocusesOnceAfterPersistentBusy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	deps := defaultConnectionRetryDeps()
+	deps.retryTimeout = 500 * time.Millisecond
+	deps.retryPoll = 5 * time.Millisecond
+	deps.busyFocusStallThreshold = 30 * time.Millisecond
+	focusCallCount := 0
+	restoreCallCount := 0
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 123}, nil
+	}
+	deps.focusUnityProcess = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
+		focusCallCount++
+		return func(context.Context) error {
+			restoreCallCount++
+			return nil
+		}, nil
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	busy := `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Unity is busy running 'compile'.","data":{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","message":"busy"}}}`
+	go func() {
+		for {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			go func() {
+				defer func() {
+					_ = conn.Close()
+				}()
+				if _, readErr := unityipc.Read(bufio.NewReader(conn)); readErr != nil {
+					return
+				}
+				_ = unityipc.Write(conn, []byte(busy))
+			}()
+		}
+	}()
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	_, err = sendWithTransientConnectionRetryWithDeps(
+		context.Background(),
+		connection,
+		"get-logs",
+		map[string]any{},
+		nil,
+		0,
+		deps)
+	if err == nil {
+		t.Fatal("expected busy error after retry window")
+	}
+	if focusCallCount != 1 {
+		t.Fatalf("expected one busy-stall focus attempt, got %d", focusCallCount)
+	}
+	if restoreCallCount != 1 {
+		t.Fatalf("expected focus restore after busy retry exit, got %d", restoreCallCount)
 	}
 }
 

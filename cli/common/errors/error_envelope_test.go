@@ -267,6 +267,28 @@ func TestClassifyServerBusyRPCError(t *testing.T) {
 	}
 }
 
+func TestClassifyServerBusyRPCError_WhenCompiling_IncludesEditorActivityAndGuidance(t *testing.T) {
+	// Verifies compiling busy payloads add editor activity details and compile-specific guidance.
+	err := &unityipc.RPCError{
+		Code:    -32603,
+		Message: "Unity is busy running 'unity-compile'.",
+		Data: json.RawMessage(
+			`{"type":"server_busy","runningToolName":"unity-compile","requestedToolName":"get-logs","isCompiling":true}`),
+	}
+
+	cliErr := ClassifyError(err, ErrorContext{ProjectRoot: "/tmp/MyProject", Command: "get-logs"})
+	editorActivity, ok := cliErr.Details["EditorActivity"].(map[string]any)
+	if !ok {
+		t.Fatalf("editor activity missing: %#v", cliErr.Details)
+	}
+	if editorActivity["isCompiling"] != true {
+		t.Fatalf("isCompiling mismatch: %#v", editorActivity)
+	}
+	if cliErr.NextActions[0] != "Unity is compiling scripts; wait for compilation to finish before retrying." {
+		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
+	}
+}
+
 func TestWriteClassifiedServerBusyRPCErrorWritesErrorEnvelope(t *testing.T) {
 	// Verifies server_busy output uses the same machine-readable error envelope as other failures.
 	err := &unityipc.RPCError{

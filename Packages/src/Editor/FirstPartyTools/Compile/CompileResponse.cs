@@ -68,6 +68,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Message { get; set; }
 
         /// <summary>
+        /// Optional recovery steps when compile cannot proceed automatically.
+        /// </summary>
+        public string[] NextActions { get; set; }
+
+        /// <summary>
         /// Unity project root path (from UnityEngine.Application.dataPath).
         /// Set only when WaitForDomainReload=true so the CLI can report which project produced the result.
         /// </summary>
