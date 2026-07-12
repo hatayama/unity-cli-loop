@@ -185,6 +185,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public static async Task<InputSimulationWaitOutcome> WaitForPressLifetime(float duration, CancellationToken ct)
         {
+            PressLifetimeWaitResult result = await WaitForPressLifetime(
+                duration,
+                isPressEdgeObserved: null,
+                ct).ConfigureAwait(false);
+            return result.Outcome;
+        }
+
+        /// <summary>
+        /// Waits for duration + min frames, then optionally holds release until a press edge is observed.
+        /// Why: when wasPressedThisFrame never becomes true in the normal window, delaying release
+        /// gives gameplay more frames without reinjecting down/up (which would double-fire actions).
+        /// </summary>
+        public static async Task<PressLifetimeWaitResult> WaitForPressLifetime(
+            float duration,
+            Func<bool>? isPressEdgeObserved,
+            CancellationToken ct)
+        {
             await SwitchToMainThreadIfNeeded(ct);
 
             int minimumObservationFrames = GetMinimumObservationFrameCount();
@@ -192,14 +209,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             float startTime = Time.realtimeSinceStartup;
             float elapsed = 0f;
             int observedFrames = 0;
+            int baseSatisfiedFrameCount = -1;
             int timeoutMilliseconds = GetPressLifetimeTimeoutMilliseconds(duration);
             System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            while (observedFrames < minimumObservationFrames || elapsed < duration)
+            while (true)
             {
+                bool baseWaitSatisfied = PressHoldUntilEdgeLogic.IsBaseWaitSatisfied(
+                    observedFrames,
+                    minimumObservationFrames,
+                    elapsed,
+                    duration);
+                if (baseWaitSatisfied && baseSatisfiedFrameCount < 0)
+                {
+                    baseSatisfiedFrameCount = observedFrames;
+                }
+
+                bool pressEdgeObserved = isPressEdgeObserved != null && isPressEdgeObserved();
+                bool shouldExtendForEdge = isPressEdgeObserved != null &&
+                    PressHoldUntilEdgeLogic.ShouldExtendHoldForEdge(
+                        pressEdgeObserved,
+                        baseWaitSatisfied,
+                        stopwatch.ElapsedMilliseconds,
+                        timeoutMilliseconds);
+
+                if (baseWaitSatisfied && !shouldExtendForEdge)
+                {
+                    int extendedFrames = baseSatisfiedFrameCount < 0
+                        ? 0
+                        : PressHoldUntilEdgeLogic.CountExtendedFrames(observedFrames, baseSatisfiedFrameCount);
+                    return new PressLifetimeWaitResult(
+                        InputSimulationWaitOutcome.Completed,
+                        extendedFrames);
+                }
+
                 if (IsPaused())
                 {
-                    return InputSimulationWaitOutcome.Paused;
+                    return new PressLifetimeWaitResult(InputSimulationWaitOutcome.Paused, 0);
                 }
 
                 InputSimulationWaitOutcome frameOutcome = await WaitOneRuntimeFrameOrTimeout(
@@ -208,21 +254,48 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ct).ConfigureAwait(false);
                 if (frameOutcome == InputSimulationWaitOutcome.TimedOut)
                 {
-                    return InputSimulationWaitOutcome.TimedOut;
+                    // Why: timeout during edge-extension still completes Press successfully with
+                    // PressEdgeObserved=false — same contract as before, not a hard failure.
+                    if (baseWaitSatisfied)
+                    {
+                        int extendedFrames = baseSatisfiedFrameCount < 0
+                            ? 0
+                            : PressHoldUntilEdgeLogic.CountExtendedFrames(observedFrames, baseSatisfiedFrameCount);
+                        return new PressLifetimeWaitResult(
+                            InputSimulationWaitOutcome.Completed,
+                            extendedFrames);
+                    }
+
+                    return new PressLifetimeWaitResult(InputSimulationWaitOutcome.TimedOut, 0);
                 }
 
                 await SwitchToMainThreadIfNeeded(ct);
                 if (IsPaused())
                 {
-                    return InputSimulationWaitOutcome.Paused;
+                    return new PressLifetimeWaitResult(InputSimulationWaitOutcome.Paused, 0);
                 }
 
                 observedFrames = Time.frameCount - startFrameCount;
                 elapsed = Time.realtimeSinceStartup - startTime;
             }
-
-            return InputSimulationWaitOutcome.Completed;
         }
+
+        /// <summary>
+        /// Outcome of a Press duration wait, including how many frames release was delayed for edge observation.
+        /// </summary>
+        internal readonly struct PressLifetimeWaitResult
+        {
+            public PressLifetimeWaitResult(InputSimulationWaitOutcome outcome, int extendedObservationFrames)
+            {
+                Outcome = outcome;
+                ExtendedObservationFrames = extendedObservationFrames;
+            }
+
+            public InputSimulationWaitOutcome Outcome { get; }
+
+            public int ExtendedObservationFrames { get; }
+        }
+
 
         public static void RunExplicitUpdate(InputUpdateType targetUpdateType)
         {
