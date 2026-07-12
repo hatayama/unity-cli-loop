@@ -254,11 +254,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static string ValidateEnable(EnableWatchSchema parameters)
         {
-            if (parameters == null)
-            {
-                return "Watch parameters must not be null.";
-            }
-
             if (string.IsNullOrWhiteSpace(parameters.Id))
             {
                 return "Id must not be null or empty.";
