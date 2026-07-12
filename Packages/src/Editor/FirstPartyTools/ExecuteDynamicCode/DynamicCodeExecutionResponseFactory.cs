@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -171,14 +170,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Dictionary<string, List<string>> ambiguousCandidates = null)
         {
             List<CompilationErrorDto> list = new();
-            string[] lines = string.IsNullOrEmpty(updatedCode)
+            string[] userSnippetLines = ResolveUserSnippetLines(updatedCode);
+            string[] fallbackLines = string.IsNullOrEmpty(updatedCode)
                 ? Array.Empty<string>()
                 : updatedCode.Split(new[] { '\n' }, StringSplitOptions.None);
 
             foreach (CompilationError error in errors)
             {
                 (string hint, List<string> suggestions) = GetHintAndSuggestions(error, ambiguousCandidates);
-                string context = ExtractContext(lines, error.Line, error.Column);
+                bool hasUserSnippetRegion = WrappedDynamicCodeUserSnippetExtractor.TryExtract(updatedCode, out _);
+                bool useUserSnippetContext = DynamicCodeDiagnosticContextBuilder.IsUserSnippetLineInRange(
+                    userSnippetLines,
+                    error.Line);
+                string[] contextLines = useUserSnippetContext ? userSnippetLines : fallbackLines;
+                string context = ExtractContext(contextLines, error.Line, error.Column);
+                if (hasUserSnippetRegion && !useUserSnippetContext && error.Line > 0)
+                {
+                    hint = AppendWrapperOriginHint(hint);
+                }
+
                 list.Add(new CompilationErrorDto
                 {
                     Line = error.Line,
@@ -202,6 +212,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 })
                 .Select(group => group.First())
                 .ToList();
+        }
+
+        private static string[] ResolveUserSnippetLines(string updatedCode)
+        {
+            if (!WrappedDynamicCodeUserSnippetExtractor.TryExtract(updatedCode, out string userSnippet))
+            {
+                return Array.Empty<string>();
+            }
+
+            return WrappedDynamicCodeUserSnippetExtractor.SplitNormalizedLines(userSnippet);
+        }
+
+        private static string AppendWrapperOriginHint(string hint)
+        {
+            const string wrapperOriginHint =
+                "This diagnostic line does not map to the user snippet; it likely refers to generated wrapper code.";
+            if (string.IsNullOrEmpty(hint))
+            {
+                return wrapperOriginHint;
+            }
+
+            if (hint.Contains(wrapperOriginHint, StringComparison.Ordinal))
+            {
+                return hint;
+            }
+
+            return hint + " " + wrapperOriginHint;
         }
 
         private static (string hint, List<string> suggestions) GetHintAndSuggestions(
@@ -270,30 +307,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int lineNumber1Based,
             int column1Based)
         {
-            if (lines == null || lines.Length == 0 || lineNumber1Based <= 0 || lineNumber1Based > lines.Length)
-            {
-                return string.Empty;
-            }
-
-            int start = Math.Max(1, lineNumber1Based - 3);
-            int end = Math.Min(lines.Length, lineNumber1Based + 3);
-            StringBuilder sb = new();
-            for (int i = start; i <= end; i++)
-            {
-                string line = lines[i - 1].TrimEnd('\r');
-                string linePrefix = $"L{i}:";
-                sb.AppendLine(linePrefix + line);
-                if (i == lineNumber1Based)
-                {
-                    int caretPos = Math.Max(1, column1Based);
-                    sb.AppendLine(
-                        new string(' ', linePrefix.Length)
-                        + new string(' ', Math.Max(0, caretPos - 1))
-                        + "^");
-                }
-            }
-
-            return sb.ToString();
+            return DynamicCodeDiagnosticContextBuilder.BuildContext(lines, lineNumber1Based, column1Based);
         }
     }
 }

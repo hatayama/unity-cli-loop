@@ -339,37 +339,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return qualifiedChainParts != null && qualifiedChainParts.Count >= 2;
         }
 
-        // WrapperTemplate marks user code with #line directives;
-        // scanning only this region avoids false positives from boilerplate identifiers
         private static string ExtractUserCodeSection(string wrappedSource)
         {
-            string startMarker = WrapperTemplate.UserCodeStartMarker;
-            string endMarker = WrapperTemplate.UserCodeEndMarker;
-
-            int startIdx = wrappedSource.IndexOf(startMarker, System.StringComparison.Ordinal);
-            // Wrapped source from WrapperTemplate should always contain the marker
-            Debug.Assert(startIdx >= 0, "UserCodeStartMarker not found in wrappedSource");
-            if (startIdx < 0)
+            if (WrappedDynamicCodeUserSnippetExtractor.TryExtract(wrappedSource, out string userSnippet))
             {
-                return wrappedSource;
+                return userSnippet;
             }
 
-            int codeStart = wrappedSource.IndexOf('\n', startIdx);
-            Debug.Assert(codeStart >= 0, "newline after UserCodeStartMarker not found");
-            if (codeStart < 0)
-            {
-                return wrappedSource;
-            }
-            codeStart++;
-
-            int endIdx = wrappedSource.IndexOf(endMarker, codeStart, System.StringComparison.Ordinal);
-            Debug.Assert(endIdx >= 0, "UserCodeEndMarker not found in wrappedSource");
-            if (endIdx < 0)
-            {
-                return wrappedSource.Substring(codeStart);
-            }
-
-            return wrappedSource.Substring(codeStart, endIdx - codeStart);
+            return wrappedSource;
         }
 
         private static int SkipToEndOfLine(string s, int pos)
