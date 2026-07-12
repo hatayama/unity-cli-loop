@@ -133,10 +133,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _refreshButton.SetEnabled(true);
         }
 
-        internal void ShowMigrationTargetsState(int fileCount, bool isMigrating)
+        internal void ShowMigrationTargetsState(string[] filePaths, string projectRoot, bool isMigrating)
         {
+            Debug.Assert(filePaths != null, "filePaths must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
             _migrationStatusTextField.SetValueWithoutNotify(
-                ThirdPartyToolMigrationWizardText.GetMigrationStatusText(fileCount));
+                ThirdPartyToolMigrationWizardText.GetMigrationStatusText(filePaths, projectRoot));
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             ViewDataBinder.SetVisible(_migrationButtonRow, true);
             _migrateButton.SetEnabled(!isMigrating);

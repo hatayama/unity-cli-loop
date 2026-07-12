@@ -151,24 +151,116 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(loggedException, Is.SameAs(expectedException));
         }
 
-        [TestCase(
-            1,
-            "1 file needs V3 C# source structure migration.\n" +
-            "The Unity Console is showing errors because this file still uses the old custom tool API.\n\n" +
-            "Click Migrate to update it automatically. The errors should disappear after migration.")]
-        [TestCase(
-            3,
-            "3 files need V3 C# source structure migration.\n" +
-            "The Unity Console is showing errors because these files still use the old custom tool API.\n\n" +
-            "Click Migrate to update them automatically. The errors should disappear after migration.")]
-        public void GetMigrationStatusText_WhenTargetsExist_ReturnsFileCount(
-            int fileCount,
-            string expectedText)
+        [Test]
+        public void GetMigrationStatusText_WhenTargetsExist_IncludesRelativeFilePaths()
         {
-            // Verifies that the migration wizard summarizes detected V2 custom tool files.
-            string text = ThirdPartyToolMigrationWizardWindow.GetMigrationStatusText(fileCount);
+            // Verifies the migration status lists project-relative target paths after the summary.
+            string projectRoot = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "UnityCliLoopMigrationStatusRoot",
+                System.Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(projectRoot);
+            try
+            {
+                string[] filePaths =
+                {
+                    System.IO.Path.Combine(projectRoot, "Assets", "Vendor", "One.cs"),
+                    System.IO.Path.Combine(projectRoot, "Assets", "Vendor", "Two.cs")
+                };
 
-            Assert.That(text, Is.EqualTo(expectedText));
+                string text = ThirdPartyToolMigrationWizardWindow.GetMigrationStatusText(
+                    filePaths,
+                    projectRoot);
+
+                Assert.That(text, Does.StartWith(
+                    "2 files need V3 C# source structure migration.\n" +
+                    "The Unity Console is showing errors because these files still use the old custom tool API.\n\n" +
+                    "Click Migrate to update them automatically. The errors should disappear after migration.\n\n" +
+                    "Files:\n"));
+                Assert.That(text, Does.Contain("Assets/Vendor/One.cs"));
+                Assert.That(text, Does.Contain("Assets/Vendor/Two.cs"));
+                Assert.That(text, Does.Not.Contain("\\"));
+            }
+            finally
+            {
+                System.IO.Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void FormatMigrationTargetPathsForStatus_WhenPathsUseBackslashes_NormalizesToForwardSlashes()
+        {
+            // Verifies displayed migration paths always use forward slashes on every platform.
+            string normalized = ThirdPartyToolMigrationWizardStateRules.NormalizeDisplayPathSeparators(
+                "Assets\\Vendor\\Tool.cs");
+
+            Assert.That(normalized, Is.EqualTo("Assets/Vendor/Tool.cs"));
+        }
+
+        [Test]
+        public void FormatMigrationTargetPathsForStatus_WhenPathCountExceedsLimit_AppendsOverflowSummary()
+        {
+            // Verifies long target lists truncate with a +N more files suffix.
+            string projectRoot = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "UnityCliLoopMigrationOverflowRoot",
+                System.Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(projectRoot);
+            try
+            {
+                int totalCount = ThirdPartyToolMigrationWizardStateRules.MaxMigrationTargetPathsInStatus + 3;
+                string[] filePaths = new string[totalCount];
+                for (int index = 0; index < totalCount; index++)
+                {
+                    filePaths[index] = System.IO.Path.Combine(projectRoot, "Assets", $"File{index:D3}.cs");
+                }
+
+                string text = ThirdPartyToolMigrationWizardText.FormatMigrationTargetPathsForStatus(
+                    filePaths,
+                    projectRoot);
+
+                Assert.That(text, Does.Contain("Assets/File000.cs"));
+                Assert.That(
+                    text,
+                    Does.Contain(
+                        $"Assets/File{(ThirdPartyToolMigrationWizardStateRules.MaxMigrationTargetPathsInStatus - 1):D3}.cs"));
+                Assert.That(text, Does.Contain("+3 more files"));
+                Assert.That(text, Does.Not.Contain($"Assets/File{ThirdPartyToolMigrationWizardStateRules.MaxMigrationTargetPathsInStatus:D3}.cs"));
+            }
+            finally
+            {
+                System.IO.Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ConfirmMigrationApply_WhenDialogIsCanceled_ReturnsFalse()
+        {
+            // Verifies Cancel leaves migration unstarted by returning false from the confirm helper.
+            bool confirmed = ThirdPartyToolMigrationWizardWindow.ConfirmMigrationApply(
+                2,
+                (title, message, ok, cancel) =>
+                {
+                    Assert.That(title, Is.EqualTo(ThirdPartyToolMigrationWizardText.MigrationConfirmDialogTitle));
+                    Assert.That(message, Does.Contain("2 files will be rewritten in place."));
+                    Assert.That(message, Does.Contain("VCS recommended"));
+                    Assert.That(ok, Is.EqualTo(ThirdPartyToolMigrationWizardText.MigrationConfirmDialogOkText));
+                    Assert.That(cancel, Is.EqualTo(ThirdPartyToolMigrationWizardText.MigrationConfirmDialogCancelText));
+                    return false;
+                });
+
+            Assert.That(confirmed, Is.False);
+        }
+
+        [Test]
+        public void ConfirmMigrationApply_WhenDialogIsAccepted_ReturnsTrue()
+        {
+            // Verifies Migrate confirmation allows the apply path to continue.
+            bool confirmed = ThirdPartyToolMigrationWizardWindow.ConfirmMigrationApply(
+                1,
+                (_, _, _, _) => true);
+
+            Assert.That(confirmed, Is.True);
         }
 
         [Test]
