@@ -188,6 +188,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 bool useOriginalUserContext = hasUserSnippetRegion
                     && DynamicCodeDiagnosticContextBuilder.IsUserSnippetLineInRange(originalUserLines, error.Line);
                 string[] contextLines = useOriginalUserContext ? originalUserLines : fallbackLines;
+                // why: compiler column is measured on hoisted wrapped source while Context shows original
+                // user text; literals hoisted on the same line before the error site can shift column a few
+                // positions even after indent subtraction.
                 int contextColumn = useOriginalUserContext
                     ? DynamicCodeDiagnosticColumnMapper.MapWrappedColumnToUserColumn(error.Column)
                     : error.Column;
