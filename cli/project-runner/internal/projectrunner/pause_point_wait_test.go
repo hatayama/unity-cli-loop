@@ -829,7 +829,7 @@ func TestPausePointExpiredErrorReportsNoRemainingTime(t *testing.T) {
 // Verifies disabled native pause-point commands are rejected before Unity dispatch.
 func TestRunProjectLocalWaitForPausePointRespectsToolSettings(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)
-	writeToolSettings(t, projectRoot, `{"disabledTools":["await-pause-point"]}`)
+	writeToolSettings(t, projectRoot, `{"disabledTools":["pause-point"]}`)
 	t.Chdir(filepath.Dir(projectRoot))
 
 	var stdout bytes.Buffer
@@ -848,6 +848,32 @@ func TestRunProjectLocalWaitForPausePointRespectsToolSettings(t *testing.T) {
 		t.Fatalf("error code mismatch: %#v", envelope.Error)
 	}
 	if envelope.Error.Command != clicore.PausePointAwaitCommandName {
+		t.Fatalf("command mismatch: %#v", envelope.Error)
+	}
+}
+
+// Verifies disabled pause-point-status is rejected before Unity dispatch.
+func TestRunProjectLocalPausePointStatusRespectsToolSettings(t *testing.T) {
+	projectRoot := createLaunchTestProject(t)
+	writeToolSettings(t, projectRoot, `{"disabledTools":["pause-point"]}`)
+	t.Chdir(filepath.Dir(projectRoot))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunProjectLocal(
+		context.Background(),
+		[]string{"--project-path", projectRoot, clicore.PausePointStatusUserCommandName, "--id", "jump"},
+		&stdout,
+		&stderr)
+
+	if code != 1 {
+		t.Fatalf("expected disabled command failure, got %d with stdout %s", code, stdout.String())
+	}
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
+	if envelope.Error.ErrorCode != clierrors.ErrorCodeToolDisabled {
+		t.Fatalf("error code mismatch: %#v", envelope.Error)
+	}
+	if envelope.Error.Command != clicore.PausePointStatusUserCommandName {
 		t.Fatalf("command mismatch: %#v", envelope.Error)
 	}
 }
