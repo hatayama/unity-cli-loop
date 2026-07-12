@@ -10,10 +10,18 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
     /// </summary>
     internal sealed class UloopPausePointEntry
     {
-        public UloopPausePointEntry(string id, int timeoutSeconds, DateTime enabledAtUtc, int generation)
+        public UloopPausePointEntry(
+            string id,
+            int timeoutSeconds,
+            string mode,
+            int maxHistory,
+            DateTime enabledAtUtc,
+            int generation)
         {
             Id = id;
             TimeoutSeconds = timeoutSeconds;
+            Mode = mode;
+            MaxHistory = maxHistory;
             EnabledAtUtc = enabledAtUtc;
             ExpiresAtUtc = enabledAtUtc.AddSeconds(timeoutSeconds);
             Generation = generation;
@@ -21,10 +29,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             IsEnabled = true;
             Message = "Pause point enabled.";
             CapturedVariables = Array.Empty<UloopCapturedVariable>();
+            _capturedVariableHistory = new Queue<UloopPausePointCapturedHistoryFrame>(maxHistory);
         }
 
         public string Id { get; }
         public int TimeoutSeconds { get; }
+        public string Mode { get; }
+        public int MaxHistory { get; }
         public DateTime EnabledAtUtc { get; }
         public DateTime ExpiresAtUtc { get; }
         public int Generation { get; }
@@ -40,6 +51,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string Message { get; private set; }
         public IReadOnlyList<UloopCapturedVariable> CapturedVariables { get; private set; }
         public bool CapturedVariablesTruncated { get; private set; }
+        public IReadOnlyList<UloopPausePointCapturedHistoryFrame> CapturedVariableHistory =>
+            new List<UloopPausePointCapturedHistoryFrame>(_capturedVariableHistory);
+        public int HistoryDroppedCount { get; private set; }
         public string ClearedReason { get; private set; } = string.Empty;
         public string StatusBeforeClear { get; private set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; private set; }
@@ -58,7 +72,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             IsEnabled = false;
             Status = UloopPausePointStatus.Expired;
-            Message = "Pause point expired before it was hit.";
+            Message = HitCount == 0
+                ? "Pause point expired before it was hit."
+                : $"Pause point capture window expired after {HitCount} hit(s); capture history is preserved.";
         }
 
         public void MarkCleared(string clearedReason, string message = "Pause point cleared.")
@@ -78,6 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 ClearedReason = UloopPausePointClearedReason.AfterExpired;
             }
             else if (Status == UloopPausePointStatus.Hit &&
+                !IsEnabled &&
                 clearedReason == UloopPausePointClearedReason.ExplicitClear)
             {
                 ClearedReason = UloopPausePointClearedReason.AlreadyHit;
@@ -102,7 +119,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public void RecordHit(DateTime nowUtc, bool isPlaying, bool isPaused, int hitSequence)
         {
             RecordHitWithCapturedVariables(
-                nowUtc, isPlaying, isPaused, hitSequence, Array.Empty<UloopCapturedVariable>(), false);
+                nowUtc, isPlaying, isPaused, hitSequence, Time.frameCount,
+                Array.Empty<UloopCapturedVariable>(), false);
         }
 
         public void RecordHitWithCapturedVariables(
@@ -110,6 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             bool isPlaying,
             bool isPaused,
             int hitSequence,
+            int frameCount,
             IReadOnlyList<UloopCapturedVariable> capturedVariables,
             bool capturedVariablesTruncated)
         {
@@ -127,11 +146,27 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             LastHitSequence = hitSequence;
             IsPlayingAtHit = isPlaying;
             IsPausedAtHit = isPaused;
-            IsEnabled = false;
+            IsEnabled = Mode != UloopPausePointCaptureMode.SingleShot;
             Status = UloopPausePointStatus.Hit;
-            Message = "Pause point hit; Unity pause was requested.";
+            Message = Mode == UloopPausePointCaptureMode.Trace
+                ? "Pause point hit; recorded to history without pausing (trace mode)."
+                : "Pause point hit; Unity pause was requested.";
             CapturedVariables = capturedVariables;
             CapturedVariablesTruncated = capturedVariablesTruncated;
+
+            if (_capturedVariableHistory.Count == MaxHistory)
+            {
+                _capturedVariableHistory.Dequeue();
+                HistoryDroppedCount++;
+            }
+
+            _capturedVariableHistory.Enqueue(
+                new UloopPausePointCapturedHistoryFrame(
+                    hitSequence,
+                    frameCount,
+                    FormatUtc(nowUtc),
+                    capturedVariables,
+                    capturedVariablesTruncated));
         }
 
         public UloopPausePointSnapshot ToSnapshot(DateTime nowUtc, IUloopPausePointPauseController pauseController)
@@ -161,6 +196,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 isHit,
                 HitCount,
                 TimeoutSeconds,
+                Mode,
+                MaxHistory,
+                CapturedVariableHistory,
+                HistoryDroppedCount,
                 expired,
                 FormatUtc(EnabledAtUtc),
                 elapsedMilliseconds,
@@ -201,6 +240,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             DateTime utcValue = value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
             return utcValue.ToString("O");
         }
+
+        private readonly Queue<UloopPausePointCapturedHistoryFrame> _capturedVariableHistory;
     }
 }
 #endif

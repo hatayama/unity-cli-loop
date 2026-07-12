@@ -18,6 +18,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             bool isHit,
             int hitCount,
             int timeoutSeconds,
+            string mode,
+            int maxHistory,
+            IReadOnlyList<UloopPausePointCapturedHistoryFrame> capturedVariableHistory,
+            int historyDroppedCount,
             bool expired,
             string enabledAtUtc,
             long elapsedMilliseconds,
@@ -44,6 +48,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             IsHit = isHit;
             HitCount = hitCount;
             TimeoutSeconds = timeoutSeconds;
+            Mode = mode ?? UloopPausePointCaptureMode.SingleShot;
+            MaxHistory = maxHistory;
+            CapturedVariableHistory = capturedVariableHistory ?? Array.Empty<UloopPausePointCapturedHistoryFrame>();
+            HistoryDroppedCount = historyDroppedCount;
             Expired = expired;
             EnabledAtUtc = enabledAtUtc ?? string.Empty;
             ElapsedSinceEnabledMilliseconds = elapsedMilliseconds;
@@ -69,6 +77,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public bool IsHit { get; }
         public int HitCount { get; }
         public int TimeoutSeconds { get; }
+        public string Mode { get; }
+        public int MaxHistory { get; }
+        public IReadOnlyList<UloopPausePointCapturedHistoryFrame> CapturedVariableHistory { get; }
+        public int HistoryDroppedCount { get; }
         public bool Expired { get; }
         public string EnabledAtUtc { get; }
         public long ElapsedSinceEnabledMilliseconds { get; }
@@ -97,6 +109,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 false,
                 false,
                 0,
+                0,
+                UloopPausePointCaptureMode.SingleShot,
+                0,
+                Array.Empty<UloopPausePointCapturedHistoryFrame>(),
                 0,
                 false,
                 string.Empty,
