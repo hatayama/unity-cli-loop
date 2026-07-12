@@ -51,8 +51,6 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string Message { get; private set; }
         public IReadOnlyList<UloopCapturedVariable> CapturedVariables { get; private set; }
         public bool CapturedVariablesTruncated { get; private set; }
-        public IReadOnlyList<UloopPausePointCapturedHistoryFrame> CapturedVariableHistory =>
-            new List<UloopPausePointCapturedHistoryFrame>(_capturedVariableHistory);
         public int HistoryDroppedCount { get; private set; }
         public string ClearedReason { get; private set; } = string.Empty;
         public string StatusBeforeClear { get; private set; } = string.Empty;
@@ -114,13 +112,6 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public void MarkLateHitDiscardedAfterClear()
         {
             LateHitDiscardedAfterClear = true;
-        }
-
-        public void RecordHit(DateTime nowUtc, bool isPlaying, bool isPaused, int hitSequence)
-        {
-            RecordHitWithCapturedVariables(
-                nowUtc, isPlaying, isPaused, hitSequence, Time.frameCount,
-                Array.Empty<UloopCapturedVariable>(), false);
         }
 
         public void RecordHitWithCapturedVariables(
@@ -198,7 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 TimeoutSeconds,
                 Mode,
                 MaxHistory,
-                CapturedVariableHistory,
+                new List<UloopPausePointCapturedHistoryFrame>(_capturedVariableHistory),
                 HistoryDroppedCount,
                 expired,
                 FormatUtc(EnabledAtUtc),
