@@ -147,6 +147,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int segmentStart,
             int semiEnd)
         {
+            if (result.TopLevelBodyBuilder.Length == 0)
+            {
+                result.ExtractedLeadingUsingLineCount++;
+            }
+
             result.UsingDirectives.Add(source.Substring(segmentStart, semiEnd - segmentStart + 1).TrimEnd());
 
             string aliasName = ExtractUsingAliasName(source, segmentStart, semiEnd);
@@ -361,7 +366,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     : body + "\nreturn null;";
             }
 
-            return WrapperTemplate.Build(shape.UsingDirectives, shape.AliasedNames, namespaceName, className, body);
+            return WrapperTemplate.Build(
+                shape.UsingDirectives,
+                shape.AliasedNames,
+                namespaceName,
+                className,
+                body,
+                extractedLeadingUsingLinePlaceholderCount: shape.ExtractedLeadingUsingLineCount);
         }
 
         internal static int SkipWhitespace(string s, int pos)
@@ -818,6 +829,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class SourceShapeResult
     {
         public List<string> UsingDirectives { get; } = new List<string>();
+        public int ExtractedLeadingUsingLineCount { get; set; }
         public HashSet<string> AliasedNames { get; } = new HashSet<string>(System.StringComparer.Ordinal);
         public bool HasNamespaceDeclaration { get; set; }
         public bool HasTypeDeclaration { get; set; }

@@ -315,5 +315,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.AreEqual(0, prepared.HoistedLiteralBindings.Count);
             StringAssert.Contains("return 3000000000;", prepared.PreparedSource);
         }
+
+        /// <summary>
+        /// Verifies extracted leading using directives emit placeholder lines so #line numbering matches the original snippet.
+        /// </summary>
+        [Test]
+        public void Prepare_WhenLeadingUsingDirectiveIsExtracted_ShouldPreserveUserSnippetLineNumbers()
+        {
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
+                "using UnityEngine;\nreturn null;",
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            Assert.IsNotNull(prepared.PreparedSource);
+            int markerIndex = prepared.PreparedSource.IndexOf(WrapperTemplate.UserCodeStartMarker, System.StringComparison.Ordinal);
+            string userRegion = prepared.PreparedSource.Substring(markerIndex);
+            StringAssert.Contains("#line 1 \"user-snippet.cs\"\n            \n            return null;", userRegion);
+        }
     }
 }
