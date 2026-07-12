@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 #if ULOOP_HAS_INPUT_SYSTEM
@@ -70,10 +71,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string normalizedKey = NormalizeKeyName(parameters.Key);
             if (!Enum.TryParse<Key>(normalizedKey, ignoreCase: true, out Key key) || key == Key.None)
             {
+                IReadOnlyList<string> suggestions = KeyboardKeyNameSuggester.Suggest(parameters.Key);
+                string suggestionText = suggestions.Count == 0
+                    ? string.Empty
+                    : $" Did you mean: {string.Join(", ", suggestions)}?";
                 return new SimulateKeyboardResponse
                 {
                     Success = false,
-                    Message = $"Invalid key name: \"{parameters.Key}\". Use Input System Key enum names (e.g. \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\").",
+                    Message =
+                        $"Invalid key name: \"{parameters.Key}\". Use Input System Key enum names (e.g. \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\").{suggestionText}",
                     Action = parameters.Action.ToString()
                 };
             }
