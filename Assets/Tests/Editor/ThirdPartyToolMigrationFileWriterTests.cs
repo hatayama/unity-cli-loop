@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 
 using NUnit.Framework;
@@ -170,6 +171,118 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 }
 
                 Assert.That(CountSidecarFiles(tempDirectory), Is.EqualTo(0));
+            }
+            finally
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+
+        [Test]
+        public void WriteBatch_WhenTargetHasUtf8Bom_PreservesBomBytes()
+        {
+            // Verifies a UTF-8 BOM target keeps EF BB BF after a batch write.
+            string tempDirectory = CreateTempDirectory();
+            try
+            {
+                string filePath = Path.Combine(tempDirectory, "BomFile.cs");
+                File.WriteAllText(filePath, "original", new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+                ThirdPartyToolMigrationFileWriter.WriteBatch(
+                    new List<MigrationFileChange>
+                    {
+                        new MigrationFileChange(filePath, "migrated")
+                    });
+
+                byte[] bytes = File.ReadAllBytes(filePath);
+                Assert.That(bytes[0], Is.EqualTo(0xEF));
+                Assert.That(bytes[1], Is.EqualTo(0xBB));
+                Assert.That(bytes[2], Is.EqualTo(0xBF));
+                Assert.That(Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3), Is.EqualTo("migrated"));
+            }
+            finally
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+
+        [Test]
+        public void WriteBatch_WhenTargetIsUtf16LittleEndian_PreservesEncoding()
+        {
+            // Verifies a UTF-16 LE BOM target is rewritten as UTF-16 LE with the new content.
+            string tempDirectory = CreateTempDirectory();
+            try
+            {
+                string filePath = Path.Combine(tempDirectory, "Utf16File.cs");
+                Encoding utf16 = new UnicodeEncoding(bigEndian: false, byteOrderMark: true);
+                File.WriteAllText(filePath, "original", utf16);
+
+                ThirdPartyToolMigrationFileWriter.WriteBatch(
+                    new List<MigrationFileChange>
+                    {
+                        new MigrationFileChange(filePath, "migrated")
+                    });
+
+                byte[] bytes = File.ReadAllBytes(filePath);
+                Assert.That(bytes[0], Is.EqualTo(0xFF));
+                Assert.That(bytes[1], Is.EqualTo(0xFE));
+                Assert.That(utf16.GetString(bytes, 2, bytes.Length - 2), Is.EqualTo("migrated"));
+            }
+            finally
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+
+        [Test]
+        public void WriteBatch_WhenTargetHasNoBom_DoesNotAddBom()
+        {
+            // Verifies a BOM-less UTF-8 target does not gain EF BB BF after a batch write.
+            string tempDirectory = CreateTempDirectory();
+            try
+            {
+                string filePath = Path.Combine(tempDirectory, "NoBomFile.cs");
+                File.WriteAllText(filePath, "original", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+                ThirdPartyToolMigrationFileWriter.WriteBatch(
+                    new List<MigrationFileChange>
+                    {
+                        new MigrationFileChange(filePath, "migrated")
+                    });
+
+                byte[] bytes = File.ReadAllBytes(filePath);
+                Assert.That(bytes.Length, Is.GreaterThanOrEqualTo(1));
+                Assert.That(bytes[0], Is.Not.EqualTo(0xEF));
+                Assert.That(Encoding.UTF8.GetString(bytes), Is.EqualTo("migrated"));
+            }
+            finally
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+
+        [Test]
+        public void WriteBatch_WhenContentUsesCrlf_PreservesCrlfBytes()
+        {
+            // Verifies CRLF content bytes survive the batch write without lone LF rewriting.
+            string tempDirectory = CreateTempDirectory();
+            try
+            {
+                string filePath = Path.Combine(tempDirectory, "CrlfFile.cs");
+                File.WriteAllText(filePath, "original\r\nline", new UTF8Encoding(false));
+                string migratedContent = "migrated\r\nline\r\n";
+
+                ThirdPartyToolMigrationFileWriter.WriteBatch(
+                    new List<MigrationFileChange>
+                    {
+                        new MigrationFileChange(filePath, migratedContent)
+                    });
+
+                byte[] bytes = File.ReadAllBytes(filePath);
+                string decoded = Encoding.UTF8.GetString(bytes);
+                Assert.That(decoded, Is.EqualTo(migratedContent));
+                Assert.That(decoded.Contains("\r\n"), Is.True);
+                Assert.That(decoded.Replace("\r\n", string.Empty).Contains("\n"), Is.False);
             }
             finally
             {

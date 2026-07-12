@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -92,7 +93,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string tempFilePath = CreateUniqueSidecarPath(change.FilePath, TempSidecarExtension);
             // Register before WriteAllText so a mid-write IOException can still clean up a partial .tmp.
             preparedWrites.Add(new PreparedWrite(change.FilePath, tempFilePath));
-            ThirdPartyToolMigrationFileAccess.WriteAllText(tempFilePath, change.Content);
+            // The plan carries decoded strings only, so the original file's BOM/encoding must be
+            // re-detected here and reapplied; otherwise every migrated file collapses to BOM-less UTF-8.
+            Encoding encoding = ThirdPartyToolMigrationFileAccess.Exists(change.FilePath)
+                ? ThirdPartyToolMigrationFileAccess.DetectEncodingFromBom(change.FilePath)
+                : new UTF8Encoding(false);
+            ThirdPartyToolMigrationFileAccess.WriteAllTextWithEncoding(tempFilePath, change.Content, encoding);
         }
 
         private static void CommitAll(List<PreparedWrite> preparedWrites)
@@ -265,12 +271,63 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return File.ReadAllText(GetFileSystemPath(filePath));
         }
 
-        internal static void WriteAllText(string filePath, string content)
+        internal static Encoding DetectEncodingFromBom(string filePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
+
+            byte[] bom = new byte[4];
+            int readCount = 0;
+            using (FileStream stream = File.OpenRead(GetFileSystemPath(filePath)))
+            {
+                // FileStream.Read may return fewer bytes than requested; read until EOF or 4 bytes.
+                while (readCount < bom.Length)
+                {
+                    int read = stream.Read(bom, readCount, bom.Length - readCount);
+                    if (read == 0)
+                    {
+                        break;
+                    }
+
+                    readCount += read;
+                }
+            }
+
+            // UTF-32 BOMs must be checked before UTF-16 because they share the same leading bytes.
+            if (readCount >= 4 && bom[0] == 0xFF && bom[1] == 0xFE && bom[2] == 0x00 && bom[3] == 0x00)
+            {
+                return new UTF32Encoding(bigEndian: false, byteOrderMark: true);
+            }
+
+            if (readCount >= 4 && bom[0] == 0x00 && bom[1] == 0x00 && bom[2] == 0xFE && bom[3] == 0xFF)
+            {
+                return new UTF32Encoding(bigEndian: true, byteOrderMark: true);
+            }
+
+            if (readCount >= 3 && bom[0] == 0xEF && bom[1] == 0xBB && bom[2] == 0xBF)
+            {
+                return new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+            }
+
+            if (readCount >= 2 && bom[0] == 0xFF && bom[1] == 0xFE)
+            {
+                return new UnicodeEncoding(bigEndian: false, byteOrderMark: true);
+            }
+
+            if (readCount >= 2 && bom[0] == 0xFE && bom[1] == 0xFF)
+            {
+                return new UnicodeEncoding(bigEndian: true, byteOrderMark: true);
+            }
+
+            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        }
+
+        internal static void WriteAllTextWithEncoding(string filePath, string content, Encoding encoding)
         {
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
             Debug.Assert(content != null, "content must not be null");
+            Debug.Assert(encoding != null, "encoding must not be null");
 
-            File.WriteAllText(GetFileSystemPath(filePath), content);
+            File.WriteAllText(GetFileSystemPath(filePath), content, encoding);
         }
 
         internal static IEnumerable<string> ReadLines(string filePath)
