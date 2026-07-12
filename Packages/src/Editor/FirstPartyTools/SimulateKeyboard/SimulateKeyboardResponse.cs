@@ -21,6 +21,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public List<UnityCliLoopPausePointHit>? PausePointHits { get; set; }
         public bool? PressEdgeObserved { get; set; }
 
+        /// <summary>
+        /// Extra observation frames spent holding the key after the normal duration window
+        /// while waiting for wasPressedThisFrame. Null when release was not delayed.
+        /// </summary>
+        public int? PressHoldExtendedFrames { get; set; }
+
         public SimulateKeyboardResponse()
         {
         }
