@@ -75,7 +75,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return cancelledResponse;
                 }
 
-                ExecuteDynamicCodeResponse response = _responseFactory.ConvertExecutionResultToResponse(finalResult);
+                ExecuteDynamicCodeResponse response =
+                    _responseFactory.ConvertExecutionResultToResponse(finalResult, originalCode);
                 response.EmitTimingsInJsonResponse = parameters.IncludeTimings;
                 // Why: domain-reload timeouts can complete while Unity's synchronization context is stalled.
                 bool domainReloadWaitRequired =

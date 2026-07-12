@@ -88,6 +88,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// Verifies wrapped UpdatedCode diagnostics render context from the user snippet region.
+        /// </summary>
+        [Test]
+        public void ConvertExecutionResultToResponse_WhenWrappedSourceFails_UsesUserSnippetContext()
+        {
+            DynamicCodeExecutionResponseFactory factory = new();
+            string userCode = "int a=1;\nint b=2;\nint c=3;\nint d=4;\nint e= ;\nreturn a;";
+            string wrappedSource = WrapperTemplate.Build(
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                "TestNs",
+                "TestClass",
+                userCode);
+            ExecutionResult result = new()
+            {
+                Success = false,
+                ErrorMessage = "Compilation error occurred",
+                UpdatedCode = wrappedSource,
+                CompilationErrors = new List<CompilationError>
+                {
+                    new CompilationError
+                    {
+                        ErrorCode = "CS1525",
+                        Message = "Invalid expression term ';'",
+                        Line = 5,
+                        Column = 20
+                    }
+                }
+            };
+
+            ExecuteDynamicCodeResponse response = factory.ConvertExecutionResultToResponse(result, userCode);
+
+            Assert.That(response.Diagnostics[0].Column, Is.EqualTo(8));
+            Assert.That(response.Diagnostics[0].PointerColumn, Is.EqualTo(8));
+            Assert.That(response.Diagnostics[0].Context, Does.Contain("L5:int e= ;"));
+            Assert.That(response.Diagnostics[0].Context, Does.Contain("int b=2;"));
+            Assert.That(response.Diagnostics[0].Context, Does.Not.Contain("__uloop_literal"));
+            Assert.That(response.Diagnostics[0].Context, Does.Not.Contain("using System.Collections.Generic"));
+            Assert.That(response.Diagnostics[0].Context, Does.Not.Contain("L7:"));
+            string[] contextLines = response.Diagnostics[0].Context
+                .Split(new[] { '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
+            int caretLineIndex = System.Array.FindIndex(contextLines, line => line.Contains('^'));
+            Assert.That(caretLineIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(contextLines[caretLineIndex].IndexOf('^'), Is.EqualTo("L5:".Length + 7));
+        }
+
+        /// <summary>
         /// Verifies known compilation failures preserve friendly explanations, examples, and solutions.
         /// </summary>
         [Test]
