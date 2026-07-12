@@ -71,6 +71,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public IReadOnlyList<PausePointStatusCapturedVariable> CapturedVariables { get; set; } =
             Array.Empty<PausePointStatusCapturedVariable>();
         public bool CapturedVariablesTruncated { get; set; }
+        public string ClearedReason { get; set; } = string.Empty;
+        public string StatusBeforeClear { get; set; } = string.Empty;
+        public bool LateHitDiscardedAfterClear { get; set; }
 
         internal static PausePointStatusResponse FromSnapshot(UloopPausePointSnapshot snapshot)
         {
@@ -102,7 +105,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CapturedVariables = snapshot.CapturedVariables
                     .Select(PausePointStatusCapturedVariable.FromCapturedVariable)
                     .ToList(),
-                CapturedVariablesTruncated = snapshot.CapturedVariablesTruncated
+                CapturedVariablesTruncated = snapshot.CapturedVariablesTruncated,
+                ClearedReason = snapshot.ClearedReason,
+                StatusBeforeClear = snapshot.StatusBeforeClear,
+                LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear
             };
         }
     }

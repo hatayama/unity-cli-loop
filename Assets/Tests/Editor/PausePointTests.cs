@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
@@ -135,6 +137,66 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
 
             Assert.That(UloopPausePointRegistry.GetHitSnapshots(), Is.Empty);
+        }
+
+        [Test]
+        public void Clear_WhenAlreadyClearedByRunTests_PreservesOriginalReason()
+        {
+            // Verifies a later explicit clear does not erase run-tests auto-clear evidence.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.ClearAll(UloopPausePointClearedReason.RunTestsAutoClear);
+
+            UloopPausePointRegistry.Clear("jump");
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(snapshot.ClearedReason, Is.EqualTo(UloopPausePointClearedReason.RunTestsAutoClear));
+            Assert.That(snapshot.StatusBeforeClear, Is.EqualTo(UloopPausePointStatus.Enabled));
+        }
+
+        [Test]
+        public void ClearAll_WhenEnabled_SetsRunTestsAutoClearReason()
+        {
+            // Verifies run-tests-style ClearAll is visible on status after wiping an enabled marker.
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            UloopPausePointRegistry.ClearAll(UloopPausePointClearedReason.RunTestsAutoClear);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(snapshot.ClearedReason, Is.EqualTo(UloopPausePointClearedReason.RunTestsAutoClear));
+            Assert.That(snapshot.StatusBeforeClear, Is.EqualTo(UloopPausePointStatus.Enabled));
+        }
+
+        [Test]
+        public void ClearAll_WhenExpired_ReportsAfterExpiredReason()
+        {
+            // Verifies ClearAll after timeout keeps AfterExpired instead of erasing the timeout clue.
+            UloopPausePointRegistry.Enable("jump", 1);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointRegistry.ClearAll(UloopPausePointClearedReason.ClearAll);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(snapshot.ClearedReason, Is.EqualTo(UloopPausePointClearedReason.AfterExpired));
+            Assert.That(snapshot.StatusBeforeClear, Is.EqualTo(UloopPausePointStatus.Expired));
+        }
+
+        [Test]
+        public void Hit_WhenAlreadyCleared_LogsLateHitAndSetsDiscardFlag()
+        {
+            // Verifies a delayed hit after Clear is observable instead of a silent no-op.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Clear("jump");
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("hit after it was cleared"));
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Hit("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(snapshot.LateHitDiscardedAfterClear, Is.True);
+            Assert.That(snapshot.ClearedReason, Is.EqualTo(UloopPausePointClearedReason.ExplicitClear));
+            Assert.That(_pauseController.PauseCount, Is.EqualTo(0));
         }
 
         [Test]
@@ -420,6 +482,100 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.CapturedVariables, Is.EqualTo(capturedVariables));
             Assert.That(snapshot.CapturedVariablesTruncated, Is.True);
             Assert.That(_pauseController.PauseCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void TryGetCapturedValue_WhenLatestHitStoredRawFrame_ReturnsLiveReferences()
+        {
+            // Verifies raw capture exposes live objects for the latest hit only.
+            UloopPausePointRegistry.Enable("jump", 30);
+            List<int> scores = new() { 10, 20, 30 };
+            UloopPausePointCapturedVariableFrame frame = new(
+                new[]
+                {
+                    new UloopPausePointCapturedVariableEntry("scores", UloopCapturedVariableScope.Local, scores),
+                    new UloopPausePointCapturedVariableEntry("empty", UloopCapturedVariableScope.Local, null)
+                },
+                false);
+            UloopCapturedVariable[] capturedVariables =
+            {
+                new("scores", UloopCapturedVariableScope.Local, "System.Collections.Generic.List`1[System.Int32]", "[10,20,30]", string.Empty, string.Empty, 0)
+            };
+
+            UloopPausePointRegistry.HitWithCapturedFrame("jump", frame, capturedVariables, false);
+
+            (bool foundScores, object scoresValue) = UloopPausePoint.TryGetCapturedValue("scores");
+            (bool foundNull, object nullValue) = UloopPausePoint.TryGetCapturedValue("empty");
+            (bool foundMissing, object missingValue) = UloopPausePoint.TryGetCapturedValue("missing");
+
+            Assert.That(foundScores, Is.True);
+            Assert.That(scoresValue, Is.SameAs(scores));
+            Assert.That(foundNull, Is.True);
+            Assert.That(nullValue, Is.Null);
+            Assert.That(foundMissing, Is.False);
+            Assert.That(missingValue, Is.Null);
+            Assert.That(UloopPausePoint.GetCapturedPausePointId(), Is.EqualTo("jump"));
+            Assert.That(UloopPausePoint.GetCapturedNames(), Is.EqualTo(new[] { "scores", "empty" }));
+        }
+
+        [Test]
+        public void TryGetCapturedValue_WhenRegistryClearsLatestHit_ReturnsNotFound()
+        {
+            // Verifies clear and reset paths drop raw references instead of leaving stale handles.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointCapturedVariableFrame frame = new(
+                new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 5) },
+                false);
+            UloopPausePointRegistry.HitWithCapturedFrame(
+                "jump", frame, Array.Empty<UloopCapturedVariable>(), false);
+
+            UloopPausePointRegistry.Clear("jump");
+
+            (bool found, object value) = UloopPausePoint.TryGetCapturedValue("speed");
+            Assert.That(found, Is.False);
+            Assert.That(value, Is.Null);
+            Assert.That(UloopPausePoint.GetCapturedPausePointId(), Is.Empty);
+        }
+
+        [Test]
+        public void TryGetCapturedValue_WhenNewHitReplacesPrevious_ExposesLatestSnapshotOnly()
+        {
+            // Verifies only the latest hit snapshot is held, matching _latestHitSnapshot semantics.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Enable("land", 30);
+            UloopPausePointCapturedVariableFrame jumpFrame = new(
+                new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 1) },
+                false);
+            UloopPausePointCapturedVariableFrame landFrame = new(
+                new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 2) },
+                false);
+
+            UloopPausePointRegistry.HitWithCapturedFrame("jump", jumpFrame, Array.Empty<UloopCapturedVariable>(), false);
+            UloopPausePointRegistry.HitWithCapturedFrame("land", landFrame, Array.Empty<UloopCapturedVariable>(), false);
+
+            (bool found, object value) = UloopPausePoint.TryGetCapturedValue("speed");
+            Assert.That(found, Is.True);
+            Assert.That(value, Is.EqualTo(2));
+            Assert.That(UloopPausePoint.GetCapturedPausePointId(), Is.EqualTo("land"));
+        }
+
+        [Test]
+        public void TryGetCapturedValue_WhenUnrelatedPausePointIsCleared_KeepsLatestHitRawCapture()
+        {
+            // Verifies Clear(id) only drops raw refs when id matches the latest hit snapshot.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Enable("land", 30);
+            UloopPausePointCapturedVariableFrame landFrame = new(
+                new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 7) },
+                false);
+            UloopPausePointRegistry.HitWithCapturedFrame("land", landFrame, Array.Empty<UloopCapturedVariable>(), false);
+
+            UloopPausePointRegistry.Clear("jump");
+
+            (bool found, object value) = UloopPausePoint.TryGetCapturedValue("speed");
+            Assert.That(found, Is.True);
+            Assert.That(value, Is.EqualTo(7));
+            Assert.That(UloopPausePoint.GetCapturedPausePointId(), Is.EqualTo("land"));
         }
 
         [Test]

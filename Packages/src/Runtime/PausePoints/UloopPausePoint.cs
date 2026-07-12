@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace io.github.hatayama.UnityCliLoop.Runtime
@@ -15,6 +17,43 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         {
 #if UNITY_EDITOR
             UloopPausePointRegistry.Hit(id);
+#endif
+        }
+
+        /// <summary>
+        /// Tries to read a raw captured variable from the latest pause-point hit while Unity is paused.
+        /// When multiple captured variables share the same name, the last one wins.
+        /// </summary>
+        public static (bool Found, object Value) TryGetCapturedValue(string name)
+        {
+#if UNITY_EDITOR
+            return UloopPausePointRawCaptureHolder.TryGetCapturedValue(name);
+#else
+            return (false, null);
+#endif
+        }
+
+        /// <summary>
+        /// Returns captured variable names from the latest pause-point hit, or empty when none is held.
+        /// </summary>
+        public static IReadOnlyList<string> GetCapturedNames()
+        {
+#if UNITY_EDITOR
+            return UloopPausePointRawCaptureHolder.GetCapturedNames();
+#else
+            return Array.Empty<string>();
+#endif
+        }
+
+        /// <summary>
+        /// Returns the pause-point id for the latest raw capture snapshot, or empty when none is held.
+        /// </summary>
+        public static string GetCapturedPausePointId()
+        {
+#if UNITY_EDITOR
+            return UloopPausePointRawCaptureHolder.GetCapturedPausePointId();
+#else
+            return string.Empty;
 #endif
         }
     }

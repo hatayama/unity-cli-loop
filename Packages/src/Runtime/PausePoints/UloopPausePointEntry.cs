@@ -40,6 +40,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string Message { get; private set; }
         public IReadOnlyList<UloopCapturedVariable> CapturedVariables { get; private set; }
         public bool CapturedVariablesTruncated { get; private set; }
+        public string ClearedReason { get; private set; } = string.Empty;
+        public string StatusBeforeClear { get; private set; } = string.Empty;
+        public bool LateHitDiscardedAfterClear { get; private set; }
 
         public void ExpireIfNeeded(DateTime nowUtc)
         {
@@ -58,11 +61,42 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             Message = "Pause point expired before it was hit.";
         }
 
-        public void MarkCleared(string message = "Pause point cleared.")
+        public void MarkCleared(string clearedReason, string message = "Pause point cleared.")
         {
+            // Why: a second clear must not erase the first reason (e.g. RunTestsAutoClear).
+            if (Status == UloopPausePointStatus.Cleared)
+            {
+                IsEnabled = false;
+                Message = message;
+                return;
+            }
+
+            // Why: keep the pre-clear status so agents can still see Expired/Hit after Cleared overwrites Status.
+            StatusBeforeClear = Status;
+            if (Status == UloopPausePointStatus.Expired)
+            {
+                ClearedReason = UloopPausePointClearedReason.AfterExpired;
+            }
+            else if (Status == UloopPausePointStatus.Hit &&
+                clearedReason == UloopPausePointClearedReason.ExplicitClear)
+            {
+                ClearedReason = UloopPausePointClearedReason.AlreadyHit;
+            }
+            else
+            {
+                ClearedReason = string.IsNullOrEmpty(clearedReason)
+                    ? UloopPausePointClearedReason.ExplicitClear
+                    : clearedReason;
+            }
+
             IsEnabled = false;
             Status = UloopPausePointStatus.Cleared;
             Message = message;
+        }
+
+        public void MarkLateHitDiscardedAfterClear()
+        {
+            LateHitDiscardedAfterClear = true;
         }
 
         public void RecordHit(DateTime nowUtc, bool isPlaying, bool isPaused, int hitSequence)
@@ -140,7 +174,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 Message,
                 recommendedNextAction,
                 CapturedVariables,
-                CapturedVariablesTruncated);
+                CapturedVariablesTruncated,
+                ClearedReason,
+                StatusBeforeClear,
+                LateHitDiscardedAfterClear);
         }
 
         private long CalculateRemainingMilliseconds(DateTime nowUtc)

@@ -70,12 +70,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 UloopPausePointStatus.Cleared => "Pause point was already cleared.",
                 _ => "Pause point cleared."
             };
-            entry.MarkCleared(message);
+            entry.MarkCleared(UloopPausePointClearedReason.ExplicitClear, message);
             ClearLatestHitSnapshotIfMatches(id);
             return entry.ToSnapshot(now, _pauseController);
         }
 
-        public static UloopPausePointClearAllResult ClearAll()
+        public static UloopPausePointClearAllResult ClearAll(
+            string clearedReason = UloopPausePointClearedReason.ClearAll)
         {
             OnClearedAll?.Invoke();
 
@@ -88,10 +89,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                     continue;
                 }
 
+                // Resolve expiry first so ClearAll after timeout keeps AfterExpired visibility.
+                entry.ExpireIfNeeded(now);
                 clearedIds.Add(entry.Id);
-                entry.MarkCleared();
+                entry.MarkCleared(clearedReason);
             }
             ClearLatestHitSnapshot();
+            UloopPausePointRawCaptureHolder.Clear();
 
             UloopPausePointEditorStateSnapshot editorState = UloopPausePointEditorStateSnapshot.FromController(
                 _pauseController,
@@ -116,7 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         public static UloopPausePointSnapshot Hit(string id)
         {
-            return HitCore(id, Array.Empty<UloopCapturedVariable>(), false);
+            return HitCore(id, null, Array.Empty<UloopCapturedVariable>(), false);
         }
 
         public static UloopPausePointSnapshot HitWithCapturedVariables(
@@ -124,7 +128,19 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         {
             Debug.Assert(capturedVariables != null, "capturedVariables must not be null");
 
-            return HitCore(id, capturedVariables, capturedVariablesTruncated);
+            return HitCore(id, null, capturedVariables, capturedVariablesTruncated);
+        }
+
+        public static UloopPausePointSnapshot HitWithCapturedFrame(
+            string id,
+            UloopPausePointCapturedVariableFrame capturedFrame,
+            IReadOnlyList<UloopCapturedVariable> capturedVariables,
+            bool capturedVariablesTruncated)
+        {
+            Debug.Assert(capturedFrame != null, "capturedFrame must not be null");
+            Debug.Assert(capturedVariables != null, "capturedVariables must not be null");
+
+            return HitCore(id, capturedFrame, capturedVariables, capturedVariablesTruncated);
         }
 
         // Returns after a single dictionary lookup when the id is not armed. Harmony-injected
@@ -140,7 +156,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         }
 
         private static UloopPausePointSnapshot HitCore(
-            string id, IReadOnlyList<UloopCapturedVariable> capturedVariables, bool capturedVariablesTruncated)
+            string id,
+            UloopPausePointCapturedVariableFrame capturedFrame,
+            IReadOnlyList<UloopCapturedVariable> capturedVariables,
+            bool capturedVariablesTruncated)
         {
             if (string.IsNullOrWhiteSpace(id))
             {
@@ -158,6 +177,16 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             entry.ExpireIfNeeded(now);
             if (!entry.IsEnabled)
             {
+                // Why: delayed main-thread hits can lose the race to Clear/ClearAll; surface that race.
+                if (entry.Status == UloopPausePointStatus.Cleared)
+                {
+                    entry.MarkLateHitDiscardedAfterClear();
+                    Debug.LogWarning(
+                        $"Pause point '{id}' was hit after it was cleared " +
+                        $"(ClearedReason={entry.ClearedReason}, StatusBeforeClear={entry.StatusBeforeClear}). " +
+                        "The late hit was discarded.");
+                }
+
                 return entry.ToSnapshot(now, _pauseController);
             }
 
@@ -170,6 +199,11 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             _latestHitSnapshot = snapshot;
             _hitSnapshots.RemoveAll(hitSnapshot => hitSnapshot.Id == id);
             _hitSnapshots.Add(snapshot);
+            if (capturedFrame != null)
+            {
+                UloopPausePointRawCaptureHolder.Store(capturedFrame, id);
+            }
+
             return snapshot;
         }
 
@@ -187,6 +221,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         {
             _latestHitSnapshot = null;
             _hitSnapshots.Clear();
+            UloopPausePointRawCaptureHolder.Clear();
         }
 
         private static void ClearLatestHitSnapshotIfMatches(string id)
@@ -203,6 +238,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             _latestHitSnapshot = null;
+            UloopPausePointRawCaptureHolder.Clear();
         }
 
         public static void ConfigureForTests(IUloopPausePointPauseController pauseController, Func<DateTime> nowProvider)
@@ -223,6 +259,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             _hitSnapshots.Clear();
             _pauseController = new UnityEditorPausePointPauseController();
             _nowProvider = () => DateTime.UtcNow;
+            UloopPausePointRawCaptureHolder.Clear();
         }
 
         private static DateTime NowUtc()

@@ -25,12 +25,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
-                instance, parameterNamesAndValues, localNamesAndValues);
+            (UloopPausePointCapturedVariableFrame frame, List<UloopCapturedVariable> variables, bool truncated) =
+                CaptureFrame(instance, parameterNamesAndValues, localNamesAndValues);
 
             if (MainThreadSwitcher.IsMainThread)
             {
-                UloopPausePointRegistry.HitWithCapturedVariables(id, variables, truncated);
+                UloopPausePointRegistry.HitWithCapturedFrame(id, frame, variables, truncated);
                 return;
             }
 
@@ -38,7 +38,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // touched from the main thread, so an off-thread hit is recorded on the next
             // main-thread tick instead of inline. HitCore re-checks IsEnabled at that point, so a
             // marker that already got disarmed by a faster hit safely no-ops there.
-            MainThreadSwitcher.AddContinuation(() => UloopPausePointRegistry.HitWithCapturedVariables(id, variables, truncated));
+            MainThreadSwitcher.AddContinuation(
+                () => UloopPausePointRegistry.HitWithCapturedFrame(id, frame, variables, truncated));
+        }
+
+        internal static (UloopPausePointCapturedVariableFrame Frame, List<UloopCapturedVariable> Variables, bool Truncated)
+            CaptureFrame(object instance, object[] parameterNamesAndValues, object[] localNamesAndValues)
+        {
+            UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
+                instance, parameterNamesAndValues, localNamesAndValues);
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.FormatFrame(frame);
+            return (frame, variables, truncated);
         }
     }
 }
