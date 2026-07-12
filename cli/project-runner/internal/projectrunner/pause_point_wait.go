@@ -66,6 +66,9 @@ type pausePointStatusResponse struct {
 	RecommendedNextAction           string                       `json:"RecommendedNextAction"`
 	CapturedVariables               []pausePointCapturedVariable `json:"CapturedVariables"`
 	CapturedVariablesTruncated      bool                         `json:"CapturedVariablesTruncated"`
+	ClearedReason                   string                       `json:"ClearedReason"`
+	StatusBeforeClear               string                       `json:"StatusBeforeClear"`
+	LateHitDiscardedAfterClear      bool                         `json:"LateHitDiscardedAfterClear"`
 }
 
 type pausePointEditorState struct {
