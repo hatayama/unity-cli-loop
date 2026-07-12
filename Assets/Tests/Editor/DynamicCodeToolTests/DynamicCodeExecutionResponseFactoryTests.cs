@@ -213,5 +213,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(response.CompilationErrors, Is.Empty);
             Assert.That(response.ErrorMessage, Is.EqualTo(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
         }
+
+        /// <summary>
+        /// Verifies int-to-byte conversion failures include transpiler constraint guidance.
+        /// </summary>
+        [Test]
+        public void ConvertExecutionResultToResponse_WhenColor32ByteConversionFails_AddsTranspilerConstraintHint()
+        {
+            DynamicCodeExecutionResponseFactory factory = new();
+            ExecutionResult result = new()
+            {
+                Success = false,
+                ErrorMessage = "Compilation error occurred",
+                CompilationErrors = new List<CompilationError>
+                {
+                    new CompilationError
+                    {
+                        ErrorCode = "CS1503",
+                        Message = "CS1503: Argument 1: cannot convert from 'int' to 'byte'",
+                        Line = 2,
+                        Column = 20
+                    }
+                }
+            };
+
+            ExecuteDynamicCodeResponse response = factory.ConvertExecutionResultToResponse(
+                result,
+                "using UnityEngine;\nreturn new Color32(255, 0, 0, 255);");
+
+            Assert.That(response.Diagnostics[0].Hint, Does.Contain("Color32"));
+            Assert.That(response.Diagnostics[0].Suggestions, Contains.Item(
+                "Cast each component explicitly, for example: new Color32((byte)255, (byte)0, (byte)0, (byte)255)."));
+        }
     }
 }
