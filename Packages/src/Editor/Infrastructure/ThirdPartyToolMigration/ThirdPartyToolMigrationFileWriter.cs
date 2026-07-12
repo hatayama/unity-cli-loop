@@ -271,14 +271,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return File.ReadAllText(GetFileSystemPath(filePath));
         }
 
-        internal static void WriteAllText(string filePath, string content)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
-            Debug.Assert(content != null, "content must not be null");
-
-            File.WriteAllText(GetFileSystemPath(filePath), content);
-        }
-
         internal static Encoding DetectEncodingFromBom(string filePath)
         {
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
