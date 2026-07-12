@@ -56,6 +56,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string CurrentConstantsTypeName = "UnityCliLoopConstants";
         public const string CurrentEditorFrameWaitTimeoutMemberName = "EDITOR_FRAME_WAIT_TIMEOUT_MS";
         public const int MinimumRawStringDelimiterQuoteCount = 3;
+        // Longest valid C# char literal content is \Uxxxxxxxx; beyond that an apostrophe is ordinary code.
+        public const int MaxCharLiteralContentLength = 10;
         public static readonly string[] ExcludedDirectoryNames =
         {
             ".git",
