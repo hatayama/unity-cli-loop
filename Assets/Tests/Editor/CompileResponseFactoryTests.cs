@@ -212,6 +212,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.NextActions, Has.Length.EqualTo(2));
             Assert.That(response.NextActions[0], Does.Contain("execute-dynamic-code"));
             Assert.That(response.NextActions[0], Does.Contain("EditorSceneManager.OpenScene"));
+            Assert.That(response.NextActions[0], Does.Contain("OpenSceneMode.Single discards unsaved"));
+            Assert.That(response.NextActions[1], Does.Contain("unsaved in-editor changes"));
+            Assert.That(response.NextActions[1], Does.Not.Contain("stop-on-external-scene-changes"));
         }
 
         [Test]

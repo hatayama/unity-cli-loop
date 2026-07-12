@@ -20,7 +20,7 @@ const (
 	focusRestoreTimeout                 = 2 * time.Second
 	serverConnectionRetryDefaultTimeout = 10 * time.Second
 	serverConnectionRetryDefaultPoll    = 1 * time.Second
-	defaultBusyFocusStallThreshold      = 30 * time.Second
+	defaultBusyFocusStallThreshold      = 5 * time.Second
 )
 
 type connectionRetryDeps struct {

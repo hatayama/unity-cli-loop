@@ -20,6 +20,19 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
+// Verifies the default busy-stall focus threshold fires before the bounded busy retry window ends.
+func TestDefaultBusyFocusStallThresholdFitsWithinBusyRetryWindow(t *testing.T) {
+	deps := defaultConnectionRetryDeps()
+	threshold := busyFocusStallThresholdFor(deps)
+	if threshold >= deps.retryTimeout {
+		t.Fatalf(
+			"busy focus stall threshold must stay below the busy retry window: threshold=%s window=%s",
+			threshold,
+			deps.retryTimeout,
+		)
+	}
+}
+
 // Verifies transient IPC connection failures focus Unity once and restore focus before reporting server-not-responding.
 func TestSendWithTransientConnectionRetryReportsUnityServerNotResponding(t *testing.T) {
 	deps := defaultConnectionRetryDeps()

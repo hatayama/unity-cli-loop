@@ -20,8 +20,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Reload each changed Scene with execute-dynamic-code, for example: " +
             "`uloop execute-dynamic-code --code 'using UnityEditor.SceneManagement; using UnityEngine.SceneManagement; " +
             "EditorSceneManager.OpenScene(\"<SCENE_ASSET_PATH>\", OpenSceneMode.Single);'` " +
-            "using the Scene path from Errors[].File.",
-            "Alternatively rerun compile without `--stop-on-external-scene-changes` to let uloop reload externally changed Scenes automatically."
+            "using the Scene path from Errors[].File. OpenSceneMode.Single discards unsaved in-editor Scene changes.",
+            "If the Scene has unsaved in-editor changes that conflict with the external change, decide first: " +
+            "save the Scene to keep editor changes, or reload it to take the external content."
         };
 
         internal static CompileResponse CreateResponse(

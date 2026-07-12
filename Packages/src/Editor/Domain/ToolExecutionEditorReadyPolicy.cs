@@ -38,8 +38,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     toolName,
                     editorState.IsPlaying,
                     editorState.IsPaused,
-                    true,
-                    false);
+                    editorState.IsCompiling,
+                    editorState.IsUpdating);
             }
 
             if ((condition & GuardCondition.NotUpdating) != 0 && editorState.IsUpdating)
@@ -49,8 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     toolName,
                     editorState.IsPlaying,
                     editorState.IsPaused,
-                    false,
-                    true);
+                    editorState.IsCompiling,
+                    editorState.IsUpdating);
             }
 
             return ToolExecutionEditorReadyDecision.Ready(toolName);
