@@ -15,6 +15,8 @@ Use this small loop for one representative frame you care about. No source edit 
 uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 30
 ```
 
+`--timeout-seconds` on enable starts the marker lifetime clock at enable time, not when you later run `await-pause-point`.
+
 The response returns the derived marker `Id` (`Assets/Scripts/Enemy.cs:42`), the `ResolvedLine` that was actually patched, and the `ResolvedMethod`. When the requested line has no executable statement, the pause point rounds forward to the next executable line — check `ResolvedLine` when precision matters. Use the returned `Id` for every follow-up command.
 
 2. Trigger the action with a `simulate-*` command.
@@ -33,6 +35,7 @@ uloop await-pause-point --id "Assets/Scripts/Enemy.cs:42" --timeout-seconds 30
 Every hit response embeds `CapturedVariables`: the method's in-scope locals, its parameters, and the `this` instance fields, captured at the exact moment execution reached the patched line. Values are point-in-time strings, not live references, so they stay valid as evidence even after Unity resumes.
 
 - The snapshot is taken **before** the resolved line executes, exactly like an IDE breakpoint on that line. To inspect a value after an assignment, place the pause point on the following line.
+- `execute-dynamic-code` during the pause sees the interrupted method's **post-interrupt** state, not this pre-line snapshot. Use `CapturedVariables` for pre-line evidence; use the raw capture API below when you need live references while paused.
 - `Scope` is `Local`, `Parameter`, or `InstanceField`.
 - `UnityEngine.Object` values additionally carry `UnityObjectKind` (`SceneObject`, `PrefabAsset`, `Asset`, `RuntimeInstance`, or `Destroyed`), `UnityObjectPath`, and `UnityObjectInstanceId`. Use these as handles for the next dig: a `SceneObject` path feeds `get-hierarchy`/`find-game-objects`, an asset path locates the asset, and the InstanceID works with `execute-dynamic-code`.
 - `CapturedVariablesTruncated=true` means at least one value was clipped to the length cap or the variable-count cap stopped enumeration; clipped values are still present up to the cap.
@@ -42,6 +45,26 @@ Every hit response embeds `CapturedVariables`: the method's in-scope locals, its
 Read `EvidenceSummary` first when it is present. It groups `EditorState`, pause point hit metadata, matching-log counts, truncation status, and warnings so you can tell whether the evidence is a single clean hit or needs closer inspection. `MatchingLogs` (log entries whose text contains the marker id) is still embedded, but source-derived ids rarely appear in log text, so treat `CapturedVariables` as the primary variable evidence.
 
 Use `Generation`, `EnabledAtUtc`, and the hit sequence fields from the hit or status response to tell a fresh marker from stale evidence with the same id. `RemainingMilliseconds` and `Expired` are returned directly so you do not need to infer marker lifetime from elapsed time.
+
+## Raw Capture While Paused
+
+While Unity is paused on a hit, `execute-dynamic-code` can read live captured references through `UloopPausePoint`:
+
+- `TryGetCapturedValue(string name)` returns `(bool Found, object Value)` for the latest hit only. When multiple captured variables share the same name, the last one wins.
+- `GetCapturedNames()` lists captured variable names from that snapshot.
+- `GetCapturedPausePointId()` returns the pause-point id for the held snapshot.
+
+The holder clears when Unity resumes (not when you `Step` while still paused), when the matching pause point is cleared, when a new hit replaces the snapshot, or when PlayMode exits. After resume, `TryGetCapturedValue` returns `Found=false`.
+
+## Marker Types
+
+- `uloop enable-pause-point --file --line` patches the already-compiled method at a source line. No code edit or recompile is required.
+- `UloopPausePoint.Pause(id)` is a hand-written marker call for code paths that file:line patching cannot reach. Pair it with `uloop enable-pause-point --id <id>` (no `--file`/`--line`).
+- For ordinary file:line debugging you do not need `UloopPausePoint.Pause` in source. Prefer CLI enable when the target line can be patched.
+
+## Hit Preconditions
+
+A pause point hits only when control flow reaches the patched line (or the `Pause(id)` call). `simulate-keyboard` returning `PressEdgeObserved=true` means the input edge was observed, not that your target game logic has reached the pause line yet.
 
 ## When To Use
 
