@@ -579,6 +579,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void TryGetCapturedValue_WhenSamePausePointIsReenabledWhilePaused_KeepsLatestHitRawCapture()
+        {
+            // Verifies re-enabling the same id while still paused (e.g. to refresh its timeout
+            // during a step session) keeps the held raw capture instead of clearing it.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointCapturedVariableFrame frame = new(
+                new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 1) },
+                false);
+            UloopPausePointRegistry.HitWithCapturedFrame("jump", frame, Array.Empty<UloopCapturedVariable>(), false);
+
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            (bool found, object value) = UloopPausePoint.TryGetCapturedValue("speed");
+            Assert.That(found, Is.True);
+            Assert.That(value, Is.EqualTo(1));
+            Assert.That(UloopPausePoint.GetCapturedPausePointId(), Is.EqualTo("jump"));
+        }
+
+        [Test]
+        public void TryGetCapturedValue_WhenSamePausePointIsReenabledThenCleared_StillClearsRawCapture()
+        {
+            // Verifies Clear(id) after a same-id re-enable still drops the raw capture holder,
+            // even though the re-enable already reset the hit snapshot bookkeeping.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointCapturedVariableFrame frame = new(
+                new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 1) },
+                false);
+            UloopPausePointRegistry.HitWithCapturedFrame("jump", frame, Array.Empty<UloopCapturedVariable>(), false);
+
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Clear("jump");
+
+            (bool found, object value) = UloopPausePoint.TryGetCapturedValue("speed");
+            Assert.That(found, Is.False);
+            Assert.That(value, Is.Null);
+            Assert.That(UloopPausePoint.GetCapturedPausePointId(), Is.Empty);
+        }
+
+        [Test]
         public void Hit_WhenPausePointIsEnabled_ReportsEmptyCapturedVariables()
         {
             // Verifies the plain marker path (no source pause point) reports an empty, non-null list.
