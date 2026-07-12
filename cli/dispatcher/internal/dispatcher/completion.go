@@ -229,6 +229,13 @@ func printCommandNames(cache clicore.ToolsCache, stdout io.Writer) {
 }
 
 func printOptionsForCommand(command string, cache clicore.ToolsCache, stdout io.Writer) {
+	if isWatchToolCommand(command) {
+		tool, ok := clicore.FindDefaultTool(command)
+		if ok {
+			printOptionsForTool(tool, stdout)
+		}
+		return
+	}
 	nativeOptions, ok := nativeCommandOptions[command]
 	if ok {
 		options := append([]string{}, nativeOptions...)

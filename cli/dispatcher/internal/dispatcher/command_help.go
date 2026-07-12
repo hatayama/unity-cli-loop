@@ -12,6 +12,12 @@ import (
 )
 
 func tryHandleCommandHelp(command string, startPath string, projectPath string, stdout io.Writer, stderr io.Writer) (bool, int) {
+	if isWatchToolCommand(command) {
+		if tool, ok := clicore.FindDefaultTool(command); ok {
+			printToolHelp(tool, stdout)
+			return true, 0
+		}
+	}
 	if _, ok := clicore.NativeCommand(command); ok {
 		printNativeSingleCommandHelp(command, stdout)
 		return true, 0
@@ -114,7 +120,16 @@ func nativeCommandDescription(command string) (string, bool) {
 
 func nativeCommandUsesProject(command string) bool {
 	switch command {
-	case clicore.LaunchCommandName, "list", "sync", "focus-window", clicore.SkillsCommandName, clicore.PausePointAwaitCommandName, clicore.PausePointStatusUserCommandName:
+	case clicore.LaunchCommandName, "list", "sync", "focus-window", clicore.SkillsCommandName, clicore.PausePointAwaitCommandName, clicore.PausePointStatusUserCommandName, clicore.WatchEnableCommandName, clicore.WatchClearCommandName, clicore.WatchValuesCommandName:
+		return true
+	default:
+		return false
+	}
+}
+
+func isWatchToolCommand(command string) bool {
+	switch command {
+	case clicore.WatchEnableCommandName, clicore.WatchClearCommandName, clicore.WatchValuesCommandName:
 		return true
 	default:
 		return false
