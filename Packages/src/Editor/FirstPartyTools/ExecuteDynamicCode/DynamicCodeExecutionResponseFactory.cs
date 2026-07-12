@@ -300,6 +300,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return (hint, suggestions);
 
                 default:
+                    if (DynamicCodeTranspilerConstraintHints.TryBuildHint(
+                            error.ErrorCode,
+                            error.Message,
+                            out string constraintHint,
+                            out string constraintSuggestion))
+                    {
+                        hint = constraintHint;
+                        if (!string.IsNullOrEmpty(constraintSuggestion))
+                        {
+                            suggestions.Add(constraintSuggestion);
+                        }
+                    }
+
                     return (hint, suggestions);
             }
         }

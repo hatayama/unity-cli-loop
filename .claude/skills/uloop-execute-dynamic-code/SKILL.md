@@ -32,6 +32,11 @@ return x;
 
 Prefer terminal commands for file operations and keep snippets focused on Unity Editor state that existing uloop tools cannot inspect or change.
 
+## Known transpiler constraints
+
+- Static local functions cannot use hoisted literals (`__uloop_literal_N`). Keep literals inside static local function bodies as inline constants, or move helpers out of static local functions.
+- Integer literals are hoisted as `int` values. APIs that require `byte` components (for example `new Color32(255, 0, 0, 255)`) need explicit casts such as `(byte)255` even when plain Unity scripts accept uncast numeric literals.
+
 ## Shell Quoting
 
 - zsh/bash: single-quote the whole snippet so C# double quotes pass through unchanged: `--code 'return "hi";'`. For a single quote inside the snippet, close and reopen the shell string with `'\''`.

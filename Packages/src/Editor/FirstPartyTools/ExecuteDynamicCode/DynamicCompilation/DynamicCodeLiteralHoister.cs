@@ -30,6 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             StringBuilder rewrittenSource = new(source.Length);
             List<HoistedLiteralBinding> bindings = new();
+            LiteralHoistScopeTracker scopeTracker = new();
             int index = 0;
 
             while (index < source.Length)
@@ -59,12 +60,49 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                if (TryHoistRegularStringLiteral(source, rewrittenSource, bindings, ref index))
+                if (scopeTracker.TryConsumeStaticLocalFunctionHeader(source, index, rewrittenSource, ref index))
                 {
                     continue;
                 }
 
-                if (TryHoistIntegerLiteral(source, rewrittenSource, bindings, ref index))
+                if (source[index] == '{')
+                {
+                    scopeTracker.OnOpenBrace();
+                    rewrittenSource.Append('{');
+                    index++;
+                    continue;
+                }
+
+                if (source[index] == '}')
+                {
+                    scopeTracker.OnCloseBrace();
+                    rewrittenSource.Append('}');
+                    index++;
+                    continue;
+                }
+
+                if (source[index] == ';')
+                {
+                    scopeTracker.OnSemicolon();
+                    rewrittenSource.Append(';');
+                    index++;
+                    continue;
+                }
+
+                if (scopeTracker.ShouldSuppressLiteralHoisting)
+                {
+                    if (TryCopyRegularStringLiteral(source, rewrittenSource, ref index))
+                    {
+                        continue;
+                    }
+                }
+                else if (TryHoistRegularStringLiteral(source, rewrittenSource, bindings, ref index))
+                {
+                    continue;
+                }
+
+                if (!scopeTracker.ShouldSuppressLiteralHoisting
+                    && TryHoistIntegerLiteral(source, rewrittenSource, bindings, ref index))
                 {
                     continue;
                 }
@@ -538,6 +576,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 if (current == '\'')
+                {
+                    index++;
+                    rewrittenSource.Append(source, start, index - start);
+                    return true;
+                }
+
+                index++;
+            }
+
+            index = start;
+            return false;
+        }
+
+        private static bool TryCopyRegularStringLiteral(
+            string source,
+            StringBuilder rewrittenSource,
+            ref int index)
+        {
+            if (source[index] != '"')
+            {
+                return false;
+            }
+
+            if (index > 0 && (source[index - 1] == '@' || source[index - 1] == '$'))
+            {
+                return false;
+            }
+
+            int start = index;
+            index++;
+
+            while (index < source.Length)
+            {
+                char current = source[index];
+                if (current == '\\')
+                {
+                    AdvanceEscapedLiteralSequence(source, ref index);
+                    continue;
+                }
+
+                if (current == '"')
                 {
                     index++;
                     rewrittenSource.Append(source, start, index - start);
