@@ -164,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static string[] ClearActivePausePointsDefault()
         {
-            UloopPausePointClearAllResult result = UloopPausePointRegistry.ClearAll();
+            UloopPausePointClearAllResult result = UloopPausePointRegistry.ClearAll(UloopPausePointClearedReason.RunTestsAutoClear);
             if (result.ClearedCount == 0)
             {
                 return null;

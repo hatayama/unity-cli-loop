@@ -65,6 +65,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Message { get; set; } = string.Empty;
         public string RecommendedNextAction { get; set; } = string.Empty;
         public string Warning { get; set; } = string.Empty;
+        public string ClearedReason { get; set; } = string.Empty;
+        public string StatusBeforeClear { get; set; } = string.Empty;
+        public bool LateHitDiscardedAfterClear { get; set; }
 
         internal static PausePointResponse FromSnapshot(UloopPausePointSnapshot snapshot)
         {
@@ -92,7 +95,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 FirstHitSequence = snapshot.FirstHitSequence,
                 LastHitSequence = snapshot.LastHitSequence,
                 Message = snapshot.Message,
-                RecommendedNextAction = snapshot.RecommendedNextAction
+                RecommendedNextAction = snapshot.RecommendedNextAction,
+                ClearedReason = snapshot.ClearedReason,
+                StatusBeforeClear = snapshot.StatusBeforeClear,
+                LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear
             };
         }
 

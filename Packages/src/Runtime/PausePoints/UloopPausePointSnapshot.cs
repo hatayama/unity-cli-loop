@@ -31,7 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             string message,
             string recommendedNextAction,
             IReadOnlyList<UloopCapturedVariable> capturedVariables,
-            bool capturedVariablesTruncated)
+            bool capturedVariablesTruncated,
+            string clearedReason,
+            string statusBeforeClear,
+            bool lateHitDiscardedAfterClear)
         {
             Debug.Assert(editorState != null, "editorState must not be null");
 
@@ -55,6 +58,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             RecommendedNextAction = recommendedNextAction ?? string.Empty;
             CapturedVariables = capturedVariables ?? Array.Empty<UloopCapturedVariable>();
             CapturedVariablesTruncated = capturedVariablesTruncated;
+            ClearedReason = clearedReason ?? string.Empty;
+            StatusBeforeClear = statusBeforeClear ?? string.Empty;
+            LateHitDiscardedAfterClear = lateHitDiscardedAfterClear;
         }
 
         public string Id { get; }
@@ -77,6 +83,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string RecommendedNextAction { get; }
         public IReadOnlyList<UloopCapturedVariable> CapturedVariables { get; }
         public bool CapturedVariablesTruncated { get; }
+        public string ClearedReason { get; }
+        public string StatusBeforeClear { get; }
+        public bool LateHitDiscardedAfterClear { get; }
 
         public static UloopPausePointSnapshot NotEnabled(string id, IUloopPausePointPauseController pauseController)
         {
@@ -104,6 +113,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 "Pause point is not enabled.",
                 string.Empty,
                 Array.Empty<UloopCapturedVariable>(),
+                false,
+                string.Empty,
+                string.Empty,
                 false);
         }
     }
