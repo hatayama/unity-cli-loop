@@ -34,8 +34,11 @@ Prefer `rg` when available, but any repository search tool is acceptable.
 | V2 form | V3 form |
 | --- | --- |
 | `--flag true` | `--flag` when the V3 option is a positive default-false boolean |
+| `--flag=true` | `--flag` when the V3 option is a positive default-false boolean |
 | `--flag=false` | remove the option when the V3 default is already false |
+| `--flag false` | remove the option when the V3 default is already false |
 | `--flag true` | remove the option when the V3 default is already true |
+| `--flag=true` | remove the option when the V3 default is already true |
 | `--flag false` | use the V3 negative option when the V3 default is true |
 | `--flag=false` | use the V3 negative option when the V3 default is true |
 
