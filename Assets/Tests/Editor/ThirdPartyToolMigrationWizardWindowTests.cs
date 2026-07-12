@@ -466,12 +466,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         [TestCase(SkillInstallState.Installed, true)]
         [TestCase(SkillInstallState.Outdated, true)]
+        [TestCase(SkillInstallState.Checking, true)]
         [TestCase(SkillInstallState.Missing, false)]
         public void ShouldShowTemporarySkillNote_ReturnsExpectedValue(
             SkillInstallState installState,
             bool expected)
         {
-            // Verifies the temporary skill note shows only while the skill is installed.
+            // Verifies the temporary skill note shows for every non-missing install state.
             bool shouldShow = ThirdPartyToolMigrationWizardStateRules.ShouldShowTemporarySkillNote(installState);
 
             Assert.That(shouldShow, Is.EqualTo(expected));
