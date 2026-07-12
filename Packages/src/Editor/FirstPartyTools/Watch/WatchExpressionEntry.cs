@@ -26,7 +26,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Expression { get; }
         public int MaxHistory { get; }
         public int HistoryDroppedCount { get; private set; }
+        internal int LastEvaluatedFrameCount { get; private set; } = int.MinValue;
         internal IWatchExpressionEvaluator Evaluator { get; }
+
+        internal void MarkEvaluated(int frameCount)
+        {
+            LastEvaluatedFrameCount = frameCount;
+        }
 
         internal void Append(int frameCount, DateTime evaluatedAtUtc, WatchEvaluationResult result)
         {

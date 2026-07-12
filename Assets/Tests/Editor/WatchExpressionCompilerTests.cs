@@ -16,6 +16,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     [TestFixture]
     public sealed class WatchExpressionCompilerTests
     {
+        private const int MaxCompilationWaitTicks = 600;
+
         /// <summary>
         /// Verifies a valid expression reaches the compile-only path and produces an evaluator.
         /// </summary>
@@ -25,9 +27,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             WatchExpressionCompiler compiler = new(new DynamicCodeCompiler());
             Task<WatchCompilationResult> compilationTask = compiler.CompileAsync("1 + 2", CancellationToken.None);
 
-            while (!compilationTask.IsCompleted)
+            int waitTicks = 0;
+            while (!compilationTask.IsCompleted && waitTicks < MaxCompilationWaitTicks)
             {
+                waitTicks++;
                 yield return null;
+            }
+
+            if (!compilationTask.IsCompleted)
+            {
+                Assert.Fail($"Watch expression compilation did not complete within {MaxCompilationWaitTicks} editor ticks.");
+                yield break;
             }
 
             Assert.That(compilationTask.IsCompletedSuccessfully, Is.True);

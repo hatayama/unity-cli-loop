@@ -15,7 +15,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly IWatchEditorStateProvider _stateProvider;
         private readonly Dictionary<string, WatchExpressionEntry> _entriesById = new(StringComparer.Ordinal);
         private readonly List<WatchExpressionEntry> _entries = new();
-        private int _lastEvaluatedFrameCount = int.MinValue;
         private bool _isEvaluating;
 
         public WatchExpressionRegistry(IWatchEditorStateProvider stateProvider)
@@ -48,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _entriesById.Add(id, entry);
             _entries.Add(entry);
             int baselineFrameCount = _stateProvider.FrameCount;
-            _lastEvaluatedFrameCount = baselineFrameCount;
+            entry.MarkEvaluated(baselineFrameCount);
             _isEvaluating = true;
             try
             {
@@ -88,18 +87,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             int frameCount = _stateProvider.FrameCount;
-            if (_isEvaluating || frameCount == _lastEvaluatedFrameCount)
+            if (_isEvaluating)
             {
                 return false;
             }
 
-            _lastEvaluatedFrameCount = frameCount;
             _isEvaluating = true;
+            bool evaluatedAny = false;
             try
             {
                 foreach (WatchExpressionEntry entry in _entries)
                 {
+                    if (entry.LastEvaluatedFrameCount == frameCount)
+                    {
+                        continue;
+                    }
+
+                    entry.MarkEvaluated(frameCount);
                     EvaluateEntry(entry, frameCount);
+                    evaluatedAny = true;
                 }
             }
             finally
@@ -107,7 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _isEvaluating = false;
             }
 
-            return true;
+            return evaluatedAny;
         }
 
         public IReadOnlyList<WatchExpressionEntry> GetEntries()

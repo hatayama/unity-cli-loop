@@ -1,3 +1,3 @@
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("UnityCliLoop.Tests.Editor")]
+[assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor")]

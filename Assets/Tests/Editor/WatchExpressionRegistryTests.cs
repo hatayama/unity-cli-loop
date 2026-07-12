@@ -13,6 +13,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     [TestFixture]
     public sealed class WatchExpressionRegistryTests
     {
+        /// <summary>
+        /// Verifies registration evaluates an immediate baseline frame.
+        /// </summary>
         [Test]
         public void Register_AddsImmediateBaselineToHistory()
         {
@@ -31,6 +34,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(entry.Result.Value, Is.EqualTo(3));
         }
 
+        /// <summary>
+        /// Verifies changed frames evaluate watches in registration order only once per frame.
+        /// </summary>
         [Test]
         public void EvaluateIfFrameChanged_EvaluatesInRegistrationOrderAndSkipsSameFrame()
         {
@@ -52,6 +58,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(registry.GetHistory("second"), Has.Count.EqualTo(2));
         }
 
+        /// <summary>
+        /// Verifies registering a watch after a frame advances does not skip existing watches on that frame.
+        /// </summary>
+        [Test]
+        public void Register_AfterFrameAdvance_DoesNotSkipExistingWatchEvaluation()
+        {
+            FakeWatchEditorStateProvider stateProvider = new(10, true, true);
+            WatchExpressionRegistry registry = new(stateProvider);
+            registry.Register("first", "first", new SequenceWatchExpressionEvaluator(1, 2), 20);
+
+            stateProvider.FrameCount = 11;
+            registry.Register("second", "second", new SequenceWatchExpressionEvaluator(3), 20);
+            registry.EvaluateIfFrameChanged();
+
+            Assert.That(registry.GetHistory("first"), Has.Count.EqualTo(2));
+            Assert.That(registry.GetHistory("second"), Has.Count.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a frame change while not paused does not evaluate watches before a paused evaluation.
+        /// </summary>
         [Test]
         public void EvaluateIfFrameChanged_WhenNotPaused_DoesNotEvaluate()
         {
@@ -60,14 +87,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             WatchExpressionRegistry registry = new(stateProvider);
             registry.Register("speed", "speed", evaluator, 20);
 
-            stateProvider.IsPaused = true;
             stateProvider.FrameCount = 11;
-            registry.EvaluateIfFrameChanged();
+            bool evaluatedWhileNotPaused = registry.EvaluateIfFrameChanged();
 
+            Assert.That(evaluatedWhileNotPaused, Is.False);
+            Assert.That(registry.GetHistory("speed"), Has.Count.EqualTo(1));
+            Assert.That(evaluator.EvaluationCount, Is.EqualTo(1));
+
+            stateProvider.IsPaused = true;
+            bool evaluatedAfterPause = registry.EvaluateIfFrameChanged();
+
+            Assert.That(evaluatedAfterPause, Is.True);
             Assert.That(registry.GetHistory("speed"), Has.Count.EqualTo(2));
             Assert.That(evaluator.EvaluationCount, Is.EqualTo(2));
         }
 
+        /// <summary>
+        /// Verifies each watch keeps only its configured history tail and dropped count.
+        /// </summary>
         [Test]
         public void History_WhenLimitIsExceeded_DropsOldestEntry()
         {
@@ -85,6 +122,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(registry.GetHistoryDroppedCount("speed"), Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// Verifies evaluator re-entry does not start a nested registry evaluation.
+        /// </summary>
         [Test]
         public void EvaluateIfFrameChanged_WhenEvaluatorReentersRegistry_DoesNotEvaluateNestedFrame()
         {
@@ -101,6 +141,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(registry.GetHistory("speed"), Has.Count.EqualTo(2));
         }
 
+        /// <summary>
+        /// Verifies clearing all watches removes every registered expression.
+        /// </summary>
         [Test]
         public void ClearAll_RemovesAllRegisteredExpressions()
         {
@@ -113,6 +156,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(clearedCount, Is.EqualTo(2));
             Assert.That(registry.GetEntries(), Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies clearing one watch leaves the other watch evaluating on later frames.
+        /// </summary>
+        [Test]
+        public void Clear_RemovesOnlySelectedExpression()
+        {
+            FakeWatchEditorStateProvider stateProvider = new(10, true, true);
+            SequenceWatchExpressionEvaluator firstEvaluator = new(1, 2);
+            SequenceWatchExpressionEvaluator secondEvaluator = new(3, 4);
+            WatchExpressionRegistry registry = new(stateProvider);
+            registry.Register("first", "first", firstEvaluator, 20);
+            registry.Register("second", "second", secondEvaluator, 20);
+
+            bool cleared = registry.Clear("first");
+            stateProvider.FrameCount = 11;
+            bool evaluated = registry.EvaluateIfFrameChanged();
+
+            Assert.That(cleared, Is.True);
+            Assert.That(evaluated, Is.True);
+            Assert.That(registry.GetHistory("first"), Is.Empty);
+            Assert.That(registry.GetHistory("second"), Has.Count.EqualTo(2));
+            Assert.That(secondEvaluator.EvaluationCount, Is.EqualTo(2));
         }
 
         private sealed class FakeWatchEditorStateProvider : IWatchEditorStateProvider
@@ -132,7 +199,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private sealed class SequenceWatchExpressionEvaluator : IWatchExpressionEvaluator
         {
-            private readonly Queue<object> _values;
+        private readonly Queue<object> _values;
             private object _lastValue;
 
             public SequenceWatchExpressionEvaluator(params object[] values)
