@@ -114,6 +114,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             if (!EditorApplication.isPlaying)
             {
+                // Why: only CLI-started Play owns the override; manual Editor Play must keep project defaults.
+                ControlPlayModeServices.RunInBackgroundService.EnableForCliPlayStart();
                 EditorApplication.isPlaying = true;
             }
 

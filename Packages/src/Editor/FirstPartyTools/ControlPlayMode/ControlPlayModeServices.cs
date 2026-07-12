@@ -8,9 +8,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal ControlPlayModeCompilationFailureService CompilationFailureService { get; } = new();
         internal ControlPlayModeCompilationFailureGate CompilationFailureGate { get; } = new();
 
+        internal CliPlayModeRunInBackgroundService RunInBackgroundService { get; } =
+            new CliPlayModeRunInBackgroundService(
+                new CliPlayModeRunInBackgroundController(new CliPlayModeRunInBackgroundSessionStore()));
+
         internal void InitializeForEditorStartup()
         {
             CompilationFailureService.InitializeForEditorStartup();
+            RunInBackgroundService.InitializeForEditorStartup();
         }
     }
 
@@ -26,6 +31,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static IControlPlayModeCompilationFailureGate CompilationFailureGate =>
             RegistryValue.CompilationFailureGate;
+
+        internal static CliPlayModeRunInBackgroundService RunInBackgroundService =>
+            RegistryValue.RunInBackgroundService;
 
         internal static void InitializeForEditorStartup()
         {
