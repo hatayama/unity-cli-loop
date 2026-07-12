@@ -1,16 +1,19 @@
 package projectrunner
 
 import (
-	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
-func isSettingsManagedNativeToolCommand(command string) bool {
+const pausePointSettingsToolName = "pause-point"
+
+func settingsToolNameForNativeCommand(command string) (string, bool) {
 	switch command {
 	case clicore.PausePointAwaitCommandName, clicore.PausePointStatusUserCommandName:
-		return true
+		return pausePointSettingsToolName, true
 	default:
-		return false
+		return "", false
 	}
 }
 

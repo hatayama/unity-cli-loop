@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     {
         private static readonly string[] NativeToolNames =
         {
-            UnityCliLoopConstants.COMMAND_NAME_AWAIT_PAUSE_POINT
+            UnityCliLoopConstants.SETTINGS_TOOL_NAME_PAUSE_POINT
         };
 
         private readonly IToolSettingsPort _toolSettingsPort;
