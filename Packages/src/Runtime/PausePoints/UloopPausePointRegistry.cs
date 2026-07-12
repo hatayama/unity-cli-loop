@@ -259,13 +259,16 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
         }
 
-        // Same as ForgetHitSnapshotForId, plus clears the raw capture holder when the id owned the
-        // latest hit. Clear(id) uses this because an explicit clear is documented to drop captures.
+        // Same as ForgetHitSnapshotForId, plus clears the raw capture holder when the holder's
+        // captured snapshot belongs to the cleared id. Clear(id) uses this because an explicit
+        // clear is documented to drop captures. Ownership is checked against the holder itself
+        // (not _latestHitSnapshot) because Enable()'s ForgetHitSnapshotForId already nulls out
+        // _latestHitSnapshot on a same-id re-enable, which would otherwise make a later Clear(id)
+        // think it no longer owns a holder it actually still does.
         private static void ClearHitSnapshotAndRawCaptureForId(string id)
         {
-            bool ownedLatestHit = _latestHitSnapshot != null && _latestHitSnapshot.Id == id;
             ForgetHitSnapshotForId(id);
-            if (ownedLatestHit)
+            if (UloopPausePointRawCaptureHolder.GetCapturedPausePointId() == id)
             {
                 UloopPausePointRawCaptureHolder.Clear();
             }
