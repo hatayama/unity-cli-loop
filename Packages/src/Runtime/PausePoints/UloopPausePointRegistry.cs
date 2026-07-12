@@ -15,6 +15,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
     internal static class UloopPausePointRegistry
     {
         public const int DefaultTimeoutSeconds = 30;
+        public const int DefaultMaxHistory = 20;
+        public const int MaxHistoryLimit = 100;
 
         private static readonly ConcurrentDictionary<string, UloopPausePointEntry> Entries = new();
         private static IUloopPausePointPauseController _pauseController = new UnityEditorPausePointPauseController();
@@ -35,14 +37,21 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public static Action<string> OnCleared { get; set; }
         public static Action OnClearedAll { get; set; }
 
-        public static UloopPausePointSnapshot Enable(string id, int timeoutSeconds)
+        public static UloopPausePointSnapshot Enable(
+            string id,
+            int timeoutSeconds,
+            string mode = UloopPausePointCaptureMode.SingleShot,
+            int maxHistory = DefaultMaxHistory)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
             Debug.Assert(timeoutSeconds > 0, "timeoutSeconds must be greater than zero");
+            Debug.Assert(IsSupportedMode(mode), "mode must be a supported pause point capture mode");
+            Debug.Assert(maxHistory > 0, "maxHistory must be greater than zero");
+            Debug.Assert(maxHistory <= MaxHistoryLimit, "maxHistory must not exceed the history limit");
 
             DateTime now = NowUtc();
             int generation = ++_nextGeneration;
-            UloopPausePointEntry entry = new(id, timeoutSeconds, now, generation);
+            UloopPausePointEntry entry = new(id, timeoutSeconds, mode, maxHistory, now, generation);
             Entries[id] = entry;
             ClearLatestHitSnapshotIfMatches(id);
             return entry.ToSnapshot(now, _pauseController);
@@ -63,10 +72,16 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             UloopPausePointEntry entry = Entries[id];
             // Resolve expiry first so a clear after the timeout reports "expired", not a normal clear.
             entry.ExpireIfNeeded(now);
-            string message = entry.Status switch
+            string message = !entry.IsEnabled && entry.Status == UloopPausePointStatus.Hit
+                ? "Pause point was already hit (auto-disarmed); nothing to clear."
+                : entry.Status switch
             {
-                UloopPausePointStatus.Hit => "Pause point was already hit (auto-disarmed); nothing to clear.",
-                UloopPausePointStatus.Expired => "Pause point had already expired before being hit; nothing to clear.",
+                UloopPausePointStatus.Hit =>
+                    $"Pause point cleared after {entry.HitCount} hit(s); capture history is preserved.",
+                UloopPausePointStatus.Expired when entry.HitCount > 0 =>
+                    "Pause point capture window had already expired; nothing to clear.",
+                UloopPausePointStatus.Expired =>
+                    "Pause point had already expired before being hit; nothing to clear.",
                 UloopPausePointStatus.Cleared => "Pause point was already cleared.",
                 _ => "Pause point cleared."
             };
@@ -190,11 +205,16 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 return entry.ToSnapshot(now, _pauseController);
             }
 
-            _pauseController.Pause();
+            if (entry.Mode != UloopPausePointCaptureMode.Trace)
+            {
+                _pauseController.Pause();
+            }
+
             int hitSequence = ++_nextHitSequence;
+            int frameCount = Time.frameCount;
             entry.RecordHitWithCapturedVariables(
                 now, _pauseController.IsPlaying, _pauseController.IsPaused, hitSequence,
-                capturedVariables, capturedVariablesTruncated);
+                frameCount, capturedVariables, capturedVariablesTruncated);
             UloopPausePointSnapshot snapshot = entry.ToSnapshot(now, _pauseController);
             _latestHitSnapshot = snapshot;
             _hitSnapshots.RemoveAll(hitSnapshot => hitSnapshot.Id == id);
@@ -266,6 +286,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         {
             DateTime now = _nowProvider();
             return now.Kind == DateTimeKind.Utc ? now : now.ToUniversalTime();
+        }
+
+        private static bool IsSupportedMode(string mode)
+        {
+            return mode == UloopPausePointCaptureMode.SingleShot ||
+                   mode == UloopPausePointCaptureMode.Continuous ||
+                   mode == UloopPausePointCaptureMode.Trace;
         }
     }
 }
