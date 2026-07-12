@@ -20,8 +20,8 @@ func runResolvedProjectCommand(
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
-	if isSettingsManagedNativeToolCommand(command) &&
-		clicore.IsToolDisabledByToolSettings(command, clicore.LoadDisabledTools(connection.ProjectRoot)) {
+	if settingsToolName, isSettingsManaged := settingsToolNameForNativeCommand(command); isSettingsManaged &&
+		clicore.IsToolDisabledByToolSettings(settingsToolName, clicore.LoadDisabledTools(connection.ProjectRoot)) {
 		clierrors.WriteErrorEnvelope(stderr, nativeToolDisabledError(connection.ProjectRoot, command))
 		return 1
 	}
