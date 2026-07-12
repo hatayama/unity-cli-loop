@@ -1105,11 +1105,183 @@ func TestRunV3MigrationSkillUninstallRemovesAlternateLayout(t *testing.T) {
 	}
 }
 
+// Tests that an already-installed V3 migration skill still removes the alternate layout.
+func TestInstallV3MigrationSkillForTargetRemovesAlternateLayoutWhenInstalled(t *testing.T) {
+	projectRoot := t.TempDir()
+	skillContent := `---
+name: v3-cli-invocation-migration
+---
+
+# temporary migration
+`
+	writeV3MigrationSkillFixture(t, projectRoot, skillContent)
+	skills, err := collectV3MigrationSkillDefinition(projectRoot)
+	if err != nil {
+		t.Fatalf("collectV3MigrationSkillDefinition failed: %v", err)
+	}
+	target := targetConfigs["codex"]
+	baseDir, err := getSkillsBaseDir(projectRoot, target, false)
+	if err != nil {
+		t.Fatalf("getSkillsBaseDir failed: %v", err)
+	}
+	flatDir := getPreferredSkillDir(baseDir, v3MigrationSkillName, false)
+	groupedDir := getPreferredSkillDir(baseDir, v3MigrationSkillName, true)
+	if err := syncSkillDirectory(skills[0].sourceDirectory, flatDir); err != nil {
+		t.Fatalf("seed flat install failed: %v", err)
+	}
+	writeSkillFile(t, groupedDir, skillContent)
+
+	result, err := installV3MigrationSkillForTarget(projectRoot, target, skills, false, false)
+	if err != nil {
+		t.Fatalf("installV3MigrationSkillForTarget failed: %v", err)
+	}
+	if result.installed != 0 || result.updated != 0 || result.skipped != 1 {
+		t.Fatalf("install result mismatch: %#v", result)
+	}
+	if _, err := os.Stat(filepath.Join(flatDir, "SKILL.md")); err != nil {
+		t.Fatalf("preferred flat skill should remain: %v", err)
+	}
+	if _, err := os.Stat(groupedDir); !os.IsNotExist(err) {
+		t.Fatalf("alternate grouped skill should be removed: %v", err)
+	}
+}
+
+// Tests that an outdated V3 migration skill is re-synced and counted as updated.
+func TestInstallV3MigrationSkillForTargetUpdatesOutdatedSkill(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeV3MigrationSkillFixture(t, projectRoot, `---
+name: v3-cli-invocation-migration
+---
+
+# temporary migration v1
+`)
+	skills, err := collectV3MigrationSkillDefinition(projectRoot)
+	if err != nil {
+		t.Fatalf("collectV3MigrationSkillDefinition failed: %v", err)
+	}
+	target := targetConfigs["codex"]
+	baseDir, err := getSkillsBaseDir(projectRoot, target, false)
+	if err != nil {
+		t.Fatalf("getSkillsBaseDir failed: %v", err)
+	}
+	flatDir := getPreferredSkillDir(baseDir, v3MigrationSkillName, false)
+	if err := syncSkillDirectory(skills[0].sourceDirectory, flatDir); err != nil {
+		t.Fatalf("seed flat install failed: %v", err)
+	}
+
+	updatedContent := `---
+name: v3-cli-invocation-migration
+---
+
+# temporary migration v2
+`
+	writeV3MigrationSkillFixture(t, projectRoot, updatedContent)
+	skills, err = collectV3MigrationSkillDefinition(projectRoot)
+	if err != nil {
+		t.Fatalf("collectV3MigrationSkillDefinition failed after update: %v", err)
+	}
+
+	result, err := installV3MigrationSkillForTarget(projectRoot, target, skills, false, false)
+	if err != nil {
+		t.Fatalf("installV3MigrationSkillForTarget failed: %v", err)
+	}
+	if result.installed != 0 || result.updated != 1 || result.skipped != 0 {
+		t.Fatalf("install result mismatch: %#v", result)
+	}
+	installedContent, err := os.ReadFile(filepath.Join(flatDir, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read installed skill failed: %v", err)
+	}
+	if !strings.Contains(string(installedContent), "temporary migration v2") {
+		t.Fatalf("outdated skill should be re-synced: %s", installedContent)
+	}
+}
+
+// Tests that uninstalling a grouped V3 migration skill removes an empty managed parent directory.
+func TestRunV3MigrationSkillUninstallRemovesEmptyGroupedParent(t *testing.T) {
+	projectRoot := t.TempDir()
+	target := targetConfigs["codex"]
+	baseDir, err := getSkillsBaseDir(projectRoot, target, false)
+	if err != nil {
+		t.Fatalf("getSkillsBaseDir failed: %v", err)
+	}
+	groupedDir := getPreferredSkillDir(baseDir, v3MigrationSkillName, true)
+	managedParent := filepath.Join(baseDir, managedSkillsDir)
+	writeSkillFile(t, groupedDir, "---\nname: v3-cli-invocation-migration\n---\n")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	options := skillCommandOptions{targets: []skillTarget{target}}
+
+	code := runV3MigrationSkillUninstall(projectRoot, options, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("uninstall should succeed: code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(groupedDir); !os.IsNotExist(err) {
+		t.Fatalf("grouped migration skill should be removed: %v", err)
+	}
+	if _, err := os.Stat(managedParent); !os.IsNotExist(err) {
+		t.Fatalf("empty managed parent should be removed: %v", err)
+	}
+}
+
+// Tests that install-v3-migration without targets prints guidance instead of installing.
+func TestRunV3MigrationSkillsSubcommandWithoutTargetsPrintsGuidance(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runV3MigrationSkillsSubcommand(
+		"install-v3-migration",
+		t.TempDir(),
+		skillCommandOptions{},
+		stdout,
+		stderr,
+	)
+
+	if code != 0 {
+		t.Fatalf("guidance path should succeed: code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "Please specify at least one target for 'install-v3-migration'") {
+		t.Fatalf("guidance should name the subcommand: %s", output)
+	}
+	for _, id := range allSkillTargetIDs {
+		flag := "--" + id
+		if !strings.Contains(output, flag) {
+			t.Fatalf("target guidance missing %s:\n%s", flag, output)
+		}
+	}
+}
+
 // writeTestSkill seeds a SKILL.md fixture at projectRoot/relativeDir via the
 // shared clitest.WriteSkillFile helper, which owns the CRLF normalization.
 func writeTestSkill(t *testing.T, projectRoot string, relativeDir string, content string) {
 	t.Helper()
 	clitest.WriteSkillFile(t, projectRoot, relativeDir, "SKILL.md", content)
+}
+
+func writeV3MigrationSkillFixture(t *testing.T, projectRoot string, skillContent string) {
+	t.Helper()
+	writePackageRootMarker(t, projectRoot)
+	writeTestSkill(t, projectRoot, "Packages/src/TemporarySkills~/v3-cli-invocation-migration/Skill", skillContent)
+	referenceDir := filepath.Join(
+		projectRoot,
+		"Packages",
+		"src",
+		"TemporarySkills~",
+		"v3-cli-invocation-migration",
+		"Skill",
+		"references",
+	)
+	if err := os.MkdirAll(referenceDir, 0o755); err != nil {
+		t.Fatalf("failed to create reference dir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(referenceDir, "first-party-v2-to-v3.md"),
+		[]byte("# reference\n"),
+		0o644); err != nil {
+		t.Fatalf("failed to write reference: %v", err)
+	}
 }
 
 func writeManifest(t *testing.T, projectRoot string, content string) {
