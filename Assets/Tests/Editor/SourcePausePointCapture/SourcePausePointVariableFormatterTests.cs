@@ -327,6 +327,112 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(variable.Value, Is.EqualTo("(destroyed)"));
         }
 
+        [Test]
+        public void Format_WithListOfIntegers_SerializesCollectionAsJsonArray()
+        {
+            // Verifies List<T> values preview as JSON instead of the default type-name ToString.
+            object[] locals = { "scores", new List<int> { 1, 2, 3 } };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Is.EqualTo("[1,2,3]"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithStringDictionary_SerializesCollectionAsJsonObject()
+        {
+            // Verifies dictionary values preview as JSON objects with string keys.
+            object[] locals =
+            {
+                "labels",
+                new Dictionary<string, string> { { "hp", "100" }, { "mp", "50" } }
+            };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Is.EqualTo("{\"hp\":\"100\",\"mp\":\"50\"}"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WhenCollectionElementCountExceedsPreviewCap_TruncatesElementsAndSetsFlag()
+        {
+            // Verifies only the first preview-cap elements are serialized and truncation is reported.
+            List<int> values = Enumerable.Range(0, SourcePausePointConstants.MaxCollectionPreviewElementCount + 5).ToList();
+            object[] locals = { "scores", values };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            string value = variables.Single().Value;
+            Assert.That(value, Does.StartWith("["));
+            Assert.That(value, Does.EndWith("]"));
+            Assert.That(value.Split(',').Length, Is.EqualTo(SourcePausePointConstants.MaxCollectionPreviewElementCount));
+            Assert.That(truncated, Is.True);
+        }
+
+        [Test]
+        public void Format_WithCompositeCollectionElements_FallsBackElementsToToString()
+        {
+            // Verifies composite element types stringify instead of expanding nested object graphs.
+            object[] locals = { "items", new List<InstanceFieldFixture> { new() { PublicField = 7 } } };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Does.Contain(nameof(InstanceFieldFixture)));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithCircularCollectionReference_DoesNotThrow()
+        {
+            // Verifies cyclic graphs degrade safely instead of crashing collection preview.
+            List<object> outer = new();
+            List<object> inner = new();
+            outer.Add(inner);
+            inner.Add(outer);
+            object[] locals = { "graph", outer };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Does.Contain("(circular)"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithStringValue_KeepsPlainStringPreview()
+        {
+            // Verifies string is excluded from IEnumerable JSON preview and keeps the raw value.
+            object[] locals = { "label", "ready" };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Is.EqualTo("ready"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WhenCollectionPreviewExceedsMaxLength_TruncatesValueAndSetsTruncatedFlag()
+        {
+            // Verifies expanded collection JSON uses the larger preview cap before clipping.
+            List<string> values = Enumerable.Range(0, SourcePausePointConstants.MaxCollectionPreviewElementCount)
+                .Select(_ => new string('x', 120))
+                .ToList();
+            object[] locals = { "chunks", values };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value.Length, Is.EqualTo(SourcePausePointConstants.MaxCollectionPreviewValueLength));
+            Assert.That(truncated, Is.True);
+        }
+
         [UnityTest]
         public IEnumerator Format_WhenCalledOffMainThread_DegradesUnityObjectValueWithoutEngineApiAccess()
         {

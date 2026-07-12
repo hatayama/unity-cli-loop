@@ -192,7 +192,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return FormatUnityObjectVariable(name, scope, typeName, unityObjectCandidate);
             }
 
-            string value = ApplyValueLengthCap(SafeToString(rawValue), ref truncated);
+            if (SourcePausePointCollectionPreviewSerializer.TrySerialize(rawValue, ref truncated, out string collectionPreview))
+            {
+                string cappedPreview = ApplyValueLengthCap(
+                    collectionPreview,
+                    SourcePausePointConstants.MaxCollectionPreviewValueLength,
+                    ref truncated);
+                return new UloopCapturedVariable(name, scope, typeName, cappedPreview, string.Empty, string.Empty, 0);
+            }
+
+            string value = ApplyValueLengthCap(
+                SafeToString(rawValue), SourcePausePointConstants.MaxCapturedVariableValueLength, ref truncated);
             return new UloopCapturedVariable(name, scope, typeName, value, string.Empty, string.Empty, 0);
         }
 
@@ -221,15 +231,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 classification.Kind, classification.Path, classification.InstanceId);
         }
 
-        private static string ApplyValueLengthCap(string value, ref bool truncated)
+        private static string ApplyValueLengthCap(string value, int maxLength, ref bool truncated)
         {
-            if (value.Length <= SourcePausePointConstants.MaxCapturedVariableValueLength)
+            if (value.Length <= maxLength)
             {
                 return value;
             }
 
             truncated = true;
-            return value.Substring(0, SourcePausePointConstants.MaxCapturedVariableValueLength);
+            return value.Substring(0, maxLength);
         }
 
         // The single sanctioned try-catch in this codebase's capture path: user ToString()

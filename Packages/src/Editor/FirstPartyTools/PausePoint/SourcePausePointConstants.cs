@@ -14,6 +14,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // pause-point evidence to stay skimmable, mirroring the truncation-by-cap pattern MatchingLogs uses.
         public const int MaxCapturedVariableCount = 50;
         public const int MaxCapturedVariableValueLength = 256;
+        public const int MaxCollectionPreviewElementCount = 10;
+        public const int MaxCollectionPreviewValueLength = 1024;
 
         public const string HarmonyId = "io.github.hatayama.uloop.source-pause-point";
         public const string BurstCompileAttributeFullName = "Unity.Burst.BurstCompileAttribute";
