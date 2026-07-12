@@ -1,0 +1,35 @@
+{
+  "Success": true,
+  "Id": "speed",
+  "Expression": "1 + 2",
+  "MaxHistory": 20,
+  "HistoryDroppedCount": 0,
+  "ClearedCount": 0,
+  "Message": "Watch values retrieved.",
+  "Watches": [
+    {
+      "Id": "speed",
+      "Expression": "1 + 2",
+      "MaxHistory": 20,
+      "HistoryDroppedCount": 0,
+      "History": [
+        {
+          "FrameCount": 42,
+          "EvaluatedAtUtc": "2026-06-03T00:00:01.0000000Z",
+          "Success": true,
+          "Value": "3",
+          "ErrorTypeName": "",
+          "ErrorMessage": ""
+        }
+      ]
+    }
+  ],
+  "CompilationErrors": [
+    {
+      "Line": 3,
+      "Column": 25,
+      "Message": "; expected",
+      "ErrorCode": "CS1002"
+    }
+  ]
+}
