@@ -11,9 +11,6 @@ const (
 	PausePointAwaitCommandName      = "await-pause-point"
 	PausePointStatusUserCommandName = "pause-point-status"
 	RunTestsCommandName             = "run-tests"
-	WatchEnableCommandName          = "enable-watch"
-	WatchClearCommandName           = "clear-watch"
-	WatchValuesCommandName          = "get-watch-values"
 	CompletionCommand               = "completion"
 	ListCommandsFlag                = "--list-commands"
 	ListOptionsFlag                 = "--list-options"
@@ -42,9 +39,6 @@ var NativeCommands = []NativeCommandEntry{
 	{Name: "focus-window", Description: "Bring the Unity Editor window to the foreground", Owner: RunnerOwned},
 	{Name: PausePointAwaitCommandName, Description: "Wait until a named UloopPausePoint.Pause marker pauses Unity", Owner: RunnerOwned},
 	{Name: PausePointStatusUserCommandName, Description: "Show the state of a named UloopPausePoint.Pause marker", Owner: RunnerOwned},
-	{Name: WatchEnableCommandName, Description: "Register a C# watch expression for paused Play Mode steps", Owner: RunnerOwned},
-	{Name: WatchClearCommandName, Description: "Clear one or all registered watch expressions", Owner: RunnerOwned},
-	{Name: WatchValuesCommandName, Description: "Show registered watch expression values and history", Owner: RunnerOwned},
 	{Name: SkillsCommandName, Description: "List, install, or uninstall agent skills", Owner: DispatcherOwned},
 	{Name: CompletionCommand, Description: "Print or install shell completion", Owner: DispatcherOwned},
 	{Name: InstallCommandName, Description: "Configure the global uloop launcher binary", Owner: DispatcherOwned},

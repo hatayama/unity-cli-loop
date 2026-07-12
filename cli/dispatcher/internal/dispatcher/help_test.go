@@ -273,12 +273,12 @@ func TestCommandHelpPrefersProjectCacheForDefaultToolNames(t *testing.T) {
 	}
 }
 
-// Verifies watch commands keep schema-driven option help even though they are native runner commands.
-func TestCommandHelpUsesWatchToolSchemaForNativeWatchCommands(t *testing.T) {
+// Verifies enable-watch stays a plain default tool and still exposes schema-driven option help.
+func TestCommandHelpUsesWatchToolSchemaForDefaultWatchCommands(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	handled, code := tryHandleCommandHelp(clicore.WatchEnableCommandName, "", "", &stdout, &stderr)
+	handled, code := tryHandleCommandHelp("enable-watch", "", "", &stdout, &stderr)
 
 	if !handled || code != 0 {
 		t.Fatalf("watch help was not handled: handled=%v code=%d stderr=%s", handled, code, stderr.String())
