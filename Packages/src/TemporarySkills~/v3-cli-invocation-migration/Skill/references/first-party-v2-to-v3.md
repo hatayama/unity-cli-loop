@@ -1,5 +1,7 @@
 # First-Party V2 to V3 CLI Migration
 
+Agent-facing CLI migration candidates live here. Installed-skill cleanup names stay in `SkillTargetInstaller` / `skills.go` `deprecatedSkillNames`.
+
 Use this reference as the canonical option migration map. Search results are
 only candidates. Edit a match only after the surrounding context proves it is
 a V2 `uloop` invocation.
@@ -21,8 +23,10 @@ Prefer `rg` when available, but any repository search tool is acceptable.
 - Search `uloop` first and inspect command examples, shell scripts, PowerShell scripts, and agent skills.
 - Search boolean-looking CLI syntax: `--` plus nearby `true` or `false`, including `--flag true`, `--flag=false`, and inline Markdown command examples.
 - Search renamed first-party option names: `wait-for-domain-reload`, `reload-external-scene-changes`, `force-recompile`, `save-before-run`, `show-overlay`, `include-components`, `include-inactive`, and `compile-only`.
-- Search removed first-party commands only to report them as out-of-scope
-  command migration candidates: `get-project-info` and `get-version`.
+- Search removed or renamed first-party commands only to report them as
+  out-of-scope command migration candidates: `get-project-info`, `get-version`,
+  `unity-search`, `execute-menu-item`, `get-menu-items`,
+  `get-unity-search-providers`, `get-provider-details`, and `capture-window`.
 - Skip generated installed skill copies under `.agents`, `.claude`, `.codex`, `.cursor`, `.gemini`, `.windsurf`, `.agent`, or equivalent target folders unless the user explicitly asks to migrate installed copies.
 
 ## Boolean Argument Rules
@@ -33,6 +37,7 @@ Prefer `rg` when available, but any repository search tool is acceptable.
 | `--flag=false` | remove the option when the V3 default is already false |
 | `--flag true` | remove the option when the V3 default is already true |
 | `--flag false` | use the V3 negative option when the V3 default is true |
+| `--flag=false` | use the V3 negative option when the V3 default is true |
 
 For third-party tools, inspect the current tool schema or docs before choosing the replacement. Do not infer third-party negative flags from first-party conventions.
 
@@ -65,3 +70,9 @@ For third-party tools, inspect the current tool schema or docs before choosing t
 | --- | --- |
 | `uloop get-project-info` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
 | `uloop get-version` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
+| `uloop unity-search` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
+| `uloop execute-menu-item` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
+| `uloop get-menu-items` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
+| `uloop get-unity-search-providers` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
+| `uloop get-provider-details` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
+| `uloop capture-window` | Renamed to `uloop screenshot`. Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
