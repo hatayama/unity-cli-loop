@@ -10,7 +10,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class DynamicCodeLiteralHoister
     {
-        private const string LiteralParameterPrefix = "__uloop_literal_";
+        internal const string LiteralParameterPrefix = "__uloop_literal_";
         private static readonly Dictionary<char, char> RegularStringEscapes = new()
         {
             { '\'', '\'' },

@@ -5,6 +5,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Detects static local function headers so literal hoisting can skip their bodies.
     /// </summary>
+    /// <remarks>
+    /// Unsupported header shapes leave literals hoistable and may still surface CS8421:
+    /// generic constraints with where clauses, tuple return types such as static (int, int) F(),
+    /// and expression bodies that contain statement lambdas (the first semicolon ends suppression early).
+    /// </remarks>
     internal static class StaticLocalFunctionHeaderScanner
     {
         internal static bool TrySkipHeader(

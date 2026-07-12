@@ -55,11 +55,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(rewrittenSource != null, "rewrittenSource must not be null");
 
-            if (_braceDepth < 1)
-            {
-                return false;
-            }
-
             if (!IsKeywordAt(source, index, "static"))
             {
                 return false;

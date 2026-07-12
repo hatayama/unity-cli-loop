@@ -34,7 +34,8 @@ Prefer terminal commands for file operations and keep snippets focused on Unity 
 
 ## Known transpiler constraints
 
-- Static local functions cannot use hoisted literals (`__uloop_literal_N`). Keep literals inside static local function bodies as inline constants, or move helpers out of static local functions.
+- Literals inside recognized static local function bodies are kept inline automatically. Unsupported header shapes (generic `where` clauses, tuple return types, statement lambdas inside expression bodies) may still hoist literals and surface CS8421; remove `static` or rewrite the helper.
+- Static lambdas (`static x => ...`) cannot reference hoisted literals and surface CS8820; remove `static` from the lambda or use a non-static local function.
 - Integer literals are hoisted as `int` values. APIs that require `byte` components (for example `new Color32(255, 0, 0, 255)`) need explicit casts such as `(byte)255` even when plain Unity scripts accept uncast numeric literals.
 
 ## Shell Quoting

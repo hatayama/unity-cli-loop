@@ -300,11 +300,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return (hint, suggestions);
 
                 default:
-                    if (DynamicCodeTranspilerConstraintHints.TryBuildHint(
-                            error.ErrorCode,
-                            error.Message,
-                            out string constraintHint,
-                            out string constraintSuggestion))
+                    (bool matched, string constraintHint, string constraintSuggestion) = DynamicCodeTranspilerConstraintHints.TryBuildHint(
+                        error.ErrorCode,
+                        error.Message);
+                    if (matched)
                     {
                         hint = constraintHint;
                         if (!string.IsNullOrEmpty(constraintSuggestion))
