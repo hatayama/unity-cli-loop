@@ -273,6 +273,24 @@ func TestCommandHelpPrefersProjectCacheForDefaultToolNames(t *testing.T) {
 	}
 }
 
+// Verifies enable-watch stays a plain default tool and still exposes schema-driven option help.
+func TestCommandHelpUsesWatchToolSchemaForDefaultWatchCommands(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	handled, code := tryHandleCommandHelp("enable-watch", "", "", &stdout, &stderr)
+
+	if !handled || code != 0 {
+		t.Fatalf("watch help was not handled: handled=%v code=%d stderr=%s", handled, code, stderr.String())
+	}
+	output := stdout.String()
+	for _, expected := range []string{"--expression", "--id", "--max-history"} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("watch help missing %q:\n%s", expected, output)
+		}
+	}
+}
+
 // Tests that execute-dynamic-code help includes CLI-side code-file support without resolving a Unity project.
 func TestRunDispatcherExecuteDynamicCodeHelpDoesNotRequireUnityProject(t *testing.T) {
 	t.Chdir(t.TempDir())
