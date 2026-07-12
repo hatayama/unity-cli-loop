@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 foreach (MigrationFileChange change in changes)
                 {
-                    preparedWrites.Add(Prepare(change));
+                    Prepare(preparedWrites, change);
                 }
 
                 prepared = true;
@@ -68,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 for (int index = 0; index < changes.Count; index++)
                 {
-                    preparedWrites.Add(Prepare(changes[index]));
+                    Prepare(preparedWrites, changes[index]);
                     if ((index + 1) % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
                     {
                         await Task.Yield();
@@ -87,11 +87,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static PreparedWrite Prepare(MigrationFileChange change)
+        private static void Prepare(List<PreparedWrite> preparedWrites, MigrationFileChange change)
         {
             string tempFilePath = CreateUniqueSidecarPath(change.FilePath, TempSidecarExtension);
+            // Register before WriteAllText so a mid-write IOException can still clean up a partial .tmp.
+            preparedWrites.Add(new PreparedWrite(change.FilePath, tempFilePath));
             ThirdPartyToolMigrationFileAccess.WriteAllText(tempFilePath, change.Content);
-            return new PreparedWrite(change.FilePath, tempFilePath);
         }
 
         private static void CommitAll(List<PreparedWrite> preparedWrites)
