@@ -199,7 +199,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private sealed class SequenceWatchExpressionEvaluator : IWatchExpressionEvaluator
         {
-        private readonly Queue<object> _values;
+            private readonly Queue<object> _values;
             private object _lastValue;
 
             public SequenceWatchExpressionEvaluator(params object[] values)
