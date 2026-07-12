@@ -4522,5 +4522,26 @@ public sealed class OtherTool
             Assert.That(names.Contains("Temp"), Is.True);
             Assert.That(names.Contains(".git"), Is.True);
         }
+
+        [Test]
+        public void IsExcludedDirectoryName_WhenDirectoryEndsWithTilde_ReturnsTrue()
+        {
+            // Verifies Unity trailing-~ folders such as Samples~ are excluded from migration scans.
+            Assert.That(ThirdPartyToolMigrationRules.IsExcludedDirectoryName("Samples~"), Is.True);
+        }
+
+        [Test]
+        public void IsExcludedDirectoryName_WhenDirectoryStartsWithDot_ReturnsTrue()
+        {
+            // Verifies hidden/dot folders are excluded even when not listed by exact name.
+            Assert.That(ThirdPartyToolMigrationRules.IsExcludedDirectoryName(".hidden"), Is.True);
+        }
+
+        [Test]
+        public void IsExcludedDirectoryName_WhenDirectoryIsOrdinaryAssetFolder_ReturnsFalse()
+        {
+            // Verifies normal Assets subfolders remain eligible for migration scanning.
+            Assert.That(ThirdPartyToolMigrationRules.IsExcludedDirectoryName("VendorTools"), Is.False);
+        }
     }
 }
