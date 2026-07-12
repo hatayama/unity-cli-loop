@@ -95,6 +95,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a non-positive max-history value returns a validation failure.
+        /// </summary>
+        [Test]
+        public async Task Enable_WhenMaxHistoryIsZero_ReturnsValidationFailure()
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["mode"] = UloopPausePointCaptureMode.SingleShot,
+                ["maxHistory"] = 0
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("MaxHistory must be between 1 and 100."));
+        }
+
+        /// <summary>
         /// Verifies the CLI-only status bridge exposes mode and captured history fields.
         /// </summary>
         [Test]
