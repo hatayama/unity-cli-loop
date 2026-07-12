@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
@@ -135,6 +137,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
 
             Assert.That(UloopPausePointRegistry.GetHitSnapshots(), Is.Empty);
+        }
+
+        [Test]
+        public void ClearAll_WhenEnabled_SetsRunTestsAutoClearReason()
+        {
+            // Verifies run-tests-style ClearAll is visible on status after wiping an enabled marker.
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            UloopPausePointRegistry.ClearAll(UloopPausePointClearedReason.RunTestsAutoClear);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(snapshot.ClearedReason, Is.EqualTo(UloopPausePointClearedReason.RunTestsAutoClear));
+            Assert.That(snapshot.StatusBeforeClear, Is.EqualTo(UloopPausePointStatus.Enabled));
+        }
+
+        [Test]
+        public void ClearAll_WhenExpired_ReportsAfterExpiredReason()
+        {
+            // Verifies ClearAll after timeout keeps AfterExpired instead of erasing the timeout clue.
+            UloopPausePointRegistry.Enable("jump", 1);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointRegistry.ClearAll(UloopPausePointClearedReason.ClearAll);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(snapshot.ClearedReason, Is.EqualTo(UloopPausePointClearedReason.AfterExpired));
+            Assert.That(snapshot.StatusBeforeClear, Is.EqualTo(UloopPausePointStatus.Expired));
+        }
+
+        [Test]
+        public void Hit_WhenAlreadyCleared_LogsLateHitAndSetsDiscardFlag()
+        {
+            // Verifies a delayed hit after Clear is observable instead of a silent no-op.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Clear("jump");
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("hit after it was cleared"));
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Hit("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(snapshot.LateHitDiscardedAfterClear, Is.True);
+            Assert.That(snapshot.ClearedReason, Is.EqualTo(UloopPausePointClearedReason.ExplicitClear));
+            Assert.That(_pauseController.PauseCount, Is.EqualTo(0));
         }
 
         [Test]

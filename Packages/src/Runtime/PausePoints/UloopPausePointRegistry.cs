@@ -70,12 +70,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 UloopPausePointStatus.Cleared => "Pause point was already cleared.",
                 _ => "Pause point cleared."
             };
-            entry.MarkCleared(message);
+            entry.MarkCleared(UloopPausePointClearedReason.ExplicitClear, message);
             ClearLatestHitSnapshotIfMatches(id);
             return entry.ToSnapshot(now, _pauseController);
         }
 
-        public static UloopPausePointClearAllResult ClearAll()
+        public static UloopPausePointClearAllResult ClearAll(
+            string clearedReason = UloopPausePointClearedReason.ClearAll)
         {
             OnClearedAll?.Invoke();
 
@@ -88,8 +89,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                     continue;
                 }
 
+                // Resolve expiry first so ClearAll after timeout keeps AfterExpired visibility.
+                entry.ExpireIfNeeded(now);
                 clearedIds.Add(entry.Id);
-                entry.MarkCleared();
+                entry.MarkCleared(clearedReason);
             }
             ClearLatestHitSnapshot();
 
@@ -158,6 +161,16 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             entry.ExpireIfNeeded(now);
             if (!entry.IsEnabled)
             {
+                // Why: delayed main-thread hits can lose the race to Clear/ClearAll; surface that race.
+                if (entry.Status == UloopPausePointStatus.Cleared)
+                {
+                    entry.MarkLateHitDiscardedAfterClear();
+                    Debug.LogWarning(
+                        $"Pause point '{id}' was hit after it was cleared " +
+                        $"(ClearedReason={entry.ClearedReason}, StatusBeforeClear={entry.StatusBeforeClear}). " +
+                        "The late hit was discarded.");
+                }
+
                 return entry.ToSnapshot(now, _pauseController);
             }
 

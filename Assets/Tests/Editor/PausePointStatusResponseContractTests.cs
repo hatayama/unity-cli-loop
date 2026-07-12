@@ -61,7 +61,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         UnityObjectInstanceId = -1234
                     }
                 },
-                CapturedVariablesTruncated = true
+                CapturedVariablesTruncated = true,
+                ClearedReason = "",
+                StatusBeforeClear = "",
+                LateHitDiscardedAfterClear = false
             };
             string json = JsonConvert.SerializeObject(
                 response,
