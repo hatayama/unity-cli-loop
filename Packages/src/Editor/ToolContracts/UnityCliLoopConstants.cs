@@ -67,6 +67,9 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string TOOL_NAME_GET_HIERARCHY = "get-hierarchy";
         public const string TOOL_NAME_GET_LOGS = "get-logs";
         public const string TOOL_NAME_RUN_TESTS = "run-tests";
+        public const string TOOL_NAME_ENABLE_WATCH = "enable-watch";
+        public const string TOOL_NAME_CLEAR_WATCH = "clear-watch";
+        public const string TOOL_NAME_GET_WATCH_VALUES = "get-watch-values";
         public const string COMMAND_NAME_GET_TOOL_DETAILS = "get-tool-details";
         public const string COMMAND_NAME_GET_VERSION = "get-version";
         public const string COMMAND_NAME_GET_COMPILE_STATUS = "get-compile-status";

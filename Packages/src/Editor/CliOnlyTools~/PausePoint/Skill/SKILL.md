@@ -75,6 +75,21 @@ While Unity is paused on a hit, `execute-dynamic-code` can read live captured re
 
 The holder clears when Unity resumes (not when you `Step` while still paused), when the matching pause point is cleared, when a new hit replaces the snapshot, or when PlayMode exits. After resume, `TryGetCapturedValue` returns `Found=false`.
 
+## Watch Expressions
+
+Use watch expressions when the value should be evaluated automatically after each paused Play Mode Step:
+
+```bash
+uloop enable-watch --id "speed" --expression "UloopPausePoint.TryGetCapturedValue(\"speed\").Value" --max-history 20
+uloop get-watch-values --id "speed"
+```
+
+`enable-watch` compiles the C# expression once, evaluates it immediately for a baseline, and then evaluates it once per changed `Time.frameCount` while Unity is both playing and paused. Multiple watches run in registration order. `enable-watch` rejects a duplicate id instead of overwriting; clear with `clear-watch --id <id>` before re-registering a changed expression. `clear-watch --id <id>` removes one watch; `clear-watch --all` removes all watches. `get-watch-values` without `--id` returns every registered watch.
+
+The expression may use `UloopPausePoint.TryGetCapturedValue("name")` to inspect the latest raw pause-point capture while paused. Each history entry includes the frame and either a stringified value or an explicit error type and message. A throwing expression is recorded as an error and does not stop the Editor update loop. `--max-history` accepts 1 through 100 and drops the oldest entries after the limit.
+
+Watch expressions are in-memory Editor state. A domain reload clears them, so re-register them after `uloop compile`, script recompilation, or an Editor restart. For reliable per-Step changes, keep the expression attached to a continuous pause point on an `Update` or `FixedUpdate` line and use `control-play-mode --action Step`.
+
 ## Marker Types
 
 - `uloop enable-pause-point --file --line` patches the already-compiled method at a source line. No code edit or recompile is required.

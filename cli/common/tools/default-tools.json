@@ -397,6 +397,58 @@
       }
     },
     {
+      "name": "enable-watch",
+      "description": "Register a C# expression to evaluate on each paused Play Mode step",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Id": {
+            "type": "string",
+            "description": "Unique watch expression identifier"
+          },
+          "Expression": {
+            "type": "string",
+            "description": "C# expression returning an object; UloopPausePoint.TryGetCapturedValue can read the latest raw capture"
+          },
+          "MaxHistory": {
+            "type": "integer",
+            "description": "Maximum number of watch evaluations to retain (1-100)",
+            "default": 20
+          }
+        }
+      }
+    },
+    {
+      "name": "clear-watch",
+      "description": "Clear one or all registered C# watch expressions",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Id": {
+            "type": "string",
+            "description": "Watch expression identifier to clear"
+          },
+          "All": {
+            "type": "boolean",
+            "description": "Clear every registered watch expression"
+          }
+        }
+      }
+    },
+    {
+      "name": "get-watch-values",
+      "description": "Show registered watch expression values and bounded evaluation history",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Id": {
+            "type": "string",
+            "description": "Optional watch expression identifier; omit to return all watches"
+          }
+        }
+      }
+    },
+    {
       "name": "simulate-mouse-ui",
       "description": "Simulate mouse click, long-press, and drag on PlayMode UI elements via EventSystem screen coordinates",
       "inputSchema": {
