@@ -215,16 +215,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies int-to-byte conversion failures include transpiler constraint guidance.
+        /// Verifies int-to-byte conversion failures align diagnostics with extracted using lines.
         /// </summary>
         [Test]
         public void ConvertExecutionResultToResponse_WhenColor32ByteConversionFails_AddsTranspilerConstraintHint()
         {
             DynamicCodeExecutionResponseFactory factory = new();
+            string userCode = "using UnityEngine;\nreturn new Color32(255, 0, 0, 255);";
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
+                userCode,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
             ExecutionResult result = new()
             {
                 Success = false,
                 ErrorMessage = "Compilation error occurred",
+                UpdatedCode = prepared.PreparedSource,
                 CompilationErrors = new List<CompilationError>
                 {
                     new CompilationError
@@ -237,11 +243,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 }
             };
 
-            ExecuteDynamicCodeResponse response = factory.ConvertExecutionResultToResponse(
-                result,
-                "using UnityEngine;\nreturn new Color32(255, 0, 0, 255);");
+            ExecuteDynamicCodeResponse response = factory.ConvertExecutionResultToResponse(result, userCode);
 
+            Assert.That(response.Diagnostics[0].Line, Is.EqualTo(2));
             Assert.That(response.Diagnostics[0].Hint, Does.Contain("Color32"));
+            Assert.That(response.Diagnostics[0].Context, Does.Contain("L2:return new Color32(255, 0, 0, 255);"));
+            Assert.That(response.Diagnostics[0].Context, Does.Not.Contain("L1:using UnityEngine;\n                      ^"));
             Assert.That(response.Diagnostics[0].Suggestions, Contains.Item(
                 "Cast each component explicitly, for example: new Color32((byte)255, (byte)0, (byte)0, (byte)255)."));
         }

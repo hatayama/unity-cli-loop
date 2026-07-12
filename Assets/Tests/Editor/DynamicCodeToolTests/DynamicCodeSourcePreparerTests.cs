@@ -315,5 +315,113 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.AreEqual(0, prepared.HoistedLiteralBindings.Count);
             StringAssert.Contains("return 3000000000;", prepared.PreparedSource);
         }
+
+        /// <summary>
+        /// Verifies body line padding preserves original line numbers when a leading using is extracted.
+        /// </summary>
+        [Test]
+        public void Prepare_WhenLeadingUsingDirectiveIsExtracted_ShouldPreserveUserSnippetLineNumbers()
+        {
+            string source = "using UnityEngine;\nreturn null;";
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.PrepareWithoutLiteralHoisting(
+                source,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            AssertUserSnippetLineAlignment(source, prepared.PreparedSource);
+            Assert.That(GetWrappedUserSnippetLines(prepared.PreparedSource)[1], Is.EqualTo("return null;"));
+        }
+
+        /// <summary>
+        /// Verifies a blank line between an extracted using and the first statement keeps the statement on its original line.
+        /// </summary>
+        [Test]
+        public void Prepare_WhenBlankLineFollowsExtractedUsing_ShouldPreserveUserSnippetLineNumbers()
+        {
+            string source = "using UnityEngine;\n\nreturn null;";
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.PrepareWithoutLiteralHoisting(
+                source,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            AssertUserSnippetLineAlignment(source, prepared.PreparedSource);
+            Assert.That(GetWrappedUserSnippetLines(prepared.PreparedSource)[2], Is.EqualTo("return null;"));
+        }
+
+        /// <summary>
+        /// Verifies a skipped leading comment and extracted using both preserve later statement line numbers.
+        /// </summary>
+        [Test]
+        public void Prepare_WhenLeadingCommentPrecedesExtractedUsing_ShouldPreserveUserSnippetLineNumbers()
+        {
+            string source = "// setup\nusing UnityEngine;\nreturn null;";
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.PrepareWithoutLiteralHoisting(
+                source,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            AssertUserSnippetLineAlignment(source, prepared.PreparedSource);
+            Assert.That(GetWrappedUserSnippetLines(prepared.PreparedSource)[2], Is.EqualTo("return null;"));
+        }
+
+        /// <summary>
+        /// Verifies multiple extracted usings separated by a blank line preserve the first statement line number.
+        /// </summary>
+        [Test]
+        public void Prepare_WhenMultipleExtractedUsingsAreSeparatedByBlankLine_ShouldPreserveUserSnippetLineNumbers()
+        {
+            string source = "using System;\n\nusing UnityEngine;\nreturn null;";
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.PrepareWithoutLiteralHoisting(
+                source,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            AssertUserSnippetLineAlignment(source, prepared.PreparedSource);
+            Assert.That(GetWrappedUserSnippetLines(prepared.PreparedSource)[3], Is.EqualTo("return null;"));
+        }
+
+        /// <summary>
+        /// Verifies a blank line between top-level statements preserves the later statement line number.
+        /// </summary>
+        [Test]
+        public void Prepare_WhenBlankLineSeparatesTopLevelStatements_ShouldPreserveUserSnippetLineNumbers()
+        {
+            string source = "int a = 1;\n\nreturn null;";
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.PrepareWithoutLiteralHoisting(
+                source,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            AssertUserSnippetLineAlignment(source, prepared.PreparedSource);
+            string[] wrappedLines = GetWrappedUserSnippetLines(prepared.PreparedSource);
+            Assert.That(wrappedLines[0], Is.EqualTo("int a = 1;"));
+            Assert.That(wrappedLines[2], Is.EqualTo("return null;"));
+        }
+
+        private static string[] GetWrappedUserSnippetLines(string preparedSource)
+        {
+            WrappedDynamicCodeUserSnippetExtractor.TryExtract(preparedSource, out string snippet);
+            return WrappedDynamicCodeUserSnippetExtractor.SplitNormalizedLines(snippet);
+        }
+
+        private static void AssertUserSnippetLineAlignment(string originalSource, string preparedSource)
+        {
+            string[] originalLines = DynamicCodeUserSnippetLines.Split(originalSource);
+            string[] wrappedLines = GetWrappedUserSnippetLines(preparedSource);
+            Assert.That(wrappedLines.Length, Is.EqualTo(originalLines.Length));
+
+            for (int lineIndex = 0; lineIndex < originalLines.Length; lineIndex++)
+            {
+                string originalLine = originalLines[lineIndex];
+                string trimmedStart = originalLine.TrimStart();
+                if (trimmedStart.StartsWith("using ", System.StringComparison.Ordinal)
+                    || trimmedStart.StartsWith("global using ", System.StringComparison.Ordinal)
+                    || trimmedStart.StartsWith("//", System.StringComparison.Ordinal)
+                    || originalLine.Length == 0)
+                {
+                    Assert.That(wrappedLines[lineIndex], Is.Empty, $"Line {lineIndex + 1} should stay empty in the #line region.");
+                }
+            }
+        }
     }
 }
