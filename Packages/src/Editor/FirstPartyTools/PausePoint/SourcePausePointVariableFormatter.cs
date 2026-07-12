@@ -242,8 +242,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return value.Substring(0, maxLength);
         }
 
-        // The single sanctioned try-catch in this codebase's capture path: user ToString()
-        // overrides are untrusted code we must not let crash a pause-point hit.
+        // Sanctioned try-catch sites in the capture path: user ToString() overrides (below) and
+        // materialized-collection enumeration in SourcePausePointCollectionPreviewSerializer.
+        // Both must not let untrusted user code crash a pause-point hit.
         private static string SafeToString(object value)
         {
             try

@@ -433,6 +433,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(truncated, Is.True);
         }
 
+        [Test]
+        public void Format_WithDeferredLinqQuery_FallsBackToToStringInsteadOfJson()
+        {
+            // Verifies deferred IEnumerable/LINQ is not executed for JSON preview.
+            IEnumerable<int> query = Enumerable.Range(1, 3).Select(static value => value);
+            object[] locals = { "query", query };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Is.EqualTo(query.ToString()));
+            Assert.That(variables.Single().Value, Does.Not.StartWith("["));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WhenMaterializedCollectionEnumerationThrows_FallsBackToToString()
+        {
+            // Verifies enumeration exceptions during preview do not escape into user game code.
+            LogAssert.Expect(LogType.Exception, "InvalidOperationException: enum boom");
+            ThrowingOnEnumerateCollection collection = new();
+            object[] locals = { "broken", collection };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Is.EqualTo(collection.ToString()));
+            Assert.That(truncated, Is.False);
+        }
+
         [UnityTest]
         public IEnumerator Format_WhenCalledOffMainThread_DegradesUnityObjectValueWithoutEngineApiAccess()
         {
@@ -503,6 +533,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await Task.Yield();
                 OuterField += localValue;
                 return localValue;
+            }
+        }
+
+        private sealed class ThrowingOnEnumerateCollection : ICollection
+        {
+            public int Count => 3;
+            public bool IsSynchronized => false;
+            public object SyncRoot => this;
+
+            public void CopyTo(Array array, int index)
+            {
+            }
+
+            public IEnumerator GetEnumerator()
+            {
+                throw new InvalidOperationException("enum boom");
             }
         }
     }

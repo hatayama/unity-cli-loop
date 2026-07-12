@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const int MaxCapturedVariableValueLength = 256;
         public const int MaxCollectionPreviewElementCount = 10;
         public const int MaxCollectionPreviewValueLength = 1024;
+        public const int MaxCollectionPreviewDepth = 2;
 
         public const string HarmonyId = "io.github.hatayama.uloop.source-pause-point";
         public const string BurstCompileAttributeFullName = "Unity.Burst.BurstCompileAttribute";

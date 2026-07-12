@@ -13,12 +13,11 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Builds a shallow JSON preview for captured IEnumerable values so pause-point status can show
-    /// collection contents instead of the default type-name ToString.
+    /// Builds a shallow JSON preview for captured materialized collections so pause-point status can
+    /// show collection contents instead of the default type-name ToString.
     /// </summary>
     internal static class SourcePausePointCollectionPreviewSerializer
     {
-        private const int MaxCollectionDepth = 2;
         private const string OffMainThreadValue = "(captured off main thread)";
         private const string DestroyedValue = "(destroyed)";
 
@@ -42,15 +41,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            if (rawValue is not IEnumerable enumerable)
+            // Why: deferred IEnumerable/LINQ must not execute user code during preview; only
+            // materialized ICollection/IDictionary snapshots are safe to walk.
+            if (rawValue is not ICollection && rawValue is not IDictionary)
             {
                 return false;
             }
 
-            HashSet<object> visited = new(ReferenceEqualityComparer.Instance);
-            JToken token = BuildToken(enumerable, MaxCollectionDepth, visited, ref truncated);
-            preview = token.ToString(Formatting.None);
-            return true;
+            try
+            {
+                HashSet<object> visited = new(ReferenceEqualityComparer.Instance);
+                JToken token = BuildToken(
+                    rawValue, SourcePausePointConstants.MaxCollectionPreviewDepth, visited, ref truncated);
+                preview = token.ToString(Formatting.None);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                return false;
+            }
         }
 
         private static void HandleSerializationError(object sender, ErrorEventArgs args)
@@ -99,7 +109,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return BuildDictionaryToken(dictionary, remainingDepth, visited, ref truncated);
                 }
 
-                return BuildArrayToken(enumerable, remainingDepth, visited, ref truncated);
+                if (value is ICollection)
+                {
+                    return BuildArrayToken(enumerable, remainingDepth, visited, ref truncated);
+                }
+
+                return new JValue(SafeToString(value));
             }
 
             return new JValue(SafeToString(value));
@@ -138,12 +153,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     break;
                 }
 
-                string key = entry.Key == null ? "null" : entry.Key.ToString();
+                string key = FormatDictionaryKey(entry.Key);
                 jsonObject[key] = BuildToken(entry.Value, remainingDepth - 1, visited, ref truncated);
                 elementCount++;
             }
 
             return jsonObject;
+        }
+
+        private static string FormatDictionaryKey(object key)
+        {
+            if (key == null)
+            {
+                return "null";
+            }
+
+            if (key is UnityEngine.Object unityObject)
+            {
+                return FormatUnityObjectElement(unityObject);
+            }
+
+            return SafeToString(key);
         }
 
         private static bool IsJsonPrimitive(object value)
@@ -174,6 +204,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return unityObject.name;
         }
 
+        // Sanctioned try-catch in the capture path: user ToString() overrides are untrusted code
+        // we must not let crash a pause-point hit.
         private static string SafeToString(object value)
         {
             try
