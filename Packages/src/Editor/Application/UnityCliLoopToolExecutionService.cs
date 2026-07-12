@@ -76,7 +76,9 @@ namespace io.github.hatayama.UnityCliLoop.Application
                     runningToolName,
                     requestedToolName,
                     editorRuntimeStatePort.IsPlaying,
-                    editorRuntimeStatePort.IsPaused);
+                    editorRuntimeStatePort.IsPaused,
+                    editorRuntimeStatePort.IsCompiling,
+                    editorRuntimeStatePort.IsUpdating);
             }
 
             (bool HasValue, bool IsPlaying, bool IsPaused) playState =

@@ -713,6 +713,83 @@ func TestSendWithTransientConnectionRetryReturnsBusyAfterRetryWindow(t *testing.
 	}
 }
 
+// Verifies persistent busy retries focus Unity once after the busy stall threshold and restore focus on exit.
+func TestSendWithTransientConnectionRetryFocusesOnceAfterPersistentBusy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	deps := defaultConnectionRetryDeps()
+	deps.retryTimeout = 500 * time.Millisecond
+	deps.retryPoll = 5 * time.Millisecond
+	deps.busyFocusStallThreshold = 30 * time.Millisecond
+	focusCallCount := 0
+	restoreCallCount := 0
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 123}, nil
+	}
+	deps.focusUnityProcess = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
+		focusCallCount++
+		return func(context.Context) error {
+			restoreCallCount++
+			return nil
+		}, nil
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	busy := `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Unity is busy running 'compile'.","data":{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","message":"busy"}}}`
+	go func() {
+		for {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			go func() {
+				defer func() {
+					_ = conn.Close()
+				}()
+				if _, readErr := unityipc.Read(bufio.NewReader(conn)); readErr != nil {
+					return
+				}
+				_ = unityipc.Write(conn, []byte(busy))
+			}()
+		}
+	}()
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	_, err = sendWithTransientConnectionRetryWithDeps(
+		context.Background(),
+		connection,
+		"get-logs",
+		map[string]any{},
+		nil,
+		0,
+		deps)
+	if err == nil {
+		t.Fatal("expected busy error after retry window")
+	}
+	if focusCallCount != 1 {
+		t.Fatalf("expected one busy-stall focus attempt, got %d", focusCallCount)
+	}
+	if restoreCallCount != 1 {
+		t.Fatalf("expected focus restore after busy retry exit, got %d", restoreCallCount)
+	}
+}
+
 // Verifies that undispatched dial failures keep retrying past the base window while a
 // running Unity process is confirmed, so a domain reload longer than the base window
 // (e.g. on large projects) does not fail the command spuriously.

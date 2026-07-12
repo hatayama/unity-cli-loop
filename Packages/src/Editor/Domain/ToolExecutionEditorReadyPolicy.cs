@@ -37,7 +37,9 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     UnityCompileOperationName,
                     toolName,
                     editorState.IsPlaying,
-                    editorState.IsPaused);
+                    editorState.IsPaused,
+                    true,
+                    false);
             }
 
             if ((condition & GuardCondition.NotUpdating) != 0 && editorState.IsUpdating)
@@ -46,7 +48,9 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     UnityAssetDatabaseUpdateOperationName,
                     toolName,
                     editorState.IsPlaying,
-                    editorState.IsPaused);
+                    editorState.IsPaused,
+                    false,
+                    true);
             }
 
             return ToolExecutionEditorReadyDecision.Ready(toolName);
@@ -98,13 +102,17 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public readonly string RequestedToolName;
         public readonly bool IsPlaying;
         public readonly bool IsPaused;
+        public readonly bool IsCompiling;
+        public readonly bool IsUpdating;
 
         private ToolExecutionEditorReadyDecision(
             bool isReady,
             string runningOperationName,
             string requestedToolName,
             bool isPlaying,
-            bool isPaused)
+            bool isPaused,
+            bool isCompiling,
+            bool isUpdating)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(requestedToolName), "requestedToolName must not be null or whitespace");
             Debug.Assert(isReady || !string.IsNullOrWhiteSpace(runningOperationName), "runningOperationName must not be null or whitespace for busy decisions");
@@ -114,6 +122,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             RequestedToolName = requestedToolName;
             IsPlaying = isPlaying;
             IsPaused = isPaused;
+            IsCompiling = isCompiling;
+            IsUpdating = isUpdating;
         }
 
         public static ToolExecutionEditorReadyDecision Ready(string requestedToolName)
@@ -123,6 +133,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 string.Empty,
                 requestedToolName,
                 false,
+                false,
+                false,
                 false);
         }
 
@@ -130,14 +142,18 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             string runningOperationName,
             string requestedToolName,
             bool isPlaying,
-            bool isPaused)
+            bool isPaused,
+            bool isCompiling,
+            bool isUpdating)
         {
             return new ToolExecutionEditorReadyDecision(
                 false,
                 runningOperationName,
                 requestedToolName,
                 isPlaying,
-                isPaused);
+                isPaused,
+                isCompiling,
+                isUpdating);
         }
     }
 }

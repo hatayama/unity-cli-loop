@@ -15,6 +15,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string MissingTestFrameworkReferenceHint =
             "Possible test asmdef issue: Unity test framework symbols are missing. Make sure com.unity.test-framework is installed and add optionalUnityReferences: [\"TestAssemblies\"] or enable testAssemblies on the test asmdef.";
 
+        private static readonly string[] ExternalSceneChangeNextActions =
+        {
+            "Reload each changed Scene with execute-dynamic-code, for example: " +
+            "`uloop execute-dynamic-code --code 'using UnityEditor.SceneManagement; using UnityEngine.SceneManagement; " +
+            "EditorSceneManager.OpenScene(\"<SCENE_ASSET_PATH>\", OpenSceneMode.Single);'` " +
+            "using the Scene path from Errors[].File.",
+            "Alternatively rerun compile without `--stop-on-external-scene-changes` to let uloop reload externally changed Scenes automatically."
+        };
+
         internal static CompileResponse CreateResponse(
             CompileResult result,
             bool forceRecompile)
@@ -37,13 +46,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     message: result.Message ?? "Compilation status is unknown. Use get-logs to inspect the compiler output.");
             }
 
-            return new CompileResponse(
+            CompileResponse response = new CompileResponse(
                 success: result.Success,
                 errorCount: result.Errors?.Length ?? 0,
                 warningCount: result.Warnings?.Length ?? 0,
                 errors: ToIssues(result.Errors),
                 warnings: ToIssues(result.Warnings),
                 message: AddMissingTestFrameworkReferenceHint(result.Message, result.Errors));
+            response.NextActions = CreateExternalSceneChangeNextActions(result.Message);
+            return response;
+        }
+
+        private static string[] CreateExternalSceneChangeNextActions(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return null;
+            }
+
+            if (!message.Contains("externally changed Scene files", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            return ExternalSceneChangeNextActions;
         }
 
         private static CompileResponse CreateForceCompileResult(CompileResult result)

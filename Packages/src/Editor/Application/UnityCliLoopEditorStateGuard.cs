@@ -29,7 +29,9 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 decision.RunningOperationName,
                 decision.RequestedToolName,
                 decision.IsPlaying,
-                decision.IsPaused);
+                decision.IsPaused,
+                decision.IsCompiling,
+                decision.IsUpdating);
         }
     }
 }

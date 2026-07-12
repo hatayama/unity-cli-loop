@@ -11,13 +11,17 @@ namespace io.github.hatayama.UnityCliLoop.Application
             string runningToolName,
             string requestedToolName,
             bool? isPlaying = null,
-            bool? isPaused = null)
+            bool? isPaused = null,
+            bool? isCompiling = null,
+            bool? isUpdating = null)
             : base(CreateMessage(runningToolName, requestedToolName))
         {
             RunningToolName = runningToolName;
             RequestedToolName = requestedToolName;
             IsPlaying = isPlaying;
             IsPaused = isPaused;
+            IsCompiling = isCompiling;
+            IsUpdating = isUpdating;
         }
 
         public string RunningToolName { get; }
@@ -27,6 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public bool? IsPlaying { get; }
 
         public bool? IsPaused { get; }
+
+        public bool? IsCompiling { get; }
+
+        public bool? IsUpdating { get; }
 
         private static string CreateMessage(string runningToolName, string requestedToolName)
         {

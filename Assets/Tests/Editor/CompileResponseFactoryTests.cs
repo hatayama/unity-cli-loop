@@ -185,6 +185,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void CreateResponse_WhenExternalSceneCannotBeResolved_AddsNextActions()
+        {
+            // Verifies unresolved external Scene changes include execute-dynamic-code reload guidance.
+            CompilerMessage error = new CompilerMessage
+            {
+                type = CompilerMessageType.Error,
+                message = "Compilation cannot resolve externally changed Scene files before compile.",
+                file = "Assets/Scenes/SampleScene.unity",
+                line = 0
+            };
+            CompileResult result = new CompileResult(
+                success: false,
+                errorCount: 1,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: new[] { error },
+                errors: new[] { error },
+                warnings: Array.Empty<CompilerMessage>(),
+                message: error.message);
+
+            CompileResponse response =
+                CompileResponseFactory.CreateResponse(result, forceRecompile: false);
+
+            Assert.That(response.NextActions, Is.Not.Null);
+            Assert.That(response.NextActions, Has.Length.EqualTo(2));
+            Assert.That(response.NextActions[0], Does.Contain("execute-dynamic-code"));
+            Assert.That(response.NextActions[0], Does.Contain("EditorSceneManager.OpenScene"));
+        }
+
+        [Test]
         public void CreateResponse_WhenUnityTestFrameworkSymbolIsMissing_AddsTestAsmdefHint()
         {
             // Verifies compile failures from unmarked test asmdefs include the TestAssemblies fix.
