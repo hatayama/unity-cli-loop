@@ -30,11 +30,15 @@ func TestWaitForPausePointReturnsHitAfterEnabledStatus(t *testing.T) {
 	responses := []pausePointStatusResponse{
 		{Id: "jump", Status: pausePointStatusEnabled, IsEnabled: true},
 		{
-			Id:          "jump",
-			Status:      pausePointStatusHit,
-			IsHit:       true,
-			HitCount:    1,
-			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
+			Id:                      "jump",
+			Status:                  pausePointStatusHit,
+			IsHit:                   true,
+			HitCount:                1,
+			Mode:                    "continuous",
+			MaxHistory:              20,
+			CapturedVariableHistory: []pausePointCapturedHistoryFrame{{HitSequence: 1, FrameCount: 42, HitAtUtc: "2026-06-03T00:00:01.0000000Z"}},
+			HistoryDroppedCount:     0,
+			EditorState:             pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
 		},
 	}
 	requestCount := 0
@@ -64,6 +68,9 @@ func TestWaitForPausePointReturnsHitAfterEnabledStatus(t *testing.T) {
 	}
 	if response.Status != pausePointStatusHit || response.HitCount != 1 {
 		t.Fatalf("response mismatch: %#v", response)
+	}
+	if response.Mode != "continuous" || response.MaxHistory != 20 || len(response.CapturedVariableHistory) != 1 {
+		t.Fatalf("capture history mismatch: %#v", response)
 	}
 	if requestCount != 2 {
 		t.Fatalf("request count mismatch: %d", requestCount)
