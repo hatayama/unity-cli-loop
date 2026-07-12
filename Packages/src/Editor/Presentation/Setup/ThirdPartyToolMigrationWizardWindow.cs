@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -33,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private bool _isUpdatingMigrationSkill;
         private SkillsTarget _migrationSkillTarget = SkillsTarget.Claude;
         private SkillInstallState _migrationSkillInstallState = SkillInstallState.Missing;
+        private string[] _pendingMigrationFilePaths = Array.Empty<string>();
         private CancellationTokenSource _migrationOperationCts;
         private CancellationTokenSource _migrationSkillOperationCts;
         private SkillSetupUseCase _skillSetupUseCase;
@@ -184,9 +186,23 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 frameSize);
         }
 
-        internal static string GetMigrationStatusText(int fileCount)
+        internal static string GetMigrationStatusText(string[] filePaths, string projectRoot)
         {
-            return ThirdPartyToolMigrationWizardText.GetMigrationStatusText(fileCount);
+            return ThirdPartyToolMigrationWizardText.GetMigrationStatusText(filePaths, projectRoot);
+        }
+
+        internal static bool ConfirmMigrationApply(
+            int fileCount,
+            Func<string, string, string, string, bool> displayDialog)
+        {
+            Debug.Assert(displayDialog != null, "displayDialog must not be null");
+            Debug.Assert(fileCount >= 0, "fileCount must not be negative");
+
+            return displayDialog(
+                ThirdPartyToolMigrationWizardText.MigrationConfirmDialogTitle,
+                ThirdPartyToolMigrationWizardText.GetMigrationConfirmDialogMessage(fileCount),
+                ThirdPartyToolMigrationWizardText.MigrationConfirmDialogOkText,
+                ThirdPartyToolMigrationWizardText.MigrationConfirmDialogCancelText);
         }
 
         internal static string GetMigrationProgressText(
@@ -458,11 +474,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            ShowMigrationTargetsState(preview.FileCount);
+            ShowMigrationTargetsState(preview.FilePaths);
         }
 
         private async void HandleMigrateThirdPartyTools()
         {
+            if (!ConfirmMigrationApply(
+                _pendingMigrationFilePaths.Length,
+                (title, message, ok, cancel) => EditorUtility.DisplayDialog(title, message, ok, cancel)))
+            {
+                return;
+            }
+
             CancellationToken ct = BeginMigrationOperation();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             ThirdPartyToolMigrationResult result = default;
@@ -555,9 +578,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ScheduleResizeToContent();
         }
 
-        private void ShowMigrationTargetsState(int fileCount)
+        private void ShowMigrationTargetsState(string[] filePaths)
         {
-            _view.ShowMigrationTargetsState(fileCount, _isMigrating);
+            Debug.Assert(filePaths != null, "filePaths must not be null");
+
+            _pendingMigrationFilePaths = filePaths;
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            _view.ShowMigrationTargetsState(filePaths, projectRoot, _isMigrating);
             ScheduleResizeToContent();
         }
 
