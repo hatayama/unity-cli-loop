@@ -53,7 +53,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int generation = ++_nextGeneration;
             UloopPausePointEntry entry = new(id, timeoutSeconds, mode, maxHistory, now, generation);
             Entries[id] = entry;
-            ClearLatestHitSnapshotIfMatches(id);
+            // Why not clear the raw capture holder here: a re-enable does not resume Unity, so the
+            // paused-window constraint (see UloopPausePointRawCaptureHolder's class comment) is not
+            // violated by keeping the previous hit's live references across a same-id re-enable.
+            ForgetHitSnapshotForId(id);
             return entry.ToSnapshot(now, _pauseController);
         }
 
@@ -86,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 _ => "Pause point cleared."
             };
             entry.MarkCleared(UloopPausePointClearedReason.ExplicitClear, message);
-            ClearLatestHitSnapshotIfMatches(id);
+            ClearHitSnapshotAndRawCaptureForId(id);
             return entry.ToSnapshot(now, _pauseController);
         }
 
@@ -244,21 +247,28 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             UloopPausePointRawCaptureHolder.Clear();
         }
 
-        private static void ClearLatestHitSnapshotIfMatches(string id)
+        // Drops the id's own hit-history entry and, if it currently owns the latest hit, that
+        // pointer too - but never touches the raw capture holder. Enable() uses this so a same-id
+        // re-enable while paused only resets the entry's generation bookkeeping.
+        private static void ForgetHitSnapshotForId(string id)
         {
             _hitSnapshots.RemoveAll(hitSnapshot => hitSnapshot.Id == id);
-            if (_latestHitSnapshot == null)
+            if (_latestHitSnapshot != null && _latestHitSnapshot.Id == id)
             {
-                return;
+                _latestHitSnapshot = null;
             }
+        }
 
-            if (_latestHitSnapshot.Id != id)
+        // Same as ForgetHitSnapshotForId, plus clears the raw capture holder when the id owned the
+        // latest hit. Clear(id) uses this because an explicit clear is documented to drop captures.
+        private static void ClearHitSnapshotAndRawCaptureForId(string id)
+        {
+            bool ownedLatestHit = _latestHitSnapshot != null && _latestHitSnapshot.Id == id;
+            ForgetHitSnapshotForId(id);
+            if (ownedLatestHit)
             {
-                return;
+                UloopPausePointRawCaptureHolder.Clear();
             }
-
-            _latestHitSnapshot = null;
-            UloopPausePointRawCaptureHolder.Clear();
         }
 
         public static void ConfigureForTests(IUloopPausePointPauseController pauseController, Func<DateTime> nowProvider)

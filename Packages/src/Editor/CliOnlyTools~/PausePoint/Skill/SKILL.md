@@ -73,7 +73,7 @@ While Unity is paused on a hit, `execute-dynamic-code` can read live captured re
 - `GetCapturedNames()` lists captured variable names from that snapshot.
 - `GetCapturedPausePointId()` returns the pause-point id for the held snapshot.
 
-The holder clears when Unity resumes (not when you `Step` while still paused), when the matching pause point is cleared, when a new hit replaces the snapshot, or when PlayMode exits. After resume, `TryGetCapturedValue` returns `Found=false`.
+The holder clears when Unity resumes (not when you `Step` while still paused), when the matching pause point is cleared, when a new hit replaces the snapshot, or when PlayMode exits. After resume, `TryGetCapturedValue` returns `Found=false`. Re-enabling the same pause point while still paused (for example to refresh its timeout during a step session) keeps the held references, because a re-enable does not resume Unity.
 
 ## Watch Expressions
 
