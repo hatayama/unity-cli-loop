@@ -227,8 +227,30 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return true;
             }
 
+            // why not follow symlinks/junctions: cycle prevention takes priority over scanning
+            // through linked package trees that some developers keep under Assets.
+            if (!Directory.Exists(directoryPath))
+            {
+                // Dangling reparse points report Exists=false; skip before reading Attributes.
+                return true;
+            }
+
+            if (IsReparsePointDirectory(directoryPath))
+            {
+                return true;
+            }
+
             string directoryName = Path.GetFileName(directoryPath);
             return ThirdPartyToolMigrationRules.IsExcludedDirectoryName(directoryName);
+        }
+
+        private static bool IsReparsePointDirectory(string directoryPath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(directoryPath), "directoryPath must not be null or empty");
+            Debug.Assert(Directory.Exists(directoryPath), "directoryPath must exist before reading attributes");
+
+            DirectoryInfo directoryInfo = new DirectoryInfo(directoryPath);
+            return (directoryInfo.Attributes & FileAttributes.ReparsePoint) != 0;
         }
 
         private static bool IsProjectRootPackagesDirectory(string projectRoot, string directoryPath)

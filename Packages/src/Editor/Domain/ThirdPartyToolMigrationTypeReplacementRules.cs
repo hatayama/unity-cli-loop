@@ -110,14 +110,19 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public static string ReplaceLegacyContractTypeNamesInCode(
             string source,
             string[] aliases,
+            string[] assemblyDeclaredTypeNames,
             ref int replacementCount)
         {
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(aliases != null, "aliases must not be null");
+            Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
 
             string migratedContent = source;
             foreach (TypeReplacementRule rule in ToolContractTypeReplacementRules)
             {
+                bool hasProtectedTypeDeclaration = DeclaresLocalType(migratedContent, rule.LegacyName) ||
+                    assemblyDeclaredTypeNames.Contains(rule.LegacyName);
+
                 Regex fullyQualifiedRegex = new(
                     $@"(?:(?:global::)?{Regex.Escape(LegacyNamespace)}\.){Regex.Escape(rule.LegacyName)}\b",
                     RegexOptions.Compiled);
@@ -145,7 +150,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 migratedContent = ReplaceRegexInCode(
                     migratedContent,
                     unqualifiedRegex,
-                    match => ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
+                    match => !hasProtectedTypeDeclaration &&
+                        ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
                         ? rule.CurrentName
                         : match.Value,
                     ref replacementCount);
@@ -157,14 +163,19 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public static string ReplaceLegacyDomainTypeNamesInCode(
             string source,
             string[] aliases,
+            string[] assemblyDeclaredTypeNames,
             ref int replacementCount)
         {
             Debug.Assert(source != null, "source must not be null");
             Debug.Assert(aliases != null, "aliases must not be null");
+            Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
 
             string migratedContent = source;
             foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
             {
+                bool hasProtectedTypeDeclaration = DeclaresLocalType(migratedContent, rule.LegacyName) ||
+                    assemblyDeclaredTypeNames.Contains(rule.LegacyName);
+
                 Regex fullyQualifiedRegex = new(
                     $@"(?:(?:global::)?{Regex.Escape(LegacyNamespace)}\.){Regex.Escape(rule.LegacyName)}\b",
                     RegexOptions.Compiled);
@@ -192,7 +203,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 migratedContent = ReplaceRegexInCode(
                     migratedContent,
                     unqualifiedRegex,
-                    match => ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
+                    match => !hasProtectedTypeDeclaration &&
+                        ShouldMigrateLegacyTypeReference(migratedContent, rule.LegacyName, match.Index)
                         ? $"{CurrentNamespace}.{rule.CurrentName}"
                         : match.Value,
                     ref replacementCount);
@@ -477,14 +489,21 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 ref replacementCount);
         }
 
-        public static string ReplaceLegacyToolInfoTypeReferencesInCode(string source, ref int replacementCount)
+        public static string ReplaceLegacyToolInfoTypeReferencesInCode(
+            string source,
+            string[] assemblyDeclaredTypeNames,
+            ref int replacementCount)
         {
             Debug.Assert(source != null, "source must not be null");
+            Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
 
+            bool hasProtectedTypeDeclaration = DeclaresLocalType(source, "ToolInfo") ||
+                assemblyDeclaredTypeNames.Contains("ToolInfo");
             return ReplaceRegexInCode(
                 source,
                 UnqualifiedToolInfoRegex,
-                match => ShouldMigrateLegacyToolInfoTypeReference(source, match.Index)
+                match => !hasProtectedTypeDeclaration &&
+                    ShouldMigrateLegacyToolInfoTypeReference(source, match.Index)
                     ? $"{CurrentNamespace}.ToolInfo"
                     : match.Value,
                 ref replacementCount);
