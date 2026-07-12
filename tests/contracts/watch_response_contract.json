@@ -24,5 +24,12 @@
       ]
     }
   ],
-  "CompilationErrors": []
+  "CompilationErrors": [
+    {
+      "Line": 3,
+      "Column": 25,
+      "Message": "; expected",
+      "ErrorCode": "CS1002"
+    }
+  ]
 }

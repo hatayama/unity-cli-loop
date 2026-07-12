@@ -54,7 +54,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         }
                     }
                 },
-                CompilationErrors = new List<WatchCompilationErrorResponse>()
+                CompilationErrors = new List<WatchCompilationErrorResponse>
+                {
+                    new()
+                    {
+                        Line = 3,
+                        Column = 25,
+                        Message = "; expected",
+                        ErrorCode = "CS1002"
+                    }
+                }
             };
             string json = JsonConvert.SerializeObject(
                 response,
