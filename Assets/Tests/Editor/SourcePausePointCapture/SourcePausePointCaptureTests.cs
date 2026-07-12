@@ -75,6 +75,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_pauseController.PauseCount, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// Verifies the source capture path records every hit for an armed continuous marker.
+        /// </summary>
+        [Test]
+        public void Capture_WhenContinuousPausePointIsEnabled_RecordsEveryFormattedHit()
+        {
+            UloopPausePointRegistry.Enable("jump", 30, UloopPausePointCaptureMode.Continuous, 20);
+
+            SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), new object[] { "speed", 1 });
+            SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), new object[] { "speed", 2 });
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.IsEnabled, Is.True);
+            Assert.That(snapshot.HitCount, Is.EqualTo(2));
+            Assert.That(snapshot.CapturedVariableHistory, Has.Count.EqualTo(2));
+            Assert.That(snapshot.CapturedVariables.Single(variable => variable.Name == "speed").Value, Is.EqualTo("2"));
+            Assert.That(_pauseController.PauseCount, Is.EqualTo(2));
+        }
+
         [UnityTest]
         public IEnumerator Capture_WhenCalledOffMainThread_RecordsHitOnNextMainThreadTick()
         {

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
@@ -23,6 +25,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int Line { get; set; }
 
         public int TimeoutSeconds { get; set; } = UloopPausePointRegistry.DefaultTimeoutSeconds;
+
+        public string Mode { get; set; } = UloopPausePointCaptureMode.SingleShot;
+
+        public int MaxHistory { get; set; } = UloopPausePointRegistry.DefaultMaxHistory;
     }
 
     /// <summary>
@@ -51,6 +57,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool IsHit { get; set; }
         public int HitCount { get; set; }
         public int TimeoutSeconds { get; set; }
+        public string Mode { get; set; } = string.Empty;
+        public int MaxHistory { get; set; }
+        public IReadOnlyList<PausePointCapturedHistoryFrame> CapturedVariableHistory { get; set; } =
+            Array.Empty<PausePointCapturedHistoryFrame>();
+        public int HistoryDroppedCount { get; set; }
         public bool Expired { get; set; }
         public string EnabledAtUtc { get; set; } = string.Empty;
         public long ElapsedSinceEnabledMilliseconds { get; set; }
@@ -84,6 +95,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 IsHit = snapshot.IsHit,
                 HitCount = snapshot.HitCount,
                 TimeoutSeconds = snapshot.TimeoutSeconds,
+                Mode = snapshot.Mode,
+                MaxHistory = snapshot.MaxHistory,
+                CapturedVariableHistory = snapshot.CapturedVariableHistory
+                    .Select(PausePointCapturedHistoryFrame.FromSnapshot)
+                    .ToList(),
+                HistoryDroppedCount = snapshot.HistoryDroppedCount,
                 Expired = snapshot.Expired,
                 EnabledAtUtc = snapshot.EnabledAtUtc,
                 ElapsedSinceEnabledMilliseconds = snapshot.ElapsedSinceEnabledMilliseconds,
@@ -117,6 +134,72 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Message = result.ClearedCount == 0
                     ? "No active pause points to clear."
                     : "Pause points cleared."
+            };
+        }
+    }
+
+    /// <summary>
+    /// One formatted capture frame included in the enable-pause-point response history.
+    /// </summary>
+    public class PausePointCapturedHistoryFrame
+    {
+        public int HitSequence { get; set; }
+        public int FrameCount { get; set; }
+        public string HitAtUtc { get; set; } = string.Empty;
+        public IReadOnlyList<PausePointCapturedVariable> CapturedVariables { get; set; } =
+            Array.Empty<PausePointCapturedVariable>();
+        public bool Truncated { get; set; }
+
+        internal static PausePointCapturedHistoryFrame FromSnapshot(
+            UloopPausePointCapturedHistoryFrame snapshot)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            return new PausePointCapturedHistoryFrame
+            {
+                HitSequence = snapshot.HitSequence,
+                FrameCount = snapshot.FrameCount,
+                HitAtUtc = snapshot.HitAtUtc,
+                CapturedVariables = snapshot.CapturedVariables
+                    .Select(PausePointCapturedVariable.FromSnapshot)
+                    .ToList(),
+                Truncated = snapshot.Truncated
+            };
+        }
+    }
+
+    /// <summary>
+    /// One formatted variable included in a pause point capture history frame.
+    /// </summary>
+    public class PausePointCapturedVariable
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Scope { get; set; } = string.Empty;
+        public string TypeName { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
+        public string UnityObjectKind { get; set; } = string.Empty;
+        public string UnityObjectPath { get; set; } = string.Empty;
+        public int UnityObjectInstanceId { get; set; }
+
+        internal static PausePointCapturedVariable FromSnapshot(UloopCapturedVariable snapshot)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            return new PausePointCapturedVariable
+            {
+                Name = snapshot.Name,
+                Scope = snapshot.Scope,
+                TypeName = snapshot.TypeName,
+                Value = snapshot.Value,
+                UnityObjectKind = snapshot.UnityObjectKind,
+                UnityObjectPath = snapshot.UnityObjectPath,
+                UnityObjectInstanceId = snapshot.UnityObjectInstanceId
             };
         }
     }
@@ -187,6 +270,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public PausePointResponse Enable(EnablePausePointSchema parameters)
         {
+            string captureSettingsError = ValidateCaptureSettings(parameters);
+            if (captureSettingsError != null)
+            {
+                return CreateValidationFailure(captureSettingsError);
+            }
+
             string modeError = ValidateEnableMode(parameters);
             if (modeError != null)
             {
@@ -203,7 +292,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return EnableBySourceLocation(parameters);
             }
 
-            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(parameters.Id, parameters.TimeoutSeconds);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(
+                parameters.Id,
+                parameters.TimeoutSeconds,
+                parameters.Mode,
+                parameters.MaxHistory);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.Warning = CreateEnableWarning();
             return response;
@@ -257,7 +350,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
-            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(id, parameters.TimeoutSeconds);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(
+                id,
+                parameters.TimeoutSeconds,
+                parameters.Mode,
+                parameters.MaxHistory);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.ResolvedLine = resolveResult.Resolution.ResolvedLine;
             response.ResolvedMethod = resolveResult.Resolution.MethodDisplayName;
@@ -308,6 +405,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!hasId && hasFile != hasLine)
             {
                 return "File and Line must both be provided together.";
+            }
+
+            return null;
+        }
+
+        private static string ValidateCaptureSettings(EnablePausePointSchema parameters)
+        {
+            string[] supportedModes =
+            {
+                UloopPausePointCaptureMode.SingleShot,
+                UloopPausePointCaptureMode.Continuous,
+                UloopPausePointCaptureMode.Trace
+            };
+            if (!supportedModes.Contains(parameters.Mode))
+            {
+                return $"Mode must be one of: {string.Join(", ", supportedModes)}.";
+            }
+
+            if (parameters.MaxHistory <= 0 || parameters.MaxHistory > UloopPausePointRegistry.MaxHistoryLimit)
+            {
+                return $"MaxHistory must be between 1 and {UloopPausePointRegistry.MaxHistoryLimit}.";
             }
 
             return null;
