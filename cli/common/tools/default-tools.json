@@ -373,7 +373,7 @@
           },
           "MaxHistory": {
             "type": "integer",
-            "description": "Maximum number of captured hit frames to retain",
+            "description": "Maximum number of captured hit frames to retain (1-100)",
             "default": 20
           }
         }
