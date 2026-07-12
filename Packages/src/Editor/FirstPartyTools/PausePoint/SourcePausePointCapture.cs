@@ -30,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (MainThreadSwitcher.IsMainThread)
             {
-                UloopPausePointRegistry.HitWithCapturedVariables(id, frame, variables, truncated);
+                UloopPausePointRegistry.HitWithCapturedFrame(id, frame, variables, truncated);
                 return;
             }
 
@@ -39,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // main-thread tick instead of inline. HitCore re-checks IsEnabled at that point, so a
             // marker that already got disarmed by a faster hit safely no-ops there.
             MainThreadSwitcher.AddContinuation(
-                () => UloopPausePointRegistry.HitWithCapturedVariables(id, frame, variables, truncated));
+                () => UloopPausePointRegistry.HitWithCapturedFrame(id, frame, variables, truncated));
         }
 
         internal static (UloopPausePointCapturedVariableFrame Frame, List<UloopCapturedVariable> Variables, bool Truncated)
@@ -47,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
                 instance, parameterNamesAndValues, localNamesAndValues);
-            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(frame);
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.FormatFrame(frame);
             return (frame, variables, truncated);
         }
     }

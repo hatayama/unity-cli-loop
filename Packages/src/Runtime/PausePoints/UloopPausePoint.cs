@@ -22,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         /// <summary>
         /// Tries to read a raw captured variable from the latest pause-point hit while Unity is paused.
+        /// When multiple captured variables share the same name, the last one wins.
         /// </summary>
         public static (bool Found, object Value) TryGetCapturedValue(string name)
         {

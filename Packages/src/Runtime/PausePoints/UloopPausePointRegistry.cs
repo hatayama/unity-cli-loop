@@ -72,7 +72,6 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             };
             entry.MarkCleared(UloopPausePointClearedReason.ExplicitClear, message);
             ClearLatestHitSnapshotIfMatches(id);
-            UloopPausePointRawCaptureHolder.Clear();
             return entry.ToSnapshot(now, _pauseController);
         }
 
@@ -132,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return HitCore(id, null, capturedVariables, capturedVariablesTruncated);
         }
 
-        public static UloopPausePointSnapshot HitWithCapturedVariables(
+        public static UloopPausePointSnapshot HitWithCapturedFrame(
             string id,
             UloopPausePointCapturedVariableFrame capturedFrame,
             IReadOnlyList<UloopCapturedVariable> capturedVariables,

@@ -502,7 +502,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new("scores", UloopCapturedVariableScope.Local, "System.Collections.Generic.List`1[System.Int32]", "[10,20,30]", string.Empty, string.Empty, 0)
             };
 
-            UloopPausePointRegistry.HitWithCapturedVariables("jump", frame, capturedVariables, false);
+            UloopPausePointRegistry.HitWithCapturedFrame("jump", frame, capturedVariables, false);
 
             (bool foundScores, object scoresValue) = UloopPausePoint.TryGetCapturedValue("scores");
             (bool foundNull, object nullValue) = UloopPausePoint.TryGetCapturedValue("empty");
@@ -526,7 +526,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointCapturedVariableFrame frame = new(
                 new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 5) },
                 false);
-            UloopPausePointRegistry.HitWithCapturedVariables(
+            UloopPausePointRegistry.HitWithCapturedFrame(
                 "jump", frame, Array.Empty<UloopCapturedVariable>(), false);
 
             UloopPausePointRegistry.Clear("jump");
@@ -550,12 +550,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 2) },
                 false);
 
-            UloopPausePointRegistry.HitWithCapturedVariables("jump", jumpFrame, Array.Empty<UloopCapturedVariable>(), false);
-            UloopPausePointRegistry.HitWithCapturedVariables("land", landFrame, Array.Empty<UloopCapturedVariable>(), false);
+            UloopPausePointRegistry.HitWithCapturedFrame("jump", jumpFrame, Array.Empty<UloopCapturedVariable>(), false);
+            UloopPausePointRegistry.HitWithCapturedFrame("land", landFrame, Array.Empty<UloopCapturedVariable>(), false);
 
             (bool found, object value) = UloopPausePoint.TryGetCapturedValue("speed");
             Assert.That(found, Is.True);
             Assert.That(value, Is.EqualTo(2));
+            Assert.That(UloopPausePoint.GetCapturedPausePointId(), Is.EqualTo("land"));
+        }
+
+        [Test]
+        public void TryGetCapturedValue_WhenUnrelatedPausePointIsCleared_KeepsLatestHitRawCapture()
+        {
+            // Verifies Clear(id) only drops raw refs when id matches the latest hit snapshot.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Enable("land", 30);
+            UloopPausePointCapturedVariableFrame landFrame = new(
+                new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 7) },
+                false);
+            UloopPausePointRegistry.HitWithCapturedFrame("land", landFrame, Array.Empty<UloopCapturedVariable>(), false);
+
+            UloopPausePointRegistry.Clear("jump");
+
+            (bool found, object value) = UloopPausePoint.TryGetCapturedValue("speed");
+            Assert.That(found, Is.True);
+            Assert.That(value, Is.EqualTo(7));
             Assert.That(UloopPausePoint.GetCapturedPausePointId(), Is.EqualTo("land"));
         }
 

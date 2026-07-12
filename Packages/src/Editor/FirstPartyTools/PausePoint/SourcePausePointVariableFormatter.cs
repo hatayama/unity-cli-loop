@@ -24,10 +24,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
                 instance, parameterNamesAndValues, localNamesAndValues);
-            return Format(frame);
+            return FormatFrame(frame);
         }
 
-        public static (List<UloopCapturedVariable> Variables, bool Truncated) Format(
+        public static (List<UloopCapturedVariable> Variables, bool Truncated) FormatFrame(
             UloopPausePointCapturedVariableFrame frame)
         {
             Debug.Assert(frame != null, "frame must not be null");
