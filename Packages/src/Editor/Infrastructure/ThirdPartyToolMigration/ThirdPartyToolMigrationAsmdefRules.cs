@@ -51,12 +51,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     Array.Empty<RemovedLegacyPlayerLoopTimingSignature>());
             }
 
-            JArray migratedReferences = CreateReferencesArray(migrationResult.References);
-            asmdef["references"] = migratedReferences;
+            ThirdPartyToolMigrationAsmdefTextEditor.AsmdefReferencesEditResult editResult =
+                ThirdPartyToolMigrationAsmdefTextEditor.ReplaceReferencesArray(source, migrationResult.References);
+            // The surgical edit needs an existing "references" array to anchor on; when the asmdef has
+            // none, there is no original formatting to preserve, so full re-serialization is acceptable.
+            string migratedSource = editResult.Replaced
+                ? editResult.Content
+                : CreateReserializedAsmdefSource(asmdef, migrationResult.References);
             return new ThirdPartyToolMigrationContentResult(
-                asmdef.ToString(Formatting.Indented),
+                migratedSource,
                 migrationResult.ReplacementCount,
                 Array.Empty<RemovedLegacyPlayerLoopTimingSignature>());
+        }
+
+        private static string CreateReserializedAsmdefSource(JObject asmdef, string[] references)
+        {
+            Debug.Assert(asmdef != null, "asmdef must not be null");
+            Debug.Assert(references != null, "references must not be null");
+
+            asmdef["references"] = CreateReferencesArray(references);
+            return asmdef.ToString(Formatting.Indented);
         }
 
         private static string[] ReadReferenceValues(JArray references)
