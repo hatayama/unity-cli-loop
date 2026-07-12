@@ -188,7 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void FormatMigrationTargetPathsForStatus_WhenPathsUseBackslashes_NormalizesToForwardSlashes()
+        public void NormalizeDisplayPathSeparators_WhenPathsUseBackslashes_NormalizesToForwardSlashes()
         {
             // Verifies displayed migration paths always use forward slashes on every platform.
             string normalized = ThirdPartyToolMigrationWizardStateRules.NormalizeDisplayPathSeparators(
