@@ -706,7 +706,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies the File/Line path resolves a real fixture method, patches it via Harmony
             // through the full public tool surface, and a subsequent call to the patched method
-            // hits the registry with its locals, parameters, and instance field captured.
+            // hits the registry with its locals, parameters, the synthetic "this" entry, and
+            // instance field captured.
             PausePointResponse response = await EnablePausePointByFileLineAsync(FixtureFilePath, FixtureLine);
 
             Assert.That(response.Success, Is.True);
@@ -722,7 +723,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.IsHit, Is.True);
             Assert.That(
                 snapshot.CapturedVariables.Select(v => v.Name),
-                Is.EquivalentTo(new[] { "left", "right", "sum", "Tag" }));
+                Is.EquivalentTo(new[] { "left", "right", "sum", "this", "Tag" }));
         }
 
         [Test]

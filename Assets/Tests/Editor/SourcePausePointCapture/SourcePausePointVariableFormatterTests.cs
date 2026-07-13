@@ -106,7 +106,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void Format_WhenOneValueExceedsMaxLength_StillCapturesSubsequentVariables()
         {
             // Regression test: an over-long value must only clip itself, never abort capture of
-            // the parameters/instance fields that come after it in the same call.
+            // the parameters, the synthetic "this" entry, and instance fields that come after it
+            // in the same call.
             string longValue = new string('a', SourcePausePointConstants.MaxCapturedVariableValueLength + 10);
             object[] locals = { "longText", longValue };
             object[] parameters = { "hp", 42 };
@@ -115,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
                 instance, parameters, locals);
 
-            Assert.That(variables.Select(v => v.Name), Is.EqualTo(new[] { "longText", "hp", "PublicField" }));
+            Assert.That(variables.Select(v => v.Name), Is.EqualTo(new[] { "longText", "hp", "this", "PublicField" }));
             Assert.That(variables.Single(v => v.Name == "hp").Value, Is.EqualTo("42"));
             Assert.That(variables.Single(v => v.Name == "PublicField").Value, Is.EqualTo("5"));
             Assert.That(truncated, Is.True);
@@ -143,8 +144,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Format_WithInstanceFields_CapturesThemAfterLocalsAndParameters()
         {
-            // Verifies instance fields (Scope=InstanceField) are appended after locals/parameters,
-            // and compiler-generated backing fields ("<Prop>k__BackingField") are skipped.
+            // Verifies the synthetic "this" entry (Scope=This) lands after locals/parameters and
+            // before instance fields (Scope=InstanceField), and compiler-generated backing fields
+            // ("<Prop>k__BackingField") are skipped.
             InstanceFieldFixture instance = new() { PublicField = 9 };
             instance.Prop = "hello";
             object[] locals = { "local", 1 };
@@ -153,9 +155,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             (List<UloopCapturedVariable> variables, _) = SourcePausePointVariableFormatter.Format(
                 instance, parameters, locals);
 
-            Assert.That(variables.Select(v => v.Name), Is.EqualTo(new[] { "local", "param", "PublicField" }));
-            Assert.That(variables[2].Scope, Is.EqualTo(UloopCapturedVariableScope.InstanceField));
-            Assert.That(variables[2].Value, Is.EqualTo("9"));
+            Assert.That(variables.Select(v => v.Name), Is.EqualTo(new[] { "local", "param", "this", "PublicField" }));
+            Assert.That(variables[2].Scope, Is.EqualTo(UloopCapturedVariableScope.This));
+            Assert.That(variables[3].Scope, Is.EqualTo(UloopCapturedVariableScope.InstanceField));
+            Assert.That(variables[3].Value, Is.EqualTo("9"));
             Assert.That(variables.Any(v => v.Name.Contains("Prop")), Is.False);
         }
 

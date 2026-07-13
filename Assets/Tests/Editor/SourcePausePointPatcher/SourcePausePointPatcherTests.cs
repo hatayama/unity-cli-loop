@@ -40,7 +40,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void Patch_InstanceMethod_CapturesLocalsParametersAndInstanceFieldOnHit()
         {
             // Verifies the base case: an instance method's parameters, its as-yet-unassigned local,
-            // and its declaring instance's own field are all captured at the resolved statement.
+            // the synthetic "this" entry, and its declaring instance's own field are all captured
+            // at the resolved statement.
             const string id = "patcher-normal-method";
             SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
                 FixturesDirectory + "PatcherNormalMethodFixture.cs", 11);
@@ -56,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(sum, Is.EqualTo(5));
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(id);
             Assert.That(snapshot.IsHit, Is.True);
-            Assert.That(snapshot.CapturedVariables.Select(v => v.Name), Is.EquivalentTo(new[] { "left", "right", "sum", "Tag" }));
+            Assert.That(snapshot.CapturedVariables.Select(v => v.Name), Is.EquivalentTo(new[] { "left", "right", "sum", "this", "Tag" }));
             Assert.That(snapshot.CapturedVariables.First(v => v.Name == "left").Value, Is.EqualTo("2"));
             Assert.That(snapshot.CapturedVariables.First(v => v.Name == "right").Value, Is.EqualTo("3"));
             Assert.That(snapshot.CapturedVariables.First(v => v.Name == "sum").Value, Is.EqualTo("0"));
@@ -90,7 +91,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void Patch_StructInstanceMethod_BoxesValueTypeThisAndCapturesInstanceField()
         {
             // Verifies the ldobj+box path used when `this` is a value type: ldarg.0 yields a managed
-            // pointer for a struct instance method, which must be dereferenced and boxed before Capture.
+            // pointer for a struct instance method, which must be dereferenced and boxed before
+            // Capture, surfacing both the synthetic "this" entry and the boxed instance's field.
             const string id = "patcher-struct-instance-method";
             SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
                 FixturesDirectory + "PatcherStructInstanceMethodFixture.cs", 11);
@@ -106,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(doubled, Is.EqualTo(14));
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(id);
             Assert.That(snapshot.IsHit, Is.True);
-            Assert.That(snapshot.CapturedVariables.Select(v => v.Name), Is.EquivalentTo(new[] { "doubled", "Value" }));
+            Assert.That(snapshot.CapturedVariables.Select(v => v.Name), Is.EquivalentTo(new[] { "doubled", "this", "Value" }));
             Assert.That(snapshot.CapturedVariables.First(v => v.Name == "Value").Value, Is.EqualTo("7"));
         }
 
