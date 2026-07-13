@@ -17,6 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Action _allowAutoRefresh;
         private readonly Action _resolveFocusReturnChanges;
         private readonly Action<string> _logWarning;
+        private readonly Action<string, string, object> _logVibeInfo;
+        private readonly Action<string, string, object> _logVibeWarning;
 
         internal ExternalAssetFocusReturnService(
             Func<bool> getAutoRefreshHeld,
@@ -25,7 +27,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action disallowAutoRefresh,
             Action allowAutoRefresh,
             Action resolveFocusReturnChanges,
-            Action<string> logWarning = null)
+            Action<string> logWarning = null,
+            Action<string, string, object> logVibeInfo = null,
+            Action<string, string, object> logVibeWarning = null)
         {
             Debug.Assert(getAutoRefreshHeld != null, "getAutoRefreshHeld must not be null");
             Debug.Assert(setAutoRefreshHeld != null, "setAutoRefreshHeld must not be null");
@@ -42,6 +46,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _resolveFocusReturnChanges =
                 resolveFocusReturnChanges ?? throw new ArgumentNullException(nameof(resolveFocusReturnChanges));
             _logWarning = logWarning ?? (message => Debug.LogWarning(message));
+            // Why inject: pure C# unit tests stay free of VibeLogger; production wires VibeLogger.
+            _logVibeInfo = logVibeInfo ?? ((operation, message, context) => { });
+            _logVibeWarning = logVibeWarning ?? ((operation, message, context) => { });
         }
 
         internal bool RestoreAutoRefreshIfHeld()
@@ -82,7 +89,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (!_isEditorFocused())
             {
-                HoldAutoRefreshIfNeeded();
+                if (HoldAutoRefreshIfNeeded())
+                {
+                    // Why only on actual repair: reconcile ticks every 0.5s; spam would drown the gate timeline.
+                    _logVibeInfo(
+                        "external_scene_reconcile_repair",
+                        "Reconcile armed Auto Refresh hold while Editor is unfocused",
+                        new { held = true, isFocused = false });
+                }
+
                 return;
             }
 
@@ -92,6 +107,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HandleFocusChanged(true);
+            _logVibeInfo(
+                "external_scene_reconcile_repair",
+                "Reconcile released Auto Refresh hold while Editor is focused",
+                new { held = _getAutoRefreshHeld(), isFocused = true });
         }
 
         internal void HandleFocusChanged(bool isFocused)
@@ -112,20 +131,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal void HoldAutoRefreshIfNeeded()
+        /// <summary>
+        /// Attempts to arm DisallowAutoRefresh. Returns true only when this call newly armed the hold.
+        /// </summary>
+        internal bool HoldAutoRefreshIfNeeded()
         {
             if (_getAutoRefreshHeld())
             {
-                return;
+                return false;
             }
 
             if (!TryDisallowAutoRefresh())
             {
-                return;
+                return false;
             }
 
             // Why only after success: setting SessionState on failure desyncs the Unity counter (§10).
             _setAutoRefreshHeld(true);
+            _logVibeInfo(
+                "external_scene_hold_armed",
+                "Auto Refresh hold armed",
+                new { held = true, isFocused = _isEditorFocused() });
+            return true;
         }
 
         private void ReleaseAutoRefreshIfHeld()
@@ -141,6 +168,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             _setAutoRefreshHeld(false);
+            _logVibeInfo(
+                "external_scene_hold_released",
+                "Auto Refresh hold released",
+                new { held = false, isFocused = _isEditorFocused() });
         }
 
         private bool TryDisallowAutoRefresh()
@@ -156,6 +187,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _logWarning(
                     "Unity CLI Loop could not DisallowAutoRefresh (often during domain reload). " +
                     "Will retry via focus reconcile. " + exception.GetType().Name + ": " + exception.Message);
+                _logVibeWarning(
+                    "external_scene_hold_failed",
+                    "DisallowAutoRefresh failed",
+                    new
+                    {
+                        exceptionType = exception.GetType().FullName,
+                        exceptionMessage = exception.Message,
+                        held = _getAutoRefreshHeld(),
+                        isFocused = _isEditorFocused()
+                    });
                 return false;
             }
         }
@@ -172,6 +213,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _logWarning(
                     "Unity CLI Loop could not AllowAutoRefresh (often during domain reload). " +
                     "Will retry via focus reconcile. " + exception.GetType().Name + ": " + exception.Message);
+                _logVibeWarning(
+                    "external_scene_release_failed",
+                    "AllowAutoRefresh failed",
+                    new
+                    {
+                        exceptionType = exception.GetType().FullName,
+                        exceptionMessage = exception.Message,
+                        held = _getAutoRefreshHeld(),
+                        isFocused = _isEditorFocused()
+                    });
                 return false;
             }
         }

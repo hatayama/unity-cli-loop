@@ -193,6 +193,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void FocusReturnService_WhenHoldSucceeds_EmitsHoldArmedVibeLog()
+        {
+            // Verifies successful Disallow arms held and emits the observability vibe event once.
+            bool autoRefreshHeld = false;
+            List<string> vibeOperations = new List<string>();
+            ExternalAssetFocusReturnService service = new ExternalAssetFocusReturnService(
+                () => autoRefreshHeld,
+                isHeld => autoRefreshHeld = isHeld,
+                () => false,
+                () => { },
+                () => { },
+                () => { },
+                logWarning: null,
+                logVibeInfo: (operation, message, context) => vibeOperations.Add(operation),
+                logVibeWarning: null);
+
+            service.HoldAutoRefreshIfNeeded();
+            service.HoldAutoRefreshIfNeeded();
+
+            Assert.That(autoRefreshHeld, Is.True);
+            Assert.That(vibeOperations, Is.EqualTo(new[] { "external_scene_hold_armed" }));
+        }
+
+        [Test]
+        public void FocusReturnService_WhenDisallowThrows_EmitsHoldFailedVibeLog()
+        {
+            // Verifies Disallow failures leave SessionState unheld and emit hold_failed vibe warning.
+            bool autoRefreshHeld = false;
+            List<string> vibeOperations = new List<string>();
+            ExternalAssetFocusReturnService service = new ExternalAssetFocusReturnService(
+                () => autoRefreshHeld,
+                isHeld => autoRefreshHeld = isHeld,
+                () => false,
+                () => throw new InvalidOperationException("kCodeReload"),
+                () => { },
+                () => { },
+                logWarning: _ => { },
+                logVibeInfo: null,
+                logVibeWarning: (operation, message, context) => vibeOperations.Add(operation));
+
+            service.HoldAutoRefreshIfNeeded();
+
+            Assert.That(autoRefreshHeld, Is.False);
+            Assert.That(vibeOperations, Is.EqualTo(new[] { "external_scene_hold_failed" }));
+        }
+
+        [Test]
         public void FocusReturnService_WhenFocusIsLost_HoldsAutoRefreshOnce()
         {
             // Verifies focus loss suspends Unity Auto Refresh only once per unfocused interval.
