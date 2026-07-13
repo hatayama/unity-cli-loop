@@ -59,6 +59,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return new WorkerAttemptResult(null, true, failureReason, failureContext);
             }
+
+            public static WorkerAttemptResult NonRetryableFailure(string failureReason, object failureContext)
+            {
+                return new WorkerAttemptResult(null, false, failureReason, failureContext);
+            }
         }
 
         /// <summary>
@@ -68,25 +73,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             public bool IsReady { get; }
 
+            public bool IsRetryable { get; }
+
             public string FailureReason { get; }
 
             public object FailureContext { get; }
 
-            private WorkerStartupResult(bool isReady, string failureReason, object failureContext)
+            private WorkerStartupResult(
+                bool isReady,
+                bool isRetryable,
+                string failureReason,
+                object failureContext)
             {
                 IsReady = isReady;
+                IsRetryable = isRetryable;
                 FailureReason = failureReason;
                 FailureContext = failureContext;
             }
 
             public static WorkerStartupResult Ready()
             {
-                return new WorkerStartupResult(true, null, null);
+                return new WorkerStartupResult(true, false, null, null);
             }
 
             public static WorkerStartupResult Failure(string failureReason, object failureContext)
             {
-                return new WorkerStartupResult(false, failureReason, failureContext);
+                return new WorkerStartupResult(false, true, failureReason, failureContext);
+            }
+
+            public static WorkerStartupResult ClosedLifecycleFailure()
+            {
+                return new WorkerStartupResult(
+                    false,
+                    false,
+                    "shared_worker_lifecycle_closed",
+                    new { reason = "lifecycle_generation_advanced" });
             }
         }
 
@@ -151,11 +172,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action markBuildFinished,
             Action incrementBuildCount)
         {
+            int lifecycleGenerationAtStart = ServiceValue.ExecuteWithStateLock(
+                ServiceValue.GetLifecycleGenerationLocked);
+
             for (int attempt = 1; attempt <= SharedCompilerWorkerMaxAttempts; attempt++)
             {
                 WorkerAttemptResult attemptResult = await TryCompileOnceAsync(
                     requestFilePath,
                     externalCompilerPaths,
+                    lifecycleGenerationAtStart,
                     ct,
                     markBuildStarted,
                     markBuildFinished,
@@ -185,14 +210,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static async Task<WorkerAttemptResult> TryCompileOnceAsync(
             string requestFilePath,
             ExternalCompilerPaths externalCompilerPaths,
+            int lifecycleGenerationAtStart,
             CancellationToken ct,
             Action markBuildStarted,
             Action markBuildFinished,
             Action incrementBuildCount)
         {
-            WorkerStartupResult startupResult = EnsureWorkerReady(externalCompilerPaths);
+            WorkerStartupResult startupResult = EnsureWorkerReady(
+                externalCompilerPaths,
+                lifecycleGenerationAtStart);
             if (!startupResult.IsReady)
             {
+                if (!startupResult.IsRetryable)
+                {
+                    return WorkerAttemptResult.NonRetryableFailure(
+                        startupResult.FailureReason,
+                        startupResult.FailureContext);
+                }
+
                 return WorkerAttemptResult.RetryableFailure(
                     startupResult.FailureReason,
                     startupResult.FailureContext);
@@ -206,11 +241,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 incrementBuildCount).ConfigureAwait(false);
         }
 
-        private static WorkerStartupResult EnsureWorkerReady(ExternalCompilerPaths externalCompilerPaths)
+        private static WorkerStartupResult EnsureWorkerReady(
+            ExternalCompilerPaths externalCompilerPaths,
+            int lifecycleGenerationAtStart)
         {
-            if (ServiceValue.ExecuteWithStateLock(ServiceValue.HasLiveProcessLocked))
+            WorkerStartupResult earlyResult = ServiceValue.ExecuteWithStateLock(() =>
             {
-                return WorkerStartupResult.Ready();
+                if (!ServiceValue.IsLifecycleGenerationCurrentLocked(lifecycleGenerationAtStart))
+                {
+                    return WorkerStartupResult.ClosedLifecycleFailure();
+                }
+
+                if (ServiceValue.HasLiveProcessLocked())
+                {
+                    return WorkerStartupResult.Ready();
+                }
+
+                return null;
+            });
+            if (earlyResult != null)
+            {
+                return earlyResult;
             }
 
             WorkerPaths workerPaths = CreateWorkerPaths();
@@ -224,7 +275,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return workerAssemblyResult;
             }
 
-            return StartWorkerProcess(externalCompilerPaths, workerPaths);
+            return StartWorkerProcess(
+                externalCompilerPaths,
+                workerPaths,
+                lifecycleGenerationAtStart);
         }
 
         private static WorkerStartupResult EnsureWorkerAssemblyBuilt(
@@ -268,23 +322,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static WorkerStartupResult StartWorkerProcess(
             ExternalCompilerPaths externalCompilerPaths,
-            WorkerPaths workerPaths)
+            WorkerPaths workerPaths,
+            int lifecycleGenerationAtStart)
         {
             ProcessStartInfo startInfo = CreateWorkerStartInfo(externalCompilerPaths, workerPaths);
-            bool started = ServiceValue.ExecuteWithStateLock(
-                () => ServiceValue.StartProcessLocked(startInfo));
-            if (!started)
+            return ServiceValue.ExecuteWithStateLock(() =>
             {
-                return WorkerStartupResult.Failure(
-                    "worker_start_failed",
-                    new
-                    {
-                        dotnet_host_path = externalCompilerPaths.DotnetHostPath,
-                        worker_assembly_path = workerPaths.AssemblyPath
-                    });
-            }
+                if (!ServiceValue.IsLifecycleGenerationCurrentLocked(lifecycleGenerationAtStart))
+                {
+                    return WorkerStartupResult.ClosedLifecycleFailure();
+                }
 
-            return WorkerStartupResult.Ready();
+                bool started = ServiceValue.StartProcessLocked(startInfo);
+                if (!started)
+                {
+                    return WorkerStartupResult.Failure(
+                        "worker_start_failed",
+                        new
+                        {
+                            dotnet_host_path = externalCompilerPaths.DotnetHostPath,
+                            worker_assembly_path = workerPaths.AssemblyPath
+                        });
+                }
+
+                return WorkerStartupResult.Ready();
+            });
         }
 
         private static async Task<WorkerAttemptResult> InvokeWorkerOnceAsync(
