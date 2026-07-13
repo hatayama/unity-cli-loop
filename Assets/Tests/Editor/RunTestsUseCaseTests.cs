@@ -49,6 +49,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteAsync_WithNonPositiveTimeoutSeconds_ShouldFailFastWithoutRunningTests()
+        {
+            // Verifies invalid TimeoutSeconds is rejected before validation or Test Runner work.
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait
+            );
+            RunTestsSchema parameters = new()
+            {
+                TimeoutSeconds = 0
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.ExecutionFailed));
+            Assert.That(response.Message, Does.Contain("greater than zero"));
+            Assert.That(executionService.WasCalled, Is.False);
+            Assert.That(validationService.WasCalled, Is.False);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WithTimeoutSecondsAboveMax_ShouldFailFastWithoutRunningTests()
+        {
+            // Verifies TimeoutSeconds above MaxTimeoutSeconds fail before arming CancelAfter.
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait
+            );
+            RunTestsSchema parameters = new()
+            {
+                TimeoutSeconds = RunTestsExecutionTimeout.MaxTimeoutSeconds + 1
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Status, Is.EqualTo(RunTestsExecutionStatus.ExecutionFailed));
+            Assert.That(response.Message, Does.Contain(RunTestsExecutionTimeout.MaxTimeoutSeconds.ToString()));
+            Assert.That(executionService.WasCalled, Is.False);
+            Assert.That(validationService.WasCalled, Is.False);
+        }
+
+        [Test]
         public async Task ExecuteAsync_WithUnknownTestMode_ShouldFailFastWithoutRunningTests()
         {
             // Verifies unknown enum values do not bypass the EditMode play-state guard.
