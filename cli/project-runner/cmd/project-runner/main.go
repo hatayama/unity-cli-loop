@@ -12,5 +12,6 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	context.AfterFunc(ctx, stop)
 	os.Exit(projectrunner.RunProjectLocal(ctx, os.Args[1:], os.Stdout, os.Stderr))
 }
