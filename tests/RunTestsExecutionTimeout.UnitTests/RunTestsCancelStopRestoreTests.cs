@@ -39,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.UnitTests
             Assert.That(result.StopWaitTimedOut, Is.False);
             Assert.That(playingChecks, Is.GreaterThan(0));
             Assert.That(result.DegradationNote, Does.Contain("Play Mode exit was requested and confirmed"));
+            Assert.That(result.DegradationNote, Does.Not.Contain("no public API"));
         }
 
         [Test]

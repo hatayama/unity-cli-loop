@@ -45,19 +45,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why not `using`: Dispose must run only after cancel-time stop/restore finishes.
             // Disposing earlier re-enables domain reload while Test Runner / Play Mode may still be active.
             DomainReloadDisableScope scope = new DomainReloadDisableScope();
-            bool executionStarted = false;
             try
             {
-                executionStarted = true;
                 return await ExecuteTestWithEventNotification(TestMode.PlayMode, filter, ct);
             }
             catch (OperationCanceledException originalException)
             {
-                if (!executionStarted)
-                {
-                    throw;
-                }
-
                 RunTestsCancelStopRestoreResult stopResult = await RunTestsCancelStopRestore.StopAndRestoreAsync(
                     isPlayMode: true,
                     runGuid: null,
@@ -75,19 +68,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
-            bool executionStarted = false;
             try
             {
-                executionStarted = true;
                 return await ExecuteTestWithEventNotification(TestMode.EditMode, filter, ct);
             }
             catch (OperationCanceledException originalException)
             {
-                if (!executionStarted)
-                {
-                    throw;
-                }
-
                 RunTestsCancelStopRestoreResult stopResult = await RunTestsCancelStopRestore.StopAndRestoreAsync(
                     isPlayMode: false,
                     runGuid: null,

@@ -237,7 +237,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool stopWaitTimedOut)
         {
             StringBuilder note = new();
-            if (!testRunCancelAttempted || !testRunCancelSucceeded)
+            // Why guard on PlayMode exit confirmed: once Play Mode has exited, the in-flight
+            // PlayMode job is effectively stopped; warning about missing CancelTestRun only
+            // confuses agents. Keep the warning for EditMode and for unconfirmed PlayMode exit.
+            if ((!testRunCancelAttempted || !testRunCancelSucceeded) &&
+                (!isPlayMode || !playModeExitConfirmed))
             {
                 note.Append(
                     "Unity Test Framework 1.3.9 has no public API to cancel an in-flight test job");
