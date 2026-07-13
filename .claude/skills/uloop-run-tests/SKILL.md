@@ -30,6 +30,7 @@ uloop run-tests [options]
 | `--filter-type` | string | `all` | Filter type: `all`, `exact`, `regex`, `assembly` |
 | `--filter-value` | string | - | Filter value (test name, pattern, or assembly) |
 | `--fail-on-unsaved-changes` | flag | - | Fail before test execution if unsaved editor changes remain instead of auto-saving them |
+| `--timeout-seconds` | integer | `600` | Maximum seconds to wait for RunFinished before canceling the await (max `1500`). Increase for long suites; on timeout the Test Runner may still be running until stop handling lands |
 
 ## Output
 

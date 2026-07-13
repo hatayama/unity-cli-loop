@@ -99,6 +99,11 @@
             "type": "boolean",
             "description": "Save unsaved loaded Scene changes and current Prefab Stage changes before running tests",
             "default": true
+          },
+          "TimeoutSeconds": {
+            "type": "integer",
+            "description": "Maximum seconds to wait for Unity Test Runner RunFinished before canceling the await and freeing the tool slot",
+            "default": 600
           }
         }
       }
