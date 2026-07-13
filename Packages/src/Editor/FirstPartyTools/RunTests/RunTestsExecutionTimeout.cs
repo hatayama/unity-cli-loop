@@ -63,8 +63,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationTokenSource linkedCancellationTokenSource =
                 CancellationTokenSource.CreateLinkedTokenSource(parentCancellationToken);
             // Why CancelAfter here: frees the single-flight slot when RunFinished never fires.
-            // PR 1-1 only completes the await via cancellation; TestRunnerApi may keep running
-            // until PR 1-2 routes this same cancel path through an explicit stop + PlayMode restore.
+            // Cancel paths then run StopAndRestore (PlayMode exit / optional job cancel) before
+            // DomainReloadDisableScope dispose so reload is not re-enabled mid-run.
             linkedCancellationTokenSource.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
             return linkedCancellationTokenSource;
         }
@@ -72,14 +72,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Builds the agent-facing message for a CancelAfter timeout.
         /// </summary>
-        public static string CreateTimeoutMessage(int timeoutSeconds)
+        public static string CreateTimeoutMessage(
+            int timeoutSeconds,
+            string stopRestoreDegradationNote = null)
         {
             Debug.Assert(timeoutSeconds > 0, "timeoutSeconds must be greater than zero");
 
-            return
+            string message =
                 $"run-tests timed out after {timeoutSeconds} seconds without a RunFinished callback. " +
-                "The Unity Test Runner may still be running in the background. " +
                 "Increase --timeout-seconds for long suites, or restart with `uloop launch -r` if Unity is stuck.";
+            if (!string.IsNullOrEmpty(stopRestoreDegradationNote))
+            {
+                return message + " " + stopRestoreDegradationNote;
+            }
+
+            return message +
+                " The Unity Test Runner may still be running in the background.";
         }
 
         /// <summary>

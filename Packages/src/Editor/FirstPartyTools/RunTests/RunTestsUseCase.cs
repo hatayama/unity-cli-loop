@@ -126,14 +126,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // the fixed cleanup delay straddles the deadline after RunFinished already arrived.
                 await _waitForTestRunnerCleanupAsync(ct);
             }
-            catch (OperationCanceledException) when (RunTestsExecutionTimeout.IsTimeoutCancellation(ct))
+            catch (RunTestsExecutionCanceledException canceledException)
+                when (RunTestsExecutionTimeout.IsTimeoutCancellation(ct))
             {
                 // Why return a tool failure instead of rethrowing: agents need an actionable
                 // timeout message (extend --timeout-seconds / launch -r). Parent/disconnect
                 // cancellation still propagates so the IPC session can tear down normally.
-                // Why not stop TestRunnerApi here yet: PR 1-2 will route this same cancel path
-                // through explicit runner stop + PlayMode restore; until then the runner may
-                // keep running in the background after the await is released.
+                return CreateFailureResponse(
+                    RunTestsExecutionTimeout.CreateTimeoutMessage(
+                        parameters.TimeoutSeconds,
+                        canceledException.StopResult.DegradationNote));
+            }
+            catch (OperationCanceledException) when (RunTestsExecutionTimeout.IsTimeoutCancellation(ct))
+            {
                 return CreateFailureResponse(
                     RunTestsExecutionTimeout.CreateTimeoutMessage(parameters.TimeoutSeconds));
             }

@@ -71,6 +71,19 @@ namespace io.github.hatayama.UnityCliLoop.UnitTests
         }
 
         [Test]
+        public void CreateTimeoutMessage_WhenStopRestoreNoteProvided_ShouldAppendDegradationDetails()
+        {
+            // Verifies cancel-time stop/restore notes are appended for agent guidance.
+            string message = RunTestsExecutionTimeout.CreateTimeoutMessage(
+                600,
+                "Play Mode exit was requested and confirmed.");
+
+            Assert.That(message, Does.Contain("600"));
+            Assert.That(message, Does.Contain("Play Mode exit was requested and confirmed."));
+            Assert.That(message, Does.Not.Contain("may still be running in the background"));
+        }
+
+        [Test]
         public void IsTimeoutCancellation_WhenParentIsNotCanceled_ShouldReturnTrue()
         {
             // Verifies CancelAfter-driven cancellation is distinguished from parent/disconnect cancellation.
