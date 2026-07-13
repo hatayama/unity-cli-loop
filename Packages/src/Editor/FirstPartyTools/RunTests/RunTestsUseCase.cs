@@ -73,6 +73,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return RunTestsResponse.CreateTestFrameworkUnavailable();
             }
 
+            if (!RunTestsExecutionTimeout.TryValidate(parameters.TimeoutSeconds, out string timeoutError))
+            {
+                return CreateFailureResponse(timeoutError);
+            }
+
             ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.SaveBeforeRun);
             if (!validation.IsValid)
             {
@@ -100,17 +105,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // pause source is a human manually pausing via the Editor UI, which is native
             // Unity behavior and out of scope.
             ct.ThrowIfCancellationRequested();
+            using CancellationTokenSource timeoutCancellationTokenSource =
+                RunTestsExecutionTimeout.CreateLinkedTimeoutSource(ct, parameters.TimeoutSeconds);
+            CancellationToken executionCt = timeoutCancellationTokenSource.Token;
             SerializableTestResult result;
-            if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
+            try
             {
-                result = await _executionService.ExecutePlayModeTestAsync(filter, ct);
-            }
-            else
-            {
-                result = await _executionService.ExecuteEditModeTestAsync(filter, ct);
-            }
+                if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
+                {
+                    result = await _executionService.ExecutePlayModeTestAsync(filter, executionCt);
+                }
+                else
+                {
+                    result = await _executionService.ExecuteEditModeTestAsync(filter, executionCt);
+                }
 
-            await _waitForTestRunnerCleanupAsync(ct);
+                await _waitForTestRunnerCleanupAsync(executionCt);
+            }
+            catch (OperationCanceledException) when (RunTestsExecutionTimeout.IsTimeoutCancellation(ct))
+            {
+                // Why return a tool failure instead of rethrowing: agents need an actionable
+                // timeout message (extend --timeout-seconds / launch -r). Parent/disconnect
+                // cancellation still propagates so the IPC session can tear down normally.
+                // Why not stop TestRunnerApi here yet: PR 1-2 will route this same cancel path
+                // through explicit runner stop + PlayMode restore; until then the runner may
+                // keep running in the background after the await is released.
+                return CreateFailureResponse(
+                    RunTestsExecutionTimeout.CreateTimeoutMessage(parameters.TimeoutSeconds));
+            }
 
             // 3. Response creation.
             RunTestsResponse response = new(
