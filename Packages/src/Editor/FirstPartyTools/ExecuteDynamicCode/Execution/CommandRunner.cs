@@ -53,37 +53,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             );
         }
 
-        public ExecutionResult Execute(ExecutionContext context)
-        {
-            string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
-            if (!TryBeginExecution(out int undoGroup))
-            {
-                return CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_IN_PROGRESS);
-            }
-
-            try
-            {
-                using CancellationTokenSource combinedCts = CreateCombinedCancellationTokenSource(context);
-                return ExecuteInternal(context, combinedCts.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                return CreateCancelledResult();
-            }
-            catch (Exception ex)
-            {
-                LogExecutionError(ex, correlationId);
-
-                return CreateErrorResult(
-                    ex.Message,
-                    new List<string> { $"Exception: {ex.Message}" });
-            }
-            finally
-            {
-                EndExecution(undoGroup);
-            }
-        }
-
         public void Cancel()
         {
             _cancellationTokenSource?.Cancel();
