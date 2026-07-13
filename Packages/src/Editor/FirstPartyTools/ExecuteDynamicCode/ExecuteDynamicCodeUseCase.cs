@@ -75,6 +75,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return cancelledResponse;
                 }
 
+                if (DynamicCodeExecutionResponseFactory.IsRuntimeRestartingResult(finalResult))
+                {
+                    ExecuteDynamicCodeResponse restartingResponse =
+                        DynamicCodeExecutionResponseFactory.CreateRuntimeRestartingResponse();
+                    restartingResponse.EmitTimingsInJsonResponse = parameters.IncludeTimings;
+                    return restartingResponse;
+                }
+
                 ExecuteDynamicCodeResponse response =
                     _responseFactory.ConvertExecutionResultToResponse(finalResult, originalCode);
                 response.EmitTimingsInJsonResponse = parameters.IncludeTimings;
@@ -143,15 +151,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (!request.YieldToForegroundRequests)
             {
-                return await _runtime.ExecuteAsync(request, cancellationToken).ConfigureAwait(false);
+                // Why catch here: reset/reload disposes the scheduler mid-flight; map to an explicit
+                // retryable response instead of leaking ObjectDisposedException across the tool boundary.
+                // Why not retry inside UseCase: re-fetching a facade races domain reload.
+                try
+                {
+                    return await _runtime.ExecuteAsync(request, cancellationToken).ConfigureAwait(false);
+                }
+                catch (ObjectDisposedException)
+                {
+                    LogDynamicCodeRuntimeRestarting("execute");
+                    return DynamicCodeExecutionResponseFactory.CreateRuntimeRestartingExecutionResult();
+                }
             }
 
-            (bool entered, ExecutionResult result) = await _runtime.TryExecuteIfIdleAsync(
-                request,
-                cancellationToken).ConfigureAwait(false);
-            if (entered)
+            try
             {
-                return result;
+                (bool entered, ExecutionResult result) = await _runtime.TryExecuteIfIdleAsync(
+                    request,
+                    cancellationToken).ConfigureAwait(false);
+                if (entered)
+                {
+                    return result;
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                LogDynamicCodeRuntimeRestarting("try_execute_if_idle");
+                return DynamicCodeExecutionResponseFactory.CreateRuntimeRestartingExecutionResult();
             }
 
             return new ExecutionResult
@@ -178,7 +205,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool completed = false;
             try
             {
-                completed = await ExecuteForegroundWarmupSequenceAsync(cancellationToken).ConfigureAwait(false);
+                // Why catch here: warmup is best-effort; a disposed runtime during reset must not
+                // surface as a CLI error — treat as incomplete warm (same as entered=false).
+                try
+                {
+                    completed = await ExecuteForegroundWarmupSequenceAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (ObjectDisposedException)
+                {
+                    LogDynamicCodeRuntimeRestarting("warm");
+                    completed = false;
+                }
+
                 if (completed)
                 {
                     DynamicCodeForegroundWarmupState.MarkCompleted();
@@ -191,6 +229,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     DynamicCodeForegroundWarmupState.ResetAfterIncompleteAttempt();
                 }
             }
+        }
+
+        private static void LogDynamicCodeRuntimeRestarting(string path)
+        {
+            VibeLogger.LogWarning(
+                "dynamic_code_runtime_restarting",
+                "Dynamic-code runtime was disposed during reset or domain reload",
+                new { path },
+                humanNote: "ObjectDisposedException from the execution runtime was mapped at the UseCase boundary",
+                aiTodo: "Retry the same execute-dynamic-code shortly; do not treat this as a permanent failure");
         }
 
         private async Task<bool> ExecuteForegroundWarmupSequenceAsync(CancellationToken ct)

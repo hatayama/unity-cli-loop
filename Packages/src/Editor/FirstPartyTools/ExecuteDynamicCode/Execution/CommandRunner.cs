@@ -15,19 +15,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class CommandRunner : ICompiledCommandInvoker
     {
         private readonly CompiledCommandEntryPointResolver _entryPointResolver;
-        private bool _isRunning = false;
-        private CancellationTokenSource _cancellationTokenSource;
+        private readonly CommandRunnerUndoHooks _undoHooks;
+        private readonly CommandRunnerExecutionSlot _executionSlot = new();
 
-        public bool IsRunning => _isRunning;
+        public bool IsRunning => _executionSlot.IsRunning;
 
         public CommandRunner()
-            : this(DynamicCodeServices.CommandEntryPointResolver)
+            : this(DynamicCodeServices.CommandEntryPointResolver, null)
         {
         }
 
-        internal CommandRunner(CompiledCommandEntryPointResolver entryPointResolver)
+        internal CommandRunner(
+            CompiledCommandEntryPointResolver entryPointResolver,
+            CommandRunnerUndoHooks undoHooks = null)
         {
             _entryPointResolver = entryPointResolver;
+            _undoHooks = undoHooks;
         }
 
         private static void LogExecutionError(Exception ex, string correlationId)
@@ -45,30 +48,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             );
         }
 
-        private CancellationTokenSource CreateCombinedCancellationTokenSource(ExecutionContext context)
+        private CancellationTokenSource CreateCombinedCancellationTokenSource(
+            ExecutionContext context,
+            CancellationTokenSource executionCancellationTokenSource)
         {
             return CancellationTokenSource.CreateLinkedTokenSource(
-                _cancellationTokenSource.Token,
+                executionCancellationTokenSource.Token,
                 context.CancellationToken
             );
         }
 
         public void Cancel()
         {
-            _cancellationTokenSource?.Cancel();
+            _executionSlot.Cancel();
         }
 
         public async Task<ExecutionResult> ExecuteAsync(ExecutionContext context)
         {
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
-            if (!TryBeginExecution(out int undoGroup))
+            if (!TryBeginExecution(out int undoGroup, out CancellationTokenSource executionCancellationTokenSource))
             {
                 return CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_IN_PROGRESS);
             }
 
             try
             {
-                using CancellationTokenSource combinedCts = CreateCombinedCancellationTokenSource(context);
+                using CancellationTokenSource combinedCts = CreateCombinedCancellationTokenSource(
+                    context,
+                    executionCancellationTokenSource);
                 return await ExecuteInternalAsync(context, combinedCts.Token);
             }
             catch (OperationCanceledException)
@@ -89,27 +96,48 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private bool TryBeginExecution(out int undoGroup)
+        private bool TryBeginExecution(
+            out int undoGroup,
+            out CancellationTokenSource executionCancellationTokenSource)
         {
-            undoGroup = -1;
-            if (_isRunning)
-            {
-                return false;
-            }
-
-            _isRunning = true;
-            _cancellationTokenSource = new CancellationTokenSource();
-            undoGroup = Undo.GetCurrentGroup();
-            Undo.SetCurrentGroupName("ExecuteDynamicCode");
-            return true;
+            return _executionSlot.TryBegin(BeginUndoGroup, out undoGroup, out executionCancellationTokenSource);
         }
 
         private void EndExecution(int undoGroup)
         {
+            _executionSlot.End(undoGroup, CollapseUndoGroup);
+        }
+
+        private int BeginUndoGroup()
+        {
+            if (_undoHooks != null)
+            {
+                System.Diagnostics.Debug.Assert(_undoHooks.GetCurrentGroup != null, "GetCurrentGroup must be set");
+                System.Diagnostics.Debug.Assert(
+                    _undoHooks.SetCurrentGroupName != null,
+                    "SetCurrentGroupName must be set");
+                int hookedGroup = _undoHooks.GetCurrentGroup();
+                _undoHooks.SetCurrentGroupName("ExecuteDynamicCode");
+                return hookedGroup;
+            }
+
+            int undoGroup = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName("ExecuteDynamicCode");
+            return undoGroup;
+        }
+
+        private void CollapseUndoGroup(int undoGroup)
+        {
+            if (_undoHooks != null)
+            {
+                System.Diagnostics.Debug.Assert(
+                    _undoHooks.CollapseUndoOperations != null,
+                    "CollapseUndoOperations must be set");
+                _undoHooks.CollapseUndoOperations(undoGroup);
+                return;
+            }
+
             Undo.CollapseUndoOperations(undoGroup);
-            _isRunning = false;
-            _cancellationTokenSource?.Dispose();
-            _cancellationTokenSource = null;
         }
 
         private static ExecutionResult CreateErrorResult(string errorMessage, List<string> logs = null)

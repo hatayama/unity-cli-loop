@@ -10,6 +10,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public Action AfterSemaphoreEntered { get; set; }
 
+        /// <summary>
+        /// Invoked after the yield path acquires the semaphore and before readiness checks.
+        /// Why: unit tests must inject failures between Wait and ThrowIfDisposed without Unity.
+        /// </summary>
+        public Action AfterYieldSemaphoreAcquired { get; set; }
+
         public Func<Task> AfterBackgroundExecutionStatePublishedAsync { get; set; }
 
         public Func<Task> AfterBusySemaphoreProbeFailedAsync { get; set; }
@@ -19,6 +25,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// must stay Unity-free for the dedicated unit-test project.
         /// </summary>
         public Action<string> LogWarning { get; set; }
+
+        public void InvokeAfterYieldSemaphoreAcquired()
+        {
+            AfterYieldSemaphoreAcquired?.Invoke();
+        }
 
         public async Task InvokeAfterBackgroundExecutionStatePublishedAsync()
         {
