@@ -15,5 +15,6 @@
 
   <ItemGroup>
     <Compile Include="../../Packages/src/Editor/FirstPartyTools/RunTests/RunTestsExecutionTimeout.cs" Link="Production/RunTestsExecutionTimeout.cs" />
+    <Compile Include="../../Packages/src/Editor/FirstPartyTools/RunTests/RunTestsCancelStopRestore.cs" Link="Production/RunTestsCancelStopRestore.cs" />
   </ItemGroup>
 </Project>

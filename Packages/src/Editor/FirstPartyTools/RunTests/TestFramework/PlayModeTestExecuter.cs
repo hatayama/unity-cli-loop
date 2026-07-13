@@ -42,8 +42,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             ct.ThrowIfCancellationRequested();
             DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
-            using DomainReloadDisableScope scope = new DomainReloadDisableScope();
-            return await ExecuteTestWithEventNotification(TestMode.PlayMode, filter, ct);
+            // Why not `using`: Dispose must run only after cancel-time stop/restore finishes.
+            // Disposing earlier re-enables domain reload while Test Runner / Play Mode may still be active.
+            DomainReloadDisableScope scope = new DomainReloadDisableScope();
+            bool executionStarted = false;
+            try
+            {
+                executionStarted = true;
+                return await ExecuteTestWithEventNotification(TestMode.PlayMode, filter, ct);
+            }
+            catch (OperationCanceledException originalException)
+            {
+                if (!executionStarted)
+                {
+                    throw;
+                }
+
+                RunTestsCancelStopRestoreResult stopResult = await RunTestsCancelStopRestore.StopAndRestoreAsync(
+                    isPlayMode: true,
+                    runGuid: null,
+                    RunTestsCancelStopRestoreUnityHooks.Resolve());
+                throw new RunTestsExecutionCanceledException(originalException.CancellationToken, stopResult);
+            }
+            finally
+            {
+                scope.Dispose();
+            }
         }
 
         public static async Task<SerializableTestResult> ExecuteEditModeTest(
@@ -51,7 +75,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
-            return await ExecuteTestWithEventNotification(TestMode.EditMode, filter, ct);
+            bool executionStarted = false;
+            try
+            {
+                executionStarted = true;
+                return await ExecuteTestWithEventNotification(TestMode.EditMode, filter, ct);
+            }
+            catch (OperationCanceledException originalException)
+            {
+                if (!executionStarted)
+                {
+                    throw;
+                }
+
+                RunTestsCancelStopRestoreResult stopResult = await RunTestsCancelStopRestore.StopAndRestoreAsync(
+                    isPlayMode: false,
+                    runGuid: null,
+                    RunTestsCancelStopRestoreUnityHooks.Resolve());
+                throw new RunTestsExecutionCanceledException(originalException.CancellationToken, stopResult);
+            }
         }
 
         private static async Task<SerializableTestResult> ExecuteTestWithEventNotification(
@@ -96,7 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             catch (Exception exception)
             {
-                Debug.LogWarning($"Failed to save NUnit XML result file: {exception}");
+                Debug.LogWarning($"Failed to save failure XML result file: {exception}");
                 return null;
             }
         }
@@ -108,7 +150,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             testRunnerApi.RegisterCallbacks(callback);
 
             Filter unityFilter = CreateUnityFilter(testMode, filter);
-            testRunnerApi.Execute(new ExecutionSettings(unityFilter));
+            // runGuid is discarded until Option A stores it for CancelTestRun.
+            _ = testRunnerApi.Execute(new ExecutionSettings(unityFilter));
         }
 
         private static Filter CreateUnityFilter(TestMode testMode, TestExecutionFilter filter)
