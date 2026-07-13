@@ -33,7 +33,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 AssetDatabase.DisallowAutoRefresh,
                 AssetDatabase.AllowAutoRefresh,
                 ResolveForFocusReturn);
+        // Why throttle: reconcile must not call Disallow/Allow every frame when already aligned.
+        private const double AutoRefreshReconcileIntervalSeconds = 0.5d;
         private static bool _initialized;
+        private static double _nextAutoRefreshReconcileTime;
 
         public static void Initialize()
         {
@@ -65,11 +68,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PrefabStage.prefabSaved += HandlePrefabSaved;
             EditorApplication.focusChanged -= HandleFocusChanged;
             EditorApplication.focusChanged += HandleFocusChanged;
+            EditorApplication.update -= ReconcileAutoRefreshHoldOnUpdate;
+            EditorApplication.update += ReconcileAutoRefreshHoldOnUpdate;
+            // Why record before Hold: fingerprints must exist for focus-return resolve after startup Hold.
             if (!restoredHeldAutoRefresh && !IsAutoRefreshHeld())
             {
                 RecordOpenSceneSnapshots();
                 RecordCurrentPrefabStageSnapshot();
             }
+
+            // Why immediate Hold: background launch never fires focusChanged(false), so Auto Refresh
+            // would stay enabled until the first focus and show a native external-change dialog.
+            FocusReturnService.HoldIfCurrentlyUnfocused();
+        }
+
+        private static void ReconcileAutoRefreshHoldOnUpdate()
+        {
+            double now = EditorApplication.timeSinceStartup;
+            if (now < _nextAutoRefreshReconcileTime)
+            {
+                return;
+            }
+
+            _nextAutoRefreshReconcileTime = now + AutoRefreshReconcileIntervalSeconds;
+            FocusReturnService.ReconcileAutoRefreshHoldWithFocus();
         }
 
         public static (bool CanProceed, string Message, string[] ScenePaths) ResolveForCompile(
