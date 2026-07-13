@@ -295,6 +295,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action incrementBuildCount)
         {
             StreamReader reader = null;
+            // Why not send here: stdin WriteLine/Flush can throw IOException if the worker dies
+            // after HasLiveProcessLocked; keep send inside the retryable try below.
             bool prepared = ServiceValue.ExecuteWithStateLock(() =>
             {
                 if (!ServiceValue.HasLiveProcessLocked())
@@ -302,7 +304,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return false;
                 }
 
-                SendCompileRequestLocked(requestFilePath);
                 reader = ServiceValue.GetOutputReaderLocked();
                 return true;
             });
@@ -320,6 +321,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
+                ServiceValue.ExecuteWithStateLock(() => SendCompileRequestLocked(requestFilePath));
                 return await ReadWorkerResponseAsync(requestFilePath, reader, ct).ConfigureAwait(false);
             }
             catch (IOException ex)
