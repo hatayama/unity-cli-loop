@@ -373,7 +373,12 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Assert(collider != null, "Collider is required for raycast clustering.");
 
             // A placement area can use several colliders on one object; one annotation should describe the clickable object.
+#if UNITY_6000_4_OR_NEWER
+            // GetInstanceID is obsolete-as-error on Unity 6000.4+; the lower 32 bits of EntityId equal the legacy instance id.
+            return (int)EntityId.ToULong(collider!.gameObject.GetEntityId());
+#else
             return collider!.gameObject.GetInstanceID();
+#endif
         }
 
         private static RaycastClusterSample CreateClusterSample(
