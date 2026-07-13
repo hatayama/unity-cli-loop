@@ -567,13 +567,13 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 	if cliErr.ProjectRoot != "/tmp/MyProject" {
 		t.Fatalf("project root mismatch: %#v", cliErr)
 	}
-	expectedMessage := "Compile status wait timed out after 180000ms. This does not mean the Unity Editor is frozen; the compile may simply still be running."
+	expectedMessage := "Compile status wait timed out after 600000ms. This does not mean the Unity Editor is frozen; the compile may simply still be running."
 	if cliErr.Message != expectedMessage {
 		t.Fatalf("message mismatch: %#v", cliErr.Message)
 	}
 	expectedActions := []string{
 		"Run a light command such as `uloop get-logs --max-count 1` to check whether Unity is responsive before treating this as a freeze.",
-		"If Unity responds, retry `uloop compile`; the previous compile likely finished in the meantime.",
+		"Unity-side compile continues after this timeout; retry `uloop compile` — the result remains retrievable for about 10 more minutes without `uloop launch -r`.",
 		"Only if Unity does not respond to any command, restart it with `uloop launch -r`.",
 	}
 	if len(cliErr.NextActions) != len(expectedActions) {
