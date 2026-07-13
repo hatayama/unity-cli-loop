@@ -28,6 +28,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     StringComparison.Ordinal);
         }
 
+        internal static bool IsRuntimeRestartingResult(ExecutionResult executionResult)
+        {
+            return executionResult != null
+                && !executionResult.Success
+                && string.Equals(
+                    executionResult.ErrorMessage,
+                    UnityCliLoopConstants.ERROR_MESSAGE_DYNAMIC_CODE_RUNTIME_RESTARTING,
+                    StringComparison.Ordinal);
+        }
+
         internal static ExecuteDynamicCodeResponse CreateCancelledResponse()
         {
             return new ExecuteDynamicCodeResponse
@@ -37,6 +47,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Logs = new List<string> { "Execution cancelled" },
                 CompilationErrors = new List<CompilationErrorDto>(),
                 ErrorMessage = UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED
+            };
+        }
+
+        internal static ExecuteDynamicCodeResponse CreateRuntimeRestartingResponse()
+        {
+            return new ExecuteDynamicCodeResponse
+            {
+                Success = false,
+                Result = string.Empty,
+                Logs = new List<string>
+                {
+                    UnityCliLoopConstants.ERROR_MESSAGE_DYNAMIC_CODE_RUNTIME_RESTARTING
+                },
+                CompilationErrors = new List<CompilationErrorDto>(),
+                ErrorMessage = UnityCliLoopConstants.ERROR_MESSAGE_DYNAMIC_CODE_RUNTIME_RESTARTING,
+                NextActions = UnityCliLoopConstants.DYNAMIC_CODE_RUNTIME_RESTARTING_NEXT_ACTIONS
+            };
+        }
+
+        internal static ExecutionResult CreateRuntimeRestartingExecutionResult()
+        {
+            return new ExecutionResult
+            {
+                Success = false,
+                ErrorMessage = UnityCliLoopConstants.ERROR_MESSAGE_DYNAMIC_CODE_RUNTIME_RESTARTING,
+                Logs = new List<string>
+                {
+                    UnityCliLoopConstants.ERROR_MESSAGE_DYNAMIC_CODE_RUNTIME_RESTARTING
+                }
             };
         }
 

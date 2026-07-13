@@ -27,6 +27,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private string _workerDirectoryPath;
         private int _responseTimeoutMilliseconds =
             SharedRoslynCompilerWorkerLineReader.DefaultResponseTimeoutMilliseconds;
+        // Why a generation instead of a sticky bool: full Shutdown (reset/reload/quit) must
+        // invalidate in-flight retry loops, while a later compile after reset must still start a worker.
+        private int _lifecycleGeneration;
 
         /// <summary>
         /// Serializes worker request/response conversations without holding the state lock across awaits.
@@ -83,6 +86,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _workerProcess != null && !_workerProcess.HasExited;
         }
 
+        internal int GetLifecycleGenerationLocked()
+        {
+            AssertStateLockHeld();
+            return _lifecycleGeneration;
+        }
+
+        internal bool IsLifecycleGenerationCurrentLocked(int expectedLifecycleGeneration)
+        {
+            AssertStateLockHeld();
+            return _lifecycleGeneration == expectedLifecycleGeneration;
+        }
+
         internal bool StartProcessLocked(ProcessStartInfo startInfo)
         {
             AssertStateLockHeld();
@@ -131,6 +146,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return SharedRoslynCompilerWorkerAssemblyBuilder.CompileWorkerAssembly(
+                externalCompilerPaths,
+                workerSourcePath,
+                workerAssemblyPath,
+                workerCompileResponseFilePath);
+        }
+
+        /// <summary>
+        /// Builds the worker assembly without blocking the caller thread on WaitForExit.
+        /// Test hooks stay synchronous so EditMode fixtures do not need thread-pool coordination.
+        /// </summary>
+        internal Task<SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult>
+            CompileWorkerAssemblyAsync(
+                ExternalCompilerPaths externalCompilerPaths,
+                string workerSourcePath,
+                string workerAssemblyPath,
+                string workerCompileResponseFilePath)
+        {
+            if (_compileWorkerAssemblyForTests != null)
+            {
+                return Task.FromResult(CompileWorkerAssembly(
+                    externalCompilerPaths,
+                    workerSourcePath,
+                    workerAssemblyPath,
+                    workerCompileResponseFilePath));
+            }
+
+            // Why not take the state lock here: build stays outside the process lock so shutdown
+            // can still kill a live worker while this Task.Run is in flight.
+            return SharedRoslynCompilerWorkerAssemblyBuilder.CompileWorkerAssemblyOffMainThreadAsync(
                 externalCompilerPaths,
                 workerSourcePath,
                 workerAssemblyPath,
@@ -269,6 +313,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             _coordination.RunShutdownWithoutCompileGate(() =>
             {
+                // Why advance here (not in ShutdownProcessLocked): retry cleanup kills the process
+                // so the same compile conversation can start a replacement worker. Server reset /
+                // reload / quit must invalidate that restart path for in-flight retries only.
+                _lifecycleGeneration++;
                 ShutdownProcessLocked();
                 CleanupWorkerDirectoryLocked(fallbackWorkerDirectoryPath);
             });

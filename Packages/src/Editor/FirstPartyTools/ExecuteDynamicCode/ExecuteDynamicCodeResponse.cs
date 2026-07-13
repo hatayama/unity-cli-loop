@@ -58,6 +58,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool DomainReloadWaitRequired { get; set; } = false;
 
         /// <summary>
+        /// Optional recovery steps when execution cannot complete automatically.
+        /// </summary>
+        public string[] NextActions { get; set; }
+
+        /// <summary>
         /// Lightweight internal timings for benchmark comparison.
         /// </summary>
         [JsonProperty("Timings")]
@@ -92,6 +97,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ShouldSerializeDomainReloadWaitRequired()
         {
             return DomainReloadWaitRequired;
+        }
+
+        public bool ShouldSerializeNextActions()
+        {
+            return NextActions != null && NextActions.Length > 0;
         }
     }
     
