@@ -33,7 +33,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             _disposed = true;
-            System.Diagnostics.Debug.Assert(_activeScopeCount > 0, "active scope count must be positive before dispose");
+
+            // Why tolerate zero: RecoverAbandonedScopeBeforeNewRun may have already cleared the
+            // static count and restored settings while this instance was still alive.
+            if (_activeScopeCount == 0)
+            {
+                return;
+            }
+
             _activeScopeCount--;
 
             if (_activeScopeCount == 0)
@@ -43,26 +50,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Resets stale scope state before a new PlayMode test run starts.
+        /// Clears abandoned static scope state and restores pending Enter Play Mode settings
+        /// before a new PlayMode test run starts.
         /// </summary>
         internal static void RecoverAbandonedScopeBeforeNewRun()
         {
+            // Why always restore when a marker exists (even if count is already 0): domain reload
+            // resets the static count while leaving the recovery marker on disk.
             if (_activeScopeCount == 0)
             {
+                DomainReloadDisableScopeRecovery.RestoreIfPending();
                 return;
             }
 
-            if (!DomainReloadDisableScopeRecovery.HasPendingRestore())
-            {
-                return;
-            }
-
+            // Why clear count even without a marker: a non-zero count would skip SaveCurrentSettings
+            // on the next constructor and nest on a phantom scope, delaying restore indefinitely.
             _activeScopeCount = 0;
+            DomainReloadDisableScopeRecovery.RestoreIfPending();
         }
 
         internal static void ResetActiveScopeCountForTests()
         {
             _activeScopeCount = 0;
+        }
+
+        internal static int GetActiveScopeCountForTests()
+        {
+            return _activeScopeCount;
         }
     }
 }

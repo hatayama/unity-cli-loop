@@ -118,6 +118,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.True);
             DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
 
+            Assert.That(DomainReloadDisableScope.GetActiveScopeCountForTests(), Is.EqualTo(0));
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.False);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.None));
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.False);
+
             DomainReloadDisableScope nextScope = new DomainReloadDisableScope();
             DomainReloadDisableScopeRecoveryData markerData = DomainReloadDisableScopeRecovery.ReadMarkerDataForTests();
 
@@ -125,6 +130,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(markerData.originalOptions, Is.EqualTo((int)EnterPlayModeOptions.None));
 
             nextScope.Dispose();
+
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.False);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.None));
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.False);
+            System.GC.KeepAlive(abandonedScope);
+        }
+
+        [Test]
+        public void RecoverAbandonedScopeBeforeNewRun_WhenCountIsPositiveWithoutMarker_ShouldClearPhantomCount()
+        {
+            // Verifies inconsistent abandoned counts cannot block the next run from saving a fresh marker.
+            SetEnterPlayModeSettings(false, EnterPlayModeOptions.None);
+            DomainReloadDisableScope abandonedScope = new DomainReloadDisableScope();
+            DomainReloadDisableScopeRecovery.ClearPendingRestoreForTests();
+            Assert.That(DomainReloadDisableScope.GetActiveScopeCountForTests(), Is.EqualTo(1));
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.False);
+
+            DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
+
+            Assert.That(DomainReloadDisableScope.GetActiveScopeCountForTests(), Is.EqualTo(0));
+
+            DomainReloadDisableScope nextScope = new DomainReloadDisableScope();
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.True);
+            nextScope.Dispose();
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.False);
+            System.GC.KeepAlive(abandonedScope);
+        }
+
+        [Test]
+        public void Dispose_AfterRecoverAbandonedScope_ShouldBeIdempotent()
+        {
+            // Verifies disposing a live instance after Recover no longer asserts or double-restores.
+            SetEnterPlayModeSettings(false, EnterPlayModeOptions.None);
+            DomainReloadDisableScope abandonedScope = new DomainReloadDisableScope();
+            DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
+
+            Assert.DoesNotThrow(() => abandonedScope.Dispose());
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.False);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.None));
+            Assert.That(DomainReloadDisableScope.GetActiveScopeCountForTests(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void RecoverAbandonedScopeBeforeNewRun_WhenCountIsZeroWithPendingMarker_ShouldRestoreSettings()
+        {
+            // Verifies domain-reload-like state (count reset, marker retained) is cleared before a new run.
+            SetEnterPlayModeSettings(false, EnterPlayModeOptions.None);
+            DomainReloadDisableScope abandonedScope = new DomainReloadDisableScope();
+            DomainReloadDisableScope.ResetActiveScopeCountForTests();
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.True);
+
+            DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
 
             Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.False);
             Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.None));
