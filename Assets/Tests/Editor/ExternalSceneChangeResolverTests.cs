@@ -193,6 +193,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void FocusReturnService_WhenHoldSucceeds_EmitsHoldArmedVibeLog()
+        {
+            // Verifies successful Disallow arms held and emits the observability vibe event once.
+            bool autoRefreshHeld = false;
+            List<string> vibeOperations = new List<string>();
+            ExternalAssetFocusReturnService service = new ExternalAssetFocusReturnService(
+                () => autoRefreshHeld,
+                isHeld => autoRefreshHeld = isHeld,
+                () => false,
+                () => { },
+                () => { },
+                () => { },
+                logWarning: null,
+                logVibeInfo: (operation, message, context) => vibeOperations.Add(operation),
+                logVibeWarning: null);
+
+            service.HoldAutoRefreshIfNeeded();
+            service.HoldAutoRefreshIfNeeded();
+
+            Assert.That(autoRefreshHeld, Is.True);
+            Assert.That(vibeOperations, Is.EqualTo(new[] { "external_scene_hold_armed" }));
+        }
+
+        [Test]
+        public void FocusReturnService_WhenDisallowThrows_EmitsHoldFailedVibeLog()
+        {
+            // Verifies Disallow failures leave SessionState unheld and emit hold_failed vibe warning.
+            bool autoRefreshHeld = false;
+            List<string> vibeOperations = new List<string>();
+            ExternalAssetFocusReturnService service = new ExternalAssetFocusReturnService(
+                () => autoRefreshHeld,
+                isHeld => autoRefreshHeld = isHeld,
+                () => false,
+                () => throw new InvalidOperationException("kCodeReload"),
+                () => { },
+                () => { },
+                logWarning: _ => { },
+                logVibeInfo: null,
+                logVibeWarning: (operation, message, context) => vibeOperations.Add(operation));
+
+            service.HoldAutoRefreshIfNeeded();
+
+            Assert.That(autoRefreshHeld, Is.False);
+            Assert.That(vibeOperations, Is.EqualTo(new[] { "external_scene_hold_failed" }));
+        }
+
+        [Test]
         public void FocusReturnService_WhenFocusIsLost_HoldsAutoRefreshOnce()
         {
             // Verifies focus loss suspends Unity Auto Refresh only once per unfocused interval.
@@ -213,6 +260,125 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(autoRefreshHeld, Is.True);
             Assert.That(disallowCallCount, Is.EqualTo(1));
             Assert.That(allowCallCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void FocusReturnService_WhenHoldIfCurrentlyUnfocusedTwice_HoldsAutoRefreshOnce()
+        {
+            // Verifies Initialize-style unfocused Hold is idempotent (disallow once).
+            bool autoRefreshHeld = false;
+            int disallowCallCount = 0;
+            ExternalAssetFocusReturnService service = CreateFocusReturnService(
+                () => autoRefreshHeld,
+                isHeld => autoRefreshHeld = isHeld,
+                () => false,
+                () => disallowCallCount++,
+                () => { },
+                () => { });
+
+            service.HoldIfCurrentlyUnfocused();
+            service.HoldIfCurrentlyUnfocused();
+
+            Assert.That(autoRefreshHeld, Is.True);
+            Assert.That(disallowCallCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void FocusReturnService_WhenDisallowThrows_DoesNotSetHeldFlag()
+        {
+            // Verifies kCodeReload Disallow failures leave SessionState unheld for later reconcile.
+            bool autoRefreshHeld = false;
+            List<string> warnings = new List<string>();
+            ExternalAssetFocusReturnService service = CreateFocusReturnService(
+                () => autoRefreshHeld,
+                isHeld => autoRefreshHeld = isHeld,
+                () => false,
+                () => throw new InvalidOperationException("kCodeReload"),
+                () => { },
+                () => { },
+                warning => warnings.Add(warning));
+
+            service.HoldAutoRefreshIfNeeded();
+
+            Assert.That(autoRefreshHeld, Is.False);
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(warnings[0], Does.Contain("DisallowAutoRefresh"));
+            Assert.That(warnings[0], Does.Contain("InvalidOperationException"));
+        }
+
+        [Test]
+        public void FocusReturnService_WhenDisallowStopsFailing_ReconcileHoldsAutoRefresh()
+        {
+            // Verifies update reconcile arms Hold after transient Disallow failures without delayCall chains.
+            bool autoRefreshHeld = false;
+            bool disallowShouldThrow = true;
+            int disallowCallCount = 0;
+            ExternalAssetFocusReturnService service = CreateFocusReturnService(
+                () => autoRefreshHeld,
+                isHeld => autoRefreshHeld = isHeld,
+                () => false,
+                () =>
+                {
+                    disallowCallCount++;
+                    if (disallowShouldThrow)
+                    {
+                        throw new InvalidOperationException("kCodeReload");
+                    }
+                },
+                () => { },
+                () => { },
+                _ => { });
+
+            service.ReconcileAutoRefreshHoldWithFocus();
+            Assert.That(autoRefreshHeld, Is.False);
+
+            disallowShouldThrow = false;
+            service.ReconcileAutoRefreshHoldWithFocus();
+
+            Assert.That(autoRefreshHeld, Is.True);
+            Assert.That(disallowCallCount, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void FocusReturnService_WhenFocusedAndHeld_ReconcileReleasesAfterPreflight()
+        {
+            // Verifies focused reconcile resolves external changes then releases a surviving Hold.
+            bool autoRefreshHeld = true;
+            List<string> events = new List<string>();
+            ExternalAssetFocusReturnService service = CreateFocusReturnService(
+                () => autoRefreshHeld,
+                isHeld => autoRefreshHeld = isHeld,
+                () => true,
+                () => events.Add("disallow"),
+                () => events.Add("allow"),
+                () => events.Add("preflight"));
+
+            service.ReconcileAutoRefreshHoldWithFocus();
+
+            Assert.That(autoRefreshHeld, Is.False);
+            Assert.That(events, Is.EqualTo(new[] { "preflight", "allow" }));
+        }
+
+        [Test]
+        public void FocusReturnService_WhenAllowThrows_KeepsHeldFlag()
+        {
+            // Verifies failed Allow leaves SessionState held so reconcile can retry without counter desync.
+            bool autoRefreshHeld = true;
+            List<string> warnings = new List<string>();
+            ExternalAssetFocusReturnService service = CreateFocusReturnService(
+                () => autoRefreshHeld,
+                isHeld => autoRefreshHeld = isHeld,
+                () => true,
+                () => { },
+                () => throw new InvalidOperationException("kCodeReload"),
+                () => { },
+                warning => warnings.Add(warning));
+
+            service.HandleFocusChanged(true);
+
+            Assert.That(autoRefreshHeld, Is.True);
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(warnings[0], Does.Contain("AllowAutoRefresh"));
         }
 
         [Test]
@@ -404,7 +570,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Func<bool> isEditorFocused,
             Action disallowAutoRefresh,
             Action allowAutoRefresh,
-            Action resolveFocusReturnChanges)
+            Action resolveFocusReturnChanges,
+            Action<string> logWarning = null)
         {
             return new ExternalAssetFocusReturnService(
                 getAutoRefreshHeld,
@@ -412,7 +579,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isEditorFocused,
                 disallowAutoRefresh,
                 allowAutoRefresh,
-                resolveFocusReturnChanges);
+                resolveFocusReturnChanges,
+                logWarning);
         }
     }
 }
