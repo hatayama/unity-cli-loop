@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using UnityEditor.Compilation;
 using Debug = UnityEngine.Debug;
 
@@ -12,36 +13,79 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// Owns the shared Roslyn compiler worker process, temporary directory, and synchronized lifecycle.
+    /// Compile conversations are serialized with an async gate; process state uses a short sync lock
+    /// so shutdown can kill the worker without waiting for an in-flight read.
     /// </summary>
     internal sealed class SharedRoslynCompilerWorkerSession
     {
-        private readonly object _syncRoot = new();
+        private readonly SharedRoslynCompilerWorkerSessionCoordination _coordination = new();
         private Func<ProcessStartInfo, Process> _startProcess = ProcessStartHelper.TryStart;
         private Action<Process, string> _sendCompileRequest = SendCompileRequestCore;
         private Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]>
             _compileWorkerAssemblyForTests;
         private Process _workerProcess;
         private string _workerDirectoryPath;
+        private int _responseTimeoutMilliseconds =
+            SharedRoslynCompilerWorkerLineReader.DefaultResponseTimeoutMilliseconds;
 
+        /// <summary>
+        /// Serializes worker request/response conversations without holding the state lock across awaits.
+        /// </summary>
+        internal Task<T> RunSerializedCompileAsync<T>(
+            Func<CancellationToken, Task<T>> operation,
+            CancellationToken ct)
+        {
+            return _coordination.RunSerializedCompileAsync(operation, ct);
+        }
+
+        /// <summary>
+        /// Runs a short critical section over process/directory state.
+        /// </summary>
+        internal T ExecuteWithStateLock<T>(Func<T> operation)
+        {
+            return _coordination.ExecuteWithStateLock(operation);
+        }
+
+        internal void ExecuteWithStateLock(Action operation)
+        {
+            _coordination.ExecuteWithStateLock(operation);
+        }
+
+        /// <summary>
+        /// Legacy sync entry used by EditMode tests that only touch process start/dispose.
+        /// </summary>
         internal T ExecuteLocked<T>(Func<T> operation)
         {
-            Debug.Assert(operation != null, "operation must not be null");
+            return ExecuteWithStateLock(operation);
+        }
 
-            lock (_syncRoot)
+        internal int ResponseTimeoutMilliseconds
+        {
+            get
             {
-                return operation();
+                return _coordination.ExecuteWithStateLock(() => _responseTimeoutMilliseconds);
             }
+        }
+
+        internal void SetResponseTimeoutMillisecondsForTests(int timeoutMilliseconds)
+        {
+            Debug.Assert(timeoutMilliseconds > 0, "timeoutMilliseconds must be positive");
+
+            _coordination.ExecuteWithStateLock(() =>
+            {
+                _responseTimeoutMilliseconds = timeoutMilliseconds;
+            });
         }
 
         internal bool HasLiveProcessLocked()
         {
-            AssertLockHeld();
+            AssertStateLockHeld();
             return _workerProcess != null && !_workerProcess.HasExited;
         }
 
         internal bool StartProcessLocked(ProcessStartInfo startInfo)
         {
-            AssertLockHeld();
+            AssertStateLockHeld();
             // EnsureWorkerReady reaches this method only after the same lock observed no live process,
             // so replacement releases the stale handle without retrying graceful shutdown.
             Process previousProcess = _workerProcess;
@@ -54,29 +98,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal void SendCompileRequestLocked(string requestFilePath)
         {
-            AssertLockHeld();
+            AssertStateLockHeld();
             _sendCompileRequest(_workerProcess, requestFilePath);
         }
 
         internal StreamReader GetOutputReaderLocked()
         {
-            AssertLockHeld();
+            AssertStateLockHeld();
             return _workerProcess.StandardOutput;
         }
 
         internal void RecordWorkerDirectoryLocked(string workerDirectoryPath)
         {
-            AssertLockHeld();
+            AssertStateLockHeld();
             _workerDirectoryPath = workerDirectoryPath;
         }
 
-        internal SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult CompileWorkerAssemblyLocked(
+        internal SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult CompileWorkerAssembly(
             ExternalCompilerPaths externalCompilerPaths,
             string workerSourcePath,
             string workerAssemblyPath,
             string workerCompileResponseFilePath)
         {
-            AssertLockHeld();
             if (_compileWorkerAssemblyForTests != null)
             {
                 return SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult.Started(
@@ -96,7 +139,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal void ShutdownProcessLocked()
         {
-            AssertLockHeld();
+            AssertStateLockHeld();
             Process workerProcess = _workerProcess;
             _workerProcess = null;
             if (workerProcess == null)
@@ -218,13 +261,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        /// <summary>
+        /// Shuts down the worker without waiting for the compile gate.
+        /// In-flight readers fail fast when the process pipes close.
+        /// </summary>
         internal void Shutdown(string fallbackWorkerDirectoryPath)
         {
-            lock (_syncRoot)
+            _coordination.RunShutdownWithoutCompileGate(() =>
             {
                 ShutdownProcessLocked();
                 CleanupWorkerDirectoryLocked(fallbackWorkerDirectoryPath);
-            }
+            });
         }
 
         internal Func<ProcessStartInfo, Process> SwapProcessStarterForTests(
@@ -265,7 +312,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private void CleanupWorkerDirectoryLocked(string fallbackWorkerDirectoryPath)
         {
-            AssertLockHeld();
+            AssertStateLockHeld();
             string workerDirectoryPath = _workerDirectoryPath ?? fallbackWorkerDirectoryPath;
             if (!Directory.Exists(workerDirectoryPath))
             {
@@ -323,9 +370,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 aiTodo: "Investigate repeated worker shutdown communication failures if shared compilation stops recovering cleanly.");
         }
 
-        private void AssertLockHeld()
+        private void AssertStateLockHeld()
         {
-            Debug.Assert(Monitor.IsEntered(_syncRoot), "Shared worker session lock must be held");
+            _coordination.AssertStateLockHeld();
         }
     }
 }

@@ -71,13 +71,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     defineSymbols,
                     allowUnsafeCode);
 
-                CompilerMessage[] workerMessages = SharedRoslynCompilerWorkerHost.TryCompile(
+                CompilerMessage[] workerMessages = await SharedRoslynCompilerWorkerHost.TryCompileAsync(
                     workerRequestFilePath,
                     externalCompilerPaths,
                     ct,
                     markBuildStarted,
                     markBuildFinished,
-                    incrementBuildCount);
+                    incrementBuildCount).ConfigureAwait(false);
                 if (workerMessages != null)
                 {
                     return new DynamicCompilationBackendResult(

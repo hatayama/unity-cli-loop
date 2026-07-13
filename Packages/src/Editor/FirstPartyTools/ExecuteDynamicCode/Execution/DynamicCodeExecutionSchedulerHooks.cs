@@ -14,6 +14,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public Func<Task> AfterBusySemaphoreProbeFailedAsync { get; set; }
 
+        /// <summary>
+        /// Optional warning sink. Why not Debug.LogWarning here: the scheduler is pure C# and
+        /// must stay Unity-free for the dedicated unit-test project.
+        /// </summary>
+        public Action<string> LogWarning { get; set; }
+
         public async Task InvokeAfterBackgroundExecutionStatePublishedAsync()
         {
             if (AfterBackgroundExecutionStatePublishedAsync == null)
@@ -32,6 +38,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             await AfterBusySemaphoreProbeFailedAsync();
+        }
+
+        public void InvokeLogWarning(string message)
+        {
+            LogWarning?.Invoke(message);
         }
     }
 }
