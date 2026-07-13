@@ -103,10 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             finally
             {
-                ClearExecutionState(false, executionCancellationTokenSource);
-                executionCancellationTokenSource?.Dispose();
-                DisposeResourcesIfRequested();
-                _executionSemaphore.Release();
+                ReleaseExecutionSlot(false, executionCancellationTokenSource);
             }
         }
 
@@ -133,10 +130,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return (false, default);
                 }
 
-                ThrowIfDisposed();
-                executionCancellationTokenSource =
-                    CreateExecutionCancellationTokenSource(cancellationToken);
-                SetExecutionState(true, executionCancellationTokenSource);
+                try
+                {
+                    // Why immediately enter try: Wait succeeded; any throw before Release
+                    // permanently sticks the slot on a still-live scheduler.
+                    _hooks.InvokeAfterYieldSemaphoreAcquired();
+                    ThrowIfDisposed();
+                    executionCancellationTokenSource =
+                        CreateExecutionCancellationTokenSource(cancellationToken);
+                    SetExecutionState(true, executionCancellationTokenSource);
+                }
+                catch
+                {
+                    _executionSemaphore.Release();
+                    throw;
+                }
             }
 
             try
@@ -148,10 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             finally
             {
-                ClearExecutionState(true, executionCancellationTokenSource);
-                executionCancellationTokenSource?.Dispose();
-                DisposeResourcesIfRequested();
-                _executionSemaphore.Release();
+                ReleaseExecutionSlot(true, executionCancellationTokenSource);
             }
         }
 
@@ -241,9 +246,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             finally
             {
-                ClearExecutionState(false, executionCancellationTokenSource);
+                ReleaseExecutionSlot(false, executionCancellationTokenSource);
+            }
+        }
+
+        /// <summary>
+        /// Releases the execution slot even when resource dispose throws.
+        /// Why nested finally: DisposeResourcesIfRequested runs only after dispose and can throw
+        /// during reload teardown; skipping Release would stick the slot forever.
+        /// </summary>
+        private void ReleaseExecutionSlot(
+            bool yieldToForegroundRequests,
+            CancellationTokenSource executionCancellationTokenSource)
+        {
+            try
+            {
+                ClearExecutionState(yieldToForegroundRequests, executionCancellationTokenSource);
                 executionCancellationTokenSource?.Dispose();
                 DisposeResourcesIfRequested();
+            }
+            finally
+            {
                 _executionSemaphore.Release();
             }
         }
