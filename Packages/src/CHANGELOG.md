@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.3.0](https://github.com/hatayama/unity-cli-loop/compare/v2.2.0...v2.3.0) (2026-07-13)
+
+
+### Features
+
+* 3D raycast annotations report hit layers ([#1499](https://github.com/hatayama/unity-cli-loop/issues/1499)) ([0f5a8a6](https://github.com/hatayama/unity-cli-loop/commit/0f5a8a6059dfdd0a372d1795472d69ef6cd3c5db))
+* Make screenshot mouse coordinates easier to verify ([#1473](https://github.com/hatayama/unity-cli-loop/issues/1473)) ([c81f6b0](https://github.com/hatayama/unity-cli-loop/commit/c81f6b0bc02c45deca3271415ccd3d70472ff1d9))
+* Return click-ready 3D collider targets from screenshots ([#1493](https://github.com/hatayama/unity-cli-loop/issues/1493)) ([7fb59d2](https://github.com/hatayama/unity-cli-loop/commit/7fb59d27cf6e7240365e3c889bc4446736ab17b8))
+
+
+### Bug Fixes
+
+* 3D click targets avoid overlay UI ([#1497](https://github.com/hatayama/unity-cli-loop/issues/1497)) ([f5cb8e9](https://github.com/hatayama/unity-cli-loop/commit/f5cb8e9f50f095806f2bb643715e79464072a50a))
+* 3D raycast annotations follow reachable collider shapes ([#1502](https://github.com/hatayama/unity-cli-loop/issues/1502)) ([e67dcba](https://github.com/hatayama/unity-cli-loop/commit/e67dcba5f202a192ed1b38b7e6048c7cab6e2c4f))
+* Dynamic code now accepts bare Unity Object calls ([#1469](https://github.com/hatayama/unity-cli-loop/issues/1469)) ([045f525](https://github.com/hatayama/unity-cli-loop/commit/045f5252c30e5027a9fff397098ff082beaeb4ee))
+* package compiles again on Unity 6000.4 and newer ([#1735](https://github.com/hatayama/unity-cli-loop/issues/1735)) ([61a0fe6](https://github.com/hatayama/unity-cli-loop/commit/61a0fe6d7da0aa9d0bcbc6d95944dd069c483ff0))
+* Raycast annotations show collider coverage without covered UI targets ([#1500](https://github.com/hatayama/unity-cli-loop/issues/1500)) ([a2abaf0](https://github.com/hatayama/unity-cli-loop/commit/a2abaf040042e856d799f9ea9eca9bd4abca39ad))
+* Screenshot annotations only mark reachable controls as clickable ([#1465](https://github.com/hatayama/unity-cli-loop/issues/1465)) ([90e7483](https://github.com/hatayama/unity-cli-loop/commit/90e7483378949b8071b33dfde7d64d435a448544))
+* UI drags now keep game mouse coordinates in sync ([#1471](https://github.com/hatayama/unity-cli-loop/issues/1471)) ([fbe9cd4](https://github.com/hatayama/unity-cli-loop/commit/fbe9cd45e2bb437f321aa9b0e265db959cbc1e37))
+
 ## [2.2.0](https://github.com/hatayama/unity-cli-loop/compare/v2.1.10...v2.2.0) (2026-06-25)
 
 
