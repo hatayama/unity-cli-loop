@@ -3,8 +3,8 @@ package clierrors
 import "github.com/hatayama/unity-cli-loop/common/unityipc"
 
 // ApiUpdateConsentModalNextAction is shared recovery guidance when the Editor main
-// thread may be blocked by Unity's API Update / Script Updating Consent modal
-// (group-5 PR 5-3: interactive Editors have no public suppress path).
+// thread may be blocked by Unity's API Update / Script Updating Consent modal.
+// Interactive Editors have no public suppress path.
 const ApiUpdateConsentModalNextAction = "The Editor may be showing an API Update / Script Updating Consent modal; check the Unity window and ask the user what to choose — never auto-dismiss it."
 
 func connectionAttemptCause(err *unityipc.ConnectionAttemptError) string {
