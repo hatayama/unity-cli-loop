@@ -152,6 +152,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerCompileResponseFilePath);
         }
 
+        /// <summary>
+        /// Builds the worker assembly without blocking the caller thread on WaitForExit.
+        /// Test hooks stay synchronous so EditMode fixtures do not need thread-pool coordination.
+        /// </summary>
+        internal Task<SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult>
+            CompileWorkerAssemblyAsync(
+                ExternalCompilerPaths externalCompilerPaths,
+                string workerSourcePath,
+                string workerAssemblyPath,
+                string workerCompileResponseFilePath)
+        {
+            if (_compileWorkerAssemblyForTests != null)
+            {
+                return Task.FromResult(CompileWorkerAssembly(
+                    externalCompilerPaths,
+                    workerSourcePath,
+                    workerAssemblyPath,
+                    workerCompileResponseFilePath));
+            }
+
+            // Why not take the state lock here: build stays outside the process lock so shutdown
+            // can still kill a live worker while this Task.Run is in flight.
+            return SharedRoslynCompilerWorkerAssemblyBuilder.CompileWorkerAssemblyOffMainThreadAsync(
+                externalCompilerPaths,
+                workerSourcePath,
+                workerAssemblyPath,
+                workerCompileResponseFilePath);
+        }
+
         internal void ShutdownProcessLocked()
         {
             AssertStateLockHeld();

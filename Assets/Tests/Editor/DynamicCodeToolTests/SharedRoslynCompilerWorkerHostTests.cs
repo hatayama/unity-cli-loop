@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -151,6 +152,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             Assert.That(started, Is.False);
             Assert.That(startCallCount, Is.Zero);
+        }
+
+        /// <summary>
+        /// Verifies the async offload path returns the test-hook build result without requiring a real csc.
+        /// </summary>
+        [Test]
+        public async Task CompileWorkerAssemblyAsync_WhenTestHookIsInstalled_ShouldReturnHookResult()
+        {
+            SharedRoslynCompilerWorkerSession session = new();
+            CompilerMessage[] expectedMessages =
+            {
+                new CompilerMessage
+                {
+                    type = CompilerMessageType.Error,
+                    message = "hooked"
+                }
+            };
+            session.SwapWorkerAssemblyCompilerForTests(
+                (paths, sourcePath, assemblyPath, responsePath) => expectedMessages);
+
+            SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult result =
+                await session.CompileWorkerAssemblyAsync(
+                    externalCompilerPaths: null,
+                    workerSourcePath: "unused.cs",
+                    workerAssemblyPath: "unused.dll",
+                    workerCompileResponseFilePath: "unused.rsp");
+
+            Assert.That(result.StartedSuccessfully, Is.True);
+            Assert.That(result.Messages, Is.SameAs(expectedMessages));
         }
 
         /// <summary>

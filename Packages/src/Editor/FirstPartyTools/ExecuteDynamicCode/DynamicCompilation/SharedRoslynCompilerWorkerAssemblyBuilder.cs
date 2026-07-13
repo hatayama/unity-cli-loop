@@ -133,6 +133,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return WorkerAssemblyBuildResult.Started(compilerMessages);
         }
 
+        /// <summary>
+        /// Runs <see cref="CompileWorkerAssembly"/> on the thread pool.
+        /// Why: the sync WaitForExit(timeout) path can otherwise block the Unity main thread when
+        /// EnsureWorkerReady runs before the first await of an idle compile-gate acquire.
+        /// </summary>
+        internal static Task<WorkerAssemblyBuildResult> CompileWorkerAssemblyOffMainThreadAsync(
+            ExternalCompilerPaths externalCompilerPaths,
+            string workerSourcePath,
+            string workerAssemblyPath,
+            string workerCompileResponseFilePath)
+        {
+            return Task.Run(
+                () => CompileWorkerAssembly(
+                    externalCompilerPaths,
+                    workerSourcePath,
+                    workerAssemblyPath,
+                    workerCompileResponseFilePath));
+        }
+
         internal static bool WaitForCompilerStreamDrain(
             Task<string> stdoutTask,
             Task<string> stderrTask,
