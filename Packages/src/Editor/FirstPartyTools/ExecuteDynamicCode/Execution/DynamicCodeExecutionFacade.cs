@@ -20,7 +20,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public DynamicCodeExecutionFacade(IDynamicCodeExecutorPool executorPool)
         {
             _executorPool = executorPool ?? throw new ArgumentNullException(nameof(executorPool));
-            _executionScheduler = new DynamicCodeExecutionScheduler(_executorPool.Dispose);
+            DynamicCodeExecutionSchedulerHooks hooks = new()
+            {
+                // Why inject: scheduler stays pure C# for unit tests; Unity logging belongs at the facade edge.
+                LogWarning = message => Debug.LogWarning(message)
+            };
+            _executionScheduler = new DynamicCodeExecutionScheduler(_executorPool.Dispose, hooks);
         }
 
         public async Task<ExecutionResult> ExecuteAsync(

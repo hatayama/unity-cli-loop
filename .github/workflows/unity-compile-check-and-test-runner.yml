@@ -65,7 +65,9 @@ jobs:
 
       - name: Run concurrency unit tests
         if: steps.changes.outputs.csharp == 'true'
-        run: dotnet test tests/DynamicCodeExecutionScheduler.UnitTests/DynamicCodeExecutionScheduler.UnitTests.csproj --configuration Release
+        run: |
+          dotnet test tests/DynamicCodeExecutionScheduler.UnitTests/DynamicCodeExecutionScheduler.UnitTests.csproj --configuration Release
+          dotnet test tests/SharedRoslynCompilerWorker.UnitTests/SharedRoslynCompilerWorker.UnitTests.csproj --configuration Release
 
       - name: Cache Library folder
         if: env.HAS_UNITY_LICENSE == 'true'

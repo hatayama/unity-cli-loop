@@ -214,15 +214,110 @@ namespace io.github.hatayama.UnityCliLoop.UnitTests
             }
         }
 
+        [Test]
+        public async Task ShutdownAsync_WhenIdle_ShouldDisposeResourcesAndComplete()
+        {
+            // Verifies idle shutdown completes immediately and disposes resources once.
+            int disposeCalls = 0;
+            DynamicCodeExecutionScheduler scheduler = CreateScheduler(
+                disposeResources: () => disposeCalls++);
+
+            await scheduler.ShutdownAsync();
+
+            Assert.That(disposeCalls, Is.EqualTo(1));
+            Assert.That(scheduler.ShutdownAsync().IsCompletedSuccessfully, Is.True);
+        }
+
+        [Test]
+        public async Task ShutdownAsync_WhenRunningActionObservesCancellation_ShouldDisposeBeforeTimeout()
+        {
+            // Verifies cooperative cancellation lets shutdown finish without hitting the timeout path.
+            int disposeCalls = 0;
+            System.Collections.Generic.List<string> warnings = new();
+            DynamicCodeExecutionSchedulerHooks hooks = new()
+            {
+                LogWarning = message => warnings.Add(message)
+            };
+            DynamicCodeExecutionScheduler scheduler = CreateScheduler(
+                hooks,
+                () => disposeCalls++,
+                shutdownTimeoutMilliseconds: 1000);
+
+            TaskCompletionSource<bool> executionStarted =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Task<string> executionTask = scheduler.RunForegroundAsync(
+                async cancellationToken =>
+                {
+                    executionStarted.TrySetResult(true);
+                    await WaitForCancellationAsync(cancellationToken);
+                    return "canceled";
+                },
+                () => "busy",
+                CancellationToken.None);
+
+            await executionStarted.Task;
+            await scheduler.ShutdownAsync();
+
+            Assert.That(async () => await executionTask, Throws.InstanceOf<OperationCanceledException>());
+            Assert.That(disposeCalls, Is.EqualTo(1));
+            Assert.That(warnings, Is.Empty);
+        }
+
+        [Test]
+        public async Task ShutdownAsync_WhenRunningActionIgnoresCancellation_ShouldCompleteAfterTimeoutAndDeferDispose()
+        {
+            // Verifies timeout unblocks shutdown while pool dispose waits for the late finally.
+            int disposeCalls = 0;
+            System.Collections.Generic.List<string> warnings = new();
+            DynamicCodeExecutionSchedulerHooks hooks = new()
+            {
+                LogWarning = message => warnings.Add(message)
+            };
+            DynamicCodeExecutionScheduler scheduler = CreateScheduler(
+                hooks,
+                () => disposeCalls++,
+                shutdownTimeoutMilliseconds: 40);
+
+            TaskCompletionSource<bool> executionStarted =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource<bool> allowExecutionToComplete =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Task<string> executionTask = scheduler.RunForegroundAsync(
+                async _ =>
+                {
+                    executionStarted.TrySetResult(true);
+                    await allowExecutionToComplete.Task;
+                    return "late";
+                },
+                () => "busy",
+                CancellationToken.None);
+
+            await executionStarted.Task;
+            await scheduler.ShutdownAsync();
+
+            Assert.That(disposeCalls, Is.EqualTo(0));
+            Assert.That(warnings, Has.Count.EqualTo(1));
+            Assert.That(warnings[0], Does.Contain("timed out after 40ms"));
+            Assert.That(warnings[0], Does.Contain("deferred until the running action reaches its finally"));
+
+            allowExecutionToComplete.TrySetResult(true);
+            string result = await executionTask;
+
+            Assert.That(result, Is.EqualTo("late"));
+            Assert.That(disposeCalls, Is.EqualTo(1));
+        }
+
         private static DynamicCodeExecutionScheduler CreateScheduler(
             DynamicCodeExecutionSchedulerHooks hooks = null,
-            Action disposeResources = null)
+            Action disposeResources = null,
+            int shutdownTimeoutMilliseconds = 1000)
         {
             return new DynamicCodeExecutionScheduler(
                 disposeResources ?? (() => { }),
                 hooks,
                 busyHandoffWindowMilliseconds: 20,
-                cancelledPrewarmHandoffWindowMilliseconds: 40);
+                cancelledPrewarmHandoffWindowMilliseconds: 40,
+                shutdownTimeoutMilliseconds: shutdownTimeoutMilliseconds);
         }
 
         private static async Task WaitForCancellationAsync(CancellationToken cancellationToken)

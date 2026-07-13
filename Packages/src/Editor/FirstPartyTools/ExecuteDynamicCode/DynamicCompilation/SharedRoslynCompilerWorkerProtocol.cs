@@ -25,7 +25,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string SharedCompilerWorkerEndMarkerToken = "{{SHARED_COMPILER_WORKER_END_MARKER}}";
         private const string SharedCompilerWorkerQuitCommandToken = "{{SHARED_COMPILER_WORKER_QUIT_COMMAND}}";
         private const string CompileRequestPathPrefixToken = "{{COMPILE_REQUEST_PATH_PREFIX}}";
-        private const int SharedCompilerWorkerResponseTimeoutMilliseconds = 30000;
 
         internal static string CreateCompileRequestCommand(string requestFilePath)
         {
@@ -59,40 +58,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return "worker_invalid_exit_code";
         }
 
-        internal static List<string> ReadDiagnosticLines(StreamReader reader, CancellationToken ct)
+        internal static Task<List<string>> ReadDiagnosticLinesAsync(
+            TextReader reader,
+            CancellationToken ct,
+            int timeoutMilliseconds = SharedRoslynCompilerWorkerLineReader.DefaultResponseTimeoutMilliseconds)
         {
-            List<string> outputLines = new();
-            while (true)
-            {
-                string outputLine = ReadProtocolLine(reader, ct);
-                if (outputLine == null)
-                {
-                    return null;
-                }
-
-                if (outputLine == SharedCompilerWorkerEndMarker)
-                {
-                    return outputLines;
-                }
-
-                outputLines.Add(outputLine);
-            }
+            return SharedRoslynCompilerWorkerLineReader.ReadDiagnosticLinesAsync(
+                reader,
+                SharedCompilerWorkerEndMarker,
+                ct,
+                timeoutMilliseconds);
         }
 
-        internal static string ReadProtocolLine(StreamReader reader, CancellationToken ct)
+        internal static Task<string> ReadProtocolLineAsync(
+            TextReader reader,
+            CancellationToken ct,
+            int timeoutMilliseconds = SharedRoslynCompilerWorkerLineReader.DefaultResponseTimeoutMilliseconds)
         {
-            Debug.Assert(reader != null, "reader must not be null");
-
-            Task<string> readTask = Task.Run(() => reader.ReadLine());
-            Task timeoutTask = Task.Delay(SharedCompilerWorkerResponseTimeoutMilliseconds, ct);
-            Task completedTask = Task.WhenAny(readTask, timeoutTask).GetAwaiter().GetResult();
-            if (!ReferenceEquals(completedTask, readTask))
-            {
-                ct.ThrowIfCancellationRequested();
-                return null;
-            }
-
-            return readTask.GetAwaiter().GetResult();
+            return SharedRoslynCompilerWorkerLineReader.ReadLineAsync(reader, ct, timeoutMilliseconds);
         }
 
         internal static string CreateProgramSource()
