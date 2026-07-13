@@ -30,3 +30,7 @@ Returns JSON:
 - `ErrorCount`: number or null
 - `WarningCount`: number or null
 - `Message`: string
+
+## Troubleshooting
+
+If compile times out or Unity stops responding to uloop while the Editor looks idle, check whether Unity is showing **API Update Required** / **Script Updating Consent**. Ask the user to choose Go Ahead or No — never auto-dismiss that modal. Interactive Editors have no public uloop/Unity API to suppress it.

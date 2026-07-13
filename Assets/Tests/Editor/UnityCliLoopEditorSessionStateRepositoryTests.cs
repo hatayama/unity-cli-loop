@@ -331,17 +331,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ClearExpiredCompileResult_WhenResultIsStale_ClearsSessionValue()
+        public void ClearExpiredCompileResult_WhenResultIsJustUnderLifetime_KeepsSessionValue()
         {
-            // Verifies stale compile results do not survive indefinitely across commands.
-            DateTime now = new DateTime(2026, 5, 30, 0, 32, 1, DateTimeKind.Utc);
+            // Verifies compile results stay retrievable until the 20-minute TTL elapses.
+            DateTime completedAt = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
+            DateTime nowJustUnderLifetime = completedAt.AddMinutes(20).AddSeconds(-1);
             _compileResultSessionRepository.StoreCompileResult(
                 "compile_test_request",
                 forceRecompile: false,
                 resultJson: "{\"Success\":true}",
-                completedAtUtc: new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc));
+                completedAtUtc: completedAt);
 
-            bool cleared = _compileSessionLifecycleService.ClearExpiredCompileResult(now);
+            bool cleared = _compileSessionLifecycleService.ClearExpiredCompileResult(nowJustUnderLifetime);
+
+            Assert.That(cleared, Is.False);
+            Assert.That(_compileResultSessionRepository.GetStoredCompileResult().HasResult, Is.True);
+        }
+
+        [Test]
+        public void ClearExpiredCompileResult_WhenResultIsJustOverLifetime_ClearsSessionValue()
+        {
+            // Verifies compile results expire immediately after the 20-minute TTL.
+            DateTime completedAt = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
+            DateTime nowJustOverLifetime = completedAt.AddMinutes(20).AddSeconds(1);
+            _compileResultSessionRepository.StoreCompileResult(
+                "compile_test_request",
+                forceRecompile: false,
+                resultJson: "{\"Success\":true}",
+                completedAtUtc: completedAt);
+
+            bool cleared = _compileSessionLifecycleService.ClearExpiredCompileResult(nowJustOverLifetime);
 
             Assert.That(cleared, Is.True);
             Assert.That(_compileResultSessionRepository.GetStoredCompileResult().HasResult, Is.False);
