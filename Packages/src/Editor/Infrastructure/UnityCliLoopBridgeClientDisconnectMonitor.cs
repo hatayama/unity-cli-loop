@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using io.github.hatayama.UnityCliLoop.Runtime;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -22,6 +23,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 if (!client.IsConnected)
                 {
+                    // Why: Option B resumes on mid-request CLI disconnect so an abandoned pause
+                    // does not leave frame-dependent tools stuck after the agent dies.
+                    UloopPausePointRegistry.ResumeEditorPauseForClientDisconnect();
                     requestCancellationTokenSource.Cancel();
                     return;
                 }

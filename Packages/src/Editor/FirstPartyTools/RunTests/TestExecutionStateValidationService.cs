@@ -1,8 +1,5 @@
-using System.Collections.Generic;
 using UnityEditor;
-using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -24,17 +21,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string UnsavedEditorChangesSaveFailureMessage =
             "Tests cannot save unsaved scene or prefab changes before running tests.";
 
+        private readonly IEditorUnsavedChangesQuietSaver _unsavedChangesQuietSaver;
+
+        public TestExecutionStateValidationService()
+            : this(new EditorUnsavedChangesQuietSaver())
+        {
+        }
+
+        public TestExecutionStateValidationService(IEditorUnsavedChangesQuietSaver unsavedChangesQuietSaver)
+        {
+            Debug.Assert(unsavedChangesQuietSaver != null, "unsavedChangesQuietSaver must not be null");
+            _unsavedChangesQuietSaver = unsavedChangesQuietSaver;
+        }
+
         protected virtual bool IsPlaying => EditorApplication.isPlaying;
         protected virtual bool IsPaused => EditorApplication.isPaused;
         protected virtual bool IsCompiling => EditorApplication.isCompiling;
         protected virtual bool IsUpdating => EditorApplication.isUpdating;
         protected virtual string[] DetectUnsavedEditorChanges()
         {
-            return DetectCurrentUnsavedEditorChanges();
+            return _unsavedChangesQuietSaver.DetectUnsavedEditorChanges();
         }
         protected virtual ValidationResult SaveUnsavedEditorChanges()
         {
-            return SaveCurrentUnsavedEditorChanges();
+            string[] failedChanges = _unsavedChangesQuietSaver.SaveUnsavedEditorChanges();
+            Debug.Assert(failedChanges != null, "Unsaved editor change save must return an array");
+            if (failedChanges.Length > 0)
+            {
+                return ValidationResult.Failure(CreateUnsavedEditorChangesSaveFailureMessage(failedChanges));
+            }
+
+            return ValidationResult.Success();
         }
 
         public virtual ValidationResult Validate(UnityCliLoopTestMode testMode, bool saveBeforeRun)
@@ -76,137 +93,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return ValidationResult.Success();
-        }
-
-        private static string[] DetectCurrentUnsavedEditorChanges()
-        {
-            List<string> unsavedEditorChanges = new();
-            AddDirtyLoadedScenes(unsavedEditorChanges);
-            AddDirtyPrefabStage(unsavedEditorChanges);
-            return unsavedEditorChanges.ToArray();
-        }
-
-        private static ValidationResult SaveCurrentUnsavedEditorChanges()
-        {
-            List<string> failedChanges = new();
-            SaveDirtyLoadedScenes(failedChanges);
-            SaveDirtyPrefabStage(failedChanges);
-            if (failedChanges.Count > 0)
-            {
-                return ValidationResult.Failure(CreateUnsavedEditorChangesSaveFailureMessage(failedChanges.ToArray()));
-            }
-
-            return ValidationResult.Success();
-        }
-
-        private static void AddDirtyLoadedScenes(List<string> unsavedEditorChanges)
-        {
-            Debug.Assert(unsavedEditorChanges != null, "unsavedEditorChanges must not be null");
-
-            for (int i = 0; i < SceneManager.sceneCount; i++)
-            {
-                Scene scene = SceneManager.GetSceneAt(i);
-                if (!scene.IsValid() || !scene.isLoaded || !scene.isDirty)
-                {
-                    continue;
-                }
-
-                unsavedEditorChanges.Add("Scene: " + GetSceneDisplayPath(scene));
-            }
-        }
-
-        private static void SaveDirtyLoadedScenes(List<string> failedChanges)
-        {
-            Debug.Assert(failedChanges != null, "failedChanges must not be null");
-
-            for (int i = 0; i < SceneManager.sceneCount; i++)
-            {
-                Scene scene = SceneManager.GetSceneAt(i);
-                if (!scene.IsValid() || !scene.isLoaded || !scene.isDirty)
-                {
-                    continue;
-                }
-
-                if (string.IsNullOrEmpty(scene.path) || !EditorSceneManager.SaveScene(scene))
-                {
-                    failedChanges.Add("Scene: " + GetSceneDisplayPath(scene));
-                }
-            }
-        }
-
-        private static void AddDirtyPrefabStage(List<string> unsavedEditorChanges)
-        {
-            Debug.Assert(unsavedEditorChanges != null, "unsavedEditorChanges must not be null");
-
-            PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
-            if (prefabStage == null || !prefabStage.scene.IsValid() || !prefabStage.scene.isDirty)
-            {
-                return;
-            }
-
-            unsavedEditorChanges.Add("Prefab Stage: " + GetPrefabStageDisplayPath(prefabStage));
-        }
-
-        private static void SaveDirtyPrefabStage(List<string> failedChanges)
-        {
-            Debug.Assert(failedChanges != null, "failedChanges must not be null");
-
-            PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
-            if (prefabStage == null || !prefabStage.scene.IsValid() || !prefabStage.scene.isDirty)
-            {
-                return;
-            }
-
-            if (!SavePrefabStage(prefabStage))
-            {
-                failedChanges.Add("Prefab Stage: " + GetPrefabStageDisplayPath(prefabStage));
-            }
-        }
-
-        private static bool SavePrefabStage(PrefabStage prefabStage)
-        {
-            Debug.Assert(prefabStage != null, "prefabStage must not be null");
-
-            if (string.IsNullOrEmpty(prefabStage.assetPath))
-            {
-                return false;
-            }
-
-            bool success;
-            PrefabUtility.SaveAsPrefabAsset(prefabStage.prefabContentsRoot, prefabStage.assetPath, out success);
-            if (success)
-            {
-                prefabStage.ClearDirtiness();
-            }
-
-            return success;
-        }
-
-        private static string GetSceneDisplayPath(Scene scene)
-        {
-            if (!string.IsNullOrEmpty(scene.path))
-            {
-                return scene.path;
-            }
-
-            if (!string.IsNullOrEmpty(scene.name))
-            {
-                return scene.name;
-            }
-
-            return "Untitled scene";
-        }
-
-        private static string GetPrefabStageDisplayPath(PrefabStage prefabStage)
-        {
-            Debug.Assert(prefabStage != null, "prefabStage must not be null");
-
-            if (!string.IsNullOrEmpty(prefabStage.assetPath))
-            {
-                return prefabStage.assetPath;
-            }
-
-            return GetSceneDisplayPath(prefabStage.scene);
         }
 
         private static string CreateUnsavedEditorChangesFailureMessage(string[] unsavedEditorChanges)

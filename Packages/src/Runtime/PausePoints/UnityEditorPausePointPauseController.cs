@@ -15,6 +15,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         {
             EditorApplication.isPaused = true;
         }
+
+        public void Resume()
+        {
+            // Why unconditional: Option B clears any Editor pause on disconnect/clear/expiry,
+            // including a manual pause that happens to be active.
+            EditorApplication.isPaused = false;
+        }
     }
 }
 #endif

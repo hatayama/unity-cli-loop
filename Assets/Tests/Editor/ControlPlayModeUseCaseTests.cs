@@ -260,6 +260,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Message, Does.Contain("no saved compiler diagnostics"));
         }
 
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartSaveFails_DoesNotEnterPlayMode()
+        {
+            // Verifies dirty Scene/Prefab save failure blocks Edit→Play instead of prompting or hanging.
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: new[] { "Scene: Assets/Scenes/Sample.unity" },
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(1));
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.IsPlaying, Is.False);
+            Assert.That(response.Message, Does.Contain("could not be saved"));
+            Assert.That(response.Message, Does.Contain("Scene: Assets/Scenes/Sample.unity"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartLeavesUnsavedChanges_DoesNotEnterPlayMode()
+        {
+            // Verifies remaining dirty editor state after a quiet save still blocks Play start.
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: new[] { "Prefab Stage: Assets/Prefabs/Hud.prefab" });
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(1));
+            Assert.That(quietSaver.DetectCallCount, Is.EqualTo(1));
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.Message, Does.Contain("unsaved scene or prefab changes"));
+            Assert.That(response.Message, Does.Contain("Prefab Stage: Assets/Prefabs/Hud.prefab"));
+        }
+
         private sealed class StubCompilationFailureProvider : IControlPlayModeCompilationFailureProvider
         {
             private readonly ControlPlayModeCompileError[] _errors;
@@ -287,6 +341,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public bool HasScriptCompilationFailed()
             {
                 return _hasScriptCompilationFailed;
+            }
+        }
+
+        private sealed class StubEditorUnsavedChangesQuietSaver : IEditorUnsavedChangesQuietSaver
+        {
+            private readonly string[] _saveFailures;
+            private readonly string[] _remainingAfterSave;
+
+            public int SaveCallCount { get; private set; }
+            public int DetectCallCount { get; private set; }
+
+            public StubEditorUnsavedChangesQuietSaver(string[] saveFailures, string[] remainingAfterSave)
+            {
+                _saveFailures = saveFailures;
+                _remainingAfterSave = remainingAfterSave;
+            }
+
+            public string[] DetectUnsavedEditorChanges()
+            {
+                DetectCallCount++;
+                return _remainingAfterSave;
+            }
+
+            public string[] SaveUnsavedEditorChanges()
+            {
+                SaveCallCount++;
+                return _saveFailures;
             }
         }
     }

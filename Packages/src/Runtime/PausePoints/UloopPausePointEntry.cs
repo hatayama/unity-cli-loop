@@ -56,16 +56,23 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string StatusBeforeClear { get; private set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; private set; }
 
-        public void ExpireIfNeeded(DateTime nowUtc)
+        public bool ExpireIfNeeded(DateTime nowUtc)
         {
-            if (!IsEnabled)
+            if (Status == UloopPausePointStatus.Cleared || Status == UloopPausePointStatus.Expired)
             {
-                return;
+                return false;
             }
 
             if (nowUtc < ExpiresAtUtc)
             {
-                return;
+                return false;
+            }
+
+            // Why also Hit: SingleShot disarms on hit (IsEnabled=false) but the capture window
+            // still ends at ExpiresAtUtc; without this, an abandoned pause after hit never expires.
+            if (!IsEnabled && Status != UloopPausePointStatus.Hit)
+            {
+                return false;
             }
 
             IsEnabled = false;
@@ -73,6 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             Message = HitCount == 0
                 ? "Pause point expired before it was hit."
                 : $"Pause point capture window expired after {HitCount} hit(s); capture history is preserved.";
+            return true;
         }
 
         public void MarkCleared(string clearedReason, string message = "Pause point cleared.")

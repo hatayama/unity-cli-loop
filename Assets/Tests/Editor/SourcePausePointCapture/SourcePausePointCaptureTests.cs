@@ -262,6 +262,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 PauseCount++;
             }
+
+            public void Resume()
+            {
+                // Why zero: Unity's isPaused is a bool; Option B Resume must fully clear pause.
+                PauseCount = 0;
+            }
         }
     }
 }

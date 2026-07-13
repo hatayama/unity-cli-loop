@@ -13,6 +13,22 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         {
             EditorApplication.pauseStateChanged += OnPauseStateChanged;
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+            EditorApplication.update += OnEditorUpdate;
+        }
+
+        private static void OnEditorUpdate()
+        {
+            // Why before the isPaused gate: disconnect may request resume while already unpaused;
+            // the pending flag must still be consumed on the main thread.
+            UloopPausePointRegistry.ApplyPendingClientDisconnectResume();
+
+            if (!EditorApplication.isPaused)
+            {
+                return;
+            }
+
+            // Why while paused only: abandoned Hit windows must expire without a CLI poll.
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
         }
 
         private static void OnPauseStateChanged(PauseState pauseState)

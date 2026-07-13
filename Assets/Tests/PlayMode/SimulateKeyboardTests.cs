@@ -1025,6 +1025,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             {
                 IsPaused = true;
             }
+
+            public void Resume()
+            {
+                IsPaused = false;
+            }
         }
 
         private static BadgeVisual RequireBadgeVisual(string keyName)
