@@ -10,8 +10,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Unity Editor hooks for cancel-time stop/restore. Option B baseline (public API only).
-    /// Option A (CancelTestRun reflection) can plug into TryCancelTestRun later with B fallback.
+    /// Unity Editor hooks for cancel-time stop/restore, including Option A CancelTestRun reflection.
     /// </summary>
     internal static class RunTestsCancelStopRestoreUnityHooks
     {
@@ -27,13 +26,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static RunTestsCancelStopRestoreHooks CreateDefault()
         {
+            TestRunnerApiCancelBridge.EnsureResolved();
+
             return new RunTestsCancelStopRestoreHooks
             {
-                // Why null TryCancelTestRun until Option A is user-approved: TF 1.3.9 exposes
-                // CancelTestRun only as an internal API, and reflection requires explicit permission.
-                // When Option A lands, resolve CancelTestRun once, cache it, and fall back here on failure.
-                TryCancelTestRun = null,
-                IsRunActive = null,
+                // Why null when lookup fails: Option A is a superset of Option B. Cached miss
+                // keeps cancel on Play Mode exit + bounded wait without retrying reflection.
+                TryCancelTestRun = TestRunnerApiCancelBridge.HasCancelTestRun
+                    ? TestRunnerApiCancelBridge.TryCancelTestRun
+                    : null,
+                IsRunActive = TestRunnerApiCancelBridge.HasIsRunActive
+                    ? TestRunnerApiCancelBridge.TryIsRunActive
+                    : null,
                 IsPlaying = () => EditorApplication.isPlaying,
                 RequestExitPlayMode = () =>
                 {
