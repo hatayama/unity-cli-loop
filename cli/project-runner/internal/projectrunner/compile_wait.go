@@ -18,11 +18,14 @@ import (
 )
 
 const (
-	compileStatusCommandName  = "get-compile-status"
-	compileRequestIDParam     = "RequestId"
-	compileWaitParam          = clicore.DomainReloadWaitParam
-	compileForceParam         = "ForceRecompile"
-	compileWaitTimeout        = clicore.ToolReadinessTimeout
+	compileStatusCommandName = "get-compile-status"
+	compileRequestIDParam    = "RequestId"
+	compileWaitParam         = clicore.DomainReloadWaitParam
+	compileForceParam        = "ForceRecompile"
+	// Why separate from ToolReadinessTimeout (180s): launch readiness stays short.
+	// Why 10m: worst-case blind block beats headroom. Why ≤ C# CompileResultLifetime (20m):
+	// timed-out clients can still retrieve results by retrying uloop compile ~10m more.
+	compileWaitTimeout        = 10 * time.Minute
 	compileWaitPollInterval   = clicore.ToolReadinessPoll
 	compileStatusProbeTimeout = clicore.ToolReadinessProbeTimeout
 	compileResponseTimeout    = 2 * time.Second

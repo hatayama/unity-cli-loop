@@ -19,11 +19,13 @@ func compileWaitTimeoutError(projectRoot string) clierrors.CLIError {
 		SafeToRetry: true,
 		ProjectRoot: projectRoot,
 		Command:     clicore.CompileCommandName,
-		// Agents have terminated whole sessions after misreading this timeout as a
-		// frozen Editor, so the guidance must walk them through a responsiveness check.
+		// Why: agents historically treated this timeout as a frozen Editor and ran
+		// launch -r. The real recovery path is retrying compile while C# still holds
+		// the result (CompileResultLifetime 20m = wait 10m + ~10m retrievable window).
 		NextActions: []string{
 			"Run a light command such as `uloop get-logs --max-count 1` to check whether Unity is responsive before treating this as a freeze.",
-			"If Unity responds, retry `uloop compile`; the previous compile likely finished in the meantime.",
+			"Unity-side compile continues after this timeout; retry `uloop compile` — the result remains retrievable for about 10 more minutes without `uloop launch -r`.",
+			clierrors.ApiUpdateConsentModalNextAction,
 			"Only if Unity does not respond to any command, restart it with `uloop launch -r`.",
 		},
 	}

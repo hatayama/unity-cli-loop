@@ -32,8 +32,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 () => EditorApplication.isFocused,
                 AssetDatabase.DisallowAutoRefresh,
                 AssetDatabase.AllowAutoRefresh,
-                ResolveForFocusReturn);
+                ResolveForFocusReturn,
+                logWarning: null,
+                logVibeInfo: (operation, message, context) =>
+                {
+                    VibeLogger.LogInfo(operation, message, context, includeStackTrace: false);
+                },
+                logVibeWarning: (operation, message, context) =>
+                {
+                    VibeLogger.LogWarning(operation, message, context);
+                });
+        // Why throttle: reconcile must not call Disallow/Allow every frame when already aligned.
+        private const double AutoRefreshReconcileIntervalSeconds = 0.5d;
         private static bool _initialized;
+        private static double _nextAutoRefreshReconcileTime;
 
         public static void Initialize()
         {
@@ -65,11 +77,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PrefabStage.prefabSaved += HandlePrefabSaved;
             EditorApplication.focusChanged -= HandleFocusChanged;
             EditorApplication.focusChanged += HandleFocusChanged;
+            EditorApplication.update -= ReconcileAutoRefreshHoldOnUpdate;
+            EditorApplication.update += ReconcileAutoRefreshHoldOnUpdate;
+            // Why record before Hold: fingerprints must exist for focus-return resolve after startup Hold.
             if (!restoredHeldAutoRefresh && !IsAutoRefreshHeld())
             {
                 RecordOpenSceneSnapshots();
                 RecordCurrentPrefabStageSnapshot();
             }
+
+            // Why immediate Hold: background launch never fires focusChanged(false), so Auto Refresh
+            // would stay enabled until the first focus and show a native external-change dialog.
+            FocusReturnService.HoldIfCurrentlyUnfocused();
+        }
+
+        private static void ReconcileAutoRefreshHoldOnUpdate()
+        {
+            double now = EditorApplication.timeSinceStartup;
+            if (now < _nextAutoRefreshReconcileTime)
+            {
+                return;
+            }
+
+            _nextAutoRefreshReconcileTime = now + AutoRefreshReconcileIntervalSeconds;
+            FocusReturnService.ReconcileAutoRefreshHoldWithFocus();
         }
 
         public static (bool CanProceed, string Message, string[] ScenePaths) ResolveForCompile(
@@ -85,6 +116,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void HandleFocusChanged(bool isFocused)
         {
+            VibeLogger.LogInfo(
+                "external_scene_focus_changed",
+                "Editor focus changed",
+                new { isFocused, held = IsAutoRefreshHeld() },
+                includeStackTrace: false);
             FocusReturnService.HandleFocusChanged(isFocused);
         }
 
@@ -134,6 +170,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             // Focus return treats Unity's in-memory editor state as authoritative because source-control
             // operations can replace files while Unity is unfocused and would otherwise trigger reload dialogs.
+            (string AssetPath, bool IsDirty)[] openScenesBefore = GetOpenSceneStates();
+            object[] fingerprintDiffsBefore = BuildFingerprintDiffContexts(openScenesBefore);
+            VibeLogger.LogInfo(
+                "external_scene_resolve_focus_return",
+                "ResolveForFocusReturn started",
+                new
+                {
+                    phase = "start",
+                    scenes = openScenesBefore,
+                    fingerprintDiffs = fingerprintDiffsBefore,
+                    held = IsAutoRefreshHeld()
+                },
+                includeStackTrace: false);
+
             string[] dirtySceneSaveFailures = SaveDirtyOpenScenesBeforeReload();
             LogFocusReturnFailures("save dirty Scene files", dirtySceneSaveFailures);
 
@@ -153,10 +203,70 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 Debug.LogWarning(
                     "Unity CLI Loop skipped Prefab Stage external-change reload because the current Prefab Stage is still dirty or could not be saved.");
+                VibeLogger.LogInfo(
+                    "external_scene_resolve_focus_return",
+                    "ResolveForFocusReturn finished early (Prefab Stage still dirty or unsaved)",
+                    new
+                    {
+                        phase = "end",
+                        skippedPrefabReload = true,
+                        dirtySceneSaveFailures,
+                        missingSceneSaveFailures,
+                        dirtyPrefabSaveFailures,
+                        missingPrefabSaveFailures,
+                        held = IsAutoRefreshHeld()
+                    },
+                    includeStackTrace: false);
                 return;
             }
 
             ResolveCurrentPrefabStageExternalChangeForFocusReturn();
+
+            (string AssetPath, bool IsDirty)[] openScenesAfter = GetOpenSceneStates();
+            VibeLogger.LogInfo(
+                "external_scene_resolve_focus_return",
+                "ResolveForFocusReturn finished",
+                new
+                {
+                    phase = "end",
+                    scenes = openScenesAfter,
+                    fingerprintDiffs = BuildFingerprintDiffContexts(openScenesAfter),
+                    dirtySceneSaveFailures,
+                    missingSceneSaveFailures,
+                    held = IsAutoRefreshHeld()
+                },
+                includeStackTrace: false);
+        }
+
+        private static object[] BuildFingerprintDiffContexts((string AssetPath, bool IsDirty)[] scenes)
+        {
+            Debug.Assert(scenes != null, "scenes must not be null");
+
+            List<object> diffs = new List<object>(scenes.Length);
+            for (int i = 0; i < scenes.Length; i++)
+            {
+                string assetPath = scenes[i].AssetPath;
+                (bool Exists, DateTime LastWriteTimeUtc, long Length) current =
+                    ReadAssetFileFingerprint(assetPath);
+                bool hasSnapshot = SceneSnapshots.TryGetValue(
+                    assetPath,
+                    out (bool Exists, DateTime LastWriteTimeUtc, long Length) snapshot);
+                bool changed = !hasSnapshot ||
+                               !ExternalAssetFileStateComparer.HasSameFileState(snapshot, current);
+                diffs.Add(new
+                {
+                    assetPath,
+                    isDirty = scenes[i].IsDirty,
+                    changed,
+                    hasSnapshot,
+                    snapshotExists = hasSnapshot && snapshot.Exists,
+                    currentExists = current.Exists,
+                    snapshotLength = hasSnapshot ? snapshot.Length : 0L,
+                    currentLength = current.Length
+                });
+            }
+
+            return diffs.ToArray();
         }
 
         private static void RecordOpenSceneSnapshots()
