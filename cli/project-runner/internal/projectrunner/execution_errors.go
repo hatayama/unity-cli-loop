@@ -25,6 +25,7 @@ func compileWaitTimeoutError(projectRoot string) clierrors.CLIError {
 		NextActions: []string{
 			"Run a light command such as `uloop get-logs --max-count 1` to check whether Unity is responsive before treating this as a freeze.",
 			"Unity-side compile continues after this timeout; retry `uloop compile` — the result remains retrievable for about 10 more minutes without `uloop launch -r`.",
+			clierrors.ApiUpdateConsentModalNextAction,
 			"Only if Unity does not respond to any command, restart it with `uloop launch -r`.",
 		},
 	}

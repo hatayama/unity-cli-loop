@@ -140,6 +140,9 @@ func TestClassifyEditorUnresponsiveError(t *testing.T) {
 	if !strings.Contains(joinedActions, "modal dialog") {
 		t.Fatalf("next actions should mention modal dialog: %#v", cliErr.NextActions)
 	}
+	if !strings.Contains(joinedActions, "API Update") || !strings.Contains(joinedActions, "never auto-dismiss") {
+		t.Fatalf("next actions should mention API Update consent guidance: %#v", cliErr.NextActions)
+	}
 	if !strings.Contains(joinedActions, "uloop focus-window") {
 		t.Fatalf("next actions should mention focus-window: %#v", cliErr.NextActions)
 	}
