@@ -9,6 +9,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public const string Local = "Local";
         public const string Parameter = "Parameter";
         public const string InstanceField = "InstanceField";
+        public const string This = "This";
     }
 }
 #endif

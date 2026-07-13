@@ -18,6 +18,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static readonly Regex HoistedLocalFieldNamePattern = new(@"^<([^>]+)>5__\d+$", RegexOptions.Compiled);
         private const string StateMachineOuterThisFieldName = "<>4__this";
 
+        // The synthetic entry name for the paused instance itself. C# identifiers cannot be named
+        // "this", so this never collides with a captured local, parameter, or field.
+        private const string ThisEntryName = "this";
+
         public static UloopPausePointCapturedVariableFrame Collect(
             object instance, object[] parameterNamesAndValues, object[] localNamesAndValues)
         {
@@ -67,9 +71,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             object instance, List<UloopPausePointCapturedVariableEntry> entries, HashSet<string> capturedNames,
             ref bool truncated)
         {
+            bool isCompilerGeneratedStateMachine =
+                Attribute.IsDefined(instance.GetType(), typeof(CompilerGeneratedAttribute));
+
+            // Normal method: the paused instance itself is `this`, emitted before its fields so the
+            // count cap keeps prioritizing locals and parameters over instance state.
+            if (!isCompilerGeneratedStateMachine)
+            {
+                if (!TryAppendEntry(
+                    entries, capturedNames, ref truncated, ThisEntryName, UloopCapturedVariableScope.This, instance))
+                {
+                    return;
+                }
+            }
+
             (object outerThis, bool countCapReached) = CollectDirectFieldVariables(
                 instance, entries, capturedNames, ref truncated, followOuterThis: true);
             if (countCapReached || outerThis == null)
+            {
+                return;
+            }
+
+            // Async/coroutine state machine: the real `this` is the hoisted outer instance, never the
+            // compiler-generated state machine object. Emit it before the outer instance's fields.
+            if (!TryAppendEntry(
+                entries, capturedNames, ref truncated, ThisEntryName, UloopCapturedVariableScope.This, outerThis))
             {
                 return;
             }
