@@ -45,15 +45,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why not `using`: Dispose must run only after cancel-time stop/restore finishes.
             // Disposing earlier re-enables domain reload while Test Runner / Play Mode may still be active.
             DomainReloadDisableScope scope = new DomainReloadDisableScope();
+            string runGuid = null;
             try
             {
-                return await ExecuteTestWithEventNotification(TestMode.PlayMode, filter, ct);
+                return await ExecuteTestWithEventNotification(
+                    TestMode.PlayMode,
+                    filter,
+                    ct,
+                    startedRunGuid => runGuid = startedRunGuid);
             }
             catch (OperationCanceledException originalException)
             {
                 RunTestsCancelStopRestoreResult stopResult = await RunTestsCancelStopRestore.StopAndRestoreAsync(
                     isPlayMode: true,
-                    runGuid: null,
+                    runGuid: runGuid,
                     RunTestsCancelStopRestoreUnityHooks.Resolve());
                 throw new RunTestsExecutionCanceledException(originalException.CancellationToken, stopResult);
             }
@@ -68,15 +73,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
+            string runGuid = null;
             try
             {
-                return await ExecuteTestWithEventNotification(TestMode.EditMode, filter, ct);
+                return await ExecuteTestWithEventNotification(
+                    TestMode.EditMode,
+                    filter,
+                    ct,
+                    startedRunGuid => runGuid = startedRunGuid);
             }
             catch (OperationCanceledException originalException)
             {
                 RunTestsCancelStopRestoreResult stopResult = await RunTestsCancelStopRestore.StopAndRestoreAsync(
                     isPlayMode: false,
-                    runGuid: null,
+                    runGuid: runGuid,
                     RunTestsCancelStopRestoreUnityHooks.Resolve());
                 throw new RunTestsExecutionCanceledException(originalException.CancellationToken, stopResult);
             }
@@ -85,7 +95,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static async Task<SerializableTestResult> ExecuteTestWithEventNotification(
             TestMode testMode,
             TestExecutionFilter filter,
-            CancellationToken ct)
+            CancellationToken ct,
+            Action<string> onRunStarted)
         {
             ct.ThrowIfCancellationRequested();
             TaskCompletionSource<SerializableTestResult> taskCompletionSource =
@@ -106,7 +117,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 taskCompletionSource.TrySetResult(result);
             };
 
-            StartTestExecution(testMode, filter, callback);
+            string runGuid = StartTestExecution(testMode, filter, callback);
+            onRunStarted?.Invoke(runGuid);
             // Without this registration the await below never completes on cancellation,
             // keeping the TestRunnerApi callback subscription alive forever.
             using CancellationTokenRegistration cancellationRegistration =
@@ -129,15 +141,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static void StartTestExecution(TestMode testMode, TestExecutionFilter filter, UnifiedTestCallback callback)
+        private static string StartTestExecution(TestMode testMode, TestExecutionFilter filter, UnifiedTestCallback callback)
         {
             TestRunnerApi testRunnerApi = ScriptableObject.CreateInstance<TestRunnerApi>();
             callback.SetTestRunnerApi(testRunnerApi);
             testRunnerApi.RegisterCallbacks(callback);
 
             Filter unityFilter = CreateUnityFilter(testMode, filter);
-            // runGuid is discarded until Option A stores it for CancelTestRun.
-            _ = testRunnerApi.Execute(new ExecutionSettings(unityFilter));
+            return testRunnerApi.Execute(new ExecutionSettings(unityFilter));
         }
 
         private static Filter CreateUnityFilter(TestMode testMode, TestExecutionFilter filter)
