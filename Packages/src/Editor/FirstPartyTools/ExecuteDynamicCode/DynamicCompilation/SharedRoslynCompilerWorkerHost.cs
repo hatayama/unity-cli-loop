@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.Compilation;
 
@@ -123,7 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             EditorApplication.quitting += ShutdownForQuit;
         }
 
-        public static CompilerMessage[] TryCompile(
+        public static Task<CompilerMessage[]> TryCompileAsync(
             string requestFilePath,
             ExternalCompilerPaths externalCompilerPaths,
             CancellationToken ct,
@@ -131,17 +132,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action markBuildFinished,
             Action incrementBuildCount)
         {
-            return ServiceValue.ExecuteLocked(
-                () => TryCompileWithRetries(
+            return ServiceValue.RunSerializedCompileAsync(
+                operationCt => TryCompileWithRetriesAsync(
                     requestFilePath,
                     externalCompilerPaths,
-                    ct,
+                    operationCt,
                     markBuildStarted,
                     markBuildFinished,
-                    incrementBuildCount));
+                    incrementBuildCount),
+                ct);
         }
 
-        private static CompilerMessage[] TryCompileWithRetries(
+        private static async Task<CompilerMessage[]> TryCompileWithRetriesAsync(
             string requestFilePath,
             ExternalCompilerPaths externalCompilerPaths,
             CancellationToken ct,
@@ -151,20 +153,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             for (int attempt = 1; attempt <= SharedCompilerWorkerMaxAttempts; attempt++)
             {
-                WorkerAttemptResult attemptResult = TryCompileOnce(
+                WorkerAttemptResult attemptResult = await TryCompileOnceAsync(
                     requestFilePath,
                     externalCompilerPaths,
                     ct,
                     markBuildStarted,
                     markBuildFinished,
-                    incrementBuildCount);
+                    incrementBuildCount).ConfigureAwait(false);
 
                 if (attemptResult.Succeeded)
                 {
                     return attemptResult.Messages;
                 }
 
-                ServiceValue.ShutdownProcessLocked();
+                ServiceValue.ExecuteWithStateLock(ServiceValue.ShutdownProcessLocked);
 
                 if (attemptResult.ShouldRetry && attempt < SharedCompilerWorkerMaxAttempts)
                 {
@@ -180,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        private static WorkerAttemptResult TryCompileOnce(
+        private static async Task<WorkerAttemptResult> TryCompileOnceAsync(
             string requestFilePath,
             ExternalCompilerPaths externalCompilerPaths,
             CancellationToken ct,
@@ -196,17 +198,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     startupResult.FailureContext);
             }
 
-            return InvokeWorkerOnce(
+            return await InvokeWorkerOnceAsync(
                 requestFilePath,
                 ct,
                 markBuildStarted,
                 markBuildFinished,
-                incrementBuildCount);
+                incrementBuildCount).ConfigureAwait(false);
         }
 
         private static WorkerStartupResult EnsureWorkerReady(ExternalCompilerPaths externalCompilerPaths)
         {
-            if (ServiceValue.HasLiveProcessLocked())
+            if (ServiceValue.ExecuteWithStateLock(ServiceValue.HasLiveProcessLocked))
             {
                 return WorkerStartupResult.Ready();
             }
@@ -234,8 +236,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return WorkerStartupResult.Ready();
             }
 
+            // Why outside state lock: worker DLL compile can take seconds; shutdown must still kill
+            // an already-running shared worker without waiting on this build.
             SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult buildResult =
-                ServiceValue.CompileWorkerAssemblyLocked(
+                ServiceValue.CompileWorkerAssembly(
                     externalCompilerPaths,
                     workerPaths.SourcePath,
                     workerPaths.AssemblyPath,
@@ -267,7 +271,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             WorkerPaths workerPaths)
         {
             ProcessStartInfo startInfo = CreateWorkerStartInfo(externalCompilerPaths, workerPaths);
-            if (!ServiceValue.StartProcessLocked(startInfo))
+            bool started = ServiceValue.ExecuteWithStateLock(
+                () => ServiceValue.StartProcessLocked(startInfo));
+            if (!started)
             {
                 return WorkerStartupResult.Failure(
                     "worker_start_failed",
@@ -281,14 +287,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return WorkerStartupResult.Ready();
         }
 
-        private static WorkerAttemptResult InvokeWorkerOnce(
+        private static async Task<WorkerAttemptResult> InvokeWorkerOnceAsync(
             string requestFilePath,
             CancellationToken ct,
             Action markBuildStarted,
             Action markBuildFinished,
             Action incrementBuildCount)
         {
-            if (!ServiceValue.HasLiveProcessLocked())
+            StreamReader reader = null;
+            // Why not send here: stdin WriteLine/Flush can throw IOException if the worker dies
+            // after HasLiveProcessLocked; keep send inside the retryable try below.
+            bool prepared = ServiceValue.ExecuteWithStateLock(() =>
+            {
+                if (!ServiceValue.HasLiveProcessLocked())
+                {
+                    return false;
+                }
+
+                reader = ServiceValue.GetOutputReaderLocked();
+                return true;
+            });
+
+            if (!prepared)
             {
                 return WorkerAttemptResult.RetryableFailure(
                     "worker_process_missing",
@@ -301,8 +321,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                SendCompileRequest(requestFilePath);
-                return ReadWorkerResponse(requestFilePath, ct);
+                ServiceValue.ExecuteWithStateLock(() => SendCompileRequestLocked(requestFilePath));
+                return await ReadWorkerResponseAsync(requestFilePath, reader, ct).ConfigureAwait(false);
             }
             catch (IOException ex)
             {
@@ -314,7 +334,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             catch (OperationCanceledException)
             {
-                ServiceValue.ShutdownProcessLocked();
+                ServiceValue.ExecuteWithStateLock(ServiceValue.ShutdownProcessLocked);
                 throw;
             }
             finally
@@ -323,22 +343,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static void SendCompileRequest(string requestFilePath)
+        private static void SendCompileRequestLocked(string requestFilePath)
         {
             string absoluteRequestFilePath = Path.GetFullPath(requestFilePath);
             ServiceValue.SendCompileRequestLocked(absoluteRequestFilePath);
         }
 
-        private static WorkerAttemptResult ReadWorkerResponse(
+        private static async Task<WorkerAttemptResult> ReadWorkerResponseAsync(
             string requestFilePath,
+            StreamReader reader,
             CancellationToken ct)
         {
-            StreamReader reader = ServiceValue.GetOutputReaderLocked();
-            string responseHeader = SharedRoslynCompilerWorkerProtocol.ReadProtocolLine(
+            int timeoutMilliseconds = ServiceValue.ResponseTimeoutMilliseconds;
+            string responseHeader = await SharedRoslynCompilerWorkerProtocol.ReadProtocolLineAsync(
                 reader,
-                ct);
+                ct,
+                timeoutMilliseconds).ConfigureAwait(false);
             if (string.IsNullOrEmpty(responseHeader))
             {
+                // Why kill immediately: abandoned ReadLine tasks unblock only after the pipe closes.
+                ServiceValue.ExecuteWithStateLock(ServiceValue.ShutdownProcessLocked);
                 return WorkerAttemptResult.RetryableFailure(
                     "worker_empty_header",
                     new { request_file_path = requestFilePath });
@@ -346,21 +370,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!SharedRoslynCompilerWorkerProtocol.TryParseResponseHeader(responseHeader, out int exitCode))
             {
+                ServiceValue.ExecuteWithStateLock(ServiceValue.ShutdownProcessLocked);
                 return WorkerAttemptResult.RetryableFailure(
                     SharedRoslynCompilerWorkerProtocol.GetResponseHeaderFailureReason(responseHeader),
                     new { header = responseHeader });
             }
 
-            List<string> outputLines = SharedRoslynCompilerWorkerProtocol.ReadDiagnosticLines(reader, ct);
+            List<string> outputLines = await SharedRoslynCompilerWorkerProtocol.ReadDiagnosticLinesAsync(
+                reader,
+                ct,
+                timeoutMilliseconds).ConfigureAwait(false);
             if (outputLines == null)
             {
+                ServiceValue.ExecuteWithStateLock(ServiceValue.ShutdownProcessLocked);
                 return WorkerAttemptResult.RetryableFailure(
                     "worker_missing_end_marker",
                     new { request_file_path = requestFilePath });
             }
 
             string combinedOutput = string.Join("\n", outputLines);
-            CompilerMessage[] compilerMessages = ExternalCompilerMessageParser.Parse(combinedOutput, string.Empty, exitCode);
+            CompilerMessage[] compilerMessages = ExternalCompilerMessageParser.Parse(
+                combinedOutput,
+                string.Empty,
+                exitCode);
             return WorkerAttemptResult.Successful(compilerMessages);
         }
 
@@ -368,7 +400,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             string workerDirectoryPath = GetWorkerDirectoryPath();
             Directory.CreateDirectory(workerDirectoryPath);
-            ServiceValue.RecordWorkerDirectoryLocked(workerDirectoryPath);
+            ServiceValue.ExecuteWithStateLock(
+                () => ServiceValue.RecordWorkerDirectoryLocked(workerDirectoryPath));
             return new WorkerPaths(
                 workerDirectoryPath,
                 Path.Combine(workerDirectoryPath, RoslynWorkerSourceFileName),
@@ -403,7 +436,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ExternalCompilerPaths externalCompilerPaths,
             WorkerPaths workerPaths)
         {
-            ProcessStartInfo startInfo = new()            {
+            ProcessStartInfo startInfo = new()
+            {
                 FileName = externalCompilerPaths.DotnetHostPath,
                 Arguments = "exec"
                     + " --runtimeconfig " + SharedRoslynCompilerWorkerAssemblyBuilder.QuoteCommandLineArgument(externalCompilerPaths.CompilerRuntimeConfigPath)
@@ -479,6 +513,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ServiceValue.SwapWorkerAssemblyCompilerForTests(compiler);
         }
 
+        internal static void SetResponseTimeoutMillisecondsForTests(int timeoutMilliseconds)
+        {
+            ServiceValue.SetResponseTimeoutMillisecondsForTests(timeoutMilliseconds);
+        }
+
         private static void Shutdown()
         {
             ServiceValue.Shutdown(GetWorkerDirectoryPath());
@@ -506,6 +545,5 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 details = failureContext
             };
         }
-
     }
 }
