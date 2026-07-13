@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -11,11 +12,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private const int BusyHandoffWindowMilliseconds = 50;
         private const int CancelledPrewarmHandoffWindowMilliseconds = 500;
+        private const int DefaultShutdownTimeoutMilliseconds = 5000;
 
         private readonly Action _disposeResources;
         private readonly DynamicCodeExecutionSchedulerHooks _hooks;
         private readonly int _busyHandoffWindowMilliseconds;
         private readonly int _cancelledPrewarmHandoffWindowMilliseconds;
+        private readonly int _shutdownTimeoutMilliseconds;
         private readonly SemaphoreSlim _executionSemaphore = new(1, 1);
         private readonly CancellationTokenSource _lifetimeCancellationTokenSource = new();
         private readonly TaskCompletionSource<bool> _shutdownCompletionSource =
@@ -32,12 +35,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action disposeResources,
             DynamicCodeExecutionSchedulerHooks hooks = null,
             int busyHandoffWindowMilliseconds = BusyHandoffWindowMilliseconds,
-            int cancelledPrewarmHandoffWindowMilliseconds = CancelledPrewarmHandoffWindowMilliseconds)
+            int cancelledPrewarmHandoffWindowMilliseconds = CancelledPrewarmHandoffWindowMilliseconds,
+            int shutdownTimeoutMilliseconds = DefaultShutdownTimeoutMilliseconds)
         {
+            Debug.Assert(busyHandoffWindowMilliseconds > 0, "busyHandoffWindowMilliseconds must be positive");
+            Debug.Assert(
+                cancelledPrewarmHandoffWindowMilliseconds > 0,
+                "cancelledPrewarmHandoffWindowMilliseconds must be positive");
+            Debug.Assert(shutdownTimeoutMilliseconds > 0, "shutdownTimeoutMilliseconds must be positive");
+
             _disposeResources = disposeResources ?? throw new ArgumentNullException(nameof(disposeResources));
             _hooks = hooks ?? new DynamicCodeExecutionSchedulerHooks();
             _busyHandoffWindowMilliseconds = busyHandoffWindowMilliseconds;
             _cancelledPrewarmHandoffWindowMilliseconds = cancelledPrewarmHandoffWindowMilliseconds;
+            _shutdownTimeoutMilliseconds = shutdownTimeoutMilliseconds;
         }
 
         public void ThrowIfDisposed()
@@ -168,10 +179,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        public Task ShutdownAsync()
+        /// <summary>
+        /// Cancels in-flight work and waits for resource dispose up to the shutdown timeout.
+        /// Why timeout then TrySetResult: waiters must unblock even when user code ignores
+        /// cancellation; pool dispose stays deferred to the running action's finally.
+        /// </summary>
+        public async Task ShutdownAsync()
         {
             Dispose();
-            return _shutdownCompletionSource.Task;
+            if (_shutdownCompletionSource.Task.IsCompleted)
+            {
+                return;
+            }
+
+            using CancellationTokenSource timeoutCancellationTokenSource = new();
+            Task delayTask = Task.Delay(
+                _shutdownTimeoutMilliseconds,
+                timeoutCancellationTokenSource.Token);
+            // Why observe via ContinueWith: canceling Delay leaves a canceled task; observing it
+            // avoids unobserved-task noise without a try/catch around await.
+            _ = delayTask.ContinueWith(
+                _ => { },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+
+            Task completedTask = await Task.WhenAny(_shutdownCompletionSource.Task, delayTask);
+            if (completedTask == _shutdownCompletionSource.Task)
+            {
+                timeoutCancellationTokenSource.Cancel();
+                return;
+            }
+
+            _hooks.InvokeLogWarning(
+                "Dynamic code scheduler shutdown drain timed out after " +
+                _shutdownTimeoutMilliseconds +
+                "ms; executor pool dispose is deferred until the running action reaches its finally.");
+            _shutdownCompletionSource.TrySetResult(true);
         }
 
         private async Task<(bool Entered, T Result)> TryRunWithoutForegroundYieldAsync<T>(
