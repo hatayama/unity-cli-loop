@@ -2,6 +2,7 @@
     "name": "UnityCLILoop.FirstPartyTools.ControlPlayMode.Editor",
     "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
     "references": [
+        "GUID:d427b32aad9cb44fc8e962437c9dbcd8",
         "GUID:fc3fd32eddbee40e39c2d76dc184957b"
     ],
     "includePlatforms": [

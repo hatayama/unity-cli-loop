@@ -124,6 +124,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             {
                 IsPaused = true;
             }
+
+            public void Resume()
+            {
+                IsPaused = false;
+            }
         }
     }
 }

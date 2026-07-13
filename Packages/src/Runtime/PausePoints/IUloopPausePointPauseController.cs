@@ -9,6 +9,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         bool IsPlaying { get; }
         bool IsPaused { get; }
         void Pause();
+        void Resume();
     }
 }
 #endif
