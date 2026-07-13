@@ -2,15 +2,16 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     /// <summary>
     /// Stores enabled pause point state for the current Editor domain. All members except
-    /// IsArmed are main-thread-only by convention; IsArmed is the one entry point an
-    /// off-main-thread Harmony-injected Capture call may reach, so Entries is a
-    /// ConcurrentDictionary to make that cross-thread read safe.
+    /// IsArmed and ResumeEditorPauseForClientDisconnect are main-thread-only by convention;
+    /// IsArmed is the Harmony Capture entry point, and the disconnect resume path only sets a
+    /// pending flag so thread-pool callers never touch EditorApplication.isPaused.
     /// </summary>
     internal static class UloopPausePointRegistry
     {
@@ -23,6 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         private static Func<DateTime> _nowProvider = () => DateTime.UtcNow;
         private static int _nextGeneration;
         private static int _nextHitSequence;
+        // Why Interlocked: disconnect monitor / DisconnectAllClients run on the thread pool.
+        private static int _pendingClientDisconnectResume;
         private static UloopPausePointSnapshot _latestHitSnapshot;
         // One input can hit several markers in the same frame; tools need the full list,
         // not just the latest hit, to report every marker that interrupted them.
@@ -283,12 +286,34 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         }
 
         /// <summary>
-        /// Resumes Editor pause when a CLI client drops mid-request or the bridge disconnects all clients.
+        /// Requests Editor resume when a CLI client drops mid-request or the bridge disconnects all clients.
+        /// Why flag only: callers run on the thread pool where Unity Editor APIs are unsafe; the main-thread
+        /// Editor update pump applies the resume via ApplyPendingClientDisconnectResume.
         /// Why not on every short-lived command close: that would resume immediately after await-pause-point
         /// returns a Hit and break the paused inspection workflow.
         /// </summary>
         public static void ResumeEditorPauseForClientDisconnect()
         {
+            Interlocked.Exchange(ref _pendingClientDisconnectResume, 1);
+        }
+
+        /// <summary>
+        /// Consumes a pending client-disconnect resume on the Editor main thread.
+        /// </summary>
+        public static void ApplyPendingClientDisconnectResume()
+        {
+            if (Interlocked.Exchange(ref _pendingClientDisconnectResume, 0) == 0)
+            {
+                return;
+            }
+
+            // Why discard when already running: Option B still clears a stale request without
+            // calling Resume on an Editor that is not paused.
+            if (!_pauseController.IsPaused)
+            {
+                return;
+            }
+
             ResumeEditorPause();
         }
 
@@ -340,6 +365,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             _nextHitSequence = 0;
             _latestHitSnapshot = null;
             _hitSnapshots.Clear();
+            Interlocked.Exchange(ref _pendingClientDisconnectResume, 0);
             _pauseController = new UnityEditorPausePointPauseController();
             _nowProvider = () => DateTime.UtcNow;
             UloopPausePointRawCaptureHolder.Clear();

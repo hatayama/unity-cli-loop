@@ -18,6 +18,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         private static void OnEditorUpdate()
         {
+            // Why before the isPaused gate: disconnect may request resume while already unpaused;
+            // the pending flag must still be consumed on the main thread.
+            UloopPausePointRegistry.ApplyPendingClientDisconnectResume();
+
             if (!EditorApplication.isPaused)
             {
                 return;

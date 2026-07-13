@@ -329,14 +329,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ResumeEditorPauseForClientDisconnect_WhenPaused_ShouldResume()
+        public void ResumeEditorPauseForClientDisconnect_WhenPaused_ShouldResumeOnMainThreadApply()
         {
-            // Verifies mid-request / bridge disconnect path resumes unconditionally (Option B).
+            // Verifies disconnect only arms a pending flag; main-thread apply resumes once (Option B).
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePoint.Pause("jump");
 
             UloopPausePointRegistry.ResumeEditorPauseForClientDisconnect();
+            Assert.That(_pauseController.IsPaused, Is.True);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
 
+            UloopPausePointRegistry.ApplyPendingClientDisconnectResume();
+
+            Assert.That(_pauseController.IsPaused, Is.False);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void ApplyPendingClientDisconnectResume_WhenNotPaused_ShouldDiscardPendingFlag()
+        {
+            // Verifies a disconnect request while already running does not call Resume.
+            Assert.That(_pauseController.IsPaused, Is.False);
+
+            UloopPausePointRegistry.ResumeEditorPauseForClientDisconnect();
+            UloopPausePointRegistry.ApplyPendingClientDisconnectResume();
+
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
             Assert.That(_pauseController.IsPaused, Is.False);
         }
 
@@ -977,6 +995,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public bool IsPlaying { get; private set; } = true;
             public bool IsPaused { get; private set; }
             public int PauseCount { get; private set; }
+            public int ResumeCount { get; private set; }
 
             public void Pause()
             {
@@ -986,6 +1005,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public void Resume()
             {
+                ResumeCount++;
                 IsPaused = false;
             }
         }
