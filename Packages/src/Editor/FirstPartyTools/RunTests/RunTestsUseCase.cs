@@ -73,6 +73,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return RunTestsResponse.CreateTestFrameworkUnavailable();
             }
 
+            (bool isTimeoutValid, string timeoutError) = RunTestsExecutionTimeout.Validate(parameters.TimeoutSeconds);
+            if (!isTimeoutValid)
+            {
+                return CreateFailureResponse(timeoutError);
+            }
+
             ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.SaveBeforeRun);
             if (!validation.IsValid)
             {
@@ -100,17 +106,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // pause source is a human manually pausing via the Editor UI, which is native
             // Unity behavior and out of scope.
             ct.ThrowIfCancellationRequested();
+            using CancellationTokenSource timeoutCancellationTokenSource =
+                RunTestsExecutionTimeout.CreateLinkedTimeoutSource(ct, parameters.TimeoutSeconds);
+            CancellationToken executionCt = timeoutCancellationTokenSource.Token;
             SerializableTestResult result;
-            if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
+            try
             {
-                result = await _executionService.ExecutePlayModeTestAsync(filter, ct);
-            }
-            else
-            {
-                result = await _executionService.ExecuteEditModeTestAsync(filter, ct);
-            }
+                if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
+                {
+                    result = await _executionService.ExecutePlayModeTestAsync(filter, executionCt);
+                }
+                else
+                {
+                    result = await _executionService.ExecuteEditModeTestAsync(filter, executionCt);
+                }
 
-            await _waitForTestRunnerCleanupAsync(ct);
+                // Why parent ct (not executionCt): CancelAfter only guards the RunFinished wait.
+                // Using the linked token here would mis-report a successful run as timed out when
+                // the fixed cleanup delay straddles the deadline after RunFinished already arrived.
+                await _waitForTestRunnerCleanupAsync(ct);
+            }
+            catch (RunTestsExecutionCanceledException canceledException)
+                when (RunTestsExecutionTimeout.IsTimeoutCancellation(ct))
+            {
+                // Why return a tool failure instead of rethrowing: agents need an actionable
+                // timeout message (extend --timeout-seconds / launch -r). Parent/disconnect
+                // cancellation still propagates so the IPC session can tear down normally.
+                return CreateFailureResponse(
+                    RunTestsExecutionTimeout.CreateTimeoutMessage(
+                        parameters.TimeoutSeconds,
+                        canceledException.StopResult.DegradationNote));
+            }
+            catch (OperationCanceledException) when (RunTestsExecutionTimeout.IsTimeoutCancellation(ct))
+            {
+                return CreateFailureResponse(
+                    RunTestsExecutionTimeout.CreateTimeoutMessage(parameters.TimeoutSeconds));
+            }
 
             // 3. Response creation.
             RunTestsResponse response = new(

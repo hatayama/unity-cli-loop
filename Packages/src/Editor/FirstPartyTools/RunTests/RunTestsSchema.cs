@@ -27,5 +27,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string FilterValue { get; set; } = "";
         public bool SaveBeforeRun { get; set; } = true;
 
+        /// <summary>
+        /// Maximum seconds to wait for Unity Test Runner RunFinished before canceling the await.
+        /// Kept below the CLI absolute response timeout so hung runs free the single-flight slot first.
+        /// </summary>
+        public int TimeoutSeconds { get; set; } = RunTestsExecutionTimeout.DefaultTimeoutSeconds;
     }
 } 
