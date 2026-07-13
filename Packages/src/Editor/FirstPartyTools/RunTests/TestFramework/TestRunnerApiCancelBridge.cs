@@ -13,7 +13,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class TestRunnerApiCancelBridge
     {
         private static readonly object ResolveLock = new object();
-        private static bool _resolved;
+        // Why volatile: double-checked locking outside the lock must observe a completed resolve.
+        private static volatile bool _resolved;
         private static MethodInfo _cancelTestRunMethod;
         private static MethodInfo _isRunActiveMethod;
         private static string _resolveLog;
