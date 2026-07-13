@@ -128,7 +128,9 @@ func (controller *connectionRetryFocusController) tryFocusProcess(
 
 	correlationID := vibelog.NewCLIVibeCorrelationID()
 	logConnectionRetryFocusAttempt(controller.connection, controller.method, pid, reason, cause, correlationID)
-	restorer, focusErr := controller.deps.focusUnityProcess(ctx, pid)
+	focusContext, cancel := context.WithTimeout(ctx, unityprocess.FocusCommandTimeout)
+	defer cancel()
+	restorer, focusErr := controller.deps.focusUnityProcess(focusContext, pid)
 	if focusErr == nil {
 		controller.restoreFocus = restorer
 		logConnectionRetryFocusSuccess(controller.connection, controller.method, pid, reason, cause, correlationID)

@@ -28,7 +28,9 @@ func FocusUnityProcessWithRestore(ctx context.Context, pid int) (RestoreFocusFun
 }
 
 func readFrontmostProcessIDMac(ctx context.Context) int {
-	output, err := exec.CommandContext(ctx, "osascript", "-e", `tell application "System Events" to get unix id of first process whose frontmost is true`).Output()
+	commandContext, cancel := withCommandTimeout(ctx, FocusCommandTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(commandContext, "osascript", "-e", `tell application "System Events" to get unix id of first process whose frontmost is true`).Output()
 	if err != nil {
 		return 0
 	}
@@ -40,6 +42,8 @@ func readFrontmostProcessIDMac(ctx context.Context) int {
 }
 
 func setFrontmostProcessMac(ctx context.Context, pid int) error {
+	commandContext, cancel := withCommandTimeout(ctx, FocusCommandTimeout)
+	defer cancel()
 	script := fmt.Sprintf(`tell application "System Events" to set frontmost of (first process whose unix id is %d) to true`, pid)
-	return exec.CommandContext(ctx, "osascript", "-e", script).Run()
+	return exec.CommandContext(commandContext, "osascript", "-e", script).Run()
 }
