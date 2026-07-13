@@ -73,7 +73,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return RunTestsResponse.CreateTestFrameworkUnavailable();
             }
 
-            if (!RunTestsExecutionTimeout.TryValidate(parameters.TimeoutSeconds, out string timeoutError))
+            (bool isTimeoutValid, string timeoutError) = RunTestsExecutionTimeout.Validate(parameters.TimeoutSeconds);
+            if (!isTimeoutValid)
             {
                 return CreateFailureResponse(timeoutError);
             }
@@ -120,7 +121,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     result = await _executionService.ExecuteEditModeTestAsync(filter, executionCt);
                 }
 
-                await _waitForTestRunnerCleanupAsync(executionCt);
+                // Why parent ct (not executionCt): CancelAfter only guards the RunFinished wait.
+                // Using the linked token here would mis-report a successful run as timed out when
+                // the fixed cleanup delay straddles the deadline after RunFinished already arrived.
+                await _waitForTestRunnerCleanupAsync(ct);
             }
             catch (OperationCanceledException) when (RunTestsExecutionTimeout.IsTimeoutCancellation(ct))
             {

@@ -27,27 +27,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Validates TimeoutSeconds before creating a CancelAfter source.
         /// </summary>
-        public static bool TryValidate(int timeoutSeconds, out string errorMessage)
+        public static (bool IsValid, string ErrorMessage) Validate(int timeoutSeconds)
         {
             if (timeoutSeconds <= 0)
             {
-                errorMessage =
+                return (
+                    false,
                     "TimeoutSeconds must be greater than zero. " +
-                    "Pass --timeout-seconds with a positive integer.";
-                return false;
+                    "Pass --timeout-seconds with a positive integer.");
             }
 
             if (timeoutSeconds > MaxTimeoutSeconds)
             {
-                errorMessage =
+                return (
+                    false,
                     $"TimeoutSeconds must be less than or equal to {MaxTimeoutSeconds} " +
                     $"(CLI absolute response limit is 30 minutes). " +
-                    $"Received: {timeoutSeconds}.";
-                return false;
+                    $"Received: {timeoutSeconds}.");
             }
 
-            errorMessage = null;
-            return true;
+            return (true, null);
         }
 
         /// <summary>
@@ -59,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(
                 timeoutSeconds > 0 && timeoutSeconds <= MaxTimeoutSeconds,
-                "timeoutSeconds must be validated with TryValidate before CreateLinkedTimeoutSource");
+                "timeoutSeconds must be validated with Validate before CreateLinkedTimeoutSource");
 
             CancellationTokenSource linkedCancellationTokenSource =
                 CancellationTokenSource.CreateLinkedTokenSource(parentCancellationToken);
@@ -89,6 +88,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public static bool IsTimeoutCancellation(CancellationToken parentCancellationToken)
         {
+            // Why parent-only check is enough today: the linked source has exactly two cancel
+            // causes (CancelAfter and parent/disconnect). If another linked cancel source is
+            // added later, also require timeoutCancellationTokenSource.IsCancellationRequested.
             return !parentCancellationToken.IsCancellationRequested;
         }
     }

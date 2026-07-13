@@ -13,10 +13,10 @@ namespace io.github.hatayama.UnityCliLoop.UnitTests
     public class RunTestsExecutionTimeoutTests
     {
         [Test]
-        public void TryValidate_WhenTimeoutSecondsIsZero_ShouldReject()
+        public void Validate_WhenTimeoutSecondsIsZero_ShouldReject()
         {
             // Verifies non-positive TimeoutSeconds fail before CancelAfter is armed.
-            bool isValid = RunTestsExecutionTimeout.TryValidate(0, out string errorMessage);
+            (bool isValid, string errorMessage) = RunTestsExecutionTimeout.Validate(0);
 
             Assert.That(isValid, Is.False);
             Assert.That(errorMessage, Does.Contain("greater than zero"));
@@ -24,12 +24,12 @@ namespace io.github.hatayama.UnityCliLoop.UnitTests
         }
 
         [Test]
-        public void TryValidate_WhenTimeoutSecondsExceedsMax_ShouldReject()
+        public void Validate_WhenTimeoutSecondsExceedsMax_ShouldReject()
         {
             // Verifies values above MaxTimeoutSeconds are rejected so C# CancelAfter stays ahead of the CLI 30-minute absolute limit.
             int tooLarge = RunTestsExecutionTimeout.MaxTimeoutSeconds + 1;
 
-            bool isValid = RunTestsExecutionTimeout.TryValidate(tooLarge, out string errorMessage);
+            (bool isValid, string errorMessage) = RunTestsExecutionTimeout.Validate(tooLarge);
 
             Assert.That(isValid, Is.False);
             Assert.That(errorMessage, Does.Contain(RunTestsExecutionTimeout.MaxTimeoutSeconds.ToString()));
@@ -37,24 +37,22 @@ namespace io.github.hatayama.UnityCliLoop.UnitTests
         }
 
         [Test]
-        public void TryValidate_WhenTimeoutSecondsIsDefault_ShouldAccept()
+        public void Validate_WhenTimeoutSecondsIsDefault_ShouldAccept()
         {
             // Verifies the agreed default (600s) is inside the allowed range.
-            bool isValid = RunTestsExecutionTimeout.TryValidate(
-                RunTestsExecutionTimeout.DefaultTimeoutSeconds,
-                out string errorMessage);
+            (bool isValid, string errorMessage) = RunTestsExecutionTimeout.Validate(
+                RunTestsExecutionTimeout.DefaultTimeoutSeconds);
 
             Assert.That(isValid, Is.True);
             Assert.That(errorMessage, Is.Null);
         }
 
         [Test]
-        public void TryValidate_WhenTimeoutSecondsIsMax_ShouldAccept()
+        public void Validate_WhenTimeoutSecondsIsMax_ShouldAccept()
         {
             // Verifies the inclusive upper bound remains usable for long suites.
-            bool isValid = RunTestsExecutionTimeout.TryValidate(
-                RunTestsExecutionTimeout.MaxTimeoutSeconds,
-                out string errorMessage);
+            (bool isValid, string errorMessage) = RunTestsExecutionTimeout.Validate(
+                RunTestsExecutionTimeout.MaxTimeoutSeconds);
 
             Assert.That(isValid, Is.True);
             Assert.That(errorMessage, Is.Null);
