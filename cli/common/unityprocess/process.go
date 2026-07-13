@@ -64,7 +64,9 @@ func listUnityProcesses(ctx context.Context) ([]UnityProcess, error) {
 }
 
 func listUnityProcessesMac(ctx context.Context) ([]UnityProcess, error) {
-	output, err := exec.CommandContext(ctx, "ps", "-axo", "pid=,command=", "-ww").Output()
+	commandContext, cancel := withCommandTimeout(ctx, ProcessListCommandTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(commandContext, "ps", "-axo", "pid=,command=", "-ww").Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve Unity process list: %w", err)
 	}
@@ -80,7 +82,9 @@ func listUnityProcessesWindows(ctx context.Context) ([]UnityProcess, error) {
 		"  Write-Output (\"{0}|{1}\" -f $process.ProcessId, $commandLine)",
 		"}",
 	}
-	output, err := exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", strings.Join(scriptLines, "\n")).Output()
+	commandContext, cancel := withCommandTimeout(ctx, ProcessListCommandTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(commandContext, windowsPowerShellCommand, "-NoProfile", "-Command", strings.Join(scriptLines, "\n")).Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve Unity process list on Windows: %w", err)
 	}

@@ -9,6 +9,7 @@ import (
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
 // Verifies shared readiness waits keep the shorter non-launch timeout.
@@ -82,7 +83,15 @@ func TestToolReadinessDoneErrorReportsTimeoutWhenParentIsActive(t *testing.T) {
 // Verifies that readiness timeout reports a live Unity process whose IPC server does not respond.
 func TestToolReadinessDoneErrorReportsServerNotRespondingWhenUnityRuns(t *testing.T) {
 	deps := toolReadinessDeps{
-		findRunningUnityProcess: func(context.Context, string) (*UnityProcess, error) {
+		findRunningUnityProcess: func(ctx context.Context, projectRoot string) (*UnityProcess, error) {
+			deadline, hasDeadline := ctx.Deadline()
+			if !hasDeadline {
+				t.Fatal("process lookup context should have a deadline")
+			}
+			remaining := time.Until(deadline)
+			if remaining < unityprocess.ProcessListCommandTimeout-time.Second || remaining > unityprocess.ProcessListCommandTimeout {
+				t.Fatalf("process lookup timeout mismatch: %s", remaining)
+			}
 			return &UnityProcess{Pid: 123}, nil
 		},
 	}
