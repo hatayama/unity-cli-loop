@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
+using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -12,17 +13,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public const int DefaultTimeoutSeconds = 180;
 
+        private const string UnsavedEditorChangesSaveFailureMessage =
+            "Play mode could not start because unsaved scene or prefab changes could not be saved.";
+        private const string UnsavedEditorChangesRemainingFailureMessage =
+            "Play mode could not start while the editor has unsaved scene or prefab changes.";
+
         private readonly IControlPlayModeCompilationFailureProvider _compilationFailureProvider;
         private readonly IControlPlayModeCompilationFailureGate _compilationFailureGate;
+        private readonly IEditorUnsavedChangesQuietSaver _unsavedChangesQuietSaver;
 
         public ControlPlayModeUseCase(
             IControlPlayModeCompilationFailureProvider compilationFailureProvider = null,
-            IControlPlayModeCompilationFailureGate compilationFailureGate = null)
+            IControlPlayModeCompilationFailureGate compilationFailureGate = null,
+            IEditorUnsavedChangesQuietSaver unsavedChangesQuietSaver = null)
         {
             _compilationFailureProvider =
                 compilationFailureProvider ?? ControlPlayModeServices.CompilationFailureProvider;
             _compilationFailureGate =
                 compilationFailureGate ?? ControlPlayModeServices.CompilationFailureGate;
+            _unsavedChangesQuietSaver =
+                unsavedChangesQuietSaver ?? new EditorUnsavedChangesQuietSaver();
         }
 
         public Task<ControlPlayModeResponse> ExecuteAsync(ControlPlayModeSchema parameters, CancellationToken ct)
@@ -108,6 +118,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     true);
             }
 
+            // Why only when entering Play from Edit: SaveScene does not work while already playing,
+            // and resume-from-pause must not rewrite Scene assets.
+            if (!wasPlaying)
+            {
+                ControlPlayModeActionResult saveResult = SaveDirtyEditorChangesBeforePlayStart();
+                if (saveResult.HasResponse)
+                {
+                    return saveResult;
+                }
+            }
+
             if (wasPaused)
             {
                 EditorApplication.isPaused = false;
@@ -122,6 +143,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool changed = wasPaused || !wasPlaying;
             string message = wasPaused ? "Play mode resumed" : "Play mode started";
             return ControlPlayModeActionResult.FromState(message, changed, false);
+        }
+
+        private ControlPlayModeActionResult SaveDirtyEditorChangesBeforePlayStart()
+        {
+            string[] failedChanges = _unsavedChangesQuietSaver.SaveUnsavedEditorChanges();
+            Debug.Assert(failedChanges != null, "Unsaved editor change save must return an array");
+            if (failedChanges.Length > 0)
+            {
+                return ControlPlayModeActionResult.FromResponse(
+                    CreateSaveFailedResponse(UnsavedEditorChangesSaveFailureMessage, failedChanges),
+                    false);
+            }
+
+            string[] remainingChanges = _unsavedChangesQuietSaver.DetectUnsavedEditorChanges();
+            Debug.Assert(remainingChanges != null, "Unsaved editor change detection must return an array");
+            if (remainingChanges.Length > 0)
+            {
+                return ControlPlayModeActionResult.FromResponse(
+                    CreateSaveFailedResponse(UnsavedEditorChangesRemainingFailureMessage, remainingChanges),
+                    false);
+            }
+
+            return ControlPlayModeActionResult.FromState(string.Empty, false, false);
         }
 
         private static ControlPlayModeActionResult ExecutePlayModeStop(bool wasPaused, bool wasPlaying)
@@ -170,6 +214,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
 
             return response;
+        }
+
+        private static ControlPlayModeResponse CreateSaveFailedResponse(string messagePrefix, string[] failedChanges)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(messagePrefix), "messagePrefix must not be null or empty");
+            Debug.Assert(failedChanges != null, "failedChanges must not be null");
+            Debug.Assert(failedChanges.Length > 0, "failedChanges must not be empty");
+
+            string message = messagePrefix + " Unsaved changes: " + string.Join(", ", failedChanges);
+            return CreateResponse(message, false, false);
         }
 
         private static ControlPlayModeResponse CreateCompileErrorBlockedResponse(
