@@ -78,12 +78,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             sb.AppendLine(UserCodeEndMarker);
             sb.AppendLine("#line hidden");
             sb.AppendLine("        }");
-            sb.AppendLine();
-            sb.AppendLine("        public object Execute(");
-            sb.AppendLine("            System.Collections.Generic.Dictionary<string, object> parameters = null)");
-            sb.AppendLine("        {");
-            sb.AppendLine("            return ExecuteAsync(parameters, default).GetAwaiter().GetResult();");
-            sb.AppendLine("        }");
+            // Why no sync Execute(): the runtime always prefers ExecuteAsync and passes the real
+            // combined CancellationToken. A sync wrapper that called ExecuteAsync(..., default)
+            // discarded that token and added an unused sync-over-async landmine.
             sb.AppendLine("    }");
             sb.AppendLine("}");
 
