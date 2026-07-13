@@ -207,6 +207,64 @@ namespace io.github.hatayama.UnityCliLoop.UnitTests
                         CancellationToken.None),
                     Throws.InstanceOf<ObjectDisposedException>());
                 Assert.That(disposeCalls, Is.EqualTo(1));
+                Assert.That(GetExecutionSemaphoreCurrentCount(scheduler), Is.EqualTo(1));
+            }
+            finally
+            {
+                scheduler.Dispose();
+            }
+        }
+
+        [Test]
+        public async Task TryRunIfIdleAsync_WhenSetupThrowsAfterYieldAcquire_ShouldReleaseSlotForLaterForegroundWork()
+        {
+            // Verifies yield-path failures after Wait do not leak the semaphore on a live scheduler.
+            DynamicCodeExecutionSchedulerHooks hooks = new()
+            {
+                AfterYieldSemaphoreAcquired = () => throw new InvalidOperationException("yield setup failed")
+            };
+            using DynamicCodeExecutionScheduler scheduler = CreateScheduler(hooks);
+
+            Assert.That(
+                async () => await scheduler.TryRunIfIdleAsync(
+                    true,
+                    _ => Task.FromResult("background"),
+                    CancellationToken.None),
+                Throws.TypeOf<InvalidOperationException>());
+
+            Assert.That(GetExecutionSemaphoreCurrentCount(scheduler), Is.EqualTo(1));
+
+            string foregroundResult = await scheduler.RunForegroundAsync(
+                _ => Task.FromResult("foreground"),
+                () => "busy",
+                CancellationToken.None);
+
+            Assert.That(foregroundResult, Is.EqualTo("foreground"));
+        }
+
+        [Test]
+        public async Task RunForegroundAsync_WhenDisposeResourcesThrows_ShouldStillReleaseSemaphore()
+        {
+            // Verifies Release stays reachable when deferred resource dispose throws in finally.
+            DynamicCodeExecutionScheduler scheduler = null;
+            DynamicCodeExecutionSchedulerHooks hooks = new()
+            {
+                AfterSemaphoreEntered = () => scheduler.Dispose()
+            };
+            scheduler = CreateScheduler(
+                hooks,
+                () => throw new InvalidOperationException("pool dispose failed"));
+
+            try
+            {
+                Assert.That(
+                    async () => await scheduler.RunForegroundAsync(
+                        _ => Task.FromResult("foreground"),
+                        () => "busy",
+                        CancellationToken.None),
+                    Throws.TypeOf<InvalidOperationException>());
+
+                Assert.That(GetExecutionSemaphoreCurrentCount(scheduler), Is.EqualTo(1));
             }
             finally
             {
@@ -318,6 +376,17 @@ namespace io.github.hatayama.UnityCliLoop.UnitTests
                 busyHandoffWindowMilliseconds: 20,
                 cancelledPrewarmHandoffWindowMilliseconds: 40,
                 shutdownTimeoutMilliseconds: shutdownTimeoutMilliseconds);
+        }
+
+        private static int GetExecutionSemaphoreCurrentCount(DynamicCodeExecutionScheduler scheduler)
+        {
+            System.Reflection.FieldInfo field = typeof(DynamicCodeExecutionScheduler).GetField(
+                "_executionSemaphore",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null);
+            SemaphoreSlim semaphore = (SemaphoreSlim)field.GetValue(scheduler);
+            Assert.That(semaphore, Is.Not.Null);
+            return semaphore.CurrentCount;
         }
 
         private static async Task WaitForCancellationAsync(CancellationToken cancellationToken)
