@@ -173,6 +173,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Dispose_OfAbandonedInstance_AfterNewScopeStarted_ShouldLeaveNewScopeIntact()
+        {
+            // Verifies a delayed Dispose from an abandoned scope cannot restore settings under a newer scope.
+            SetEnterPlayModeSettings(false, EnterPlayModeOptions.None);
+            DomainReloadDisableScope abandonedScope = new DomainReloadDisableScope();
+            int generationBeforeRecover = DomainReloadDisableScope.GetGenerationForTests();
+            DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
+            Assert.That(DomainReloadDisableScope.GetGenerationForTests(), Is.EqualTo(generationBeforeRecover + 1));
+
+            DomainReloadDisableScope nextScope = new DomainReloadDisableScope();
+            Assert.That(DomainReloadDisableScope.GetActiveScopeCountForTests(), Is.EqualTo(1));
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.True);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.DisableDomainReload));
+
+            abandonedScope.Dispose();
+
+            Assert.That(DomainReloadDisableScope.GetActiveScopeCountForTests(), Is.EqualTo(1));
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.True);
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.True);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.DisableDomainReload));
+
+            nextScope.Dispose();
+            Assert.That(DomainReloadDisableScope.GetActiveScopeCountForTests(), Is.EqualTo(0));
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.False);
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.False);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.None));
+        }
+
+        [Test]
         public void RecoverAbandonedScopeBeforeNewRun_WhenCountIsZeroWithPendingMarker_ShouldRestoreSettings()
         {
             // Verifies domain-reload-like state (count reset, marker retained) is cleared before a new run.
