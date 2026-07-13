@@ -285,6 +285,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point was already hit (auto-disarmed); nothing to clear."));
+            Assert.That(_pauseController.IsPaused, Is.False);
+        }
+
+        [Test]
+        public void Clear_AfterHit_ShouldResumeEditorPause()
+        {
+            // Verifies Option B: Clear resumes even when the pause was left from a pause-point hit.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            Assert.That(_pauseController.IsPaused, Is.True);
+
+            UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(_pauseController.IsPaused, Is.False);
+        }
+
+        [Test]
+        public void ClearAll_AfterHit_ShouldResumeEditorPause()
+        {
+            // Verifies ClearAll also resumes under Option B.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePointRegistry.ClearAll();
+
+            Assert.That(_pauseController.IsPaused, Is.False);
+        }
+
+        [Test]
+        public void ApplyCaptureWindowExpirations_WhenHitPastTimeout_ShouldExpireAndResume()
+        {
+            // Verifies abandoned SingleShot hits still expire at ExpiresAtUtc and resume without a Clear poll.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            _nowUtc = _nowUtc.AddSeconds(31);
+
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus("jump");
+            Assert.That(status.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(_pauseController.IsPaused, Is.False);
+        }
+
+        [Test]
+        public void ResumeEditorPauseForClientDisconnect_WhenPaused_ShouldResumeOnMainThreadApply()
+        {
+            // Verifies disconnect only arms a pending flag; main-thread apply resumes once (Option B).
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePointRegistry.ResumeEditorPauseForClientDisconnect();
+            Assert.That(_pauseController.IsPaused, Is.True);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
+
+            UloopPausePointRegistry.ApplyPendingClientDisconnectResume();
+
+            Assert.That(_pauseController.IsPaused, Is.False);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void ApplyPendingClientDisconnectResume_WhenNotPaused_ShouldDiscardPendingFlag()
+        {
+            // Verifies a disconnect request while already running does not call Resume.
+            Assert.That(_pauseController.IsPaused, Is.False);
+
+            UloopPausePointRegistry.ResumeEditorPauseForClientDisconnect();
+            UloopPausePointRegistry.ApplyPendingClientDisconnectResume();
+
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
+            Assert.That(_pauseController.IsPaused, Is.False);
         }
 
         [Test]
@@ -924,11 +995,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public bool IsPlaying { get; private set; } = true;
             public bool IsPaused { get; private set; }
             public int PauseCount { get; private set; }
+            public int ResumeCount { get; private set; }
 
             public void Pause()
             {
                 PauseCount++;
                 IsPaused = true;
+            }
+
+            public void Resume()
+            {
+                ResumeCount++;
+                IsPaused = false;
             }
         }
     }

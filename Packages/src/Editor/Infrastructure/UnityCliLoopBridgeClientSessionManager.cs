@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -86,6 +87,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 _clientStreams.TryRemove(clientKey, out _);
             }
+
+            // Why: bridge teardown must not leave Play Mode paused after clients are forced off.
+            UloopPausePointRegistry.ResumeEditorPauseForClientDisconnect();
         }
 
         internal void StartClientHandler(BridgeClientConnection client, CancellationToken cancellationToken)
