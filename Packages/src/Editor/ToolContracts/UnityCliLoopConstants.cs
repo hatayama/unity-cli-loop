@@ -111,10 +111,22 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string ERROR_MESSAGE_ASSEMBLY_DEFINITION_IMPORT_ERROR = "Assembly Definition or Assembly Reference import error detected. Unity may not start compilation until asmdef or asmref errors are removed.";
         public const string ERROR_MESSAGE_EXECUTION_IN_PROGRESS = "Another execution is already in progress";
         public const string ERROR_MESSAGE_EXECUTION_CANCELLED = "Execution was cancelled or timed out";
+        public const string ERROR_MESSAGE_DYNAMIC_CODE_RUNTIME_RESTARTING =
+            "Dynamic-code runtime was disposed during a server reset or domain reload; retry the same command shortly.";
         public const string ERROR_MESSAGE_NO_COMPILED_ASSEMBLY = "No compiled assembly provided";
         public const string ERROR_MESSAGE_NO_EXECUTE_METHOD = "No Execute method found in compiled assembly";
         public const string ERROR_MESSAGE_FAILED_TO_CREATE_INSTANCE = "Failed to create instance of target type";
         public const string ERROR_MESSAGE_UNSUPPORTED_SIGNATURE = "Execute method signature not supported";
+
+        /// <summary>
+        /// Recovery steps when execute-dynamic-code hits a disposed runtime during reset/reload.
+        /// Why this tone: matches compile-wait guidance — retry recovers the result; launch -r is not first-line.
+        /// </summary>
+        public static readonly string[] DYNAMIC_CODE_RUNTIME_RESTARTING_NEXT_ACTIONS =
+        {
+            "Retry the same `uloop execute-dynamic-code` shortly — the bridge is restarting after reset or domain reload.",
+            "Unity is still running; `uloop launch -r` is not needed for this error.",
+        };
 
         public const int COMPILE_START_TIMEOUT_MS = 5000;
         public const int COMPILE_START_POLL_INTERVAL_MS = 100;

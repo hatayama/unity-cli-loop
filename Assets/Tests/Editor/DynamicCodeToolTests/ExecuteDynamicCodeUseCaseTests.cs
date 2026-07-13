@@ -731,6 +731,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(response.Logs, Contains.Item("Solutions:"));
         }
 
+        [Test]
+        public async Task ExecuteAsync_WhenRuntimeThrowsObjectDisposedException_ReturnsRetryableRestartingError()
+        {
+            // Verifies disposed-runtime ODE during execute maps to Success=false with restarting guidance.
+            MarkForegroundWarmupCompleted();
+            ObjectDisposedDynamicCodeExecutionRuntime runtime = new(
+                throwOnExecuteCount: 1,
+                successAfterThrow: false);
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return 1;",
+                    CompileOnly = false
+                },
+                CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(
+                response.ErrorMessage,
+                Is.EqualTo(UnityCliLoopConstants.ERROR_MESSAGE_DYNAMIC_CODE_RUNTIME_RESTARTING));
+            Assert.That(response.NextActions, Is.EqualTo(UnityCliLoopConstants.DYNAMIC_CODE_RUNTIME_RESTARTING_NEXT_ACTIONS));
+            Assert.That(response.NextActions[0], Does.Contain("Retry").IgnoreCase);
+            Assert.That(response.NextActions[1], Does.Contain("launch -r"));
+            Assert.That(response.NextActions[1], Does.Contain("not needed"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenWarmupThrowsObjectDisposedException_ContinuesAsSilentNoOp()
+        {
+            // Verifies Warm-path ODE is incomplete warm (no CLI error), while Execute still succeeds afterward.
+            ObjectDisposedDynamicCodeExecutionRuntime runtime = new(
+                throwOnExecuteCount: 1,
+                successAfterThrow: true);
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return \"ok\";",
+                    CompileOnly = false
+                },
+                CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Result, Is.EqualTo("ok"));
+            Assert.That(response.ErrorMessage, Is.Null.Or.Empty);
+            Assert.That(response.NextActions, Is.Null);
+            Assert.That(runtime.ExecuteCount, Is.GreaterThanOrEqualTo(2));
+        }
+
         /// <summary>
         /// Test support type used by editor and play mode fixtures.
         /// </summary>
@@ -774,6 +824,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     YieldToForegroundRequests = request.YieldToForegroundRequests
                 });
                 return Task.FromResult<(bool, ExecutionResult)>((true, _results.Dequeue()));
+            }
+        }
+
+        /// <summary>
+        /// Throws ObjectDisposedException on the Nth ExecuteAsync, optionally returning success afterward.
+        /// </summary>
+        private sealed class ObjectDisposedDynamicCodeExecutionRuntime : IDynamicCodeExecutionRuntime
+        {
+            private readonly int _throwOnExecuteCount;
+            private readonly bool _successAfterThrow;
+
+            public ObjectDisposedDynamicCodeExecutionRuntime(int throwOnExecuteCount, bool successAfterThrow)
+            {
+                _throwOnExecuteCount = throwOnExecuteCount;
+                _successAfterThrow = successAfterThrow;
+            }
+
+            public int ExecuteCount { get; private set; }
+
+            public Task<ExecutionResult> ExecuteAsync(
+                DynamicCodeExecutionRequest request,
+                CancellationToken cancellationToken = default)
+            {
+                ExecuteCount++;
+                if (ExecuteCount == _throwOnExecuteCount)
+                {
+                    // ObjectName matches the production scheduler dispose path without requiring type visibility.
+                    throw new ObjectDisposedException("DynamicCodeExecutionScheduler");
+                }
+
+                if (!_successAfterThrow)
+                {
+                    throw new InvalidOperationException("Unexpected ExecuteAsync after ObjectDisposedException");
+                }
+
+                return Task.FromResult(new ExecutionResult
+                {
+                    Success = true,
+                    Result = "ok"
+                });
+            }
+
+            public Task<(bool Entered, ExecutionResult Result)> TryExecuteIfIdleAsync(
+                DynamicCodeExecutionRequest request,
+                CancellationToken cancellationToken = default)
+            {
+                throw new InvalidOperationException("TryExecuteIfIdleAsync is not used by these tests");
             }
         }
 
