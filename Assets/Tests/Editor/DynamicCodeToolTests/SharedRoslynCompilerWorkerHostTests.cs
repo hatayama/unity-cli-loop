@@ -46,6 +46,114 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// Verifies full Shutdown advances lifecycle generation so in-flight retries cannot restart the worker.
+        /// </summary>
+        [Test]
+        public void Shutdown_WhenCalled_ShouldAdvanceLifecycleGeneration()
+        {
+            SharedRoslynCompilerWorkerSession session = new();
+            string unusedWorkerDirectoryPath = Path.Combine(
+                Path.GetTempPath(),
+                $"SharedRoslynCompilerWorkerSessionTests_{Guid.NewGuid():N}");
+
+            int generationBefore = session.ExecuteWithStateLock(session.GetLifecycleGenerationLocked);
+            session.Shutdown(unusedWorkerDirectoryPath);
+            int generationAfter = session.ExecuteWithStateLock(session.GetLifecycleGenerationLocked);
+
+            Assert.That(generationBefore, Is.EqualTo(0));
+            Assert.That(generationAfter, Is.EqualTo(1));
+            Assert.That(
+                session.ExecuteWithStateLock(() => session.IsLifecycleGenerationCurrentLocked(generationBefore)),
+                Is.False);
+            Assert.That(
+                session.ExecuteWithStateLock(() => session.IsLifecycleGenerationCurrentLocked(generationAfter)),
+                Is.True);
+        }
+
+        /// <summary>
+        /// Verifies retry-path process kill keeps the lifecycle open so a replacement worker may start.
+        /// </summary>
+        [Test]
+        public void ShutdownProcessLocked_WhenCalledAlone_ShouldStillAllowWorkerRestart()
+        {
+            SharedRoslynCompilerWorkerSession session = new();
+            Process startedProcess = null;
+            int startCallCount = 0;
+            session.SwapProcessStarterForTests(_ =>
+            {
+                startCallCount++;
+                startedProcess = new Process();
+                return startedProcess;
+            });
+
+            try
+            {
+                int generationAtStart = session.ExecuteWithStateLock(session.GetLifecycleGenerationLocked);
+                session.ExecuteWithStateLock(session.ShutdownProcessLocked);
+
+                bool started = session.ExecuteWithStateLock(
+                    () =>
+                    {
+                        if (!session.IsLifecycleGenerationCurrentLocked(generationAtStart))
+                        {
+                            return false;
+                        }
+
+                        return session.StartProcessLocked(new ProcessStartInfo());
+                    });
+
+                Assert.That(started, Is.True);
+                Assert.That(startCallCount, Is.EqualTo(1));
+                Assert.That(
+                    session.ExecuteWithStateLock(session.GetLifecycleGenerationLocked),
+                    Is.EqualTo(generationAtStart));
+            }
+            finally
+            {
+                startedProcess?.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Verifies a stale lifecycle generation refuses StartProcess after full Shutdown.
+        /// </summary>
+        [Test]
+        public void StartProcessLocked_WhenLifecycleGenerationIsStale_ShouldBeDetectableBeforeStart()
+        {
+            SharedRoslynCompilerWorkerSession session = new();
+            string unusedWorkerDirectoryPath = Path.Combine(
+                Path.GetTempPath(),
+                $"SharedRoslynCompilerWorkerSessionTests_{Guid.NewGuid():N}");
+            int startCallCount = 0;
+            session.SwapProcessStarterForTests(_ =>
+            {
+                startCallCount++;
+                return new Process();
+            });
+
+            int generationAtStart = session.ExecuteWithStateLock(session.GetLifecycleGenerationLocked);
+            session.Shutdown(unusedWorkerDirectoryPath);
+
+            bool wouldStart = session.ExecuteWithStateLock(
+                () => session.IsLifecycleGenerationCurrentLocked(generationAtStart));
+            Assert.That(wouldStart, Is.False);
+
+            bool started = session.ExecuteWithStateLock(
+                () =>
+                {
+                    if (!session.IsLifecycleGenerationCurrentLocked(generationAtStart))
+                    {
+                        return false;
+                    }
+
+                    return session.StartProcessLocked(new ProcessStartInfo());
+                });
+
+            Assert.That(started, Is.False);
+            Assert.That(startCallCount, Is.Zero);
+        }
+
+        /// <summary>
         /// Verifies replacing the cached worker releases the previously owned process handle.
         /// </summary>
         [Test]
