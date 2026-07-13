@@ -216,9 +216,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action markBuildFinished,
             Action incrementBuildCount)
         {
-            WorkerStartupResult startupResult = EnsureWorkerReady(
+            WorkerStartupResult startupResult = await EnsureWorkerReadyAsync(
                 externalCompilerPaths,
-                lifecycleGenerationAtStart);
+                lifecycleGenerationAtStart).ConfigureAwait(false);
             if (!startupResult.IsReady)
             {
                 if (!startupResult.IsRetryable)
@@ -241,7 +241,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 incrementBuildCount).ConfigureAwait(false);
         }
 
-        private static WorkerStartupResult EnsureWorkerReady(
+        private static async Task<WorkerStartupResult> EnsureWorkerReadyAsync(
             ExternalCompilerPaths externalCompilerPaths,
             int lifecycleGenerationAtStart)
         {
@@ -267,9 +267,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             WorkerPaths workerPaths = CreateWorkerPaths();
             SynchronizeWorkerSource(workerPaths);
 
-            WorkerStartupResult workerAssemblyResult = EnsureWorkerAssemblyBuilt(
+            WorkerStartupResult workerAssemblyResult = await EnsureWorkerAssemblyBuiltAsync(
                 externalCompilerPaths,
-                workerPaths);
+                workerPaths).ConfigureAwait(false);
             if (!workerAssemblyResult.IsReady)
             {
                 return workerAssemblyResult;
@@ -281,7 +281,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 lifecycleGenerationAtStart);
         }
 
-        private static WorkerStartupResult EnsureWorkerAssemblyBuilt(
+        private static async Task<WorkerStartupResult> EnsureWorkerAssemblyBuiltAsync(
             ExternalCompilerPaths externalCompilerPaths,
             WorkerPaths workerPaths)
         {
@@ -292,12 +292,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why outside state lock: worker DLL compile can take seconds; shutdown must still kill
             // an already-running shared worker without waiting on this build.
+            // Why Task.Run (via CompileWorkerAssemblyAsync): WaitForExit(timeout) is synchronous and
+            // this path can still run on the Unity main thread before the first await when the
+            // compile gate is acquired without yielding.
             SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult buildResult =
-                ServiceValue.CompileWorkerAssembly(
+                await ServiceValue.CompileWorkerAssemblyAsync(
                     externalCompilerPaths,
                     workerPaths.SourcePath,
                     workerPaths.AssemblyPath,
-                    workerPaths.CompileResponseFilePath);
+                    workerPaths.CompileResponseFilePath).ConfigureAwait(false);
             if (!buildResult.StartedSuccessfully)
             {
                 return WorkerStartupResult.Failure(
