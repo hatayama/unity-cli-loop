@@ -285,6 +285,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point was already hit (auto-disarmed); nothing to clear."));
+            Assert.That(_pauseController.IsPaused, Is.False);
+        }
+
+        [Test]
+        public void Clear_AfterHit_ShouldResumeEditorPause()
+        {
+            // Verifies Option B: Clear resumes even when the pause was left from a pause-point hit.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            Assert.That(_pauseController.IsPaused, Is.True);
+
+            UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(_pauseController.IsPaused, Is.False);
+        }
+
+        [Test]
+        public void ClearAll_AfterHit_ShouldResumeEditorPause()
+        {
+            // Verifies ClearAll also resumes under Option B.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePointRegistry.ClearAll();
+
+            Assert.That(_pauseController.IsPaused, Is.False);
+        }
+
+        [Test]
+        public void ApplyCaptureWindowExpirations_WhenHitPastTimeout_ShouldExpireAndResume()
+        {
+            // Verifies abandoned SingleShot hits still expire at ExpiresAtUtc and resume without a Clear poll.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            _nowUtc = _nowUtc.AddSeconds(31);
+
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus("jump");
+            Assert.That(status.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(_pauseController.IsPaused, Is.False);
+        }
+
+        [Test]
+        public void ResumeEditorPauseForClientDisconnect_WhenPaused_ShouldResume()
+        {
+            // Verifies mid-request / bridge disconnect path resumes unconditionally (Option B).
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePointRegistry.ResumeEditorPauseForClientDisconnect();
+
+            Assert.That(_pauseController.IsPaused, Is.False);
         }
 
         [Test]
@@ -929,6 +982,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 PauseCount++;
                 IsPaused = true;
+            }
+
+            public void Resume()
+            {
+                IsPaused = false;
             }
         }
     }

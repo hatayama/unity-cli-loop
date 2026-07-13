@@ -90,6 +90,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             };
             entry.MarkCleared(UloopPausePointClearedReason.ExplicitClear, message);
             ClearHitSnapshotAndRawCaptureForId(id);
+            // Why always Resume: Option B does not distinguish manual vs pause-point pause.
+            ResumeEditorPause();
             return entry.ToSnapshot(now, _pauseController);
         }
 
@@ -114,6 +116,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
             ClearLatestHitSnapshot();
             UloopPausePointRawCaptureHolder.Clear();
+            // Why always Resume: Option B does not distinguish manual vs pause-point pause.
+            ResumeEditorPause();
 
             UloopPausePointEditorStateSnapshot editorState = UloopPausePointEditorStateSnapshot.FromController(
                 _pauseController,
@@ -132,7 +136,11 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             UloopPausePointEntry entry = Entries[id];
-            entry.ExpireIfNeeded(now);
+            if (entry.ExpireIfNeeded(now))
+            {
+                ResumeEditorPause();
+            }
+
             return entry.ToSnapshot(now, _pauseController);
         }
 
@@ -192,7 +200,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             UloopPausePointEntry entry = Entries[id];
-            entry.ExpireIfNeeded(now);
+            if (entry.ExpireIfNeeded(now))
+            {
+                ResumeEditorPause();
+                return entry.ToSnapshot(now, _pauseController);
+            }
+
             if (!entry.IsEnabled)
             {
                 // Why: delayed main-thread hits can lose the race to Clear/ClearAll; surface that race.
@@ -245,6 +258,43 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             _latestHitSnapshot = null;
             _hitSnapshots.Clear();
             UloopPausePointRawCaptureHolder.Clear();
+        }
+
+        /// <summary>
+        /// Expires capture windows that have elapsed and resumes the Editor when any expire.
+        /// Used while paused so expiry still runs without a CLI status poll.
+        /// </summary>
+        public static void ApplyCaptureWindowExpirations()
+        {
+            DateTime now = NowUtc();
+            bool anyExpired = false;
+            foreach (UloopPausePointEntry entry in Entries.Values)
+            {
+                if (entry.ExpireIfNeeded(now))
+                {
+                    anyExpired = true;
+                }
+            }
+
+            if (anyExpired)
+            {
+                ResumeEditorPause();
+            }
+        }
+
+        /// <summary>
+        /// Resumes Editor pause when a CLI client drops mid-request or the bridge disconnects all clients.
+        /// Why not on every short-lived command close: that would resume immediately after await-pause-point
+        /// returns a Hit and break the paused inspection workflow.
+        /// </summary>
+        public static void ResumeEditorPauseForClientDisconnect()
+        {
+            ResumeEditorPause();
+        }
+
+        private static void ResumeEditorPause()
+        {
+            _pauseController.Resume();
         }
 
         // Drops the id's own hit-history entry and, if it currently owns the latest hit, that
