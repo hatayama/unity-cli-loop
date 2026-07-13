@@ -80,7 +80,9 @@ func toolReadinessDoneErrorWithDeps(ctx context.Context, projectRoot string, cau
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	runningProcess, err := deps.findRunningUnityProcess(context.Background(), projectRoot)
+	processLookupContext, cancel := context.WithTimeout(context.Background(), unityprocess.ProcessListCommandTimeout)
+	defer cancel()
+	runningProcess, err := deps.findRunningUnityProcess(processLookupContext, projectRoot)
 	if err == nil && runningProcess != nil {
 		return clierrors.UnityServerNotRespondingError{
 			ProjectRoot: projectRoot,

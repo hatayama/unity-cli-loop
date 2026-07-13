@@ -9,9 +9,11 @@ import (
 )
 
 func FocusUnityProcess(ctx context.Context, pid int) error {
+	commandContext, cancel := withCommandTimeout(ctx, FocusCommandTimeout)
+	defer cancel()
 	script := buildFocusUnityProcessWindowsScript(pid)
 	stderr := bytes.Buffer{}
-	command := exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", script)
+	command := exec.CommandContext(commandContext, windowsPowerShellCommand, "-NoProfile", "-Command", script)
 	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
 		return commandErrorWithStderr(err, stderr.String())
@@ -20,9 +22,11 @@ func FocusUnityProcess(ctx context.Context, pid int) error {
 }
 
 func FocusUnityProcessWithRestore(ctx context.Context, pid int) (RestoreFocusFunc, error) {
+	commandContext, cancel := withCommandTimeout(ctx, FocusCommandTimeout)
+	defer cancel()
 	script := buildFocusUnityProcessWindowsWithRestoreScript(pid)
 	stderr := bytes.Buffer{}
-	command := exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", script)
+	command := exec.CommandContext(commandContext, windowsPowerShellCommand, "-NoProfile", "-Command", script)
 	command.Stderr = &stderr
 	output, err := command.Output()
 	if err != nil {
@@ -38,9 +42,11 @@ func FocusUnityProcessWithRestore(ctx context.Context, pid int) (RestoreFocusFun
 }
 
 func restoreWindowsForegroundWindow(ctx context.Context, handle int64) error {
+	commandContext, cancel := withCommandTimeout(ctx, FocusCommandTimeout)
+	defer cancel()
 	script := buildRestoreWindowsForegroundWindowScript(handle)
 	stderr := bytes.Buffer{}
-	command := exec.CommandContext(ctx, windowsPowerShellCommand, "-NoProfile", "-Command", script)
+	command := exec.CommandContext(commandContext, windowsPowerShellCommand, "-NoProfile", "-Command", script)
 	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
 		return commandErrorWithStderr(err, stderr.String())

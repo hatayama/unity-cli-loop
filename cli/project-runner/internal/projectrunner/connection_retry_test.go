@@ -18,6 +18,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
 // Verifies the default busy-stall focus threshold fires before the bounded busy retry window ends.
@@ -30,6 +31,34 @@ func TestDefaultBusyFocusStallThresholdFitsWithinBusyRetryWindow(t *testing.T) {
 			threshold,
 			deps.retryTimeout,
 		)
+	}
+}
+
+// Verifies connection-retry focus rescue bounds the focus external command with a deadline.
+func TestConnectionRetryFocusControllerBoundsFocusContext(t *testing.T) {
+	var receivedContext context.Context
+	deps := defaultConnectionRetryDeps()
+	deps.focusUnityProcess = func(ctx context.Context, pid int) (unityprocess.RestoreFocusFunc, error) {
+		receivedContext = ctx
+		return nil, nil
+	}
+	controller := newConnectionRetryFocusController(
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		"get-logs",
+		deps,
+	)
+	controller.tryFocusProcess(context.Background(), 123, focusReasonBusyStall, errors.New("busy"))
+
+	if receivedContext == nil {
+		t.Fatal("expected focus attempt context")
+	}
+	deadline, hasDeadline := receivedContext.Deadline()
+	if !hasDeadline {
+		t.Fatal("focus attempt context should have a deadline")
+	}
+	remaining := time.Until(deadline)
+	if remaining < unityprocess.FocusCommandTimeout-time.Second || remaining > unityprocess.FocusCommandTimeout {
+		t.Fatalf("focus timeout mismatch: %s", remaining)
 	}
 }
 
