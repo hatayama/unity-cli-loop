@@ -178,6 +178,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// Pins block-comment copy path: comment text stays intact while a following integer still hoists.
+        /// </summary>
+        [Test]
+        public void Rewrite_WhenBlockCommentPrecedesLiteral_ShouldPreserveCommentAndHoistLiteral()
+        {
+            HoistedLiteralRewriteResult result = DynamicCodeLiteralHoister.Rewrite("/* c */ return 1;");
+
+            Assert.That(result.RewrittenSource, Is.EqualTo("/* c */ return __uloop_literal_0;"));
+            Assert.That(result.Bindings, Has.Count.EqualTo(1));
+            Assert.That(result.Bindings[0].Value, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Pins unterminated block comments consuming the remainder of the source through EOF.
+        /// </summary>
+        [Test]
+        public void Rewrite_WhenUnterminatedBlockComment_ShouldTreatRemainderAsComment()
+        {
+            string source = "/* unterminated";
+
+            HoistedLiteralRewriteResult result = DynamicCodeLiteralHoister.Rewrite(source);
+
+            Assert.That(result.RewrittenSource, Is.EqualTo(source));
+            Assert.That(result.Bindings, Is.Empty);
+            Assert.That(result.DeclarationLines, Is.Empty);
+        }
+
+        /// <summary>
         /// Pins mixed string and integer hoisting in a single expression.
         /// </summary>
         [Test]

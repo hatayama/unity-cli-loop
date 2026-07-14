@@ -391,10 +391,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static int SkipWhitespace(string s, int pos)
         {
-            Debug.Assert(s != null, "s must not be null");
-            Debug.Assert(pos >= 0, "pos must be non-negative");
-            while (pos < s.Length && char.IsWhiteSpace(s[pos])) pos++;
-            return pos;
+            return SourceTokenScanner.SkipWhitespace(s, pos);
         }
 
         internal static bool StartsWithKeyword(string s, int pos, string keyword)

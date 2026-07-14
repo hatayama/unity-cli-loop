@@ -7,20 +7,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class SourceTokenScanner
     {
+        internal static int SkipWhitespace(string s, int pos)
+        {
+            Debug.Assert(s != null, "s must not be null");
+            Debug.Assert(pos >= 0, "pos must be non-negative");
+            while (pos < s.Length && char.IsWhiteSpace(s[pos])) pos++;
+            return pos;
+        }
+
         internal static int SkipWhitespaceAndComments(string source, int pos)
         {
-            int current = SourceShaper.SkipWhitespace(source, pos);
+            // why: own SkipWhitespace so SourceTokenScanner does not depend back on SourceShaper
+            int current = SkipWhitespace(source, pos);
             while (true)
             {
                 if (TryMatchLineComment(source, current, out int afterLine))
                 {
-                    current = SourceShaper.SkipWhitespace(source, afterLine);
+                    current = SkipWhitespace(source, afterLine);
                     continue;
                 }
 
                 if (TryMatchBlockComment(source, current, out int afterBlock))
                 {
-                    current = SourceShaper.SkipWhitespace(source, afterBlock);
+                    current = SkipWhitespace(source, afterBlock);
                     continue;
                 }
 
