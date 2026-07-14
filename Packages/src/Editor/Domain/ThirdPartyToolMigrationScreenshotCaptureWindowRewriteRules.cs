@@ -47,87 +47,13 @@ using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTypeR
 
 namespace io.github.hatayama.UnityCliLoop.Domain
 {
-    public static class ThirdPartyToolMigrationScreenshotRules
+    /// <summary>
+    /// Rewrites legacy EditorWindowCaptureUtility CaptureWindow call sites during migration.
+    /// </summary>
+    public static class ThirdPartyToolMigrationScreenshotCaptureWindowRewriteRules
     {
-        public static (string Content, int ReplacementCount) ReplaceLegacyEditorWindowCaptureUtilityCallsInCode(
-            string source,
-            string[] legacyNamespaceAliases,
-            string[] currentFirstPartyToolsNamespaceAliases,
-            bool canMigrateBareLegacyEditorWindowCaptureUtility,
-            bool shouldQualifyBareEditorWindowCaptureUtilityTimeout,
-            bool canPreserveBareCurrentToolContractsReferences,
-            bool canUseBareCurrentFirstPartyTools,
-            string[] assemblyDeclaredTypeNames)
-        {
-            Debug.Assert(source != null, "source must not be null");
-            Debug.Assert(legacyNamespaceAliases != null, "legacyNamespaceAliases must not be null");
-            Debug.Assert(
-                currentFirstPartyToolsNamespaceAliases != null,
-                "currentFirstPartyToolsNamespaceAliases must not be null");
-            Debug.Assert(assemblyDeclaredTypeNames != null, "assemblyDeclaredTypeNames must not be null");
-
-            (string captureWindowContent, int captureWindowReplacementCount) =
-                ThirdPartyToolMigrationScreenshotCaptureWindowRewriteRules.ReplaceLegacyEditorWindowCaptureUtilityCaptureWindowCallsInCode(
-                    source,
-                    legacyNamespaceAliases,
-                    currentFirstPartyToolsNamespaceAliases,
-                    canMigrateBareLegacyEditorWindowCaptureUtility,
-                    shouldQualifyBareEditorWindowCaptureUtilityTimeout,
-                    canPreserveBareCurrentToolContractsReferences,
-                    canUseBareCurrentFirstPartyTools,
-                    HasProtectedEditorWindowCaptureUtilityDeclaration(source, assemblyDeclaredTypeNames));
-            (string captureWindowTaskContent, int captureWindowTaskReplacementCount) =
-                ThirdPartyToolMigrationScreenshotCaptureWindowRewriteRules.ReplaceLegacyEditorWindowCaptureUtilityCaptureWindowTaskCallsInCode(
-                    captureWindowContent,
-                    legacyNamespaceAliases,
-                    currentFirstPartyToolsNamespaceAliases,
-                    canMigrateBareLegacyEditorWindowCaptureUtility,
-                    shouldQualifyBareEditorWindowCaptureUtilityTimeout,
-                    canPreserveBareCurrentToolContractsReferences,
-                    canUseBareCurrentFirstPartyTools,
-                    HasProtectedEditorWindowCaptureUtilityDeclaration(captureWindowContent, assemblyDeclaredTypeNames));
-            (string captureGameRenderingContent, int captureGameRenderingReplacementCount) =
-                ReplaceLegacyEditorWindowCaptureUtilityCaptureGameRenderingCallsInCode(
-                    captureWindowTaskContent,
-                    legacyNamespaceAliases,
-                    currentFirstPartyToolsNamespaceAliases,
-                    canMigrateBareLegacyEditorWindowCaptureUtility,
-                    shouldQualifyBareEditorWindowCaptureUtilityTimeout,
-                    canPreserveBareCurrentToolContractsReferences,
-                    canUseBareCurrentFirstPartyTools,
-                    HasProtectedEditorWindowCaptureUtilityDeclaration(
-                        captureWindowTaskContent,
-                        assemblyDeclaredTypeNames));
-            (string captureGameRenderingTaskContent, int captureGameRenderingTaskReplacementCount) =
-                ReplaceLegacyEditorWindowCaptureUtilityCaptureGameRenderingTaskCallsInCode(
-                    captureGameRenderingContent,
-                    legacyNamespaceAliases,
-                    currentFirstPartyToolsNamespaceAliases,
-                    canMigrateBareLegacyEditorWindowCaptureUtility,
-                    shouldQualifyBareEditorWindowCaptureUtilityTimeout,
-                    canPreserveBareCurrentToolContractsReferences,
-                    canUseBareCurrentFirstPartyTools,
-                    HasProtectedEditorWindowCaptureUtilityDeclaration(
-                        captureGameRenderingContent,
-                        assemblyDeclaredTypeNames));
-            int deconstructionReplacementCount = 0;
-            string migratedContent = AddDiscardToCaptureGameRenderingDeconstructionsInCode(
-                captureGameRenderingTaskContent,
-                canUseBareCurrentFirstPartyTools,
-                currentFirstPartyToolsNamespaceAliases,
-                assemblyDeclaredTypeNames,
-                ref deconstructionReplacementCount);
-            return (
-                migratedContent,
-                captureWindowReplacementCount +
-                captureWindowTaskReplacementCount +
-                captureGameRenderingReplacementCount +
-                captureGameRenderingTaskReplacementCount +
-                deconstructionReplacementCount);
-        }
-
         public static (string Content, int ReplacementCount)
-            ReplaceLegacyEditorWindowCaptureUtilityCaptureGameRenderingCallsInCode(
+            ReplaceLegacyEditorWindowCaptureUtilityCaptureWindowCallsInCode(
                 string source,
                 string[] legacyNamespaceAliases,
                 string[] currentFirstPartyToolsNamespaceAliases,
@@ -144,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 "currentFirstPartyToolsNamespaceAliases must not be null");
 
             CodeTextMask codeTextMask = CodeTextMask.Create(source);
-            MatchCollection matches = LegacyEditorWindowCaptureUtilityCaptureGameRenderingRegex.Matches(source);
+            MatchCollection matches = LegacyEditorWindowCaptureUtilityCaptureWindowRegex.Matches(source);
             StringBuilder builder = new(source.Length);
             int sourceCopyIndex = 0;
             int replacementCount = 0;
@@ -175,7 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 string argumentsSource = source.Substring(
                     openParenthesisIndex + 1,
                     closingParenthesisIndex - openParenthesisIndex - 1);
-                string[] migratedArguments = GetMigratedEditorWindowCaptureUtilityGameRenderingArguments(
+                string[] migratedArguments = GetMigratedEditorWindowCaptureUtilityArguments(
                     SplitAttributeArguments(argumentsSource),
                     GetMigratedEditorWindowCaptureUtilityTimeoutExpression(
                         match,
@@ -186,21 +112,34 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                     continue;
                 }
 
+                (string configureAwaitSuffix, int replacementEndIndex) =
+                    ReadOptionalConfigureAwaitSuffix(source, codeTextMask, closingParenthesisIndex + 1);
+                bool shouldExtractTexture = ShouldExtractCaptureWindowTexture(
+                    source,
+                    codeTextMask,
+                    match.Index,
+                    replacementEndIndex);
+
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
-                builder.Append("await ");
-                ThirdPartyToolMigrationScreenshotCaptureWindowRewriteRules.AppendMigratedEditorWindowCaptureUtilityReference(
+                builder.Append(shouldExtractTexture ? "(await " : "await ");
+                AppendMigratedEditorWindowCaptureUtilityReference(
                     builder,
                     match,
                     currentFirstPartyToolsNamespaceAliases,
                     canPreserveBareCurrentToolContractsReferences,
                     canPreserveBareCurrentFirstPartyToolsReferences);
                 builder.Append('.');
-                builder.Append(EditorWindowCaptureUtilityCaptureGameRenderingMethodName);
+                builder.Append(EditorWindowCaptureUtilityCaptureWindowMethodName);
                 builder.Append('(');
                 builder.Append(string.Join(", ", migratedArguments));
                 builder.Append(')');
-                AppendCaptureGameRenderingLegacyTupleProjection(builder);
-                sourceCopyIndex = closingParenthesisIndex + 1;
+                builder.Append(configureAwaitSuffix);
+                if (shouldExtractTexture)
+                {
+                    builder.Append(").texture");
+                }
+
+                sourceCopyIndex = replacementEndIndex;
                 replacementCount++;
             }
 
@@ -214,7 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         }
 
         public static (string Content, int ReplacementCount)
-            ReplaceLegacyEditorWindowCaptureUtilityCaptureGameRenderingTaskCallsInCode(
+            ReplaceLegacyEditorWindowCaptureUtilityCaptureWindowTaskCallsInCode(
                 string source,
                 string[] legacyNamespaceAliases,
                 string[] currentFirstPartyToolsNamespaceAliases,
@@ -231,7 +170,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 "currentFirstPartyToolsNamespaceAliases must not be null");
 
             CodeTextMask codeTextMask = CodeTextMask.Create(source);
-            MatchCollection matches = LegacyEditorWindowCaptureUtilityCaptureGameRenderingInvocationRegex.Matches(source);
+            MatchCollection matches = LegacyEditorWindowCaptureUtilityCaptureWindowInvocationRegex.Matches(source);
             StringBuilder builder = new(source.Length);
             int sourceCopyIndex = 0;
             int replacementCount = 0;
@@ -263,7 +202,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 string argumentsSource = source.Substring(
                     openParenthesisIndex + 1,
                     closingParenthesisIndex - openParenthesisIndex - 1);
-                string[] migratedArguments = GetMigratedEditorWindowCaptureUtilityGameRenderingArguments(
+                string[] migratedArguments = GetMigratedEditorWindowCaptureUtilityArguments(
                     SplitAttributeArguments(argumentsSource),
                     GetMigratedEditorWindowCaptureUtilityTimeoutExpression(
                         match,
@@ -275,18 +214,18 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 }
 
                 builder.Append(source, sourceCopyIndex, match.Index - sourceCopyIndex);
-                ThirdPartyToolMigrationScreenshotCaptureWindowRewriteRules.AppendMigratedEditorWindowCaptureUtilityReference(
+                AppendMigratedEditorWindowCaptureUtilityReference(
                     builder,
                     match,
                     currentFirstPartyToolsNamespaceAliases,
                     canPreserveBareCurrentToolContractsReferences,
                     canPreserveBareCurrentFirstPartyToolsReferences);
                 builder.Append('.');
-                builder.Append(EditorWindowCaptureUtilityCaptureGameRenderingMethodName);
+                builder.Append(EditorWindowCaptureUtilityCaptureWindowMethodName);
                 builder.Append('(');
                 builder.Append(string.Join(", ", migratedArguments));
-                builder.Append(')');
-                AppendCaptureGameRenderingLegacyTupleProjection(builder);
+                builder.Append(").ContinueWith(__unityCliLoopCaptureTask => ");
+                builder.Append("__unityCliLoopCaptureTask.GetAwaiter().GetResult().texture)");
                 sourceCopyIndex = closingParenthesisIndex + 1;
                 replacementCount++;
             }
@@ -298,6 +237,65 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
             builder.Append(source, sourceCopyIndex, source.Length - sourceCopyIndex);
             return (builder.ToString(), replacementCount);
+        }
+
+        internal static void AppendMigratedEditorWindowCaptureUtilityReference(
+            StringBuilder builder,
+            Match match,
+            string[] currentFirstPartyToolsNamespaceAliases,
+            bool canPreserveBareCurrentToolContractsReferences,
+            bool canPreserveBareCurrentFirstPartyToolsReferences)
+        {
+            Debug.Assert(builder != null, "builder must not be null");
+            Debug.Assert(match != null, "match must not be null");
+            Debug.Assert(
+                currentFirstPartyToolsNamespaceAliases != null,
+                "currentFirstPartyToolsNamespaceAliases must not be null");
+
+            if (match.Groups["currentQualifier"].Success)
+            {
+                string qualifier = match.Groups["currentQualifier"].Value;
+                if (IsCurrentFirstPartyToolsQualifier(qualifier))
+                {
+                    builder.Append(qualifier);
+                    builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
+                    return;
+                }
+            }
+
+            if (match.Groups["alias"].Success &&
+                currentFirstPartyToolsNamespaceAliases.Contains(match.Groups["alias"].Value))
+            {
+                builder.Append(match.Groups["alias"].Value);
+                builder.Append('.');
+                builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
+                return;
+            }
+
+            if (match.Groups["editorWindowCaptureUtility"].Success &&
+                (canPreserveBareCurrentToolContractsReferences ||
+                    canPreserveBareCurrentFirstPartyToolsReferences))
+            {
+                builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
+                return;
+            }
+
+            builder.Append(CurrentNamespace);
+            builder.Append('.');
+            builder.Append(LegacyEditorWindowCaptureUtilityTypeName);
+        }
+
+        internal static bool IsCurrentFirstPartyToolsQualifier(string qualifier)
+        {
+            Debug.Assert(qualifier != null, "qualifier must not be null");
+
+            string normalizedQualifier = qualifier.StartsWith("global::", StringComparison.Ordinal)
+                ? qualifier.Substring("global::".Length)
+                : qualifier;
+            return string.Equals(
+                normalizedQualifier,
+                CurrentFirstPartyToolsNamespace + ".",
+                StringComparison.Ordinal);
         }
 
     }
