@@ -171,7 +171,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Focus return treats Unity's in-memory editor state as authoritative because source-control
             // operations can replace files while Unity is unfocused and would otherwise trigger reload dialogs.
             (string AssetPath, bool IsDirty)[] openScenesBefore = GetOpenSceneStates();
-            object[] fingerprintDiffsBefore = BuildFingerprintDiffContexts(openScenesBefore);
+            object[] fingerprintDiffsBefore =
+                BuildFingerprintDiffContexts(openScenesBefore, SceneSnapshots, ReadAssetFileFingerprint);
             VibeLogger.LogInfo(
                 "external_scene_resolve_focus_return",
                 "ResolveForFocusReturn started",
@@ -230,7 +231,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     phase = "end",
                     scenes = openScenesAfter,
-                    fingerprintDiffs = BuildFingerprintDiffContexts(openScenesAfter),
+                    fingerprintDiffs = BuildFingerprintDiffContexts(openScenesAfter, SceneSnapshots, ReadAssetFileFingerprint),
                     dirtySceneSaveFailures,
                     missingSceneSaveFailures,
                     held = IsAutoRefreshHeld()
@@ -238,17 +239,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 includeStackTrace: false);
         }
 
-        private static object[] BuildFingerprintDiffContexts((string AssetPath, bool IsDirty)[] scenes)
+        /// <summary>
+        /// Builds a fingerprint diff snapshot for observability logging, given explicit snapshot state
+        /// and a fingerprint reader so the comparison logic itself can be characterized without Unity APIs.
+        /// </summary>
+        internal static object[] BuildFingerprintDiffContexts(
+            (string AssetPath, bool IsDirty)[] scenes,
+            Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots,
+            Func<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> readFingerprint)
         {
             Debug.Assert(scenes != null, "scenes must not be null");
+            Debug.Assert(snapshots != null, "snapshots must not be null");
+            Debug.Assert(readFingerprint != null, "readFingerprint must not be null");
 
             List<object> diffs = new List<object>(scenes.Length);
             for (int i = 0; i < scenes.Length; i++)
             {
                 string assetPath = scenes[i].AssetPath;
-                (bool Exists, DateTime LastWriteTimeUtc, long Length) current =
-                    ReadAssetFileFingerprint(assetPath);
-                bool hasSnapshot = SceneSnapshots.TryGetValue(
+                (bool Exists, DateTime LastWriteTimeUtc, long Length) current = readFingerprint(assetPath);
+                bool hasSnapshot = snapshots.TryGetValue(
                     assetPath,
                     out (bool Exists, DateTime LastWriteTimeUtc, long Length) snapshot);
                 bool changed = !hasSnapshot ||

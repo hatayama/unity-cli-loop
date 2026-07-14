@@ -543,6 +543,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void BuildFingerprintDiffContexts_WhenNoSnapshotExists_ReportsChangedWithoutSnapshot()
+        {
+            // Pins first-observation behavior used by focus-return start/end observability logging.
+            Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots =
+                new Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)>(StringComparer.Ordinal);
+            (string AssetPath, bool IsDirty)[] scenes = { (ScenePath, false) };
+
+            object[] diffs = ExternalSceneChangeTracker.BuildFingerprintDiffContexts(
+                scenes, snapshots, _ => (true, ChangedTime, 20));
+
+            Assert.That(diffs, Has.Length.EqualTo(1));
+            dynamic diff = diffs[0];
+            Assert.That((string)diff.assetPath, Is.EqualTo(ScenePath));
+            Assert.That((bool)diff.changed, Is.True);
+            Assert.That((bool)diff.hasSnapshot, Is.False);
+            Assert.That((bool)diff.snapshotExists, Is.False);
+            Assert.That((bool)diff.currentExists, Is.True);
+            Assert.That((long)diff.currentLength, Is.EqualTo(20));
+        }
+
+        [Test]
+        public void BuildFingerprintDiffContexts_WhenFingerprintMatchesSnapshot_ReportsUnchanged()
+        {
+            // Pins that identical fingerprints are reported as unchanged for observability logging.
+            Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots = CreateSnapshots();
+            (string AssetPath, bool IsDirty)[] scenes = { (ScenePath, true) };
+
+            object[] diffs = ExternalSceneChangeTracker.BuildFingerprintDiffContexts(
+                scenes, snapshots, _ => (true, SavedTime, 10));
+
+            dynamic diff = diffs[0];
+            Assert.That((bool)diff.hasSnapshot, Is.True);
+            Assert.That((bool)diff.changed, Is.False);
+            Assert.That((bool)diff.isDirty, Is.True);
+        }
+
+        [Test]
+        public void BuildFingerprintDiffContexts_WhenFingerprintDiffersFromSnapshot_ReportsChanged()
+        {
+            // Pins that a diverged fingerprint is reported as changed for observability logging.
+            Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots = CreateSnapshots();
+            (string AssetPath, bool IsDirty)[] scenes = { (ScenePath, false) };
+
+            object[] diffs = ExternalSceneChangeTracker.BuildFingerprintDiffContexts(
+                scenes, snapshots, _ => (true, ChangedTime, 20));
+
+            dynamic diff = diffs[0];
+            Assert.That((bool)diff.hasSnapshot, Is.True);
+            Assert.That((bool)diff.changed, Is.True);
+            Assert.That((long)diff.snapshotLength, Is.EqualTo(10));
+            Assert.That((long)diff.currentLength, Is.EqualTo(20));
+        }
+
+        [Test]
         public void CreatePrefabStageReopenContext_WhenInstanceIsMissing_UsesIsolation()
         {
             // Verifies missing Prefab Stage context reopens without invalid InContext arguments.
