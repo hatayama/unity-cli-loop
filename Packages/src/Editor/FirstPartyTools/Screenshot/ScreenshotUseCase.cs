@@ -256,14 +256,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SynchronizationContext editorContext =
                 CapturedEditorSynchronizationContext.RequireCurrent("window screenshot use case");
             EditorWindow[] windows = EditorWindowCaptureUtility.FindWindowsByName(request.WindowName, request.MatchMode);
-            string captureWindowName = request.WindowName;
-            if (ScreenshotWindowNameResolver.ShouldFallbackToSimulator(
-                    request.WindowName,
-                    request.MatchMode,
-                    windows.Length))
+            string captureWindowName = ScreenshotWindowNameResolver.ResolveCaptureWindowName(
+                request.WindowName,
+                request.MatchMode,
+                windows.Length);
+            bool usedSimulatorFallback = !string.Equals(
+                captureWindowName,
+                request.WindowName,
+                StringComparison.OrdinalIgnoreCase);
+            if (usedSimulatorFallback)
             {
                 // why: Device Simulator replaces the Game tab, so the default "Game" title miss should retry Simulator
-                captureWindowName = UnityCliLoopConstants.SCREENSHOT_SIMULATOR_WINDOW_NAME;
                 windows = EditorWindowCaptureUtility.FindWindowsByName(captureWindowName, request.MatchMode);
                 if (windows.Length > 0)
                 {
@@ -277,16 +280,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (windows.Length == 0)
             {
-                string notFoundMessage =
-                    $"Window '{request.WindowName}' not found (MatchMode: {request.MatchMode})";
-                if (ScreenshotWindowNameResolver.ShouldFallbackToSimulator(
-                        request.WindowName,
-                        request.MatchMode,
-                        matchCount: 0))
-                {
-                    notFoundMessage +=
-                        $". Device Simulator may be active — pass --window-name {UnityCliLoopConstants.SCREENSHOT_SIMULATOR_WINDOW_NAME}";
-                }
+                string notFoundMessage = usedSimulatorFallback
+                    ? "Neither Game nor Simulator window found; open the Game view or Device Simulator and retry"
+                    : $"Window '{request.WindowName}' not found (MatchMode: {request.MatchMode})";
 
                 VibeLogger.LogError(
                     "screenshot_window_not_found",

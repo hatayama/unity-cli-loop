@@ -69,5 +69,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(resolved, Is.EqualTo(UnityCliLoopConstants.SCREENSHOT_SIMULATOR_WINDOW_NAME));
         }
+
+        [Test]
+        public void ResolveCaptureWindowName_WhenFallbackDoesNotApply_ReturnsRequestedName()
+        {
+            // Verifies Resolve keeps the requested title when Game already matched.
+            string resolved = ScreenshotWindowNameResolver.ResolveCaptureWindowName(
+                UnityCliLoopConstants.SCREENSHOT_DEFAULT_WINDOW_NAME,
+                WindowMatchMode.exact,
+                primaryMatchCount: 1);
+
+            Assert.That(resolved, Is.EqualTo(UnityCliLoopConstants.SCREENSHOT_DEFAULT_WINDOW_NAME));
+        }
     }
 }
