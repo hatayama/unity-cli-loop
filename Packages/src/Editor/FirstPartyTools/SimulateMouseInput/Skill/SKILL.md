@@ -106,6 +106,7 @@ unity_y = gameViewHeight - input_y
 ```
 
 - `Mouse.current.position` uses bottom-left Unity coordinates, so the value read inside Unity may show the converted Y.
+- Device Simulator play view is supported. Prefer rendering-mode screenshots for coordinates; they match the simulated device resolution, not Simulator chrome scale.
 
 ## Prerequisites
 

@@ -162,7 +162,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return names.ToArray();
         }
 
-        // Captures game rendering by reading GameView's composited RenderTexture (PlayMode only).
+        // Captures game rendering by reading the Play Mode view RenderTexture (PlayMode only).
+        // Works for both GameView and Device Simulator via PlayModeView.m_TargetTexture.
         // Contains all cameras + Screen Space Overlay Canvas, without tab bar or borders.
         internal static async Task<(Texture2D? texture, GameRenderingImageInfo renderingImageInfo, bool timedOut)> CaptureGameRenderingAsync(
             float resolutionScale,
@@ -189,13 +190,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             RenderTexture rt = GameViewBridge.GetRenderTexture();
             if (rt == null)
             {
-                Debug.LogWarning("[EditorWindowCaptureUtility] GameView RenderTexture is not available");
+                Debug.LogWarning("[EditorWindowCaptureUtility] Play Mode view RenderTexture is not available");
                 GameRenderingImageInfo unavailableInfo = renderingImageInfo ??
                     CreateUnavailableGameRenderingImageInfo(Handles.GetMainGameViewSize());
                 return (null, unavailableInfo, false);
             }
 
-            // GameView RenderTexture can be shorter than the full input area, so raw image Y needs this offset.
+            // Play Mode view RenderTexture can be shorter than the full input area, so raw image Y needs this offset.
             GameRenderingImageInfo captureInfo = renderingImageInfo ??
                 CreateGameRenderingImageInfo(Handles.GetMainGameViewSize(), rt.width, rt.height);
 
