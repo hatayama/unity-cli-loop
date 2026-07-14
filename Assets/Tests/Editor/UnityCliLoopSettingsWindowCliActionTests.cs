@@ -27,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool expected)
         {
             // Verifies that package-owned installs route to uninstall only when the dispatcher minimum is satisfied.
-            bool result = UnityCliLoopSettingsWindow.ShouldUninstallCliFromPrimaryButton(
+            bool result = UnityCliLoopSettingsCliSetupPresenter.ShouldUninstallCliFromPrimaryButton(
                 cliVersion,
                 cliIsDispatcher,
                 canUninstallCli,
@@ -45,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool expected)
         {
             // Verifies that stale terminal PATH state routes to repair only when CLI replacement is not needed.
-            bool result = UnityCliLoopSettingsWindow.ShouldRepairCliPathFromPrimaryButton(
+            bool result = UnityCliLoopSettingsCliSetupPresenter.ShouldRepairCliPathFromPrimaryButton(
                 needsCliPathSetup,
                 needsUpdate);
 
@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that the Settings window chooses repair only when dispatcher replacement is unnecessary.
             CliSetupPrimaryAction result =
-                UnityCliLoopSettingsWindow.ResolveCliPrimaryButtonAction(
+                UnityCliLoopSettingsCliSetupPresenter.ResolveCliPrimaryButtonAction(
                     needsCliPathSetup,
                     cliVersion,
                     cliIsDispatcher,
@@ -94,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies that a refreshed Settings state cannot turn a stale click into a destructive action.
             CliSetupPrimaryAction result =
-                UnityCliLoopSettingsWindow.ResolveExecutableCliPrimaryButtonAction(
+                UnityCliLoopSettingsCliSetupPresenter.ResolveExecutableCliPrimaryButtonAction(
                     ParseAction(clickedAction),
                     ParseAction(refreshedAction));
 
@@ -111,7 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool expected)
         {
             // Verifies that PATH repair only runs for POSIX package-owned current-user installs.
-            bool result = UnityCliLoopSettingsWindow.ShouldCheckCliPathSetupForPlatform(
+            bool result = UnityCliLoopSettingsCliSetupPresenter.ShouldCheckCliPathSetupForPlatform(
                 platform,
                 hasPackageOwnedCurrentUserInstall);
 
@@ -131,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool expected)
         {
             // Verifies that the settings UI updates non-dispatcher or older dispatcher installs.
-            bool result = UnityCliLoopSettingsWindow.IsCliUpdateNeeded(
+            bool result = UnityCliLoopSettingsCliSetupPresenter.IsCliUpdateNeeded(
                 cliVersion,
                 cliIsDispatcher,
                 TestMinimumDispatcherVersion);
@@ -150,7 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies that Settings keeps the success dialog for first install only.
             SkillSetupTargetInfo targetInfo = CreateSkillTarget(installState, hasDifferentLayoutSkills);
 
-            bool result = UnityCliLoopSettingsWindow.ShouldShowSkillsInstalledDialog(targetInfo);
+            bool result = SkillInstallDialogPolicy.ShouldShowForSelectedTarget(targetInfo);
 
             Assert.That(result, Is.EqualTo(expected));
         }
