@@ -66,6 +66,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public async Task<ExecutionResult> ExecuteAsync(ExecutionContext context)
         {
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
+            // Why switch first: callers often resume off-thread via ConfigureAwait(false), but
+            // BeginUndoGroup / EndExecution use Unity Undo APIs that require the main thread.
+            await MainThreadSwitcher.SwitchToMainThread(context.CancellationToken);
             if (!TryBeginExecution(out int undoGroup, out CancellationTokenSource executionCancellationTokenSource))
             {
                 return CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_IN_PROGRESS);
@@ -76,15 +79,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 using CancellationTokenSource combinedCts = CreateCombinedCancellationTokenSource(
                     context,
                     executionCancellationTokenSource);
-                return await ExecuteInternalAsync(context, combinedCts.Token).ConfigureAwait(false);
+                ExecutionResult result = await ExecuteInternalAsync(context, combinedCts.Token).ConfigureAwait(false);
+                await MainThreadSwitcher.SwitchToMainThread();
+                return result;
             }
             catch (OperationCanceledException)
             {
+                await MainThreadSwitcher.SwitchToMainThread();
                 return CreateCancelledResult();
             }
             catch (Exception ex)
             {
                 LogExecutionError(ex, correlationId);
+                await MainThreadSwitcher.SwitchToMainThread();
 
                 return CreateErrorResult(
                     ex.Message,
