@@ -19,11 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "io.github.hatayama.UnityCliLoop.ExternalSceneChangeTracker.AutoRefreshHeld";
         private const string SceneSnapshotsSessionStateKey =
             "io.github.hatayama.UnityCliLoop.ExternalSceneChangeTracker.SceneSnapshots";
-        private const string PrefabStageSnapshotsSessionStateKey =
-            "io.github.hatayama.UnityCliLoop.ExternalSceneChangeTracker.PrefabStageSnapshots";
         private static readonly Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> SceneSnapshots =
-            new Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)>(StringComparer.Ordinal);
-        private static readonly Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> PrefabStageSnapshots =
             new Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)>(StringComparer.Ordinal);
         private static readonly ExternalAssetFocusReturnService FocusReturnService =
             new ExternalAssetFocusReturnService(
@@ -69,12 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             EditorSceneManager.sceneSaved += HandleSceneSaved;
             EditorSceneManager.sceneClosed -= HandleSceneClosed;
             EditorSceneManager.sceneClosed += HandleSceneClosed;
-            PrefabStage.prefabStageOpened -= HandlePrefabStageOpened;
-            PrefabStage.prefabStageOpened += HandlePrefabStageOpened;
-            PrefabStage.prefabStageClosing -= HandlePrefabStageClosing;
-            PrefabStage.prefabStageClosing += HandlePrefabStageClosing;
-            PrefabStage.prefabSaved -= HandlePrefabSaved;
-            PrefabStage.prefabSaved += HandlePrefabSaved;
+            ExternalPrefabStageChangeTracker.RegisterEventHandlers();
             EditorApplication.focusChanged -= HandleFocusChanged;
             EditorApplication.focusChanged += HandleFocusChanged;
             EditorApplication.update -= ReconcileAutoRefreshHoldOnUpdate;
@@ -83,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!restoredHeldAutoRefresh && !IsAutoRefreshHeld())
             {
                 RecordOpenSceneSnapshots();
-                RecordCurrentPrefabStageSnapshot();
+                ExternalPrefabStageChangeTracker.RecordCurrent();
             }
 
             // Why immediate Hold: background launch never fires focusChanged(false), so Auto Refresh
@@ -145,27 +136,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SaveSceneSnapshotsToSessionState();
         }
 
-        private static void HandlePrefabStageOpened(PrefabStage prefabStage)
-        {
-            RecordPrefabStageSnapshot(prefabStage);
-        }
-
-        private static void HandlePrefabStageClosing(PrefabStage prefabStage)
-        {
-            if (!IsTrackablePrefabStage(prefabStage))
-            {
-                return;
-            }
-
-            PrefabStageSnapshots.Remove(NormalizeAssetPath(prefabStage.assetPath));
-            SavePrefabStageSnapshotsToSessionState();
-        }
-
-        private static void HandlePrefabSaved(GameObject prefabRoot)
-        {
-            RecordCurrentPrefabStageSnapshot();
-        }
-
         private static void ResolveForFocusReturn()
         {
             // Focus return treats Unity's in-memory editor state as authoritative because source-control
@@ -191,16 +161,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] missingSceneSaveFailures = SaveMissingOpenScenesFromUnity();
             LogFocusReturnFailures("restore missing Scene files from the Unity state", missingSceneSaveFailures);
 
-            string[] dirtyPrefabSaveFailures = SaveDirtyCurrentPrefabStage();
+            string[] dirtyPrefabSaveFailures = ExternalPrefabStageChangeTracker.SaveDirty();
             LogFocusReturnFailures("save the dirty Prefab Stage", dirtyPrefabSaveFailures);
 
-            string[] missingPrefabSaveFailures = SaveMissingCurrentPrefabStageAsset();
+            string[] missingPrefabSaveFailures = ExternalPrefabStageChangeTracker.SaveMissingAsset();
             LogFocusReturnFailures("restore the missing Prefab asset from the Unity state", missingPrefabSaveFailures);
 
             ResolveSceneExternalChangesForFocusReturn();
             if (dirtyPrefabSaveFailures.Length > 0 ||
                 missingPrefabSaveFailures.Length > 0 ||
-                IsCurrentPrefabStageDirty())
+                ExternalPrefabStageChangeTracker.IsCurrentDirty())
             {
                 Debug.LogWarning(
                     "Unity CLI Loop skipped Prefab Stage external-change reload because the current Prefab Stage is still dirty or could not be saved.");
@@ -221,7 +191,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            ResolveCurrentPrefabStageExternalChangeForFocusReturn();
+            ExternalPrefabStageChangeTracker.ResolveExternalChangeForFocusReturn();
 
             (string AssetPath, bool IsDirty)[] openScenesAfter = GetOpenSceneStates();
             VibeLogger.LogInfo(
@@ -310,23 +280,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        private static void RecordCurrentPrefabStageSnapshot()
-        {
-            RecordPrefabStageSnapshot(PrefabStageUtility.GetCurrentPrefabStage());
-        }
-
-        private static void RecordPrefabStageSnapshot(PrefabStage prefabStage)
-        {
-            if (!IsTrackablePrefabStage(prefabStage))
-            {
-                return;
-            }
-
-            string assetPath = NormalizeAssetPath(prefabStage.assetPath);
-            PrefabStageSnapshots[assetPath] = ReadAssetFileFingerprint(assetPath);
-            SavePrefabStageSnapshotsToSessionState();
-        }
-
         private static (string AssetPath, bool IsDirty)[] GetOpenSceneStates()
         {
             List<(string AssetPath, bool IsDirty)> scenes = new List<(string AssetPath, bool IsDirty)>();
@@ -352,15 +305,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                    scene.path.EndsWith(".unity", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static bool IsTrackablePrefabStage(PrefabStage prefabStage)
-        {
-            return prefabStage != null &&
-                   prefabStage.scene.IsValid() &&
-                   !string.IsNullOrEmpty(prefabStage.assetPath) &&
-                   prefabStage.assetPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static (bool Exists, DateTime LastWriteTimeUtc, long Length) ReadAssetFileFingerprint(
+        internal static (bool Exists, DateTime LastWriteTimeUtc, long Length) ReadAssetFileFingerprint(
             string assetPath)
         {
             Debug.Assert(!string.IsNullOrEmpty(assetPath), "assetPath must not be empty");
@@ -389,83 +334,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Debug.LogWarning("Unity CLI Loop could not resolve external Scene changes on focus return. " +
                              result.Message);
-        }
-
-        private static void ResolveCurrentPrefabStageExternalChangeForFocusReturn()
-        {
-            PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
-            if (!IsTrackablePrefabStage(prefabStage))
-            {
-                return;
-            }
-
-            string assetPath = NormalizeAssetPath(prefabStage.assetPath);
-            (bool Exists, DateTime LastWriteTimeUtc, long Length) currentFingerprint =
-                ReadAssetFileFingerprint(assetPath);
-            if (!PrefabStageSnapshots.ContainsKey(assetPath))
-            {
-                PrefabStageSnapshots[assetPath] = currentFingerprint;
-                SavePrefabStageSnapshotsToSessionState();
-                return;
-            }
-
-            if (ExternalAssetFileStateComparer.HasSameFileState(
-                PrefabStageSnapshots[assetPath], currentFingerprint))
-            {
-                return;
-            }
-
-            if (!currentFingerprint.Exists)
-            {
-                string[] saveFailures = SaveMissingCurrentPrefabStageAsset();
-                LogFocusReturnFailures("restore the missing Prefab asset from the Unity state", saveFailures);
-                return;
-            }
-
-            AssetDatabase.ImportAsset(assetPath);
-            UnityEngine.Object prefabAsset = AssetDatabase.LoadMainAssetAtPath(assetPath);
-            if (prefabAsset == null)
-            {
-                Debug.LogWarning("Unity CLI Loop could not reopen externally changed Prefab asset on focus return. " +
-                                 "Prefab Stage: " + assetPath);
-                return;
-            }
-
-            (GameObject OpenedFromInstanceObject, PrefabStage.Mode Mode) reopenContext =
-                CreatePrefabStageReopenContext(
-                    prefabStage.openedFromInstanceObject,
-                    prefabStage.mode,
-                    PrefabUtility.IsPartOfPrefabInstance);
-            PrefabStage reopenedStage =
-                PrefabStageUtility.OpenPrefab(assetPath, reopenContext.OpenedFromInstanceObject, reopenContext.Mode);
-            if (reopenedStage == null)
-            {
-                Debug.LogWarning("Unity CLI Loop could not reopen externally changed Prefab asset on focus return. " +
-                                 "Prefab Stage: " + assetPath);
-                return;
-            }
-
-            RecordPrefabStageSnapshot(reopenedStage);
-        }
-
-        internal static (GameObject OpenedFromInstanceObject, PrefabStage.Mode Mode) CreatePrefabStageReopenContext(
-            GameObject openedFromInstanceObject,
-            PrefabStage.Mode prefabStageMode,
-            Func<GameObject, bool> isPartOfPrefabInstance)
-        {
-            Debug.Assert(isPartOfPrefabInstance != null, "isPartOfPrefabInstance must not be null");
-
-            if (openedFromInstanceObject == null)
-            {
-                return (null, PrefabStage.Mode.InIsolation);
-            }
-
-            if (isPartOfPrefabInstance(openedFromInstanceObject))
-            {
-                return (openedFromInstanceObject, prefabStageMode);
-            }
-
-            return (null, PrefabStage.Mode.InIsolation);
         }
 
         private static string[] SaveDirtyOpenScenesBeforeReload()
@@ -534,73 +402,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return failedScenePaths.ToArray();
         }
 
-        private static string[] SaveDirtyCurrentPrefabStage()
-        {
-            PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
-            if (!IsTrackablePrefabStage(prefabStage) || !prefabStage.scene.isDirty)
-            {
-                return Array.Empty<string>();
-            }
-
-            if (TrySavePrefabStage(prefabStage))
-            {
-                return Array.Empty<string>();
-            }
-
-            return new[] { GetPrefabStageDisplayPath(prefabStage) };
-        }
-
-        private static string[] SaveMissingCurrentPrefabStageAsset()
-        {
-            PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
-            if (!IsTrackablePrefabStage(prefabStage))
-            {
-                return Array.Empty<string>();
-            }
-
-            string assetPath = NormalizeAssetPath(prefabStage.assetPath);
-            (bool Exists, DateTime LastWriteTimeUtc, long Length) currentFingerprint =
-                ReadAssetFileFingerprint(assetPath);
-            if (currentFingerprint.Exists)
-            {
-                return Array.Empty<string>();
-            }
-
-            if (TrySavePrefabStage(prefabStage))
-            {
-                return Array.Empty<string>();
-            }
-
-            return new[] { GetPrefabStageDisplayPath(prefabStage) };
-        }
-
-        private static bool IsCurrentPrefabStageDirty()
-        {
-            PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
-            return IsTrackablePrefabStage(prefabStage) && prefabStage.scene.isDirty;
-        }
-
-        private static bool TrySavePrefabStage(PrefabStage prefabStage)
-        {
-            Debug.Assert(prefabStage != null, "prefabStage must not be null");
-
-            if (string.IsNullOrEmpty(prefabStage.assetPath))
-            {
-                return false;
-            }
-
-            bool success;
-            PrefabUtility.SaveAsPrefabAsset(prefabStage.prefabContentsRoot, prefabStage.assetPath, out success);
-            if (!success)
-            {
-                return false;
-            }
-
-            prefabStage.ClearDirtiness();
-            RecordPrefabStageSnapshot(prefabStage);
-            return true;
-        }
-
         private static bool ReloadOpenSceneSetup()
         {
             SceneSetup[] sceneSetup = EditorSceneManager.GetSceneManagerSetup();
@@ -639,9 +440,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ExternalAssetSnapshotSessionStore.RestoreSnapshots(
                 SceneSnapshots,
                 SessionState.GetString(SceneSnapshotsSessionStateKey, ""));
-            ExternalAssetSnapshotSessionStore.RestoreSnapshots(
-                PrefabStageSnapshots,
-                SessionState.GetString(PrefabStageSnapshotsSessionStateKey, ""));
+            ExternalPrefabStageChangeTracker.RestoreFromSessionState();
         }
 
         private static void SaveSceneSnapshotsToSessionState()
@@ -651,20 +450,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ExternalAssetSnapshotSessionStore.SerializeSnapshots(SceneSnapshots));
         }
 
-        private static void SavePrefabStageSnapshotsToSessionState()
-        {
-            SessionState.SetString(
-                PrefabStageSnapshotsSessionStateKey,
-                ExternalAssetSnapshotSessionStore.SerializeSnapshots(PrefabStageSnapshots));
-        }
-
-        private static string NormalizeAssetPath(string assetPath)
+        internal static string NormalizeAssetPath(string assetPath)
         {
             Debug.Assert(!string.IsNullOrEmpty(assetPath), "assetPath must not be empty");
             return assetPath.Replace('\\', '/');
         }
 
-        private static string GetSceneDisplayPath(Scene scene)
+        internal static string GetSceneDisplayPath(Scene scene)
         {
             if (!string.IsNullOrEmpty(scene.path))
             {
@@ -679,19 +471,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return "Untitled scene";
         }
 
-        private static string GetPrefabStageDisplayPath(PrefabStage prefabStage)
-        {
-            Debug.Assert(prefabStage != null, "prefabStage must not be null");
-
-            if (!string.IsNullOrEmpty(prefabStage.assetPath))
-            {
-                return NormalizeAssetPath(prefabStage.assetPath);
-            }
-
-            return GetSceneDisplayPath(prefabStage.scene);
-        }
-
-        private static void LogFocusReturnFailures(string action, string[] failedAssetPaths)
+        internal static void LogFocusReturnFailures(string action, string[] failedAssetPaths)
         {
             Debug.Assert(!string.IsNullOrEmpty(action), "action must not be empty");
             Debug.Assert(failedAssetPaths != null, "failedAssetPaths must not be null");

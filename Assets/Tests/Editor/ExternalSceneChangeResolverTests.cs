@@ -506,7 +506,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             try
             {
                 (GameObject OpenedFromInstanceObject, PrefabStage.Mode Mode) context =
-                    ExternalSceneChangeTracker.CreatePrefabStageReopenContext(
+                    ExternalPrefabStageChangeTracker.CreatePrefabStageReopenContext(
                         openedFromInstanceObject,
                         PrefabStage.Mode.InContext,
                         _ => true);
@@ -528,7 +528,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             try
             {
                 (GameObject OpenedFromInstanceObject, PrefabStage.Mode Mode) context =
-                    ExternalSceneChangeTracker.CreatePrefabStageReopenContext(
+                    ExternalPrefabStageChangeTracker.CreatePrefabStageReopenContext(
                         openedFromInstanceObject,
                         PrefabStage.Mode.InContext,
                         _ => false);
@@ -601,7 +601,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies missing Prefab Stage context reopens without invalid InContext arguments.
             (GameObject OpenedFromInstanceObject, PrefabStage.Mode Mode) context =
-                ExternalSceneChangeTracker.CreatePrefabStageReopenContext(
+                ExternalPrefabStageChangeTracker.CreatePrefabStageReopenContext(
                     null,
                     PrefabStage.Mode.InContext,
                     _ => true);
