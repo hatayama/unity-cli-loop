@@ -15,7 +15,10 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             UnityCliLoopConstants.COMMAND_NAME_AWAIT_PAUSE_POINT,
             UnityCliLoopConstants.TOOL_NAME_ENABLE_PAUSE_POINT,
             UnityCliLoopConstants.TOOL_NAME_CLEAR_PAUSE_POINT,
-            UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS
+            UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS,
+            UnityCliLoopConstants.TOOL_NAME_ENABLE_WATCH,
+            UnityCliLoopConstants.TOOL_NAME_CLEAR_WATCH,
+            UnityCliLoopConstants.TOOL_NAME_GET_WATCH_VALUES
         };
 
         internal static bool IsUserFacingToolSettingsTool(string toolName)
