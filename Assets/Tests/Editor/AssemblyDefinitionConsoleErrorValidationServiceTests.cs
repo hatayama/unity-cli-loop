@@ -2,6 +2,7 @@ using NUnit.Framework;
 using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -173,6 +174,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result.HasErrors, Is.False);
             Assert.That(result.Errors, Is.Empty);
+        }
+
+        [Test]
+        public void CreateFailureMessage_WhenErrorsHaveFiles_ListsEachIssueWithItsFile()
+        {
+            // Pins the failure message shape consumed by CompileResult.Message for compile responses.
+            AssemblyDefinitionConsoleError[] errors =
+            {
+                new("duplicate references", "Assets/Editor/Sample.asmdef", 0),
+                new("invalid target", "Assets/Tests/Sample.asmref", 0)
+            };
+
+            string message = AssemblyDefinitionConsoleErrorMessageFormatter.CreateFailureMessage(errors);
+
+            Assert.That(message, Does.StartWith(UnityCliLoopConstants.ERROR_MESSAGE_ASSEMBLY_DEFINITION_IMPORT_ERROR));
+            Assert.That(message, Does.Contain("- Assets/Editor/Sample.asmdef: duplicate references"));
+            Assert.That(message, Does.Contain("- Assets/Tests/Sample.asmref: invalid target"));
+        }
+
+        [Test]
+        public void CreateFailureMessage_WhenErrorHasNoFile_OmitsFilePrefix()
+        {
+            // Pins fallback formatting for issues without a resolvable asset path.
+            AssemblyDefinitionConsoleError[] errors = { new("generic import failure", "", 0) };
+
+            string message = AssemblyDefinitionConsoleErrorMessageFormatter.CreateFailureMessage(errors);
+
+            Assert.That(message, Does.Contain("- generic import failure"));
+            Assert.That(message, Does.Not.Contain(": generic import failure"));
+        }
+
+        [Test]
+        public void CreateFailureMessage_WhenMoreThanTenErrorsExist_ListsOnlyFirstTen()
+        {
+            // Pins the display cap so console failure messages stay readable with many issues.
+            AssemblyDefinitionConsoleError[] errors = new AssemblyDefinitionConsoleError[12];
+            for (int i = 0; i < errors.Length; i++)
+            {
+                errors[i] = new AssemblyDefinitionConsoleError($"issue-{i}", $"Assets/Sample{i}.asmdef", 0);
+            }
+
+            string message = AssemblyDefinitionConsoleErrorMessageFormatter.CreateFailureMessage(errors);
+
+            Assert.That(message, Does.Contain("issue-9"));
+            Assert.That(message, Does.Not.Contain("issue-10"));
+            Assert.That(message, Does.Not.Contain("issue-11"));
+        }
+
+        [Test]
+        public void AssemblyDefinitionConsoleErrorResult_WhenErrorsExist_ExposesFormattedMessage()
+        {
+            // Pins that the result DTO's Message mirrors CreateFailureMessage for compile failure reporting.
+            AssemblyDefinitionConsoleError[] errors = { new("duplicate references", "Assets/Editor/Sample.asmdef", 0) };
+
+            AssemblyDefinitionConsoleErrorResult result = new(errors);
+
+            Assert.That(result.Message, Is.EqualTo(AssemblyDefinitionConsoleErrorMessageFormatter.CreateFailureMessage(errors)));
+        }
+
+        [Test]
+        public void AssemblyDefinitionConsoleErrorResult_WhenNoErrorsExist_HasNullMessage()
+        {
+            // Pins that an empty result never triggers Message-based failure handling.
+            AssemblyDefinitionConsoleErrorResult result = new(System.Array.Empty<AssemblyDefinitionConsoleError>());
+
+            Assert.That(result.HasErrors, Is.False);
+            Assert.That(result.Message, Is.Null);
         }
     }
 }
