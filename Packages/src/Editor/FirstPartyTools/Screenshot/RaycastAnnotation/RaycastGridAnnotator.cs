@@ -13,9 +13,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class RaycastGridAnnotator
     {
-        private const int CLUSTERED_GRID_COLUMNS = 40;
-        private const int CLUSTERED_GRID_ROWS = 40;
-
         internal static List<RaycastLayerSummaryInfo> CollectRaycastLayerSummaries(
             Vector2 renderingImageSize,
             int imageToInputOffsetY)
@@ -23,8 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<RaycastLayerHitSample> samples = CollectLayerHitSamples(
                 renderingImageSize,
                 imageToInputOffsetY,
-                CLUSTERED_GRID_ROWS,
-                CLUSTERED_GRID_COLUMNS);
+                RaycastPhysicsColliderBuilder.CLUSTERED_GRID_ROWS,
+                RaycastPhysicsColliderBuilder.CLUSTERED_GRID_COLUMNS);
             return CreateLayerSummaries(samples);
         }
 
@@ -145,15 +142,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Sync once before the dense pass so every sample reads the same current physics state.
             Physics.SyncTransforms();
 
-            for (int row = 1; row <= CLUSTERED_GRID_ROWS; row++)
+            for (int row = 1; row <= RaycastPhysicsColliderBuilder.CLUSTERED_GRID_ROWS; row++)
             {
-                for (int column = 1; column <= CLUSTERED_GRID_COLUMNS; column++)
+                for (int column = 1; column <= RaycastPhysicsColliderBuilder.CLUSTERED_GRID_COLUMNS; column++)
                 {
                     Vector2 inputPosition = CalculateGridInputPositionForGrid(
                         renderingImageSize,
                         imageToInputOffsetY,
-                        CLUSTERED_GRID_ROWS,
-                        CLUSTERED_GRID_COLUMNS,
+                        RaycastPhysicsColliderBuilder.CLUSTERED_GRID_ROWS,
+                        RaycastPhysicsColliderBuilder.CLUSTERED_GRID_COLUMNS,
                         row,
                         column);
                     GameViewRaycastResult raycastResult = GameViewRaycastUtility.RaycastFromInputPosition(

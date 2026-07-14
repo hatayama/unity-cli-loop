@@ -11,8 +11,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class RaycastPhysicsColliderBuilder
     {
-        private const int CLUSTERED_GRID_COLUMNS = 40;
-        private const int CLUSTERED_GRID_ROWS = 40;
+        // why: shared with RaycastGridAnnotator so sample loop density and cell half-steps stay in lockstep
+        internal const int CLUSTERED_GRID_COLUMNS = 40;
+        internal const int CLUSTERED_GRID_ROWS = 40;
+        // why: shared with UIElementAnnotationRenderer so physics outline Y-flip keeps matching element Type
+        internal const string PhysicsColliderElementType = "PhysicsCollider";
 
         // Split the reachable cluster into 4-connected regions and materialize one UIElementInfo per region.
         // Why: a single GameObject can produce multiple visually closed outline regions when UI occlusion
@@ -64,7 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Label = label,
                 Name = metadata.Name,
                 Path = metadata.Path,
-                Type = "PhysicsCollider",
+                Type = PhysicsColliderElementType,
                 Interaction = "Raycast",
                 SimX = representative.InputX,
                 SimY = representative.InputY,

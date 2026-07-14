@@ -227,7 +227,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static bool IsPhysicsColliderElement(UIElementInfo element)
         {
-            return element.Type == "PhysicsCollider";
+            return element.Type == RaycastPhysicsColliderBuilder.PhysicsColliderElementType;
         }
 
         private static List<RaycastOutlineSegment> ConvertTopLeftOutlineSegmentsToScreenSegments(
