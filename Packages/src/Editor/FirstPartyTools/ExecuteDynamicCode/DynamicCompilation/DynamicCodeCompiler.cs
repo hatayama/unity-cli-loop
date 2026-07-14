@@ -95,7 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Stopwatch builderTotalStopwatch = Stopwatch.StartNew();
-            CompiledAssemblyBuildResult buildResult = await _assemblyBuilder.BuildAsync(plan, ct);
+            CompiledAssemblyBuildResult buildResult = await _assemblyBuilder.BuildAsync(plan, ct).ConfigureAwait(false);
             builderTotalStopwatch.Stop();
             LastBuildCount = buildResult.BuildCount;
 

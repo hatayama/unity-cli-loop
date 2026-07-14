@@ -541,10 +541,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static bool ShouldShowSkillsInstalledDialog(
             IEnumerable<SkillSetupTargetInfo> targets)
         {
-            Debug.Assert(targets != null, "targets must not be null");
-            return targets.All(target =>
-                target.InstallState != SkillInstallState.Outdated
-                && !target.HasDifferentLayoutSkills);
+            return SkillInstallDialogPolicy.ShouldShowForInstallableTargets(targets);
         }
 
         internal static bool ShouldUseFirstInstallSkillsUi(string lastSeenSetupWizardVersion)
@@ -579,8 +576,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             RuntimePlatform platform,
             bool hasPackageOwnedCurrentUserInstall)
         {
-            return platform != RuntimePlatform.WindowsEditor
-                && hasPackageOwnedCurrentUserInstall;
+            return CliPathSetupCheckPolicy.ShouldCheck(
+                isWindowsEditor: platform == RuntimePlatform.WindowsEditor,
+                hasPackageOwnedCurrentUserInstall);
         }
 
         private static CliSetupCompatibilityState EvaluateCliSetupCompatibilityForSetupWizard(
@@ -762,7 +760,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 : SetupWizardSkillsStepPresenter.FilterInstallableSkillTargets(targets);
             if (installableTargets.Count == 0) return;
 
-            bool shouldShowSkillsInstalledDialog = ShouldShowSkillsInstalledDialog(installableTargets);
+            bool shouldShowSkillsInstalledDialog =
+                SkillInstallDialogPolicy.ShouldShowForInstallableTargets(installableTargets);
             _isInstallingSkills = true;
             UpdateSkillsStep(true, targets);
 

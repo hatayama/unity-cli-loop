@@ -103,7 +103,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     BuildCompileLogContext(request),
                     correlationId);
                 preparationService.StopPlayMode();
-                bool exited = await WaitForPlayModeExitAsync(ct);
+                bool exited = await WaitForPlayModeExitAsync(ct).ConfigureAwait(false);
+                // Why switch back: the poll loop uses ConfigureAwait(false), but subsequent
+                // validation and compile orchestration call Unity Editor APIs.
+                await MainThreadSwitcher.SwitchToMainThread(ct);
                 VibeLogger.LogInfo(
                     "compile_playmode_exit_observed",
                     exited ? "Play Mode exited before compile." : "Play Mode did not exit before compile.",
@@ -151,7 +154,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // 3. Compilation execution
             ct.ThrowIfCancellationRequested();
-            CompileResult result = await _executeCompilationAsync(request, ct);
+            CompileResult result = await _executeCompilationAsync(request, ct).ConfigureAwait(false);
 
             // 4. Result formatting
             CompileResponse successResponse =
@@ -160,10 +163,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return successResponse;
         }
 
-        // Why these awaits do not use ConfigureAwait(false): StopPlayMode() clears isPaused
-        // before setting isPlaying=false, so by the time the poll loop's TimerDelay continuation
-        // is posted to UnitySynchronizationContext the pause is already lifted and the queue
-        // drains normally. Measured 2026-07-11: compile during pause self-resolved in ~5s.
+        // Why ConfigureAwait(false) is paired with SwitchToMainThread at the call site:
+        // StopPlayMode() clears isPaused before setting isPlaying=false, so by the time the
+        // poll loop's TimerDelay continuation is posted the pause is already lifted. Measured
+        // 2026-07-11: compile during pause self-resolved in ~5s. Off-thread resumes must still
+        // switch back before Unity API work after the wait returns.
         private async Task<bool> WaitForPlayModeExitAsync(CancellationToken ct)
         {
             int waitedMs = 0;
@@ -171,7 +175,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             while (EditorApplication.isPlaying && waitedMs < MAX_WAIT_MS)
             {
                 ct.ThrowIfCancellationRequested();
-                await TimerDelay.Wait(POLL_INTERVAL_MS, ct);
+                await TimerDelay.Wait(POLL_INTERVAL_MS, ct).ConfigureAwait(false);
+                // Why switch each poll: EditorApplication.isPlaying must be read on the main thread.
+                await MainThreadSwitcher.SwitchToMainThread(ct);
                 waitedMs += POLL_INTERVAL_MS;
             }
 

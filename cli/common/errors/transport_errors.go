@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"syscall"
+
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
 // Reports whether the error means the transport dropped mid-request. Domain reload
@@ -27,10 +29,14 @@ func IsTransportDisconnectError(err error) bool {
 		return true
 	}
 
+	var noResponseErr *unityipc.NoResponseError
+	if errors.As(err, &noResponseErr) {
+		return true
+	}
+
 	// Fallback for errors that expose no typed cause.
 	message := err.Error()
-	return message == "UNITY_NO_RESPONSE" ||
-		strings.Contains(message, "EOF") ||
+	return strings.Contains(message, "EOF") ||
 		strings.Contains(message, "connection reset") ||
 		strings.Contains(message, "broken pipe") ||
 		strings.Contains(message, "use of closed network connection")

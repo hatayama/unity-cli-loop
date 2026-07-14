@@ -154,7 +154,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal void TryShowOnVersionChange()
         {
-            EvaluateVersionChange(CancellationToken.None);
+            EvaluateVersionChange(CancellationToken.None).Forget();
         }
 
         private static bool TryGetMajorVersion(string version, out int majorVersion)
@@ -170,7 +170,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return int.TryParse(majorText, out majorVersion);
         }
 
-        private async void EvaluateVersionChange(CancellationToken ct)
+        private async Task EvaluateVersionChange(CancellationToken ct)
         {
             string currentVersion = UnityCliLoopConstants.PackageInfo.version;
             string currentMinimumDispatcherVersion = _cliSetupApplicationService.GetMinimumRequiredCliVersion();

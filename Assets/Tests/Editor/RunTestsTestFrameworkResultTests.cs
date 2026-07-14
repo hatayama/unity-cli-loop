@@ -192,7 +192,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 TestResultStatus.Failed,
                 0.1,
                 new List<ITestResultAdaptor>());
-            Regex warningPattern = new Regex("^Failed to save NUnit XML result file: ");
+            Regex warningPattern = new Regex("^Failed to save failure XML result file: ");
 
             LogAssert.Expect(LogType.Warning, warningPattern);
 

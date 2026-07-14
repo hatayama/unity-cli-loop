@@ -66,6 +66,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public async Task<ExecutionResult> ExecuteAsync(ExecutionContext context)
         {
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
+            // Why switch first: callers often resume off-thread via ConfigureAwait(false), but
+            // BeginUndoGroup / EndExecution use Unity Undo APIs that require the main thread.
+            try
+            {
+                await MainThreadSwitcher.SwitchToMainThread(context.CancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Why catch here: a pre-cancelled token throws before TryBeginExecution,
+                // and callers expect a cancelled ExecutionResult rather than a leaked OCE.
+                return CreateCancelledResult();
+            }
+
             if (!TryBeginExecution(out int undoGroup, out CancellationTokenSource executionCancellationTokenSource))
             {
                 return CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_IN_PROGRESS);
@@ -76,15 +89,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 using CancellationTokenSource combinedCts = CreateCombinedCancellationTokenSource(
                     context,
                     executionCancellationTokenSource);
-                return await ExecuteInternalAsync(context, combinedCts.Token);
+                ExecutionResult result = await ExecuteInternalAsync(context, combinedCts.Token).ConfigureAwait(false);
+                await MainThreadSwitcher.SwitchToMainThread();
+                return result;
             }
             catch (OperationCanceledException)
             {
+                await MainThreadSwitcher.SwitchToMainThread();
                 return CreateCancelledResult();
             }
             catch (Exception ex)
             {
                 LogExecutionError(ex, correlationId);
+                await MainThreadSwitcher.SwitchToMainThread();
 
                 return CreateErrorResult(
                     ex.Message,
@@ -296,7 +313,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         cancellationToken);
                     object invoked = executeAsyncMethod.Invoke(instance, callArgs);
 
-                    object awaitedResult = await AwaitableHelper.AwaitIfNeeded(invoked, cancellationToken);
+                    object awaitedResult = await AwaitableHelper.AwaitIfNeeded(invoked, cancellationToken).ConfigureAwait(false);
                     string resultString = awaitedResult?.ToString() ?? "";
 
                     return CreateSuccessResult(resultString);
