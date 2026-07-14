@@ -1,18 +1,32 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
     /// <summary>
-    /// Presents the CLI setup section and owns Settings primary-action mediation decisions.
+    /// Presents the CLI setup section, owns Settings primary-action mediation,
+    /// and runs CLI install / path-setup / version-refresh workflows.
     /// </summary>
     internal sealed class UnityCliLoopSettingsCliSetupPresenter
     {
         private readonly UnityCliLoopSettingsWindowUI _view;
         private readonly CliSetupApplicationService _cliSetupApplicationService;
+
+        private Func<UnityCliLoopSettingsSkillsSnapshot> _getSkillsSnapshot;
+        private Action _refreshSkillsInstallStateInBackground;
+        private Action<bool> _refreshAllSections;
+
+        private bool _isInstallingCli;
+        private bool _isRefreshingVersion;
+        private bool _isRefreshingCliPathSetup;
+        private bool _needsCliPathSetup;
 
         internal UnityCliLoopSettingsCliSetupPresenter(
             UnityCliLoopSettingsWindowUI view,
@@ -24,6 +38,44 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _view = view ?? throw new ArgumentNullException(nameof(view));
             _cliSetupApplicationService = cliSetupApplicationService
                 ?? throw new ArgumentNullException(nameof(cliSetupApplicationService));
+        }
+
+        internal bool IsRefreshingVersion => _isRefreshingVersion;
+
+        internal void BindCoordination(
+            Func<UnityCliLoopSettingsSkillsSnapshot> getSkillsSnapshot,
+            Action refreshSkillsInstallStateInBackground,
+            Action<bool> refreshAllSections)
+        {
+            Debug.Assert(getSkillsSnapshot != null, "getSkillsSnapshot must not be null");
+            Debug.Assert(
+                refreshSkillsInstallStateInBackground != null,
+                "refreshSkillsInstallStateInBackground must not be null");
+            Debug.Assert(refreshAllSections != null, "refreshAllSections must not be null");
+
+            _getSkillsSnapshot = getSkillsSnapshot
+                ?? throw new ArgumentNullException(nameof(getSkillsSnapshot));
+            _refreshSkillsInstallStateInBackground = refreshSkillsInstallStateInBackground
+                ?? throw new ArgumentNullException(nameof(refreshSkillsInstallStateInBackground));
+            _refreshAllSections = refreshAllSections
+                ?? throw new ArgumentNullException(nameof(refreshAllSections));
+        }
+
+        internal void RefreshSection(bool includeSkillDirectoryChecks = true)
+        {
+            Debug.Assert(_getSkillsSnapshot != null, "BindCoordination must be called before RefreshSection");
+
+            UnityCliLoopSettingsSkillsSnapshot skills = _getSkillsSnapshot();
+            Update(
+                _needsCliPathSetup,
+                _isInstallingCli,
+                _isRefreshingVersion,
+                _isRefreshingCliPathSetup,
+                includeSkillDirectoryChecks,
+                skills.InstallSkillsFlat,
+                skills.SelectedTargetInstallState,
+                skills.SkillsTarget,
+                skills.IsInstallingSkills);
         }
 
         internal void Update(
@@ -131,6 +183,225 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliVersion,
                 cliIsDispatcher,
                 requiredCliVersion).NeedsUpdate;
+        }
+
+        internal async Task RefreshCliVersionInBackground()
+        {
+            if (_cliSetupApplicationService.IsCliCheckCompleted())
+            {
+                return;
+            }
+
+            await _cliSetupApplicationService.RefreshCliVersionAsync(CancellationToken.None);
+            RefreshCliPathSetupInBackground().Forget();
+            RefreshSection();
+            _refreshSkillsInstallStateInBackground();
+        }
+
+        internal async Task RefreshCliPathSetupInBackground()
+        {
+            if (_isRefreshingCliPathSetup)
+            {
+                return;
+            }
+
+            if (!ShouldCheckCliPathSetup())
+            {
+                _needsCliPathSetup = false;
+                return;
+            }
+
+            _isRefreshingCliPathSetup = true;
+            RefreshSection();
+
+            try
+            {
+                bool isCliVisibleFromShell = await _cliSetupApplicationService.IsCliVisibleFromShellAsync(
+                    UnityEngine.Application.platform,
+                    CancellationToken.None);
+                _needsCliPathSetup = !isCliVisibleFromShell;
+            }
+            finally
+            {
+                _isRefreshingCliPathSetup = false;
+                RefreshSection();
+            }
+        }
+
+        internal async Task HandleRefreshCliVersion()
+        {
+            if (_isRefreshingVersion)
+            {
+                return;
+            }
+
+            _isRefreshingVersion = true;
+            RefreshSection();
+
+            try
+            {
+                Task forceRefresh = _cliSetupApplicationService.ForceRefreshCliVersionAsync(CancellationToken.None);
+                Task minimumDelay = Task.Delay(500);
+                await Task.WhenAll(forceRefresh, minimumDelay);
+                RefreshCliPathSetupInBackground().Forget();
+            }
+            finally
+            {
+                _isRefreshingVersion = false;
+                RefreshSection();
+            }
+        }
+
+        internal async Task HandleInstallCli()
+        {
+            CliSetupPrimaryAction clickedAction = ResolveCurrentPrimaryButtonAction(_needsCliPathSetup);
+
+            await RefreshCliPrimaryActionStateAsync(CancellationToken.None);
+            CliSetupPrimaryAction refreshedAction = ResolveCurrentPrimaryButtonAction(_needsCliPathSetup);
+            CliSetupPrimaryAction executableAction = ResolveExecutableCliPrimaryButtonAction(
+                clickedAction,
+                refreshedAction);
+            if (executableAction == CliSetupPrimaryAction.None)
+            {
+                return;
+            }
+
+            if (executableAction == CliSetupPrimaryAction.RepairPath)
+            {
+                await HandleRepairCliPathSetup();
+                return;
+            }
+
+            if (executableAction == CliSetupPrimaryAction.Uninstall)
+            {
+                await HandleUninstallCli();
+                return;
+            }
+
+            bool wasCliInstalledBeforeInstall = _cliSetupApplicationService.IsCliInstalled();
+            _needsCliPathSetup = false;
+            _isInstallingCli = true;
+            RefreshSection();
+
+            try
+            {
+                CliInstallResult result = await _cliSetupApplicationService.InstallGlobalCliAsync(
+                    UnityEngine.Application.platform,
+                    CancellationToken.None);
+
+                if (!result.Success)
+                {
+                    NativeCliInstallCommand command = _cliSetupApplicationService.GetGlobalCliInstallCommand(
+                        UnityEngine.Application.platform,
+                        true);
+                    EditorUtility.DisplayDialog(
+                        "Installation Failed",
+                        $"Failed to install uLoop CLI.\n\n{result.ErrorOutput}\n\nYou can try manually:\n{command.ManualCommand}",
+                        "OK");
+                    return;
+                }
+
+                await CliPathSetupPrompt.EnsureVisibleAndShowResultAsync(
+                    UnityEngine.Application.platform,
+                    _cliSetupApplicationService,
+                    CancellationToken.None);
+                await RefreshCliPathSetupAsync(CancellationToken.None);
+            }
+            finally
+            {
+                _isInstallingCli = false;
+                _refreshAllSections(
+                    CliInstallRefreshPolicy.ShouldRefreshSkillsAfterCliInstall(wasCliInstalledBeforeInstall));
+            }
+        }
+
+        private async Task RefreshCliPrimaryActionStateAsync(CancellationToken ct)
+        {
+            _isRefreshingVersion = true;
+            RefreshSection();
+
+            try
+            {
+                await _cliSetupApplicationService.ForceRefreshCliVersionAsync(ct);
+                await RefreshCliPathSetupAsync(ct);
+            }
+            finally
+            {
+                _isRefreshingVersion = false;
+                RefreshSection();
+            }
+        }
+
+        private async Task RefreshCliPathSetupAsync(CancellationToken ct)
+        {
+            if (!ShouldCheckCliPathSetup())
+            {
+                _needsCliPathSetup = false;
+                return;
+            }
+
+            bool isCliVisibleFromShell = await _cliSetupApplicationService.IsCliVisibleFromShellAsync(
+                UnityEngine.Application.platform,
+                ct);
+            _needsCliPathSetup = !isCliVisibleFromShell;
+        }
+
+        private async Task HandleRepairCliPathSetup()
+        {
+            _isInstallingCli = true;
+            RefreshSection();
+
+            try
+            {
+                await CliPathSetupPrompt.EnsureVisibleAndShowResultAsync(
+                    UnityEngine.Application.platform,
+                    _cliSetupApplicationService,
+                    CancellationToken.None);
+                await RefreshCliPathSetupAsync(CancellationToken.None);
+            }
+            finally
+            {
+                _isInstallingCli = false;
+                _refreshAllSections(false);
+            }
+        }
+
+        private async Task HandleUninstallCli()
+        {
+            if (!CliUninstallPrompt.ConfirmUninstall())
+            {
+                return;
+            }
+
+            _isInstallingCli = true;
+            RefreshSection();
+
+            try
+            {
+                CliInstallResult result = await _cliSetupApplicationService.UninstallGlobalCliAsync(
+                    UnityEngine.Application.platform,
+                    CancellationToken.None);
+                if (!result.Success)
+                {
+                    EditorUtility.DisplayDialog(
+                        "Uninstallation Failed",
+                        $"Failed to uninstall uLoop CLI.\n\n{result.ErrorOutput}",
+                        "OK");
+                    return;
+                }
+            }
+            finally
+            {
+                _isInstallingCli = false;
+                _refreshAllSections(true);
+            }
+        }
+
+        private bool ShouldCheckCliPathSetup()
+        {
+            return ShouldCheckCliPathSetupForPlatform(
+                UnityEngine.Application.platform,
+                _cliSetupApplicationService.HasPackageOwnedCurrentUserInstall(UnityEngine.Application.platform));
         }
 
         private CliSetupData CreateCliSetupData(
