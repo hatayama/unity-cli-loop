@@ -92,7 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new[] { "AreSkillsInstalledInAnyLayout", "AreSkillsInstalledForLayout" }
             },
             {
-                "Packages/src/Editor/Presentation/UnityCliLoopSettingsWindow.cs",
+                "Packages/src/Editor/Presentation/UnityCliLoopSettingsSkillsPresenter.cs",
                 new[] { "GetSelectedTargetInstallStateForCurrentProject", "GetSelectedTargetInstallStateAtProjectRoot" }
             }
         };
