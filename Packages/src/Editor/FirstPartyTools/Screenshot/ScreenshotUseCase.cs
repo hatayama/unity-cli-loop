@@ -256,18 +256,51 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SynchronizationContext editorContext =
                 CapturedEditorSynchronizationContext.RequireCurrent("window screenshot use case");
             EditorWindow[] windows = EditorWindowCaptureUtility.FindWindowsByName(request.WindowName, request.MatchMode);
+            string captureWindowName = request.WindowName;
+            if (ScreenshotWindowNameResolver.ShouldFallbackToSimulator(
+                    request.WindowName,
+                    request.MatchMode,
+                    windows.Length))
+            {
+                // why: Device Simulator replaces the Game tab, so the default "Game" title miss should retry Simulator
+                captureWindowName = UnityCliLoopConstants.SCREENSHOT_SIMULATOR_WINDOW_NAME;
+                windows = EditorWindowCaptureUtility.FindWindowsByName(captureWindowName, request.MatchMode);
+                if (windows.Length > 0)
+                {
+                    VibeLogger.LogInfo(
+                        "screenshot_window_fallback_simulator",
+                        $"Window '{request.WindowName}' not found; capturing '{captureWindowName}' instead",
+                        correlationId: correlationId
+                    );
+                }
+            }
+
             if (windows.Length == 0)
             {
+                string notFoundMessage =
+                    $"Window '{request.WindowName}' not found (MatchMode: {request.MatchMode})";
+                if (ScreenshotWindowNameResolver.ShouldFallbackToSimulator(
+                        request.WindowName,
+                        request.MatchMode,
+                        matchCount: 0))
+                {
+                    notFoundMessage +=
+                        $". Device Simulator may be active — pass --window-name {UnityCliLoopConstants.SCREENSHOT_SIMULATOR_WINDOW_NAME}";
+                }
+
                 VibeLogger.LogError(
                     "screenshot_window_not_found",
-                    $"Window '{request.WindowName}' not found (MatchMode: {request.MatchMode})",
+                    notFoundMessage,
                     correlationId: correlationId
                 );
-                return new ScreenshotResponse();
+                return new ScreenshotResponse
+                {
+                    Message = notFoundMessage,
+                };
             }
 
             string outputDirectory = EnsureOutputDirectoryExists(request.OutputDirectory);
-            string safeWindowName = SanitizeFileName(request.WindowName);
+            string safeWindowName = SanitizeFileName(captureWindowName);
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
             List<ScreenshotInfo> screenshots = new();
 
@@ -336,7 +369,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             VibeLogger.LogInfo(
                 "screenshot_success",
                 $"Captured {screenshots.Count} window(s)",
-                new { WindowName = request.WindowName, ScreenshotCount = screenshots.Count },
+                new { WindowName = captureWindowName, RequestedWindowName = request.WindowName, ScreenshotCount = screenshots.Count },
                 correlationId: correlationId
             );
 

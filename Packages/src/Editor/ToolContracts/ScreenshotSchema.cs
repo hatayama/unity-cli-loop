@@ -5,7 +5,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     /// </summary>
     public class ScreenshotSchema : UnityCliLoopToolSchema
     {
-        public string WindowName { get; set; } = "Game";
+        public string WindowName { get; set; } = UnityCliLoopConstants.SCREENSHOT_DEFAULT_WINDOW_NAME;
         public float ResolutionScale { get; set; } = 1.0f;
         public WindowMatchMode MatchMode { get; set; } = WindowMatchMode.exact;
         public string OutputDirectory { get; set; } = "";

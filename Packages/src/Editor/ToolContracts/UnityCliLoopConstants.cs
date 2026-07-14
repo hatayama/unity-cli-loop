@@ -103,6 +103,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             "simulate_mouse_x = image_x / resolutionScale; simulate_mouse_y = image_y / resolutionScale + imageToInputOffsetY";
         public const string SCREENSHOT_WINDOW_TO_INPUT_FORMULA_UNAVAILABLE =
             "unavailable: window screenshots include Unity Editor chrome; use capture-mode rendering for mouse input coordinates";
+        public const string SCREENSHOT_DEFAULT_WINDOW_NAME = "Game";
+        public const string SCREENSHOT_SIMULATOR_WINDOW_NAME = "Simulator";
 
         public const int CORRELATION_ID_LENGTH = 8;
         public const string GUID_FORMAT_NO_HYPHENS = "N";
