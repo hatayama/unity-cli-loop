@@ -168,7 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (captureTimedOut)
                 {
                     return CreateTimedOutResult(
-                        "GameView rendering capture",
+                        "Play Mode view rendering capture",
                         correlationId,
                         new List<ScreenshotInfo>());
                 }
@@ -190,7 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 VibeLogger.LogError(
                     "screenshot_rendering_unavailable",
-                    "GameView RenderTexture is not available. Open the Game view and wait for a frame before retrying.",
+                    "Play Mode view RenderTexture is not available. Open the Game view or Device Simulator and wait for a frame before retrying.",
                     correlationId: correlationId
                 );
                 return new ScreenshotResponse();

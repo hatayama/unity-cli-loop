@@ -6,56 +6,59 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.InternalAPIBridge
 {
     /// <summary>
-    /// Bridge class for accessing Unity GameView internal APIs via reflection.
-    /// GameView is an internal class; this bridge discovers members dynamically.
+    /// Bridge for the active Play Mode view RenderTexture via reflection.
+    /// Uses PlayModeView so both GameView and Device Simulator windows work.
     /// </summary>
     public static class GameViewBridge
     {
-        private static Type _gameViewType;
-        private static FieldInfo _renderTextureField;
+        private const string PlayModeViewTypeName = "UnityEditor.PlayModeView";
+        private const string GetMainPlayModeViewMethodName = "GetMainPlayModeView";
+        private const string TargetTextureFieldName = "m_TargetTexture";
+
+        private static Type _playModeViewType;
+        private static MethodInfo _getMainPlayModeViewMethod;
+        private static FieldInfo _targetTextureField;
         private static bool _memberSearchDone;
 
         /// <summary>
-        /// Get the GameView's composited RenderTexture containing all cameras + Screen Space Overlay Canvas.
+        /// Get the active Play Mode view's composited RenderTexture
+        /// (cameras + Screen Space Overlay Canvas).
         /// </summary>
-        /// <returns>The RenderTexture, or null if GameView not found or field not accessible</returns>
+        /// <returns>The RenderTexture, or null if the view or field is unavailable</returns>
         public static RenderTexture GetRenderTexture()
         {
             EnsureMembersResolved();
 
-            EditorWindow gameView = FindMainGameView();
-            if (gameView == null || _renderTextureField == null)
+            EditorWindow playModeView = FindMainPlayModeView();
+            if (playModeView == null || _targetTextureField == null)
             {
                 return null;
             }
 
-            return _renderTextureField.GetValue(gameView) as RenderTexture;
+            return _targetTextureField.GetValue(playModeView) as RenderTexture;
         }
 
-        private static EditorWindow FindMainGameView()
+        /// <summary>
+        /// Resolve m_TargetTexture on the PlayModeView declaring type.
+        /// Must not use a derived Type: GetField does not return private fields declared on base types.
+        /// </summary>
+        internal static FieldInfo ResolveTargetTextureField(Type playModeViewType)
         {
-            if (_gameViewType == null)
+            Debug.Assert(playModeViewType != null, "playModeViewType must not be null");
+
+            return playModeViewType.GetField(
+                TargetTextureFieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+        }
+
+        private static EditorWindow FindMainPlayModeView()
+        {
+            if (_getMainPlayModeViewMethod == null)
             {
                 return null;
             }
 
-            UnityEngine.Object[] gameViews = Resources.FindObjectsOfTypeAll(_gameViewType);
-            if (gameViews.Length == 0)
-            {
-                return null;
-            }
-
-            // Prefer focused window to match editor's active view context
-            foreach (UnityEngine.Object gv in gameViews)
-            {
-                EditorWindow window = gv as EditorWindow;
-                if (window != null && window.hasFocus)
-                {
-                    return window;
-                }
-            }
-
-            return gameViews[0] as EditorWindow;
+            return _getMainPlayModeViewMethod.Invoke(null, null) as EditorWindow;
         }
 
         private static void EnsureMembersResolved()
@@ -66,18 +69,27 @@ namespace io.github.hatayama.UnityCliLoop.InternalAPIBridge
             }
             _memberSearchDone = true;
 
-            _gameViewType = typeof(Editor).Assembly.GetType("UnityEditor.GameView");
-            if (_gameViewType == null)
+            _playModeViewType = typeof(Editor).Assembly.GetType(PlayModeViewTypeName);
+            if (_playModeViewType == null)
             {
-                Debug.LogWarning("[GameViewBridge] GameView type not found");
+                Debug.LogWarning("[GameViewBridge] PlayModeView type not found");
                 return;
             }
 
-            _renderTextureField = _gameViewType.GetField("m_RenderTexture",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-            if (_renderTextureField == null)
+            _getMainPlayModeViewMethod = _playModeViewType.GetMethod(
+                GetMainPlayModeViewMethodName,
+                BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            if (_getMainPlayModeViewMethod == null)
             {
-                Debug.LogWarning("[GameViewBridge] m_RenderTexture field not found");
+                Debug.LogWarning("[GameViewBridge] GetMainPlayModeView method not found");
+                return;
+            }
+
+            // why: private base fields are invisible to GetField on derived types (GameView / SimulatorWindow)
+            _targetTextureField = ResolveTargetTextureField(_playModeViewType);
+            if (_targetTextureField == null)
+            {
+                Debug.LogWarning("[GameViewBridge] m_TargetTexture field not found on PlayModeView");
             }
         }
     }
