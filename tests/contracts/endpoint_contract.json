@@ -1,0 +1,30 @@
+{
+  "comment": "Maps already-canonicalized project roots to IPC endpoint names. Symlink/realpath resolution (Go filepath.EvalSymlinks / C# realpath) is intentionally out of scope because it depends on the live filesystem. Each canonicalProjectRoot is the post-resolution string that both sides hash. trimOnlyEquivalentRoots are trailing-separator variants that must hash identically after separator trimming only.",
+  "cases": [
+    {
+      "id": "unix-stable",
+      "canonicalProjectRoot": "/Users/example/MyProject",
+      "trimOnlyEquivalentRoots": [
+        "/Users/example/MyProject/"
+      ],
+      "unixSocketPath": "/tmp/uloop/UnityCliLoop-bebe6bce5923715b.sock",
+      "windowsPipePath": "\\\\.\\pipe\\uloop-UnityCliLoop-bebe6bce5923715b"
+    },
+    {
+      "id": "unix-case-sensitive",
+      "canonicalProjectRoot": "/Users/example/myproject",
+      "trimOnlyEquivalentRoots": [],
+      "unixSocketPath": "/tmp/uloop/UnityCliLoop-6b4ae0bfeab42b19.sock",
+      "windowsPipePath": "\\\\.\\pipe\\uloop-UnityCliLoop-6b4ae0bfeab42b19"
+    },
+    {
+      "id": "windows-stable",
+      "canonicalProjectRoot": "C:\\Users\\example\\MyProject",
+      "trimOnlyEquivalentRoots": [
+        "C:\\Users\\example\\MyProject\\"
+      ],
+      "unixSocketPath": "/tmp/uloop/UnityCliLoop-4abce6d9d9e51244.sock",
+      "windowsPipePath": "\\\\.\\pipe\\uloop-UnityCliLoop-4abce6d9d9e51244"
+    }
+  ]
+}
