@@ -149,8 +149,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static async Task ContinueAfterDrainAsync(Task currentDrainTask, Task nextDrainTask)
         {
-            await currentDrainTask;
-            await nextDrainTask;
+            await currentDrainTask.ConfigureAwait(false);
+            await nextDrainTask.ConfigureAwait(false);
         }
 
         private static Task ObserveDrainTask(Task drainTask)

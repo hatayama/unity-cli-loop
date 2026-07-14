@@ -114,17 +114,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
                 {
-                    result = await _executionService.ExecutePlayModeTestAsync(filter, executionCt);
+                    result = await _executionService.ExecutePlayModeTestAsync(filter, executionCt).ConfigureAwait(false);
                 }
                 else
                 {
-                    result = await _executionService.ExecuteEditModeTestAsync(filter, executionCt);
+                    result = await _executionService.ExecuteEditModeTestAsync(filter, executionCt).ConfigureAwait(false);
                 }
 
                 // Why parent ct (not executionCt): CancelAfter only guards the RunFinished wait.
                 // Using the linked token here would mis-report a successful run as timed out when
                 // the fixed cleanup delay straddles the deadline after RunFinished already arrived.
-                await _waitForTestRunnerCleanupAsync(ct);
+                await _waitForTestRunnerCleanupAsync(ct).ConfigureAwait(false);
             }
             catch (RunTestsExecutionCanceledException canceledException)
                 when (RunTestsExecutionTimeout.IsTimeoutCancellation(ct))
@@ -207,7 +207,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             // Why: Unity Test Framework exposes the real active-run signal only through internal API,
             // while the public RunFinished callback fires before cleanup tasks such as RestoreSceneSetupTask.
-            await TimerDelay.Wait(TestRunnerCleanupFallbackDelayMilliseconds, ct);
+            await TimerDelay.Wait(TestRunnerCleanupFallbackDelayMilliseconds, ct).ConfigureAwait(false);
         }
     }
 }

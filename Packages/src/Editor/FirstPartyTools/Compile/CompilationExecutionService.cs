@@ -47,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _pendingCompileSessionRepository);
             compileController.SetResultRecordingContext(CompileResultRecordingContext.Create(request));
             compileController.SetExternalSceneChangePolicy(request.ReloadExternalSceneChanges);
-            return await compileController.TryCompileAsync(request.ForceRecompile, ct);
+            return await compileController.TryCompileAsync(request.ForceRecompile, ct).ConfigureAwait(false);
         }
     }
 }

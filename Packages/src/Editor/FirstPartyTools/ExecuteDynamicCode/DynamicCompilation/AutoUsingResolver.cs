@@ -40,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 File.WriteAllText(sourcePath, currentSource);
                 // AssemblyBuilder retries must stay on Unity's main thread because the compiler API is not thread-safe.
-                CompilerMessage[] messages = await buildFunc(sourcePath, dllPath, mutableReferences, ct);
+                CompilerMessage[] messages = await buildFunc(sourcePath, dllPath, mutableReferences, ct).ConfigureAwait(false);
 
                 List<string> unresolvedTypes = ExtractUnresolvedTypes(messages);
                 if (unresolvedTypes.Count == 0)
@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Final compilation with all added usings
             File.WriteAllText(sourcePath, currentSource);
-            CompilerMessage[] finalMessages = await buildFunc(sourcePath, dllPath, mutableReferences, ct);
+            CompilerMessage[] finalMessages = await buildFunc(sourcePath, dllPath, mutableReferences, ct).ConfigureAwait(false);
             return new AutoUsingResult(
                 currentSource,
                 finalMessages,

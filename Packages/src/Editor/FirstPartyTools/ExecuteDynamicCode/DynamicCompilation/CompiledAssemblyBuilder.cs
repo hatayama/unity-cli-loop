@@ -101,14 +101,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         cancellationToken,
                         () => canDeleteTempFiles = false,
                         () => canDeleteTempFiles = true,
-                        () => buildCount++);
+                        () => buildCount++).ConfigureAwait(false);
                     compilationBackendKind = backendResult.BackendKind;
                     buildStopwatch.Stop();
                     buildMilliseconds += buildStopwatch.Elapsed.TotalMilliseconds;
                     return backendResult.CompilerMessages;
                 }
 
-                BuildAttemptResult attemptResult = await BuildPreparedCodeAsync(plan.PreparedCode, ct);
+                BuildAttemptResult attemptResult = await BuildPreparedCodeAsync(plan.PreparedCode, ct).ConfigureAwait(false);
                 bool shouldCacheResult = true;
 
                 if (ShouldRetryWithoutLiteralHoisting(plan.PreparedCode, attemptResult.Diagnostics))
@@ -117,7 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         plan.OriginalRequest.Code,
                         plan.NamespaceName,
                         plan.ClassName);
-                    attemptResult = await BuildPreparedCodeAsync(fallbackPreparedCode, ct);
+                    attemptResult = await BuildPreparedCodeAsync(fallbackPreparedCode, ct).ConfigureAwait(false);
                     shouldCacheResult = false;
                 }
 
@@ -160,7 +160,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         wrappedCode,
                         initialReferences,
                         BuildFunc,
-                        cancellationToken);
+                        cancellationToken).ConfigureAwait(false);
                     referenceResolutionMilliseconds += autoResult.ReferenceResolutionMilliseconds;
 
                     wrappedCode = autoResult.UpdatedSource;
@@ -183,7 +183,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             originalWrappedCode,
                             rollbackReferences,
                             BuildFunc,
-                            cancellationToken);
+                            cancellationToken).ConfigureAwait(false);
                         referenceResolutionMilliseconds += rollbackResult.ReferenceResolutionMilliseconds;
 
                         CompilerDiagnostics rollbackDiagnostics = CompilerDiagnostics.FromMessages(rollbackResult.Messages);

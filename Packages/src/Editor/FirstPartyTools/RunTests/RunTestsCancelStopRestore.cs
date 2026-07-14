@@ -108,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     runGuid,
                     hooks,
                     stopWaitTimeoutMilliseconds,
-                    pollIntervalMilliseconds);
+                    pollIntervalMilliseconds).ConfigureAwait(false);
             }
             catch (Exception exception)
             {
@@ -172,7 +172,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     () => !hooks.IsPlaying(),
                     hooks.DelayAsync,
                     stopWaitTimeoutMilliseconds,
-                    pollIntervalMilliseconds);
+                    pollIntervalMilliseconds).ConfigureAwait(false);
                 playModeExitConfirmed = confirmed;
                 stopWaitTimedOut = timedOut;
             }
@@ -182,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     () => !hooks.IsRunActive(),
                     hooks.DelayAsync,
                     stopWaitTimeoutMilliseconds,
-                    pollIntervalMilliseconds);
+                    pollIntervalMilliseconds).ConfigureAwait(false);
                 stopWaitTimedOut = timedOut;
                 if (!confirmed)
                 {
@@ -221,7 +221,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return (true, false);
                 }
 
-                await delayAsync(pollIntervalMilliseconds, CancellationToken.None);
+                await delayAsync(pollIntervalMilliseconds, CancellationToken.None).ConfigureAwait(false);
                 elapsedMilliseconds += pollIntervalMilliseconds;
             }
 

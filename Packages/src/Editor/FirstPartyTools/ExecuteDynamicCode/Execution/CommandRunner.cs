@@ -76,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 using CancellationTokenSource combinedCts = CreateCombinedCancellationTokenSource(
                     context,
                     executionCancellationTokenSource);
-                return await ExecuteInternalAsync(context, combinedCts.Token);
+                return await ExecuteInternalAsync(context, combinedCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -296,7 +296,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         cancellationToken);
                     object invoked = executeAsyncMethod.Invoke(instance, callArgs);
 
-                    object awaitedResult = await AwaitableHelper.AwaitIfNeeded(invoked, cancellationToken);
+                    object awaitedResult = await AwaitableHelper.AwaitIfNeeded(invoked, cancellationToken).ConfigureAwait(false);
                     string resultString = awaitedResult?.ToString() ?? "";
 
                     return CreateSuccessResult(resultString);

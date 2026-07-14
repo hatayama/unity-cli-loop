@@ -117,15 +117,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         keyboard,
                         key,
                         parameters.Duration,
-                        ct);
+                        ct).ConfigureAwait(false);
                     break;
 
                 case UnityCliLoopKeyboardAction.KeyDown:
-                    response = await KeyboardInputActionExecutor.ExecuteKeyDown(keyboard, key, ct);
+                    response = await KeyboardInputActionExecutor.ExecuteKeyDown(keyboard, key, ct).ConfigureAwait(false);
                     break;
 
                 case UnityCliLoopKeyboardAction.KeyUp:
-                    response = await KeyboardInputActionExecutor.ExecuteKeyUp(keyboard, key, ct);
+                    response = await KeyboardInputActionExecutor.ExecuteKeyUp(keyboard, key, ct).ConfigureAwait(false);
                     break;
 
                 default:
