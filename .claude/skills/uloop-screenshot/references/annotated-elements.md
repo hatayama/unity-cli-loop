@@ -2,6 +2,8 @@
 
 Read this when using `uloop screenshot --capture-mode rendering --annotate-elements true` or `--annotate-raycast-grid true` output to find coordinates for `simulate-mouse-ui`, `simulate-mouse-input`, or `raycast`.
 
+Device Simulator is supported for this flow: prefer `--capture-mode rendering` (not `window`) so coordinates match the simulated device resolution.
+
 ## AnnotatedElements Fields
 
 `AnnotatedElements` is empty unless `--annotate-elements true` is used, or unless `--annotate-raycast-grid true` adds clustered 3D collider candidates (with or without `--raycast-layer-mask`). UI entries are sorted by z-order, frontmost first. Each item contains:

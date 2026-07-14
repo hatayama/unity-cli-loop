@@ -3,6 +3,7 @@
     "rootNamespace": "io.github.hatayama.UnityCliLoop.Tests.Editor",
     "references": [
         "GUID:214998e563c124e8a88199b2dd1f522d",
+        "GUID:5079a8d3a72924a81aa1cbc25f65ed1b",
         "GUID:5c4588558a3624eacbce0f50007cf1eb",
         "GUID:18e6dd30a99d14f32a045f79a2956f46",
         "GUID:2fca906c8834d45aea12a5cc143c032d",

@@ -168,7 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (captureTimedOut)
                 {
                     return CreateTimedOutResult(
-                        "GameView rendering capture",
+                        "Play Mode view rendering capture",
                         correlationId,
                         new List<ScreenshotInfo>());
                 }
@@ -190,7 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 VibeLogger.LogError(
                     "screenshot_rendering_unavailable",
-                    "GameView RenderTexture is not available. Open the Game view and wait for a frame before retrying.",
+                    "Play Mode view RenderTexture is not available. Open the Game view or Device Simulator and wait for a frame before retrying.",
                     correlationId: correlationId
                 );
                 return new ScreenshotResponse();
@@ -256,18 +256,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SynchronizationContext editorContext =
                 CapturedEditorSynchronizationContext.RequireCurrent("window screenshot use case");
             EditorWindow[] windows = EditorWindowCaptureUtility.FindWindowsByName(request.WindowName, request.MatchMode);
+            string captureWindowName = ScreenshotWindowNameResolver.ResolveCaptureWindowName(
+                request.WindowName,
+                request.MatchMode,
+                windows.Length);
+            bool usedSimulatorFallback = !string.Equals(
+                captureWindowName,
+                request.WindowName,
+                StringComparison.OrdinalIgnoreCase);
+            if (usedSimulatorFallback)
+            {
+                // why: Device Simulator replaces the Game tab, so the default "Game" title miss should retry Simulator
+                windows = EditorWindowCaptureUtility.FindWindowsByName(captureWindowName, request.MatchMode);
+                if (windows.Length > 0)
+                {
+                    VibeLogger.LogInfo(
+                        "screenshot_window_fallback_simulator",
+                        $"Window '{request.WindowName}' not found; capturing '{captureWindowName}' instead",
+                        correlationId: correlationId
+                    );
+                }
+            }
+
             if (windows.Length == 0)
             {
+                string notFoundMessage = usedSimulatorFallback
+                    ? "Neither Game nor Simulator window found; open the Game view or Device Simulator and retry"
+                    : $"Window '{request.WindowName}' not found (MatchMode: {request.MatchMode})";
+
                 VibeLogger.LogError(
                     "screenshot_window_not_found",
-                    $"Window '{request.WindowName}' not found (MatchMode: {request.MatchMode})",
+                    notFoundMessage,
                     correlationId: correlationId
                 );
-                return new ScreenshotResponse();
+                return new ScreenshotResponse
+                {
+                    Message = notFoundMessage,
+                };
             }
 
             string outputDirectory = EnsureOutputDirectoryExists(request.OutputDirectory);
-            string safeWindowName = SanitizeFileName(request.WindowName);
+            string safeWindowName = SanitizeFileName(captureWindowName);
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
             List<ScreenshotInfo> screenshots = new();
 
@@ -336,7 +365,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             VibeLogger.LogInfo(
                 "screenshot_success",
                 $"Captured {screenshots.Count} window(s)",
-                new { WindowName = request.WindowName, ScreenshotCount = screenshots.Count },
+                new { WindowName = captureWindowName, RequestedWindowName = request.WindowName, ScreenshotCount = screenshots.Count },
                 correlationId: correlationId
             );
 
