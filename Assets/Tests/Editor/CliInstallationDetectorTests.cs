@@ -108,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildShellCliDetectionCommand_UsesShortVersionFlag()
         {
             // Verifies that shell detection asks the command itself for its terminal-visible version.
-            string command = CliInstallationDetector.BuildShellCliDetectionCommand("uloop");
+            string command = CliShellInstallationProbe.BuildShellCliDetectionCommand("uloop");
 
             Assert.That(command, Does.Contain("command -v uloop"));
             Assert.That(command, Does.Contain("uloop --version --json"));
@@ -123,7 +123,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildShellCliDetectionCommandForShell_WhenRuntimeShellIsFish_UsesFishStatusSyntax()
         {
             // Verifies that command syntax follows the actual shell process, not PATH setup support.
-            string command = CliInstallationDetector.BuildShellCliDetectionCommandForShell(
+            string command = CliShellInstallationProbe.BuildShellCliDetectionCommandForShell(
                 "uloop",
                 "/opt/homebrew/bin/fish");
 
@@ -154,7 +154,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             + "__ULOOP_VERSION_STATUS_END__\n";
 
             CliInstallationDetection detection =
-                CliInstallationDetector.ParseShellCliInstallationOutput(output);
+                CliShellInstallationProbe.ParseShellCliInstallationOutput(output);
 
             Assert.That(detection.Version, Is.EqualTo("2.1.1"));
             Assert.That(detection.IsDispatcher, Is.False);
@@ -182,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             + "__ULOOP_VERSION_STATUS_END__\n";
 
             CliInstallationDetection detection =
-                CliInstallationDetector.ParseShellCliInstallationOutput(output);
+                CliShellInstallationProbe.ParseShellCliInstallationOutput(output);
 
             Assert.That(detection.Version, Is.EqualTo("3.0.0-beta.31"));
             Assert.That(detection.IsDispatcher, Is.False);
@@ -210,7 +210,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             + "__ULOOP_VERSION_STATUS_END__\n";
 
             CliInstallationDetection detection =
-                CliInstallationDetector.ParseShellCliInstallationOutput(output);
+                CliShellInstallationProbe.ParseShellCliInstallationOutput(output);
 
             Assert.That(detection.Version, Is.EqualTo("3.0.0"));
             Assert.That(detection.IsDispatcher, Is.True);
@@ -225,7 +225,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "3.0.0-beta.40",
                 "/Users/ExampleUser/.npm-global/bin/uloop");
 
-            bool result = CliInstallationDetector.IsShellDetectionUsableForPathSetup(
+            bool result = CliShellInstallationProbe.IsShellDetectionUsableForPathSetup(
                 detection,
                 UnityEngine.RuntimePlatform.OSXEditor,
                 (path, platform) => false,
@@ -255,7 +255,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             + "__ULOOP_VERSION_STATUS_END__\n";
 
             CliInstallationDetection detection =
-                CliInstallationDetector.ParseShellCliInstallationOutput(output);
+                CliShellInstallationProbe.ParseShellCliInstallationOutput(output);
 
             Assert.That(detection.Version, Is.EqualTo("3.0.0-beta.31"));
             Assert.That(detection.ExecutablePath, Is.EqualTo("/tmp/uloop"));
@@ -275,7 +275,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             + "__ULOOP_VERSION_STATUS_END__\n";
 
             CliInstallationDetection detection =
-                CliInstallationDetector.ParseShellCliInstallationOutput(output);
+                CliShellInstallationProbe.ParseShellCliInstallationOutput(output);
 
             Assert.That(detection.Version, Is.EqualTo("2.1.1"));
             Assert.That(detection.ExecutablePath, Is.Null);
@@ -296,7 +296,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             + "__ULOOP_VERSION_STATUS_END__\n";
 
             CliInstallationDetection detection =
-                CliInstallationDetector.ParseShellCliInstallationOutput(output);
+                CliShellInstallationProbe.ParseShellCliInstallationOutput(output);
 
             Assert.That(detection.Version, Is.Null);
             Assert.That(detection.ExecutablePath, Is.EqualTo("/Users/ExampleUser/.npm-global/bin/uloop"));
