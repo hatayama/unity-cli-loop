@@ -134,6 +134,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SimulateMouseInputOverlayState.SetScrollDirection(0);
             _replayHeldKeys.Clear();
             _replayHeldButtons.Clear();
+            // why: old ResetUiReplayState cleared virtual mouse position on loop restart; without this, loop iteration 2+ keeps the previous pass's last position until the next position event
+            _replayMousePosition = null;
         }
 
         private void ProcessKeyDown(string keyName)
