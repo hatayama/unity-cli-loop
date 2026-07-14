@@ -379,10 +379,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             InitializeApplicationServices();
             _view = ThirdPartyToolMigrationWizardView.Create(
                 rootVisualElement,
-                RefreshUI,
-                HandleMigrateThirdPartyTools,
+                () => RefreshUI().Forget(),
+                () => HandleMigrateThirdPartyTools().Forget(),
                 HandleMigrationSkillTargetChanged,
-                HandleToggleMigrationSkill,
+                () => HandleToggleMigrationSkill().Forget(),
                 Close);
             _resizer = new ThirdPartyToolMigrationWizardWindowResizer(this, _view.MainScrollView);
             _resizer.BindSizeUpdates();
@@ -425,10 +425,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            rootVisualElement.schedule.Execute(RefreshUI).StartingIn(0);
+            rootVisualElement.schedule.Execute(() => RefreshUI().Forget()).StartingIn(0);
         }
 
-        private async void RefreshUI()
+        private async Task RefreshUI()
         {
             CancellationToken ct = BeginMigrationOperation();
             ShowCheckingState(new ThirdPartyToolMigrationProgress(0, 0));
@@ -477,7 +477,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ShowMigrationTargetsState(preview.FilePaths);
         }
 
-        private async void HandleMigrateThirdPartyTools()
+        private async Task HandleMigrateThirdPartyTools()
         {
             if (!ConfirmMigrationApply(
                 _pendingMigrationFilePaths.Length,
@@ -546,7 +546,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 CompleteMigrationOperation(ct);
                 if (shouldRefreshAfterInterruptedMigration)
                 {
-                    RefreshUI();
+                    await RefreshUI();
                 }
             }
 
@@ -557,7 +557,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (ShouldRefreshAfterMigration(result))
             {
-                RefreshUI();
+                await RefreshUI();
                 return;
             }
 
@@ -626,7 +626,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             RefreshMigrationSkillState();
         }
 
-        private async void HandleToggleMigrationSkill()
+        private async Task HandleToggleMigrationSkill()
         {
             CancellationToken ct = BeginMigrationSkillOperation();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
@@ -767,7 +767,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             ShowCheckingState(new ThirdPartyToolMigrationProgress(0, 0));
-            rootVisualElement.schedule.Execute(RefreshUI).StartingIn(0);
+            rootVisualElement.schedule.Execute(() => RefreshUI().Forget()).StartingIn(0);
         }
 
         private void CompleteMigrationOperation(CancellationToken ct)

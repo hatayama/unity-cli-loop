@@ -130,7 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             InitializeEventHandler();
             LoadSavedSettings();
             RestoreSessionState();
-            HandlePostCompileMode();
+            HandlePostCompileMode().Forget();
         }
 
         private void InitializeModel()
@@ -164,9 +164,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void SetupViewCallbacks()
         {
-            _view.OnRefreshCliVersion += HandleRefreshCliVersion;
-            _view.OnInstallCli += HandleInstallCli;
-            _view.OnInstallSkills += HandleInstallSkills;
+            _view.OnRefreshCliVersion += () => HandleRefreshCliVersion().Forget();
+            _view.OnInstallCli += () => HandleInstallCli().Forget();
+            _view.OnInstallSkills += () => HandleInstallSkills().Forget();
             _view.OnRefreshSkillsState += HandleRefreshSkillsState;
             _view.OnSkillsTargetChanged += value =>
             {
@@ -201,7 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _model.LoadFromSessionState();
         }
 
-        private async void HandlePostCompileMode()
+        private async Task HandlePostCompileMode()
         {
             _model.EnablePostCompileMode();
             _sessionFlagsRepository.SetShowReconnectingUI(false);
@@ -324,8 +324,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (runExpensiveChecks)
             {
-                RefreshCliVersionInBackground();
-                RefreshCliPathSetupInBackground();
+                RefreshCliVersionInBackground().Forget();
+                RefreshCliPathSetupInBackground().Forget();
                 if (refreshSkillInstallState)
                 {
                     RefreshSelectedTargetInstallStateInBackground();
@@ -340,7 +340,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
         }
 
-        private async void RefreshCliVersionInBackground()
+        private async Task RefreshCliVersionInBackground()
         {
             if (_cliSetupApplicationService.IsCliCheckCompleted())
             {
@@ -348,12 +348,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             await _cliSetupApplicationService.RefreshCliVersionAsync(CancellationToken.None);
-            RefreshCliPathSetupInBackground();
+            RefreshCliPathSetupInBackground().Forget();
             RefreshCliSetupSection();
             RefreshSelectedTargetInstallStateInBackground();
         }
 
-        private async void RefreshCliPathSetupInBackground()
+        private async Task RefreshCliPathSetupInBackground()
         {
             if (_isRefreshingCliPathSetup)
             {
@@ -383,7 +383,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
         }
 
-        private async void HandleRefreshCliVersion()
+        private async Task HandleRefreshCliVersion()
         {
             if (_isRefreshingVersion)
             {
@@ -398,7 +398,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 Task forceRefresh = _cliSetupApplicationService.ForceRefreshCliVersionAsync(CancellationToken.None);
                 Task minimumDelay = Task.Delay(500);
                 await Task.WhenAll(forceRefresh, minimumDelay);
-                RefreshCliPathSetupInBackground();
+                RefreshCliPathSetupInBackground().Forget();
             }
             finally
             {
@@ -544,10 +544,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _view?.UpdateSingleToolToggle(toolName, enabled);
 
             // Skill synchronization can touch many files, so defer it to keep UI input responsive.
-            EditorApplication.delayCall += () => ApplyToolToggleSideEffects(toolName, enabled);
+            EditorApplication.delayCall += () => ApplyToolToggleSideEffects(toolName, enabled).Forget();
         }
 
-        private async void ApplyToolToggleSideEffects(string toolName, bool enabled)
+        private async Task ApplyToolToggleSideEffects(string toolName, bool enabled)
         {
             if (!enabled)
             {
@@ -646,10 +646,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             CancellationTokenSource cts = new();
             _skillInstallStateRefreshCts = cts;
-            RefreshSelectedTargetInstallStateAsync(cts.Token);
+            RefreshSelectedTargetInstallStateAsync(cts.Token).Forget();
         }
 
-        private async void RefreshSelectedTargetInstallStateAsync(CancellationToken ct)
+        private async Task RefreshSelectedTargetInstallStateAsync(CancellationToken ct)
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             SkillInstallState installState = await Task.Run(
@@ -707,7 +707,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _skillInstallStateRefreshCts = null;
         }
 
-        private async void HandleInstallCli()
+        private async Task HandleInstallCli()
         {
             CliSetupPrimaryAction clickedAction = GetCurrentCliPrimaryButtonAction();
 
@@ -944,7 +944,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
         }
 
-        private async void HandleInstallSkills()
+        private async Task HandleInstallSkills()
         {
             if (!_cliSetupApplicationService.IsCliInstalled())
             {
