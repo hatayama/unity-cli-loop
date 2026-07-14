@@ -17,43 +17,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public static class UIElementAnnotator
     {
         private const int OVERLAY_SORT_ORDER = 32767;
-        private const int LABEL_FONT_SIZE = 20;
-        private const float OUTPUT_BORDER_NEUTRAL_THICKNESS = 2f;
-        private const float OUTPUT_BORDER_COLOR_THICKNESS = 4f;
-        private const int LABEL_PADDING_H = 6;
-        private const int LABEL_PADDING_V = 3;
-        private const float LABEL_DARK_TEXT_LUMINANCE_THRESHOLD = 0.62f;
-        private const float OUTPUT_LABEL_OUTLINE_DISTANCE = 2f;
-        private const float OUTPUT_LABEL_TO_BORDER_GAP = 4f;
-        private const string INTERACTION_CLICK = "Click";
-        private const string INTERACTION_DRAG = "Drag";
-        private const string INTERACTION_DROP = "Drop";
-        private const string INTERACTION_TEXT = "Text";
-        private const string DISPLAY_LABEL_SEPARATOR = " / ";
-
-        // Label-based colors separate dense controls where many elements share the same UI type.
-        private static readonly Color[] ANNOTATION_COLORS =
-        {
-            new Color(1f, 0.35f, 0f, 0.95f),
-            new Color(0f, 0.9f, 1f, 0.95f),
-            new Color(1f, 0.15f, 0.65f, 0.95f),
-            new Color(1f, 0.9f, 0f, 0.95f),
-            new Color(0.2f, 1f, 0.35f, 0.95f),
-            new Color(0.65f, 0.45f, 1f, 0.95f),
-            new Color(1f, 1f, 1f, 0.95f),
-            new Color(0.15f, 0.55f, 1f, 0.95f),
-            new Color(1f, 0.55f, 0.75f, 0.95f),
-            new Color(0.45f, 1f, 0.8f, 0.95f),
-            new Color(0.9f, 0.45f, 0.15f, 0.95f),
-            new Color(0.45f, 0.85f, 0.1f, 0.95f),
-            new Color(0.95f, 0.2f, 0.2f, 0.95f),
-            new Color(0.55f, 0.7f, 1f, 0.95f),
-            new Color(0.95f, 0.95f, 0.45f, 0.95f),
-            new Color(0.85f, 0.55f, 1f, 0.95f)
-        };
-        private static readonly Color FALLBACK_COLOR = new Color(1f, 1f, 0f, 0.9f);
-        private static readonly Color DARK_CONTRAST_COLOR = new Color(0f, 0f, 0f, 0.95f);
-        private static readonly Color LIGHT_CONTRAST_COLOR = new Color(1f, 1f, 1f, 0.95f);
 
         public static List<UIElementInfo> CollectInteractiveElements()
         {
@@ -119,23 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             canvas.sortingOrder = OVERLAY_SORT_ORDER;
 
             Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            List<AnnotationDrawInfo> drawInfos = new(elements.Count);
-            float physicsAnnotationScreenHeight = CalculatePhysicsAnnotationScreenHeight(elements);
-
-            foreach (UIElementInfo element in elements)
-            {
-                drawInfos.Add(CreateAnnotationDrawInfo(element, physicsAnnotationScreenHeight));
-            }
-
-            foreach (AnnotationDrawInfo drawInfo in drawInfos)
-            {
-                CreateAnnotationBorderForElement(root.transform, drawInfo, borderMetrics);
-            }
-
-            foreach (AnnotationDrawInfo drawInfo in drawInfos)
-            {
-                CreateAnnotationLabelForElement(root.transform, drawInfo, font, borderMetrics);
-            }
+            UIElementAnnotationRenderer.RenderAnnotations(root.transform, elements, font, borderMetrics);
 
             return root;
         }
@@ -375,426 +322,57 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        private static void CreateAnnotationBorderForElement(
-            Transform parent,
-            AnnotationDrawInfo drawInfo,
-            AnnotationBorderMetrics borderMetrics)
+        internal static Color GetAnnotationColorForElement(UIElementInfo element)
         {
-            if (drawInfo.OutlineSegments.Count > 0)
-            {
-                CreateAnnotationOutlineForElement(parent, drawInfo, borderMetrics);
-                return;
-            }
-
-            CreateBorder(
-                parent,
-                "LightOuter",
-                drawInfo.ScreenMinX - borderMetrics.OuterOffset,
-                drawInfo.ScreenMinY - borderMetrics.OuterOffset,
-                drawInfo.ScreenMaxX + borderMetrics.OuterOffset,
-                drawInfo.ScreenMaxY + borderMetrics.OuterOffset,
-                borderMetrics.NeutralThickness,
-                drawInfo.BorderColors.Outer);
-            CreateBorder(
-                parent,
-                "ColorMiddle",
-                drawInfo.ScreenMinX - borderMetrics.ColorOffset,
-                drawInfo.ScreenMinY - borderMetrics.ColorOffset,
-                drawInfo.ScreenMaxX + borderMetrics.ColorOffset,
-                drawInfo.ScreenMaxY + borderMetrics.ColorOffset,
-                borderMetrics.ColorThickness,
-                drawInfo.BorderColors.Middle);
-            CreateBorder(
-                parent,
-                "DarkInner",
-                drawInfo.ScreenMinX,
-                drawInfo.ScreenMinY,
-                drawInfo.ScreenMaxX,
-                drawInfo.ScreenMaxY,
-                borderMetrics.NeutralThickness,
-                drawInfo.BorderColors.Inner);
+            return UIElementAnnotationStyling.GetAnnotationColorForElement(element);
         }
 
-        private static void CreateAnnotationOutlineForElement(
-            Transform parent,
-            AnnotationDrawInfo drawInfo,
-            AnnotationBorderMetrics borderMetrics)
+        internal static Color GetContrastingTextColor(Color backgroundColor)
         {
-            float outerThickness = borderMetrics.ColorThickness + borderMetrics.NeutralThickness * 2f;
-            CreateOutline(
-                parent,
-                "LightOuter",
-                drawInfo.OutlineSegments,
-                outerThickness,
-                drawInfo.BorderColors.Outer);
-            CreateOutline(
-                parent,
-                "ColorMiddle",
-                drawInfo.OutlineSegments,
-                borderMetrics.ColorThickness,
-                drawInfo.BorderColors.Middle);
-            CreateOutline(
-                parent,
-                "DarkInner",
-                drawInfo.OutlineSegments,
-                borderMetrics.NeutralThickness,
-                drawInfo.BorderColors.Inner);
+            return UIElementAnnotationStyling.GetContrastingTextColor(backgroundColor);
         }
 
-        private static void CreateAnnotationLabelForElement(
-            Transform parent,
-            AnnotationDrawInfo drawInfo,
-            Font font,
-            AnnotationBorderMetrics borderMetrics)
+        internal static Color GetContrastPartnerColor(Color color)
         {
-            CreateLabel(
-                parent,
-                drawInfo.DisplayLabel,
-                drawInfo.ScreenMinX,
-                drawInfo.ScreenMaxY + borderMetrics.OuterOffset + borderMetrics.LabelOutlineDistance + borderMetrics.LabelToBorderGap,
-                drawInfo.Color,
-                drawInfo.ContrastColor,
-                font,
-                borderMetrics.LabelOutlineDistance);
+            return UIElementAnnotationStyling.GetContrastPartnerColor(color);
         }
 
-        private static AnnotationDrawInfo CreateAnnotationDrawInfo(
-            UIElementInfo element,
-            float physicsAnnotationScreenHeight)
+        internal static AnnotationBorderColors GetAnnotationBorderColors(Color annotationColor)
         {
-            Color color = GetAnnotationColorForElement(element);
-            Color contrastColor = GetContrastingTextColor(color);
-            AnnotationBorderColors borderColors = GetAnnotationBorderColors(color);
-            string displayLabel = CreateDisplayLabel(element);
-            float screenMinX = element.BoundsMinX;
-            float screenMinY = element.BoundsMinY;
-            float screenMaxX = element.BoundsMaxX;
-            float screenMaxY = element.BoundsMaxY;
-            List<RaycastOutlineSegment> outlineSegments = element.RaycastOutlineSegments;
-
-            if (IsPhysicsColliderElement(element))
-            {
-                Debug.Assert(
-                    physicsAnnotationScreenHeight >= 0f,
-                    "Physics collider annotations require a non-negative Game View height.");
-                screenMinY = physicsAnnotationScreenHeight - element.BoundsMaxY;
-                screenMaxY = physicsAnnotationScreenHeight - element.BoundsMinY;
-                outlineSegments = ConvertTopLeftOutlineSegmentsToScreenSegments(
-                    element.RaycastOutlineSegments,
-                    physicsAnnotationScreenHeight);
-            }
-
-            return new AnnotationDrawInfo(
-                screenMinX,
-                screenMinY,
-                screenMaxX,
-                screenMaxY,
-                color,
-                contrastColor,
-                borderColors,
-                displayLabel,
-                outlineSegments);
+            return UIElementAnnotationStyling.GetAnnotationBorderColors(annotationColor);
         }
 
-        private static float CalculatePhysicsAnnotationScreenHeight(List<UIElementInfo> elements)
+        internal static AnnotationBorderMetrics CalculateAnnotationBorderMetrics(float outputResolutionScale)
         {
-            foreach (UIElementInfo element in elements)
-            {
-                if (!IsPhysicsColliderElement(element))
-                {
-                    continue;
-                }
-
-                return GameViewCoordinateUtility.GetMainGameViewSize().y;
-            }
-
-            return 0f;
+            return UIElementAnnotationStyling.CalculateAnnotationBorderMetrics(outputResolutionScale);
         }
 
-        private static bool IsPhysicsColliderElement(UIElementInfo element)
+        internal static string GetInteractionForType(string type)
         {
-            return element.Type == "PhysicsCollider";
+            return UIElementAnnotationStyling.GetInteractionForType(type);
         }
 
-        private static List<RaycastOutlineSegment> ConvertTopLeftOutlineSegmentsToScreenSegments(
-            List<RaycastOutlineSegment> outlineSegments,
-            float screenHeight)
+        internal static string CreateDisplayLabel(UIElementInfo element)
         {
-            List<RaycastOutlineSegment> screenSegments = new(outlineSegments.Count);
-            foreach (RaycastOutlineSegment segment in outlineSegments)
-            {
-                screenSegments.Add(ConvertTopLeftOutlineSegmentToScreenSegment(segment, screenHeight));
-            }
-
-            return screenSegments;
+            return UIElementAnnotationStyling.CreateDisplayLabel(element);
         }
 
         internal static RaycastOutlineSegment ConvertTopLeftOutlineSegmentToScreenSegment(
             RaycastOutlineSegment segment,
             float screenHeight)
         {
-            return new RaycastOutlineSegment(
-                segment.StartX,
-                screenHeight - segment.StartY,
-                segment.EndX,
-                screenHeight - segment.EndY);
-        }
-
-        private static void CreateBorder(
-            Transform parent, string name,
-            float minX, float minY, float maxX, float maxY,
-            float thickness, Color color)
-        {
-            BorderEdgeRects borderEdgeRects = CalculateBorderEdgeRects(minX, minY, maxX, maxY, thickness);
-
-            CreateBorderEdge(parent, $"{name}_Top", borderEdgeRects.Top, color);
-            CreateBorderEdge(parent, $"{name}_Bottom", borderEdgeRects.Bottom, color);
-            CreateBorderEdge(parent, $"{name}_Left", borderEdgeRects.Left, color);
-            CreateBorderEdge(parent, $"{name}_Right", borderEdgeRects.Right, color);
-        }
-
-        private static void CreateOutline(
-            Transform parent,
-            string name,
-            List<RaycastOutlineSegment> outlineSegments,
-            float thickness,
-            Color color)
-        {
-            for (int i = 0; i < outlineSegments.Count; i++)
-            {
-                Rect rect = CalculateOutlineSegmentRect(outlineSegments[i], thickness);
-                CreateBorderEdge(parent, $"{name}_Outline_{i}", rect, color);
-            }
+            return UIElementAnnotationRenderer.ConvertTopLeftOutlineSegmentToScreenSegment(segment, screenHeight);
         }
 
         internal static Rect CalculateOutlineSegmentRect(RaycastOutlineSegment segment, float thickness)
         {
-            Debug.Assert(thickness >= 0f, "Outline thickness must not be negative.");
-            bool horizontal = Mathf.Approximately(segment.StartY, segment.EndY);
-            bool vertical = Mathf.Approximately(segment.StartX, segment.EndX);
-            Debug.Assert(horizontal || vertical, "Raycast outline segments must be axis-aligned.");
-
-            if (horizontal)
-            {
-                float minX = Mathf.Min(segment.StartX, segment.EndX) - thickness / 2f;
-                float width = Mathf.Abs(segment.EndX - segment.StartX) + thickness;
-                return new Rect(minX, segment.StartY - thickness / 2f, width, thickness);
-            }
-
-            float minY = Mathf.Min(segment.StartY, segment.EndY) - thickness / 2f;
-            float height = Mathf.Abs(segment.EndY - segment.StartY) + thickness;
-            return new Rect(segment.StartX - thickness / 2f, minY, thickness, height);
+            return UIElementAnnotationRenderer.CalculateOutlineSegmentRect(segment, thickness);
         }
 
         internal static BorderEdgeRects CalculateBorderEdgeRects(
             float minX, float minY, float maxX, float maxY, float thickness)
         {
-            Debug.Assert(maxX >= minX, "maxX must not be smaller than minX.");
-            Debug.Assert(maxY >= minY, "maxY must not be smaller than minY.");
-            Debug.Assert(thickness >= 0f, "thickness must not be negative.");
-
-            float boxWidth = maxX - minX;
-            float boxHeight = maxY - minY;
-            float verticalEdgeHeight = Mathf.Max(0f, boxHeight - thickness * 2f);
-
-            return new BorderEdgeRects(
-                new Rect(minX, maxY - thickness, boxWidth, thickness),
-                new Rect(minX, minY, boxWidth, thickness),
-                new Rect(minX, minY + thickness, thickness, verticalEdgeHeight),
-                new Rect(maxX - thickness, minY + thickness, thickness, verticalEdgeHeight));
-        }
-
-        private static void CreateBorderEdge(
-            Transform parent, string name,
-            Rect rect,
-            Color color)
-        {
-            GameObject edgeGo = new($"Border_{name}");
-            edgeGo.hideFlags = HideFlags.HideAndDontSave;
-            edgeGo.transform.SetParent(parent, false);
-
-            RectTransform rt = edgeGo.AddComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.zero;
-            rt.pivot = Vector2.zero;
-            rt.anchoredPosition = new Vector2(rect.x, rect.y);
-            rt.sizeDelta = new Vector2(rect.width, rect.height);
-
-            Image image = edgeGo.AddComponent<Image>();
-            image.color = color;
-            image.raycastTarget = false;
-        }
-
-        private static void CreateLabel(
-            Transform parent, string text,
-            float x, float y,
-            Color backgroundColor, Color textColor, Font font, float outlineDistance)
-        {
-            GameObject bgGo = new("LabelBg");
-            bgGo.hideFlags = HideFlags.HideAndDontSave;
-            bgGo.transform.SetParent(parent, false);
-
-            RectTransform bgRt = bgGo.AddComponent<RectTransform>();
-            bgRt.anchorMin = Vector2.zero;
-            bgRt.anchorMax = Vector2.zero;
-            bgRt.pivot = new Vector2(0f, 0f);
-            bgRt.anchoredPosition = new Vector2(x, y);
-
-            Image bgImage = bgGo.AddComponent<Image>();
-            bgImage.color = backgroundColor;
-            bgImage.raycastTarget = false;
-
-            Outline bgOutline = bgGo.AddComponent<Outline>();
-            bgOutline.effectColor = GetContrastPartnerColor(backgroundColor);
-            bgOutline.effectDistance = new Vector2(outlineDistance, -outlineDistance);
-
-            ContentSizeFitter fitter = bgGo.AddComponent<ContentSizeFitter>();
-            fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            HorizontalLayoutGroup layout = bgGo.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset(LABEL_PADDING_H, LABEL_PADDING_H, LABEL_PADDING_V, LABEL_PADDING_V);
-            layout.childAlignment = TextAnchor.MiddleLeft;
-
-            GameObject textGo = new("LabelText");
-            textGo.hideFlags = HideFlags.HideAndDontSave;
-            textGo.transform.SetParent(bgGo.transform, false);
-
-            textGo.AddComponent<RectTransform>();
-
-            Text labelText = textGo.AddComponent<Text>();
-            labelText.text = text;
-            labelText.font = font;
-            labelText.fontSize = LABEL_FONT_SIZE;
-            labelText.fontStyle = FontStyle.Bold;
-            labelText.color = textColor;
-            labelText.alignment = TextAnchor.MiddleLeft;
-            labelText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            labelText.verticalOverflow = VerticalWrapMode.Overflow;
-            labelText.raycastTarget = false;
-        }
-
-        internal static Color GetAnnotationColorForElement(UIElementInfo element)
-        {
-            Debug.Assert(element != null, "UIElementInfo must not be null.");
-
-            int labelIndex = GetLabelIndex(element!.Label);
-            if (labelIndex < 0)
-            {
-                return FALLBACK_COLOR;
-            }
-
-            return ANNOTATION_COLORS[labelIndex % ANNOTATION_COLORS.Length];
-        }
-
-        internal static Color GetContrastingTextColor(Color backgroundColor)
-        {
-            float luminance = CalculateLuminance(backgroundColor);
-            if (luminance >= LABEL_DARK_TEXT_LUMINANCE_THRESHOLD)
-            {
-                return DARK_CONTRAST_COLOR;
-            }
-
-            return LIGHT_CONTRAST_COLOR;
-        }
-
-        internal static Color GetContrastPartnerColor(Color color)
-        {
-            Color readableColor = GetContrastingTextColor(color);
-            if (readableColor == DARK_CONTRAST_COLOR)
-            {
-                return LIGHT_CONTRAST_COLOR;
-            }
-
-            return DARK_CONTRAST_COLOR;
-        }
-
-        internal static AnnotationBorderColors GetAnnotationBorderColors(Color annotationColor)
-        {
-            return new AnnotationBorderColors(DARK_CONTRAST_COLOR, annotationColor, LIGHT_CONTRAST_COLOR);
-        }
-
-        internal static AnnotationBorderMetrics CalculateAnnotationBorderMetrics(float outputResolutionScale)
-        {
-            Debug.Assert(outputResolutionScale > 0f, "Output resolution scale must be positive.");
-
-            float neutralThickness = OUTPUT_BORDER_NEUTRAL_THICKNESS / outputResolutionScale;
-            float colorThickness = OUTPUT_BORDER_COLOR_THICKNESS / outputResolutionScale;
-            float labelOutlineDistance = OUTPUT_LABEL_OUTLINE_DISTANCE / outputResolutionScale;
-            float labelToBorderGap = OUTPUT_LABEL_TO_BORDER_GAP / outputResolutionScale;
-
-            return new AnnotationBorderMetrics(
-                neutralThickness,
-                colorThickness,
-                colorThickness,
-                colorThickness + neutralThickness,
-                labelOutlineDistance,
-                labelToBorderGap);
-        }
-
-        internal static string GetInteractionForType(string type)
-        {
-            if (type == "Slider" || type == "Scrollbar" || type == "Draggable")
-            {
-                return INTERACTION_DRAG;
-            }
-
-            if (type == "DropTarget")
-            {
-                return INTERACTION_DROP;
-            }
-
-            if (type == "InputField")
-            {
-                return INTERACTION_TEXT;
-            }
-
-            return INTERACTION_CLICK;
-        }
-
-        internal static string CreateDisplayLabel(UIElementInfo element)
-        {
-            Debug.Assert(element != null, "UIElementInfo must not be null.");
-
-            string interaction = element!.Interaction;
-            if (string.IsNullOrEmpty(interaction))
-            {
-                interaction = GetInteractionForType(element.Type);
-            }
-
-            if (string.IsNullOrEmpty(element.Label))
-            {
-                return interaction.ToUpperInvariant();
-            }
-
-            return $"{element.Label}{DISPLAY_LABEL_SEPARATOR}{interaction.ToUpperInvariant()}";
-        }
-
-        private static float CalculateLuminance(Color color)
-        {
-            return color.r * 0.299f + color.g * 0.587f + color.b * 0.114f;
-        }
-
-        private static int GetLabelIndex(string label)
-        {
-            if (string.IsNullOrEmpty(label))
-            {
-                return -1;
-            }
-
-            int index = 0;
-            for (int i = 0; i < label.Length; i++)
-            {
-                char labelCharacter = label[i];
-                if (labelCharacter < 'A' || labelCharacter > 'Z')
-                {
-                    return -1;
-                }
-
-                index = index * 26 + labelCharacter - 'A' + 1;
-            }
-
-            return index - 1;
+            return UIElementAnnotationRenderer.CalculateBorderEdgeRects(minX, minY, maxX, maxY, thickness);
         }
 
         internal readonly struct BorderEdgeRects
@@ -824,41 +402,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Inner = inner;
                 Middle = middle;
                 Outer = outer;
-            }
-        }
-
-        private readonly struct AnnotationDrawInfo
-        {
-            public readonly float ScreenMinX;
-            public readonly float ScreenMinY;
-            public readonly float ScreenMaxX;
-            public readonly float ScreenMaxY;
-            public readonly Color Color;
-            public readonly Color ContrastColor;
-            public readonly AnnotationBorderColors BorderColors;
-            public readonly string DisplayLabel;
-            public readonly List<RaycastOutlineSegment> OutlineSegments;
-
-            public AnnotationDrawInfo(
-                float screenMinX,
-                float screenMinY,
-                float screenMaxX,
-                float screenMaxY,
-                Color color,
-                Color contrastColor,
-                AnnotationBorderColors borderColors,
-                string displayLabel,
-                List<RaycastOutlineSegment> outlineSegments)
-            {
-                ScreenMinX = screenMinX;
-                ScreenMinY = screenMinY;
-                ScreenMaxX = screenMaxX;
-                ScreenMaxY = screenMaxY;
-                Color = color;
-                ContrastColor = contrastColor;
-                BorderColors = borderColors;
-                DisplayLabel = displayLabel;
-                OutlineSegments = outlineSegments;
             }
         }
 

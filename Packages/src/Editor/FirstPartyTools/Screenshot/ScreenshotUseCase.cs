@@ -34,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 aiTodo: "Monitor capture performance and file size"
             );
 
-            ValidateParameters(request);
+            ScreenshotParameterValidator.Validate(request);
 
             if (request.CaptureMode == CaptureMode.rendering)
             {
@@ -92,8 +92,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 raycastGridRenderingInfo = renderingImageInfo;
                 gameViewSize = renderingImageInfo.GameViewSize;
-                RaycastLayerMaskResolution raycastLayerMaskResolution = ResolveRaycastLayerMask(request);
-                List<RaycastLayerDefinition> availableLayerDefinitions = GetAvailableLayerDefinitions();
+                RaycastLayerMaskResolution raycastLayerMaskResolution = ScreenshotParameterValidator.ResolveRaycastLayerMask(request);
+                List<RaycastLayerDefinition> availableLayerDefinitions = ScreenshotParameterValidator.GetAvailableLayerDefinitions();
                 int effectiveLayerMask = raycastLayerMaskResolution.HasLayerNames
                     ? raycastLayerMaskResolution.Mask
                     : Physics.DefaultRaycastLayers;
@@ -202,11 +202,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                string outputDirectory = EnsureOutputDirectoryExists(request.OutputDirectory);
+                string outputDirectory = ScreenshotFileWriter.EnsureOutputDirectoryExists(request.OutputDirectory);
                 string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
                 string savedPath = Path.Combine(outputDirectory, $"Rendering_{timestamp}.png");
 
-                SaveTextureAsPng(texture, savedPath);
+                ScreenshotFileWriter.SaveTextureAsPng(texture, savedPath);
                 // why: only prune the package default Screenshots folder; never delete files in a user-specified OutputDirectory
                 if (string.IsNullOrEmpty(request.OutputDirectory))
                 {
@@ -300,7 +300,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
-            string outputDirectory = EnsureOutputDirectoryExists(request.OutputDirectory);
+            string outputDirectory = ScreenshotFileWriter.EnsureOutputDirectoryExists(request.OutputDirectory);
             string safeWindowName = SanitizeFileName(captureWindowName);
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
             List<ScreenshotInfo> screenshots = new();
@@ -339,7 +339,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 try
                 {
-                    SaveTextureAsPng(texture, savedPath);
+                    ScreenshotFileWriter.SaveTextureAsPng(texture, savedPath);
 
                     FileInfo savedFileInfo = new(savedPath);
                     ScreenshotInfo info = new()
@@ -429,165 +429,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Vector2 gameViewSize,
             int imageToInputOffsetY = 0)
         {
-            info.ImageCoordinateSystem = UnityCliLoopConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW;
-            info.GameViewWidth = gameViewSize.x;
-            info.GameViewHeight = gameViewSize.y;
-            info.ImageToInputOffsetY = imageToInputOffsetY;
-            info.ScreenshotToInputFormula = UnityCliLoopConstants.SCREENSHOT_RENDERING_TO_INPUT_FORMULA;
-            info.UnityInputFormula = UnityCliLoopConstants.COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY;
+            ScreenshotCoordinateMetadata.ApplyRendering(info, gameViewSize, imageToInputOffsetY);
         }
 
         internal static void ApplyWindowCoordinateMetadata(ScreenshotInfo info)
         {
-            info.ImageCoordinateSystem = UnityCliLoopConstants.COORDINATE_SYSTEM_TOP_LEFT_WINDOW;
-            info.ScreenshotToInputFormula = UnityCliLoopConstants.SCREENSHOT_WINDOW_TO_INPUT_FORMULA_UNAVAILABLE;
-            info.UnityInputFormula = "";
+            ScreenshotCoordinateMetadata.ApplyWindow(info);
         }
 
         internal static List<UIElementInfo> CreateResponseAnnotatedElements(
             List<UIElementInfo> uiElements,
             List<UIElementInfo> physicsColliderElements)
         {
-            List<UIElementInfo> responseElements = new(uiElements);
-            responseElements.AddRange(physicsColliderElements);
-            return responseElements;
-        }
-
-        private void ValidateParameters(ScreenshotSchema request)
-        {
-            if (request.CaptureMode != CaptureMode.rendering &&
-                string.IsNullOrEmpty(request.WindowName))
-            {
-                throw new UnityCliLoopToolParameterValidationException("WindowName cannot be null or empty");
-            }
-
-            if (request.ResolutionScale < 0.1f || request.ResolutionScale > 1.0f)
-            {
-                throw new UnityCliLoopToolParameterValidationException(
-                    $"ResolutionScale must be between 0.1 and 1.0, got: {request.ResolutionScale}");
-            }
-
-            // AnnotateElements, ElementsOnly, and AnnotateRaycastGrid rely on PlayMode rendering pipeline
-            if (request.CaptureMode != CaptureMode.rendering)
-            {
-                if (request.AnnotateElements)
-                {
-                    throw new UnityCliLoopToolParameterValidationException("AnnotateElements is only supported when CaptureMode=rendering");
-                }
-
-                if (request.ElementsOnly)
-                {
-                    throw new UnityCliLoopToolParameterValidationException("ElementsOnly is only supported when CaptureMode=rendering");
-                }
-
-                if (request.AnnotateRaycastGrid)
-                {
-                    throw new UnityCliLoopToolParameterValidationException("AnnotateRaycastGrid is only supported when CaptureMode=rendering");
-                }
-            }
-
-            if (request.ElementsOnly &&
-                !request.AnnotateElements &&
-                !request.AnnotateRaycastGrid)
-            {
-                throw new UnityCliLoopToolParameterValidationException(
-                    "ElementsOnly requires AnnotateElements=true or AnnotateRaycastGrid=true");
-            }
-
-            RaycastLayerMaskResolution raycastLayerMaskResolution = ResolveRaycastLayerMask(request);
-            if (raycastLayerMaskResolution.HasLayerNames && !request.AnnotateRaycastGrid)
-            {
-                throw new UnityCliLoopToolParameterValidationException(
-                    "RaycastLayerMask requires AnnotateRaycastGrid=true");
-            }
-
-            if (!raycastLayerMaskResolution.IsValid)
-            {
-                throw new UnityCliLoopToolParameterValidationException(
-                    CreateInvalidRaycastLayerMaskMessage(raycastLayerMaskResolution));
-            }
-        }
-
-        private static RaycastLayerMaskResolution ResolveRaycastLayerMask(ScreenshotSchema request)
-        {
-            string raycastLayerMask = request.RaycastLayerMask ?? "";
-            return RaycastLayerMaskResolver.Resolve(
-                raycastLayerMask,
-                GetAvailableLayerDefinitions());
-        }
-
-        private static List<RaycastLayerDefinition> GetAvailableLayerDefinitions()
-        {
-            List<RaycastLayerDefinition> layerDefinitions = new();
-            for (int layerIndex = 0; layerIndex <= 31; layerIndex++)
-            {
-                string layerName = LayerMask.LayerToName(layerIndex);
-                if (string.IsNullOrEmpty(layerName))
-                {
-                    continue;
-                }
-
-                layerDefinitions.Add(new RaycastLayerDefinition
-                {
-                    Name = layerName,
-                    Index = layerIndex
-                });
-            }
-
-            return layerDefinitions;
+            return ScreenshotResponseFactory.CreateResponseAnnotatedElements(uiElements, physicsColliderElements);
         }
 
         internal static string CreateInvalidRaycastLayerMaskMessage(
             RaycastLayerMaskResolution raycastLayerMaskResolution)
         {
-            string invalidLayerNames = string.Join(", ", raycastLayerMaskResolution.InvalidLayerNames);
-            string validLayerNames = string.Join(", ", raycastLayerMaskResolution.ValidLayerNames);
-            if (string.IsNullOrEmpty(validLayerNames))
-            {
-                validLayerNames = "(none)";
-            }
-
-            return $"RaycastLayerMask contains unknown layer name(s): {invalidLayerNames}. Valid layers: {validLayerNames}";
-        }
-
-        private string EnsureOutputDirectoryExists(string outputDirectory)
-        {
-            string resolvedDirectory;
-
-            if (string.IsNullOrEmpty(outputDirectory))
-            {
-                string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-                resolvedDirectory = Path.Combine(projectRoot, UnityCliLoopConstants.OUTPUT_ROOT_DIR, UnityCliLoopConstants.SCREENSHOTS_DIR);
-            }
-            else
-            {
-                resolvedDirectory = Path.GetFullPath(outputDirectory);
-            }
-
-            Directory.CreateDirectory(resolvedDirectory);
-
-            return resolvedDirectory;
+            return ScreenshotParameterValidator.CreateInvalidRaycastLayerMaskMessage(raycastLayerMaskResolution);
         }
 
         internal static string SanitizeFileName(string name)
         {
-            char[] invalidChars = Path.GetInvalidFileNameChars();
-            string sanitized = name;
-            foreach (char c in invalidChars)
-            {
-                sanitized = sanitized.Replace(c, '_');
-            }
-            return sanitized;
-        }
-
-        private void SaveTextureAsPng(Texture2D texture, string fullPath)
-        {
-            byte[] pngData = texture.EncodeToPNG();
-            if (pngData == null)
-            {
-                throw new InvalidOperationException($"Failed to encode texture to PNG. Format: {texture.format}, Size: {texture.width}x{texture.height}");
-            }
-            File.WriteAllBytes(fullPath, pngData);
+            return ScreenshotFileWriter.SanitizeFileName(name);
         }
     }
 }
