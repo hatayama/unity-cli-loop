@@ -13,9 +13,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class RaycastGridAnnotator
     {
-        private const int CLUSTERED_GRID_COLUMNS = 40;
-        private const int CLUSTERED_GRID_ROWS = 40;
-
         internal static List<RaycastLayerSummaryInfo> CollectRaycastLayerSummaries(
             Vector2 renderingImageSize,
             int imageToInputOffsetY)
@@ -23,8 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<RaycastLayerHitSample> samples = CollectLayerHitSamples(
                 renderingImageSize,
                 imageToInputOffsetY,
-                CLUSTERED_GRID_ROWS,
-                CLUSTERED_GRID_COLUMNS);
+                RaycastPhysicsColliderBuilder.CLUSTERED_GRID_ROWS,
+                RaycastPhysicsColliderBuilder.CLUSTERED_GRID_COLUMNS);
             return CreateLayerSummaries(samples);
         }
 
@@ -55,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         Physics.DefaultRaycastLayers,
                         false);
 
-                    samples.Add(CreateLayerHitSample(raycastResult));
+                    samples.Add(RaycastLayerSummaryBuilder.CreateLayerHitSample(raycastResult));
                 }
             }
 
@@ -97,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UiRaycastHelper.RaycastContext? uiRaycastContext = CreateUiRaycastContext();
             Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
             RaycastSampleCoverage sampleCoverage =
-                CreateClusterSampleCoverage(renderingImageSize, imageToInputOffsetY);
+                RaycastPhysicsColliderBuilder.CreateClusterSampleCoverage(renderingImageSize, imageToInputOffsetY);
 
             for (int i = 0; i < clusters.Count; i++)
             {
@@ -123,237 +120,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return elements;
         }
 
-        // Split the reachable cluster into 4-connected regions and materialize one UIElementInfo per region.
-        // Why: a single GameObject can produce multiple visually closed outline regions when UI occlusion
-        // splits its reachable samples, and agents need one annotation per closed region so they can address
-        // each one with its own Label, Bounds, SimX/SimY, and RaycastOutlineSegments.
         internal static List<UIElementInfo> CreateComponentElements(
             RaycastClusterInfo reachableCluster,
             RaycastColliderMetadata metadata,
             RaycastSampleCoverage sampleCoverage,
             int startLabelNumber)
         {
-            List<List<RaycastClusterSample>> components =
-                RaycastHitClusterer.SplitIntoConnectedComponents(reachableCluster.Samples);
-            components.Sort(CompareComponentsByTopLeft);
-
-            List<UIElementInfo> componentElements = new List<UIElementInfo>();
-            for (int j = 0; j < components.Count; j++)
-            {
-                List<RaycastClusterSample> componentSamples = components[j];
-                RaycastClusterInfo componentCluster = new RaycastClusterInfo
-                {
-                    Samples = componentSamples,
-                    SampleCount = componentSamples.Count,
-                    Representative = RaycastHitClusterer.SelectRepresentativeSample(componentSamples)
-                };
-                componentElements.Add(CreatePhysicsColliderElement(
-                    $"R{startLabelNumber + j}",
-                    componentCluster,
-                    metadata,
-                    sampleCoverage));
-            }
-            return componentElements;
-        }
-
-        // Order components so labels are assigned in a fully deterministic top-left-first sequence.
-        // Why: List<T>.Sort is not stable, so two components sharing the same min InputY and min InputX
-        // would otherwise flip order between runs. The min (Row, Column) tiebreaker pins the order.
-        private static int CompareComponentsByTopLeft(
-            List<RaycastClusterSample> left,
-            List<RaycastClusterSample> right)
-        {
-            float leftMinY = MinInputY(left);
-            float rightMinY = MinInputY(right);
-            int yComparison = leftMinY.CompareTo(rightMinY);
-            if (yComparison != 0)
-            {
-                return yComparison;
-            }
-
-            float leftMinX = MinInputX(left);
-            float rightMinX = MinInputX(right);
-            int xComparison = leftMinX.CompareTo(rightMinX);
-            if (xComparison != 0)
-            {
-                return xComparison;
-            }
-
-            (int, int) leftMinCell = MinRowColumn(left);
-            (int, int) rightMinCell = MinRowColumn(right);
-            int rowComparison = leftMinCell.Item1.CompareTo(rightMinCell.Item1);
-            if (rowComparison != 0)
-            {
-                return rowComparison;
-            }
-            return leftMinCell.Item2.CompareTo(rightMinCell.Item2);
-        }
-
-        private static float MinInputX(List<RaycastClusterSample> samples)
-        {
-            float minValue = samples[0].InputX;
-            for (int i = 1; i < samples.Count; i++)
-            {
-                if (samples[i].InputX < minValue)
-                {
-                    minValue = samples[i].InputX;
-                }
-            }
-            return minValue;
-        }
-
-        private static float MinInputY(List<RaycastClusterSample> samples)
-        {
-            float minValue = samples[0].InputY;
-            for (int i = 1; i < samples.Count; i++)
-            {
-                if (samples[i].InputY < minValue)
-                {
-                    minValue = samples[i].InputY;
-                }
-            }
-            return minValue;
-        }
-
-        private static (int, int) MinRowColumn(List<RaycastClusterSample> samples)
-        {
-            (int, int) minCell = (samples[0].Row, samples[0].Column);
-            for (int i = 1; i < samples.Count; i++)
-            {
-                (int, int) candidate = (samples[i].Row, samples[i].Column);
-                if (candidate.Item1 < minCell.Item1 ||
-                    (candidate.Item1 == minCell.Item1 && candidate.Item2 < minCell.Item2))
-                {
-                    minCell = candidate;
-                }
-            }
-            return minCell;
-        }
-
-        private static RaycastLayerHitSample CreateLayerHitSample(GameViewRaycastResult raycastResult)
-        {
-            RaycastLayerHitSample sample = new RaycastLayerHitSample
-            {
-                Hit = raycastResult.Hits.Length > 0
-            };
-
-            if (!sample.Hit)
-            {
-                return sample;
-            }
-
-            RaycastHit hit = raycastResult.Hits[0];
-            sample.HitGameObjectPath = GameObjectPathUtility.GetFullPath(hit.collider.gameObject);
-            sample.HitLayerIndex = hit.collider.gameObject.layer;
-            sample.HitLayer = LayerMask.LayerToName(hit.collider.gameObject.layer);
-            return sample;
-        }
-
-        internal static List<RaycastLayerSummaryInfo> CreateLayerSummaries(List<RaycastLayerHitSample> samples)
-        {
-            Dictionary<int, RaycastLayerSummaryAccumulator> accumulatorsByLayerIndex =
-                new Dictionary<int, RaycastLayerSummaryAccumulator>();
-
-            foreach (RaycastLayerHitSample sample in samples)
-            {
-                if (!sample.Hit || sample.HitLayerIndex == null)
-                {
-                    continue;
-                }
-
-                int layerIndex = sample.HitLayerIndex.Value;
-                if (!accumulatorsByLayerIndex.ContainsKey(layerIndex))
-                {
-                    accumulatorsByLayerIndex.Add(
-                        layerIndex,
-                        new RaycastLayerSummaryAccumulator(sample.HitLayer ?? "", layerIndex));
-                }
-
-                RaycastLayerSummaryAccumulator accumulator = accumulatorsByLayerIndex[layerIndex];
-                accumulator.AddHit(sample.HitGameObjectPath ?? "");
-            }
-
-            List<RaycastLayerSummaryInfo> summaries = new List<RaycastLayerSummaryInfo>();
-            foreach (RaycastLayerSummaryAccumulator accumulator in accumulatorsByLayerIndex.Values)
-            {
-                summaries.Add(accumulator.CreateSummary());
-            }
-
-            summaries.Sort(CompareLayerSummaries);
-            return summaries;
-        }
-
-        private static int CompareLayerSummaries(
-            RaycastLayerSummaryInfo left,
-            RaycastLayerSummaryInfo right)
-        {
-            int hitCountComparison = right.HitCount.CompareTo(left.HitCount);
-            if (hitCountComparison != 0)
-            {
-                return hitCountComparison;
-            }
-
-            return left.LayerIndex.CompareTo(right.LayerIndex);
-        }
-
-        private sealed class RaycastLayerSummaryAccumulator
-        {
-            private readonly Dictionary<string, int> _objectHitCounts = new Dictionary<string, int>();
-            private string _representativeObjectPath = "";
-            private int _representativeObjectHitCount;
-
-            public string Layer { get; }
-            public int LayerIndex { get; }
-            public int HitCount { get; private set; }
-
-            public RaycastLayerSummaryAccumulator(string layer, int layerIndex)
-            {
-                Layer = layer;
-                LayerIndex = layerIndex;
-            }
-
-            public void AddHit(string objectPath)
-            {
-                HitCount++;
-                int objectHitCount = 1;
-                if (_objectHitCounts.ContainsKey(objectPath))
-                {
-                    objectHitCount = _objectHitCounts[objectPath] + 1;
-                }
-
-                _objectHitCounts[objectPath] = objectHitCount;
-                if (ShouldUseAsRepresentative(objectPath, objectHitCount))
-                {
-                    _representativeObjectPath = objectPath;
-                    _representativeObjectHitCount = objectHitCount;
-                }
-            }
-
-            public RaycastLayerSummaryInfo CreateSummary()
-            {
-                return new RaycastLayerSummaryInfo
-                {
-                    Layer = Layer,
-                    LayerIndex = LayerIndex,
-                    HitCount = HitCount,
-                    RepresentativeObjectPath = _representativeObjectPath
-                };
-            }
-
-            private bool ShouldUseAsRepresentative(string objectPath, int objectHitCount)
-            {
-                if (objectHitCount > _representativeObjectHitCount)
-                {
-                    return true;
-                }
-
-                if (objectHitCount < _representativeObjectHitCount)
-                {
-                    return false;
-                }
-
-                return string.CompareOrdinal(objectPath, _representativeObjectPath) < 0;
-            }
+            return RaycastPhysicsColliderBuilder.CreateComponentElements(
+                reachableCluster,
+                metadata,
+                sampleCoverage,
+                startLabelNumber);
         }
 
         private static RaycastClusterCollection CollectClusterSamples(
@@ -365,15 +142,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Sync once before the dense pass so every sample reads the same current physics state.
             Physics.SyncTransforms();
 
-            for (int row = 1; row <= CLUSTERED_GRID_ROWS; row++)
+            for (int row = 1; row <= RaycastPhysicsColliderBuilder.CLUSTERED_GRID_ROWS; row++)
             {
-                for (int column = 1; column <= CLUSTERED_GRID_COLUMNS; column++)
+                for (int column = 1; column <= RaycastPhysicsColliderBuilder.CLUSTERED_GRID_COLUMNS; column++)
                 {
                     Vector2 inputPosition = CalculateGridInputPositionForGrid(
                         renderingImageSize,
                         imageToInputOffsetY,
-                        CLUSTERED_GRID_ROWS,
-                        CLUSTERED_GRID_COLUMNS,
+                        RaycastPhysicsColliderBuilder.CLUSTERED_GRID_ROWS,
+                        RaycastPhysicsColliderBuilder.CLUSTERED_GRID_COLUMNS,
                         row,
                         column);
                     GameViewRaycastResult raycastResult = GameViewRaycastUtility.RaycastFromInputPosition(
@@ -394,7 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     {
                         clusterCollection.MetadataByClusterKey.Add(
                             clusterKey,
-                            CreateColliderMetadata(collider));
+                            RaycastPhysicsColliderBuilder.CreateColliderMetadata(collider));
                     }
 
                     clusterCollection.Samples.Add(CreateClusterSample(inputPosition, clusterKey, row, column));
@@ -431,99 +208,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static RaycastColliderMetadata CreateColliderMetadata(Collider collider)
-        {
-            GameObject hitObject = collider.gameObject;
-            return new RaycastColliderMetadata
-            {
-                Name = hitObject.name,
-                Path = GameObjectPathUtility.GetFullPath(hitObject),
-                Layer = LayerMask.LayerToName(hitObject.layer),
-                Components = GetRelevantComponentTypeNames(hitObject)
-            };
-        }
-
         internal static UIElementInfo CreatePhysicsColliderElement(
             string label,
             RaycastClusterInfo cluster,
             RaycastColliderMetadata metadata,
             RaycastSampleCoverage sampleCoverage)
         {
-            Debug.Assert(cluster.Samples.Count > 0, "Physics collider cluster must contain sampled hits.");
-            RaycastClusterSample representative = cluster.Representative;
-            RaycastSampleBounds sampleBounds = CalculateSampleCellBounds(cluster.Samples, sampleCoverage);
-            List<RaycastOutlineSegment> outlineSegments =
-                RaycastSampleOutlineBuilder.CreateOutlineSegments(cluster.Samples, sampleCoverage);
-
-            UIElementInfo element = new UIElementInfo
-            {
-                Label = label,
-                Name = metadata.Name,
-                Path = metadata.Path,
-                Type = "PhysicsCollider",
-                Interaction = "Raycast",
-                SimX = representative.InputX,
-                SimY = representative.InputY,
-                BoundsMinX = sampleBounds.MinX,
-                BoundsMinY = sampleBounds.MinY,
-                BoundsMaxX = sampleBounds.MaxX,
-                BoundsMaxY = sampleBounds.MaxY,
-                SortingOrder = 0,
-                SiblingIndex = 0,
-                Layer = metadata.Layer,
-                Components = new List<string>(metadata.Components),
-                RaycastOutlineSegments = outlineSegments
-            };
-
-            Debug.Assert(
-                element.SimX >= element.BoundsMinX &&
-                element.SimX <= element.BoundsMaxX &&
-                element.SimY >= element.BoundsMinY &&
-                element.SimY <= element.BoundsMaxY,
-                "Physics collider bounds must use the same top-left input coordinate space as SimX/SimY.");
-            return element;
+            return RaycastPhysicsColliderBuilder.CreatePhysicsColliderElement(
+                label,
+                cluster,
+                metadata,
+                sampleCoverage);
         }
 
-        private static RaycastSampleCoverage CreateClusterSampleCoverage(
-            Vector2 renderingImageSize,
-            int imageToInputOffsetY)
+        internal static List<RaycastLayerSummaryInfo> CreateLayerSummaries(List<RaycastLayerHitSample> samples)
         {
-            float stepX = renderingImageSize.x / (CLUSTERED_GRID_COLUMNS + 1f);
-            float stepY = renderingImageSize.y / (CLUSTERED_GRID_ROWS + 1f);
-            return new RaycastSampleCoverage(
-                stepX / 2f,
-                stepY / 2f,
-                0f,
-                imageToInputOffsetY,
-                renderingImageSize.x,
-                imageToInputOffsetY + renderingImageSize.y);
-        }
-
-        private static RaycastSampleBounds CalculateSampleCellBounds(
-            List<RaycastClusterSample> samples,
-            RaycastSampleCoverage sampleCoverage)
-        {
-            Debug.Assert(samples.Count > 0, "At least one raycast sample is required.");
-
-            float minX = samples[0].InputX - sampleCoverage.HalfStepX;
-            float minY = samples[0].InputY - sampleCoverage.HalfStepY;
-            float maxX = samples[0].InputX + sampleCoverage.HalfStepX;
-            float maxY = samples[0].InputY + sampleCoverage.HalfStepY;
-
-            for (int i = 1; i < samples.Count; i++)
-            {
-                RaycastClusterSample sample = samples[i];
-                minX = Mathf.Min(minX, sample.InputX - sampleCoverage.HalfStepX);
-                minY = Mathf.Min(minY, sample.InputY - sampleCoverage.HalfStepY);
-                maxX = Mathf.Max(maxX, sample.InputX + sampleCoverage.HalfStepX);
-                maxY = Mathf.Max(maxY, sample.InputY + sampleCoverage.HalfStepY);
-            }
-
-            return new RaycastSampleBounds(
-                Mathf.Clamp(minX, sampleCoverage.MinX, sampleCoverage.MaxX),
-                Mathf.Clamp(minY, sampleCoverage.MinY, sampleCoverage.MaxY),
-                Mathf.Clamp(maxX, sampleCoverage.MinX, sampleCoverage.MaxX),
-                Mathf.Clamp(maxY, sampleCoverage.MinY, sampleCoverage.MaxY));
+            return RaycastLayerSummaryBuilder.CreateLayerSummaries(samples);
         }
 
         private static UiRaycastHelper.RaycastContext? CreateUiRaycastContext()
@@ -567,63 +267,5 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             return raycastResult != null && raycastResult.Value.module is GraphicRaycaster;
         }
-
-        private static List<string> GetRelevantComponentTypeNames(GameObject hitObject)
-        {
-            List<string> componentTypeNames = new List<string>();
-            HashSet<System.Type> seenTypes = new HashSet<System.Type>();
-            Component[] components = hitObject.GetComponents<Component>();
-
-            foreach (Component component in components)
-            {
-                if (component == null)
-                {
-                    continue;
-                }
-
-                if (!(component is Collider) && !(component is MonoBehaviour))
-                {
-                    continue;
-                }
-
-                System.Type componentType = component.GetType();
-                if (seenTypes.Contains(componentType))
-                {
-                    continue;
-                }
-
-                seenTypes.Add(componentType);
-                componentTypeNames.Add(componentType.Name);
-            }
-
-            return componentTypeNames;
-        }
-
-        private readonly struct RaycastSampleBounds
-        {
-            public readonly float MinX;
-            public readonly float MinY;
-            public readonly float MaxX;
-            public readonly float MaxY;
-
-            public RaycastSampleBounds(float minX, float minY, float maxX, float maxY)
-            {
-                MinX = minX;
-                MinY = minY;
-                MaxX = maxX;
-                MaxY = maxY;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Carries the raycast hit layer/object of one dense grid sample, for internal layer-summary aggregation only.
-    /// </summary>
-    internal sealed class RaycastLayerHitSample
-    {
-        public bool Hit { get; set; }
-        public string? HitGameObjectPath { get; set; }
-        public string? HitLayer { get; set; }
-        public int? HitLayerIndex { get; set; }
     }
 }

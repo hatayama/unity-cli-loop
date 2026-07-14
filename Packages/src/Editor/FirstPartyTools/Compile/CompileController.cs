@@ -25,6 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private bool _reloadExternalSceneChanges = true;
         private CompileResultRecordingContext _resultRecordingContext = CompileResultRecordingContext.Disabled();
         private DateTime _compileStartedAtUtc = DateTime.MinValue;
+        private readonly CompileLifecycleRecoveryCoordinator _recoveryCoordinator;
 
         public CompileController(
             ICompileResultSessionRepository compileResultSessionRepository,
@@ -37,6 +38,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(compileResultSessionRepository));
             _pendingCompileSessionRepository = pendingCompileSessionRepository ??
                 throw new ArgumentNullException(nameof(pendingCompileSessionRepository));
+            _recoveryCoordinator = new CompileLifecycleRecoveryCoordinator(
+                () => EditorApplication.isCompiling,
+                IsCompileRequestCompleted,
+                () => _currentCompileTask,
+                () => new AssemblyDefinitionConsoleErrorValidationService().FindCurrentErrors(),
+                () => new AssemblyDefinitionDuplicationValidationService().ValidateNoDuplicateAsmdefNames(),
+                () => _isForceCompile,
+                () => _compileMessages.ToArray(),
+                BuildCompileControllerStateContext,
+                AbortCompileWithResult,
+                AbortCompile);
         }
 
         /// <summary>
@@ -178,7 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     CompilationPipeline.RequestScriptCompilation();
                 }
 
-                StartCompileLifecycleWatchdog(compileTask, ct);
+                _recoveryCoordinator.StartWatchdog(compileTask, ct);
                 compileTaskTransferred = true;
                 return await compileTask.Task.ConfigureAwait(false);
             }
@@ -202,82 +214,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private void StartCompileLifecycleWatchdog(TaskCompletionSource<CompileResult> compileTask, CancellationToken ct)
-        {
-            UnityEngine.Debug.Assert(compileTask != null, "compileTask must not be null");
-
-            Task watchdogTask = WatchCompileLifecycleAsync(ct);
-            _ = watchdogTask.ContinueWith(
-                faultedTask => HandleCompileLifecycleWatchdogFault(compileTask, faultedTask),
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted,
-                TaskScheduler.Default);
-        }
-
-        private Task WatchCompileLifecycleAsync(CancellationToken ct)
-        {
-            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
-                () => EditorApplication.isCompiling,
-                IsCompileRequestCompleted,
-                WaitForCompileWatchdogPollAsync,
-                _ => { },
-                HandleCompileStartTimeout,
-                HandleCompileStoppedWithoutFinishEvent,
-                AbortCompile);
-            return watchdog.WatchAsync(ct);
-        }
-
         private bool IsCompileRequestCompleted()
         {
             return _currentCompileTask == null || _currentCompileTask.Task.IsCompleted;
-        }
-
-        private static Task WaitForCompileWatchdogPollAsync()
-        {
-            return TimerDelay.Wait(UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS);
-        }
-
-        private void HandleCompileLifecycleWatchdogFault(
-            TaskCompletionSource<CompileResult> compileTask,
-            Task faultedTask)
-        {
-            UnityEngine.Debug.Assert(compileTask != null, "compileTask must not be null");
-            UnityEngine.Debug.Assert(faultedTask != null, "faultedTask must not be null");
-            UnityEngine.Debug.Assert(faultedTask.IsFaulted, "faultedTask must be faulted");
-
-            if (!IsCurrentCompileRequest(_currentCompileTask, compileTask))
-            {
-                return;
-            }
-
-            Exception exception = faultedTask.Exception;
-            UnityEngine.Debug.Assert(exception != null, "faultedTask exception must not be null");
-            if (exception != null)
-            {
-                UnityEngine.Debug.LogException(exception);
-            }
-
-            EditorApplication.delayCall += () => AbortCompileAfterWatchdogFault(compileTask);
-        }
-
-        private void AbortCompileAfterWatchdogFault(TaskCompletionSource<CompileResult> compileTask)
-        {
-            UnityEngine.Debug.Assert(compileTask != null, "compileTask must not be null");
-
-            if (!IsCurrentCompileRequest(_currentCompileTask, compileTask))
-            {
-                return;
-            }
-
-            AbortCompile("Compilation watchdog failed unexpectedly.");
-        }
-
-        internal static bool IsCurrentCompileRequest(
-            TaskCompletionSource<CompileResult> currentCompileTask,
-            TaskCompletionSource<CompileResult> compileTask)
-        {
-            UnityEngine.Debug.Assert(compileTask != null, "compileTask must not be null");
-            return currentCompileTask != null && ReferenceEquals(currentCompileTask, compileTask);
         }
 
         private Dictionary<string, object> BuildCompileControllerStateContext(
@@ -307,82 +246,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return context;
-        }
-
-        private void HandleCompileStartTimeout(int waitedMs)
-        {
-            AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
-            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
-                assemblyDefinitionValidationService.FindCurrentErrors();
-            if (assemblyDefinitionErrors.HasErrors)
-            {
-                VibeLogger.LogWarning(
-                    "compile_start_timeout_assembly_definition_error",
-                    assemblyDefinitionErrors.Message,
-                    BuildCompileControllerStateContext(new Dictionary<string, object>
-                    {
-                        ["waited_ms"] = waitedMs
-                    }));
-                AbortCompileWithResult(
-                    CompileResultFactory.CreateAssemblyDefinitionFailureResult(assemblyDefinitionErrors));
-                return;
-            }
-
-            AssemblyDefinitionDuplicationValidationService asmdefValidationService = new();
-            ValidationResult asmdefValidation = asmdefValidationService.ValidateNoDuplicateAsmdefNames();
-            if (!asmdefValidation.IsValid)
-            {
-                VibeLogger.LogWarning(
-                    "compile_start_timeout_duplicate_asmdef",
-                    asmdefValidation.ErrorMessage,
-                    BuildCompileControllerStateContext(new Dictionary<string, object>
-                    {
-                        ["waited_ms"] = waitedMs
-                    }));
-                AbortCompile(asmdefValidation.ErrorMessage);
-                return;
-            }
-
-            VibeLogger.LogWarning(
-                "compile_start_timeout",
-                "Compilation did not start before the start timeout.",
-                BuildCompileControllerStateContext(new Dictionary<string, object>
-                {
-                    ["waited_ms"] = waitedMs
-                }));
-            AbortCompile(
-                "Compilation did not start. Possible causes: editor update/reload locks, Auto Refresh disabled, or no script changes."
-            );
-        }
-
-        private void HandleCompileStoppedWithoutFinishEvent(int stoppedMs)
-        {
-            string message =
-                "Unity stopped compiling before Unity CLI Loop received the compilationFinished callback. " +
-                "The compile result is indeterminate; use get-logs to inspect the compiler output.";
-            AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
-            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
-                assemblyDefinitionValidationService.FindCurrentErrors();
-            CompileResult result = CompileResultFactory.CreateStoppedWithoutFinishResult(
-                assemblyDefinitionErrors,
-                _compileMessages.ToArray(),
-                _isForceCompile,
-                message);
-            VibeLogger.LogWarning(
-                "compile_finish_callback_missing",
-                result.Message ?? message,
-                new
-                {
-                    force_recompile = _isForceCompile,
-                    stopped_ms = stoppedMs,
-                    message_count = _compileMessages.Count,
-                    assembly_definition_error_count = assemblyDefinitionErrors.Errors.Length,
-                    editor_compiling = EditorApplication.isCompiling,
-                    editor_updating = EditorApplication.isUpdating,
-                    editor_playing = EditorApplication.isPlaying,
-                    editor_paused = EditorApplication.isPaused
-                });
-            AbortCompileWithResult(result);
         }
 
         /// <summary>
