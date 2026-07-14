@@ -2,7 +2,8 @@
     "name": "UnityCLILoop.FirstPartyTools.FindGameObjects.Editor",
     "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
     "references": [
-        "GUID:fc3fd32eddbee40e39c2d76dc184957b"
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
+        "GUID:77087b1bb30a415e87a80cbf24e7430a"
     ],
     "includePlatforms": [
         "Editor"

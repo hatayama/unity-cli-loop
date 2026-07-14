@@ -1,10 +1,7 @@
 {
-    "name": "UnityCLILoop.FirstPartyTools.GetHierarchy.Editor",
+    "name": "UnityCLILoop.FirstPartyTools.Common.OutputRetention.Editor",
     "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
-    "references": [
-        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
-        "GUID:77087b1bb30a415e87a80cbf24e7430a"
-    ],
+    "references": [],
     "includePlatforms": [
         "Editor"
     ],
@@ -15,5 +12,5 @@
     "autoReferenced": false,
     "defineConstraints": [],
     "versionDefines": [],
-    "noEngineReferences": false
+    "noEngineReferences": true
 }
