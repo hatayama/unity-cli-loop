@@ -17,125 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class SharedRoslynCompilerWorkerHost
     {
         private const int SharedCompilerWorkerMaxAttempts = 2;
-        private const string RoslynWorkerSourceFileName = "RoslynCompilerWorker.cs";
-        private const string RoslynWorkerAssemblyFileName = "RoslynCompilerWorker.dll";
-        private const string RoslynWorkerCompileResponseFileName = "RoslynCompilerWorker.rsp";
 
         private static readonly SharedRoslynCompilerWorkerSession ServiceValue = new();
-
-        /// <summary>
-        /// Carries the result data produced by Worker Attempt behavior.
-        /// </summary>
-        private sealed class WorkerAttemptResult
-        {
-            public CompilerMessage[] Messages { get; }
-
-            public bool ShouldRetry { get; }
-
-            public string FailureReason { get; }
-
-            public object FailureContext { get; }
-
-            private WorkerAttemptResult(
-                CompilerMessage[] messages,
-                bool shouldRetry,
-                string failureReason,
-                object failureContext)
-            {
-                Messages = messages;
-                ShouldRetry = shouldRetry;
-                FailureReason = failureReason;
-                FailureContext = failureContext;
-            }
-
-            public bool Succeeded => Messages != null;
-
-            public static WorkerAttemptResult Successful(CompilerMessage[] messages)
-            {
-                return new WorkerAttemptResult(messages, false, null, null);
-            }
-
-            public static WorkerAttemptResult RetryableFailure(string failureReason, object failureContext)
-            {
-                return new WorkerAttemptResult(null, true, failureReason, failureContext);
-            }
-
-            public static WorkerAttemptResult NonRetryableFailure(string failureReason, object failureContext)
-            {
-                return new WorkerAttemptResult(null, false, failureReason, failureContext);
-            }
-        }
-
-        /// <summary>
-        /// Carries the result data produced by Worker Startup behavior.
-        /// </summary>
-        private sealed class WorkerStartupResult
-        {
-            public bool IsReady { get; }
-
-            public bool IsRetryable { get; }
-
-            public string FailureReason { get; }
-
-            public object FailureContext { get; }
-
-            private WorkerStartupResult(
-                bool isReady,
-                bool isRetryable,
-                string failureReason,
-                object failureContext)
-            {
-                IsReady = isReady;
-                IsRetryable = isRetryable;
-                FailureReason = failureReason;
-                FailureContext = failureContext;
-            }
-
-            public static WorkerStartupResult Ready()
-            {
-                return new WorkerStartupResult(true, false, null, null);
-            }
-
-            public static WorkerStartupResult Failure(string failureReason, object failureContext)
-            {
-                return new WorkerStartupResult(false, true, failureReason, failureContext);
-            }
-
-            public static WorkerStartupResult ClosedLifecycleFailure()
-            {
-                return new WorkerStartupResult(
-                    false,
-                    false,
-                    "shared_worker_lifecycle_closed",
-                    new { reason = "lifecycle_generation_advanced" });
-            }
-        }
-
-        /// <summary>
-        /// Provides Worker Paths behavior for Unity CLI Loop.
-        /// </summary>
-        private sealed class WorkerPaths
-        {
-            public string DirectoryPath { get; }
-
-            public string SourcePath { get; }
-
-            public string AssemblyPath { get; }
-
-            public string CompileResponseFilePath { get; }
-
-            public WorkerPaths(
-                string directoryPath,
-                string sourcePath,
-                string assemblyPath,
-                string compileResponseFilePath)
-            {
-                DirectoryPath = directoryPath;
-                SourcePath = sourcePath;
-                AssemblyPath = assemblyPath;
-                CompileResponseFilePath = compileResponseFilePath;
-            }
-        }
 
         internal static void RegisterLifecycleForEditorStartup()
         {
@@ -216,7 +99,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action markBuildFinished,
             Action incrementBuildCount)
         {
-            WorkerStartupResult startupResult = await EnsureWorkerReadyAsync(
+            WorkerStartupResult startupResult = await SharedRoslynCompilerWorkerHostProcess.EnsureWorkerReadyAsync(
+                ServiceValue,
                 externalCompilerPaths,
                 lifecycleGenerationAtStart).ConfigureAwait(false);
             if (!startupResult.IsReady)
@@ -239,117 +123,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 markBuildStarted,
                 markBuildFinished,
                 incrementBuildCount).ConfigureAwait(false);
-        }
-
-        private static async Task<WorkerStartupResult> EnsureWorkerReadyAsync(
-            ExternalCompilerPaths externalCompilerPaths,
-            int lifecycleGenerationAtStart)
-        {
-            WorkerStartupResult earlyResult = ServiceValue.ExecuteWithStateLock(() =>
-            {
-                if (!ServiceValue.IsLifecycleGenerationCurrentLocked(lifecycleGenerationAtStart))
-                {
-                    return WorkerStartupResult.ClosedLifecycleFailure();
-                }
-
-                if (ServiceValue.HasLiveProcessLocked())
-                {
-                    return WorkerStartupResult.Ready();
-                }
-
-                return null;
-            });
-            if (earlyResult != null)
-            {
-                return earlyResult;
-            }
-
-            WorkerPaths workerPaths = CreateWorkerPaths();
-            SynchronizeWorkerSource(workerPaths);
-
-            WorkerStartupResult workerAssemblyResult = await EnsureWorkerAssemblyBuiltAsync(
-                externalCompilerPaths,
-                workerPaths).ConfigureAwait(false);
-            if (!workerAssemblyResult.IsReady)
-            {
-                return workerAssemblyResult;
-            }
-
-            return StartWorkerProcess(
-                externalCompilerPaths,
-                workerPaths,
-                lifecycleGenerationAtStart);
-        }
-
-        private static async Task<WorkerStartupResult> EnsureWorkerAssemblyBuiltAsync(
-            ExternalCompilerPaths externalCompilerPaths,
-            WorkerPaths workerPaths)
-        {
-            if (File.Exists(workerPaths.AssemblyPath))
-            {
-                return WorkerStartupResult.Ready();
-            }
-
-            // Why outside state lock: worker DLL compile can take seconds; shutdown must still kill
-            // an already-running shared worker without waiting on this build.
-            // Why Task.Run (via CompileWorkerAssemblyAsync): WaitForExit(timeout) is synchronous and
-            // this path can still run on the Unity main thread before the first await when the
-            // compile gate is acquired without yielding.
-            SharedRoslynCompilerWorkerAssemblyBuilder.WorkerAssemblyBuildResult buildResult =
-                await ServiceValue.CompileWorkerAssemblyAsync(
-                    externalCompilerPaths,
-                    workerPaths.SourcePath,
-                    workerPaths.AssemblyPath,
-                    workerPaths.CompileResponseFilePath).ConfigureAwait(false);
-            if (!buildResult.StartedSuccessfully)
-            {
-                return WorkerStartupResult.Failure(
-                    buildResult.FailureReason,
-                    buildResult.FailureContext);
-            }
-
-            if (!HasErrors(buildResult.Messages))
-            {
-                return WorkerStartupResult.Ready();
-            }
-
-            SharedRoslynCompilerWorkerAssemblyBuilder.DeleteWorkerAssemblyIfPresent(workerPaths.AssemblyPath);
-            return WorkerStartupResult.Failure(
-                "worker_build_failed",
-                new
-                {
-                    first_error = FindFirstErrorMessage(buildResult.Messages),
-                    worker_source_path = workerPaths.SourcePath
-                });
-        }
-
-        private static WorkerStartupResult StartWorkerProcess(
-            ExternalCompilerPaths externalCompilerPaths,
-            WorkerPaths workerPaths,
-            int lifecycleGenerationAtStart)
-        {
-            ProcessStartInfo startInfo = CreateWorkerStartInfo(externalCompilerPaths, workerPaths);
-            return ServiceValue.ExecuteWithStateLock(() =>
-            {
-                if (!ServiceValue.IsLifecycleGenerationCurrentLocked(lifecycleGenerationAtStart))
-                {
-                    return WorkerStartupResult.ClosedLifecycleFailure();
-                }
-
-                bool started = ServiceValue.StartProcessLocked(startInfo);
-                if (!started)
-                {
-                    return WorkerStartupResult.Failure(
-                        "worker_start_failed",
-                        new
-                        {
-                            dotnet_host_path = externalCompilerPaths.DotnetHostPath,
-                            worker_assembly_path = workerPaths.AssemblyPath
-                        });
-                }
-
-                return WorkerStartupResult.Ready();
-            });
         }
 
         private static async Task<WorkerAttemptResult> InvokeWorkerOnceAsync(
@@ -461,91 +234,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return WorkerAttemptResult.Successful(compilerMessages);
         }
 
-        private static WorkerPaths CreateWorkerPaths()
-        {
-            string workerDirectoryPath = GetWorkerDirectoryPath();
-            Directory.CreateDirectory(workerDirectoryPath);
-            ServiceValue.ExecuteWithStateLock(
-                () => ServiceValue.RecordWorkerDirectoryLocked(workerDirectoryPath));
-            return new WorkerPaths(
-                workerDirectoryPath,
-                Path.Combine(workerDirectoryPath, RoslynWorkerSourceFileName),
-                Path.Combine(workerDirectoryPath, RoslynWorkerAssemblyFileName),
-                Path.Combine(workerDirectoryPath, RoslynWorkerCompileResponseFileName));
-        }
-
-        private static string GetWorkerDirectoryPath()
-        {
-            return Path.Combine(
-                Path.GetTempPath(),
-                "UnityCliLoopCompilation",
-                $"RoslynWorker-{Process.GetCurrentProcess().Id}");
-        }
-
-        private static void SynchronizeWorkerSource(WorkerPaths workerPaths)
-        {
-            string workerSource = SharedRoslynCompilerWorkerProtocol.CreateProgramSource();
-            if (File.Exists(workerPaths.SourcePath) && File.ReadAllText(workerPaths.SourcePath) == workerSource)
-            {
-                return;
-            }
-
-            File.WriteAllText(workerPaths.SourcePath, workerSource);
-            if (File.Exists(workerPaths.AssemblyPath))
-            {
-                File.Delete(workerPaths.AssemblyPath);
-            }
-        }
-
-        private static ProcessStartInfo CreateWorkerStartInfo(
-            ExternalCompilerPaths externalCompilerPaths,
-            WorkerPaths workerPaths)
-        {
-            ProcessStartInfo startInfo = new()
-            {
-                FileName = externalCompilerPaths.DotnetHostPath,
-                Arguments = "exec"
-                    + " --runtimeconfig " + SharedRoslynCompilerWorkerAssemblyBuilder.QuoteCommandLineArgument(externalCompilerPaths.CompilerRuntimeConfigPath)
-                    + " --depsfile " + SharedRoslynCompilerWorkerAssemblyBuilder.QuoteCommandLineArgument(externalCompilerPaths.CompilerDepsFilePath)
-                    + " " + SharedRoslynCompilerWorkerAssemblyBuilder.QuoteCommandLineArgument(workerPaths.AssemblyPath),
-                WorkingDirectory = workerPaths.DirectoryPath,
-                UseShellExecute = false,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = false,
-                CreateNoWindow = true
-            };
-
-            SharedRoslynCompilerWorkerAssemblyBuilder.ConfigureWorkerDotnetRuntimeEnvironment(startInfo);
-            return startInfo;
-        }
-
-        private static bool HasErrors(IReadOnlyCollection<CompilerMessage> messages)
-        {
-            foreach (CompilerMessage message in messages)
-            {
-                if (message.type == CompilerMessageType.Error)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static string FindFirstErrorMessage(IReadOnlyCollection<CompilerMessage> messages)
-        {
-            foreach (CompilerMessage message in messages)
-            {
-                if (message.type == CompilerMessageType.Error)
-                {
-                    return message.message;
-                }
-            }
-
-            return string.Empty;
-        }
-
         private static void ShutdownForReload()
         {
             Shutdown();
@@ -585,7 +273,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void Shutdown()
         {
-            ServiceValue.Shutdown(GetWorkerDirectoryPath());
+            ServiceValue.Shutdown(SharedRoslynCompilerWorkerHostProcess.GetWorkerDirectoryPath());
         }
 
         private static WorkerAttemptResult CreateRetryableWorkerCommunicationFailure(
