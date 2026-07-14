@@ -19,9 +19,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         private const bool ForceFlatSkillInstall = true;
         private const double DeferredInitialRefreshDelaySeconds = 0.05;
-        private const double ToolSettingsRegistryWarmupInitialDelaySeconds = 0.05;
-        private const double ToolSettingsRegistryWarmupMaxDelaySeconds = 0.8;
-        private const int ToolSettingsRegistryWarmupMaxAttempts = 5;
 
         private static IUnityCliLoopEditorSettingsPort RegisteredEditorSettingsPort;
         private static ISessionFlagsRepository RegisteredSessionFlagsRepository;
@@ -49,13 +46,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private bool _isRefreshingVersion;
         private bool _isRefreshingCliPathSetup;
         private bool _needsCliPathSetup;
-        private bool _isToolSettingsCatalogDirty = true;
         private bool _isDeferredInitialRefreshScheduled;
         private bool _hasCompletedDeferredInitialRefresh;
         private double _deferredInitialRefreshDueTime;
-        private bool _isToolSettingsRegistryWarmupScheduled;
-        private double _toolSettingsRegistryWarmupDueTime;
-        private int _toolSettingsRegistryWarmupAttemptCount;
         private SkillInstallState _selectedTargetInstallState = SkillInstallState.Missing;
         private CancellationTokenSource _skillInstallStateRefreshCts;
 
@@ -107,9 +100,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void OnDestroy()
         {
             CancelDeferredInitialRefresh();
-            CancelToolSettingsRegistryWarmup();
-            ResetToolSettingsRegistryWarmupAttemptCount();
+            _toolSettingsPresenter?.CancelRegistryWarmup();
+            _toolSettingsPresenter?.ResetRegistryWarmupAttemptCount();
             CancelSkillInstallStateRefresh();
+            _toolSettingsPresenter?.SetViewReady(false);
             _view?.Dispose();
             _view = null;
             _cliSetupPresenter = null;
@@ -129,7 +123,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             InitializeModel();
             InitializeEventHandler();
             LoadSavedSettings();
-            RestoreSessionState();
+            _model.LoadFromSessionState();
             HandlePostCompileMode().Forget();
         }
 
@@ -159,6 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _toolSettingsPresenter = new UnityCliLoopSettingsToolSettingsPresenter(
                 _view,
                 _toolSettingsUseCase);
+            _toolSettingsPresenter.SetViewReady(true);
             SetupViewCallbacks();
         }
 
@@ -196,11 +191,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _installSkillsFlat = ForceFlatSkillInstall;
         }
 
-        private void RestoreSessionState()
-        {
-            _model.LoadFromSessionState();
-        }
-
         private async Task HandlePostCompileMode()
         {
             _model.EnablePostCompileMode();
@@ -226,11 +216,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void OnDisable()
         {
             CancelDeferredInitialRefresh();
-            CancelToolSettingsRegistryWarmup();
-            ResetToolSettingsRegistryWarmupAttemptCount();
+            _toolSettingsPresenter?.CancelRegistryWarmup();
+            _toolSettingsPresenter?.ResetRegistryWarmupAttemptCount();
             CancelSkillInstallStateRefresh();
             CleanupEventHandler();
-            SaveSessionState();
+            _model?.SaveToSessionState();
+            _toolSettingsPresenter?.SetViewReady(false);
             _view?.Dispose();
             _view = null;
             _cliSetupPresenter = null;
@@ -240,11 +231,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void CleanupEventHandler()
         {
             _eventHandler?.Cleanup();
-        }
-
-        private void SaveSessionState()
-        {
-            _model.SaveToSessionState();
         }
 
         private void ScheduleDeferredInitialRefresh()
@@ -336,7 +322,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             RefreshToolSettingsHeader();
             if (runExpensiveChecks)
             {
-                RefreshToolSettingsCatalogIfNeeded();
+                _toolSettingsPresenter?.RefreshCatalogIfNeeded(_model.UI.ShowToolSettings);
             }
         }
 
@@ -409,7 +395,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         public void InvalidateToolSettingsCatalog()
         {
-            _isToolSettingsCatalogDirty = true;
+            _toolSettingsPresenter?.InvalidateCatalog();
         }
 
         private void RefreshToolSettingsHeader()
@@ -422,120 +408,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _toolSettingsPresenter.UpdateHeader(_model.UI.ShowToolSettings);
         }
 
-        private void RefreshToolSettingsCatalog()
-        {
-            if (_toolSettingsPresenter == null)
-            {
-                return;
-            }
-
-            ToolSettingsSectionData toolSettingsData =
-                _toolSettingsPresenter.UpdateCatalog(_model.UI.ShowToolSettings);
-
-            if (UnityCliLoopSettingsWindowRefreshPolicy.ShouldKeepToolSettingsCatalogDirty(toolSettingsData))
-            {
-                if (ScheduleToolSettingsRegistryWarmup())
-                {
-                    _isToolSettingsCatalogDirty = true;
-                    return;
-                }
-
-                _isToolSettingsCatalogDirty = false;
-                return;
-            }
-
-            CancelToolSettingsRegistryWarmup();
-            ResetToolSettingsRegistryWarmupAttemptCount();
-            _isToolSettingsCatalogDirty = false;
-        }
-
-        private void RefreshToolSettingsCatalogIfNeeded()
-        {
-            if (!_model.UI.ShowToolSettings || !_isToolSettingsCatalogDirty)
-            {
-                return;
-            }
-
-            if (_view == null)
-            {
-                return;
-            }
-
-            RefreshToolSettingsCatalog();
-        }
-
         private void UpdateShowToolSettings(bool show)
         {
             _model.UpdateShowToolSettings(show);
-            RefreshToolSettingsHeader();
-
-            if (!show)
-            {
-                _isToolSettingsCatalogDirty = true;
-                CancelToolSettingsRegistryWarmup();
-                ResetToolSettingsRegistryWarmupAttemptCount();
-                return;
-            }
-
-            RefreshToolSettingsCatalogIfNeeded();
-        }
-
-        private bool ScheduleToolSettingsRegistryWarmup()
-        {
-            if (UnityCliLoopSettingsWindowRefreshPolicy.ShouldStartToolSettingsRegistryWarmup(
-                    _isToolSettingsRegistryWarmupScheduled,
-                    _toolSettingsRegistryWarmupAttemptCount,
-                    ToolSettingsRegistryWarmupMaxAttempts))
-            {
-                double delaySeconds = UnityCliLoopSettingsWindowRefreshPolicy.CalculateToolSettingsRegistryWarmupDelaySeconds(
-                    ToolSettingsRegistryWarmupInitialDelaySeconds,
-                    ToolSettingsRegistryWarmupMaxDelaySeconds,
-                    _toolSettingsRegistryWarmupAttemptCount);
-
-                _isToolSettingsRegistryWarmupScheduled = true;
-                _toolSettingsRegistryWarmupDueTime = EditorApplication.timeSinceStartup + delaySeconds;
-                _toolSettingsRegistryWarmupAttemptCount++;
-                EditorApplication.update += RunToolSettingsRegistryWarmupWhenDue;
-                return true;
-            }
-
-            return _isToolSettingsRegistryWarmupScheduled;
-        }
-
-        private void RunToolSettingsRegistryWarmupWhenDue()
-        {
-            if (EditorApplication.timeSinceStartup < _toolSettingsRegistryWarmupDueTime)
-            {
-                return;
-            }
-
-            CancelToolSettingsRegistryWarmup();
-
-            if (_view == null || !_model.UI.ShowToolSettings)
-            {
-                ResetToolSettingsRegistryWarmupAttemptCount();
-                return;
-            }
-
-            _toolSettingsUseCase.WarmupRegistry();
-            InvalidateToolSettingsCatalog();
-            RefreshToolSettingsCatalogIfNeeded();
-        }
-
-        private void CancelToolSettingsRegistryWarmup()
-        {
-            if (!_isToolSettingsRegistryWarmupScheduled)
-            {
-                return;
-            }
-
-            EditorApplication.update -= RunToolSettingsRegistryWarmupWhenDue;
-            _isToolSettingsRegistryWarmupScheduled = false;
-        }
-
-        private void ResetToolSettingsRegistryWarmupAttemptCount()
-        {
-            _toolSettingsRegistryWarmupAttemptCount = 0;
+            _toolSettingsPresenter?.HandleShowToolSettingsChanged(show);
         }
 
         private void HandleToolToggled(string toolName, bool enabled)
@@ -597,16 +473,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private bool ShouldCheckCliPathSetup()
         {
-            return ShouldCheckCliPathSetupForPlatform(
+            return UnityCliLoopSettingsCliSetupPresenter.ShouldCheckCliPathSetupForPlatform(
                 UnityEngine.Application.platform,
                 _cliSetupApplicationService.HasPackageOwnedCurrentUserInstall(UnityEngine.Application.platform));
-        }
-
-        internal static bool ShouldCheckCliPathSetupForPlatform(
-            RuntimePlatform platform,
-            bool hasPackageOwnedCurrentUserInstall)
-        {
-            return platform != RuntimePlatform.WindowsEditor && hasPackageOwnedCurrentUserInstall;
         }
 
         private void RefreshSelectedTargetInstallStateFast()
@@ -709,13 +578,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private async Task HandleInstallCli()
         {
-            CliSetupPrimaryAction clickedAction = GetCurrentCliPrimaryButtonAction();
+            CliSetupPrimaryAction clickedAction = _cliSetupPresenter.ResolveCurrentPrimaryButtonAction(_needsCliPathSetup);
 
             await RefreshCliPrimaryActionStateAsync(CancellationToken.None);
-            CliSetupPrimaryAction refreshedAction = GetCurrentCliPrimaryButtonAction();
-            CliSetupPrimaryAction executableAction = ResolveExecutableCliPrimaryButtonAction(
-                clickedAction,
-                refreshedAction);
+            CliSetupPrimaryAction refreshedAction = _cliSetupPresenter.ResolveCurrentPrimaryButtonAction(_needsCliPathSetup);
+            CliSetupPrimaryAction executableAction =
+                UnityCliLoopSettingsCliSetupPresenter.ResolveExecutableCliPrimaryButtonAction(
+                    clickedAction,
+                    refreshedAction);
             if (executableAction == CliSetupPrimaryAction.None)
             {
                 return;
@@ -771,69 +641,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
         }
 
-        private CliSetupPrimaryAction GetCurrentCliPrimaryButtonAction()
-        {
-            string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
-            bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
-            string cliExecutablePath = _cliSetupApplicationService.GetCachedCliExecutablePath();
-            bool canUninstallCli = _cliSetupApplicationService.IsPackageOwnedCurrentUserInstallPath(
-                cliExecutablePath,
-                UnityEngine.Application.platform);
-            string requiredCliVersion = _cliSetupApplicationService.GetMinimumRequiredCliVersion();
-            return ResolveCliPrimaryButtonAction(
-                _needsCliPathSetup,
-                cliVersion,
-                cliIsDispatcher,
-                canUninstallCli,
-                requiredCliVersion);
-        }
-
-        internal static bool ShouldUninstallCliFromPrimaryButton(
-            string cliVersion,
-            bool cliIsDispatcher,
-            bool canUninstallCli,
-            string requiredCliVersion)
-        {
-            bool isCliInstalled = cliVersion != null;
-            bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher, requiredCliVersion);
-            return CliSetupPrimaryActionPolicy.ShouldUninstallCli(
-                isCliInstalled,
-                needsUpdate,
-                canUninstallCli);
-        }
-
-        internal static CliSetupPrimaryAction ResolveCliPrimaryButtonAction(
-            bool needsCliPathSetup,
-            string cliVersion,
-            bool cliIsDispatcher,
-            bool canUninstallCli,
-            string requiredCliVersion)
-        {
-            bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher, requiredCliVersion);
-            bool isCliInstalled = cliVersion != null;
-            return CliSetupPrimaryActionPolicy.ResolveSettingsPrimaryAction(
-                needsCliPathSetup,
-                needsUpdate,
-                isCliInstalled,
-                canUninstallCli);
-        }
-
-        internal static CliSetupPrimaryAction ResolveExecutableCliPrimaryButtonAction(
-            CliSetupPrimaryAction clickedAction,
-            CliSetupPrimaryAction refreshedAction)
-        {
-            return CliSetupPrimaryActionPolicy.ResolveExecutableSettingsAction(
-                clickedAction,
-                refreshedAction);
-        }
-
-        internal static bool ShouldRepairCliPathFromPrimaryButton(
-            bool needsCliPathSetup,
-            bool needsUpdate)
-        {
-            return CliSetupPrimaryActionPolicy.ShouldRepairCliPath(needsCliPathSetup, needsUpdate);
-        }
-
         private async Task RefreshCliPrimaryActionStateAsync(CancellationToken ct)
         {
             _isRefreshingVersion = true;
@@ -885,34 +692,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
         }
 
-        internal static bool IsCliUpdateNeeded(
-            string cliVersion,
-            bool cliIsDispatcher,
-            string requiredCliVersion)
-        {
-            return EvaluateCliSetupCompatibility(
-                cliVersion,
-                cliIsDispatcher,
-                requiredCliVersion).NeedsUpdate;
-        }
-
-        internal static bool ShouldShowSkillsInstalledDialog(SkillSetupTargetInfo targetInfo)
-        {
-            return targetInfo.InstallState != SkillInstallState.Outdated
-                && !targetInfo.HasDifferentLayoutSkills;
-        }
-
-        private static CliSetupCompatibilityState EvaluateCliSetupCompatibility(
-            string cliVersion,
-            bool cliIsDispatcher,
-            string requiredCliVersion)
-        {
-            return CliSetupCompatibility.Evaluate(
-                cliVersion,
-                cliIsDispatcher,
-                requiredCliVersion);
-        }
-
         private async Task HandleUninstallCli()
         {
             if (!CliUninstallPrompt.ConfirmUninstall())
@@ -958,7 +737,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             SkillSetupTargetInfo selectedTargetInfo =
                 GetSelectedTargetInfo(projectRoot, includeFreshnessCheck: true);
-            bool shouldShowSkillsInstalledDialog = ShouldShowSkillsInstalledDialog(selectedTargetInfo);
+            bool shouldShowSkillsInstalledDialog =
+                SkillInstallDialogPolicy.ShouldShowForSelectedTarget(selectedTargetInfo);
             CancelSkillInstallStateRefresh();
             _isInstallingSkills = true;
             RefreshCliSetupSection();

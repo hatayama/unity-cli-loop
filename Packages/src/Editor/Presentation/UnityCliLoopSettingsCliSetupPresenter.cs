@@ -7,7 +7,7 @@ using io.github.hatayama.UnityCliLoop.Domain;
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
     /// <summary>
-    /// Presents the CLI setup section in the Unity CLI Loop settings window.
+    /// Presents the CLI setup section and owns Settings primary-action mediation decisions.
     /// </summary>
     internal sealed class UnityCliLoopSettingsCliSetupPresenter
     {
@@ -48,6 +48,89 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 skillsTarget,
                 isInstallingSkills);
             _view.UpdateCliSetup(cliData);
+        }
+
+        internal CliSetupPrimaryAction ResolveCurrentPrimaryButtonAction(bool needsCliPathSetup)
+        {
+            string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
+            bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
+            string cliExecutablePath = _cliSetupApplicationService.GetCachedCliExecutablePath();
+            bool canUninstallCli = _cliSetupApplicationService.IsPackageOwnedCurrentUserInstallPath(
+                cliExecutablePath,
+                UnityEngine.Application.platform);
+            string requiredCliVersion = _cliSetupApplicationService.GetMinimumRequiredCliVersion();
+            return ResolveCliPrimaryButtonAction(
+                needsCliPathSetup,
+                cliVersion,
+                cliIsDispatcher,
+                canUninstallCli,
+                requiredCliVersion);
+        }
+
+        internal static bool ShouldUninstallCliFromPrimaryButton(
+            string cliVersion,
+            bool cliIsDispatcher,
+            bool canUninstallCli,
+            string requiredCliVersion)
+        {
+            bool isCliInstalled = cliVersion != null;
+            bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher, requiredCliVersion);
+            return CliSetupPrimaryActionPolicy.ShouldUninstallCli(
+                isCliInstalled,
+                needsUpdate,
+                canUninstallCli);
+        }
+
+        internal static CliSetupPrimaryAction ResolveCliPrimaryButtonAction(
+            bool needsCliPathSetup,
+            string cliVersion,
+            bool cliIsDispatcher,
+            bool canUninstallCli,
+            string requiredCliVersion)
+        {
+            bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher, requiredCliVersion);
+            bool isCliInstalled = cliVersion != null;
+            return CliSetupPrimaryActionPolicy.ResolveSettingsPrimaryAction(
+                needsCliPathSetup,
+                needsUpdate,
+                isCliInstalled,
+                canUninstallCli);
+        }
+
+        internal static CliSetupPrimaryAction ResolveExecutableCliPrimaryButtonAction(
+            CliSetupPrimaryAction clickedAction,
+            CliSetupPrimaryAction refreshedAction)
+        {
+            return CliSetupPrimaryActionPolicy.ResolveExecutableSettingsAction(
+                clickedAction,
+                refreshedAction);
+        }
+
+        internal static bool ShouldRepairCliPathFromPrimaryButton(
+            bool needsCliPathSetup,
+            bool needsUpdate)
+        {
+            return CliSetupPrimaryActionPolicy.ShouldRepairCliPath(needsCliPathSetup, needsUpdate);
+        }
+
+        internal static bool ShouldCheckCliPathSetupForPlatform(
+            RuntimePlatform platform,
+            bool hasPackageOwnedCurrentUserInstall)
+        {
+            return CliPathSetupCheckPolicy.ShouldCheck(
+                isWindowsEditor: platform == RuntimePlatform.WindowsEditor,
+                hasPackageOwnedCurrentUserInstall);
+        }
+
+        internal static bool IsCliUpdateNeeded(
+            string cliVersion,
+            bool cliIsDispatcher,
+            string requiredCliVersion)
+        {
+            return CliSetupCompatibility.Evaluate(
+                cliVersion,
+                cliIsDispatcher,
+                requiredCliVersion).NeedsUpdate;
         }
 
         private CliSetupData CreateCliSetupData(
