@@ -18,7 +18,7 @@ uloop screenshot [--window-name <name>] [--resolution-scale <scale>] [--match-mo
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--window-name` | string | `Game` | Window name to capture. Ignored when `--capture-mode rendering`. |
+| `--window-name` | string | `Game` | Window name to capture. Ignored when `--capture-mode rendering`. When the Game tab is Device Simulator and the title is `Simulator`, default `Game` falls back to `Simulator`. |
 | `--resolution-scale` | number | `1.0` | Resolution scale (0.1 to 1.0) |
 | `--match-mode` | enum | `exact` | Window name matching mode: `exact`, `prefix`, or `contains`. Ignored when `--capture-mode rendering`. |
 | `--capture-mode` | enum | `window` | `window`=capture EditorWindow including toolbar, `rendering`=capture game rendering only (PlayMode required, coordinates match simulate-mouse) |
@@ -36,7 +36,13 @@ uloop screenshot [--window-name <name>] [--resolution-scale <scale>] [--match-mo
 
 ## Window Name
 
-The window name is the text displayed in the window's title bar (tab). Common names: Game, Scene, Console, Inspector, Project, Hierarchy, Animation, Animator, Profiler. Custom EditorWindow titles are also supported.
+The window name is the text displayed in the window's title bar (tab). Common names: Game, Simulator, Scene, Console, Inspector, Project, Hierarchy, Animation, Animator, Profiler. Custom EditorWindow titles are also supported.
+
+## Device Simulator
+
+- Prefer `--capture-mode rendering` for the annotate → click flow. It works with both the normal Game view and Device Simulator, and coordinates match `simulate-mouse-ui` / `simulate-mouse-input` / `raycast`.
+- `--capture-mode window` captures Editor chrome (toolbar/borders). With Device Simulator as the play view, default `--window-name Game` falls back to `Simulator` when no Game tab exists; you can also pass `--window-name Simulator`.
+- Simulator Fit to Screen / Scale / Safe Area overlays are chrome-only and do not change rendering-mode input coordinates. After device rotation, re-run annotate (or re-read `Screen` size) before clicking.
 
 ## Output
 

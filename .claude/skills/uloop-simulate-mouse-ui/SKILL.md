@@ -67,6 +67,7 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 - Dragging on empty space (no draggable UI element) returns `Success = false`
 - `--bypass-raycast` still uses coordinates for pointer event positions, but chooses the clicked, long-pressed, or dragged GameObject by `--target-path`
 - If `--target-path` or `--drop-target-path` matches multiple active GameObjects, the command fails instead of choosing an arbitrary duplicate
+- Device Simulator play view is supported. Prefer `uloop screenshot --capture-mode rendering --annotate-elements` for coordinates; they use the simulated device resolution (`Handles.GetMainGameViewSize()` / `Screen`), not the Simulator chrome scale.
 
 ## Pause Point Inspection (Standard for E2E)
 
