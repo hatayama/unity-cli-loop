@@ -5,7 +5,14 @@
   "IsUpdating": true,
   "IsDomainReloadInProgress": true,
   "Result": {
-    "Success": true
+    "Success": true,
+    "ErrorCount": 0,
+    "WarningCount": 0,
+    "Errors": [],
+    "Warnings": [],
+    "Message": "Compile result is available.",
+    "NextActions": null,
+    "ProjectRoot": null
   },
   "Message": "Compile result is available."
 }

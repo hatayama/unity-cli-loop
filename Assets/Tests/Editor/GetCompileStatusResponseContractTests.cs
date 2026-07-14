@@ -1,8 +1,10 @@
+using System;
 using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -18,9 +20,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GetCompileStatusResponse_WhenSerialized_MatchesSharedContractFieldShape()
         {
-            // Verifies C# does not add, remove, or rename get-compile-status fields (including Result.Success)
-            // without updating the shared CLI contract that Go unmarshals during domain-reload waits.
+            // Verifies C# does not add, remove, or rename get-compile-status fields without updating the
+            // shared CLI contract. Result must come from a real CompileResponse serialization because that
+            // is what CompileStatusBridgeCommand restores from ResultJson for Go compileResultStatus.Success.
             JObject expected = ReadSharedContractFieldShape();
+            JObject compileResultJson = SerializeCompileResponseResult();
             GetCompileStatusResponse response = new()
             {
                 Ready = true,
@@ -28,10 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 IsCompiling = true,
                 IsUpdating = true,
                 IsDomainReloadInProgress = true,
-                Result = new JObject
-                {
-                    ["Success"] = true
-                },
+                Result = compileResultJson,
                 Message = "Compile result is available."
             };
             string json = JsonConvert.SerializeObject(
@@ -41,6 +42,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject actual = NormalizeFieldShape(JObject.Parse(json));
 
             Assert.That(JToken.DeepEquals(actual, expected), Is.True, $"Expected {expected} but got {actual}");
+        }
+
+        [Test]
+        public void CompileResponse_WhenSerializedForCompileStatusResult_IncludesSuccessProperty()
+        {
+            // Verifies the wire Result payload still exposes Success under the name Go unmarshals into
+            // compileResultStatus — a rename on CompileResponse must fail this test.
+            JObject compileResultJson = SerializeCompileResponseResult();
+            Assert.That(compileResultJson.Property("Success"), Is.Not.Null);
+            Assert.That(compileResultJson["Success"]!.Type, Is.EqualTo(JTokenType.Boolean));
+        }
+
+        private static JObject SerializeCompileResponseResult()
+        {
+            CompileResponse compileResult = new(
+                success: true,
+                errorCount: 0,
+                warningCount: 0,
+                errors: Array.Empty<CompileIssue>(),
+                warnings: Array.Empty<CompileIssue>(),
+                message: "Compile result is available.");
+            string resultJson = JsonConvert.SerializeObject(
+                compileResult,
+                Formatting.None,
+                UnityCliLoopJsonResponseSerializerSettings.Settings);
+            return JObject.Parse(resultJson);
         }
 
         private static JObject ReadSharedContractFieldShape()
