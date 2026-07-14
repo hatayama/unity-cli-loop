@@ -186,7 +186,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new("invalid target", "Assets/Tests/Sample.asmref", 0)
             };
 
-            string message = AssemblyDefinitionConsoleErrorValidationService.CreateFailureMessage(errors);
+            string message = AssemblyDefinitionConsoleErrorMessageFormatter.CreateFailureMessage(errors);
 
             Assert.That(message, Does.StartWith(UnityCliLoopConstants.ERROR_MESSAGE_ASSEMBLY_DEFINITION_IMPORT_ERROR));
             Assert.That(message, Does.Contain("- Assets/Editor/Sample.asmdef: duplicate references"));
@@ -199,7 +199,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Pins fallback formatting for issues without a resolvable asset path.
             AssemblyDefinitionConsoleError[] errors = { new("generic import failure", "", 0) };
 
-            string message = AssemblyDefinitionConsoleErrorValidationService.CreateFailureMessage(errors);
+            string message = AssemblyDefinitionConsoleErrorMessageFormatter.CreateFailureMessage(errors);
 
             Assert.That(message, Does.Contain("- generic import failure"));
             Assert.That(message, Does.Not.Contain(": generic import failure"));
@@ -215,7 +215,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 errors[i] = new AssemblyDefinitionConsoleError($"issue-{i}", $"Assets/Sample{i}.asmdef", 0);
             }
 
-            string message = AssemblyDefinitionConsoleErrorValidationService.CreateFailureMessage(errors);
+            string message = AssemblyDefinitionConsoleErrorMessageFormatter.CreateFailureMessage(errors);
 
             Assert.That(message, Does.Contain("issue-9"));
             Assert.That(message, Does.Not.Contain("issue-10"));
@@ -230,7 +230,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             AssemblyDefinitionConsoleErrorResult result = new(errors);
 
-            Assert.That(result.Message, Is.EqualTo(AssemblyDefinitionConsoleErrorValidationService.CreateFailureMessage(errors)));
+            Assert.That(result.Message, Is.EqualTo(AssemblyDefinitionConsoleErrorMessageFormatter.CreateFailureMessage(errors)));
         }
 
         [Test]

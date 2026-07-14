@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEditor.AssetImporters;
@@ -16,7 +15,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public sealed class AssemblyDefinitionConsoleErrorValidationService
     {
-        private const int MaxDisplayedIssueCount = 10;
         private const string GuidReferencePrefix = "GUID:";
         private readonly Func<string, string, bool> _isCurrentImportError;
 
@@ -442,60 +440,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static bool ContainsText(string value, string marker)
         {
             return value.IndexOf(marker, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        /// <summary>
-        /// Creates the compile failure message shown when Assembly Definition or Assembly Reference errors are present.
-        /// </summary>
-        internal static string CreateFailureMessage(AssemblyDefinitionConsoleError[] errors)
-        {
-            Debug.Assert(errors != null, "errors must not be null");
-
-            string details = string.Join(
-                "\n",
-                errors
-                    .Take(MaxDisplayedIssueCount)
-                    .Select(error => string.IsNullOrWhiteSpace(error.File)
-                        ? $"- {error.Message}"
-                        : $"- {error.File}: {error.Message}")
-            );
-
-            return $"{UnityCliLoopConstants.ERROR_MESSAGE_ASSEMBLY_DEFINITION_IMPORT_ERROR}\n{details}";
-        }
-    }
-
-    /// <summary>
-    /// Immutable Console error snapshot for one Assembly Definition or Assembly Reference issue.
-    /// </summary>
-    public sealed class AssemblyDefinitionConsoleError
-    {
-        public string Message { get; }
-        public string File { get; }
-        public int Line { get; }
-
-        public AssemblyDefinitionConsoleError(string message, string file, int line)
-        {
-            Message = message ?? string.Empty;
-            File = file ?? string.Empty;
-            Line = line;
-        }
-    }
-
-    /// <summary>
-    /// Immutable result for Assembly Definition and Assembly Reference Console error detection.
-    /// </summary>
-    public sealed class AssemblyDefinitionConsoleErrorResult
-    {
-        public AssemblyDefinitionConsoleError[] Errors { get; }
-        public bool HasErrors => Errors.Length > 0;
-        public string Message { get; }
-
-        public AssemblyDefinitionConsoleErrorResult(AssemblyDefinitionConsoleError[] errors)
-        {
-            Errors = errors ?? Array.Empty<AssemblyDefinitionConsoleError>();
-            Message = HasErrors
-                ? AssemblyDefinitionConsoleErrorValidationService.CreateFailureMessage(Errors)
-                : null;
         }
     }
 }
