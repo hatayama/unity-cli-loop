@@ -102,7 +102,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 // The delay is not cancelled directly because the watchdog must convert cancellation into cleanup.
-                await _waitForPollAsync();
+                await _waitForPollAsync().ConfigureAwait(false);
+                // Why CancellationToken.None: a cancelled ct would throw OCE here and skip the
+                // loop-head _onCancelled conversion; cleanup must still run on the main thread.
+                await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
                 if (!observedStart)
                 {
                     waitedForStartMs += UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS;

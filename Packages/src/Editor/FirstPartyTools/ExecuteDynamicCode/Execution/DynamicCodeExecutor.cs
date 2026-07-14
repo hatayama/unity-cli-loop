@@ -56,7 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     className);
                 sourcePreparationStopwatch.Stop();
                 Stopwatch compileTotalStopwatch = Stopwatch.StartNew();
-                CompilationResult compilationResult = await CompileCodeAsync(code, className, cancellationToken);
+                CompilationResult compilationResult = await CompileCodeAsync(code, className, cancellationToken).ConfigureAwait(false);
                 compileTotalStopwatch.Stop();
 
                 ExecutionResult compilationFailureResult = TryCreateCompilationFailureResult(
@@ -88,7 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
 
                 Stopwatch executionStopwatch = Stopwatch.StartNew();
-                ExecutionResult executionResult = await _invoker.ExecuteAsync(context);
+                ExecutionResult executionResult = await _invoker.ExecuteAsync(context).ConfigureAwait(false);
                 executionStopwatch.Stop();
 
                 executionResult.ExecutionTime = totalStopwatch.Elapsed;
@@ -155,7 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Namespace = DynamicCodeConstants.DEFAULT_NAMESPACE
             };
 
-            CompilationResult result = await _compiler.CompileAsync(request, ct);
+            CompilationResult result = await _compiler.CompileAsync(request, ct).ConfigureAwait(false);
             if (!result.Success)
             {
                 lock (_statsLock)

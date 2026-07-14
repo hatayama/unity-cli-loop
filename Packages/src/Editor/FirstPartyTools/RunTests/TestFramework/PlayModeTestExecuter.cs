@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.Editor")]
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -52,18 +54,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     TestMode.PlayMode,
                     filter,
                     ct,
-                    startedRunGuid => runGuid = startedRunGuid);
+                    startedRunGuid => runGuid = startedRunGuid).ConfigureAwait(false);
             }
             catch (OperationCanceledException originalException)
             {
+                // Why switch first: ExecuteTestWithEventNotification may resume off-thread via
+                // ConfigureAwait(false), but stop/restore hooks call Unity Play Mode APIs.
+                await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
                 RunTestsCancelStopRestoreResult stopResult = await RunTestsCancelStopRestore.StopAndRestoreAsync(
                     isPlayMode: true,
                     runGuid: runGuid,
-                    RunTestsCancelStopRestoreUnityHooks.Resolve());
+                    RunTestsCancelStopRestoreUnityHooks.Resolve()).ConfigureAwait(false);
                 throw new RunTestsExecutionCanceledException(originalException.CancellationToken, stopResult);
             }
             finally
             {
+                await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
                 scope.Dispose();
             }
         }
@@ -80,14 +86,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     TestMode.EditMode,
                     filter,
                     ct,
-                    startedRunGuid => runGuid = startedRunGuid);
+                    startedRunGuid => runGuid = startedRunGuid).ConfigureAwait(false);
             }
             catch (OperationCanceledException originalException)
             {
+                await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
                 RunTestsCancelStopRestoreResult stopResult = await RunTestsCancelStopRestore.StopAndRestoreAsync(
                     isPlayMode: false,
                     runGuid: runGuid,
-                    RunTestsCancelStopRestoreUnityHooks.Resolve());
+                    RunTestsCancelStopRestoreUnityHooks.Resolve()).ConfigureAwait(false);
                 throw new RunTestsExecutionCanceledException(originalException.CancellationToken, stopResult);
             }
         }
@@ -123,7 +130,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // keeping the TestRunnerApi callback subscription alive forever.
             using CancellationTokenRegistration cancellationRegistration =
                 ct.Register(() => taskCompletionSource.TrySetCanceled(ct));
-            SerializableTestResult result = await taskCompletionSource.Task;
+            SerializableTestResult result = await taskCompletionSource.Task.ConfigureAwait(false);
+            // Why switch back: UnifiedTestCallback.Dispose unregisters TestRunnerApi callbacks
+            // and must run on the Unity main thread.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
             ct.ThrowIfCancellationRequested();
             return result;
         }

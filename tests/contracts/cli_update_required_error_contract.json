@@ -1,0 +1,12 @@
+{
+  "comment": "This frame must remain backward compatible forever — old CLIs parse it to learn they must update.",
+  "errorData": {
+    "type": "cli_update_required",
+    "message": "Install matching uloop CLI and Unity package versions, then retry the original command.",
+    "currentCliVersion": "3.0.0-beta.5",
+    "currentProtocolVersion": 1,
+    "requiredProtocolVersion": 3,
+    "updateCommand": "uloop update",
+    "retryableAfterUpdate": true
+  }
+}

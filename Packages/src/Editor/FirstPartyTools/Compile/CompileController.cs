@@ -105,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         {
                             ["requested_force_recompile"] = forceRecompile
                         }));
-                    return await _currentCompileTask.Task;
+                    return await _currentCompileTask.Task.ConfigureAwait(false);
                 }
                 throw new InvalidOperationException("Compilation is in progress, but the task could not be found.");
             }
@@ -180,7 +180,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 StartCompileLifecycleWatchdog(compileTask, ct);
                 compileTaskTransferred = true;
-                return await compileTask.Task;
+                return await compileTask.Task.ConfigureAwait(false);
             }
             finally
             {

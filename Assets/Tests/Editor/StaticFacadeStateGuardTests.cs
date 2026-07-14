@@ -334,7 +334,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(source, Does.Contain("await DynamicCodeMissingReturnRetryPolicy.RetryMissingReturnIfNeeded(\n                    executionResult,"));
             Assert.That(source, Does.Contain("cancellationToken).ConfigureAwait(false);"));
             Assert.That(source, Does.Contain("await _runtime.ExecuteAsync(request, cancellationToken).ConfigureAwait(false);"));
-            Assert.That(source, Does.Contain("await _runtime.TryExecuteIfIdleAsync(\n                request,\n                cancellationToken).ConfigureAwait(false);"));
+            Assert.That(source, Does.Contain("await _runtime.TryExecuteIfIdleAsync(\n                    request,\n                    cancellationToken).ConfigureAwait(false);"));
             Assert.That(
                 retryPolicySource,
                 Does.Contain("await executeRetryAsync(codeWithReturn, ct)\n                .ConfigureAwait(false);"));

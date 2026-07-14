@@ -106,23 +106,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             switch (parameters.Action)
             {
                 case UnityCliLoopMouseInputAction.Click:
-                    response = await MouseInputPressActionExecutor.ExecuteClick(mouse, parameters, ct);
+                    response = await MouseInputPressActionExecutor.ExecuteClick(mouse, parameters, ct).ConfigureAwait(false);
                     break;
 
                 case UnityCliLoopMouseInputAction.LongPress:
-                    response = await MouseInputPressActionExecutor.ExecuteLongPress(mouse, parameters, ct);
+                    response = await MouseInputPressActionExecutor.ExecuteLongPress(mouse, parameters, ct).ConfigureAwait(false);
                     break;
 
                 case UnityCliLoopMouseInputAction.MoveDelta:
-                    response = await MouseInputMotionActionExecutor.ExecuteMoveDelta(mouse, parameters, ct);
+                    response = await MouseInputMotionActionExecutor.ExecuteMoveDelta(mouse, parameters, ct).ConfigureAwait(false);
                     break;
 
                 case UnityCliLoopMouseInputAction.Scroll:
-                    response = await MouseInputMotionActionExecutor.ExecuteScroll(mouse, parameters, ct);
+                    response = await MouseInputMotionActionExecutor.ExecuteScroll(mouse, parameters, ct).ConfigureAwait(false);
                     break;
 
                 case UnityCliLoopMouseInputAction.SmoothDelta:
-                    response = await MouseInputMotionActionExecutor.ExecuteSmoothDelta(mouse, parameters, ct);
+                    response = await MouseInputMotionActionExecutor.ExecuteSmoothDelta(mouse, parameters, ct).ConfigureAwait(false);
                     break;
 
                 default:

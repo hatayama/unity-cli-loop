@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 DynamicCodeExecutionRequest request = CreateRequest(
                     warmupCode,
                     yieldToForegroundRequests);
-                ExecutionResult result = await runtime.ExecuteAsync(request, ct);
+                ExecutionResult result = await runtime.ExecuteAsync(request, ct).ConfigureAwait(false);
                 if (!result.Success)
                 {
                     return false;
@@ -46,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 DynamicCodeExecutionRequest request = CreateRequest(
                     warmupCode,
                     yieldToForegroundRequests);
-                (bool entered, ExecutionResult result) = await runtime.TryExecuteIfIdleAsync(request, ct);
+                (bool entered, ExecutionResult result) = await runtime.TryExecuteIfIdleAsync(request, ct).ConfigureAwait(false);
                 if (!entered || !result.Success)
                 {
                     return false;
