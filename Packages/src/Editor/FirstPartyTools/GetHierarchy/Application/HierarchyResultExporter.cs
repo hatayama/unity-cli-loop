@@ -61,7 +61,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
             string jsonContent = JsonConvert.SerializeObject(exportData, settings);
             File.WriteAllText(filePath, jsonContent);
-            
+            OutputFileRetention.DeleteOldestBeyondLimit(exportDir, "*.json");
+
             // Return relative path
             return Path.Combine(EXPORT_DIR, filename);
         }
