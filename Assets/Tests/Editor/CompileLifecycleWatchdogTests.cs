@@ -146,7 +146,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies watchdog fault recovery accepts the compile request it was created for.
             TaskCompletionSource<CompileResult> compileTask = new();
 
-            bool isCurrentCompileRequest = CompileController.IsCurrentCompileRequest(compileTask, compileTask);
+            bool isCurrentCompileRequest =
+                CompileLifecycleRecoveryCoordinator.IsCurrentCompileRequest(compileTask, compileTask);
 
             Assert.That(isCurrentCompileRequest, Is.True);
         }
@@ -158,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             TaskCompletionSource<CompileResult> currentCompileTask = new();
             TaskCompletionSource<CompileResult> staleCompileTask = new();
 
-            bool isCurrentCompileRequest = CompileController.IsCurrentCompileRequest(
+            bool isCurrentCompileRequest = CompileLifecycleRecoveryCoordinator.IsCurrentCompileRequest(
                 currentCompileTask,
                 staleCompileTask);
 

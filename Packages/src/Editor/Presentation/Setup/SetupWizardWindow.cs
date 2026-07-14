@@ -1,7 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 using UnityEditor;
 using UnityEditor.UIElements;
@@ -192,18 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return RegisteredSkillSetupUseCase;
         }
 
-        // Prerequisite
-        private VisualElement _nodejsWarning;
-        private VisualElement _nodejsOk;
         private Button _refreshButton;
-
-        // Step 2
-        private VisualElement _groupSkillsRow;
-        private EnumField _skillsTargetField;
-        private Toggle _groupSkillsToggle;
-        private Label _groupSkillsLabel;
-
-        // Footer
         private Toggle _suppressAutoShowToggle;
         private Button _openSettingsButton;
         private Button _closeButton;
@@ -211,23 +197,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private Label _githubLinkLabel;
         private Image _githubLinkIcon;
         private ScrollView _mainScrollView;
-        private SetupWizardCliStepPresenter _cliStepPresenter;
-        private SetupWizardSkillsStepPresenter _skillsStepPresenter;
+        private SetupWizardWorkflowController _controller;
 
-        // State
-        private bool _isInstallingCli;
-        private bool _isInstallingSkills;
-        private bool _needsCliPathSetup;
-        private bool _isSkillsTargetFieldInitialized;
-        private bool _shouldUseFirstInstallSkillsUi;
-        private bool _installSkillsFlat;
         [SerializeField]
         private string _lastSeenSetupWizardVersionBeforeOpen = string.Empty;
         [SerializeField]
         private bool _shouldRecordLastSeenVersionAfterCreateGui;
-        private IVisualElementScheduledItem _initialRefreshScheduledItem;
-        private CancellationTokenSource _skillInstallStateRefreshCts;
-        private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private SkillSetupUseCase _skillSetupUseCase;
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private CliSetupApplicationService _cliSetupApplicationService;
@@ -236,14 +211,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void CreateGUI()
         {
             InitializeApplicationServices();
-            InitializeFirstInstallSkillsUiState();
             LoadLayout();
             BindElements();
             _resizer = new SetupWizardWindowResizer(this, _mainScrollView);
             BindEvents();
             BindSizeUpdates();
-            ApplyInitialCheckingState();
-            ScheduleInitialRefresh();
+            _controller.ApplyInitialCheckingState();
+            _controller.ScheduleInitialRefresh();
             ScheduleResizeToContent();
             RecordLastSeenSetupWizardStateAfterSuccessfulCreateGui();
         }
@@ -253,12 +227,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _skillSetupUseCase = GetSkillSetupUseCase();
             _editorSettingsPort = GetEditorSettingsPort();
             _cliSetupApplicationService = GetCliSetupApplicationService();
-        }
-
-        private void InitializeFirstInstallSkillsUiState()
-        {
-            _shouldUseFirstInstallSkillsUi = ShouldUseFirstInstallSkillsUi(
-                _lastSeenSetupWizardVersionBeforeOpen);
         }
 
         private void RecordLastSeenSetupWizardStateAfterSuccessfulCreateGui()
@@ -273,9 +241,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void OnDisable()
         {
-            _initialRefreshScheduledItem?.Pause();
+            _controller?.PauseInitialRefresh();
             _resizer?.Pause();
-            CancelSkillInstallStateRefresh();
+            _controller?.CancelSkillInstallStateRefresh();
         }
 
         private void LoadLayout()
@@ -293,35 +261,23 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void BindElements()
         {
-            _nodejsWarning = rootVisualElement.Q<VisualElement>("nodejs-warning");
-            _nodejsOk = rootVisualElement.Q<VisualElement>("nodejs-ok");
+            VisualElement nodejsWarning = rootVisualElement.Q<VisualElement>("nodejs-warning");
+            VisualElement nodejsOk = rootVisualElement.Q<VisualElement>("nodejs-ok");
             _refreshButton = rootVisualElement.Q<Button>("refresh-button");
 
             VisualElement cliStatusIcon = rootVisualElement.Q<VisualElement>("cli-status-icon");
             Label cliStatusLabel = rootVisualElement.Q<Label>("cli-status-label");
             Button installCliButton = rootVisualElement.Q<Button>("install-cli-button");
-            _cliStepPresenter = new SetupWizardCliStepPresenter(
-                cliStatusIcon,
-                cliStatusLabel,
-                installCliButton,
-                HandleInstallCli);
 
-            _groupSkillsRow = rootVisualElement.Q<VisualElement>("group-skills-row");
-            _skillsTargetField = rootVisualElement.Q<EnumField>("skills-target-field");
-            _groupSkillsToggle = rootVisualElement.Q<Toggle>("group-skills-toggle");
-            _groupSkillsLabel = rootVisualElement.Q<Label>("group-skills-label");
+            VisualElement groupSkillsRow = rootVisualElement.Q<VisualElement>("group-skills-row");
+            EnumField skillsTargetField = rootVisualElement.Q<EnumField>("skills-target-field");
+            Toggle groupSkillsToggle = rootVisualElement.Q<Toggle>("group-skills-toggle");
+            Label groupSkillsLabel = rootVisualElement.Q<Label>("group-skills-label");
             VisualElement skillsTargetRow = rootVisualElement.Q<VisualElement>("skills-target-row");
             VisualElement skillsTargetList = rootVisualElement.Q<VisualElement>("skills-target-list");
             VisualElement skillsStatusDivider = rootVisualElement.Q<VisualElement>("skills-status-divider");
             Label skillsStatusLabel = rootVisualElement.Q<Label>("skills-status-label");
             Button installSkillsButton = rootVisualElement.Q<Button>("install-skills-button");
-            _skillsStepPresenter = new SetupWizardSkillsStepPresenter(
-                skillsTargetRow,
-                skillsTargetList,
-                skillsStatusDivider,
-                skillsStatusLabel,
-                installSkillsButton,
-                HandleInstallSkills);
 
             _suppressAutoShowToggle = rootVisualElement.Q<Toggle>("suppress-auto-show-toggle");
             _openSettingsButton = rootVisualElement.Q<Button>("open-settings-button");
@@ -330,13 +286,36 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _githubLinkLabel = rootVisualElement.Q<Label>("github-link-label");
             _githubLinkIcon = rootVisualElement.Q<Image>("github-link-icon");
             _mainScrollView = rootVisualElement.Q<ScrollView>();
+
+            _controller = new SetupWizardWorkflowController(
+                rootVisualElement,
+                nodejsWarning,
+                nodejsOk,
+                cliStatusIcon,
+                cliStatusLabel,
+                installCliButton,
+                groupSkillsRow,
+                skillsTargetField,
+                groupSkillsToggle,
+                groupSkillsLabel,
+                skillsTargetRow,
+                skillsTargetList,
+                skillsStatusDivider,
+                skillsStatusLabel,
+                installSkillsButton,
+                _suppressAutoShowToggle,
+                _skillSetupUseCase,
+                _editorSettingsPort,
+                _cliSetupApplicationService,
+                ScheduleResizeToContent,
+                _lastSeenSetupWizardVersionBeforeOpen);
         }
 
         private void BindEvents()
         {
-            _refreshButton.clicked += () => RefreshUI();
-            InitializeSkillsTargetField();
-            InitializeGroupSkillsToggle();
+            _refreshButton.clicked += () => _controller.RefreshUI();
+            _controller.InitializeSkillsTargetField();
+            _controller.InitializeGroupSkillsToggle();
             _suppressAutoShowToggle.RegisterValueChangedCallback(evt => HandleSuppressAutoShowChanged(evt.newValue));
             _openSettingsButton.clicked += HandleOpenSettings;
             _closeButton.clicked += HandleClose;
@@ -362,180 +341,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _githubLinkIcon.image = iconTexture;
         }
 
-        private void InitializeSkillsTargetField()
-        {
-            if (_isSkillsTargetFieldInitialized) return;
-
-            _skillsTargetField.Init(_skillsTarget);
-            _skillsTargetField.RegisterValueChangedCallback(evt =>
-            {
-                if (evt.newValue is SkillsTarget newTarget)
-                {
-                    _skillsTarget = newTarget;
-                    RefreshSkillsSection();
-                }
-            });
-            _isSkillsTargetFieldInitialized = true;
-        }
-
-        private void InitializeGroupSkillsToggle()
-        {
-            ApplyFlatSkillInstallPreference();
-            ViewDataBinder.SetVisible(_groupSkillsRow, false);
-            _groupSkillsToggle.SetValueWithoutNotify(!_installSkillsFlat);
-            _groupSkillsToggle.RegisterValueChangedCallback(evt =>
-            {
-                evt.StopPropagation();
-                ApplyFlatSkillInstallPreference();
-                RefreshSkillsSection();
-            });
-            _groupSkillsLabel.RegisterCallback<ClickEvent>(HandleGroupSkillsRowClicked);
-        }
-
         private void BindSizeUpdates()
         {
             _resizer.BindSizeUpdates();
-        }
-
-        private void RefreshAutoShowToggle()
-        {
-            _suppressAutoShowToggle.SetValueWithoutNotify(_editorSettingsPort.GetSuppressSetupWizardAutoShow());
-        }
-
-        private void ApplyInitialCheckingState()
-        {
-            RefreshAutoShowToggle();
-            ViewDataBinder.SetVisible(_nodejsWarning, false);
-            ViewDataBinder.SetVisible(_nodejsOk, false);
-            _cliStepPresenter.ShowChecking();
-            ViewDataBinder.SetVisible(_groupSkillsRow, false);
-            _groupSkillsToggle.SetEnabled(false);
-            _skillsStepPresenter.ShowChecking(_shouldUseFirstInstallSkillsUi);
-        }
-
-        private void ScheduleInitialRefresh()
-        {
-            _initialRefreshScheduledItem?.Pause();
-            _initialRefreshScheduledItem = rootVisualElement.schedule.Execute(() => RefreshUI()).StartingIn(0);
-        }
-
-        private void RefreshSkillsSection()
-        {
-            string cachedCliVersion = _cliSetupApplicationService.GetCachedCliVersion();
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            bool cliInstalled = IsCliInstalled(cachedCliVersion);
-            List<SkillSetupTargetInfo> targets = DetectDisplayedSkillTargetsFast(projectRoot);
-            bool canManageSkills = CanManageSkills(cliInstalled);
-            UpdateSkillsStep(canManageSkills, targets);
-            BeginRefreshDisplayedSkillTargets(canManageSkills);
-            ScheduleResizeToContent();
-        }
-
-        private void RefreshUI(bool refreshSkillsSection = true)
-        {
-            RefreshUIAsync(refreshSkillsSection, CancellationToken.None).Forget();
-        }
-
-        private async Task RefreshUIAsync(
-            bool refreshSkillsSection,
-            CancellationToken ct)
-        {
-            CancelSkillInstallStateRefresh();
-            ct.ThrowIfCancellationRequested();
-            RefreshAutoShowToggle();
-            ViewDataBinder.SetVisible(_nodejsWarning, false);
-            ViewDataBinder.SetVisible(_nodejsOk, false);
-            _cliStepPresenter.ShowChecking();
-            if (refreshSkillsSection)
-            {
-                ViewDataBinder.SetVisible(_groupSkillsRow, false);
-                _groupSkillsToggle.SetEnabled(false);
-                _skillsStepPresenter.ShowChecking(_shouldUseFirstInstallSkillsUi);
-            }
-
-            await Task.Yield();
-            ct.ThrowIfCancellationRequested();
-
-            ViewDataBinder.SetVisible(_nodejsWarning, false);
-            ViewDataBinder.SetVisible(_nodejsOk, false);
-
-            await _cliSetupApplicationService.ForceRefreshCliVersionAsync(ct);
-            string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
-            bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            string requiredCliVersion = GetMinimumRequiredCliVersion();
-            bool cliInstalled = IsCliInstalled(cliVersion);
-            _needsCliPathSetup = await ShouldRepairCliPathSetupAsync(ct);
-
-            _cliStepPresenter.Update(
-                cliInstalled,
-                cliVersion,
-                cliIsDispatcher,
-                requiredCliVersion,
-                _isInstallingCli,
-                _needsCliPathSetup);
-
-            if (!refreshSkillsSection)
-            {
-                ScheduleResizeToContent();
-                return;
-            }
-
-            List<SkillSetupTargetInfo> targets = DetectDisplayedSkillTargetsFast(projectRoot);
-            bool canManageSkills = CanManageSkills(cliInstalled);
-            UpdateSkillsStep(canManageSkills, targets);
-            BeginRefreshDisplayedSkillTargets(canManageSkills);
-
-            ScheduleResizeToContent();
-        }
-
-        private List<SkillSetupTargetInfo> DetectDisplayedSkillTargets(string projectRoot)
-        {
-            return _skillSetupUseCase.DetectSkillTargetsForLayoutAtProjectRoot(projectRoot, !_installSkillsFlat);
-        }
-
-        private List<SkillSetupTargetInfo> DetectDisplayedSkillTargetsFast(string projectRoot)
-        {
-            return _skillSetupUseCase.DetectSkillTargetsForLayoutFastAtProjectRoot(projectRoot, !_installSkillsFlat);
-        }
-
-        private void BeginRefreshDisplayedSkillTargets(bool canManageSkills)
-        {
-            CancelSkillInstallStateRefresh();
-            if (!canManageSkills || _isInstallingSkills)
-            {
-                return;
-            }
-
-            CancellationTokenSource cts = new();
-            _skillInstallStateRefreshCts = cts;
-            RefreshDisplayedSkillTargetsAsync(cts.Token).Forget();
-        }
-
-        private async Task RefreshDisplayedSkillTargetsAsync(CancellationToken ct)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            List<SkillSetupTargetInfo> targets =
-                await Task.Run(() => DetectDisplayedSkillTargets(projectRoot));
-            if (ct.IsCancellationRequested)
-            {
-                return;
-            }
-
-            UpdateSkillsStep(canManageSkills: true, targets);
-            ScheduleResizeToContent();
-        }
-
-        private void CancelSkillInstallStateRefresh()
-        {
-            if (_skillInstallStateRefreshCts == null)
-            {
-                return;
-            }
-
-            _skillInstallStateRefreshCts.Cancel();
-            _skillInstallStateRefreshCts.Dispose();
-            _skillInstallStateRefreshCts = null;
         }
 
         internal static bool ShouldShowSkillsInstalledDialog(
@@ -554,24 +362,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return cliInstalled;
         }
 
-        private static async Task<bool> ShouldRepairCliPathSetupAsync(CancellationToken ct)
-        {
-            CliSetupApplicationService cliSetupApplicationService = GetCliSetupApplicationService();
-            bool hasPackageOwnedCurrentUserInstall =
-                cliSetupApplicationService.HasPackageOwnedCurrentUserInstall(UnityEngine.Application.platform);
-            if (!ShouldCheckCliPathSetupForSetupWizard(
-                    UnityEngine.Application.platform,
-                    hasPackageOwnedCurrentUserInstall))
-            {
-                return false;
-            }
-
-            bool isCliVisibleFromShell = await cliSetupApplicationService.IsCliVisibleFromShellAsync(
-                UnityEngine.Application.platform,
-                ct);
-            return !isCliVisibleFromShell;
-        }
-
         internal static bool ShouldCheckCliPathSetupForSetupWizard(
             RuntimePlatform platform,
             bool hasPackageOwnedCurrentUserInstall)
@@ -581,132 +371,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 hasPackageOwnedCurrentUserInstall);
         }
 
-        private static CliSetupCompatibilityState EvaluateCliSetupCompatibilityForSetupWizard(
-            string cliVersion,
-            bool cliIsDispatcher)
-        {
-            return CliSetupCompatibility.Evaluate(
-                cliVersion,
-                cliIsDispatcher,
-                GetMinimumRequiredCliVersion());
-        }
-
         private static string GetMinimumRequiredCliVersion()
         {
             return GetCliSetupApplicationService().GetMinimumRequiredCliVersion();
-        }
-
-        private static bool IsCliInstalled(string cliVersion)
-        {
-            return !string.IsNullOrEmpty(cliVersion);
-        }
-
-        private void UpdateSkillsStep(
-            bool canManageSkills,
-            List<SkillSetupTargetInfo> targets)
-        {
-            _groupSkillsToggle.SetEnabled(canManageSkills && !_isInstallingSkills);
-            _skillsStepPresenter.Update(
-                canManageSkills,
-                targets,
-                _shouldUseFirstInstallSkillsUi,
-                _skillsTarget,
-                !_installSkillsFlat,
-                _isInstallingSkills);
-        }
-
-        private void HandleInstallCli()
-        {
-            HandleInstallCliAsync(CancellationToken.None).Forget();
-        }
-
-        private async Task HandleInstallCliAsync(CancellationToken ct)
-        {
-            await RefreshCliPrimaryActionStateAsync(ct);
-
-            string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
-            bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
-            CliSetupCompatibilityState state = EvaluateCliSetupCompatibilityForSetupWizard(
-                cliVersion,
-                cliIsDispatcher);
-            if (ShouldRepairCliPathFromPrimaryButton(_needsCliPathSetup, state.NeedsUpdate))
-            {
-                await HandleRepairCliPathSetup(ct);
-                return;
-            }
-
-            bool wasCliInstalledBeforeInstall = _cliSetupApplicationService.IsCliInstalled();
-            _needsCliPathSetup = false;
-            _isInstallingCli = true;
-            _cliStepPresenter.Update(
-                cliInstalled: false,
-                cliVersion: null,
-                cliIsDispatcher: false,
-                requiredCliVersion: GetMinimumRequiredCliVersion(),
-                isInstallingCli: _isInstallingCli,
-                needsCliPathSetup: _needsCliPathSetup);
-
-            try
-            {
-                CliInstallResult result = await _cliSetupApplicationService.InstallGlobalCliAsync(
-                    UnityEngine.Application.platform,
-                    ct);
-
-                if (!result.Success)
-                {
-                    NativeCliInstallCommand command = _cliSetupApplicationService.GetGlobalCliInstallCommand(
-                        UnityEngine.Application.platform,
-                        true);
-                    EditorUtility.DisplayDialog(
-                        "Installation Failed",
-                        $"Failed to install uloop CLI.\n\n{result.ErrorOutput}\n\n"
-                        + $"You can install manually:\n  {command.ManualCommand}",
-                        "OK");
-                    return;
-                }
-
-                await CliPathSetupPrompt.EnsureVisibleAndShowResultAsync(
-                    UnityEngine.Application.platform,
-                    _cliSetupApplicationService,
-                    ct);
-                _needsCliPathSetup = await ShouldRepairCliPathSetupAsync(ct);
-            }
-            finally
-            {
-                _isInstallingCli = false;
-                RefreshUI(CliInstallRefreshPolicy.ShouldRefreshSkillsAfterCliInstall(
-                    wasCliInstalledBeforeInstall));
-            }
-        }
-
-        private async Task RefreshCliPrimaryActionStateAsync(CancellationToken ct)
-        {
-            _cliStepPresenter.ShowRefreshingPrimaryAction();
-
-            try
-            {
-                await _cliSetupApplicationService.ForceRefreshCliVersionAsync(ct);
-                _needsCliPathSetup = await ShouldRepairCliPathSetupAsync(ct);
-            }
-            finally
-            {
-                RefreshCliStepFromCachedState();
-            }
-        }
-
-        private void RefreshCliStepFromCachedState()
-        {
-            string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
-            bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
-            string requiredCliVersion = GetMinimumRequiredCliVersion();
-            bool cliInstalled = IsCliInstalled(cliVersion);
-            _cliStepPresenter.Update(
-                cliInstalled,
-                cliVersion,
-                cliIsDispatcher,
-                requiredCliVersion,
-                _isInstallingCli,
-                _needsCliPathSetup);
         }
 
         internal static bool ShouldRepairCliPathFromPrimaryButton(
@@ -714,73 +381,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool needsUpdate)
         {
             return CliSetupPrimaryActionPolicy.ShouldRepairCliPath(needsCliPathSetup, needsUpdate);
-        }
-
-        private async Task HandleRepairCliPathSetup(CancellationToken ct)
-        {
-            _isInstallingCli = true;
-            _cliStepPresenter.Update(
-                cliInstalled: true,
-                cliVersion: _cliSetupApplicationService.GetCachedCliVersion(),
-                cliIsDispatcher: _cliSetupApplicationService.GetCachedCliIsDispatcher(),
-                requiredCliVersion: GetMinimumRequiredCliVersion(),
-                isInstallingCli: _isInstallingCli,
-                needsCliPathSetup: _needsCliPathSetup);
-
-            try
-            {
-                await CliPathSetupPrompt.EnsureVisibleAndShowResultAsync(
-                    UnityEngine.Application.platform,
-                    _cliSetupApplicationService,
-                    ct);
-                _needsCliPathSetup = await ShouldRepairCliPathSetupAsync(ct);
-            }
-            finally
-            {
-                _isInstallingCli = false;
-                RefreshUI();
-            }
-        }
-
-        private void HandleInstallSkills()
-        {
-            HandleInstallSkillsAsync(CancellationToken.None).Forget();
-        }
-
-        private async Task HandleInstallSkillsAsync(CancellationToken ct)
-        {
-            CancelSkillInstallStateRefresh();
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            List<SkillSetupTargetInfo> targets = DetectDisplayedSkillTargets(projectRoot);
-            List<SkillSetupTargetInfo> installableTargets = _shouldUseFirstInstallSkillsUi
-                ? SetupWizardSkillsStepPresenter.GetFirstInstallableSkillTargets(
-                    targets,
-                    _skillsTarget,
-                    !_installSkillsFlat)
-                : SetupWizardSkillsStepPresenter.FilterInstallableSkillTargets(targets);
-            if (installableTargets.Count == 0) return;
-
-            bool shouldShowSkillsInstalledDialog =
-                SkillInstallDialogPolicy.ShouldShowForInstallableTargets(installableTargets);
-            _isInstallingSkills = true;
-            UpdateSkillsStep(true, targets);
-
-            try
-            {
-                await _skillSetupUseCase.InstallSkillFilesAsync(
-                    installableTargets,
-                    !_installSkillsFlat,
-                    ct);
-                if (shouldShowSkillsInstalledDialog)
-                {
-                    EditorDialogHelper.ShowSkillsInstalledDialog();
-                }
-            }
-            finally
-            {
-                _isInstallingSkills = false;
-                RefreshSkillsSection();
-            }
         }
 
         private void HandleOpenSettings()
@@ -816,36 +416,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ViewDataBinder.ToggleClass(_githubLinkIcon, "setup-footer__github-link-icon--hover", isHovered);
         }
 
-        private void HandleGroupSkillsRowClicked(ClickEvent evt)
-        {
-            evt.StopPropagation();
-            if (!_groupSkillsToggle.enabledSelf)
-            {
-                return;
-            }
-
-            if (evt.target is VisualElement targetElement && _groupSkillsToggle.Contains(targetElement))
-            {
-                return;
-            }
-
-            bool newValue = !_groupSkillsToggle.value;
-            _groupSkillsToggle.SetValueWithoutNotify(newValue);
-            ApplyFlatSkillInstallPreference();
-            RefreshSkillsSection();
-        }
-
-        private void ApplyFlatSkillInstallPreference()
-        {
-            // Claude Code does not resolve nested skill folders, so setup keeps every editor target on the flat layout.
-            _installSkillsFlat = ForceFlatSkillInstall;
-            _editorSettingsPort.SetInstallSkillsFlat(_installSkillsFlat);
-        }
-
         private void ScheduleResizeToContent()
         {
             _resizer?.ScheduleResizeToContent();
         }
-
     }
 }
