@@ -34,21 +34,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 );
                 return JsonConvert.SerializeObject(response, Formatting.None, ResponseSerializerSettings);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Return safe fallback response for any serialization errors
-                object fallbackResult = new
-                {
-                    error = "Serialization failed - returning safe fallback",
-                    commandType = result != null ? result.GetType().Name : "unknown"
-                };
-
-                JsonRpcSuccessResponse fallbackResponse = new(
+                // Why error frame instead of success+error object: clients treat jsonrpc success as
+                // completed tool results; a fake success would hide serialization failure from agents.
+                string commandType = result != null ? result.GetType().Name : "unknown";
+                JsonRpcErrorResponse errorResponse = new(
                     UnityCliLoopServerConfig.JSONRPC_VERSION,
                     id,
-                    fallbackResult
-                );
-                return JsonConvert.SerializeObject(fallbackResponse, Formatting.None, ResponseSerializerSettings);
+                    new JsonRpcError(
+                        UnityCliLoopServerConfig.INTERNAL_ERROR_CODE,
+                        "Failed to serialize the tool response.",
+                        new InternalErrorData(
+                            $"Serialization failed for response type '{commandType}': {ex.Message}")));
+                return JsonConvert.SerializeObject(errorResponse, Formatting.None, ResponseSerializerSettings);
             }
         }
 
