@@ -1,0 +1,11 @@
+{
+  "Ready": true,
+  "HasResult": true,
+  "IsCompiling": true,
+  "IsUpdating": true,
+  "IsDomainReloadInProgress": true,
+  "Result": {
+    "Success": true
+  },
+  "Message": "Compile result is available."
+}
