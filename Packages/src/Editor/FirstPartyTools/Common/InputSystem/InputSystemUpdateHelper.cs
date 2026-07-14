@@ -1,7 +1,6 @@
 #nullable enable
 #if ULOOP_HAS_INPUT_SYSTEM
 using System;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
@@ -14,16 +13,6 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
-    /// <summary>
-    /// Reports whether input observation finished normally, paused, or exceeded the wall-clock guard.
-    /// </summary>
-    internal enum InputSimulationWaitOutcome
-    {
-        Completed = 0,
-        Paused = 1,
-        TimedOut = 2
-    }
-
     // Shared helper for applying Input System state changes at the correct update phase.
     // Both keyboard and mouse simulation need frame-precise timing so that
     // wasPressedThisFrame / wasReleasedThisFrame detect the injected state.
@@ -36,125 +25,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const int ManualPressObservationFrames = 3;
         private const int DefaultApplyTimeoutMilliseconds = UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS;
         private const int DefaultFrameObservationTimeoutMilliseconds = UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS;
-        private const int PressDurationTimeoutGraceMilliseconds = 5000;
-        private const int ApplyWaitStateWaiting = 0;
-        private const int ApplyWaitStateApplying = 1;
-        private const int ApplyWaitStateFinishedWithoutApply = 2;
+
         private static Func<bool> isPausedProvider = () => EditorApplication.isPaused;
         private static int applyTimeoutMilliseconds = DefaultApplyTimeoutMilliseconds;
         private static int frameObservationTimeoutMilliseconds = DefaultFrameObservationTimeoutMilliseconds;
-        private static int pendingConfiguredUpdateCallbackCount;
+
+        internal static int PendingConfiguredUpdateCallbackCountValue;
+
+        internal static int ApplyTimeoutMilliseconds => applyTimeoutMilliseconds;
+
+        internal static int FrameObservationTimeoutMilliseconds => frameObservationTimeoutMilliseconds;
 
         public static async Task<InputSimulationWaitOutcome> ApplyOnNextConfiguredUpdate(Action apply, CancellationToken ct)
         {
-            Debug.Assert(apply != null, "apply must not be null");
-            if (apply == null)
-            {
-                throw new ArgumentNullException(nameof(apply));
-            }
-
-            InputUpdateType targetUpdateType = InputUpdateTypeResolver.Resolve();
-            if (InputUpdateTypeResolver.RequiresExplicitUpdate())
-            {
-                return ApplyOnExplicitUpdate(apply, targetUpdateType, ct);
-            }
-
-            TaskCompletionSource<InputSimulationWaitOutcome> tcs =
-                new(TaskCreationOptions.RunContinuationsAsynchronously);
-            CancellationTokenRegistration registration = default;
-            int applyWaitState = ApplyWaitStateWaiting;
-            Action? callback = null;
-            InputSystemUpdateSubscription? subscription = null;
-
-            callback = () =>
-            {
-                Debug.Assert(callback != null, "callback must be assigned before subscription");
-                Debug.Assert(subscription != null, "subscription must be assigned before callback invocation");
-                if (Interlocked.CompareExchange(
-                        ref applyWaitState,
-                        ApplyWaitStateWaiting,
-                        ApplyWaitStateWaiting) != ApplyWaitStateWaiting)
-                {
-                    subscription?.Dispose();
-                    return;
-                }
-
-                InputUpdateType currentUpdateType = InputState.currentUpdateType;
-                if (!InputUpdateTypeResolver.IsMatch(currentUpdateType, targetUpdateType))
-                {
-                    return;
-                }
-
-                if (Interlocked.CompareExchange(
-                        ref applyWaitState,
-                        ApplyWaitStateApplying,
-                        ApplyWaitStateWaiting) != ApplyWaitStateWaiting)
-                {
-                    subscription?.Dispose();
-                    return;
-                }
-
-                subscription?.Dispose();
-                try
-                {
-                    apply();
-                    tcs.TrySetResult(InputSimulationWaitOutcome.Completed);
-                }
-                catch (Exception exception)
-                {
-                    // Convert apply failures into the awaited task result so timeout paths never wait on an orphaned TCS.
-                    tcs.TrySetException(exception);
-                }
-            };
-
-            subscription = new InputSystemUpdateSubscription(callback);
-            try
-            {
-                if (ct.CanBeCanceled)
-                {
-                    registration = ct.Register(() =>
-                    {
-                        if (Interlocked.CompareExchange(
-                                ref applyWaitState,
-                                ApplyWaitStateFinishedWithoutApply,
-                                ApplyWaitStateWaiting) == ApplyWaitStateWaiting)
-                        {
-                            subscription?.Dispose();
-                            tcs.TrySetCanceled(ct);
-                        }
-                    });
-                }
-
-                using CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                Task timeoutTask = TimerDelay.Wait(applyTimeoutMilliseconds, timeoutCts.Token);
-                Task completedTask = await Task.WhenAny(tcs.Task, timeoutTask).ConfigureAwait(false);
-                if (completedTask == timeoutTask)
-                {
-                    await timeoutTask.ConfigureAwait(false);
-                    if (Interlocked.CompareExchange(
-                            ref applyWaitState,
-                            ApplyWaitStateFinishedWithoutApply,
-                            ApplyWaitStateWaiting) == ApplyWaitStateWaiting)
-                    {
-                        subscription.Dispose();
-                        return InputSimulationWaitOutcome.TimedOut;
-                    }
-
-                    InputSimulationWaitOutcome appliedOutcome = await tcs.Task.ConfigureAwait(false);
-                    await SwitchToMainThreadIfNeeded(CancellationToken.None);
-                    return appliedOutcome;
-                }
-
-                timeoutCts.Cancel();
-                InputSimulationWaitOutcome outcome = await tcs.Task.ConfigureAwait(false);
-                await SwitchToMainThreadIfNeeded(CancellationToken.None);
-                return outcome;
-            }
-            finally
-            {
-                registration.Dispose();
-                subscription?.Dispose();
-            }
+            return await InputSystemConfiguredUpdateApplier.ApplyOnNextConfiguredUpdate(apply, ct)
+                .ConfigureAwait(false);
         }
 
         public static int GetMinimumObservationFrameCount()
@@ -193,94 +78,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Waits for duration + min frames, then optionally holds release until a press edge is observed.
-        /// Why: when wasPressedThisFrame never becomes true in the normal window, delaying release
-        /// gives gameplay more frames without reinjecting down/up (which would double-fire actions).
-        /// </summary>
-        public static async Task<PressLifetimeWaitResult> WaitForPressLifetime(
-            float duration,
-            Func<bool>? isPressEdgeObserved,
-            CancellationToken ct)
-        {
-            await SwitchToMainThreadIfNeeded(ct);
-
-            int minimumObservationFrames = GetMinimumObservationFrameCount();
-            int startFrameCount = Time.frameCount;
-            float startTime = Time.realtimeSinceStartup;
-            float elapsed = 0f;
-            int observedFrames = 0;
-            int baseSatisfiedFrameCount = -1;
-            int timeoutMilliseconds = GetPressLifetimeTimeoutMilliseconds(duration);
-            System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            while (true)
-            {
-                bool baseWaitSatisfied = PressHoldUntilEdgeLogic.IsBaseWaitSatisfied(
-                    observedFrames,
-                    minimumObservationFrames,
-                    elapsed,
-                    duration);
-                if (baseWaitSatisfied && baseSatisfiedFrameCount < 0)
-                {
-                    baseSatisfiedFrameCount = observedFrames;
-                }
-
-                bool pressEdgeObserved = isPressEdgeObserved != null && isPressEdgeObserved();
-                bool shouldExtendForEdge = isPressEdgeObserved != null &&
-                    PressHoldUntilEdgeLogic.ShouldExtendHoldForEdge(
-                        pressEdgeObserved,
-                        baseWaitSatisfied,
-                        stopwatch.ElapsedMilliseconds,
-                        timeoutMilliseconds);
-
-                if (baseWaitSatisfied && !shouldExtendForEdge)
-                {
-                    int extendedFrames = baseSatisfiedFrameCount < 0
-                        ? 0
-                        : PressHoldUntilEdgeLogic.CountExtendedFrames(observedFrames, baseSatisfiedFrameCount);
-                    return new PressLifetimeWaitResult(
-                        InputSimulationWaitOutcome.Completed,
-                        extendedFrames);
-                }
-
-                if (IsPaused())
-                {
-                    return new PressLifetimeWaitResult(InputSimulationWaitOutcome.Paused, 0);
-                }
-
-                InputSimulationWaitOutcome frameOutcome = await WaitOneRuntimeFrameOrTimeout(
-                    timeoutMilliseconds,
-                    stopwatch,
-                    ct).ConfigureAwait(false);
-                if (frameOutcome == InputSimulationWaitOutcome.TimedOut)
-                {
-                    // Why: timeout during edge-extension still completes Press successfully with
-                    // PressEdgeObserved=false — same contract as before, not a hard failure.
-                    if (baseWaitSatisfied)
-                    {
-                        int extendedFrames = baseSatisfiedFrameCount < 0
-                            ? 0
-                            : PressHoldUntilEdgeLogic.CountExtendedFrames(observedFrames, baseSatisfiedFrameCount);
-                        return new PressLifetimeWaitResult(
-                            InputSimulationWaitOutcome.Completed,
-                            extendedFrames);
-                    }
-
-                    return new PressLifetimeWaitResult(InputSimulationWaitOutcome.TimedOut, 0);
-                }
-
-                await SwitchToMainThreadIfNeeded(ct);
-                if (IsPaused())
-                {
-                    return new PressLifetimeWaitResult(InputSimulationWaitOutcome.Paused, 0);
-                }
-
-                observedFrames = Time.frameCount - startFrameCount;
-                elapsed = Time.realtimeSinceStartup - startTime;
-            }
-        }
-
-        /// <summary>
         /// Outcome of a Press duration wait, including how many frames release was delayed for edge observation.
         /// </summary>
         internal readonly struct PressLifetimeWaitResult
@@ -296,6 +93,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public int ExtendedObservationFrames { get; }
         }
 
+        /// <summary>
+        /// Waits for duration + min frames, then optionally holds release until a press edge is observed.
+        /// Why: when wasPressedThisFrame never becomes true in the normal window, delaying release
+        /// gives gameplay more frames without reinjecting down/up (which would double-fire actions).
+        /// </summary>
+        public static async Task<PressLifetimeWaitResult> WaitForPressLifetime(
+            float duration,
+            Func<bool>? isPressEdgeObserved,
+            CancellationToken ct)
+        {
+            return await InputSystemRuntimeFrameWaiter.WaitForPressLifetime(duration, isPressEdgeObserved, ct)
+                .ConfigureAwait(false);
+        }
 
         public static void RunExplicitUpdate(InputUpdateType targetUpdateType)
         {
@@ -325,101 +135,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static InputSimulationWaitOutcome ApplyOnExplicitUpdate(
-            Action apply,
-            InputUpdateType targetUpdateType,
-            CancellationToken ct)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            Action? callback = null;
-            bool applied = false;
-
-            callback = () =>
-            {
-                InputUpdateType currentUpdateType = InputState.currentUpdateType;
-                if (!InputUpdateTypeResolver.IsMatch(currentUpdateType, targetUpdateType))
-                {
-                    return;
-                }
-
-                Debug.Assert(callback != null, "callback must be assigned before subscription");
-                InputSystem.onBeforeUpdate -= callback;
-                apply();
-                applied = true;
-            };
-
-            InputSystem.onBeforeUpdate += callback;
-
-            RunExplicitUpdate(targetUpdateType);
-            if (!applied)
-            {
-                Debug.Assert(callback != null, "callback must be assigned before explicit update fallback");
-                InputSystem.onBeforeUpdate -= callback;
-                apply();
-                RunExplicitUpdate(targetUpdateType);
-            }
-
-            return InputSimulationWaitOutcome.Completed;
-        }
-
-        private static InputSettings.UpdateMode GetExplicitUpdateMode(
-            InputUpdateType targetUpdateType,
-            InputSettings.UpdateMode fallbackUpdateMode)
-        {
-            if (targetUpdateType == InputUpdateType.Dynamic)
-            {
-                return InputSettings.UpdateMode.ProcessEventsInDynamicUpdate;
-            }
-
-            if (targetUpdateType == InputUpdateType.Fixed)
-            {
-                return InputSettings.UpdateMode.ProcessEventsInFixedUpdate;
-            }
-
-            if (targetUpdateType == InputUpdateType.Manual)
-            {
-                return InputSettings.UpdateMode.ProcessEventsManually;
-            }
-
-            return fallbackUpdateMode;
-        }
-
         public static async Task<InputSimulationWaitOutcome> WaitForRuntimeFrames(int frameCount, CancellationToken ct)
         {
-            Debug.Assert(frameCount >= 0, "frameCount must be non-negative");
-            await SwitchToMainThreadIfNeeded(ct);
-
-            int startFrameCount = Time.frameCount;
-            int observedFrames = 0;
-            System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            while (observedFrames < frameCount)
-            {
-                if (IsPaused())
-                {
-                    return InputSimulationWaitOutcome.Paused;
-                }
-
-                InputSimulationWaitOutcome frameOutcome = await WaitOneRuntimeFrameOrTimeout(
-                    frameObservationTimeoutMilliseconds,
-                    stopwatch,
-                    ct).ConfigureAwait(false);
-                if (frameOutcome == InputSimulationWaitOutcome.TimedOut)
-                {
-                    return InputSimulationWaitOutcome.TimedOut;
-                }
-
-                await SwitchToMainThreadIfNeeded(ct);
-                if (IsPaused())
-                {
-                    return InputSimulationWaitOutcome.Paused;
-                }
-
-                observedFrames = Time.frameCount - startFrameCount;
-            }
-
-            return InputSimulationWaitOutcome.Completed;
+            return await InputSystemRuntimeFrameWaiter.WaitForRuntimeFrames(frameCount, ct).ConfigureAwait(false);
         }
 
         public static InputSystemMainThreadAwaitable SwitchToMainThreadIfNeeded(CancellationToken ct)
@@ -467,131 +185,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             frameObservationTimeoutMilliseconds = DefaultFrameObservationTimeoutMilliseconds;
         }
 
-        internal static int PendingConfiguredUpdateCallbackCount => Volatile.Read(ref pendingConfiguredUpdateCallbackCount);
+        internal static int PendingConfiguredUpdateCallbackCount => Volatile.Read(ref PendingConfiguredUpdateCallbackCountValue);
 
-        private static bool IsPaused()
+        internal static bool IsPaused()
         {
             return isPausedProvider();
         }
 
-        private static async Task<InputSimulationWaitOutcome> WaitOneRuntimeFrameOrTimeout(
-            int timeoutMilliseconds,
-            System.Diagnostics.Stopwatch stopwatch,
-            CancellationToken ct)
+        private static InputSettings.UpdateMode GetExplicitUpdateMode(
+            InputUpdateType targetUpdateType,
+            InputSettings.UpdateMode fallbackUpdateMode)
         {
-            int remainingMilliseconds = timeoutMilliseconds - (int)stopwatch.ElapsedMilliseconds;
-            if (remainingMilliseconds <= 0)
+            if (targetUpdateType == InputUpdateType.Dynamic)
             {
-                return InputSimulationWaitOutcome.TimedOut;
+                return InputSettings.UpdateMode.ProcessEventsInDynamicUpdate;
             }
 
-            bool frameObserved = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
-                1,
-                remainingMilliseconds,
-                ct).ConfigureAwait(false);
-            return frameObserved
-                ? InputSimulationWaitOutcome.Completed
-                : InputSimulationWaitOutcome.TimedOut;
-        }
-
-        private static int GetPressLifetimeTimeoutMilliseconds(float duration)
-        {
-            double durationMilliseconds = Math.Ceiling(duration * 1000d);
-            double timeoutMilliseconds = durationMilliseconds + PressDurationTimeoutGraceMilliseconds;
-            if (timeoutMilliseconds > int.MaxValue)
+            if (targetUpdateType == InputUpdateType.Fixed)
             {
-                return int.MaxValue;
+                return InputSettings.UpdateMode.ProcessEventsInFixedUpdate;
             }
 
-            return Math.Max(frameObservationTimeoutMilliseconds, (int)timeoutMilliseconds);
-        }
-
-        /// <summary>
-        /// Owns one Input System update subscription so timeout and cancellation paths remove it exactly once.
-        /// </summary>
-        private sealed class InputSystemUpdateSubscription : IDisposable
-        {
-            private readonly Action callback;
-            private int isDisposed;
-
-            public InputSystemUpdateSubscription(Action callback)
+            if (targetUpdateType == InputUpdateType.Manual)
             {
-                Debug.Assert(callback != null, "callback must not be null");
-
-                this.callback = callback ?? throw new ArgumentNullException(nameof(callback));
-                InputSystem.onBeforeUpdate += this.callback;
-                Interlocked.Increment(ref pendingConfiguredUpdateCallbackCount);
+                return InputSettings.UpdateMode.ProcessEventsManually;
             }
 
-            public void Dispose()
-            {
-                if (Interlocked.Exchange(ref isDisposed, 1) != 0)
-                {
-                    return;
-                }
-
-                Interlocked.Decrement(ref pendingConfiguredUpdateCallbackCount);
-                if (MainThreadSwitcher.IsMainThread)
-                {
-                    InputSystem.onBeforeUpdate -= callback;
-                    return;
-                }
-
-                RemoveOnMainThreadAsync(CancellationToken.None).Forget();
-            }
-
-            private async Task RemoveOnMainThreadAsync(CancellationToken ct)
-            {
-                await SwitchToMainThreadIfNeeded(ct);
-                InputSystem.onBeforeUpdate -= callback;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Switches input simulation continuations back to Unity's main thread without wrapping the switch in a Task.
-    /// </summary>
-    internal readonly struct InputSystemMainThreadAwaitable
-    {
-        private readonly CancellationToken _ct;
-
-        public InputSystemMainThreadAwaitable(CancellationToken ct)
-        {
-            _ct = ct;
-        }
-
-        public Awaiter GetAwaiter()
-        {
-            return new Awaiter(_ct);
-        }
-
-        public readonly struct Awaiter : INotifyCompletion
-        {
-            private readonly CancellationToken _ct;
-
-            public Awaiter(CancellationToken ct)
-            {
-                _ct = ct;
-            }
-
-            public bool IsCompleted
-            {
-                get
-                {
-                    _ct.ThrowIfCancellationRequested();
-                    return MainThreadSwitcher.IsMainThread;
-                }
-            }
-
-            public void GetResult()
-            {
-                _ct.ThrowIfCancellationRequested();
-            }
-
-            public void OnCompleted(Action continuation)
-            {
-                MainThreadSwitcher.SwitchToMainThread(_ct).GetAwaiter().OnCompleted(continuation);
-            }
+            return fallbackUpdateMode;
         }
     }
 }
