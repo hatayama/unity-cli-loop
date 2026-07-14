@@ -73,7 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool canUninstallCli,
             string requiredCliVersion)
         {
-            bool isCliInstalled = cliVersion != null;
+            bool isCliInstalled = !string.IsNullOrEmpty(cliVersion);
             bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher, requiredCliVersion);
             return CliSetupPrimaryActionPolicy.ShouldUninstallCli(
                 isCliInstalled,
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string requiredCliVersion)
         {
             bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher, requiredCliVersion);
-            bool isCliInstalled = cliVersion != null;
+            bool isCliInstalled = !string.IsNullOrEmpty(cliVersion);
             return CliSetupPrimaryActionPolicy.ResolveSettingsPrimaryAction(
                 needsCliPathSetup,
                 needsUpdate,
@@ -149,7 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string cliExecutablePath = _cliSetupApplicationService.GetCachedCliExecutablePath();
             string requiredCliVersion = _cliSetupApplicationService.GetMinimumRequiredCliVersion();
 
-            bool isCliInstalled = cliVersion != null || needsCliPathSetup;
+            bool isCliInstalled = !string.IsNullOrEmpty(cliVersion) || needsCliPathSetup;
             bool canUninstallCli = _cliSetupApplicationService.IsPackageOwnedCurrentUserInstallPath(
                 cliExecutablePath,
                 UnityEngine.Application.platform);

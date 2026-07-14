@@ -103,6 +103,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 // The delay is not cancelled directly because the watchdog must convert cancellation into cleanup.
                 await _waitForPollAsync().ConfigureAwait(false);
+                // Why switch back: the poll delay resumes off-thread, but _isEditorCompiling and
+                // completion callbacks use Unity Editor APIs that require the main thread.
+                await MainThreadSwitcher.SwitchToMainThread(ct);
                 if (!observedStart)
                 {
                     waitedForStartMs += UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS;

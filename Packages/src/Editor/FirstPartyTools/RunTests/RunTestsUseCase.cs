@@ -100,11 +100,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] clearedPausePointIds = _clearActivePausePoints();
 
             // 2. Test execution
-            // Why these awaits do not use ConfigureAwait(false): the entry clears all active
-            // pause points and the server is single-flight (BUSY rejects concurrent commands),
-            // so no CLI-originated pause can fire during test execution. The only remaining
-            // pause source is a human manually pausing via the Editor UI, which is native
-            // Unity behavior and out of scope.
+            // Why ConfigureAwait(false) is paired with SwitchToMainThread inside execution helpers:
+            // the server is single-flight (BUSY rejects concurrent commands), so no CLI-originated
+            // pause can fire during test execution. Off-thread resumes must switch back before any
+            // Unity API work (stop/restore, cleanup delay, callback dispose).
             ct.ThrowIfCancellationRequested();
             using CancellationTokenSource timeoutCancellationTokenSource =
                 RunTestsExecutionTimeout.CreateLinkedTimeoutSource(ct, parameters.TimeoutSeconds);
@@ -124,6 +123,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why parent ct (not executionCt): CancelAfter only guards the RunFinished wait.
                 // Using the linked token here would mis-report a successful run as timed out when
                 // the fixed cleanup delay straddles the deadline after RunFinished already arrived.
+                await MainThreadSwitcher.SwitchToMainThread(ct);
                 await _waitForTestRunnerCleanupAsync(ct).ConfigureAwait(false);
             }
             catch (RunTestsExecutionCanceledException canceledException)

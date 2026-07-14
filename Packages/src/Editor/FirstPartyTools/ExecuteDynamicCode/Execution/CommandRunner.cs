@@ -68,7 +68,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
             // Why switch first: callers often resume off-thread via ConfigureAwait(false), but
             // BeginUndoGroup / EndExecution use Unity Undo APIs that require the main thread.
-            await MainThreadSwitcher.SwitchToMainThread(context.CancellationToken);
+            try
+            {
+                await MainThreadSwitcher.SwitchToMainThread(context.CancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Why catch here: a pre-cancelled token throws before TryBeginExecution,
+                // and callers expect a cancelled ExecutionResult rather than a leaked OCE.
+                return CreateCancelledResult();
+            }
+
             if (!TryBeginExecution(out int undoGroup, out CancellationTokenSource executionCancellationTokenSource))
             {
                 return CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_IN_PROGRESS);

@@ -14,6 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string TestMinimumDispatcherVersion = "3.0.0";
 
         [TestCase(null, false, true, false)]
+        [TestCase("", false, true, false)]
         [TestCase("2.9.0", false, true, false)]
         [TestCase("3.0.0", false, true, false)]
         [TestCase("2.9.0", true, true, false)]
@@ -61,6 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(false, "3.0.0", false, true, "InstallOrUpdate")]
         [TestCase(false, "3.0.0", true, false, "InstallOrUpdate")]
         [TestCase(false, null, false, true, "InstallOrUpdate")]
+        [TestCase(false, "", false, true, "InstallOrUpdate")]
         public void ResolveCliPrimaryButtonAction_ReturnsClickedPrimaryAction(
             bool needsCliPathSetup,
             string cliVersion,

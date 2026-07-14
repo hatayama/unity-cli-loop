@@ -4,6 +4,8 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -216,6 +218,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int elapsedMilliseconds = 0;
             while (elapsedMilliseconds < timeoutMilliseconds)
             {
+                await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
                 if (isDone())
                 {
                     return (true, false);
@@ -225,6 +228,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 elapsedMilliseconds += pollIntervalMilliseconds;
             }
 
+            await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
             return (isDone(), true);
         }
 

@@ -190,6 +190,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             WatchCompilationResult compilationResult = await WatchExpressionServices.Compiler
                 .CompileAsync(parameters.Expression, ct).ConfigureAwait(false);
+            // Why switch back: CompileAsync resumes off-thread, but Registry/EnsureMonitorStarted
+            // touch EditorApplication.update and must run on the Unity main thread.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
             if (!compilationResult.Success)
             {
                 return CreateCompilationFailure(compilationResult);
