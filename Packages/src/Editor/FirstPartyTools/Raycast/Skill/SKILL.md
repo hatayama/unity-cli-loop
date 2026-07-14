@@ -33,6 +33,8 @@ unity_x = input_x
 unity_y = gameViewHeight - input_y
 ```
 
+- Device Simulator play view is supported. Prefer coordinates from `uloop screenshot --capture-mode rendering` (or its annotated `SimX`/`SimY`).
+
 ## Examples
 
 ```bash
