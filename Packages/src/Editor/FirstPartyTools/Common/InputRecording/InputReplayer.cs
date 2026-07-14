@@ -1,16 +1,11 @@
 #if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
 using System;
-using System.Collections.Generic;
-using System.Globalization;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.Controls;
 using UnityEngine.InputSystem.LowLevel;
 
-using RuntimeMouseButton = io.github.hatayama.UnityCliLoop.Runtime.MouseButton;
 using io.github.hatayama.UnityCliLoop.Runtime;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -20,17 +15,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class InputReplayerService
     {
-        private readonly Dictionary<string, Key> _keyLookup = BuildKeyLookup();
-        private readonly Key[] _allKeys = BuildAllKeys();
-        private readonly Dictionary<string, RuntimeMouseButton> _buttonLookup =
-            new Dictionary<string, RuntimeMouseButton>(StringComparer.OrdinalIgnoreCase)
-        {
-            { "Left", RuntimeMouseButton.Left },
-            { "Right", RuntimeMouseButton.Right },
-            { "Middle", RuntimeMouseButton.Middle }
-        };
-        private readonly Key[] _emptyKeys = Array.Empty<Key>();
-        private readonly RuntimeMouseButton[] _emptyButtons = Array.Empty<RuntimeMouseButton>();
+        private readonly InputReplayEventProcessor _eventProcessor = new InputReplayEventProcessor();
+        private readonly InputReplayUiController _uiController;
 
         private bool _isReplaying;
         private InputRecordingData? _data;
@@ -38,23 +24,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private int _currentFrame;
         private bool _loop;
         private bool _showOverlay;
-        private readonly HashSet<Key> _replayHeldKeys = new HashSet<Key>();
-        private readonly HashSet<RuntimeMouseButton> _replayHeldButtons = new HashSet<RuntimeMouseButton>();
-        private readonly List<BaseInputModule> _disabledInputModules = new List<BaseInputModule>();
-        private Vector2? _replayMousePosition;
 
-        // UI replay goes through ExecuteEvents so verification does not depend on
-        // GameView focus or the active input module's update timing.
-        private bool _hasMousePosition;
-        private bool _prevLeftButtonHeld;
-        private Vector2? _previousReplayMousePosition;
-        private bool _suppressIdleUiOverlay;
-        private PointerEventData? _pointerData;
-        private GameObject? _currentPressTarget;
-        private GameObject? _currentDragTarget;
-        private bool _isDragging;
-        private Vector2 _pressScreenPosition;
-        private float _pressTime;
+        public InputReplayerService()
+        {
+            _uiController = new InputReplayUiController(_eventProcessor);
+        }
 
         public event Action? ReplayStarted;
         public event Action? ReplayCompleted;
@@ -94,14 +68,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RecordReplayOverlayFactory.EnsureReplayOverlay();
             }
 
-            _replayHeldKeys.Clear();
-            _replayHeldButtons.Clear();
-            _hasMousePosition = DetectMousePositionEvents(data!);
-            ResetUiReplayState();
-            if (_hasMousePosition)
+            _eventProcessor.InitializeForRecording(data!);
+            _uiController.Reset();
+            if (_eventProcessor.HasMousePosition)
             {
                 SimulateMouseInputOverlayState.Clear();
             }
+
             _isReplaying = true;
 
             InputSystem.onAfterUpdate -= OnAfterUpdate;
@@ -120,18 +93,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             InputSystem.onAfterUpdate -= OnAfterUpdate;
             _isReplaying = false;
 
-            ReleaseAllHeldInputs();
+            _eventProcessor.ReleaseAllHeldInputs();
 
             _data = null;
             _eventIndex = 0;
             _currentFrame = 0;
-            _replayHeldKeys.Clear();
-            _replayHeldButtons.Clear();
-            RestoreUiInputModules();
-            ResetUiReplayState();
+            _eventProcessor.ClearHeldState();
+            _uiController.RestoreUiInputModules();
+            _uiController.Reset();
 
             ReplayInputOverlayState.Clear();
-            if (_hasMousePosition)
+            if (_eventProcessor.HasMousePosition)
             {
                 SimulateMouseUiOverlayState.Clear();
             }
@@ -155,11 +127,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Vector2 frameScroll = Vector2.zero;
 
             CollectFrameState(ref frameDelta, ref frameScroll);
-            ApplyCurrentFrameSnapshot(Keyboard.current, Mouse.current, frameDelta, frameScroll);
+            _eventProcessor.ApplyCurrentFrameSnapshot(Keyboard.current, Mouse.current, frameDelta, frameScroll);
 
-            if (_hasMousePosition)
+            if (_eventProcessor.HasMousePosition)
             {
-                ApplyUiEvents();
+                _uiController.ApplyUiEvents();
             }
 
             if (_showOverlay)
@@ -173,10 +145,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (_loop)
                 {
-                    ReleaseAllHeldInputs();
+                    _eventProcessor.ReleaseAllHeldInputs();
                     _eventIndex = 0;
                     _currentFrame = 0;
-                    ResetUiReplayState();
+                    _uiController.Reset();
                 }
                 else
                 {
@@ -195,592 +167,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 InputFrameEvents frameEvents = _data.Frames[_eventIndex];
                 for (int i = 0; i < frameEvents.Events.Count; i++)
                 {
-                    ProcessEvent(frameEvents.Events[i], ref frameDelta, ref frameScroll);
+                    _eventProcessor.ProcessEvent(frameEvents.Events[i], ref frameDelta, ref frameScroll);
                 }
 
                 _eventIndex++;
             }
-        }
-
-        private void ApplyCurrentFrameSnapshot(
-            Keyboard? keyboard,
-            Mouse? mouse,
-            Vector2 frameDelta,
-            Vector2 frameScroll)
-        {
-            if (keyboard != null)
-            {
-                ApplyKeyboardSnapshot(keyboard, _replayHeldKeys);
-            }
-
-            if (mouse != null)
-            {
-                ApplyMouseSnapshot(mouse, _replayHeldButtons, frameDelta, frameScroll, _replayMousePosition);
-            }
-        }
-
-        private void ProcessEvent(
-            RecordedInputEvent evt,
-            ref Vector2 frameDelta,
-            ref Vector2 frameScroll)
-        {
-            switch (evt.Type)
-            {
-                case InputEventTypes.KEY_DOWN:
-                    ProcessKeyDown(evt.Data);
-                    break;
-                case InputEventTypes.KEY_UP:
-                    ProcessKeyUp(evt.Data);
-                    break;
-                case InputEventTypes.MOUSE_CLICK:
-                    ProcessMouseClick(evt.Data);
-                    break;
-                case InputEventTypes.MOUSE_RELEASE:
-                    ProcessMouseRelease(evt.Data);
-                    break;
-                case InputEventTypes.MOUSE_DELTA:
-                    ProcessMouseDelta(evt.Data, ref frameDelta);
-                    break;
-                case InputEventTypes.MOUSE_SCROLL:
-                    ProcessMouseScroll(evt.Data, ref frameScroll);
-                    break;
-                case InputEventTypes.MOUSE_POSITION:
-                    ProcessMousePosition(evt.Data);
-                    break;
-            }
-        }
-
-        private void ProcessKeyDown(string keyName)
-        {
-            if (!_keyLookup.TryGetValue(keyName, out Key key))
-            {
-                return;
-            }
-
-            _replayHeldKeys.Add(key);
-            SimulateKeyboardOverlayState.AddHeldKey(keyName);
-        }
-
-        private void ProcessKeyUp(string keyName)
-        {
-            if (!_keyLookup.TryGetValue(keyName, out Key key))
-            {
-                return;
-            }
-
-            _replayHeldKeys.Remove(key);
-            SimulateKeyboardOverlayState.RemoveHeldKey(keyName);
-        }
-
-        private void ProcessMouseClick(string buttonName)
-        {
-            if (!_buttonLookup.TryGetValue(buttonName, out RuntimeMouseButton button))
-            {
-                return;
-            }
-
-            _replayHeldButtons.Add(button);
-            if (!_hasMousePosition)
-            {
-                SimulateMouseInputOverlayState.SetButtonHeld(button, true);
-            }
-        }
-
-        private void ProcessMouseRelease(string buttonName)
-        {
-            if (!_buttonLookup.TryGetValue(buttonName, out RuntimeMouseButton button))
-            {
-                return;
-            }
-
-            _replayHeldButtons.Remove(button);
-            if (!_hasMousePosition)
-            {
-                SimulateMouseInputOverlayState.SetButtonHeld(button, false);
-            }
-        }
-
-        private void ProcessMouseDelta(string data, ref Vector2 frameDelta)
-        {
-            frameDelta = InputRecorder.ParseVector2(data);
-            if (!_hasMousePosition)
-            {
-                SimulateMouseInputOverlayState.SetMoveDelta(frameDelta);
-            }
-        }
-
-        private void ProcessMousePosition(string data)
-        {
-            _replayMousePosition = InputRecorder.ParseVector2(data);
-        }
-
-        private void ProcessMouseScroll(string data, ref Vector2 frameScroll)
-        {
-            if (!float.TryParse(data, NumberStyles.Float, CultureInfo.InvariantCulture, out float scrollY))
-            {
-                return;
-            }
-
-            frameScroll = new Vector2(0f, scrollY);
-            if (!_hasMousePosition)
-            {
-                int direction = scrollY > 0f ? 1 : scrollY < 0f ? -1 : 0;
-                SimulateMouseInputOverlayState.SetScrollDirection(direction);
-            }
-        }
-
-        private void ApplyKeyboardSnapshot(Keyboard keyboard, IReadOnlyCollection<Key> heldKeys)
-        {
-            InputUpdateType updateType = InputUpdateTypeResolver.Resolve();
-            using (StateEvent.From(keyboard, out InputEventPtr eventPtr))
-            {
-                // StateEvent carries the previous frame's state; without zeroing first,
-                // released keys would remain pressed until explicitly cleared.
-                for (int i = 0; i < _allKeys.Length; i++)
-                {
-                    KeyControl? control = keyboard[_allKeys[i]];
-                    if (control != null)
-                    {
-                        control.WriteValueIntoEvent(0f, eventPtr);
-                    }
-                }
-
-                foreach (Key key in heldKeys)
-                {
-                    KeyControl? control = keyboard[key];
-                    if (control != null)
-                    {
-                        control.WriteValueIntoEvent(1f, eventPtr);
-                    }
-                }
-
-                InputState.Change(keyboard, eventPtr, updateType);
-            }
-        }
-
-        private void ApplyMouseSnapshot(
-            Mouse mouse,
-            IReadOnlyCollection<RuntimeMouseButton> heldButtons,
-            Vector2 delta,
-            Vector2 scroll,
-            Vector2? position)
-        {
-            InputUpdateType updateType = InputUpdateTypeResolver.Resolve();
-            using (StateEvent.From(mouse, out InputEventPtr eventPtr))
-            {
-                mouse.leftButton.WriteValueIntoEvent(0f, eventPtr);
-                mouse.rightButton.WriteValueIntoEvent(0f, eventPtr);
-                mouse.middleButton.WriteValueIntoEvent(0f, eventPtr);
-                mouse.delta.WriteValueIntoEvent(delta, eventPtr);
-                mouse.scroll.WriteValueIntoEvent(scroll, eventPtr);
-
-                if (position.HasValue)
-                {
-                    mouse.position.WriteValueIntoEvent(position.Value, eventPtr);
-                }
-
-                foreach (RuntimeMouseButton button in heldButtons)
-                {
-                    MouseButtonControlResolver.GetButtonControl(mouse, button).WriteValueIntoEvent(1f, eventPtr);
-                }
-
-                InputState.Change(mouse, eventPtr, updateType);
-            }
-        }
-
-        private void ReleaseAllHeldInputs()
-        {
-            Keyboard? keyboard = Keyboard.current;
-            if (keyboard != null)
-            {
-                ApplyKeyboardSnapshot(keyboard, _emptyKeys);
-            }
-
-            Mouse? mouse = Mouse.current;
-            if (mouse != null)
-            {
-                ApplyMouseSnapshot(mouse, _emptyButtons, Vector2.zero, Vector2.zero, null);
-            }
-
-            foreach (Key key in _replayHeldKeys)
-            {
-                SimulateKeyboardOverlayState.RemoveHeldKey(key.ToString());
-            }
-
-            foreach (RuntimeMouseButton button in _replayHeldButtons)
-            {
-                SimulateMouseInputOverlayState.SetButtonHeld(button, false);
-            }
-
-            SimulateMouseInputOverlayState.SetMoveDelta(Vector2.zero);
-            SimulateMouseInputOverlayState.SetScrollDirection(0);
-            _replayHeldKeys.Clear();
-            _replayHeldButtons.Clear();
-        }
-
-        private static Key[] BuildAllKeys()
-        {
-            List<Key> keys = new();
-            foreach (Key key in Enum.GetValues(typeof(Key)))
-            {
-                if (key == Key.None)
-                {
-                    continue;
-                }
-
-                keys.Add(key);
-            }
-
-            return keys.ToArray();
-        }
-
-        private static Dictionary<string, Key> BuildKeyLookup()
-        {
-            Dictionary<string, Key> lookup = new(StringComparer.OrdinalIgnoreCase);
-            foreach (Key key in Enum.GetValues(typeof(Key)))
-            {
-                if (key == Key.None)
-                {
-                    continue;
-                }
-
-                string name = key.ToString();
-                if (!lookup.ContainsKey(name))
-                {
-                    lookup[name] = key;
-                }
-            }
-
-            return lookup;
-        }
-
-        private void ApplyUiEvents()
-        {
-            UiReplayFrame? replayFrame = CreateUiReplayFrame();
-            if (!replayFrame.HasValue)
-            {
-                RestoreUiInputModules();
-                return;
-            }
-
-            ApplyUiPointerActivity(replayFrame.Value);
-            ApplyUiPointerRelease(replayFrame.Value);
-        }
-
-        private UiReplayFrame? CreateUiReplayFrame()
-        {
-            if (!_replayMousePosition.HasValue)
-            {
-                return null;
-            }
-
-            EventSystem? eventSystem = EventSystem.current;
-            if (eventSystem == null)
-            {
-                return null;
-            }
-
-            Vector2 screenPos = _replayMousePosition.Value;
-            bool mouseMoved = !_previousReplayMousePosition.HasValue
-                              || _previousReplayMousePosition.Value != screenPos;
-            _previousReplayMousePosition = screenPos;
-
-            bool leftHeld = _replayHeldButtons.Contains(RuntimeMouseButton.Left);
-            bool justPressed = leftHeld && !_prevLeftButtonHeld;
-            bool justReleased = !leftHeld && _prevLeftButtonHeld;
-            _prevLeftButtonHeld = leftHeld;
-            SetUiInputModulesSuppressed(leftHeld || justReleased);
-
-            Vector2 gameViewSize = Handles.GetMainGameViewSize();
-            Vector2 inputPos = new(screenPos.x, gameViewSize.y - screenPos.y);
-
-            return new UiReplayFrame(
-                eventSystem,
-                screenPos,
-                inputPos,
-                gameViewSize,
-                leftHeld,
-                justPressed,
-                justReleased,
-                mouseMoved);
-        }
-
-        private void ApplyUiPointerActivity(UiReplayFrame replayFrame)
-        {
-            if (replayFrame.JustPressed)
-            {
-                _suppressIdleUiOverlay = false;
-                _pressTime = Time.realtimeSinceStartup;
-                OnUiPointerDown(replayFrame.ScreenPosition, replayFrame.EventSystem);
-                SimulateMouseUiOverlayState.Update(
-                    MouseAction.Click,
-                    replayFrame.InputPosition,
-                    null,
-                    _currentPressTarget?.name,
-                    replayFrame.GameViewSize);
-                SimulateMouseUiOverlayState.RequestExpandAnimation();
-                return;
-            }
-
-            if (replayFrame.LeftHeld && (_currentPressTarget != null || _currentDragTarget != null))
-            {
-                ApplyUiPointerHold(replayFrame);
-                return;
-            }
-
-            if (!_suppressIdleUiOverlay || replayFrame.MouseMoved)
-            {
-                // Keeping the overlay hidden until the pointer actually moves prevents release fade-out
-                // from being cancelled by the next idle frame at the same position.
-                _suppressIdleUiOverlay = false;
-                SimulateMouseUiOverlayState.Update(
-                    MouseAction.Click,
-                    replayFrame.InputPosition,
-                    null,
-                    null,
-                    replayFrame.GameViewSize);
-            }
-        }
-
-        private void ApplyUiPointerHold(UiReplayFrame replayFrame)
-        {
-            OnUiDrag(replayFrame.ScreenPosition);
-
-            if (_isDragging)
-            {
-                Vector2 pressInputPos = new(
-                    _pressScreenPosition.x,
-                    replayFrame.GameViewSize.y - _pressScreenPosition.y);
-                SimulateMouseUiOverlayState.Update(
-                    MouseAction.Drag,
-                    replayFrame.InputPosition,
-                    pressInputPos,
-                    null,
-                    replayFrame.GameViewSize);
-                return;
-            }
-
-            float elapsed = Time.realtimeSinceStartup - _pressTime;
-            if (elapsed < 0.5f)
-            {
-                return;
-            }
-
-            SimulateMouseUiOverlayState.Update(
-                MouseAction.LongPress,
-                replayFrame.InputPosition,
-                null,
-                _currentPressTarget?.name,
-                replayFrame.GameViewSize);
-            SimulateMouseUiOverlayState.UpdateLongPressElapsed(elapsed);
-        }
-
-        private void ApplyUiPointerRelease(UiReplayFrame replayFrame)
-        {
-            if (!replayFrame.JustReleased)
-            {
-                return;
-            }
-
-            OnUiPointerUp(replayFrame.ScreenPosition, replayFrame.EventSystem);
-            _suppressIdleUiOverlay = true;
-            SimulateMouseUiOverlayState.RequestDissipateAnimation();
-            SimulateMouseUiOverlayState.Clear();
-        }
-
-        private void OnUiPointerDown(Vector2 screenPos, EventSystem eventSystem)
-        {
-            RaycastResult? hit = UiRaycastHelper.RaycastUI(screenPos, eventSystem);
-
-            _pointerData = new PointerEventData(eventSystem)
-            {
-                position = screenPos,
-                pressPosition = screenPos,
-                button = PointerEventData.InputButton.Left
-            };
-            _pressScreenPosition = screenPos;
-            _isDragging = false;
-            _currentDragTarget = null;
-
-            if (hit == null)
-            {
-                _currentPressTarget = null;
-                return;
-            }
-
-            GameObject rawTarget = hit.Value.gameObject;
-            _pointerData.pointerCurrentRaycast = hit.Value;
-            _pointerData.pointerPressRaycast = hit.Value;
-
-            _currentPressTarget = ExecuteEvents.GetEventHandler<IPointerDownHandler>(rawTarget)
-                                  ?? ExecuteEvents.GetEventHandler<IPointerClickHandler>(rawTarget);
-
-            if (_currentPressTarget != null)
-            {
-                _pointerData.pointerPress = _currentPressTarget;
-                _pointerData.rawPointerPress = rawTarget;
-                ExecuteEvents.ExecuteHierarchy(rawTarget, _pointerData, ExecuteEvents.pointerDownHandler);
-            }
-
-            // initializePotentialDrag must fire before beginDrag per StandaloneInputModule contract
-            _currentDragTarget = ExecuteEvents.GetEventHandler<IDragHandler>(rawTarget);
-            if (_currentDragTarget != null)
-            {
-                ExecuteEvents.Execute(_currentDragTarget, _pointerData, ExecuteEvents.initializePotentialDrag);
-            }
-        }
-
-        private void OnUiDrag(Vector2 screenPos)
-        {
-            if (_pointerData == null)
-            {
-                return;
-            }
-
-            Vector2 delta = screenPos - _pointerData.position;
-            if (delta == Vector2.zero)
-            {
-                return;
-            }
-
-            _pointerData.position = screenPos;
-            _pointerData.delta = delta;
-
-            if (!_isDragging && _currentDragTarget != null)
-            {
-                float distance = (screenPos - _pressScreenPosition).magnitude;
-                if (distance > EventSystem.current.pixelDragThreshold)
-                {
-                    _isDragging = true;
-                    _pointerData.dragging = true;
-                    _pointerData.pointerDrag = _currentDragTarget;
-                    ExecuteEvents.Execute(_currentDragTarget, _pointerData, ExecuteEvents.beginDragHandler);
-                }
-            }
-
-            if (_isDragging && _currentDragTarget != null)
-            {
-                ExecuteEvents.Execute(_currentDragTarget, _pointerData, ExecuteEvents.dragHandler);
-            }
-        }
-
-        private void OnUiPointerUp(Vector2 screenPos, EventSystem eventSystem)
-        {
-            if (_pointerData == null)
-            {
-                return;
-            }
-
-            _pointerData.position = screenPos;
-
-            if (_currentPressTarget != null)
-            {
-                ExecuteEvents.Execute(_currentPressTarget, _pointerData, ExecuteEvents.pointerUpHandler);
-            }
-
-            if (_isDragging && _currentDragTarget != null)
-            {
-                RaycastResult? dropHit = UiRaycastHelper.RaycastUI(screenPos, eventSystem);
-                if (dropHit != null)
-                {
-                    _pointerData.pointerCurrentRaycast = dropHit.Value;
-                    GameObject? dropTarget = ExecuteEvents.GetEventHandler<IDropHandler>(dropHit.Value.gameObject);
-                    if (dropTarget != null)
-                    {
-                        ExecuteEvents.Execute(dropTarget, _pointerData, ExecuteEvents.dropHandler);
-                    }
-                }
-
-                ExecuteEvents.Execute(_currentDragTarget, _pointerData, ExecuteEvents.endDragHandler);
-            }
-            else if (_currentPressTarget != null)
-            {
-                // StandaloneInputModule skips click when dragged; match that behavior
-                GameObject? clickTarget = ExecuteEvents.GetEventHandler<IPointerClickHandler>(
-                    _pointerData.rawPointerPress ?? _currentPressTarget);
-                if (clickTarget != null)
-                {
-                    ExecuteEvents.Execute(clickTarget, _pointerData, ExecuteEvents.pointerClickHandler);
-                }
-            }
-
-            _currentPressTarget = null;
-            _currentDragTarget = null;
-            _isDragging = false;
-            _pointerData = null;
-        }
-
-        private static bool DetectMousePositionEvents(InputRecordingData data)
-        {
-            for (int i = 0; i < data.Frames.Count; i++)
-            {
-                List<RecordedInputEvent> events = data.Frames[i].Events;
-                for (int j = 0; j < events.Count; j++)
-                {
-                    if (events[j].Type == InputEventTypes.MOUSE_POSITION)
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        private void SetUiInputModulesSuppressed(bool suppressed)
-        {
-            if (!suppressed)
-            {
-                RestoreUiInputModules();
-                return;
-            }
-
-            EventSystem? eventSystem = EventSystem.current;
-            if (eventSystem == null)
-            {
-                return;
-            }
-
-            BaseInputModule[] modules = eventSystem.GetComponents<BaseInputModule>();
-            for (int i = 0; i < modules.Length; i++)
-            {
-                BaseInputModule module = modules[i];
-                if (!module.enabled)
-                {
-                    continue;
-                }
-
-                // Replay synthesizes ExecuteEvents directly; leaving input modules enabled
-                // lets them consume the same injected Mouse.current state a second time.
-                module.enabled = false;
-                _disabledInputModules.Add(module);
-            }
-        }
-
-        private void RestoreUiInputModules()
-        {
-            for (int i = 0; i < _disabledInputModules.Count; i++)
-            {
-                BaseInputModule module = _disabledInputModules[i];
-                if (module != null)
-                {
-                    module.enabled = true;
-                }
-            }
-
-            _disabledInputModules.Clear();
-        }
-
-        private void ResetUiReplayState()
-        {
-            _replayMousePosition = null;
-            _previousReplayMousePosition = null;
-            _prevLeftButtonHeld = false;
-            _suppressIdleUiOverlay = false;
-            _pointerData = null;
-            _currentPressTarget = null;
-            _currentDragTarget = null;
-            _isDragging = false;
-            _pressTime = 0f;
         }
 
         private void OnPlayModeStateChanged(PlayModeStateChange state)
@@ -789,38 +180,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 StopReplay();
             }
-        }
-
-        private readonly struct UiReplayFrame
-        {
-            public UiReplayFrame(
-                EventSystem eventSystem,
-                Vector2 screenPosition,
-                Vector2 inputPosition,
-                Vector2 gameViewSize,
-                bool leftHeld,
-                bool justPressed,
-                bool justReleased,
-                bool mouseMoved)
-            {
-                EventSystem = eventSystem;
-                ScreenPosition = screenPosition;
-                InputPosition = inputPosition;
-                GameViewSize = gameViewSize;
-                LeftHeld = leftHeld;
-                JustPressed = justPressed;
-                JustReleased = justReleased;
-                MouseMoved = mouseMoved;
-            }
-
-            public EventSystem EventSystem { get; }
-            public Vector2 ScreenPosition { get; }
-            public Vector2 InputPosition { get; }
-            public Vector2 GameViewSize { get; }
-            public bool LeftHeld { get; }
-            public bool JustPressed { get; }
-            public bool JustReleased { get; }
-            public bool MouseMoved { get; }
         }
     }
 
