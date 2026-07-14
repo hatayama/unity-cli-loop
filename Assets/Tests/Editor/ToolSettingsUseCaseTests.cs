@@ -103,6 +103,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void TryGetToolCatalog_WhenRegistryAvailable_ExcludesWatchAuxiliaryTools()
+        {
+            // Verifies Tool Settings hides the watch tools because they belong to the pause-point family toggle.
+            IToolSettingsPort toolSettingsPort = new InMemoryToolSettingsPort();
+            UnityCliLoopToolRegistrarService toolRegistrarService = new(
+                new EmptyInternalToolNameProvider(),
+                toolSettingsPort,
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
+                UnityCliLoopToolDiscovery.DiscoverTools);
+            ToolSettingsUseCase useCase = new(
+                toolSettingsPort,
+                toolRegistrarService,
+                new StaticToolSkillDescriptionProvider(new Dictionary<string, string>()));
+            useCase.WarmupRegistry();
+
+            bool isAvailable = useCase.TryGetToolCatalog(out ToolSettingsUseCase.ToolCatalogItem[] allTools);
+            string[] toolNames = allTools.Select(tool => tool.Name).ToArray();
+
+            Assert.That(isAvailable, Is.True);
+            Assert.That(toolNames, Does.Not.Contain(UnityCliLoopConstants.TOOL_NAME_ENABLE_WATCH));
+            Assert.That(toolNames, Does.Not.Contain(UnityCliLoopConstants.TOOL_NAME_CLEAR_WATCH));
+            Assert.That(toolNames, Does.Not.Contain(UnityCliLoopConstants.TOOL_NAME_GET_WATCH_VALUES));
+        }
+
+        [Test]
+        public void ToolSettingsToolLinkPolicy_WhenWatchToolRequested_IsNotUserFacingAndMapsToPausePoint()
+        {
+            // Verifies each watch tool is auxiliary and resolves to the pause-point settings key.
+            string[] watchToolNames =
+            {
+                UnityCliLoopConstants.TOOL_NAME_ENABLE_WATCH,
+                UnityCliLoopConstants.TOOL_NAME_CLEAR_WATCH,
+                UnityCliLoopConstants.TOOL_NAME_GET_WATCH_VALUES
+            };
+
+            foreach (string watchToolName in watchToolNames)
+            {
+                Assert.That(
+                    ToolSettingsToolLinkPolicy.IsUserFacingToolSettingsTool(watchToolName),
+                    Is.False,
+                    watchToolName);
+                Assert.That(
+                    ToolSettingsToolLinkPolicy.GetSettingsToolName(watchToolName),
+                    Is.EqualTo(UnityCliLoopConstants.SETTINGS_TOOL_NAME_PAUSE_POINT),
+                    watchToolName);
+            }
+        }
+
+        [Test]
         public void TryGetToolCatalog_WhenSkillDescriptionExists_IncludesDescription()
         {
             // Verifies Tool Settings can show source skill descriptions without changing public tool metadata.
