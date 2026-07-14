@@ -44,6 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string filePath = Path.Combine(testResultsDirectory, fileName);
             string xmlContent = GenerateNUnitXml(testResult);
             File.WriteAllText(filePath, xmlContent, Encoding.UTF8);
+            OutputFileRetention.DeleteOldestBeyondLimit(testResultsDirectory, "*.xml");
             AssetDatabase.Refresh();
             return filePath;
         }

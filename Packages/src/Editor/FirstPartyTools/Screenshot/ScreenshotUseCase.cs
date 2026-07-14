@@ -207,6 +207,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string savedPath = Path.Combine(outputDirectory, $"Rendering_{timestamp}.png");
 
                 SaveTextureAsPng(texture, savedPath);
+                // why: only prune the package default Screenshots folder; never delete files in a user-specified OutputDirectory
+                if (string.IsNullOrEmpty(request.OutputDirectory))
+                {
+                    OutputFileRetention.DeleteOldestBeyondLimit(outputDirectory, "*.png");
+                }
 
                 FileInfo savedFileInfo = new(savedPath);
                 ScreenshotInfo info = new()
@@ -360,6 +365,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     UnityEngine.Object.DestroyImmediate(texture);
                 }
+            }
+
+            // why: only prune the package default Screenshots folder; never delete files in a user-specified OutputDirectory
+            if (string.IsNullOrEmpty(request.OutputDirectory))
+            {
+                OutputFileRetention.DeleteOldestBeyondLimit(outputDirectory, "*.png");
             }
 
             VibeLogger.LogInfo(
