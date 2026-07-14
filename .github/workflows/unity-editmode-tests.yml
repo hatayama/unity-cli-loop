@@ -30,6 +30,7 @@ jobs:
         run: |
           dotnet test tests/DynamicCodeExecutionScheduler.UnitTests/DynamicCodeExecutionScheduler.UnitTests.csproj --configuration Release
           dotnet test tests/SharedRoslynCompilerWorker.UnitTests/SharedRoslynCompilerWorker.UnitTests.csproj --configuration Release
+          dotnet test tests/OutputFileRetention.UnitTests/OutputFileRetention.UnitTests.csproj --configuration Release
 
       - name: Cache Library folder
         if: env.HAS_UNITY_LICENSE == 'true'
