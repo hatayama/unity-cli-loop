@@ -1,0 +1,18 @@
+{
+  "Ready": true,
+  "HasResult": true,
+  "IsCompiling": true,
+  "IsUpdating": true,
+  "IsDomainReloadInProgress": true,
+  "Result": {
+    "Success": true,
+    "ErrorCount": 0,
+    "WarningCount": 0,
+    "Errors": [],
+    "Warnings": [],
+    "Message": "Compile result is available.",
+    "NextActions": null,
+    "ProjectRoot": null
+  },
+  "Message": "Compile result is available."
+}
