@@ -424,7 +424,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             editorContext.Post(_ => UIElementAnnotator.DestroyAnnotationOverlay(annotationOverlay), null);
         }
 
-        private static void ApplyRenderingCoordinateMetadata(
+        internal static void ApplyRenderingCoordinateMetadata(
             ScreenshotInfo info,
             Vector2 gameViewSize,
             int imageToInputOffsetY = 0)
@@ -437,14 +437,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             info.UnityInputFormula = UnityCliLoopConstants.COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY;
         }
 
-        private static void ApplyWindowCoordinateMetadata(ScreenshotInfo info)
+        internal static void ApplyWindowCoordinateMetadata(ScreenshotInfo info)
         {
             info.ImageCoordinateSystem = UnityCliLoopConstants.COORDINATE_SYSTEM_TOP_LEFT_WINDOW;
             info.ScreenshotToInputFormula = UnityCliLoopConstants.SCREENSHOT_WINDOW_TO_INPUT_FORMULA_UNAVAILABLE;
             info.UnityInputFormula = "";
         }
 
-        private static List<UIElementInfo> CreateResponseAnnotatedElements(
+        internal static List<UIElementInfo> CreateResponseAnnotatedElements(
             List<UIElementInfo> uiElements,
             List<UIElementInfo> physicsColliderElements)
         {
@@ -537,7 +537,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return layerDefinitions;
         }
 
-        private static string CreateInvalidRaycastLayerMaskMessage(
+        internal static string CreateInvalidRaycastLayerMaskMessage(
             RaycastLayerMaskResolution raycastLayerMaskResolution)
         {
             string invalidLayerNames = string.Join(", ", raycastLayerMaskResolution.InvalidLayerNames);
@@ -569,7 +569,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return resolvedDirectory;
         }
 
-        private string SanitizeFileName(string name)
+        internal static string SanitizeFileName(string name)
         {
             char[] invalidChars = Path.GetInvalidFileNameChars();
             string sanitized = name;
