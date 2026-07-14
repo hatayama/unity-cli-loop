@@ -118,6 +118,14 @@ func (err *RPCError) Error() string {
 	return fmt.Sprintf("unity error: %s", err.Message)
 }
 
+// Signals that Unity accepted the request but returned an empty JSON-RPC result.
+// Domain-reload recovery treats this as a transport disconnect so status polling can continue.
+type NoResponseError struct{}
+
+func (err *NoResponseError) Error() string {
+	return "unity returned no RPC result"
+}
+
 func NewClient(connection Connection, clientVersion string, options ...ClientOption) *Client {
 	clientOptions := ClientOptions{}
 	for _, option := range options {
@@ -375,7 +383,7 @@ func finishRPCResponse(
 		})
 	}
 	if len(response.Result) == 0 {
-		return finishOutcomeWithError(outcome, timing, startedAt, fmt.Errorf("UNITY_NO_RESPONSE"))
+		return finishOutcomeWithError(outcome, timing, startedAt, &NoResponseError{})
 	}
 
 	outcome.Result = response.Result

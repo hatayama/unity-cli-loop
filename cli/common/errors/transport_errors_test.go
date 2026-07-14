@@ -7,6 +7,8 @@ import (
 	"os"
 	"syscall"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
 // Test support type that exposes a typed cause behind an opaque message, simulating
@@ -73,7 +75,6 @@ func TestIsTransportDisconnectErrorRejectsUnrelatedErrors(t *testing.T) {
 // Verifies the legacy string fallback still classifies errors without a typed cause.
 func TestIsTransportDisconnectErrorKeepsStringFallback(t *testing.T) {
 	fallbackErrors := []error{
-		fmt.Errorf("UNITY_NO_RESPONSE"),
 		fmt.Errorf("read tcp 127.0.0.1:1: connection reset by peer"),
 	}
 
@@ -81,6 +82,15 @@ func TestIsTransportDisconnectErrorKeepsStringFallback(t *testing.T) {
 		if !IsTransportDisconnectError(err) {
 			t.Fatalf("string fallback did not classify: %v", err)
 		}
+	}
+}
+
+// Verifies a wrapped NoResponseError is classified as a disconnect even when the
+// outer error message no longer matches the legacy UNITY_NO_RESPONSE sentinel.
+func TestIsTransportDisconnectErrorMatchesWrappedNoResponseError(t *testing.T) {
+	wrapped := fmt.Errorf("rpc failed: %w", &unityipc.NoResponseError{})
+	if !IsTransportDisconnectError(wrapped) {
+		t.Fatalf("wrapped NoResponseError was not classified as disconnect: %v", wrapped)
 	}
 }
 
