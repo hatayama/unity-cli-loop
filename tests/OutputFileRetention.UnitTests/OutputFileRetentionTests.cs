@@ -30,10 +30,12 @@ namespace io.github.hatayama.UnityCliLoop.UnitTests
             }
         }
 
+        /// <summary>
+        /// Verifies retention is a no-op when matching files are below the configured limit.
+        /// </summary>
         [Test]
-        public void DeleteOldestBeyondLimit_WhenFileCountIsAtOrBelowLimit_ShouldNotDeleteAnything()
+        public void DeleteOldestBeyondLimit_WhenFileCountIsBelowLimit_ShouldNotDeleteAnything()
         {
-            // Verifies retention is a no-op when matching files are within the configured limit.
             CreateFileWithWriteTime("file_01.png", DateTime.UtcNow.AddMinutes(-20));
             CreateFileWithWriteTime("file_02.png", DateTime.UtcNow.AddMinutes(-10));
             CreateFileWithWriteTime("file_03.png", DateTime.UtcNow.AddMinutes(-1));
@@ -44,10 +46,30 @@ namespace io.github.hatayama.UnityCliLoop.UnitTests
             Assert.That(remaining.Length, Is.EqualTo(3));
         }
 
+        /// <summary>
+        /// Verifies retention is a no-op when matching files are exactly at MAX_FILES_PER_DIRECTORY.
+        /// </summary>
+        [Test]
+        public void DeleteOldestBeyondLimit_WhenFileCountIsAtLimit_ShouldNotDeleteAnything()
+        {
+            DateTime baseTime = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            for (int i = 0; i < OutputFileRetention.MAX_FILES_PER_DIRECTORY; i++)
+            {
+                CreateFileWithWriteTime($"file_{i:D2}.png", baseTime.AddMinutes(i));
+            }
+
+            OutputFileRetention.DeleteOldestBeyondLimit(_tempDirectory, "*.png");
+
+            string[] remaining = Directory.GetFiles(_tempDirectory, "*.png");
+            Assert.That(remaining.Length, Is.EqualTo(OutputFileRetention.MAX_FILES_PER_DIRECTORY));
+        }
+
+        /// <summary>
+        /// Verifies oldest matching files are deleted until only MAX_FILES_PER_DIRECTORY remain.
+        /// </summary>
         [Test]
         public void DeleteOldestBeyondLimit_WhenFileCountExceedsLimit_ShouldKeepNewestFiles()
         {
-            // Verifies oldest matching files are deleted until only MAX_FILES_PER_DIRECTORY remain.
             DateTime baseTime = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
             int totalFiles = OutputFileRetention.MAX_FILES_PER_DIRECTORY + 5;
             for (int i = 0; i < totalFiles; i++)
@@ -67,10 +89,12 @@ namespace io.github.hatayama.UnityCliLoop.UnitTests
             Assert.That(remaining[remaining.Length - 1], Is.EqualTo("file_24.png"));
         }
 
+        /// <summary>
+        /// Verifies files outside searchPattern are neither counted toward the limit nor deleted.
+        /// </summary>
         [Test]
         public void DeleteOldestBeyondLimit_WhenNonMatchingFilesExist_ShouldIgnoreThem()
         {
-            // Verifies files outside searchPattern are neither counted toward the limit nor deleted.
             DateTime baseTime = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
             int matchingFiles = OutputFileRetention.MAX_FILES_PER_DIRECTORY + 2;
             for (int i = 0; i < matchingFiles; i++)
@@ -89,10 +113,12 @@ namespace io.github.hatayama.UnityCliLoop.UnitTests
             Assert.That(File.Exists(Path.Combine(_tempDirectory, "notes.txt")), Is.True);
         }
 
+        /// <summary>
+        /// Verifies an empty directory is accepted without throwing or creating files.
+        /// </summary>
         [Test]
         public void DeleteOldestBeyondLimit_WhenDirectoryIsEmpty_ShouldNotThrow()
         {
-            // Verifies an empty directory is accepted without throwing or creating files.
             Assert.DoesNotThrow(() =>
                 OutputFileRetention.DeleteOldestBeyondLimit(_tempDirectory, "*.png"));
 
