@@ -52,14 +52,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     TestMode.PlayMode,
                     filter,
                     ct,
-                    startedRunGuid => runGuid = startedRunGuid);
+                    startedRunGuid => runGuid = startedRunGuid).ConfigureAwait(false);
             }
             catch (OperationCanceledException originalException)
             {
                 RunTestsCancelStopRestoreResult stopResult = await RunTestsCancelStopRestore.StopAndRestoreAsync(
                     isPlayMode: true,
                     runGuid: runGuid,
-                    RunTestsCancelStopRestoreUnityHooks.Resolve());
+                    RunTestsCancelStopRestoreUnityHooks.Resolve()).ConfigureAwait(false);
                 throw new RunTestsExecutionCanceledException(originalException.CancellationToken, stopResult);
             }
             finally
@@ -80,14 +80,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     TestMode.EditMode,
                     filter,
                     ct,
-                    startedRunGuid => runGuid = startedRunGuid);
+                    startedRunGuid => runGuid = startedRunGuid).ConfigureAwait(false);
             }
             catch (OperationCanceledException originalException)
             {
                 RunTestsCancelStopRestoreResult stopResult = await RunTestsCancelStopRestore.StopAndRestoreAsync(
                     isPlayMode: false,
                     runGuid: runGuid,
-                    RunTestsCancelStopRestoreUnityHooks.Resolve());
+                    RunTestsCancelStopRestoreUnityHooks.Resolve()).ConfigureAwait(false);
                 throw new RunTestsExecutionCanceledException(originalException.CancellationToken, stopResult);
             }
         }
@@ -123,7 +123,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // keeping the TestRunnerApi callback subscription alive forever.
             using CancellationTokenRegistration cancellationRegistration =
                 ct.Register(() => taskCompletionSource.TrySetCanceled(ct));
-            SerializableTestResult result = await taskCompletionSource.Task;
+            SerializableTestResult result = await taskCompletionSource.Task.ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             return result;
         }

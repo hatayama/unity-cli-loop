@@ -102,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 // The delay is not cancelled directly because the watchdog must convert cancellation into cleanup.
-                await _waitForPollAsync();
+                await _waitForPollAsync().ConfigureAwait(false);
                 if (!observedStart)
                 {
                     waitedForStartMs += UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS;

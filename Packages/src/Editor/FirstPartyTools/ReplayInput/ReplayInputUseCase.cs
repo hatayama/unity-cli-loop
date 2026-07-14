@@ -86,7 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId: correlationId
             );
 
-            await Task.CompletedTask;
+            await Task.CompletedTask.ConfigureAwait(false);
             return response;
 #endif
         }

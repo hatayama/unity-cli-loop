@@ -67,13 +67,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ThrowIfDisposed();
             cancellationToken.ThrowIfCancellationRequested();
 
-            bool entered = await _executionSemaphore.WaitAsync(0, cancellationToken);
+            bool entered = await _executionSemaphore.WaitAsync(0, cancellationToken).ConfigureAwait(false);
             if (!entered)
             {
-                await _hooks.InvokeAfterBusySemaphoreProbeFailedAsync();
+                await _hooks.InvokeAfterBusySemaphoreProbeFailedAsync().ConfigureAwait(false);
                 if (!TryCancelBackgroundPrewarm())
                 {
-                    entered = await TryAcquireAfterBusyHandoffAsync(cancellationToken);
+                    entered = await TryAcquireAfterBusyHandoffAsync(cancellationToken).ConfigureAwait(false);
                     if (!entered)
                     {
                         return createBusyResult();
@@ -83,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     entered = await TryAcquireAfterBusyHandoffAsync(
                         cancellationToken,
-                        _cancelledPrewarmHandoffWindowMilliseconds);
+                        _cancelledPrewarmHandoffWindowMilliseconds).ConfigureAwait(false);
                     if (!entered)
                     {
                         return createBusyResult();
@@ -99,7 +99,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 executionCancellationTokenSource =
                     CreateExecutionCancellationTokenSource(cancellationToken);
                 SetExecutionState(false, executionCancellationTokenSource);
-                return await action(executionCancellationTokenSource.Token);
+                return await action(executionCancellationTokenSource.Token).ConfigureAwait(false);
             }
             finally
             {
@@ -117,7 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!yieldToForegroundRequests)
             {
-                return await TryRunWithoutForegroundYieldAsync(action, cancellationToken);
+                return await TryRunWithoutForegroundYieldAsync(action, cancellationToken).ConfigureAwait(false);
             }
 
             bool entered;
@@ -149,9 +149,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                await _hooks.InvokeAfterBackgroundExecutionStatePublishedAsync();
+                await _hooks.InvokeAfterBackgroundExecutionStatePublishedAsync().ConfigureAwait(false);
                 _hooks.AfterSemaphoreEntered?.Invoke();
-                T result = await action(executionCancellationTokenSource.Token);
+                T result = await action(executionCancellationTokenSource.Token).ConfigureAwait(false);
                 return (true, result);
             }
             finally
@@ -209,7 +209,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
 
-            Task completedTask = await Task.WhenAny(_shutdownCompletionSource.Task, delayTask);
+            Task completedTask = await Task.WhenAny(_shutdownCompletionSource.Task, delayTask).ConfigureAwait(false);
             if (completedTask == _shutdownCompletionSource.Task)
             {
                 timeoutCancellationTokenSource.Cancel();
@@ -227,7 +227,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Func<CancellationToken, Task<T>> action,
             CancellationToken cancellationToken)
         {
-            bool entered = await _executionSemaphore.WaitAsync(0, cancellationToken);
+            bool entered = await _executionSemaphore.WaitAsync(0, cancellationToken).ConfigureAwait(false);
             if (!entered)
             {
                 return (false, default);
@@ -241,7 +241,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 executionCancellationTokenSource =
                     CreateExecutionCancellationTokenSource(cancellationToken);
                 SetExecutionState(false, executionCancellationTokenSource);
-                T result = await action(executionCancellationTokenSource.Token);
+                T result = await action(executionCancellationTokenSource.Token).ConfigureAwait(false);
                 return (true, result);
             }
             finally
@@ -302,7 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                await _executionSemaphore.WaitAsync(handoffCancellationTokenSource.Token);
+                await _executionSemaphore.WaitAsync(handoffCancellationTokenSource.Token).ConfigureAwait(false);
                 return true;
             }
             catch (OperationCanceledException)

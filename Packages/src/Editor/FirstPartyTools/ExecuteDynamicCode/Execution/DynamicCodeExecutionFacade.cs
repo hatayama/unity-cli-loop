@@ -39,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ExecutionResult result = await _executionScheduler.RunForegroundAsync(
                 innerCancellationToken => ExecuteCoreAsync(request, innerCancellationToken),
                 CreateExecutionInProgressResult,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
             schedulerStopwatch.Stop();
             AppendTiming(result, $"[Perf] SchedulerTotal: {schedulerStopwatch.Elapsed.TotalMilliseconds:F1}ms");
             return result;
@@ -56,7 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             (bool entered, ExecutionResult result) = await _executionScheduler.TryRunIfIdleAsync(
                 request.YieldToForegroundRequests,
                 innerCancellationToken => ExecuteCoreAsync(request, innerCancellationToken),
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
             schedulerStopwatch.Stop();
             AppendTiming(result, $"[Perf] SchedulerTotal: {schedulerStopwatch.Elapsed.TotalMilliseconds:F1}ms");
             return (entered, result);
@@ -76,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 request.ClassName,
                 request.Parameters,
                 cancellationToken,
-                request.CompileOnly);
+                request.CompileOnly).ConfigureAwait(false);
             executorTotalStopwatch.Stop();
 
             if (result.Timings == null)

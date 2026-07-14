@@ -189,7 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             WatchCompilationResult compilationResult = await WatchExpressionServices.Compiler
-                .CompileAsync(parameters.Expression, ct);
+                .CompileAsync(parameters.Expression, ct).ConfigureAwait(false);
             if (!compilationResult.Success)
             {
                 return CreateCompilationFailure(compilationResult);

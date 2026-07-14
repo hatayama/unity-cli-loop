@@ -38,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            await AfterBackgroundExecutionStatePublishedAsync();
+            await AfterBackgroundExecutionStatePublishedAsync().ConfigureAwait(false);
         }
 
         public async Task InvokeAfterBusySemaphoreProbeFailedAsync()
@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            await AfterBusySemaphoreProbeFailedAsync();
+            await AfterBusySemaphoreProbeFailedAsync().ConfigureAwait(false);
         }
 
         public void InvokeLogWarning(string message)

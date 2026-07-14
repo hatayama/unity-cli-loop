@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     BuildCompileLogContext(request),
                     correlationId);
                 preparationService.StopPlayMode();
-                bool exited = await WaitForPlayModeExitAsync(ct);
+                bool exited = await WaitForPlayModeExitAsync(ct).ConfigureAwait(false);
                 VibeLogger.LogInfo(
                     "compile_playmode_exit_observed",
                     exited ? "Play Mode exited before compile." : "Play Mode did not exit before compile.",
@@ -151,7 +151,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // 3. Compilation execution
             ct.ThrowIfCancellationRequested();
-            CompileResult result = await _executeCompilationAsync(request, ct);
+            CompileResult result = await _executeCompilationAsync(request, ct).ConfigureAwait(false);
 
             // 4. Result formatting
             CompileResponse successResponse =
@@ -171,7 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             while (EditorApplication.isPlaying && waitedMs < MAX_WAIT_MS)
             {
                 ct.ThrowIfCancellationRequested();
-                await TimerDelay.Wait(POLL_INTERVAL_MS, ct);
+                await TimerDelay.Wait(POLL_INTERVAL_MS, ct).ConfigureAwait(false);
                 waitedMs += POLL_INTERVAL_MS;
             }
 

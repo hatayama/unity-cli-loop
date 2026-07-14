@@ -14,8 +14,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// <summary>
     /// Class specialized in handling JSON-RPC 2.0 processing
     /// 
-    /// Design document reference: Packages/src/Editor/ARCHITECTURE.md
-    /// 
     /// Related classes:
     /// - UnityCliLoopExecutionRouter: Executes Unity requests based on JSON-RPC requests
     /// - Project IPC server: Receives JSON-RPC messages from CLI clients
