@@ -883,7 +883,6 @@ func TestLoadDispatcherPinIgnoresBootstrapFields(t *testing.T) {
 	}
 
 	pin, err := loadDispatcherPin(projectRoot)
-
 	if err != nil {
 		t.Fatalf("loadDispatcherPin failed: %v", err)
 	}
