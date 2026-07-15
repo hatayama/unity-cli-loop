@@ -133,8 +133,8 @@ test_publish_rejects_manifest_and_existing_tag_mismatches() {
 
 test_draft_creation_accepts_only_the_known_missing_tag_responses() {
   assert_contains '*"HTTP 404"*) tag_sha="" ;;'
-  assert_contains '*"HTTP 422"*"No commit found for SHA"*) tag_sha="" ;;'
-  assert_not_contains '*"HTTP 422"*) tag_sha="" ;;'
+  assert_contains '*"HTTP 422"*"No commit found for SHA"*|*"No commit found for SHA"*"HTTP 422"*) tag_sha="" ;;'
+  assert_count 2 'tag_sha="" ;;'
   assert_contains '*) printf '\''%s\n'\'' "${tag_error}" >&2; exit "${tag_status}" ;;'
 }
 
