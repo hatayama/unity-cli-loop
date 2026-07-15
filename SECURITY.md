@@ -15,6 +15,57 @@ When reporting a vulnerability, please include:
 
 ## Trust Model and Known Risks
 
+### First-install provenance decision
+
+The repository owner approved the following first-install trust model.
+
+- CLI-only installation requires a preinstalled GitHub CLI (`gh`) obtained
+  through the user's operating-system or package channel. The installer never
+  downloads or bootstraps `gh`. The README bootstrap downloads the installer
+  script and its Sigstore bundle from an immutable dispatcher Release, verifies
+  the script with `gh attestation verify`, and only then executes it. The
+  verified installer verifies the selected archive and its bundle before
+  extraction or execution. A missing `gh` is a hard failure.
+- Unity installation treats the already-installed Unity package as its trust
+  root. Package-release automation verifies the dispatcher Release attestation
+  and stamps its verified subject digests into the package pin. The device
+  enforces those digests by SHA-256 pinning before it executes a downloaded
+  installer script, so Unity installation does not require external `gh` or an
+  embedded verifier.
+- CLI-only verification enforces the exact repository, signer workflow
+  `.github/workflows/dispatcher-publish.yml`, an allowed source ref of
+  `refs/heads/main` or `refs/heads/v3-beta`, an attested source digest equal to
+  the resolved immutable Release tag commit, and a subject digest equal to the
+  downloaded installer or archive. Package-release automation verifies that
+  same policy before it stamps Unity's pinned subject digests. A same-origin
+  checksum provides integrity only and is never authentication.
+- Offline first installation is unsupported. Network or GitHub API failure,
+  missing verifier, missing or malformed bundle, identity mismatch, tag
+  mismatch, and digest mismatch all fail closed before script or binary
+  execution. There is no checksum-only fallback and no mutable-branch
+  `curl | sh` or `irm | iex` path.
+
+OS-native signing remains a later defense-in-depth release improvement; it is
+not a prerequisite for this bootstrap verification work.
+
+Dispatcher Release assets referenced by a package pin must remain available
+permanently. Package releases depend on the pinned dispatcher installer in the
+same way that they depend on their pinned project-runner release. Release order
+is dispatcher publish, `stamp-dispatcher-pin`, then package release. If a
+dispatcher release must be revoked, publish a replacement, raise the package's
+`minimumDispatcherVersion`, stamp the replacement release, and publish a new
+package; never silently repoint or replace an existing Release asset.
+
+### Pinned dispatcher release lifetime
+
+A package pin can continue to authenticate an older dispatcher Release after
+that dispatcher has a known vulnerability. Pinning proves provenance and
+integrity; it does not revoke already published content. The mitigation is the
+package's minimum dispatcher version gate: publish a fixed dispatcher, raise
+the minimum, stamp its digests, and publish an updated package. Treat Unity
+projects from untrusted sources as untrusted inputs because they can select
+their own pin and minimum-version requirements.
+
 ### Untrusted Unity projects can drive the runner version
 
 At runtime `uloop` looks up the project-runner pin from the current

@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/hatayama/unity-cli-loop/dispatcher/internal/attestation"
+	"github.com/hatayama/unity-cli-loop/dispatcher/attestation"
 	sharedupdate "github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
@@ -158,7 +158,7 @@ func fetchAttestationSubjectManifest(ctx context.Context, releaseTag string) (st
 	if err != nil {
 		return "", err
 	}
-	commitSHA, err := attestation.FetchTagCommitSHA(ctx, dispatcherReleaseRepository, releaseTag)
+	commitSHA, err := attestation.FetchTagCommitSHA(ctx, attestation.ReleaseRepository, releaseTag)
 	if err != nil {
 		return "", err
 	}
@@ -169,11 +169,7 @@ func fetchAttestationSubjectManifest(ctx context.Context, releaseTag string) (st
 	subjects, err := attestation.VerifySubjects(trustedMaterial, attestation.SubjectsOptions{
 		BundleData:        bundleData,
 		ExpectedCommitSHA: commitSHA,
-		Identity: attestation.Identity{
-			Repository:   dispatcherReleaseRepository,
-			WorkflowPath: attestationDispatcherPublishWorkflowPath,
-			Refs:         attestationAllowedRefs,
-		},
+		Identity:          attestation.DispatcherPublishIdentity(),
 	})
 	if err != nil {
 		return "", err

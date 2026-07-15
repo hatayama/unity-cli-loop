@@ -50,6 +50,7 @@ jobs:
           scripts/test-dispatcher-publish-workflow.sh
           scripts/test-distribute-attestation-bundles.sh
           scripts/test-install-release-filter.sh
+          scripts/test-bootstrap-manifest-from-bundle.sh
 
       - name: Check IPC protocol reminder
         if: github.event_name == 'pull_request'
@@ -67,6 +68,25 @@ jobs:
         if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
         working-directory: cli/release-automation
         run: go run ./cmd/check-dispatcher-minimum-version
+
+      - name: Check dispatcher pin
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+        working-directory: cli/release-automation
+        run: go run ./cmd/check-dispatcher-pin
+
+      - name: Verify published dispatcher pin subjects
+        if: github.event_name == 'pull_request'
+        working-directory: cli/release-automation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: go run ./cmd/check-dispatcher-pin --base "origin/${{ github.base_ref }}" --head HEAD
+
+      - name: Verify published dispatcher pin subjects without a pull request diff
+        if: github.event_name != 'pull_request'
+        working-directory: cli/release-automation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: go run ./cmd/check-dispatcher-pin --network
 
       - name: Check release triggers
         if: github.event_name == 'pull_request'

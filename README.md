@@ -82,16 +82,43 @@ To return to the v2 line, press **Uninstall CLI** in Settings, downgrade the U-L
 
 Use this only when you want to install the standalone global CLI without opening Unity package setup.
 
+Install `gh` and `jq` through your operating-system or package channel first. The bootstrap does not install
+or fall back from `gh`. Select the immutable dispatcher Release tag and its source branch; use
+`refs/heads/main` for a main release or `refs/heads/v3-beta` for a v3-beta release.
+
 On macOS or Windows Git Bash:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
+REPOSITORY=hatayama/unity-cli-loop
+RELEASE_TAG=dispatcher-v<RELEASE_VERSION>
+SOURCE_REF=refs/heads/v3-beta
+tmp_dir=$(mktemp -d)
+gh release download "$RELEASE_TAG" --repo "$REPOSITORY" --pattern 'install.sh' --pattern 'install.sh.sigstore.json' --dir "$tmp_dir" && \
+tag_sha=$(gh api "repos/$REPOSITORY/commits/$RELEASE_TAG" --jq .sha) && \
+gh attestation verify "$tmp_dir/install.sh" --bundle "$tmp_dir/install.sh.sigstore.json" --repo "$REPOSITORY" --signer-workflow "$REPOSITORY/.github/workflows/dispatcher-publish.yml" --source-ref "$SOURCE_REF" --source-digest "$tag_sha" && \
+manifest=$(jq -r '.dsseEnvelope.payload | @base64d | fromjson | .subject[] | "\(.digest.sha256)  \(.name)"' "$tmp_dir/install.sh.sigstore.json" | LC_ALL=C sort) && \
+ULOOP_VERSION="$RELEASE_TAG" ULOOP_ARCHIVE_MANIFEST="$manifest" sh "$tmp_dir/install.sh"
 ```
 
 On Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+$repository = 'hatayama/unity-cli-loop'
+$releaseTag = 'dispatcher-v<RELEASE_VERSION>'
+$sourceRef = 'refs/heads/v3-beta'
+$temporaryDirectory = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
+gh release download $releaseTag --repo $repository --pattern 'install.ps1' --pattern 'install.ps1.sigstore.json' --dir $temporaryDirectory.FullName
+if ($LASTEXITCODE -ne 0) { throw 'Installer download failed.' }
+$tagSha = gh api "repos/$repository/commits/$releaseTag" --jq .sha
+if ($LASTEXITCODE -ne 0) { throw 'Release tag resolution failed.' }
+gh attestation verify (Join-Path $temporaryDirectory.FullName 'install.ps1') --bundle (Join-Path $temporaryDirectory.FullName 'install.ps1.sigstore.json') --repo $repository --signer-workflow "$repository/.github/workflows/dispatcher-publish.yml" --source-ref $sourceRef --source-digest $tagSha
+if ($LASTEXITCODE -ne 0) { throw 'Installer attestation verification failed.' }
+$bundle = Get-Content -Raw -Encoding UTF8 (Join-Path $temporaryDirectory.FullName 'install.ps1.sigstore.json') | ConvertFrom-Json
+$statement = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($bundle.dsseEnvelope.payload)) | ConvertFrom-Json
+$manifest = [string]::Join("`n", @($statement.subject | ForEach-Object { "$($_.digest.sha256)  $($_.name)" } | Sort-Object))
+$env:ULOOP_VERSION = $releaseTag
+$env:ULOOP_ARCHIVE_MANIFEST = $manifest
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $temporaryDirectory.FullName 'install.ps1')
 ```
 
 After installing the native CLI, the installer automatically tries to remove the old npm package with `npm uninstall -g uloop-cli`.

@@ -180,7 +180,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public Task<CliInstallResult> InstallGlobalCliAsync(
                 RuntimePlatform platform,
-                string cliReleaseTag,
+                string dispatcherReleaseTag,
+                string dispatcherArchiveManifest,
                 CancellationToken ct)
             {
                 return Task.FromResult(new CliInstallResult(true, ""));
@@ -202,12 +203,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return _applyResult;
             }
 
-            public NativeCliInstallCommand GetGlobalCliInstallCommand(
+            public NativeCliInstallCommandLoadResult GetGlobalCliInstallCommand(
                 RuntimePlatform platform,
-                string cliReleaseTag,
+                string dispatcherReleaseTag,
+                string dispatcherArchiveManifest,
                 bool removeLegacyLaunchers)
             {
-                return new NativeCliInstallCommand("sh", "-c true", "install");
+                return NativeCliInstallCommandLoadResult.FromSuccess(
+                    new NativeCliInstallCommand("sh", "-c true", "install"));
             }
         }
     }

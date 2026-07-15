@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hatayama/unity-cli-loop/dispatcher/internal/attestation"
+	"github.com/hatayama/unity-cli-loop/dispatcher/attestation"
 )
 
 func TestDefaultVerifyReleaseAssetAttestationRejectsEmptyTag(t *testing.T) {
