@@ -134,6 +134,8 @@ jobs:
       id-token: write
       attestations: write
       artifact-metadata: write
+    env:
+      GH_REPO: ${{ github.repository }}
     steps:
       - name: Download packaged dispatcher assets
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093

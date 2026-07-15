@@ -122,6 +122,13 @@ test_publish_validates_metadata_without_checking_out_source() {
   fi
 }
 
+test_checkout_free_publish_has_explicit_repository_context() {
+  if ! publish_section | grep -F '    GH_REPO: ${{ github.repository }}' >/dev/null 2>&1; then
+    echo "Checkout-free publish job must define GH_REPO for gh release commands." >&2
+    exit 1
+  fi
+}
+
 test_dispatcher_assets_are_attested_after_the_manifest_is_verified() {
   assert_contains "      - name: Verify release asset manifest"
   assert_contains "      - name: Attest dispatcher release assets"
@@ -203,6 +210,7 @@ test_dispatcher_release_target_and_prerelease_state_remain_verified() {
 test_build_and_publish_jobs_have_separate_trust_boundaries
 test_unprivileged_build_uses_only_the_approved_event_commit
 test_publish_validates_metadata_without_checking_out_source
+test_checkout_free_publish_has_explicit_repository_context
 test_dispatcher_assets_are_attested_after_the_manifest_is_verified
 test_dispatcher_verifies_tagged_installers_after_draft_creation
 test_publish_rejects_manifest_and_existing_tag_mismatches

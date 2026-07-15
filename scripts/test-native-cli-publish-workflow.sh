@@ -122,6 +122,13 @@ test_publish_validates_metadata_without_checking_out_source() {
   fi
 }
 
+test_checkout_free_publish_has_explicit_repository_context() {
+  if ! publish_section | grep -F '    GH_REPO: ${{ github.repository }}' >/dev/null 2>&1; then
+    echo "Checkout-free publish job must define GH_REPO for gh release commands." >&2
+    exit 1
+  fi
+}
+
 test_assets_are_attested_after_the_manifest_is_verified() {
   assert_contains "      - name: Verify release asset manifest"
   assert_contains "      - name: Attest native CLI release assets"
@@ -192,6 +199,7 @@ test_post_publish_automation_remains_outside_the_privileged_job() {
 test_build_and_publish_jobs_have_separate_trust_boundaries
 test_unprivileged_build_uses_only_the_approved_event_commit
 test_publish_validates_metadata_without_checking_out_source
+test_checkout_free_publish_has_explicit_repository_context
 test_assets_are_attested_after_the_manifest_is_verified
 test_publish_rejects_manifest_and_existing_tag_mismatches
 test_draft_creation_accepts_only_the_known_missing_tag_responses
