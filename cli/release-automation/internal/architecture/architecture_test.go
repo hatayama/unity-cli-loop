@@ -81,7 +81,8 @@ type binaryNames struct {
 }
 
 // Tests that every module's require directives respect the repo's dependency direction:
-// common depends on nothing else in the repo; the other three modules only depend on common.
+// common depends on nothing else, runtime modules depend only on common, and release automation
+// may additionally consume the dispatcher's exported attestation verifier.
 func TestModuleDependencyDirections(t *testing.T) {
 	repositoryRoot := findRepositoryRoot(t)
 	contract := readLayoutContract(t, filepath.Join(repositoryRoot, "layout-contract.json"))
@@ -94,19 +95,34 @@ func TestModuleDependencyDirections(t *testing.T) {
 		}
 	}
 
-	dependentModuleDirs := []string{
-		filepath.Join(repositoryRoot, contract.Layout.Modules.Dispatcher),
-		filepath.Join(repositoryRoot, contract.Layout.Modules.ProjectRunner),
-		filepath.Join(repositoryRoot, contract.Layout.Modules.ReleaseAutomation),
+	dependentModules := []struct {
+		directory string
+		allowed   map[string]bool
+	}{
+		{
+			directory: filepath.Join(repositoryRoot, contract.Layout.Modules.Dispatcher),
+			allowed:   map[string]bool{commonModulePath: true},
+		},
+		{
+			directory: filepath.Join(repositoryRoot, contract.Layout.Modules.ProjectRunner),
+			allowed:   map[string]bool{commonModulePath: true},
+		},
+		{
+			directory: filepath.Join(repositoryRoot, contract.Layout.Modules.ReleaseAutomation),
+			allowed: map[string]bool{
+				commonModulePath:     true,
+				dispatcherModulePath: true,
+			},
+		},
 	}
-	for _, moduleDir := range dependentModuleDirs {
-		requires := readGoModEdit(t, moduleDir).Require
+	for _, module := range dependentModules {
+		requires := readGoModEdit(t, module.directory).Require
 		for _, require := range requires {
 			if !strings.HasPrefix(require.Path, repositoryModulePrefix) {
 				continue
 			}
-			if require.Path != commonModulePath {
-				t.Fatalf("module %s may only depend on %s among repo modules, got %s", moduleDir, commonModulePath, require.Path)
+			if !module.allowed[require.Path] {
+				t.Fatalf("module %s may only depend on %v among repo modules, got %s", module.directory, module.allowed, require.Path)
 			}
 		}
 	}
