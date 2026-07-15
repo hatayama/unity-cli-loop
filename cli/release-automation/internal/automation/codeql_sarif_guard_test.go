@@ -3,6 +3,7 @@ package automation
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -47,6 +48,26 @@ func TestValidateCodeQLSARIFRejectsMissingRun(t *testing.T) {
 
 	if err := ValidateCodeQLSARIF(sarif); err == nil {
 		t.Fatal("expected SARIF without a run to fail")
+	}
+}
+
+func TestValidateCodeQLSARIFRejectsUnexpectedSchema(t *testing.T) {
+	// Verifies an incompatible SARIF schema is rejected before an upload can report misleading results.
+	sarif := validCodeQLSARIF(`"CodeQL"`, true, 55, 70)
+	sarif = []byte(strings.Replace(string(sarif), "sarif-2.1.0.json", "sarif-2.0.0.json", 1))
+
+	if err := ValidateCodeQLSARIF(sarif); err == nil {
+		t.Fatal("expected unexpected SARIF schema to fail")
+	}
+}
+
+func TestValidateCodeQLSARIFRejectsUnexpectedCodeQLVersion(t *testing.T) {
+	// Verifies a CodeQL tool replacement is surfaced rather than silently changing the approved scanner.
+	sarif := validCodeQLSARIF(`"CodeQL"`, true, 55, 70)
+	sarif = []byte(strings.Replace(string(sarif), `"semanticVersion":"2.26.0"`, `"semanticVersion":"2.25.0"`, 1))
+
+	if err := ValidateCodeQLSARIF(sarif); err == nil {
+		t.Fatal("expected unexpected CodeQL version to fail")
 	}
 }
 
