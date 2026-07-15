@@ -177,6 +177,11 @@ test_publish_rejects_manifest_and_existing_tag_mismatches() {
   assert_not_contains "release-input/dist/release"
 }
 
+test_release_tag_is_created_before_the_release() {
+  assert_contains 'gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/${RELEASE_TAG}" -f sha="${RELEASE_SHA}"'
+  assert_before 'gh api "repos/${GITHUB_REPOSITORY}/git/refs"' 'gh release create "${RELEASE_TAG}"'
+}
+
 test_draft_creation_accepts_only_the_known_missing_tag_responses() {
   assert_contains '*"HTTP 404"*) tag_sha="" ;;'
   assert_contains '*"HTTP 422"*"No commit found for SHA"*|*"No commit found for SHA"*"HTTP 422"*) tag_sha="" ;;'
@@ -224,6 +229,7 @@ test_publish_validates_metadata_without_checking_out_source
 test_checkout_free_publish_has_explicit_repository_context
 test_assets_are_attested_after_the_manifest_is_verified
 test_publish_rejects_manifest_and_existing_tag_mismatches
+test_release_tag_is_created_before_the_release
 test_draft_creation_accepts_only_the_known_missing_tag_responses
 test_publish_rechecks_the_tag_and_uses_least_privilege_post_publish_permissions
 test_build_verifies_assets_before_writing_the_publish_input
