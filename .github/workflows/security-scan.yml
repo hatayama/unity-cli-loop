@@ -11,6 +11,7 @@ on:
       - 'cli/.go-version'
       - '**/go.mod'
       - '**/go.sum'
+      - 'cli/release-automation/**'
       - '.github/workflows/**'
       - 'scripts/**'
       - 'cli/dispatcher/attestation/trusted_root.json'
@@ -26,6 +27,7 @@ on:
       - 'cli/.go-version'
       - '**/go.mod'
       - '**/go.sum'
+      - 'cli/release-automation/**'
       - '.github/workflows/**'
       - 'scripts/**'
       - 'cli/dispatcher/attestation/trusted_root.json'
@@ -89,6 +91,9 @@ jobs:
   go-security:
     name: Go CLI Security Analysis
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
 
     steps:
     - name: Checkout code

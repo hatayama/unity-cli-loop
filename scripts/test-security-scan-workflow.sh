@@ -44,6 +44,7 @@ assert_contains "      run: go run ./cmd/check-codeql-sarif --sarif \"\${{ runne
 assert_contains "      if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false"
 assert_contains "      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork"
 assert_contains "      - '.github/workflows/**'"
+assert_contains "      - 'cli/release-automation/**'"
 assert_contains "      - 'scripts/**'"
 assert_contains "      - 'cli/dispatcher/attestation/trusted_root.json'"
 assert_contains "      - 'Packages/src/project-runner-pin.json'"

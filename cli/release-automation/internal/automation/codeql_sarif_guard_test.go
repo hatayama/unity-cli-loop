@@ -1,6 +1,7 @@
 package automation
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,18 +15,22 @@ func TestValidateCodeQLSARIFAcceptsNonEmptyFindingAtQualityBaseline(t *testing.T
 	  "version":"2.1.0",
 	  "runs":[{
 	    "tool":{"driver":{"name":"CodeQL","semanticVersion":"2.26.0"}},
-	    "properties":{"metricResults":[{"ruleId":"cs/summary/lines-of-code","value":75000}]},
+	    "properties":{"metricResults":[{"ruleId":"cs/summary/lines-of-code","value":119122}]},
 	    "invocations":[{"executionSuccessful":true,"toolExecutionNotifications":[
 	      {"descriptor":{"id":"csharp/autobuilder/buildless/complete"},"message":{"text":"C# analysis with build-mode 'none' completed."}},
-	      {"descriptor":{"id":"csharp/diagnostic/database-quality"},"message":{"text":"Some metrics of the database quality are: Percentage of calls with call target: 55 % (threshold 85 %). Percentage of expressions with known type: 70 % (threshold 85 %)."}},
+	      {"descriptor":{"id":"csharp/diagnostic/database-quality"},"message":{"text":"Some metrics of the database quality are: Percentage of calls with call target: 68 % (threshold 85 %). Percentage of expressions with known type: 82 % (threshold 85 %)."}},
 	      {"descriptor":{"id":"cs/diagnostics/successfully-extracted-files"},"message":{"text":""}}
 	    ]}],
 	    "results":[{"ruleId":"cs/security/test","message":{"text":"probe finding"}}]
 	  }]
 	}`)
 
-	if err := ValidateCodeQLSARIF(sarif); err != nil {
+	result, err := validateCodeQLSARIF(sarif)
+	if err != nil {
 		t.Fatalf("expected valid CodeQL SARIF to pass: %v", err)
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("expected the PoC baseline not to warn, got %d warnings", len(result.Warnings))
 	}
 }
 
@@ -39,6 +44,40 @@ func TestValidateCodeQLSARIFAcceptsCodeQLCLIProofFixture(t *testing.T) {
 
 	if err := ValidateCodeQLSARIF(sarif); err != nil {
 		t.Fatalf("expected CodeQL proof fixture to pass: %v", err)
+	}
+}
+
+func TestCodeQLCLIProofFixtureContainsSecurityFinding(t *testing.T) {
+	// Verifies the pinned CodeQL security-extended probe produced a real command-injection finding.
+	sarifPath := filepath.Join("testdata", "codeql-cli-2.26.0-security-probe-sarif.json")
+	sarif, err := os.ReadFile(sarifPath)
+	if err != nil {
+		t.Fatalf("read CodeQL security probe fixture: %v", err)
+	}
+	report := codeQLSARIFReport{}
+	if err := json.Unmarshal(sarif, &report); err != nil {
+		t.Fatalf("parse CodeQL security probe fixture: %v", err)
+	}
+	if len(report.Runs) != 1 || len(report.Runs[0].Results) == 0 {
+		t.Fatal("expected CodeQL security probe fixture to contain a finding")
+	}
+	finding := struct {
+		RuleID string `json:"ruleId"`
+	}{}
+	if err := json.Unmarshal(report.Runs[0].Results[0], &finding); err != nil {
+		t.Fatalf("parse CodeQL security probe finding: %v", err)
+	}
+	if finding.RuleID != "cs/command-line-injection" {
+		t.Fatalf("expected command-injection probe finding, got %q", finding.RuleID)
+	}
+}
+
+func TestValidateCodeQLSARIFAcceptsQualityAboveCodeQLWarningThreshold(t *testing.T) {
+	// Verifies an improved database without a low-quality diagnostic is accepted.
+	sarif := validCodeQLSARIFWithoutQualityDiagnostic()
+
+	if err := ValidateCodeQLSARIF(sarif); err != nil {
+		t.Fatalf("expected improved CodeQL quality to pass: %v", err)
 	}
 }
 
@@ -75,8 +114,21 @@ func TestValidateCodeQLSARIFFileRejectsMissingFile(t *testing.T) {
 	// Verifies a missing scanner output file fails instead of being treated as an empty successful scan.
 	missingPath := filepath.Join(t.TempDir(), "missing.sarif")
 
-	if err := ValidateCodeQLSARIFFile(missingPath); err == nil {
+	if _, err := ValidateCodeQLSARIFFile(missingPath); err == nil {
 		t.Fatal("expected missing SARIF file to fail")
+	}
+}
+
+func TestValidateCodeQLSARIFReportsNonblockingQualityDrift(t *testing.T) {
+	// Verifies quality below the PoC baseline but above the collapse floor produces a warning without failure.
+	sarif := validCodeQLSARIF(`"CodeQL"`, true, 67, 81)
+
+	result, err := validateCodeQLSARIF(sarif)
+	if err != nil {
+		t.Fatalf("expected quality drift above the hard floor to pass: %v", err)
+	}
+	if len(result.Warnings) != 1 {
+		t.Fatalf("expected one quality drift warning, got %d", len(result.Warnings))
 	}
 }
 
@@ -198,6 +250,22 @@ func validCodeQLSARIFWithoutCompletion() []byte {
 	      {"descriptor":{"id":"cs/diagnostics/successfully-extracted-files"},"message":{"text":""}}
 	    ]}],
 	    "results":[{"ruleId":"cs/security/test","message":{"text":"probe finding"}}]
+	  }]
+	}`)
+}
+
+func validCodeQLSARIFWithoutQualityDiagnostic() []byte {
+	return []byte(`{
+	  "$schema":"https://json.schemastore.org/sarif-2.1.0.json",
+	  "version":"2.1.0",
+	  "runs":[{
+	    "tool":{"driver":{"name":"CodeQL","semanticVersion":"2.26.0"}},
+	    "properties":{"metricResults":[{"ruleId":"cs/summary/lines-of-code","value":75000}]},
+	    "invocations":[{"executionSuccessful":true,"toolExecutionNotifications":[
+	      {"descriptor":{"id":"csharp/autobuilder/buildless/complete"},"message":{"text":"C# analysis with build-mode 'none' completed."}},
+	      {"descriptor":{"id":"cs/diagnostics/successfully-extracted-files"},"message":{"text":""}}
+	    ]}],
+	    "results":[]
 	  }]
 	}`)
 }

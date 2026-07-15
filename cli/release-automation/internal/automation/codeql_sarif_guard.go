@@ -12,9 +12,12 @@ const (
 	expectedCodeQLSARIFVersion        = "2.1.0"
 	expectedCodeQLToolName            = "CodeQL"
 	expectedCodeQLToolSemanticVersion = "2.26.0"
-	// These floors retain margin below the approved no-build PoC (68% and 82%) so ordinary Unity source changes do not cause flaky failures.
+	// These hard floors detect extractor collapse without rejecting normal Unity-source composition changes.
 	minimumCodeQLCallTargetPercentage = 55
 	minimumCodeQLKnownTypePercentage  = 70
+	// These warning baselines record the 2026-07-15 no-build PoC so quality drift remains visible without blocking valid source changes.
+	baselineCodeQLCallTargetPercentage = 68
+	baselineCodeQLKnownTypePercentage  = 82
 	// This floor detects a hollowed database while allowing expected source movement from the 119122-line PoC.
 	minimumCodeQLLinesOfCode              = 75000
 	codeQLBuildlessCompletionMessage      = "C# analysis with build-mode 'none' completed."
@@ -36,6 +39,7 @@ type codeQLSARIFRun struct {
 	Tool        codeQLSARIFTool         `json:"tool"`
 	Invocations []codeQLSARIFInvocation `json:"invocations"`
 	Properties  codeQLSARIFProperties   `json:"properties"`
+	Results     []json.RawMessage       `json:"results"`
 }
 
 type codeQLSARIFTool struct {
@@ -74,46 +78,57 @@ type codeQLSARIFMetricResult struct {
 	Value  float64 `json:"value"`
 }
 
+// CodeQLSARIFValidationResult carries nonblocking database-quality drift warnings.
+type CodeQLSARIFValidationResult struct {
+	Warnings []string
+}
+
 // ValidateCodeQLSARIFFile reads and validates a CodeQL SARIF report before upload.
-func ValidateCodeQLSARIFFile(path string) error {
+func ValidateCodeQLSARIFFile(path string) (CodeQLSARIFValidationResult, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("read CodeQL SARIF: %w", err)
+		return CodeQLSARIFValidationResult{}, fmt.Errorf("read CodeQL SARIF: %w", err)
 	}
-	return ValidateCodeQLSARIF(data)
+	return validateCodeQLSARIF(data)
 }
 
 // ValidateCodeQLSARIF validates a completed, sufficiently complete CodeQL C# no-build analysis before upload.
 func ValidateCodeQLSARIF(data []byte) error {
+	_, err := validateCodeQLSARIF(data)
+	return err
+}
+
+func validateCodeQLSARIF(data []byte) (CodeQLSARIFValidationResult, error) {
 	report := codeQLSARIFReport{}
 	if err := json.Unmarshal(data, &report); err != nil {
-		return fmt.Errorf("invalid SARIF JSON: %w", err)
+		return CodeQLSARIFValidationResult{}, fmt.Errorf("invalid SARIF JSON: %w", err)
 	}
 	if report.Schema != expectedCodeQLSARIFSchema || report.Version != expectedCodeQLSARIFVersion {
-		return fmt.Errorf("expected SARIF schema %q and version %q", expectedCodeQLSARIFSchema, expectedCodeQLSARIFVersion)
+		return CodeQLSARIFValidationResult{}, fmt.Errorf("expected SARIF schema %q and version %q", expectedCodeQLSARIFSchema, expectedCodeQLSARIFVersion)
 	}
 	if len(report.Runs) != 1 {
-		return fmt.Errorf("expected exactly one SARIF run, got %d", len(report.Runs))
+		return CodeQLSARIFValidationResult{}, fmt.Errorf("expected exactly one SARIF run, got %d", len(report.Runs))
 	}
 	run := report.Runs[0]
 	if run.Tool.Driver.Name != expectedCodeQLToolName {
-		return fmt.Errorf("expected SARIF tool %q, got %q", expectedCodeQLToolName, run.Tool.Driver.Name)
+		return CodeQLSARIFValidationResult{}, fmt.Errorf("expected SARIF tool %q, got %q", expectedCodeQLToolName, run.Tool.Driver.Name)
 	}
 	if run.Tool.Driver.SemanticVersion != expectedCodeQLToolSemanticVersion {
-		return fmt.Errorf("expected CodeQL version %q, got %q", expectedCodeQLToolSemanticVersion, run.Tool.Driver.SemanticVersion)
+		return CodeQLSARIFValidationResult{}, fmt.Errorf("expected CodeQL version %q, got %q", expectedCodeQLToolSemanticVersion, run.Tool.Driver.SemanticVersion)
 	}
 	if len(run.Invocations) != 1 || !run.Invocations[0].ExecutionSuccessful {
-		return fmt.Errorf("CodeQL invocation did not complete successfully")
+		return CodeQLSARIFValidationResult{}, fmt.Errorf("CodeQL invocation did not complete successfully")
 	}
 	return validateCodeQLSARIFQuality(run)
 }
 
-func validateCodeQLSARIFQuality(run codeQLSARIFRun) error {
+func validateCodeQLSARIFQuality(run codeQLSARIFRun) (CodeQLSARIFValidationResult, error) {
 	invocation := run.Invocations[0]
 	hasBuildlessCompletion := false
 	extractedFileCount := 0
-	callTargets := -1
-	knownTypes := -1
+	// CodeQL 2.26.0 emits the database-quality diagnostic only below its own 85% thresholds. The strict semantic-version check above freezes that behavior, so absence means both metrics are at least 85%, not that evidence was silently lost.
+	callTargets := 100
+	knownTypes := 100
 	for _, notification := range invocation.ToolExecutionNotifications {
 		if notification.Descriptor.ID == codeQLBuildlessCompletionDiagnosticID && notification.Message.Text == codeQLBuildlessCompletionMessage {
 			hasBuildlessCompletion = true
@@ -124,20 +139,20 @@ func validateCodeQLSARIFQuality(run codeQLSARIFRun) error {
 		if notification.Descriptor.ID == codeQLQualityDiagnosticID {
 			parsedCallTargets, parsedKnownTypes, err := parseCodeQLQualityMetrics(notification.Message.Text)
 			if err != nil {
-				return err
+				return CodeQLSARIFValidationResult{}, err
 			}
 			callTargets = parsedCallTargets
 			knownTypes = parsedKnownTypes
 		}
 	}
 	if !hasBuildlessCompletion {
-		return fmt.Errorf("CodeQL SARIF is missing build-mode none completion diagnostic")
+		return CodeQLSARIFValidationResult{}, fmt.Errorf("CodeQL SARIF is missing build-mode none completion diagnostic")
 	}
 	if extractedFileCount == 0 {
-		return fmt.Errorf("CodeQL SARIF has no successfully extracted C# files")
+		return CodeQLSARIFValidationResult{}, fmt.Errorf("CodeQL SARIF has no successfully extracted C# files")
 	}
 	if callTargets < minimumCodeQLCallTargetPercentage || knownTypes < minimumCodeQLKnownTypePercentage {
-		return fmt.Errorf("CodeQL database quality is below the approved floor: call targets %d%%, known types %d%%", callTargets, knownTypes)
+		return CodeQLSARIFValidationResult{}, fmt.Errorf("CodeQL database quality is below the approved floor: call targets %d%%, known types %d%%", callTargets, knownTypes)
 	}
 	linesOfCode := float64(0)
 	for _, metric := range run.Properties.MetricResults {
@@ -146,9 +161,13 @@ func validateCodeQLSARIFQuality(run codeQLSARIFRun) error {
 		}
 	}
 	if linesOfCode < float64(minimumCodeQLLinesOfCode) {
-		return fmt.Errorf("CodeQL extracted lines of code %.0f is below the approved floor %d", linesOfCode, minimumCodeQLLinesOfCode)
+		return CodeQLSARIFValidationResult{}, fmt.Errorf("CodeQL extracted lines of code %.0f is below the approved floor %d", linesOfCode, minimumCodeQLLinesOfCode)
 	}
-	return nil
+	warnings := []string{}
+	if callTargets < baselineCodeQLCallTargetPercentage || knownTypes < baselineCodeQLKnownTypePercentage {
+		warnings = append(warnings, fmt.Sprintf("CodeQL database quality is below the 2026-07-15 PoC baseline: call targets %d%% (baseline %d%%), known types %d%% (baseline %d%%)", callTargets, baselineCodeQLCallTargetPercentage, knownTypes, baselineCodeQLKnownTypePercentage))
+	}
+	return CodeQLSARIFValidationResult{Warnings: warnings}, nil
 }
 
 func parseCodeQLQualityMetrics(message string) (int, int, error) {
