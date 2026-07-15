@@ -11,6 +11,10 @@ on:
         description: "Dry run (skip release upload)"
         type: boolean
         default: false
+      recovery-target:
+        description: "Build and tag the resolver-derived release commit instead of the branch head"
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -41,14 +45,29 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: scripts/resolve-native-cli-release-target.sh >> "$GITHUB_OUTPUT"
 
+      - name: Check out resolver-derived recovery target
+        if: github.event_name == 'workflow_dispatch' && inputs.recovery-target && (steps.release.outputs.publish == 'true' || steps.release.outputs.release == 'true')
+        env:
+          TARGET_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          set -eu
+          # Why the ancestor check: recovery may only rebuild a commit that already
+          # landed on the approved branch; any other target must fail closed.
+          if ! git merge-base --is-ancestor "${TARGET_SHA}" "${GITHUB_SHA}"; then
+            echo "Recovery target ${TARGET_SHA} is not an ancestor of approved event commit ${GITHUB_SHA}." >&2
+            exit 1
+          fi
+          git checkout --detach "${TARGET_SHA}"
+
       - name: Verify release target matches build commit
         if: steps.release.outputs.publish == 'true' || steps.release.outputs.release == 'true'
         env:
           TARGET_SHA: ${{ steps.release.outputs.sha }}
         run: |
           set -eu
-          if [ "${TARGET_SHA}" != "${GITHUB_SHA}" ]; then
-            echo "Release target ${TARGET_SHA} does not match approved build commit ${GITHUB_SHA}." >&2
+          build_sha=$(git rev-parse HEAD)
+          if [ "${TARGET_SHA}" != "${build_sha}" ]; then
+            echo "Release target ${TARGET_SHA} does not match build source commit ${build_sha}." >&2
             exit 1
           fi
 
@@ -104,7 +123,7 @@ jobs:
           set -eu
           mkdir -p release-input
           {
-            printf 'build_sha=%s\n' "${GITHUB_SHA}"
+            printf 'build_sha=%s\n' "$(git rev-parse HEAD)"
             printf 'target_sha=%s\n' "${TARGET_SHA}"
             printf 'release_tag=%s\n' "${RELEASE_TAG}"
             printf 'version=%s\n' "${RELEASE_VERSION}"
@@ -156,6 +175,8 @@ jobs:
       - name: Verify release metadata
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RECOVERY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.recovery-target }}
         run: |
           set -eu
           metadata_value() {
@@ -178,9 +199,26 @@ jobs:
           event_ref=$(metadata_value event_ref)
           BUILD_SHA="${build_sha}"
           TARGET_SHA="${target_sha}"
-          if [ "${BUILD_SHA}" != "${GITHUB_SHA}" ] || [ "${TARGET_SHA}" != "${GITHUB_SHA}" ]; then
-            echo "Build SHA and release target must match the approved event commit." >&2
-            exit 1
+          if [ "${RECOVERY_TARGET}" = "true" ]; then
+            if [ "${BUILD_SHA}" != "${TARGET_SHA}" ]; then
+              echo "Recovery build SHA must match the release target commit." >&2
+              exit 1
+            fi
+            # Why an API comparison: the metadata artifact comes from the unprivileged
+            # build job, so ancestry on the approved event commit is re-verified from
+            # an independent source before the privileged job tags that commit.
+            compare_status=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${TARGET_SHA}...${GITHUB_SHA}" --jq '.status')
+            if [ "${compare_status}" != "ahead" ] && [ "${compare_status}" != "identical" ]; then
+              echo "Recovery target ${TARGET_SHA} is not an ancestor of approved event commit ${GITHUB_SHA}." >&2
+              exit 1
+            fi
+            release_sha="${TARGET_SHA}"
+          else
+            if [ "${BUILD_SHA}" != "${GITHUB_SHA}" ] || [ "${TARGET_SHA}" != "${GITHUB_SHA}" ]; then
+              echo "Build SHA and release target must match the approved event commit." >&2
+              exit 1
+            fi
+            release_sha="${GITHUB_SHA}"
           fi
           if [ "${event_ref}" != "refs/heads/main" ] && [ "${event_ref}" != "refs/heads/v3-beta" ]; then
             echo "Unsupported release ref ${event_ref}." >&2
@@ -201,6 +239,7 @@ jobs:
           validate_boolean publish "${should_publish}"
           validate_boolean release "${should_release}"
           validate_boolean dry_run "${dry_run}"
+          printf 'RELEASE_SHA=%s\n' "${release_sha}" >> "$GITHUB_ENV"
           printf 'RELEASE_TAG=%s\n' "${release_tag}" >> "$GITHUB_ENV"
           printf 'SHOULD_PUBLISH=%s\n' "${should_publish}" >> "$GITHUB_ENV"
           printf 'SHOULD_RELEASE=%s\n' "${should_release}" >> "$GITHUB_ENV"
@@ -258,8 +297,8 @@ jobs:
               *) printf '%s\n' "${tag_error}" >&2; exit "${tag_status}" ;;
             esac
           fi
-          if [ -n "${tag_sha}" ] && [ "${tag_sha}" != "${GITHUB_SHA}" ]; then
-            echo "Release tag ${RELEASE_TAG} does not match approved build commit ${GITHUB_SHA}." >&2
+          if [ -n "${tag_sha}" ] && [ "${tag_sha}" != "${RELEASE_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match approved release commit ${RELEASE_SHA}." >&2
             exit 1
           fi
           if gh release view "${RELEASE_TAG}" --json isDraft,targetCommitish > release-input/release-state.json 2>/dev/null; then
@@ -273,7 +312,7 @@ jobs:
           fi
           prerelease_flag=""
           case "${RELEASE_TAG}" in *-beta.*) prerelease_flag="--prerelease" ;; esac
-          gh release create "${RELEASE_TAG}" --draft --title "${RELEASE_TAG}" --notes-file release-input/release-notes.md --target "${GITHUB_SHA}" ${prerelease_flag}
+          gh release create "${RELEASE_TAG}" --draft --title "${RELEASE_TAG}" --notes-file release-input/release-notes.md --target "${RELEASE_SHA}" ${prerelease_flag}
           echo "release_published=false" >> "$GITHUB_OUTPUT"
 
       - name: Attest native CLI release assets
@@ -312,8 +351,8 @@ jobs:
         run: |
           set -eu
           tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '.sha')
-          if [ "${tag_sha}" != "${GITHUB_SHA}" ]; then
-            echo "Release tag ${RELEASE_TAG} does not match approved build commit ${GITHUB_SHA}." >&2
+          if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match approved release commit ${RELEASE_SHA}." >&2
             exit 1
           fi
           while IFS=' ' read -r checksum asset_path; do
@@ -348,8 +387,8 @@ jobs:
         run: |
           set -eu
           tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '.sha')
-          if [ "${tag_sha}" != "${GITHUB_SHA}" ]; then
-            echo "Release tag ${RELEASE_TAG} does not match approved build commit ${GITHUB_SHA}." >&2
+          if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match approved release commit ${RELEASE_SHA}." >&2
             exit 1
           fi
           case "${RELEASE_TAG}" in *-beta.*) gh release edit "${RELEASE_TAG}" --draft=false --prerelease ;; *) gh release edit "${RELEASE_TAG}" --draft=false ;; esac
