@@ -131,6 +131,13 @@ test_publish_rejects_manifest_and_existing_tag_mismatches() {
   assert_not_contains "release-input/dist/release"
 }
 
+test_draft_creation_accepts_only_the_known_missing_tag_responses() {
+  assert_contains '*"HTTP 404"*) tag_sha="" ;;'
+  assert_contains '*"HTTP 422"*"No commit found for SHA"*) tag_sha="" ;;'
+  assert_not_contains '*"HTTP 422"*) tag_sha="" ;;'
+  assert_contains '*) printf '\''%s\n'\'' "${tag_error}" >&2; exit "${tag_status}" ;;'
+}
+
 test_publish_rechecks_the_tag_and_uses_least_privilege_post_publish_permissions() {
   assert_contains "      - name: Publish draft release"
   if ! publish_draft_section | grep -F 'tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '\''.sha'\'')' >/dev/null 2>&1; then
@@ -160,6 +167,7 @@ test_unprivileged_build_uses_only_the_approved_event_commit
 test_publish_validates_metadata_without_checking_out_source
 test_assets_are_attested_after_the_manifest_is_verified
 test_publish_rejects_manifest_and_existing_tag_mismatches
+test_draft_creation_accepts_only_the_known_missing_tag_responses
 test_publish_rechecks_the_tag_and_uses_least_privilege_post_publish_permissions
 test_build_verifies_assets_before_writing_the_publish_input
 test_post_publish_automation_remains_outside_the_privileged_job

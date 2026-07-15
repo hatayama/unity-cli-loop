@@ -251,7 +251,8 @@ jobs:
           if [ "${tag_status}" -ne 0 ]; then
             tag_error=$(cat "${tag_error_path}")
             case "${tag_error}" in
-              *"HTTP 404"*|*"Not Found"*) tag_sha="" ;;
+              *"HTTP 404"*) tag_sha="" ;;
+              *"HTTP 422"*"No commit found for SHA"*) tag_sha="" ;;
               *) printf '%s\n' "${tag_error}" >&2; exit "${tag_status}" ;;
             esac
           fi
