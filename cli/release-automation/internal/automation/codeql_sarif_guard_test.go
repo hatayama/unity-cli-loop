@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -277,6 +278,13 @@ func boolJSON(value bool) string {
 	return "false"
 }
 
+func TestIntJSONFormatsThreeDigitValues(t *testing.T) {
+	// Verifies test fixtures remain valid when a CodeQL quality percentage reaches 100.
+	if actual := intJSON(100); actual != "100" {
+		t.Fatalf("expected 100, got %q", actual)
+	}
+}
+
 func intJSON(value int) string {
-	return string(rune('0'+value/10)) + string(rune('0'+value%10))
+	return strconv.Itoa(value)
 }

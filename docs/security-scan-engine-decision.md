@@ -34,4 +34,6 @@ Primary sources: <https://learn.microsoft.com/en-us/dotnet/fundamentals/code-ana
 
 CodeQL no-build analysis cannot resolve every Unity API reference, which lowers interprocedural accuracy and can cause false negatives. A future, separately reviewed change may generate Unity project files in CI and evaluate CodeQL `autobuild` or `manual` mode with resolved Unity assemblies. That work is intentionally outside PR-3 because it adds Unity startup, dependency, and CI-time complexity; it must preserve the fail-closed SARIF and database-quality guards established here.
 
+Expanding the scan corpus to repository-local C# outside the shipped Unity package and its tests, including `Assets/Editor`, `Assets/Scenes`, `tools`, and `tests`, is also deferred to a separately reviewed change. Those sources were not part of the approved 975-file proof, so expansion requires remeasuring and reapproving the 68%/82% quality baseline and the 75,000-line extraction floor instead of silently applying package-derived thresholds to a different corpus.
+
 GitHub documents the supported C# build modes and their trade-offs at <https://docs.github.com/en/code-security/concepts/code-scanning/codeql/codeql-for-compiled-languages>.
