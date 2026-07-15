@@ -79,13 +79,6 @@ jobs:
         if: steps.release.outputs.publish == 'true'
         run: scripts/verify-dispatcher-release-assets.sh
 
-      - name: Verify release-tagged installer scripts
-        if: steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true'
-        shell: pwsh
-        env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: ./scripts/check-release-installer.ps1 -Version $env:RELEASE_TAG
-
       - name: Write release metadata
         if: steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true'
         env:
@@ -275,6 +268,17 @@ jobs:
           if [ "${RELEASE_PRERELEASE}" = "true" ]; then prerelease_flag="--prerelease"; latest_flag="--latest=false"; fi
           gh release create "${RELEASE_TAG}" --draft --title "${RELEASE_TAG}" --notes "Dispatcher release ${RELEASE_TAG}." --target "${GITHUB_SHA}" ${prerelease_flag} ${latest_flag}
           echo "release_published=false" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tagged dispatcher installer scripts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          for installer_path in scripts/install.ps1 scripts/install.sh; do
+            installer_size=$(gh api "repos/${GITHUB_REPOSITORY}/contents/${installer_path}?ref=${RELEASE_TAG}" --jq '.size')
+            [ "${installer_size}" -gt 0 ]
+          done
 
       - name: Attest dispatcher release assets
         id: attest

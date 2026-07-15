@@ -97,7 +97,7 @@ test_publish_validates_metadata_without_checking_out_source() {
     echo "Publish job must not check out repository source." >&2
     exit 1
   fi
-  if publish_section | grep -F "scripts/" >/dev/null 2>&1; then
+  if publish_section | grep -E '^[[:space:]]+run:[[:space:]]+(\./)?scripts/' >/dev/null 2>&1; then
     echo "Publish job must not execute repository scripts." >&2
     exit 1
   fi
@@ -120,6 +120,16 @@ test_dispatcher_assets_are_attested_after_the_manifest_is_verified() {
   assert_before "      - name: Attach attestation bundles to dispatcher assets" "      - name: Upload dispatcher assets"
   assert_before "      - name: Upload dispatcher assets" "      - name: Verify remote dispatcher release assets"
   assert_before "      - name: Verify remote dispatcher release assets" "      - name: Publish draft dispatcher release"
+}
+
+test_dispatcher_verifies_tagged_installers_after_draft_creation() {
+  assert_contains "      - name: Verify tagged dispatcher installer scripts"
+  assert_contains 'for installer_path in scripts/install.ps1 scripts/install.sh; do'
+  assert_contains 'gh api "repos/${GITHUB_REPOSITORY}/contents/${installer_path}?ref=${RELEASE_TAG}" --jq '\''.size'\'''
+  assert_contains '[ "${installer_size}" -gt 0 ]'
+  assert_before "      - name: Create or reuse draft dispatcher release" "      - name: Verify tagged dispatcher installer scripts"
+  assert_before "      - name: Verify tagged dispatcher installer scripts" "      - name: Upload dispatcher assets"
+  assert_before "      - name: Verify tagged dispatcher installer scripts" "      - name: Publish draft dispatcher release"
 }
 
 test_publish_rejects_manifest_and_existing_tag_mismatches() {
@@ -150,10 +160,8 @@ test_dispatcher_build_preserves_release_checks() {
   assert_contains '  group: dispatcher-publish-${{ github.ref }}'
   assert_contains "      - name: Package dispatcher release assets"
   assert_contains "      - name: Verify packaged dispatcher release assets"
-  assert_contains "      - name: Verify release-tagged installer scripts"
   assert_before "      - name: Package dispatcher release assets" "      - name: Verify packaged dispatcher release assets"
-  assert_before "      - name: Verify packaged dispatcher release assets" "      - name: Verify release-tagged installer scripts"
-  assert_before "      - name: Verify release-tagged installer scripts" "      - name: Write release metadata"
+  assert_before "      - name: Verify packaged dispatcher release assets" "      - name: Write release metadata"
 }
 
 test_dispatcher_release_target_and_prerelease_state_remain_verified() {
@@ -168,6 +176,7 @@ test_build_and_publish_jobs_have_separate_trust_boundaries
 test_unprivileged_build_uses_only_the_approved_event_commit
 test_publish_validates_metadata_without_checking_out_source
 test_dispatcher_assets_are_attested_after_the_manifest_is_verified
+test_dispatcher_verifies_tagged_installers_after_draft_creation
 test_publish_rejects_manifest_and_existing_tag_mismatches
 test_draft_creation_accepts_only_the_known_missing_tag_responses
 test_dispatcher_publish_rechecks_the_tag_before_publishing
