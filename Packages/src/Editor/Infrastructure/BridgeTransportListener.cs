@@ -85,15 +85,31 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal sealed class UnixDomainSocketBridgeTransportListener : IBridgeTransportListener
     {
-        private readonly UnixEndpointSecurityPolicy _securityPolicy = new(new UnixNativeFileSystem());
+        private readonly UnixEndpointSecurityPolicy _securityPolicy;
         private Socket _listener;
         private long _nextClientId;
 
         public BridgeTransportEndpoint Endpoint { get; }
 
         public UnixDomainSocketBridgeTransportListener(BridgeTransportEndpoint endpoint)
+            : this(endpoint, new UnixEndpointSecurityPolicy(new UnixNativeFileSystem()))
+        {
+        }
+
+        internal static UnixDomainSocketBridgeTransportListener CreateForTesting(
+            BridgeTransportEndpoint endpoint,
+            UnixEndpointSecurityPolicy securityPolicy)
+        {
+            System.Diagnostics.Debug.Assert(securityPolicy != null, "securityPolicy must not be null");
+            return new UnixDomainSocketBridgeTransportListener(endpoint, securityPolicy);
+        }
+
+        private UnixDomainSocketBridgeTransportListener(
+            BridgeTransportEndpoint endpoint,
+            UnixEndpointSecurityPolicy securityPolicy)
         {
             Endpoint = endpoint;
+            _securityPolicy = securityPolicy;
         }
 
         public void Start()
@@ -120,8 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnixEndpointSecurityResult socketModeResult = _securityPolicy.RestrictSocket(Endpoint.Path);
             if (!socketModeResult.Success)
             {
-                _listener.Close();
-                _listener = null;
+                Stop();
                 throw new IOException(socketModeResult.ErrorMessage);
             }
             _listener.Listen(100);

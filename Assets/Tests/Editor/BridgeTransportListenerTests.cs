@@ -113,6 +113,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a failed socket restriction closes the listener and removes its bound socket file.
+        /// </summary>
+        [Test]
+        public void Start_WhenSocketRestrictionFails_RemovesBoundSocketFileBeforeThrowing()
+        {
+            UnixEndpointSecurityPolicy securityPolicy = new(new FailingSocketModeFileSystem());
+            UnixDomainSocketBridgeTransportListener listener =
+                UnixDomainSocketBridgeTransportListener.CreateForTesting(_endpoint, securityPolicy);
+
+            Assert.Throws<IOException>(() => listener.Start());
+            Assert.That(File.Exists(_endpoint.Path), Is.False);
+        }
+
+        /// <summary>
         /// Verifies teardown warns and preserves an untrusted replacement instead of throwing or deleting it.
         /// </summary>
         [Test]
@@ -128,6 +142,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.DoesNotThrow(() => listener.Stop());
             Assert.That(File.Exists(_endpoint.Path), Is.True);
+        }
+
+        private sealed class FailingSocketModeFileSystem : IUnixNativeFileSystem
+        {
+            private readonly IUnixNativeFileSystem _inner = new UnixNativeFileSystem();
+
+            public uint GetEffectiveUserId()
+            {
+                return _inner.GetEffectiveUserId();
+            }
+
+            public UnixFileMetadata ReadMetadata(string path, bool followSymbolicLinks)
+            {
+                return _inner.ReadMetadata(path, followSymbolicLinks);
+            }
+
+            public UnixNativeOperationResult CreateDirectory(string path, uint mode)
+            {
+                return _inner.CreateDirectory(path, mode);
+            }
+
+            public UnixNativeOperationResult ChangeMode(string path, uint mode)
+            {
+                return UnixNativeOperationResult.Failure(5);
+            }
         }
     }
 
