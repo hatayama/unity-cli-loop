@@ -97,7 +97,7 @@ test_publish_validates_metadata_without_checking_out_source() {
     echo "Publish job must not check out repository source." >&2
     exit 1
   fi
-  if publish_section | grep -E '^[[:space:]]+run:[[:space:]]+(\./)?scripts/' >/dev/null 2>&1; then
+  if publish_section | grep -E '^[[:space:]]+(run:[[:space:]]+)?(\./)?scripts/' >/dev/null 2>&1; then
     echo "Publish job must not execute repository scripts." >&2
     exit 1
   fi
