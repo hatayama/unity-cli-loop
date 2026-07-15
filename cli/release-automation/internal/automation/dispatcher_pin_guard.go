@@ -54,11 +54,18 @@ func ValidateDispatcherPinOffline(packagePin []byte, projectPin []byte) error {
 
 // VerifyDispatcherPinSubjects confirms the pinned manifest exactly matches the published verified subjects.
 func VerifyDispatcherPinSubjects(ctx context.Context, packagePin []byte) error {
+	return verifyDispatcherPinSubjects(ctx, packagePin, defaultDispatcherPinStampDeps())
+}
+
+func verifyDispatcherPinSubjects(
+	ctx context.Context,
+	packagePin []byte,
+	deps dispatcherPinStampDeps,
+) error {
 	values := dispatcherPinGuardValues{}
 	if err := json.Unmarshal(packagePin, &values); err != nil {
 		return fmt.Errorf("%s is invalid JSON: %w", unityPackageCliPinFile, err)
 	}
-	deps := defaultDispatcherPinStampDeps()
 	assets, err := deps.fetchReleaseAssets(ctx, values.DispatcherReleaseTag)
 	if err != nil {
 		return fmt.Errorf("fetch dispatcher release assets: %w", err)

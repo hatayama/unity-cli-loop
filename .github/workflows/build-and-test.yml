@@ -80,6 +80,13 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: go run ./cmd/check-dispatcher-pin --base "origin/${{ github.base_ref }}" --head HEAD
 
+      - name: Verify published dispatcher pin subjects without a pull request diff
+        if: github.event_name != 'pull_request'
+        working-directory: cli/release-automation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: go run ./cmd/check-dispatcher-pin --network
+
       - name: Check release triggers
         if: github.event_name == 'pull_request'
         working-directory: cli/release-automation

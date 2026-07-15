@@ -136,6 +136,14 @@ func buildDispatcherArchiveManifest(assets []dispatcherReleaseAsset, subjects ma
 	if len(entries) == 0 {
 		return "", fmt.Errorf("dispatcher release has no attested assets")
 	}
+	if len(subjects) != len(seenAssets) {
+		return "", fmt.Errorf("dispatcher release attestation subjects do not exactly match release assets")
+	}
+	for subjectName := range subjects {
+		if _, exists := seenAssets[subjectName]; !exists {
+			return "", fmt.Errorf("dispatcher release attestation has unexpected subject %q", subjectName)
+		}
+	}
 	sort.Strings(entries)
 	return strings.Join(entries, "\n"), nil
 }
