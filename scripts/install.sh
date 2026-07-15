@@ -488,12 +488,12 @@ verify_archive_attestation_manifest() {
   # extracted from a Sigstore attestation bundle already verified against the
   # release commit SHA. Enforce that the digest we just computed matches the
   # entry for our asset_name so a compromised same-origin .sha256 file alone
-  # cannot bless a swapped archive. When the env is unset (README curl|sh
-  # bootstrap), we skip: bootstrap trust rests on TLS + repo ownership, and
-  # promoting that missing-manifest path to a hard failure would break every
-  # first-time install.
+  # cannot bless a swapped archive. A missing manifest must fail before
+  # extraction because same-origin checksums alone do not authenticate a first
+  # installation.
   if [ -z "${ULOOP_ARCHIVE_MANIFEST:-}" ]; then
-    return
+    echo "Attestation manifest is required" >&2
+    exit 1
   fi
   manifest_hash=$(
     printf '%s\n' "$ULOOP_ARCHIVE_MANIFEST" | awk -v name="$asset_name" '

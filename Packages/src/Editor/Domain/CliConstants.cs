@@ -7,9 +7,9 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     {
         public const string EXECUTABLE_NAME = "uloop";
         // Why: the runtime IPC gate compares this contract generation, not release numbers.
-        // Bump it together with cli/contract.json protocolVersion only when this package can
+        // Bump it together with cli/common/clicontract/contract.json protocolVersion only when this package can
         // no longer interoperate with a different CLI protocol generation.
-        public const int REQUIRED_CLI_PROTOCOL_VERSION = 3;
+        public const int REQUIRED_CLI_PROTOCOL_VERSION = 4;
         public const string VERSION_FLAG = "--version";
         public const string SHORT_VERSION_FLAG = "-v";
         public const string JSON_FLAG = "--json";
@@ -19,6 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string WINDOWS_INSTALL_SCRIPT_NAME = "install.ps1";
         public const string INSTALL_DIR_ENVIRONMENT_VARIABLE = "ULOOP_INSTALL_DIR";
         public const string INSTALL_VERSION_ENVIRONMENT_VARIABLE = "ULOOP_VERSION";
+        public const string ARCHIVE_MANIFEST_ENVIRONMENT_VARIABLE = "ULOOP_ARCHIVE_MANIFEST";
         public const string POSIX_HOME_ENVIRONMENT_VARIABLE = "HOME";
         public const string POSIX_PATH_ENVIRONMENT_VARIABLE = "PATH";
         public const string WINDOWS_LOCAL_APPDATA_ENVIRONMENT_VARIABLE = "LOCALAPPDATA";
@@ -30,8 +31,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string NATIVE_INSTALL_BIN_DIR_NAME = "bin";
         public const string POSIX_PATH_SEPARATOR = ":";
         public const string WINDOWS_PATH_SEPARATOR = ";";
-        public const string RELEASE_TAG_PREFIX = "v";
-        public const string PROJECT_RUNNER_RELEASE_TAG_PREFIX = "uloop-project-runner-v";
         public const string DISPATCHER_RELEASE_TAG_PREFIX = "dispatcher-v";
         public const string BETA_VERSION_MARKER = "-beta.";
         public const string SKILL_DIR_PREFIX = "uloop-";

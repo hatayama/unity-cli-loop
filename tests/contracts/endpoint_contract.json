@@ -1,5 +1,15 @@
 {
-  "comment": "Maps already-canonicalized project roots to IPC endpoint names. Symlink/realpath resolution (Go filepath.EvalSymlinks / C# realpath) is intentionally out of scope because it depends on the live filesystem. Each canonicalProjectRoot is the post-resolution string that both sides hash. trimOnlyEquivalentRoots are trailing-separator variants that must hash identically after separator trimming only.",
+  "comment": "Maps already-canonicalized project roots to IPC endpoint names. Symlink/realpath resolution of the project root is intentionally out of scope because it depends on the live filesystem. Unix socket strings keep the unresolved /tmp spelling and replace <UID> with the effective user ID. The /tmp parent may itself be a symlink, but its followed target must be a root-owned sticky directory; the endpoint directory must never be a symlink.",
+  "unixSecurityPolicy": {
+    "parentPath": "/tmp",
+    "parentMayBeSymbolicLink": true,
+    "resolvedParentOwnerUid": 0,
+    "resolvedParentRequiresStickyBit": true,
+    "endpointDirectoryMayBeSymbolicLink": false,
+    "endpointDirectoryMode": "0700",
+    "endpointDirectoryRejectedSpecialModes": ["04700", "02700"],
+    "socketMode": "0600"
+  },
   "cases": [
     {
       "id": "unix-stable",
@@ -7,14 +17,14 @@
       "trimOnlyEquivalentRoots": [
         "/Users/example/MyProject/"
       ],
-      "unixSocketPath": "/tmp/uloop/UnityCliLoop-bebe6bce5923715b.sock",
+      "unixSocketPathTemplate": "/tmp/uloop-<UID>/UnityCliLoop-bebe6bce5923715b.sock",
       "windowsPipePath": "\\\\.\\pipe\\uloop-UnityCliLoop-bebe6bce5923715b"
     },
     {
       "id": "unix-case-sensitive",
       "canonicalProjectRoot": "/Users/example/myproject",
       "trimOnlyEquivalentRoots": [],
-      "unixSocketPath": "/tmp/uloop/UnityCliLoop-6b4ae0bfeab42b19.sock",
+      "unixSocketPathTemplate": "/tmp/uloop-<UID>/UnityCliLoop-6b4ae0bfeab42b19.sock",
       "windowsPipePath": "\\\\.\\pipe\\uloop-UnityCliLoop-6b4ae0bfeab42b19"
     },
     {
@@ -23,7 +33,7 @@
       "trimOnlyEquivalentRoots": [
         "C:\\Users\\example\\MyProject\\"
       ],
-      "unixSocketPath": "/tmp/uloop/UnityCliLoop-4abce6d9d9e51244.sock",
+      "unixSocketPathTemplate": "/tmp/uloop-<UID>/UnityCliLoop-4abce6d9d9e51244.sock",
       "windowsPipePath": "\\\\.\\pipe\\uloop-UnityCliLoop-4abce6d9d9e51244"
     }
   ]

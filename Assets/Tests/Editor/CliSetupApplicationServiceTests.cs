@@ -16,9 +16,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class CliSetupApplicationServiceTests
     {
         [Test]
-        public async Task InstallGlobalCliAsync_UsesMinimumRequiredDispatcherReleaseTag()
+        public async Task InstallGlobalCliAsync_UsesPinnedDispatcherReleaseTag()
         {
-            // Verifies that manual installs target the dispatcher release derived from the package pin.
+            // Verifies installation uses the immutable dispatcher release tag stamped in the package pin.
             FakeNativeCliInstaller nativeCliInstaller = new();
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 nativeCliInstaller.InstalledVersion,
-                Is.EqualTo(ExpectedDispatcherReleaseTag()));
+                Is.EqualTo("dispatcher-v3.0.1-beta.6"));
         }
 
         [Test]
@@ -45,34 +45,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GetMinimumRequiredCliReleaseTag_UsesDispatcherReleaseTag()
+        public void GetGlobalCliInstallCommand_UsesPinnedDispatcherReleaseTag()
         {
-            // Verifies setup derives the prefixed release tag from the package pin instead of a duplicated constant.
-            CliSetupApplicationService service = new(
-                new FakeCliInstallationDetector(new string[] { null }),
-                new FakeNativeCliInstaller(),
-                new CliPinReaderService());
-
-            Assert.That(service.GetMinimumRequiredCliReleaseTag(), Is.EqualTo(ExpectedDispatcherReleaseTag()));
-        }
-
-        [Test]
-        public void GetGlobalCliInstallCommand_UsesMinimumRequiredDispatcherReleaseTag()
-        {
-            // Verifies that fallback manual commands point at the pin-derived dispatcher release tag.
+            // Verifies fallback manual commands use the immutable dispatcher tag from the bootstrap pin.
             FakeNativeCliInstaller nativeCliInstaller = new();
             CliSetupApplicationService service = new(
                 new FakeCliInstallationDetector(new string[] { null }),
                 nativeCliInstaller,
                 new CliPinReaderService());
 
-            NativeCliInstallCommand command = service.GetGlobalCliInstallCommand(
+            NativeCliInstallCommandLoadResult commandResult = service.GetGlobalCliInstallCommand(
                 RuntimePlatform.OSXEditor,
                 false);
 
+            Assert.That(commandResult.Success, Is.True, commandResult.ErrorOutput);
             Assert.That(
-                command.ManualCommand,
-                Is.EqualTo("install " + ExpectedDispatcherReleaseTag()));
+                commandResult.Command.ManualCommand,
+                Is.EqualTo("install dispatcher-v3.0.1-beta.6"));
+        }
+
+        [Test]
+        public async Task InstallGlobalCliAsync_WhenBootstrapPinIsUnavailableFailsWithoutInvokingInstaller()
+        {
+            // Verifies a missing bootstrap pin cannot fall back to a derived or latest dispatcher release.
+            FakeNativeCliInstaller nativeCliInstaller = new();
+            CliSetupApplicationService service = new(
+                new FakeCliInstallationDetector(new string[] { null }),
+                nativeCliInstaller,
+                new FailingBootstrapPinReader());
+
+            CliInstallResult result = await service.InstallGlobalCliAsync(RuntimePlatform.OSXEditor, CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorOutput, Does.Contain("bootstrap pin"));
+            Assert.That(nativeCliInstaller.InstalledVersion, Is.Null);
         }
 
         private static string ExpectedMinimumDispatcherVersion()
@@ -80,11 +86,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CliPinLoadResult result = new CliPinReaderService().LoadPackagePin();
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             return result.Pin.MinimumDispatcherVersion;
-        }
-
-        private static string ExpectedDispatcherReleaseTag()
-        {
-            return CliPinReader.BuildDispatcherReleaseTag(ExpectedMinimumDispatcherVersion());
         }
 
         private sealed class FakeCliInstallationDetector : ICliInstallationDetector
@@ -121,6 +122,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void InvalidateCache() { }
         }
 
+        private sealed class FailingBootstrapPinReader : ICliPinReader
+        {
+            public CliPinLoadResult LoadPackagePin()
+            {
+                return CliPinLoadResult.FromFailure("bootstrap pin missing");
+            }
+
+            public DispatcherBootstrapPinLoadResult LoadDispatcherBootstrapPin()
+            {
+                return DispatcherBootstrapPinLoadResult.FromFailure("bootstrap pin missing");
+            }
+
+            public string LoadMinimumDispatcherVersionOrThrow()
+            {
+                return "3.0.1";
+            }
+        }
+
         private sealed class FakeNativeCliInstaller : INativeCliInstaller
         {
             public string InstalledVersion { get; private set; }
@@ -137,10 +156,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public Task<CliInstallResult> InstallGlobalCliAsync(
                 RuntimePlatform platform,
-                string cliReleaseTag,
+                string dispatcherReleaseTag,
+                string dispatcherArchiveManifest,
                 CancellationToken ct)
             {
-                InstalledVersion = cliReleaseTag;
+                InstalledVersion = dispatcherReleaseTag;
                 return Task.FromResult(new CliInstallResult(true, ""));
             }
 
@@ -167,12 +187,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return new CliPathSetupApplyResult(true, CliPathSetupApplyStatus.Applied, "");
             }
 
-            public NativeCliInstallCommand GetGlobalCliInstallCommand(
+            public NativeCliInstallCommandLoadResult GetGlobalCliInstallCommand(
                 RuntimePlatform platform,
-                string cliReleaseTag,
+                string dispatcherReleaseTag,
+                string dispatcherArchiveManifest,
                 bool removeLegacyLaunchers)
             {
-                return new NativeCliInstallCommand("sh", "-c true", $"install {cliReleaseTag}");
+                return NativeCliInstallCommandLoadResult.FromSuccess(
+                    new NativeCliInstallCommand("sh", "-c true", $"install {dispatcherReleaseTag}"));
             }
         }
     }

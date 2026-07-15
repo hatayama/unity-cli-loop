@@ -511,24 +511,25 @@ try {
     # ULOOP_ARCHIVE_MANIFEST env whose "<digest>  <filename>" lines came from a
     # Sigstore attestation bundle verified against the release commit SHA.
     # Enforcing the manifest entry stops a swapped archive from being blessed by
-    # a compromised same-origin .sha256. Missing env = README bootstrap; skip
-    # instead of hard-failing so a first-time curl|iex install still works.
+    # a compromised same-origin .sha256. Missing env must fail before archive
+    # extraction because same-origin checksums are not authentication.
     $Manifest = [Environment]::GetEnvironmentVariable("ULOOP_ARCHIVE_MANIFEST")
-    if (-not [string]::IsNullOrEmpty($Manifest)) {
-        $ManifestHash = $null
-        foreach ($Line in ($Manifest -split "`r?`n")) {
-            $Parts = $Line -split '\s+', 2
-            if ($Parts.Length -eq 2 -and $Parts[1].Trim() -eq $AssetName) {
-                $ManifestHash = $Parts[0].Trim().ToLowerInvariant()
-                break
-            }
+    if ([string]::IsNullOrEmpty($Manifest)) {
+        throw "Attestation manifest is required"
+    }
+    $ManifestHash = $null
+    foreach ($Line in ($Manifest -split "`r?`n")) {
+        $Parts = $Line -split '\s+', 2
+        if ($Parts.Length -eq 2 -and $Parts[1].Trim() -eq $AssetName) {
+            $ManifestHash = $Parts[0].Trim().ToLowerInvariant()
+            break
         }
-        if ([string]::IsNullOrEmpty($ManifestHash)) {
-            throw "Attestation manifest has no entry for $AssetName"
-        }
-        if ($ManifestHash -ne $ActualHash) {
-            throw "Attestation manifest hash mismatch for $AssetName"
-        }
+    }
+    if ([string]::IsNullOrEmpty($ManifestHash)) {
+        throw "Attestation manifest has no entry for $AssetName"
+    }
+    if ($ManifestHash -ne $ActualHash) {
+        throw "Attestation manifest hash mismatch for $AssetName"
     }
 
     Expand-UloopArchive -ArchivePath $ArchivePath -DestinationPath $TempDir

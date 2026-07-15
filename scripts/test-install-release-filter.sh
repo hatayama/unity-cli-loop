@@ -4,6 +4,9 @@ set -eu
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 TMP_DIR=$(mktemp -d)
 ORIGINAL_PATH=$PATH
+ULOOP_ARCHIVE_MANIFEST='fakehash  uloop-dispatcher-darwin-arm64.tar.gz
+fakehash  uloop-dispatcher-windows-amd64.zip'
+export ULOOP_ARCHIVE_MANIFEST
 
 cleanup() {
   rm -rf "$TMP_DIR"
