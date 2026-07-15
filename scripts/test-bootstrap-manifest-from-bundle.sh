@@ -6,7 +6,7 @@ TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT INT HUP TERM
 
 payload='{"subject":[{"name":"install.sh","digest":{"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},{"name":"uloop-dispatcher-darwin-arm64.tar.gz","digest":{"sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}]}'
-encoded_payload=$(printf '%s' "$payload" | base64)
+encoded_payload=$(printf '%s' "$payload" | base64 | tr -d '\n')
 printf '{"dsseEnvelope":{"payload":"%s"}}\n' "$encoded_payload" > "$TMP_DIR/bundle.json"
 
 manifest=$(jq -r '.dsseEnvelope.payload | @base64d | fromjson | .subject[] | "\(.digest.sha256)  \(.name)"' "$TMP_DIR/bundle.json" | LC_ALL=C sort)

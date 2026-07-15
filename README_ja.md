@@ -81,7 +81,7 @@ v2系に戻したい場合は、Settings で **Uninstall CLI** を押し、Unity
 
 Unity Package の setup を開かず、standalone の global CLI だけを入れたい場合に使ってください。
 
-最初にOSまたはパッケージ管理経由で`gh`を導入してください。bootstrapは`gh`を導入せず、代替手段にもフォールバックしません。immutableなdispatcher Release tagとsource branchを選択します。mainのReleaseは`refs/heads/main`、v3-betaのReleaseは`refs/heads/v3-beta`を指定してください。
+最初にOSまたはパッケージ管理経由で`gh`と`jq`を導入してください。bootstrapはこれらを導入せず、代替手段にもフォールバックしません。immutableなdispatcher Release tagとsource branchを選択します。mainのReleaseは`refs/heads/main`、v3-betaのReleaseは`refs/heads/v3-beta`を指定してください。
 
 macOS、Windows Git Bash の場合:
 

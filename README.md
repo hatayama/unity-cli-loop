@@ -82,7 +82,7 @@ To return to the v2 line, press **Uninstall CLI** in Settings, downgrade the U-L
 
 Use this only when you want to install the standalone global CLI without opening Unity package setup.
 
-Install `gh` through your operating-system or package channel first. The bootstrap does not install
+Install `gh` and `jq` through your operating-system or package channel first. The bootstrap does not install
 or fall back from `gh`. Select the immutable dispatcher Release tag and its source branch; use
 `refs/heads/main` for a main release or `refs/heads/v3-beta` for a v3-beta release.
 
