@@ -9,23 +9,15 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/hatayama/unity-cli-loop/dispatcher/internal/attestation"
+	"github.com/hatayama/unity-cli-loop/dispatcher/attestation"
 )
 
-// Attestation identity constants for the two workflows that publish signed
-// release assets. Adding a new signed workflow requires appending the SAN here
-// so a leaked OIDC token for an unrelated workflow cannot forge our releases.
+// Attestation workflow aliases preserve the dispatcher package's focused
+// call-site vocabulary while the exported attestation package owns policy.
 const (
-	attestationDispatcherPublishWorkflowPath = ".github/workflows/dispatcher-publish.yml"
-	attestationRunnerPublishWorkflowPath     = ".github/workflows/native-cli-publish.yml"
+	attestationDispatcherPublishWorkflowPath = attestation.DispatcherPublishWorkflowPath
+	attestationRunnerPublishWorkflowPath     = attestation.ProjectRunnerPublishWorkflowPath
 )
-
-// attestationAllowedRefs is the closed set of refs the OIDC token may be issued
-// for. Exact strings, no regex — a stolen token on a different branch fails.
-var attestationAllowedRefs = []string{
-	"refs/heads/v3-beta",
-	"refs/heads/main",
-}
 
 // verifyReleaseAssetAttestation is the hook production code calls to verify
 // a downloaded release asset. Tests override it to isolate checksum/extract
@@ -65,11 +57,7 @@ func defaultVerifyReleaseAssetAttestation(ctx context.Context, releaseTag string
 		AssetDigest:       digestHex,
 		BundleData:        bundleData,
 		ExpectedCommitSHA: commitSHA,
-		Identity: attestation.Identity{
-			Repository:   dispatcherReleaseRepository,
-			WorkflowPath: workflowPath,
-			Refs:         attestationAllowedRefs,
-		},
+		Identity:          attestation.IdentityForWorkflow(workflowPath),
 	})
 }
 

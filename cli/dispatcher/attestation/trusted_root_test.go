@@ -78,7 +78,7 @@ func TestEmbeddedTrustedRoot_HasFutureCapableAuthorityPerCategory(t *testing.T) 
 				return
 			}
 		}
-		t.Fatalf("no %s authority is usable past %s (all end before). Refresh cli/dispatcher/internal/attestation/trusted_root.json via `go run ./cmd/refresh-attestation-trusted-root` and land a fix(dispatcher) release.", category, horizon.Format(time.RFC3339))
+		t.Fatalf("no %s authority is usable past %s (all end before). Refresh cli/dispatcher/attestation/trusted_root.json via `go run ./cmd/refresh-attestation-trusted-root` and land a fix(dispatcher) release.", category, horizon.Format(time.RFC3339))
 	}
 
 	caEntries := make([]validFor, 0, len(root.CertificateAuthorities))
