@@ -1,5 +1,37 @@
 # Changelog
 
+## [3.0.0-beta.50](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.49...v3.0.0-beta.50) (2026-07-15)
+
+
+### Features
+
+* add pause point capture modes and history ([#1729](https://github.com/hatayama/unity-cli-loop/issues/1729)) ([0b5e72e](https://github.com/hatayama/unity-cli-loop/commit/0b5e72e788a6f032001ee3670c117d8034089234))
+* add pause-point watch expressions ([#1733](https://github.com/hatayama/unity-cli-loop/issues/1733)) ([875835f](https://github.com/hatayama/unity-cli-loop/commit/875835fc71deb70ccdc0bea0d67582a0d42a2f80))
+* Cap .uloop/outputs folders at 20 files automatically ([#1772](https://github.com/hatayama/unity-cli-loop/issues/1772)) ([8d67dae](https://github.com/hatayama/unity-cli-loop/commit/8d67daec5b8ec48ef43ff31bf40e094226ffe438))
+* Improve CLI guidance for tool enums, busy errors, and dynamic-code diagnostics ([7318b9d](https://github.com/hatayama/unity-cli-loop/commit/7318b9d1dcead7b52241e88adab7538b47a5f95a))
+* Improve pause point observability with cleared reasons, collection previews, and raw capture ([03c656b](https://github.com/hatayama/unity-cli-loop/commit/03c656b8734de3d87a32dc7e7f90fea61031eeaf))
+* Pause point wait command is now await-pause-point ([#1698](https://github.com/hatayama/unity-cli-loop/issues/1698)) ([f1d0a9d](https://github.com/hatayama/unity-cli-loop/commit/f1d0a9d1c6c72a8699a2468e68a05262a50642dc))
+* Pause-point snapshots now identify which instance was hit ([#1737](https://github.com/hatayama/unity-cli-loop/issues/1737)) ([a086ac9](https://github.com/hatayama/unity-cli-loop/commit/a086ac9f192dcc2e7c087c6f475f42b0962052e5))
+* Prompt to remove the temporary V3 migration skill after docs are migrated ([#1711](https://github.com/hatayama/unity-cli-loop/issues/1711)) ([a6eff6e](https://github.com/hatayama/unity-cli-loop/commit/a6eff6e889a9d980040a1a1901b5e2390bfe0214))
+
+
+### Bug Fixes
+
+* captured variables stay readable after re-enabling a pause point while paused ([#1734](https://github.com/hatayama/unity-cli-loop/issues/1734)) ([4e63cc5](https://github.com/hatayama/unity-cli-loop/commit/4e63cc5c56ba2b9257ac334ef2fa0a41c0384205))
+* compile-consistency — external scene hold, compile wait/TTL align, API Update guidance ([#1760](https://github.com/hatayama/unity-cli-loop/issues/1760)) ([247cb0c](https://github.com/hatayama/unity-cli-loop/commit/247cb0c62a6a87fd56dba0126334fb5061d4d081))
+* Device Simulator support for screenshot and mouse flow ([#1769](https://github.com/hatayama/unity-cli-loop/issues/1769)) ([0af2840](https://github.com/hatayama/unity-cli-loop/commit/0af28403ad56394779d4719c7b1b241d328cd00c))
+* dynamic-code cancel and Editor shutdown no longer hang on stuck work ([#1753](https://github.com/hatayama/unity-cli-loop/issues/1753)) ([bc1233a](https://github.com/hatayama/unity-cli-loop/commit/bc1233acd79449a1020821b021f85b5cb68b0763))
+* Harden CLI distribution and Unity IPC security ([#1794](https://github.com/hatayama/unity-cli-loop/issues/1794)) ([b5ca16b](https://github.com/hatayama/unity-cli-loop/commit/b5ca16b34fc8359466183c0cac30f2d77e862212))
+* harden execute-dynamic-code against reload busy sticks and worker lifecycle races ([#1765](https://github.com/hatayama/unity-cli-loop/issues/1765)) ([625282d](https://github.com/hatayama/unity-cli-loop/commit/625282d8bc7dc31aef2751dc7a7fb1e651cfada3))
+* Harden IPC contracts, empty RPC errors, and Settings async UI ([#1778](https://github.com/hatayama/unity-cli-loop/issues/1778)) ([0dffc75](https://github.com/hatayama/unity-cli-loop/commit/0dffc753bec575a29252430a59540ad3e0812848))
+* Harden V2-to-V3 third-party migration for safe apply and reliable scans ([#1710](https://github.com/hatayama/unity-cli-loop/issues/1710)) ([b4fbb0d](https://github.com/hatayama/unity-cli-loop/commit/b4fbb0db6b8837e4036637e11684bc08da427935))
+* Improve CLI PlayMode reliability for background input simulation ([#1714](https://github.com/hatayama/unity-cli-loop/issues/1714)) ([8845709](https://github.com/hatayama/unity-cli-loop/commit/8845709d3f70af6fc50ae98501b184f659ef5a33))
+* pause-point disconnect no longer leaves Play Mode stuck; quiet-save before CLI Play ([#1756](https://github.com/hatayama/unity-cli-loop/issues/1756)) ([3b17b68](https://github.com/hatayama/unity-cli-loop/commit/3b17b68ebc485d7b700ef7e10837fc5a258021cc))
+* run-tests hangs no longer hold the tool slot for up to 30 minutes ([#1742](https://github.com/hatayama/unity-cli-loop/issues/1742)) ([efa4898](https://github.com/hatayama/unity-cli-loop/commit/efa48982e37e39dd4d6b6459d2616cefb04eb81a))
+* run-tests timeout can cancel in-flight Test Runner jobs ([#1743](https://github.com/hatayama/unity-cli-loop/issues/1743)) ([b348ad5](https://github.com/hatayama/unity-cli-loop/commit/b348ad562dc1d9be0cdd44cd5c18773e5ccee2ab))
+* Settings no longer shows watch tools as separate toggles ([#1789](https://github.com/hatayama/unity-cli-loop/issues/1789)) ([dad66b7](https://github.com/hatayama/unity-cli-loop/commit/dad66b7c08c3f0b1e9eaa87e78e2d32eca7f2072))
+* Tool Settings pause-point toggle now gates every pause point command ([#1700](https://github.com/hatayama/unity-cli-loop/issues/1700)) ([8785326](https://github.com/hatayama/unity-cli-loop/commit/8785326661d899751b8ba4ba4d20aebac2b78cc8))
+
 ## [3.0.0-beta.49](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.48...v3.0.0-beta.49) (2026-07-11)
 
 
