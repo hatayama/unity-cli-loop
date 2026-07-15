@@ -211,7 +211,7 @@ jobs:
           manifest_paths="${RUNNER_TEMP}/native-cli-manifest-paths"
           actual_paths="${RUNNER_TEMP}/native-cli-actual-paths"
           awk '{ print $2 }' release-input/release-assets.manifest | sed 's#^dist/release/##' | sort > "${manifest_paths}"
-          find release-input/dist/release -maxdepth 1 -type f -printf '%f\n' | sort > "${actual_paths}"
+          find dist/release -maxdepth 1 -type f -printf '%f\n' | sort > "${actual_paths}"
           manifest_count=$(wc -l < "${manifest_paths}" | tr -d ' ')
           unique_manifest_count=$(uniq "${manifest_paths}" | wc -l | tr -d ' ')
           if [ "${manifest_count}" -ne "${unique_manifest_count}" ]; then
@@ -227,7 +227,7 @@ jobs:
           while IFS=' ' read -r checksum asset_path; do
             case "${checksum}" in [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]* ) ;; *) exit 1 ;; esac
             case "${asset_path}" in dist/release/[A-Za-z0-9._+-]* ) ;; *) exit 1 ;; esac
-            full_path="release-input/${asset_path}"
+            full_path="${asset_path}"
             [ -s "${full_path}" ]
             actual_checksum=$(shasum -a 256 "${full_path}" | awk '{print $1}')
             [ "${actual_checksum}" = "${checksum}" ]
@@ -278,7 +278,7 @@ jobs:
         if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
         with:
-          subject-path: release-input/dist/release/*
+          subject-path: dist/release/*
 
       - name: Verify native CLI asset attestations
         if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'
@@ -288,7 +288,7 @@ jobs:
         run: |
           set -eu
           while IFS=' ' read -r checksum asset_path; do
-            gh attestation verify "release-input/${asset_path}" --repo "${GITHUB_REPOSITORY}" --signer-workflow "${SIGNER_WORKFLOW}"
+            gh attestation verify "${asset_path}" --repo "${GITHUB_REPOSITORY}" --signer-workflow "${SIGNER_WORKFLOW}"
           done < release-input/release-assets.manifest
 
       - name: Attach attestation bundles to release assets
@@ -299,7 +299,7 @@ jobs:
           set -eu
           [ -s "${BUNDLE_PATH}" ]
           while IFS=' ' read -r checksum asset_path; do
-            cp "${BUNDLE_PATH}" "release-input/${asset_path}.sigstore.json"
+            cp "${BUNDLE_PATH}" "${asset_path}.sigstore.json"
           done < release-input/release-assets.manifest
 
       - name: Upload native CLI assets
@@ -314,15 +314,41 @@ jobs:
             exit 1
           fi
           while IFS=' ' read -r checksum asset_path; do
-            gh release upload "${RELEASE_TAG}" "release-input/${asset_path}" "release-input/${asset_path}.sigstore.json" --clobber
+            gh release upload "${RELEASE_TAG}" "${asset_path}" "${asset_path}.sigstore.json" --clobber
+          done < release-input/release-assets.manifest
+
+      - name: Verify remote release assets
+        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          release_assets=$(gh release view "${RELEASE_TAG}" --json assets)
+          while IFS=' ' read -r checksum asset_path; do
+            asset_name=$(basename "${asset_path}")
+            bundle_name="${asset_name}.sigstore.json"
+            asset_count=$(printf '%s' "${release_assets}" | jq --arg name "${asset_name}" '[.assets[] | select(.name == $name)] | length')
+            bundle_count=$(printf '%s' "${release_assets}" | jq --arg name "${bundle_name}" '[.assets[] | select(.name == $name)] | length')
+            asset_size=$(printf '%s' "${release_assets}" | jq -r --arg name "${asset_name}" '[.assets[] | select(.name == $name) | .size] | .[0]')
+            bundle_size=$(printf '%s' "${release_assets}" | jq -r --arg name "${bundle_name}" '[.assets[] | select(.name == $name) | .size] | .[0]')
+            if [ "${asset_count}" -ne 1 ] || [ "${bundle_count}" -ne 1 ] || [ "${asset_size}" -le 0 ] || [ "${bundle_size}" -le 0 ]; then
+              echo "Release asset or attestation bundle is missing or empty: ${asset_name}." >&2
+              exit 1
+            fi
           done < release-input/release-assets.manifest
 
       - name: Publish draft release
         if: env.DRY_RUN != 'true' && steps.draft.outputs.release_published != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -eu
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '.sha')
+          if [ "${tag_sha}" != "${GITHUB_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match approved build commit ${GITHUB_SHA}." >&2
+            exit 1
+          fi
           case "${RELEASE_TAG}" in *-beta.*) gh release edit "${RELEASE_TAG}" --draft=false --prerelease ;; *) gh release edit "${RELEASE_TAG}" --draft=false ;; esac
 
   post-publish:
@@ -332,7 +358,6 @@ jobs:
     permissions:
       actions: write
       contents: write
-      issues: write
       pull-requests: write
     steps:
       - name: Checkout approved event commit

@@ -54,6 +54,14 @@ publish_section() {
   ' "$WORKFLOW"
 }
 
+publish_draft_section() {
+  awk '
+    /^      - name: Publish draft release$/ { printing = 1; next }
+    printing && /^      - name:/ { exit }
+    printing { print }
+  ' "$WORKFLOW"
+}
+
 test_build_and_publish_jobs_have_separate_trust_boundaries() {
   assert_contains "  build:"
   assert_contains "  publish:"
@@ -99,14 +107,20 @@ test_publish_validates_metadata_without_checking_out_source() {
 test_assets_are_attested_after_the_manifest_is_verified() {
   assert_contains "      - name: Verify release asset manifest"
   assert_contains "      - name: Attest native CLI release assets"
-  assert_contains "          subject-path: release-input/dist/release/*"
+  assert_contains "          subject-path: dist/release/*"
   assert_contains "      - name: Attach attestation bundles to release assets"
   assert_contains "      - name: Upload native CLI assets"
+  assert_contains "      - name: Verify remote release assets"
+  assert_contains 'gh release view "${RELEASE_TAG}" --json assets'
+  assert_contains 'bundle_name="${asset_name}.sigstore.json"'
+  assert_contains '[ "${asset_count}" -ne 1 ] || [ "${bundle_count}" -ne 1 ] || [ "${asset_size}" -le 0 ] || [ "${bundle_size}" -le 0 ]'
   assert_contains "      - name: Verify native CLI asset attestations"
   assert_before "      - name: Verify release asset manifest" "      - name: Attest native CLI release assets"
   assert_before "      - name: Attest native CLI release assets" "      - name: Verify native CLI asset attestations"
   assert_before "      - name: Verify native CLI asset attestations" "      - name: Attach attestation bundles to release assets"
   assert_before "      - name: Attach attestation bundles to release assets" "      - name: Upload native CLI assets"
+  assert_before "      - name: Upload native CLI assets" "      - name: Verify remote release assets"
+  assert_before "      - name: Verify remote release assets" "      - name: Publish draft release"
 }
 
 test_publish_rejects_manifest_and_existing_tag_mismatches() {
@@ -114,6 +128,16 @@ test_publish_rejects_manifest_and_existing_tag_mismatches() {
   assert_contains "Release manifest is missing files or has duplicate entries."
   assert_contains 'gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '\''.sha'\'''
   assert_contains 'Release tag ${RELEASE_TAG} does not match approved build commit ${GITHUB_SHA}.'
+  assert_not_contains "release-input/dist/release"
+}
+
+test_publish_rechecks_the_tag_and_uses_least_privilege_post_publish_permissions() {
+  assert_contains "      - name: Publish draft release"
+  if ! publish_draft_section | grep -F 'tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '\''.sha'\'')' >/dev/null 2>&1; then
+    echo "Publish draft release must recheck the release tag SHA." >&2
+    exit 1
+  fi
+  assert_not_contains "      issues: write"
 }
 
 test_build_verifies_assets_before_writing_the_publish_input() {
@@ -136,5 +160,6 @@ test_unprivileged_build_uses_only_the_approved_event_commit
 test_publish_validates_metadata_without_checking_out_source
 test_assets_are_attested_after_the_manifest_is_verified
 test_publish_rejects_manifest_and_existing_tag_mismatches
+test_publish_rechecks_the_tag_and_uses_least_privilege_post_publish_permissions
 test_build_verifies_assets_before_writing_the_publish_input
 test_post_publish_automation_remains_outside_the_privileged_job
