@@ -3,6 +3,7 @@ package automation
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -55,6 +56,34 @@ func ValidateDispatcherPinOffline(packagePin []byte, projectPin []byte) error {
 // VerifyDispatcherPinSubjects confirms the pinned manifest exactly matches the published verified subjects.
 func VerifyDispatcherPinSubjects(ctx context.Context, packagePin []byte) error {
 	return verifyDispatcherPinSubjects(ctx, packagePin, defaultDispatcherPinStampDeps())
+}
+
+// DispatcherPinScriptDriftWarnings reports source scripts that await a later dispatcher release and pin stamp.
+func DispatcherPinScriptDriftWarnings(packagePin []byte, scripts map[string][]byte) ([]string, error) {
+	values := dispatcherPinGuardValues{}
+	if err := json.Unmarshal(packagePin, &values); err != nil {
+		return nil, fmt.Errorf("%s is invalid JSON: %w", unityPackageCliPinFile, err)
+	}
+	manifestDigests := make(map[string]string)
+	for _, entry := range strings.Split(values.DispatcherArchiveManifest, "\n") {
+		digest, name, ok := strings.Cut(entry, "  ")
+		if !ok {
+			return nil, fmt.Errorf("%s has an invalid dispatcherArchiveManifest entry", unityPackageCliPinFile)
+		}
+		manifestDigests[name] = strings.ToLower(digest)
+	}
+	warnings := make([]string, 0)
+	for _, scriptName := range []string{dispatcherPinStampInstallerScript, dispatcherPinStampPowerShellScript} {
+		scriptData, exists := scripts[scriptName]
+		if !exists {
+			return nil, fmt.Errorf("source installer %q is unavailable", scriptName)
+		}
+		actualDigest := fmt.Sprintf("%x", sha256.Sum256(scriptData))
+		if manifestDigests[scriptName] != actualDigest {
+			warnings = append(warnings, fmt.Sprintf("pin release %s has a different %s; Unity first install uses the pinned script until the next dispatcher release and pin stamp", values.DispatcherReleaseTag, scriptName))
+		}
+	}
+	return warnings, nil
 }
 
 func verifyDispatcherPinSubjects(

@@ -99,6 +99,20 @@ func TestVerifyDispatcherPinSubjectsFailsClosedWhenReleaseLookupFails(t *testing
 	}
 }
 
+func TestDispatcherPinScriptDriftWarningsReportsButDoesNotFailForChangedSourceScript(t *testing.T) {
+	// Verifies installer source drift is review information until a subsequent release can carry the new digest.
+	warnings, err := DispatcherPinScriptDriftWarnings(validDispatcherPinGuardFixture(), map[string][]byte{
+		"install.sh":  []byte("changed"),
+		"install.ps1": []byte("changed"),
+	})
+	if err != nil {
+		t.Fatalf("DispatcherPinScriptDriftWarnings failed: %v", err)
+	}
+	if len(warnings) != 2 {
+		t.Fatalf("warning count = %d, want 2", len(warnings))
+	}
+}
+
 func validDispatcherPinGuardDeps() dispatcherPinStampDeps {
 	return dispatcherPinStampDeps{
 		fetchReleaseAssets: func(context.Context, string) ([]dispatcherReleaseAsset, error) {

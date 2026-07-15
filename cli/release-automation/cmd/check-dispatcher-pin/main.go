@@ -33,6 +33,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "check-dispatcher-pin:", err)
 		os.Exit(1)
 	}
+	warnIfDispatcherInstallerScriptsDrift(packagePin)
 	shouldVerifyNetwork := *network
 	if *baseRef != "" {
 		shouldVerifyNetwork = dispatcherPinNetworkVerificationRequired(*baseRef, *headRef)
@@ -50,6 +51,27 @@ func main() {
 		fmt.Println("Dispatcher pin network verification skipped because no watched paths changed.")
 	}
 	fmt.Println("Dispatcher pin guard passed.")
+}
+
+func warnIfDispatcherInstallerScriptsDrift(packagePin []byte) {
+	scripts := map[string][]byte{}
+	for _, scriptName := range []string{"install.sh", "install.ps1"} {
+		scriptPath := filepath.Join("..", "..", "scripts", scriptName)
+		scriptData, err := os.ReadFile(scriptPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "check-dispatcher-pin: unable to compare installer source drift:", err)
+			return
+		}
+		scripts[scriptName] = scriptData
+	}
+	warnings, err := automation.DispatcherPinScriptDriftWarnings(packagePin, scripts)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "check-dispatcher-pin: unable to compare installer source drift:", err)
+		return
+	}
+	for _, warning := range warnings {
+		fmt.Fprintln(os.Stderr, "check-dispatcher-pin: review warning:", warning)
+	}
 }
 
 func dispatcherPinNetworkVerificationRequired(baseRef string, headRef string) bool {

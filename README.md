@@ -82,16 +82,36 @@ To return to the v2 line, press **Uninstall CLI** in Settings, downgrade the U-L
 
 Use this only when you want to install the standalone global CLI without opening Unity package setup.
 
+Install `gh` through your operating-system or package channel first. The bootstrap does not install
+or fall back from `gh`. Select the immutable dispatcher Release tag and its source branch; use
+`refs/heads/main` for a main release or `refs/heads/v3-beta` for a v3-beta release.
+
 On macOS or Windows Git Bash:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
+REPOSITORY=hatayama/unity-cli-loop
+RELEASE_TAG=dispatcher-v<RELEASE_VERSION>
+SOURCE_REF=refs/heads/v3-beta
+tmp_dir=$(mktemp -d)
+gh release download "$RELEASE_TAG" --repo "$REPOSITORY" --pattern 'install.sh' --pattern 'install.sh.sigstore.json' --dir "$tmp_dir" && \
+tag_sha=$(gh api "repos/$REPOSITORY/commits/$RELEASE_TAG" --jq .sha) && \
+gh attestation verify "$tmp_dir/install.sh" --bundle "$tmp_dir/install.sh.sigstore.json" --repo "$REPOSITORY" --signer-workflow "$REPOSITORY/.github/workflows/dispatcher-publish.yml" --source-ref "$SOURCE_REF" --source-digest "$tag_sha" && \
+ULOOP_VERSION="$RELEASE_TAG" sh "$tmp_dir/install.sh"
 ```
 
 On Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+$repository = 'hatayama/unity-cli-loop'
+$releaseTag = 'dispatcher-v<RELEASE_VERSION>'
+$sourceRef = 'refs/heads/v3-beta'
+$temporaryDirectory = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
+gh release download $releaseTag --repo $repository --pattern 'install.ps1' --pattern 'install.ps1.sigstore.json' --dir $temporaryDirectory.FullName
+$tagSha = gh api "repos/$repository/commits/$releaseTag" --jq .sha
+gh attestation verify (Join-Path $temporaryDirectory.FullName 'install.ps1') --bundle (Join-Path $temporaryDirectory.FullName 'install.ps1.sigstore.json') --repo $repository --signer-workflow "$repository/.github/workflows/dispatcher-publish.yml" --source-ref $sourceRef --source-digest $tagSha
+if ($LASTEXITCODE -ne 0) { throw 'Installer attestation verification failed.' }
+$env:ULOOP_VERSION = $releaseTag
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $temporaryDirectory.FullName 'install.ps1')
 ```
 
 After installing the native CLI, the installer automatically tries to remove the old npm package with `npm uninstall -g uloop-cli`.

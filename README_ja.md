@@ -81,16 +81,34 @@ v2系に戻したい場合は、Settings で **Uninstall CLI** を押し、Unity
 
 Unity Package の setup を開かず、standalone の global CLI だけを入れたい場合に使ってください。
 
+最初にOSまたはパッケージ管理経由で`gh`を導入してください。bootstrapは`gh`を導入せず、代替手段にもフォールバックしません。immutableなdispatcher Release tagとsource branchを選択します。mainのReleaseは`refs/heads/main`、v3-betaのReleaseは`refs/heads/v3-beta`を指定してください。
+
 macOS、Windows Git Bash の場合:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
+REPOSITORY=hatayama/unity-cli-loop
+RELEASE_TAG=dispatcher-v<RELEASE_VERSION>
+SOURCE_REF=refs/heads/v3-beta
+tmp_dir=$(mktemp -d)
+gh release download "$RELEASE_TAG" --repo "$REPOSITORY" --pattern 'install.sh' --pattern 'install.sh.sigstore.json' --dir "$tmp_dir" && \
+tag_sha=$(gh api "repos/$REPOSITORY/commits/$RELEASE_TAG" --jq .sha) && \
+gh attestation verify "$tmp_dir/install.sh" --bundle "$tmp_dir/install.sh.sigstore.json" --repo "$REPOSITORY" --signer-workflow "$REPOSITORY/.github/workflows/dispatcher-publish.yml" --source-ref "$SOURCE_REF" --source-digest "$tag_sha" && \
+ULOOP_VERSION="$RELEASE_TAG" sh "$tmp_dir/install.sh"
 ```
 
 Windows PowerShell の場合:
 
 ```powershell
-irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+$repository = 'hatayama/unity-cli-loop'
+$releaseTag = 'dispatcher-v<RELEASE_VERSION>'
+$sourceRef = 'refs/heads/v3-beta'
+$temporaryDirectory = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
+gh release download $releaseTag --repo $repository --pattern 'install.ps1' --pattern 'install.ps1.sigstore.json' --dir $temporaryDirectory.FullName
+$tagSha = gh api "repos/$repository/commits/$releaseTag" --jq .sha
+gh attestation verify (Join-Path $temporaryDirectory.FullName 'install.ps1') --bundle (Join-Path $temporaryDirectory.FullName 'install.ps1.sigstore.json') --repo $repository --signer-workflow "$repository/.github/workflows/dispatcher-publish.yml" --source-ref $sourceRef --source-digest $tagSha
+if ($LASTEXITCODE -ne 0) { throw 'Installer attestation verification failed.' }
+$env:ULOOP_VERSION = $releaseTag
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $temporaryDirectory.FullName 'install.ps1')
 ```
 
 native CLI のインストール後、installer は古い npm package を `npm uninstall -g uloop-cli` で自動削除しようとします。
