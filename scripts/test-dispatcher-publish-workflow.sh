@@ -62,6 +62,24 @@ publish_draft_section() {
   ' "$WORKFLOW"
 }
 
+post_publish_section() {
+  awk '
+    /^  post-publish:/ { printing = 1 }
+    printing { print }
+  ' "$WORKFLOW"
+}
+
+assert_post_publish_before() {
+  earlier=$1
+  later=$2
+  earlier_line=$(post_publish_section | grep -nF -- "$earlier" | head -n 1 | cut -d: -f 1)
+  later_line=$(post_publish_section | grep -nF -- "$later" | head -n 1 | cut -d: -f 1)
+  if [ -z "$earlier_line" ] || [ -z "$later_line" ] || [ "$earlier_line" -ge "$later_line" ]; then
+    echo "Expected post-publish '$earlier' to appear before '$later'." >&2
+    exit 1
+  fi
+}
+
 test_build_and_publish_jobs_have_separate_trust_boundaries() {
   assert_contains "  build:"
   assert_contains "  publish:"
@@ -97,7 +115,8 @@ test_publish_validates_metadata_without_checking_out_source() {
     echo "Publish job must not check out repository source." >&2
     exit 1
   fi
-  if publish_section | grep -E '^[[:space:]]+(run:[[:space:]]+)?(\./)?scripts/' >/dev/null 2>&1; then
+  installer_path_lines=$(publish_section | grep -F "scripts/" || true)
+  if [ "${installer_path_lines}" != "          for installer_path in scripts/install.ps1 scripts/install.sh; do" ]; then
     echo "Publish job must not execute repository scripts." >&2
     exit 1
   fi
@@ -170,6 +189,15 @@ test_dispatcher_release_target_and_prerelease_state_remain_verified() {
   assert_contains 'gh release edit "${RELEASE_TAG}" --draft=false --prerelease'
   assert_contains "      - name: Sync release-please package releases"
   assert_count 2 "      contents: write"
+  if ! post_publish_section | grep -F "      - name: Setup Go" >/dev/null 2>&1; then
+    echo "Post-publish job must set up the pinned Go toolchain." >&2
+    exit 1
+  fi
+  if ! post_publish_section | grep -F "          go-version-file: cli/.go-version" >/dev/null 2>&1 || ! post_publish_section | grep -F "          cache-dependency-path: '**/go.sum'" >/dev/null 2>&1; then
+    echo "Post-publish Go setup must use the repository pin and cache dependency path." >&2
+    exit 1
+  fi
+  assert_post_publish_before "      - name: Setup Go" "      - name: Sync release-please package releases"
 }
 
 test_build_and_publish_jobs_have_separate_trust_boundaries

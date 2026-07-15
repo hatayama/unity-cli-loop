@@ -368,6 +368,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache-dependency-path: '**/go.sum'
+
       - name: Dispatch release-please after native CLI publish
         if: needs.build.outputs.should_publish == 'true' && github.event_name == 'push'
         env:
