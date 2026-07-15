@@ -7,53 +7,30 @@ on:
       - v3-beta
   workflow_dispatch:
     inputs:
-      ref:
-        description: "Git ref to build from (tag, branch, or SHA). Defaults to default branch."
-        required: false
-        default: ""
       dry-run:
         description: "Dry run (skip release upload)"
         type: boolean
         default: false
-
-permissions:
-  contents: write
-  id-token: write
-  attestations: write
-  artifact-metadata: write
 
 concurrency:
   group: dispatcher-publish-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
-    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-beta'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-beta'
+    permissions:
+      contents: read
+    outputs:
+      should_publish: ${{ steps.release.outputs.publish }}
+      should_release: ${{ steps.release.outputs.release }}
+      dry_run: ${{ steps.release.outputs.dry_run }}
     steps:
-      - name: Resolve checkout ref
-        id: checkout
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          EVENT_REF: ${{ github.ref }}
-          EVENT_SHA: ${{ github.sha }}
-          INPUT_REF: ${{ inputs.ref }}
-        run: |
-          set -eu
-
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
-            CHECKOUT_REF="${INPUT_REF:-${EVENT_REF}}"
-          else
-            CHECKOUT_REF="${EVENT_SHA}"
-          fi
-
-          echo "ref=${CHECKOUT_REF}" >> "$GITHUB_OUTPUT"
-          echo "Checkout ref: ${CHECKOUT_REF}"
-
-      - name: Checkout repository
+      - name: Checkout approved event commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          ref: ${{ steps.checkout.outputs.ref }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Resolve dispatcher release target
@@ -63,8 +40,18 @@ jobs:
           EVENT_REF_NAME: ${{ github.ref_name }}
           INPUT_DRY_RUN: ${{ inputs.dry-run }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/resolve-dispatcher-release-target.sh >> "$GITHUB_OUTPUT"
+
+      - name: Verify release target matches build commit
+        if: steps.release.outputs.publish == 'true' || steps.release.outputs.release == 'true'
+        env:
+          TARGET_SHA: ${{ steps.release.outputs.sha }}
         run: |
-          scripts/resolve-dispatcher-release-target.sh >> "$GITHUB_OUTPUT"
+          set -eu
+          if [ "${TARGET_SHA}" != "${GITHUB_SHA}" ]; then
+            echo "Release target ${TARGET_SHA} does not match approved build commit ${GITHUB_SHA}." >&2
+            exit 1
+          fi
 
       - name: Setup Go
         if: steps.release.outputs.publish == 'true' || steps.release.outputs.release == 'true'
@@ -91,181 +78,234 @@ jobs:
         if: steps.release.outputs.publish == 'true'
         run: scripts/verify-dispatcher-release-assets.sh
 
+      - name: Verify release-tagged installer scripts
+        if: steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: ./scripts/check-release-installer.ps1 -Version $env:RELEASE_TAG
+
+      - name: Write release metadata
+        if: steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true'
+        env:
+          TARGET_SHA: ${{ steps.release.outputs.sha }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+          SHOULD_PUBLISH: ${{ steps.release.outputs.publish }}
+          SHOULD_RELEASE: ${{ steps.release.outputs.release }}
+          DRY_RUN: ${{ steps.release.outputs.dry_run }}
+        run: |
+          set -eu
+          mkdir -p release-input
+          {
+            printf 'build_sha=%s\n' "${GITHUB_SHA}"
+            printf 'target_sha=%s\n' "${TARGET_SHA}"
+            printf 'release_tag=%s\n' "${RELEASE_TAG}"
+            printf 'version=%s\n' "${RELEASE_VERSION}"
+            printf 'prerelease=%s\n' "${PRERELEASE}"
+            printf 'publish=%s\n' "${SHOULD_PUBLISH}"
+            printf 'release=%s\n' "${SHOULD_RELEASE}"
+            printf 'dry_run=%s\n' "${DRY_RUN}"
+            printf 'event_ref=%s\n' "${GITHUB_REF}"
+          } > release-input/release-metadata.env
+          if [ "${SHOULD_PUBLISH}" = "true" ]; then
+            shasum -a 256 dist/dispatcher-release/* > release-input/release-assets.manifest
+          else
+            : > release-input/release-assets.manifest
+          fi
+
+      - name: Upload packaged dispatcher assets
+        if: steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dispatcher-release-input
+          path: |
+            dist/dispatcher-release/*
+            release-input/*
+          if-no-files-found: error
+
+      - name: Dry run summary
+        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run == 'true'
+        run: ls -lh dist/dispatcher-release
+
+  publish:
+    needs: build
+    if: (needs.build.outputs.should_publish == 'true' || needs.build.outputs.should_release == 'true') && needs.build.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    environment: cli-release
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download packaged dispatcher assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: dispatcher-release-input
+          path: release-input
+
+      - name: Verify release metadata
+        run: |
+          set -eu
+          metadata_value() {
+            key=$1
+            value=$(grep "^${key}=" release-input/release-metadata.env | cut -d= -f2-)
+            if [ -z "${value}" ]; then
+              echo "Missing release metadata: ${key}." >&2
+              exit 1
+            fi
+            printf '%s\n' "${value}"
+          }
+
+          build_sha=$(metadata_value build_sha)
+          target_sha=$(metadata_value target_sha)
+          release_tag=$(metadata_value release_tag)
+          version=$(metadata_value version)
+          prerelease=$(metadata_value prerelease)
+          should_publish=$(metadata_value publish)
+          should_release=$(metadata_value release)
+          dry_run=$(metadata_value dry_run)
+          event_ref=$(metadata_value event_ref)
+          BUILD_SHA="${build_sha}"
+          TARGET_SHA="${target_sha}"
+          if [ "${BUILD_SHA}" != "${GITHUB_SHA}" ] || [ "${TARGET_SHA}" != "${GITHUB_SHA}" ]; then
+            echo "Build SHA and release target must match the approved event commit." >&2
+            exit 1
+          fi
+          if [ "${event_ref}" != "refs/heads/main" ] && [ "${event_ref}" != "refs/heads/v3-beta" ]; then
+            echo "Unsupported release ref ${event_ref}." >&2
+            exit 1
+          fi
+          if [ "${release_tag}" != "dispatcher-v${version}" ]; then
+            echo "Release tag does not match the resolved version." >&2
+            exit 1
+          fi
+          if [ "${prerelease}" != "true" ] && [ "${prerelease}" != "false" ]; then exit 1; fi
+          if [ "${should_publish}" != "true" ] && [ "${should_publish}" != "false" ]; then exit 1; fi
+          if [ "${should_release}" != "true" ] && [ "${should_release}" != "false" ]; then exit 1; fi
+          if [ "${dry_run}" != "true" ] && [ "${dry_run}" != "false" ]; then exit 1; fi
+          printf 'RELEASE_TAG=%s\n' "${release_tag}" >> "$GITHUB_ENV"
+          printf 'RELEASE_PRERELEASE=%s\n' "${prerelease}" >> "$GITHUB_ENV"
+          printf 'SHOULD_PUBLISH=%s\n' "${should_publish}" >> "$GITHUB_ENV"
+          printf 'DRY_RUN=%s\n' "${dry_run}" >> "$GITHUB_ENV"
+
+      - name: Verify release asset manifest
+        if: env.SHOULD_PUBLISH == 'true'
+        run: |
+          set -eu
+          asset_count=0
+          while IFS=' ' read -r checksum asset_path; do
+            case "${checksum}" in [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]* ) ;; *) exit 1 ;; esac
+            case "${asset_path}" in dist/dispatcher-release/[A-Za-z0-9._+-]* ) ;; *) exit 1 ;; esac
+            full_path="release-input/${asset_path}"
+            [ -s "${full_path}" ]
+            actual_checksum=$(shasum -a 256 "${full_path}" | awk '{print $1}')
+            [ "${actual_checksum}" = "${checksum}" ]
+            asset_count=$((asset_count + 1))
+          done < release-input/release-assets.manifest
+          [ "${asset_count}" -gt 0 ]
+
+      - name: Create or reuse draft dispatcher release
+        id: draft
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          if gh release view "${RELEASE_TAG}" --json isDraft,targetCommitish > release-input/release-state.json 2>/dev/null; then
+            target_sha=$(jq -r '.targetCommitish' release-input/release-state.json)
+            [ "${target_sha}" = "${GITHUB_SHA}" ]
+            is_draft=$(jq -r '.isDraft' release-input/release-state.json)
+            if [ "${is_draft}" = "false" ]; then
+              if [ "${RELEASE_PRERELEASE}" = "true" ]; then
+                release_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.id')
+                gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" -F prerelease=true -F make_latest=false >/dev/null
+              fi
+              echo "release_published=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "release_published=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          prerelease_flag=""
+          latest_flag=""
+          if [ "${RELEASE_PRERELEASE}" = "true" ]; then prerelease_flag="--prerelease"; latest_flag="--latest=false"; fi
+          gh release create "${RELEASE_TAG}" --draft --title "${RELEASE_TAG}" --notes "Dispatcher release ${RELEASE_TAG}." --target "${GITHUB_SHA}" ${prerelease_flag} ${latest_flag}
+          echo "release_published=false" >> "$GITHUB_OUTPUT"
+
       - name: Attest dispatcher release assets
         id: attest
-        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
+        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
         with:
-          subject-path: dist/dispatcher-release/*
+          subject-path: release-input/dist/dispatcher-release/*
 
       - name: Verify dispatcher asset attestations
-        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
+        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           SIGNER_WORKFLOW: ${{ github.repository }}/.github/workflows/dispatcher-publish.yml
         run: |
           set -eu
+          while IFS=' ' read -r checksum asset_path; do
+            gh attestation verify "release-input/${asset_path}" --repo "${GITHUB_REPOSITORY}" --signer-workflow "${SIGNER_WORKFLOW}"
+          done < release-input/release-assets.manifest
 
-          for asset_path in dist/dispatcher-release/*; do
-            gh attestation verify "${asset_path}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --signer-workflow "${SIGNER_WORKFLOW}"
-          done
-
-      - name: Distribute attestation bundles per asset
-        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
+      - name: Attach attestation bundles to dispatcher assets
+        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'
         env:
           BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
         run: |
-          scripts/distribute-attestation-bundles.sh \
-            --bundle "${BUNDLE_PATH}" \
-            --release-dir dist/dispatcher-release
-
-      - name: Upload dispatcher release assets artifact
-        if: steps.release.outputs.publish == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: dispatcher-release-assets-${{ steps.release.outputs.tag }}
-          path: dist/dispatcher-release/*
-          if-no-files-found: error
-
-      - name: Create or reuse draft dispatcher release
-        id: draft
-        if: (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          RELEASE_PRERELEASE: ${{ steps.release.outputs.prerelease }}
-          TARGET_SHA: ${{ steps.release.outputs.sha }}
-        run: |
           set -eu
-          git fetch --force --tags origin
-
-          EXISTING_TAG_SHA=$(git rev-list -n 1 "${RELEASE_TAG}" 2>/dev/null || true)
-          if [ -n "${EXISTING_TAG_SHA}" ] && [ "${EXISTING_TAG_SHA}" != "${TARGET_SHA}" ]; then
-            echo "Dispatcher release tag ${RELEASE_TAG} points at ${EXISTING_TAG_SHA}, expected ${TARGET_SHA}." >&2
-            exit 1
-          fi
-
-          if [ -z "${EXISTING_TAG_SHA}" ]; then
-            git tag "${RELEASE_TAG}" "${TARGET_SHA}"
-            git push origin "refs/tags/${RELEASE_TAG}"
-          fi
-
-          DRAFT_STATE_PATH="${RUNNER_TEMP}/dispatcher-release-draft-${GITHUB_RUN_ID}"
-          if gh release view "${RELEASE_TAG}" --json isDraft --jq '.isDraft' >"${DRAFT_STATE_PATH}" 2>/dev/null; then
-            IS_DRAFT=$(cat "${DRAFT_STATE_PATH}")
-            if [ "${IS_DRAFT}" != "true" ]; then
-              if [ "${RELEASE_PRERELEASE}" = "true" ]; then
-                RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.id')
-                gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" -F prerelease=true -F make_latest=false >/dev/null
-              fi
-
-              echo "release_published=true" >> "$GITHUB_OUTPUT"
-              echo "Dispatcher release ${RELEASE_TAG} is already published; verifying existing assets."
-              exit 0
-            fi
-
-            echo "release_published=false" >> "$GITHUB_OUTPUT"
-            echo "Reusing draft dispatcher release ${RELEASE_TAG}."
-            exit 0
-          fi
-
-          PRERELEASE_FLAG=""
-          LATEST_FLAG=""
-          if [ "${RELEASE_PRERELEASE}" = "true" ]; then
-            PRERELEASE_FLAG="--prerelease"
-            LATEST_FLAG="--latest=false"
-          fi
-
-          gh release create "${RELEASE_TAG}" \
-            --draft \
-            --title "${RELEASE_TAG}" \
-            --notes "Dispatcher release ${RELEASE_TAG}." \
-            --target "${TARGET_SHA}" \
-            ${PRERELEASE_FLAG} \
-            ${LATEST_FLAG}
-
-          echo "release_published=false" >> "$GITHUB_OUTPUT"
-
-      - name: Verify release-tagged installer scripts
-        if: (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true'
-        shell: pwsh
-        env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: |
-          ./scripts/check-release-installer.ps1 -Version $env:RELEASE_TAG
+          [ -s "${BUNDLE_PATH}" ]
+          while IFS=' ' read -r checksum asset_path; do
+            cp "${BUNDLE_PATH}" "release-input/${asset_path}.sigstore.json"
+          done < release-input/release-assets.manifest
 
       - name: Upload dispatcher assets
-        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
+        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: |
-          gh release upload "${RELEASE_TAG}" dist/dispatcher-release/* --clobber
-
-      - name: Verify remote dispatcher release assets
-        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -eu
-          ASSETS_JSON=$(gh release view "${RELEASE_TAG}" --json assets)
-
-          for asset_name in $(scripts/verify-dispatcher-release-assets.sh --list); do
-            ASSET_SIZE=$(printf '%s' "${ASSETS_JSON}" | jq -r --arg name "${asset_name}" '.assets[] | select(.name == $name) | .size')
-            if [ -z "${ASSET_SIZE}" ] || [ "${ASSET_SIZE}" = "null" ]; then
-              echo "Missing remote dispatcher release asset: ${asset_name}" >&2
-              exit 1
-            fi
-
-            if [ "${ASSET_SIZE}" -le 0 ]; then
-              echo "Remote dispatcher release asset is empty: ${asset_name}" >&2
-              exit 1
-            fi
-
-            BUNDLE_NAME="${asset_name}.sigstore.json"
-            BUNDLE_SIZE=$(printf '%s' "${ASSETS_JSON}" | jq -r --arg name "${BUNDLE_NAME}" '.assets[] | select(.name == $name) | .size')
-            if [ -z "${BUNDLE_SIZE}" ] || [ "${BUNDLE_SIZE}" = "null" ]; then
-              echo "Missing remote dispatcher attestation bundle: ${BUNDLE_NAME}" >&2
-              exit 1
-            fi
-
-            if [ "${BUNDLE_SIZE}" -le 0 ]; then
-              echo "Remote dispatcher attestation bundle is empty: ${BUNDLE_NAME}" >&2
-              exit 1
-            fi
-          done
+          while IFS=' ' read -r checksum asset_path; do
+            gh release upload "${RELEASE_TAG}" "release-input/${asset_path}" "release-input/${asset_path}.sigstore.json" --clobber
+          done < release-input/release-assets.manifest
 
       - name: Publish draft dispatcher release
-        if: (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true' && steps.draft.outputs.release_published != 'true'
+        if: env.DRY_RUN != 'true' && steps.draft.outputs.release_published != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          RELEASE_PRERELEASE: ${{ steps.release.outputs.prerelease }}
         run: |
           set -eu
           if [ "${RELEASE_PRERELEASE}" = "true" ]; then
             gh release edit "${RELEASE_TAG}" --draft=false --prerelease
-            RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.id')
-            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" -F prerelease=true -F make_latest=false >/dev/null
+            release_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.id')
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" -F prerelease=true -F make_latest=false >/dev/null
           else
             gh release edit "${RELEASE_TAG}" --draft=false
           fi
 
+  post-publish:
+    needs: [build, publish]
+    if: needs.build.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout approved event commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
       - name: Sync release-please package releases
-        id: package_release_sync
-        if: (steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true') && steps.release.outputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: scripts/sync-release-please-package-releases.sh
-
-      - name: Dry run summary
-        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run == 'true'
-        run: |
-          ls -lh dist/dispatcher-release

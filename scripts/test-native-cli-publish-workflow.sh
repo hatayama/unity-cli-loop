@@ -5,88 +5,107 @@ ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 WORKFLOW="$ROOT_DIR/.github/workflows/native-cli-publish.yml"
 
 assert_contains() {
-  file=$1
-  expected=$2
-  if ! grep -F -- "$expected" "$file" >/dev/null 2>&1; then
-    echo "Expected $file to contain: $expected" >&2
+  expected=$1
+  if ! grep -F -- "$expected" "$WORKFLOW" >/dev/null 2>&1; then
+    echo "Expected workflow to contain: $expected" >&2
+    exit 1
+  fi
+}
+
+assert_not_contains() {
+  unexpected=$1
+  if grep -F -- "$unexpected" "$WORKFLOW" >/dev/null 2>&1; then
+    echo "Expected workflow not to contain: $unexpected" >&2
     exit 1
   fi
 }
 
 line_number() {
-  file=$1
-  text=$2
-  grep -nF -- "$text" "$file" | head -n 1 | cut -d: -f 1
+  text=$1
+  grep -nF -- "$text" "$WORKFLOW" | head -n 1 | cut -d: -f 1
 }
 
 assert_before() {
-  file=$1
-  earlier=$2
-  later=$3
-  earlier_line=$(line_number "$file" "$earlier")
-  later_line=$(line_number "$file" "$later")
+  earlier=$1
+  later=$2
+  earlier_line=$(line_number "$earlier")
+  later_line=$(line_number "$later")
   if [ -z "$earlier_line" ] || [ -z "$later_line" ] || [ "$earlier_line" -ge "$later_line" ]; then
-    echo "Expected '$earlier' to appear before '$later' in $file." >&2
+    echo "Expected '$earlier' to appear before '$later'." >&2
     exit 1
   fi
 }
 
-test_attestation_permissions() {
-  assert_contains "$WORKFLOW" "  actions: write"
-  assert_contains "$WORKFLOW" "  id-token: write"
-  assert_contains "$WORKFLOW" "  attestations: write"
-  assert_contains "$WORKFLOW" "  artifact-metadata: write"
+publish_section() {
+  awk '
+    /^  publish:/ { printing = 1 }
+    /^  post-publish:/ { exit }
+    printing { print }
+  ' "$WORKFLOW"
 }
 
-test_go_is_available_for_package_release_sync() {
-  assert_contains "$WORKFLOW" "      - name: Setup Go"
-  assert_contains "$WORKFLOW" "        if: steps.release.outputs.publish == 'true' || steps.release.outputs.release == 'true'"
-  assert_before "$WORKFLOW" "      - name: Setup Go" "      - name: Sync release-please package releases"
+test_build_and_publish_jobs_have_separate_trust_boundaries() {
+  assert_contains "  build:"
+  assert_contains "  publish:"
+  assert_contains "    needs: build"
+  assert_contains "    environment: cli-release"
+  assert_contains "      contents: read"
+  assert_contains "      contents: write"
+  assert_contains "      id-token: write"
+  assert_contains "      attestations: write"
 }
 
-test_release_assets_are_attested() {
-  assert_contains "$WORKFLOW" "      - name: Attest native CLI release assets"
-  assert_contains "$WORKFLOW" "        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'"
-  assert_contains "$WORKFLOW" "        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26"
-  assert_contains "$WORKFLOW" "          subject-path: dist/release/*"
-  assert_before "$WORKFLOW" "      - name: Verify packaged release assets" "      - name: Attest native CLI release assets"
-  assert_before "$WORKFLOW" "      - name: Attest native CLI release assets" "      - name: Upload native CLI assets"
+test_unprivileged_build_uses_only_the_approved_event_commit() {
+  assert_not_contains "inputs.ref"
+  assert_not_contains "inputs.release-tag"
+  assert_not_contains "INPUT_REF"
+  assert_contains '          ref: ${{ github.sha }}'
+  assert_contains "github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-beta'"
 }
 
-test_release_asset_attestations_are_verified() {
-  assert_contains "$WORKFLOW" "      - name: Verify native CLI asset attestations"
-  assert_contains "$WORKFLOW" '          SIGNER_WORKFLOW: ${{ github.repository }}/.github/workflows/native-cli-publish.yml'
-  assert_contains "$WORKFLOW" '          for asset_path in dist/release/*; do'
-  assert_contains "$WORKFLOW" '            gh attestation verify "${asset_path}" \'
-  assert_contains "$WORKFLOW" '              --repo "${GITHUB_REPOSITORY}" \'
-  assert_contains "$WORKFLOW" '              --signer-workflow "${SIGNER_WORKFLOW}"'
-  assert_before "$WORKFLOW" "      - name: Attest native CLI release assets" "      - name: Verify native CLI asset attestations"
-  assert_before "$WORKFLOW" "      - name: Verify native CLI asset attestations" "      - name: Upload native CLI assets"
+test_publish_validates_metadata_without_checking_out_source() {
+  assert_contains "      - name: Write release metadata"
+  assert_contains "release-metadata.env"
+  assert_contains "release-assets.manifest"
+  assert_contains "      - name: Verify release metadata"
+  assert_contains 'BUILD_SHA="${build_sha}"'
+  assert_contains 'if [ "${BUILD_SHA}" != "${GITHUB_SHA}" ] || [ "${TARGET_SHA}" != "${GITHUB_SHA}" ]; then'
+  assert_contains "      - name: Download packaged release assets"
+  if publish_section | grep -F "actions/checkout" >/dev/null 2>&1; then
+    echo "Publish job must not check out repository source." >&2
+    exit 1
+  fi
+  if publish_section | grep -F "scripts/" >/dev/null 2>&1; then
+    echo "Publish job must not execute repository scripts." >&2
+    exit 1
+  fi
 }
 
-test_release_please_is_dispatched_after_publish() {
-  assert_contains "$WORKFLOW" "      - name: Dispatch release-please after native CLI publish"
-  assert_contains "$WORKFLOW" "        if: github.event_name == 'push' && steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run != 'true'"
-  assert_contains "$WORKFLOW" '          TARGET_BRANCH: ${{ github.ref_name }}'
-  assert_contains "$WORKFLOW" '          gh workflow run release-please.yml --ref "${TARGET_BRANCH}" -f branch="${TARGET_BRANCH}"'
-  assert_before "$WORKFLOW" "      - name: Publish draft release" "      - name: Dispatch release-please after native CLI publish"
-  assert_before "$WORKFLOW" "      - name: Dispatch release-please after native CLI publish" "      - name: Sync release-please package releases"
+test_assets_are_attested_after_the_manifest_is_verified() {
+  assert_contains "      - name: Verify release asset manifest"
+  assert_contains "      - name: Attest native CLI release assets"
+  assert_contains "          subject-path: release-input/dist/release/*"
+  assert_contains "      - name: Attach attestation bundles to release assets"
+  assert_contains "      - name: Upload native CLI assets"
 }
 
-test_native_cli_attestation_bundles_are_distributed_per_asset() {
-  assert_contains "$WORKFLOW" "      - name: Distribute attestation bundles per asset"
-  assert_contains "$WORKFLOW" "          scripts/distribute-attestation-bundles.sh \\"
-  assert_contains "$WORKFLOW" "            --bundle \"\${BUNDLE_PATH}\" \\"
-  assert_contains "$WORKFLOW" "            --release-dir dist/release"
-  assert_before "$WORKFLOW" "      - name: Verify native CLI asset attestations" "      - name: Distribute attestation bundles per asset"
-  assert_before "$WORKFLOW" "      - name: Distribute attestation bundles per asset" "      - name: Upload native CLI assets"
-  assert_contains "$WORKFLOW" "          BUNDLE_NAME=\"\${asset_name}.sigstore.json\""
-  assert_contains "$WORKFLOW" "              echo \"Missing remote native CLI attestation bundle: \${BUNDLE_NAME}\" >&2"
+test_build_verifies_assets_before_writing_the_publish_input() {
+  assert_contains "      - name: Package native CLI release assets"
+  assert_contains "      - name: Verify packaged release assets"
+  assert_before "      - name: Package native CLI release assets" "      - name: Verify packaged release assets"
+  assert_before "      - name: Verify packaged release assets" "      - name: Write release metadata"
 }
 
-test_attestation_permissions
-test_go_is_available_for_package_release_sync
-test_release_assets_are_attested
-test_release_asset_attestations_are_verified
-test_release_please_is_dispatched_after_publish
-test_native_cli_attestation_bundles_are_distributed_per_asset
+test_post_publish_automation_remains_outside_the_privileged_job() {
+  assert_contains "  post-publish:"
+  assert_contains "      - name: Dispatch release-please after native CLI publish"
+  assert_contains "      - name: Sync release-please package releases"
+  assert_contains "      - name: Mark release PR as tagged"
+}
+
+test_build_and_publish_jobs_have_separate_trust_boundaries
+test_unprivileged_build_uses_only_the_approved_event_commit
+test_publish_validates_metadata_without_checking_out_source
+test_assets_are_attested_after_the_manifest_is_verified
+test_build_verifies_assets_before_writing_the_publish_input
+test_post_publish_automation_remains_outside_the_privileged_job
