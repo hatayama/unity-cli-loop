@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using Newtonsoft.Json.Linq;
@@ -59,17 +60,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// Verifies the contract permits a symlinked parent but never a symlinked endpoint directory.
+        /// </summary>
+        [Test]
+        public void UnixSecurityPolicy_WhenRead_DefinesParentAndEndpointSymlinkBoundary()
+        {
+            JObject contract = ReadEndpointContract();
+            JObject policy = contract.Value<JObject>("unixSecurityPolicy");
+
+            Assert.That(policy, Is.Not.Null);
+            Assert.That(policy.Value<string>("parentPath"), Is.EqualTo("/tmp"));
+            Assert.That(policy.Value<bool>("parentMayBeSymbolicLink"), Is.True);
+            Assert.That(policy.Value<uint>("resolvedParentOwnerUid"), Is.EqualTo(0));
+            Assert.That(policy.Value<bool>("resolvedParentRequiresStickyBit"), Is.True);
+            Assert.That(policy.Value<bool>("endpointDirectoryMayBeSymbolicLink"), Is.False);
+            Assert.That(policy.Value<string>("endpointDirectoryMode"), Is.EqualTo("0700"));
+            Assert.That(
+                policy.Value<JArray>("endpointDirectoryRejectedSpecialModes")?.Values<string>(),
+                Is.EqualTo(new[] { "04700", "02700" }));
+            Assert.That(policy.Value<string>("socketMode"), Is.EqualTo("0600"));
+        }
+
         private static IEnumerable<JObject> ReadEndpointContractCases()
         {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            string json = File.ReadAllText(Path.Combine(projectRoot, SharedEndpointContractPath));
-            JObject contract = JObject.Parse(json);
+            JObject contract = ReadEndpointContract();
             JArray cases = contract.Value<JArray>("cases");
             Assert.That(cases, Is.Not.Null.And.Not.Empty);
             foreach (JToken caseToken in cases)
             {
                 yield return (JObject)caseToken;
             }
+        }
+
+        private static JObject ReadEndpointContract()
+        {
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            string json = File.ReadAllText(Path.Combine(projectRoot, SharedEndpointContractPath));
+            return JObject.Parse(json);
         }
 
         private static bool CanExerciseProjectRootOnCurrentPlatform(string projectRoot)
@@ -90,7 +118,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return contractCase.Value<string>("windowsPipePath");
             }
 
-            return contractCase.Value<string>("unixSocketPath");
+            string template = contractCase.Value<string>("unixSocketPathTemplate");
+            uint effectiveUserId = new UnixNativeFileSystem().GetEffectiveUserId();
+            return template.Replace("<UID>", effectiveUserId.ToString(CultureInfo.InvariantCulture));
         }
     }
 }

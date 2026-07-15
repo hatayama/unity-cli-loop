@@ -4,22 +4,37 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 )
 
 const endpointContractPath = "tests/contracts/endpoint_contract.json"
 
 type endpointContractFile struct {
-	Comment string                 `json:"comment"`
-	Cases   []endpointContractCase `json:"cases"`
+	Comment            string                     `json:"comment"`
+	UnixSecurityPolicy endpointUnixSecurityPolicy `json:"unixSecurityPolicy"`
+	Cases              []endpointContractCase     `json:"cases"`
+}
+
+type endpointUnixSecurityPolicy struct {
+	ParentPath                            string   `json:"parentPath"`
+	ParentMayBeSymbolicLink               bool     `json:"parentMayBeSymbolicLink"`
+	ResolvedParentOwnerUID                uint32   `json:"resolvedParentOwnerUid"`
+	ResolvedParentRequiresStickyBit       bool     `json:"resolvedParentRequiresStickyBit"`
+	EndpointDirectoryMayBeSymlink         bool     `json:"endpointDirectoryMayBeSymbolicLink"`
+	EndpointDirectoryMode                 string   `json:"endpointDirectoryMode"`
+	EndpointDirectoryRejectedSpecialModes []string `json:"endpointDirectoryRejectedSpecialModes"`
+	SocketMode                            string   `json:"socketMode"`
 }
 
 type endpointContractCase struct {
 	ID                      string   `json:"id"`
 	CanonicalProjectRoot    string   `json:"canonicalProjectRoot"`
 	TrimOnlyEquivalentRoots []string `json:"trimOnlyEquivalentRoots"`
-	UnixSocketPath          string   `json:"unixSocketPath"`
+	UnixSocketPathTemplate  string   `json:"unixSocketPathTemplate"`
 	WindowsPipePath         string   `json:"windowsPipePath"`
 }
 
@@ -49,12 +64,38 @@ func assertEndpointMatchesContract(t *testing.T, projectRoot string, contractCas
 	t.Helper()
 
 	endpoint := CreateEndpoint(projectRoot)
-	expected := contractCase.UnixSocketPath
+	expected := strings.ReplaceAll(
+		contractCase.UnixSocketPathTemplate,
+		"<UID>",
+		strconv.Itoa(os.Geteuid()),
+	)
 	if runtime.GOOS == "windows" {
 		expected = contractCase.WindowsPipePath
 	}
 	if endpoint.Address != expected {
 		t.Fatalf("endpoint mismatch for %q\nexpected: %s\nactual:   %s", projectRoot, expected, endpoint.Address)
+	}
+}
+
+// Verifies the shared contract allows a symlinked parent while forbidding a symlinked endpoint directory.
+func TestEndpointContractDefinesUnixSymlinkBoundary(t *testing.T) {
+	contract := readEndpointContract(t)
+	policy := contract.UnixSecurityPolicy
+
+	if policy.ParentPath != "/tmp" || !policy.ParentMayBeSymbolicLink {
+		t.Fatalf("expected /tmp parent symlink allowance, got %#v", policy)
+	}
+	if policy.ResolvedParentOwnerUID != 0 || !policy.ResolvedParentRequiresStickyBit {
+		t.Fatalf("expected root-owned sticky resolved parent, got %#v", policy)
+	}
+	if policy.EndpointDirectoryMayBeSymlink {
+		t.Fatal("endpoint directory must reject symbolic links")
+	}
+	if policy.EndpointDirectoryMode != "0700" || policy.SocketMode != "0600" {
+		t.Fatalf("unexpected Unix endpoint modes: %#v", policy)
+	}
+	if !reflect.DeepEqual(policy.EndpointDirectoryRejectedSpecialModes, []string{"04700", "02700"}) {
+		t.Fatalf("expected set-ID modes to be rejected: %#v", policy)
 	}
 }
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using UnityEngine;
@@ -41,9 +42,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     pipeName);
             }
 
+            uint effectiveUserId = new UnixNativeFileSystem().GetEffectiveUserId();
+            string endpointDirectory = System.IO.Path.Combine(
+                UnixEndpointSecurityConstants.ParentPath,
+                UnixEndpointSecurityConstants.EndpointDirectoryPrefix +
+                effectiveUserId.ToString(CultureInfo.InvariantCulture));
             return new BridgeTransportEndpoint(
                 BridgeTransportKind.UnixDomainSocket,
-                System.IO.Path.Combine("/tmp/uloop", endpointName + ".sock"),
+                System.IO.Path.Combine(endpointDirectory, endpointName + ".sock"),
                 string.Empty);
         }
 

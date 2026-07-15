@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
@@ -17,7 +18,8 @@ import (
 const (
 	ipcEndpointPrefix = "UnityCliLoop"
 	ipcHashLength     = 16
-	unixSocketDir     = "/tmp/uloop"
+	unixSocketParent  = "/tmp"
+	unixSocketPrefix  = "uloop-"
 	windowsPipePrefix = `\\.\pipe\uloop`
 )
 
@@ -33,6 +35,13 @@ var excludedProjectSearchDirs = map[string]bool{
 }
 
 func ResolveConnection(startPath string, explicitProjectPath string) (unityipc.Connection, error) {
+	return resolveConnection(startPath, explicitProjectPath)
+}
+
+func resolveConnection(
+	startPath string,
+	explicitProjectPath string,
+) (unityipc.Connection, error) {
 	projectRoot, err := resolveProjectRoot(startPath, explicitProjectPath)
 	if err != nil {
 		return unityipc.Connection{}, err
@@ -61,7 +70,11 @@ func CreateEndpoint(canonicalProjectRoot string) unityipc.Endpoint {
 
 	return unityipc.Endpoint{
 		Network: "unix",
-		Address: filepath.Join(unixSocketDir, endpointName+".sock"),
+		Address: filepath.Join(
+			unixSocketParent,
+			unixSocketPrefix+strconv.Itoa(os.Geteuid()),
+			endpointName+".sock",
+		),
 	}
 }
 

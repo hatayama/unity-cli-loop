@@ -7,9 +7,9 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     {
         public const string EXECUTABLE_NAME = "uloop";
         // Why: the runtime IPC gate compares this contract generation, not release numbers.
-        // Bump it together with cli/contract.json protocolVersion only when this package can
+        // Bump it together with cli/common/clicontract/contract.json protocolVersion only when this package can
         // no longer interoperate with a different CLI protocol generation.
-        public const int REQUIRED_CLI_PROTOCOL_VERSION = 3;
+        public const int REQUIRED_CLI_PROTOCOL_VERSION = 4;
         public const string VERSION_FLAG = "--version";
         public const string SHORT_VERSION_FLAG = "-v";
         public const string JSON_FLAG = "--json";

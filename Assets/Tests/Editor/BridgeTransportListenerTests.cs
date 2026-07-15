@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Threading;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 
@@ -67,6 +69,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.Throws<ObjectDisposedException>(
                 () => listener.AcceptClient(CancellationToken.None));
+        }
+
+        /// <summary>
+        /// Verifies listener startup leaves an untrusted regular file untouched instead of deleting it.
+        /// </summary>
+        [Test]
+        public void Start_WhenEndpointPathIsRegularFile_FailsWithoutDeletingFile()
+        {
+            string endpointDirectory = Path.GetDirectoryName(_endpoint.Path);
+            UnixEndpointSecurityResult directoryResult = new UnixEndpointSecurityPolicy(new UnixNativeFileSystem())
+                .EnsureEndpointDirectory(endpointDirectory);
+            Assert.That(directoryResult.Success, Is.True, directoryResult.ErrorMessage);
+            File.WriteAllText(_endpoint.Path, "untrusted");
+            UnixDomainSocketBridgeTransportListener listener = new(_endpoint);
+
+            Assert.Throws<IOException>(() => listener.Start());
+            Assert.That(File.Exists(_endpoint.Path), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies listener startup uses a 0700 directory and creates a 0600 Unix socket.
+        /// </summary>
+        [Test]
+        public void Start_WhenSuccessful_UsesOwnerOnlyDirectoryAndSocket()
+        {
+            UnixDomainSocketBridgeTransportListener listener = new(_endpoint);
+            listener.Start();
+            UnixNativeFileSystem fileSystem = new();
+
+            UnixFileMetadata directoryMetadata = fileSystem.ReadMetadata(
+                Path.GetDirectoryName(_endpoint.Path),
+                followSymbolicLinks: false);
+            UnixFileMetadata socketMetadata = fileSystem.ReadMetadata(
+                _endpoint.Path,
+                followSymbolicLinks: false);
+
+            Assert.That(directoryMetadata.Kind, Is.EqualTo(UnixFileKind.Directory));
+            Assert.That(directoryMetadata.Mode, Is.EqualTo(0x1C0));
+            Assert.That(socketMetadata.Kind, Is.EqualTo(UnixFileKind.Socket));
+            Assert.That(socketMetadata.Mode, Is.EqualTo(0x180));
+            listener.Stop();
+        }
+
+        /// <summary>
+        /// Verifies teardown warns and preserves an untrusted replacement instead of throwing or deleting it.
+        /// </summary>
+        [Test]
+        public void Stop_WhenSocketWasReplacedWithRegularFile_WarnsAndPreservesFile()
+        {
+            UnixDomainSocketBridgeTransportListener listener = new(_endpoint);
+            listener.Start();
+            File.Delete(_endpoint.Path);
+            File.WriteAllText(_endpoint.Path, "replacement");
+            LogAssert.Expect(
+                LogType.Warning,
+                new System.Text.RegularExpressions.Regex("Refusing to remove untrusted existing Unix endpoint"));
+
+            Assert.DoesNotThrow(() => listener.Stop());
+            Assert.That(File.Exists(_endpoint.Path), Is.True);
         }
     }
 
