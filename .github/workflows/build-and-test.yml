@@ -50,6 +50,7 @@ jobs:
           scripts/test-dispatcher-publish-workflow.sh
           scripts/test-distribute-attestation-bundles.sh
           scripts/test-install-release-filter.sh
+          scripts/test-bootstrap-manifest-from-bundle.sh
 
       - name: Check IPC protocol reminder
         if: github.event_name == 'pull_request'
