@@ -62,10 +62,11 @@ expect_fail() {
   fi
 }
 
-# 1. Unset env: manifest check must skip silently so a first-time README
-#    bootstrap install (curl | sh) keeps working.
+# 1. Unset env: first installation has no preverified manifest, so accepting
+#    it would permit the same-origin checksum-only fallback that the approved
+#    trust model forbids.
 unset ULOOP_ARCHIVE_MANIFEST || true
-expect_pass "unset manifest skips silently"
+expect_fail "unset manifest fails closed"
 
 # 2. Matching manifest entry: accept and continue.
 ULOOP_ARCHIVE_MANIFEST="$actual_hash  $asset_name

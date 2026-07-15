@@ -153,6 +153,7 @@ var sharedCommonPackageRoots = []string{
 	"cli/common/clicontract/",
 	"cli/common/clicore/",
 	"cli/common/errors/",
+	"cli/common/ipcendpoint/",
 	"cli/common/progress/",
 	"cli/common/project/",
 	"cli/common/skillscan/",

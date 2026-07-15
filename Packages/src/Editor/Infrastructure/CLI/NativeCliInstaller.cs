@@ -19,12 +19,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public static NativeCliInstallCommand GetInstallCommand(
             RuntimePlatform platform,
-            string cliReleaseTag,
+            string dispatcherReleaseTag,
+            string dispatcherArchiveManifest,
             bool removeLegacyLaunchers)
         {
             return NativeCliCommandBuilder.BuildInstallCommandWithPackagePath(
                 platform,
-                cliReleaseTag,
+                dispatcherReleaseTag,
+                dispatcherArchiveManifest,
                 removeLegacyLaunchers,
                 NodeEnvironmentResolver.GetUserShell(),
                 UnityCliLoopConstants.PackageResolvedPath);
@@ -32,10 +34,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public static async Task<CliInstallResult> InstallAsync(
             RuntimePlatform platform,
-            string cliReleaseTag,
+            string dispatcherReleaseTag,
+            string dispatcherArchiveManifest,
             CancellationToken ct)
         {
-            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(cliReleaseTag), "cliReleaseTag must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(dispatcherReleaseTag), "dispatcherReleaseTag must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(dispatcherArchiveManifest), "dispatcherArchiveManifest must not be null or empty");
             ct.ThrowIfCancellationRequested();
 
             string installDirectory = NativeCliInstallPathResolver.GetInstallDirectoryForCurrentUser(platform);
@@ -46,7 +50,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     $"Could not resolve the global CLI install directory. Set {CliConstants.INSTALL_DIR_ENVIRONMENT_VARIABLE} and try again.");
             }
 
-            NativeCliInstallCommand command = GetInstallCommand(platform, cliReleaseTag, true);
+            NativeCliInstallCommand command = GetInstallCommand(
+                platform,
+                dispatcherReleaseTag,
+                dispatcherArchiveManifest,
+                true);
             CliInstallResult result = await Task.Run(
                 () => NativeCliSetupCommandRunner.RunInstallCommand(command, ct, INSTALL_PROCESS_TIMEOUT_MS),
                 ct);
@@ -174,11 +182,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public Task<CliInstallResult> InstallGlobalCliAsync(
             RuntimePlatform platform,
-            string cliReleaseTag,
+            string dispatcherReleaseTag,
+            string dispatcherArchiveManifest,
             CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
-            return NativeCliInstaller.InstallAsync(platform, cliReleaseTag, ct);
+            return NativeCliInstaller.InstallAsync(platform, dispatcherReleaseTag, dispatcherArchiveManifest, ct);
         }
 
         public Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
@@ -198,12 +207,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return CliPathSetupWriter.ApplyToFileSystem(plan);
         }
 
-        public NativeCliInstallCommand GetGlobalCliInstallCommand(
+        public NativeCliInstallCommandLoadResult GetGlobalCliInstallCommand(
             RuntimePlatform platform,
-            string cliReleaseTag,
+            string dispatcherReleaseTag,
+            string dispatcherArchiveManifest,
             bool removeLegacyLaunchers)
         {
-            return NativeCliInstaller.GetInstallCommand(platform, cliReleaseTag, removeLegacyLaunchers);
+            NativeCliInstallCommand command = NativeCliInstaller.GetInstallCommand(
+                platform,
+                dispatcherReleaseTag,
+                dispatcherArchiveManifest,
+                removeLegacyLaunchers);
+            return NativeCliInstallCommandLoadResult.FromSuccess(command);
         }
     }
 }

@@ -1,8 +1,8 @@
-// Refreshes the Sigstore trusted_root.json embedded by cli/dispatcher/internal/attestation.
+// Refreshes the Sigstore trusted_root.json embedded by cli/dispatcher/attestation.
 //
 // Run this from the dispatcher module root to fetch the current Sigstore
 // public-good trusted_root.json via TUF and write it as
-// internal/attestation/trusted_root.json. The dispatcher then embeds that
+// attestation/trusted_root.json. The dispatcher then embeds that
 // file so verification stays offline at runtime. Refresh cadence is
 // quarterly; the attestation package has a CI guard test that fails when
 // any embedded authority's validity window is within 90 days of expiring,
@@ -40,7 +40,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("get trusted_root.json target: %w", err)
 	}
-	outputPath := filepath.Join("internal", "attestation", "trusted_root.json")
+	outputPath := filepath.Join("attestation", "trusted_root.json")
 	if err := os.WriteFile(outputPath, target, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", outputPath, err)
 	}
