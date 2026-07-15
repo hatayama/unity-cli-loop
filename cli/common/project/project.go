@@ -35,13 +35,12 @@ var excludedProjectSearchDirs = map[string]bool{
 }
 
 func ResolveConnection(startPath string, explicitProjectPath string) (unityipc.Connection, error) {
-	return resolveConnection(startPath, explicitProjectPath, platformEndpointDirectoryValidator{})
+	return resolveConnection(startPath, explicitProjectPath)
 }
 
 func resolveConnection(
 	startPath string,
 	explicitProjectPath string,
-	validator endpointDirectoryValidator,
 ) (unityipc.Connection, error) {
 	projectRoot, err := resolveProjectRoot(startPath, explicitProjectPath)
 	if err != nil {
@@ -54,13 +53,8 @@ func resolveConnection(
 	}
 	canonicalProjectRoot = trimTrailingSeparators(canonicalProjectRoot)
 
-	endpoint := CreateEndpoint(canonicalProjectRoot)
-	if err := validator.Validate(endpoint); err != nil {
-		return unityipc.Connection{}, err
-	}
-
 	return unityipc.Connection{
-		Endpoint:    endpoint,
+		Endpoint:    CreateEndpoint(canonicalProjectRoot),
 		ProjectRoot: canonicalProjectRoot,
 	}, nil
 }

@@ -110,7 +110,7 @@ func TestResolveConnection_WhenSettingsFileIsMissing_ShouldUseProjectPathEndpoin
 	projectRoot := t.TempDir()
 	createUnityProject(t, projectRoot)
 
-	connection, err := resolveConnection(projectRoot, "", allowEndpointDirectoryValidator{})
+	connection, err := resolveConnection(projectRoot, "")
 	if err != nil {
 		t.Fatalf("ResolveConnection failed: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestResolveConnection_WhenSettingsFileContainsStaleRuntimeState_ShouldIgnor
 		t.Fatalf("failed to write stale settings: %v", err)
 	}
 
-	connection, err := resolveConnection(projectRoot, "", allowEndpointDirectoryValidator{})
+	connection, err := resolveConnection(projectRoot, "")
 	if err != nil {
 		t.Fatalf("ResolveConnection failed: %v", err)
 	}
@@ -346,10 +346,4 @@ func assertProjectConnection(t *testing.T, connection unityipc.Connection, proje
 	if connection.Endpoint != CreateEndpoint(canonicalProjectRoot) {
 		t.Fatalf("endpoint mismatch: %#v", connection.Endpoint)
 	}
-}
-
-type allowEndpointDirectoryValidator struct{}
-
-func (allowEndpointDirectoryValidator) Validate(endpoint unityipc.Endpoint) error {
-	return nil
 }

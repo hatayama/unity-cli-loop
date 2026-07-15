@@ -44,6 +44,11 @@ func classifyTypedError(err error, context ErrorContext) (CLIError, bool) {
 }
 
 func classifyUnityConnectionError(err error, context ErrorContext) (CLIError, bool) {
+	var endpointNotCreatedErr UnityEndpointNotCreatedError
+	if errors.As(err, &endpointNotCreatedErr) {
+		return unityEndpointNotCreatedCLIError(endpointNotCreatedErr, context), true
+	}
+
 	var notRespondingErr UnityServerNotRespondingError
 	if errors.As(err, &notRespondingErr) {
 		return unityServerNotRespondingCLIError(notRespondingErr, context), true
