@@ -29,6 +29,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Resolve release target
         id: release
@@ -124,8 +125,8 @@ jobs:
         with:
           name: native-cli-release-input
           path: |
-            dist/release/*
-            release-input/*
+            dist/release
+            release-input
           if-no-files-found: error
 
       - name: Dry run summary
@@ -142,12 +143,13 @@ jobs:
       contents: write
       id-token: write
       attestations: write
+      artifact-metadata: write
     steps:
       - name: Download packaged release assets
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: native-cli-release-input
-          path: release-input
+          path: .
 
       - name: Verify release metadata
         env:
@@ -186,9 +188,17 @@ jobs:
             echo "Release tag does not match the resolved version." >&2
             exit 1
           fi
-          if [ "${should_publish}" != "true" ] && [ "${should_publish}" != "false" ]; then exit 1; fi
-          if [ "${should_release}" != "true" ] && [ "${should_release}" != "false" ]; then exit 1; fi
-          if [ "${dry_run}" != "true" ] && [ "${dry_run}" != "false" ]; then exit 1; fi
+          validate_boolean() {
+            field_name=$1
+            field_value=$2
+            if [ "${field_value}" != "true" ] && [ "${field_value}" != "false" ]; then
+              echo "Invalid boolean metadata value for ${field_name}: ${field_value}." >&2
+              exit 1
+            fi
+          }
+          validate_boolean publish "${should_publish}"
+          validate_boolean release "${should_release}"
+          validate_boolean dry_run "${dry_run}"
           printf 'RELEASE_TAG=%s\n' "${release_tag}" >> "$GITHUB_ENV"
           printf 'SHOULD_PUBLISH=%s\n' "${should_publish}" >> "$GITHUB_ENV"
           printf 'SHOULD_RELEASE=%s\n' "${should_release}" >> "$GITHUB_ENV"
@@ -198,6 +208,21 @@ jobs:
         if: env.SHOULD_PUBLISH == 'true'
         run: |
           set -eu
+          manifest_paths="${RUNNER_TEMP}/native-cli-manifest-paths"
+          actual_paths="${RUNNER_TEMP}/native-cli-actual-paths"
+          awk '{ print $2 }' release-input/release-assets.manifest | sed 's#^dist/release/##' | sort > "${manifest_paths}"
+          find release-input/dist/release -maxdepth 1 -type f -printf '%f\n' | sort > "${actual_paths}"
+          manifest_count=$(wc -l < "${manifest_paths}" | tr -d ' ')
+          unique_manifest_count=$(uniq "${manifest_paths}" | wc -l | tr -d ' ')
+          if [ "${manifest_count}" -ne "${unique_manifest_count}" ]; then
+            echo "Release manifest is missing files or has duplicate entries." >&2
+            exit 1
+          fi
+          if ! cmp -s "${manifest_paths}" "${actual_paths}"; then
+            echo "Unexpected release files are not listed in the manifest." >&2
+            echo "Release manifest is missing files or has duplicate entries." >&2
+            exit 1
+          fi
           asset_count=0
           while IFS=' ' read -r checksum asset_path; do
             case "${checksum}" in [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]* ) ;; *) exit 1 ;; esac
@@ -215,11 +240,26 @@ jobs:
         if: env.DRY_RUN != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -eu
+          tag_error_path="${RUNNER_TEMP}/native-cli-release-tag-error"
+          set +e
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '.sha' 2> "${tag_error_path}")
+          tag_status=$?
+          set -e
+          if [ "${tag_status}" -ne 0 ]; then
+            tag_error=$(cat "${tag_error_path}")
+            case "${tag_error}" in
+              *"HTTP 404"*|*"Not Found"*) tag_sha="" ;;
+              *) printf '%s\n' "${tag_error}" >&2; exit "${tag_status}" ;;
+            esac
+          fi
+          if [ -n "${tag_sha}" ] && [ "${tag_sha}" != "${GITHUB_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match approved build commit ${GITHUB_SHA}." >&2
+            exit 1
+          fi
           if gh release view "${RELEASE_TAG}" --json isDraft,targetCommitish > release-input/release-state.json 2>/dev/null; then
-            target_sha=$(jq -r '.targetCommitish' release-input/release-state.json)
-            [ "${target_sha}" = "${GITHUB_SHA}" ]
             is_draft=$(jq -r '.isDraft' release-input/release-state.json)
             if [ "${is_draft}" = "false" ]; then
               echo "release_published=true" >> "$GITHUB_OUTPUT"
@@ -268,6 +308,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '.sha')
+          if [ "${tag_sha}" != "${GITHUB_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match approved build commit ${GITHUB_SHA}." >&2
+            exit 1
+          fi
           while IFS=' ' read -r checksum asset_path; do
             gh release upload "${RELEASE_TAG}" "release-input/${asset_path}" "release-input/${asset_path}.sigstore.json" --clobber
           done < release-input/release-assets.manifest
@@ -286,7 +331,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: write
-      contents: read
+      contents: write
       issues: write
       pull-requests: write
     steps:
@@ -295,6 +340,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Dispatch release-please after native CLI publish
         if: needs.build.outputs.should_publish == 'true' && github.event_name == 'push'
