@@ -870,6 +870,31 @@ func TestLoadDispatcherPinNormalizesVersionPrefixes(t *testing.T) {
 	}
 }
 
+func TestLoadDispatcherPinIgnoresBootstrapFields(t *testing.T) {
+	// Verifies old dispatchers ignore additive bootstrap fields and retain their existing pin behavior.
+	projectRoot := createDispatcherUnityProject(t)
+	pinPath := filepath.Join(projectRoot, dispatcherProjectPinRelativePath)
+	if err := os.MkdirAll(filepath.Dir(pinPath), 0o755); err != nil {
+		t.Fatalf("failed to create pin directory: %v", err)
+	}
+	content := `{"projectRunnerVersion":"3.0.0-beta.58","minimumDispatcherVersion":"3.0.0-beta.39","dispatcherReleaseTag":"dispatcher-v3.0.1","dispatcherArchiveManifest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  install.sh"}`
+	if err := os.WriteFile(pinPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write pin: %v", err)
+	}
+
+	pin, err := loadDispatcherPin(projectRoot)
+
+	if err != nil {
+		t.Fatalf("loadDispatcherPin failed: %v", err)
+	}
+	if pin.ProjectRunnerVersion != "3.0.0-beta.58" {
+		t.Fatalf("projectRunnerVersion mismatch: %s", pin.ProjectRunnerVersion)
+	}
+	if pin.MinimumDispatcherVersion != "3.0.0-beta.39" {
+		t.Fatalf("minimumDispatcherVersion mismatch: %s", pin.MinimumDispatcherVersion)
+	}
+}
+
 func TestLoadDispatcherPinRejectsInvalidProjectRunnerVersion(t *testing.T) {
 	// Verifies project pin projectRunnerVersion must be a release version, not a filesystem path.
 	projectRoot := createDispatcherUnityProject(t)
