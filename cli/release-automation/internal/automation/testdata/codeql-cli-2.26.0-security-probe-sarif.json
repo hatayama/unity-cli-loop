@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "CodeQL",
+          "semanticVersion": "2.26.0"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "cs/command-line-injection",
+          "message": {
+            "text": "This command line depends on a user-provided value."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "Packages/src/CodeQLSecurityProbe.cs"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "properties": {
+        "probeQueryPack": "codeql/csharp-queries@1.7.5",
+        "probeQuerySuite": "security-extended"
+      }
+    }
+  ]
+}

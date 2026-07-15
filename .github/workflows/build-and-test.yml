@@ -40,6 +40,7 @@ jobs:
           scripts/test-is-release-please-release-commit.sh
           scripts/test-release-please-config.sh
           scripts/test-protocol-minimum-version-workflow.sh
+          scripts/test-security-scan-workflow.sh
           scripts/test-verify-native-cli-release-assets.sh
           scripts/test-verify-dispatcher-release-assets.sh
           scripts/test-mark-release-pr-tagged.sh
