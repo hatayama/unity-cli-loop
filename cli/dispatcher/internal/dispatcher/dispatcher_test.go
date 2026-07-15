@@ -1008,6 +1008,19 @@ func TestDispatcherReleaseAssetNameRejectsUnsupportedPlatform(t *testing.T) {
 	}
 }
 
+func TestResolveDispatcherProjectRootLaunchDoesNotRequireExistingEndpointDirectory(t *testing.T) {
+	// Verifies first launch resolves the Unity project before its private IPC directory exists.
+	projectRoot := createDispatcherUnityProject(t)
+
+	resolved, err := resolveDispatcherProjectRoot(projectRoot, "", []string{"launch"})
+	if err != nil {
+		t.Fatalf("first launch project resolution failed: %v", err)
+	}
+	if resolved != projectRoot {
+		t.Fatalf("unexpected launch project root: got %s want %s", resolved, projectRoot)
+	}
+}
+
 func createDispatcherUnityProject(t *testing.T) string {
 	t.Helper()
 	projectRoot := t.TempDir()

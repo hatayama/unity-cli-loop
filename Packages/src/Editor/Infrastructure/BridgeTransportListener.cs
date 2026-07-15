@@ -85,6 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal sealed class UnixDomainSocketBridgeTransportListener : IBridgeTransportListener
     {
+        private readonly UnixEndpointSecurityPolicy _securityPolicy = new(new UnixNativeFileSystem());
         private Socket _listener;
         private long _nextClientId;
 
@@ -98,11 +99,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public void Start()
         {
             string directory = Path.GetDirectoryName(Endpoint.Path);
-            if (!Directory.Exists(directory))
+            UnixEndpointSecurityResult directoryResult = _securityPolicy.EnsureEndpointDirectory(directory);
+            if (!directoryResult.Success)
             {
-                Directory.CreateDirectory(directory);
+                throw new IOException(directoryResult.ErrorMessage);
             }
 
+            UnixEndpointSecurityResult staleSocketResult = _securityPolicy.ValidateStaleSocket(Endpoint.Path);
+            if (!staleSocketResult.Success)
+            {
+                throw new IOException(staleSocketResult.ErrorMessage);
+            }
             if (File.Exists(Endpoint.Path))
             {
                 File.Delete(Endpoint.Path);
@@ -110,6 +117,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             _listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             _listener.Bind(new UnixDomainSocketEndPoint(Endpoint.Path));
+            UnixEndpointSecurityResult socketModeResult = _securityPolicy.RestrictSocket(Endpoint.Path);
+            if (!socketModeResult.Success)
+            {
+                _listener.Close();
+                _listener = null;
+                throw new IOException(socketModeResult.ErrorMessage);
+            }
             _listener.Listen(100);
         }
 
@@ -160,6 +174,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             listener.Close();
             if (File.Exists(Endpoint.Path))
             {
+                UnixEndpointSecurityResult staleSocketResult = _securityPolicy.ValidateStaleSocket(Endpoint.Path);
+                if (!staleSocketResult.Success)
+                {
+                    // Why cleanup does not throw: refusing to delete an untrusted replacement is
+                    // already the safe outcome, while domain-reload teardown must remain reliable.
+                    UnityEngine.Debug.LogWarning(staleSocketResult.ErrorMessage);
+                    return;
+                }
                 File.Delete(Endpoint.Path);
             }
         }

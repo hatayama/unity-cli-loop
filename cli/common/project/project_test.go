@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -22,7 +23,10 @@ func TestCreateEndpointUsesStableProjectHash(t *testing.T) {
 		return
 	}
 
-	expectedPrefix := filepath.Join("/tmp/uloop", "UnityCliLoop-")
+	expectedPrefix := filepath.Join(
+		"/tmp/uloop-"+strconv.Itoa(os.Geteuid()),
+		"UnityCliLoop-",
+	)
 	if !strings.HasPrefix(endpoint.Address, expectedPrefix) {
 		t.Fatalf("unexpected unix endpoint: %s", endpoint.Address)
 	}
@@ -106,7 +110,7 @@ func TestResolveConnection_WhenSettingsFileIsMissing_ShouldUseProjectPathEndpoin
 	projectRoot := t.TempDir()
 	createUnityProject(t, projectRoot)
 
-	connection, err := ResolveConnection(projectRoot, "")
+	connection, err := resolveConnection(projectRoot, "", allowEndpointDirectoryValidator{})
 	if err != nil {
 		t.Fatalf("ResolveConnection failed: %v", err)
 	}
@@ -127,7 +131,7 @@ func TestResolveConnection_WhenSettingsFileContainsStaleRuntimeState_ShouldIgnor
 		t.Fatalf("failed to write stale settings: %v", err)
 	}
 
-	connection, err := ResolveConnection(projectRoot, "")
+	connection, err := resolveConnection(projectRoot, "", allowEndpointDirectoryValidator{})
 	if err != nil {
 		t.Fatalf("ResolveConnection failed: %v", err)
 	}
@@ -342,4 +346,10 @@ func assertProjectConnection(t *testing.T, connection unityipc.Connection, proje
 	if connection.Endpoint != CreateEndpoint(canonicalProjectRoot) {
 		t.Fatalf("endpoint mismatch: %#v", connection.Endpoint)
 	}
+}
+
+type allowEndpointDirectoryValidator struct{}
+
+func (allowEndpointDirectoryValidator) Validate(endpoint unityipc.Endpoint) error {
+	return nil
 }
