@@ -56,6 +56,16 @@ dispatcher release must be revoked, publish a replacement, raise the package's
 `minimumDispatcherVersion`, stamp the replacement release, and publish a new
 package; never silently repoint or replace an existing Release asset.
 
+### Pinned dispatcher release lifetime
+
+A package pin can continue to authenticate an older dispatcher Release after
+that dispatcher has a known vulnerability. Pinning proves provenance and
+integrity; it does not revoke already published content. The mitigation is the
+package's minimum dispatcher version gate: publish a fixed dispatcher, raise
+the minimum, stamp its digests, and publish an updated package. Treat Unity
+projects from untrusted sources as untrusted inputs because they can select
+their own pin and minimum-version requirements.
+
 ### Untrusted Unity projects can drive the runner version
 
 At runtime `uloop` looks up the project-runner pin from the current
