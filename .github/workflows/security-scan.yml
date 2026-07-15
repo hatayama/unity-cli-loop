@@ -11,6 +11,11 @@ on:
       - 'cli/.go-version'
       - '**/go.mod'
       - '**/go.sum'
+      - '.github/workflows/**'
+      - 'scripts/**'
+      - 'cli/dispatcher/attestation/trusted_root.json'
+      - 'Packages/src/project-runner-pin.json'
+      - '.uloop/project-runner-pin.json'
   pull_request:
     branches: [ main, v3-beta ]
     paths:
@@ -21,6 +26,11 @@ on:
       - 'cli/.go-version'
       - '**/go.mod'
       - '**/go.sum'
+      - '.github/workflows/**'
+      - 'scripts/**'
+      - 'cli/dispatcher/attestation/trusted_root.json'
+      - 'Packages/src/project-runner-pin.json'
+      - '.uloop/project-runner-pin.json'
   workflow_dispatch:
 
 jobs:
@@ -29,7 +39,6 @@ jobs:
     runs-on: ubuntu-latest
     
     permissions:
-      actions: read
       contents: read
       security-events: write
 
@@ -37,71 +46,45 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
+    - name: Setup Go
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
       with:
-        dotnet-version: '6.0.x'
+        go-version-file: cli/.go-version
+        cache: false
 
-    - name: Run SecurityCodeScan on Unity CLI Loop Package
-      run: |
-        # Create a temporary project file for scanning
-        cat > temp-unity-cli-loop.csproj << 'EOF'
-        <Project Sdk="Microsoft.NET.Sdk">
-          <PropertyGroup>
-            <TargetFramework>net6.0</TargetFramework>
-            <Nullable>enable</Nullable>
-            <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-          </PropertyGroup>
-          <ItemGroup>
-            <Compile Include="Packages/src/**/*.cs" />
-          </ItemGroup>
-          <ItemGroup>
-            <PackageReference Include="SecurityCodeScan.VS2019" Version="5.6.7" PrivateAssets="all" />
-          </ItemGroup>
-        </Project>
-        EOF
-        
-        # Run dotnet build to trigger SecurityCodeScan analysis
-        dotnet restore temp-unity-cli-loop.csproj
-        
-        # Build with continue on error and create a basic SARIF file if scanning fails
-        if ! dotnet build temp-unity-cli-loop.csproj --configuration Release --verbosity normal --no-restore; then
-          echo "SecurityCodeScan completed with warnings/errors - creating placeholder SARIF"
-          cat > security-results.sarif << 'SARIF_EOF'
-        {
-          "version": "2.1.0",
-          "$schema": "http://json.schemastore.org/sarif-2.1.0-rtm.5",
-          "runs": [
-            {
-              "tool": {
-                "driver": {
-                  "name": "SecurityCodeScan",
-                  "informationUri": "https://security-code-scan.github.io/",
-                  "version": "5.6.7"
-                }
-              },
-              "results": []
-            }
-          ]
-        }
-        SARIF_EOF
-        else
-          echo "SecurityCodeScan completed successfully"
-        fi
-
-    - name: Upload SARIF results to GitHub
-      uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa
-      if: always() && hashFiles('security-results.sarif') != ''
+    - name: Initialize CodeQL C# analysis
+      uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
       with:
-        sarif_file: security-results.sarif
-        category: "SecurityCodeScan"
+        languages: csharp
+        build-mode: none
+        tools: linked
+        queries: +security-extended
+        config: |
+          paths:
+            - Packages/src
+            - Assets/Tests
 
-    - name: Upload security scan results as artifact
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      if: always()
+    - name: Analyze C# security code with CodeQL
+      uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
       with:
-        name: security-scan-results
-        path: security-results.sarif
+        category: codeql-csharp-security
+        output: ${{ runner.temp }}/codeql-results
+        upload: never
+
+    - name: Validate CodeQL SARIF
+      working-directory: cli/release-automation
+      run: go run ./cmd/check-codeql-sarif --sarif "${{ runner.temp }}/codeql-results/csharp.sarif"
+
+    - name: Upload verified CodeQL SARIF
+      if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+      uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+      with:
+        sarif_file: ${{ runner.temp }}/codeql-results/csharp.sarif
+        category: codeql-csharp-security
+
+    - name: Explain fork pull request SARIF upload policy
+      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork
+      run: echo "CodeQL SARIF upload is skipped for fork pull requests because their token has no security-events write permission."
 
   go-security:
     name: Go CLI Security Analysis
