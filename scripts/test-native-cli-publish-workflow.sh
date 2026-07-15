@@ -129,6 +129,27 @@ test_checkout_free_publish_has_explicit_repository_context() {
   fi
 }
 
+test_recovery_dispatch_is_bound_to_the_resolver_target() {
+  assert_contains "      recovery-target:"
+  assert_not_contains "inputs.sha"
+  assert_not_contains "INPUT_SHA"
+  assert_contains "      - name: Check out resolver-derived recovery target"
+  assert_contains 'if ! git merge-base --is-ancestor "${TARGET_SHA}" "${GITHUB_SHA}"; then'
+  assert_contains 'git checkout --detach "${TARGET_SHA}"'
+  assert_before "      - name: Check out resolver-derived recovery target" "      - name: Verify release target matches build commit"
+  assert_contains 'build_sha=$(git rev-parse HEAD)'
+  assert_contains 'if [ "${TARGET_SHA}" != "${build_sha}" ]; then'
+  assert_contains "          RECOVERY_TARGET: \${{ github.event_name == 'workflow_dispatch' && inputs.recovery-target }}"
+  assert_contains 'if [ "${BUILD_SHA}" != "${TARGET_SHA}" ]; then'
+  assert_contains 'compare_status=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${TARGET_SHA}...${GITHUB_SHA}" --jq '\''.status'\'')'
+  assert_contains 'if [ "${compare_status}" != "ahead" ] && [ "${compare_status}" != "identical" ]; then'
+  assert_contains 'printf '\''RELEASE_SHA=%s\n'\'' "${release_sha}" >> "$GITHUB_ENV"'
+  assert_count 2 'if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
+  assert_contains 'if [ -n "${tag_sha}" ] && [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
+  assert_not_contains '--target "${GITHUB_SHA}"'
+  assert_contains '--target "${RELEASE_SHA}"'
+}
+
 test_assets_are_attested_after_the_manifest_is_verified() {
   assert_contains "      - name: Verify release asset manifest"
   assert_contains "      - name: Attest native CLI release assets"
@@ -152,7 +173,7 @@ test_publish_rejects_manifest_and_existing_tag_mismatches() {
   assert_contains "Unexpected release files are not listed in the manifest."
   assert_contains "Release manifest is missing files or has duplicate entries."
   assert_contains 'gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '\''.sha'\'''
-  assert_contains 'Release tag ${RELEASE_TAG} does not match approved build commit ${GITHUB_SHA}.'
+  assert_contains 'Release tag ${RELEASE_TAG} does not match approved release commit ${RELEASE_SHA}.'
   assert_not_contains "release-input/dist/release"
 }
 
@@ -198,6 +219,7 @@ test_post_publish_automation_remains_outside_the_privileged_job() {
 
 test_build_and_publish_jobs_have_separate_trust_boundaries
 test_unprivileged_build_uses_only_the_approved_event_commit
+test_recovery_dispatch_is_bound_to_the_resolver_target
 test_publish_validates_metadata_without_checking_out_source
 test_checkout_free_publish_has_explicit_repository_context
 test_assets_are_attested_after_the_manifest_is_verified
