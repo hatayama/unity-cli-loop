@@ -301,6 +301,12 @@ jobs:
             echo "Release tag ${RELEASE_TAG} does not match approved release commit ${RELEASE_SHA}." >&2
             exit 1
           fi
+          if [ -z "${tag_sha}" ]; then
+            # Why the tag is created before the release: with an active tag ruleset the
+            # workflow token cannot create a release for a not-yet-existing tag, while
+            # explicit ref creation is permitted and pins the tag to the verified commit.
+            gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/${RELEASE_TAG}" -f sha="${RELEASE_SHA}"
+          fi
           if gh release view "${RELEASE_TAG}" --json isDraft,targetCommitish > release-input/release-state.json 2>/dev/null; then
             is_draft=$(jq -r '.isDraft' release-input/release-state.json)
             if [ "${is_draft}" = "false" ]; then
