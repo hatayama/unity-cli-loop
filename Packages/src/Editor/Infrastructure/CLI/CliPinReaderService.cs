@@ -159,6 +159,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return DispatcherBootstrapPinLoadResult.FromFailure(
                     $"Unity CLI Loop pin file at {pinPath} contains an invalid dispatcherArchiveManifest entry.");
             }
+            if (!HasArchiveManifestEntry(pin.DispatcherArchiveManifest, CliConstants.POSIX_INSTALL_SCRIPT_NAME)
+                || !HasArchiveManifestEntry(pin.DispatcherArchiveManifest, CliConstants.WINDOWS_INSTALL_SCRIPT_NAME))
+            {
+                return DispatcherBootstrapPinLoadResult.FromFailure(
+                    $"Unity CLI Loop pin file at {pinPath} is missing an installer script digest.");
+            }
 
             return DispatcherBootstrapPinLoadResult.FromSuccess(
                 pin.DispatcherReleaseTag,
@@ -167,17 +173,37 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static bool IsValidDispatcherReleaseTag(string dispatcherReleaseTag)
         {
-            return dispatcherReleaseTag == dispatcherReleaseTag.Trim()
-                && dispatcherReleaseTag.StartsWith(CliConstants.DISPATCHER_RELEASE_TAG_PREFIX, StringComparison.Ordinal)
-                && dispatcherReleaseTag.IndexOfAny(new char[] { '\r', '\n', '\t', ' ' }) < 0;
+            if (dispatcherReleaseTag != dispatcherReleaseTag.Trim()
+                || !dispatcherReleaseTag.StartsWith(CliConstants.DISPATCHER_RELEASE_TAG_PREFIX, StringComparison.Ordinal))
+            {
+                return false;
+            }
+            foreach (char character in dispatcherReleaseTag)
+            {
+                if (!(char.IsLetterOrDigit(character) || character == '.' || character == '-'))
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private static bool IsValidArchiveManifest(string archiveManifest)
         {
-            string[] entries = archiveManifest.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None);
+            if (archiveManifest.Contains("\r"))
+            {
+                return false;
+            }
+            string[] entries = archiveManifest.Split('\n');
+            System.Collections.Generic.HashSet<string> assetNames = new();
             foreach (string entry in entries)
             {
                 if (!IsValidArchiveManifestEntry(entry))
+                {
+                    return false;
+                }
+                string assetName = entry.Substring(MANIFEST_ENTRY_PREFIX_LENGTH);
+                if (!assetNames.Add(assetName))
                 {
                     return false;
                 }
@@ -205,6 +231,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string assetName = entry.Substring(MANIFEST_ENTRY_PREFIX_LENGTH);
             return assetName == assetName.Trim()
                 && assetName.IndexOfAny(new char[] { '\r', '\n', '\t', ' ' }) < 0;
+        }
+
+        private static bool HasArchiveManifestEntry(string archiveManifest, string assetName)
+        {
+            string suffix = "  " + assetName;
+            string[] entries = archiveManifest.Split('\n');
+            foreach (string entry in entries)
+            {
+                if (entry.EndsWith(suffix, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static bool IsHexCharacter(char value)

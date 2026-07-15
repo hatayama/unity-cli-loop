@@ -102,15 +102,4 @@ namespace io.github.hatayama.UnityCliLoop.Application
         string LoadMinimumDispatcherVersionOrThrow();
     }
 
-    /// <summary>
-    /// Builds derived values from the CLI pin JSON that ships with the Unity package.
-    /// </summary>
-    public static class CliPinReader
-    {
-        // Why: composes the dispatcher release tag from the pin so callers do not have to know the prefix.
-        public static string BuildDispatcherReleaseTag(string minimumDispatcherVersion)
-        {
-            return CliConstants.DISPATCHER_RELEASE_TAG_PREFIX + minimumDispatcherVersion;
-        }
-    }
 }

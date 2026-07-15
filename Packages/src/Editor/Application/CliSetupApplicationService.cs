@@ -27,6 +27,33 @@ namespace io.github.hatayama.UnityCliLoop.Application
     }
 
     /// <summary>
+    /// Represents either a safe native installer command or the reason it could not be built.
+    /// </summary>
+    public readonly struct NativeCliInstallCommandLoadResult
+    {
+        private NativeCliInstallCommandLoadResult(bool success, NativeCliInstallCommand command, string errorOutput)
+        {
+            Success = success;
+            Command = command;
+            ErrorOutput = errorOutput;
+        }
+
+        public bool Success { get; }
+        public NativeCliInstallCommand Command { get; }
+        public string ErrorOutput { get; }
+
+        public static NativeCliInstallCommandLoadResult FromSuccess(NativeCliInstallCommand command)
+        {
+            return new NativeCliInstallCommandLoadResult(true, command, string.Empty);
+        }
+
+        public static NativeCliInstallCommandLoadResult FromFailure(string errorOutput)
+        {
+            return new NativeCliInstallCommandLoadResult(false, default, errorOutput);
+        }
+    }
+
+    /// <summary>
     /// Defines how CLI installation state is detected by the owning workflow.
     /// </summary>
     public interface ICliInstallationDetector
@@ -49,13 +76,18 @@ namespace io.github.hatayama.UnityCliLoop.Application
     {
         bool IsPackageOwnedCurrentUserInstallPath(string cliExecutablePath, RuntimePlatform platform);
         bool HasPackageOwnedCurrentUserInstall(RuntimePlatform platform);
-        Task<CliInstallResult> InstallGlobalCliAsync(RuntimePlatform platform, string cliReleaseTag, CancellationToken ct);
+        Task<CliInstallResult> InstallGlobalCliAsync(
+            RuntimePlatform platform,
+            string dispatcherReleaseTag,
+            string dispatcherArchiveManifest,
+            CancellationToken ct);
         Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct);
         Task<CliPathSetupPlan> GetGlobalCliPathSetupPlanAsync(RuntimePlatform platform, CancellationToken ct);
         CliPathSetupApplyResult ApplyGlobalCliPathSetup(CliPathSetupPlan plan);
-        NativeCliInstallCommand GetGlobalCliInstallCommand(
+        NativeCliInstallCommandLoadResult GetGlobalCliInstallCommand(
             RuntimePlatform platform,
-            string cliReleaseTag,
+            string dispatcherReleaseTag,
+            string dispatcherArchiveManifest,
             bool removeLegacyLaunchers);
     }
 
@@ -134,13 +166,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return _cliPinReader.LoadMinimumDispatcherVersionOrThrow();
         }
 
-        public string GetMinimumRequiredCliReleaseTag()
-        {
-            // Why: v3 setup installs the global dispatcher, and the release tag is derived from the pin so it
-            // cannot drift from the version reported by GetMinimumRequiredCliVersion.
-            return CliPinReader.BuildDispatcherReleaseTag(_cliPinReader.LoadMinimumDispatcherVersionOrThrow());
-        }
-
         public bool IsPackageOwnedCurrentUserInstallPath(
             string cliExecutablePath,
             RuntimePlatform platform)
@@ -177,9 +202,16 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             ct.ThrowIfCancellationRequested();
 
+            DispatcherBootstrapPinLoadResult bootstrapPin = _cliPinReader.LoadDispatcherBootstrapPin();
+            if (!bootstrapPin.Success)
+            {
+                return new CliInstallResult(false, bootstrapPin.ErrorMessage);
+            }
+
             CliInstallResult result = await _nativeCliInstaller.InstallGlobalCliAsync(
                 platform,
-                GetMinimumRequiredCliReleaseTag(),
+                bootstrapPin.DispatcherReleaseTag,
+                bootstrapPin.ArchiveManifest,
                 ct);
             _cliInstallationDetector.InvalidateCache();
             return result;
@@ -243,13 +275,20 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return result;
         }
 
-        public NativeCliInstallCommand GetGlobalCliInstallCommand(
+        public NativeCliInstallCommandLoadResult GetGlobalCliInstallCommand(
             RuntimePlatform platform,
             bool removeLegacyLaunchers)
         {
+            DispatcherBootstrapPinLoadResult bootstrapPin = _cliPinReader.LoadDispatcherBootstrapPin();
+            if (!bootstrapPin.Success)
+            {
+                return NativeCliInstallCommandLoadResult.FromFailure(bootstrapPin.ErrorMessage);
+            }
+
             return _nativeCliInstaller.GetGlobalCliInstallCommand(
                 platform,
-                GetMinimumRequiredCliReleaseTag(),
+                bootstrapPin.DispatcherReleaseTag,
+                bootstrapPin.ArchiveManifest,
                 removeLegacyLaunchers);
         }
     }

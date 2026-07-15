@@ -295,6 +295,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void LoadDispatcherBootstrapPinFromPath_WhenManifestUsesCrLfOrDuplicateAsset_ReturnsFailure()
+        {
+            // Tests that bootstrap manifests have one canonical LF-only entry per asset name.
+            string root = CreateTestRoot();
+            string pinPath = Path.Combine(root, "project-runner-pin.json");
+
+            try
+            {
+                Directory.CreateDirectory(root);
+                string manifest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  install.sh\r\n"
+                    + "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  install.sh\n"
+                    + "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  install.ps1";
+                File.WriteAllText(
+                    pinPath,
+                    "{\"projectRunnerVersion\":\"3.0.0\",\"minimumDispatcherVersion\":\"3.0.1\",\"dispatcherReleaseTag\":\"dispatcher-v3.0.1\",\"dispatcherArchiveManifest\":\""
+                    + manifest.Replace("\r", "\\r").Replace("\n", "\\n")
+                    + "\"}");
+
+                DispatcherBootstrapPinLoadResult result =
+                    CliPinReaderService.LoadDispatcherBootstrapPinFromPath(pinPath);
+
+                Assert.That(result.Success, Is.False);
+            }
+            finally
+            {
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
+            }
+        }
+
+        [Test]
         public void LoadDispatcherBootstrapPinFromPath_WhenBootstrapFieldsAreValid_ReturnsPinnedReleaseInputs()
         {
             // Tests that a valid bootstrap pin returns the immutable release tag and complete manifest text.
@@ -302,7 +335,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string pinPath = Path.Combine(root, "project-runner-pin.json");
             string manifest =
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  install.sh\n"
-                + "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  uloop-dispatcher-darwin-arm64.zip";
+                + "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  install.ps1\n"
+                + "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  uloop-dispatcher-darwin-arm64.zip";
 
             try
             {

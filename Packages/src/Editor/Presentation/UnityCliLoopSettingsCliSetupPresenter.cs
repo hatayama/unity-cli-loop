@@ -291,12 +291,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
                 if (!result.Success)
                 {
-                    NativeCliInstallCommand command = _cliSetupApplicationService.GetGlobalCliInstallCommand(
+                    NativeCliInstallCommandLoadResult commandResult = _cliSetupApplicationService.GetGlobalCliInstallCommand(
                         UnityEngine.Application.platform,
                         true);
+                    string manualInstallGuidance = commandResult.Success
+                        ? commandResult.Command.ManualCommand
+                        : commandResult.ErrorOutput;
                     EditorUtility.DisplayDialog(
                         "Installation Failed",
-                        $"Failed to install uLoop CLI.\n\n{result.ErrorOutput}\n\nYou can try manually:\n{command.ManualCommand}",
+                        $"Failed to install uLoop CLI.\n\n{result.ErrorOutput}\n\n{manualInstallGuidance}",
                         "OK");
                     return;
                 }

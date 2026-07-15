@@ -15,13 +15,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         internal static NativeCliInstallCommand BuildRemoteInstallCommand(
             RuntimePlatform platform,
-            string cliReleaseTag,
+            string dispatcherReleaseTag,
+            string dispatcherArchiveManifest,
             bool removeLegacyLaunchers,
             string posixShellPath)
         {
             return BuildInstallCommandWithPackagePath(
                 platform,
-                cliReleaseTag,
+                dispatcherReleaseTag,
+                dispatcherArchiveManifest,
                 removeLegacyLaunchers,
                 posixShellPath,
                 null);
@@ -29,16 +31,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static NativeCliInstallCommand BuildInstallCommandWithPackagePath(
             RuntimePlatform platform,
-            string cliReleaseTag,
+            string dispatcherReleaseTag,
+            string dispatcherArchiveManifest,
             bool removeLegacyLaunchers,
             string posixShellPath,
             string packageResolvedPath)
         {
-            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(cliReleaseTag), "cliReleaseTag must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(dispatcherReleaseTag), "dispatcherReleaseTag must not be null or empty");
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(dispatcherArchiveManifest), "dispatcherArchiveManifest must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(posixShellPath), "posixShellPath must not be null or empty");
             _ = removeLegacyLaunchers;
 
-            string releaseTag = BuildReleaseTag(cliReleaseTag);
+            string releaseTag = dispatcherReleaseTag;
             if (platform == RuntimePlatform.WindowsEditor)
             {
                 string localScriptPath = ResolvePackageLocalInstallerScriptPath(
@@ -48,9 +52,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 string command = string.IsNullOrEmpty(localScriptPath)
                     ? BuildWindowsRemoteInstallScriptCommand(
                         windowsScriptUrl,
-                        BuildInstallerChecksumUrl(windowsScriptUrl),
-                        releaseTag)
-                    : BuildWindowsLocalInstallScriptCommand(localScriptPath, releaseTag);
+                        GetManifestDigest(dispatcherArchiveManifest, CliConstants.WINDOWS_INSTALL_SCRIPT_NAME),
+                        releaseTag,
+                        dispatcherArchiveManifest)
+                    : BuildWindowsLocalInstallScriptCommand(localScriptPath, releaseTag, dispatcherArchiveManifest);
                 return new NativeCliInstallCommand(
                     "powershell",
                     $"-NoProfile -ExecutionPolicy Bypass -Command \"{command}\"",
@@ -64,9 +69,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string posixCommand = string.IsNullOrEmpty(posixLocalScriptPath)
                 ? BuildPosixRemoteInstallScriptCommand(
                     posixScriptUrl,
-                    BuildInstallerChecksumUrl(posixScriptUrl),
-                    releaseTag)
-                : BuildPosixLocalInstallScriptCommand(posixLocalScriptPath, releaseTag);
+                    GetManifestDigest(dispatcherArchiveManifest, CliConstants.POSIX_INSTALL_SCRIPT_NAME),
+                    releaseTag,
+                    dispatcherArchiveManifest)
+                : BuildPosixLocalInstallScriptCommand(posixLocalScriptPath, releaseTag, dispatcherArchiveManifest);
             string loginShellCommand = BuildLoginShellPosixInstallScriptCommand(posixCommand);
             return new NativeCliInstallCommand(
                 posixShellPath,
@@ -87,10 +93,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 $"{QuoteProcessArgument(installPath)} uninstall");
         }
 
-        private static string BuildPosixRemoteInstallScriptCommand(string scriptUrl, string checksumUrl, string releaseTag)
+        private static string BuildPosixRemoteInstallScriptCommand(string scriptUrl, string expectedDigest, string releaseTag, string archiveManifest)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptUrl), "scriptUrl must not be null or empty");
-            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(checksumUrl), "checksumUrl must not be null or empty");
+            UnityEngine.Debug.Assert(IsSHA256Digest(expectedDigest), "expectedDigest must be a SHA-256 digest");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
 
             // Why: The whole command runs as a single /bin/sh -c string where `set -e` is not applied
@@ -100,20 +106,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return "tmp_dir=$(mktemp -d) && "
                 + "trap 'rm -rf \"$tmp_dir\"' EXIT && "
                 + $"curl -fsSL {QuotePosixShellValue(scriptUrl)} -o \"$tmp_dir/{scriptName}\" && "
-                + $"curl -fsSL {QuotePosixShellValue(checksumUrl)} -o \"$tmp_dir/{scriptName}.sha256\" && "
-                + "( cd \"$tmp_dir\" && "
-                + $"if command -v sha256sum >/dev/null 2>&1; then sha256sum -c {scriptName}.sha256; "
-                + $"elif command -v shasum >/dev/null 2>&1; then shasum -a 256 -c {scriptName}.sha256; "
-                + $"else echo 'sha256sum or shasum is required to verify {scriptName}' >&2; exit 1; fi ) && "
-                + $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePosixShellValue(releaseTag)} sh \"$tmp_dir/{scriptName}\"";
+                + "( if command -v sha256sum >/dev/null 2>&1; then actual_digest=$(sha256sum \"$tmp_dir/" + scriptName + "\" | awk '{print $1}'); "
+                + "elif command -v shasum >/dev/null 2>&1; then actual_digest=$(shasum -a 256 \"$tmp_dir/" + scriptName + "\" | awk '{print $1}'); "
+                + $"else echo 'sha256sum or shasum is required to verify {scriptName}' >&2; exit 1; fi && "
+                + $"[ \"$actual_digest\" = {QuotePosixShellValue(expectedDigest)} ] ) && "
+                + $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePosixShellValue(releaseTag)} "
+                + $"{CliConstants.ARCHIVE_MANIFEST_ENVIRONMENT_VARIABLE}={QuotePosixShellValue(archiveManifest)} sh \"$tmp_dir/{scriptName}\"";
         }
 
-        private static string BuildPosixLocalInstallScriptCommand(string scriptPath, string releaseTag)
+        private static string BuildPosixLocalInstallScriptCommand(string scriptPath, string releaseTag, string archiveManifest)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptPath), "scriptPath must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
 
-            return $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePosixShellValue(releaseTag)} sh {QuotePosixShellValue(scriptPath)}";
+            return $"{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePosixShellValue(releaseTag)} "
+                + $"{CliConstants.ARCHIVE_MANIFEST_ENVIRONMENT_VARIABLE}={QuotePosixShellValue(archiveManifest)} sh {QuotePosixShellValue(scriptPath)}";
         }
 
         internal static string BuildLoginShellPosixInstallScriptCommand(string posixCommand)
@@ -122,32 +129,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return $"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c {QuotePosixShellValue(posixCommand)}";
         }
 
-        private static string BuildWindowsRemoteInstallScriptCommand(string scriptUrl, string checksumUrl, string releaseTag)
+        private static string BuildWindowsRemoteInstallScriptCommand(string scriptUrl, string expectedDigest, string releaseTag, string archiveManifest)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptUrl), "scriptUrl must not be null or empty");
-            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(checksumUrl), "checksumUrl must not be null or empty");
+            UnityEngine.Debug.Assert(IsSHA256Digest(expectedDigest), "expectedDigest must be a SHA-256 digest");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
 
-            // Why: Downloading with Invoke-WebRequest to a file and re-launching PowerShell with -File
-            // replaces the previous `irm | iex` streaming path so the script is verified before it runs
-            // and so the child process owns exit-code propagation. `$ErrorActionPreference = 'Stop'`
-            // upgrades cmdlet non-terminating errors (e.g. missing checksum file) into throws so the
-            // fail-close path does not depend on incidental null dereferences downstream. The .sha256
-            // file contains "<hex-hash>  <filename>", so the leading whitespace-delimited token is
-            // compared as lower case against Get-FileHash's upper-case output.
+            // Why: Downloading to a file and running it with -File avoids the previous streaming
+            // execution path. The trusted package pin supplies the expected digest, so the downloaded
+            // script is never executed until the locally calculated SHA-256 matches that pin.
             string scriptName = CliConstants.WINDOWS_INSTALL_SCRIPT_NAME;
             return "$tmp_dir = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([System.Guid]::NewGuid().ToString())) -Force; "
                 + $"$script_path = Join-Path $tmp_dir.FullName {QuotePowerShellSingleQuotedValue(scriptName)}; "
-                + $"$checksum_path = Join-Path $tmp_dir.FullName {QuotePowerShellSingleQuotedValue(scriptName + ".sha256")}; "
                 + "try { "
                 + "$ErrorActionPreference = 'Stop'; "
                 + "$ProgressPreference = 'SilentlyContinue'; "
                 + $"Invoke-WebRequest -UseBasicParsing -Uri {QuotePowerShellSingleQuotedValue(scriptUrl)} -OutFile $script_path; "
-                + $"Invoke-WebRequest -UseBasicParsing -Uri {QuotePowerShellSingleQuotedValue(checksumUrl)} -OutFile $checksum_path; "
-                + "$expected_hash = ((Get-Content -Raw -Encoding UTF8 $checksum_path) -split '\\s+')[0].ToLowerInvariant(); "
                 + "$actual_hash = (Get-FileHash -Algorithm SHA256 -Path $script_path).Hash.ToLowerInvariant(); "
-                + $"if ($actual_hash -ne $expected_hash) {{ throw ('Checksum mismatch for {scriptName}: expected=' + $expected_hash + ' actual=' + $actual_hash) }}; "
+                + $"if ($actual_hash -ne {QuotePowerShellSingleQuotedValue(expectedDigest)}) {{ throw ('Pinned digest mismatch for {scriptName}: actual=' + $actual_hash) }}; "
                 + $"$env:{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE} = {QuotePowerShellSingleQuotedValue(releaseTag)}; "
+                + $"$env:{CliConstants.ARCHIVE_MANIFEST_ENVIRONMENT_VARIABLE} = {BuildPowerShellManifestExpression(archiveManifest)}; "
                 + "& powershell -NoProfile -ExecutionPolicy Bypass -File $script_path; "
                 + $"if ($LASTEXITCODE -ne 0) {{ throw ('{scriptName} exited with code ' + $LASTEXITCODE) }} "
                 + "} finally { "
@@ -155,12 +156,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 + "}";
         }
 
-        private static string BuildWindowsLocalInstallScriptCommand(string scriptPath, string releaseTag)
+        private static string BuildWindowsLocalInstallScriptCommand(string scriptPath, string releaseTag, string archiveManifest)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptPath), "scriptPath must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
 
             return $"$env:{CliConstants.INSTALL_VERSION_ENVIRONMENT_VARIABLE}={QuotePowerShellSingleQuotedValue(releaseTag)}; "
+                + $"$env:{CliConstants.ARCHIVE_MANIFEST_ENVIRONMENT_VARIABLE}={BuildPowerShellManifestExpression(archiveManifest)}; "
                 + $"& {QuotePowerShellSingleQuotedValue(scriptPath)}";
         }
 
@@ -206,27 +208,38 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return $"'{value.Replace("'", "''")}'";
         }
 
+        private static string BuildPowerShellManifestExpression(string archiveManifest)
+        {
+            UnityEngine.Debug.Assert(!archiveManifest.Contains("\r"), "archiveManifest must use LF line endings");
+            string[] entries = archiveManifest.Split('\n');
+            return string.Join(" + [char]10 + ", System.Array.ConvertAll(entries, QuotePowerShellSingleQuotedValue));
+        }
+
         private static string QuoteProcessArgument(string value)
         {
             UnityEngine.Debug.Assert(value != null, "value must not be null");
             return $"\"{value.Replace("\"", "\\\"")}\"";
         }
 
-        private static string BuildReleaseTag(string cliReleaseTag)
+        private static string GetManifestDigest(string archiveManifest, string assetName)
         {
-            if (cliReleaseTag.StartsWith(CliConstants.DISPATCHER_RELEASE_TAG_PREFIX, StringComparison.Ordinal))
+            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(archiveManifest), "archiveManifest must not be null or empty");
+            UnityEngine.Debug.Assert(IsSafeAssetName(assetName), "assetName must be safe for command construction");
+            string expectedSuffix = "  " + assetName;
+            string[] entries = archiveManifest.Split('\n');
+            foreach (string entry in entries)
             {
-                return cliReleaseTag;
+                if (!entry.EndsWith(expectedSuffix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                string digest = entry.Substring(0, entry.Length - expectedSuffix.Length);
+                if (IsSHA256Digest(digest))
+                {
+                    return digest.ToLowerInvariant();
+                }
             }
-            if (cliReleaseTag.StartsWith(CliConstants.PROJECT_RUNNER_RELEASE_TAG_PREFIX, StringComparison.Ordinal))
-            {
-                return $"{CliConstants.DISPATCHER_RELEASE_TAG_PREFIX}{cliReleaseTag.Substring(CliConstants.PROJECT_RUNNER_RELEASE_TAG_PREFIX.Length)}";
-            }
-            if (cliReleaseTag.StartsWith(CliConstants.RELEASE_TAG_PREFIX, StringComparison.Ordinal))
-            {
-                return $"{CliConstants.DISPATCHER_RELEASE_TAG_PREFIX}{cliReleaseTag.Substring(CliConstants.RELEASE_TAG_PREFIX.Length)}";
-            }
-            return $"{CliConstants.DISPATCHER_RELEASE_TAG_PREFIX}{cliReleaseTag}";
+            throw new ArgumentException($"dispatcher archive manifest is missing a valid digest for {assetName}", nameof(archiveManifest));
         }
 
         internal static string BuildInstallerScriptUrl(string releaseTag, string assetName)
@@ -234,17 +247,41 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(releaseTag), "releaseTag must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(assetName), "assetName must not be null or empty");
 
-            // Why: Installer scripts are shipped as dispatcher release assets alongside their .sha256
-            // sidecars, so the release download URL is used instead of raw content refs to keep the
-            // Unity install path in sync with `uloop update`'s verified installer download.
+            // Why: The immutable dispatcher Release URL avoids mutable branch content while the package
+            // pin authenticates the downloaded asset by its SHA-256 digest.
             return $"{CliConstants.RELEASE_DOWNLOAD_BASE_URL}/{releaseTag}/{assetName}";
         }
 
-        internal static string BuildInstallerChecksumUrl(string scriptUrl)
+        private static bool IsSHA256Digest(string value)
         {
-            UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(scriptUrl), "scriptUrl must not be null or empty");
+            if (value == null || value.Length != 64)
+            {
+                return false;
+            }
+            foreach (char character in value)
+            {
+                if (!((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f') || (character >= 'A' && character <= 'F')))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
 
-            return scriptUrl + ".sha256";
+        private static bool IsSafeAssetName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+            foreach (char character in value)
+            {
+                if (!(char.IsLetterOrDigit(character) || character == '.' || character == '-' || character == '_'))
+                {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 }
