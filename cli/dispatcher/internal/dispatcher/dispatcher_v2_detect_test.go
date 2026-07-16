@@ -58,6 +58,39 @@ func TestDetectV2DispatcherProjectSkipsProjectWithoutPackage(t *testing.T) {
 	}
 }
 
+func TestDetectV2DispatcherProjectFindsPackageLockVersionWithoutPackageCache(t *testing.T) {
+	// Verifies a V2 package is detected from packages-lock.json when PackageCache is unavailable.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackagesLock(t, projectRoot, "2.2.0")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if !v2Project.IsV2 {
+		t.Fatal("expected V2 project")
+	}
+	if v2Project.PackageVersion != "2.2.0" {
+		t.Fatalf("package version = %q, want 2.2.0", v2Project.PackageVersion)
+	}
+}
+
+func TestDetectV2DispatcherProjectSkipsV3PackageLockVersion(t *testing.T) {
+	// Verifies a non-V2 packages-lock.json version does not classify a project as V2.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackagesLock(t, projectRoot, "3.0.0")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if v2Project.IsV2 {
+		t.Fatalf("unexpected V2 project: %#v", v2Project)
+	}
+}
+
 func TestRunDispatcherReportsV2ProjectGuidanceWhenPinIsMissing(t *testing.T) {
 	// Verifies pinless V2 projects receive migration guidance instead of the missing-pin error.
 	projectRoot := createDispatcherUnityProject(t)
@@ -105,5 +138,14 @@ func writeV2PackageCachePackageJSON(t *testing.T, projectRoot string, suffix str
 	content := "{\n  \"version\": \"" + version + "\"\n}\n"
 	if err := os.WriteFile(packagePath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write package.json: %v", err)
+	}
+}
+
+func writeV2PackagesLock(t *testing.T, projectRoot string, version string) {
+	t.Helper()
+	lockPath := filepath.Join(projectRoot, "Packages", "packages-lock.json")
+	content := "{\n  \"dependencies\": {\n    \"" + dispatcherUnityPackageName + "\": {\n      \"version\": \"" + version + "\"\n    }\n  }\n}\n"
+	if err := os.WriteFile(lockPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write packages-lock.json: %v", err)
 	}
 }
