@@ -17,6 +17,7 @@ const (
 	dispatcherPackagesLockRelativePath     = "Packages/packages-lock.json"
 	dispatcherPackageJSONFileName          = "package.json"
 	dispatcherV2MajorVersion               = "2"
+	dispatcherPackageLockSourceGit         = "git"
 )
 
 type dispatcherV2Project struct {
@@ -35,14 +36,15 @@ type dispatcherPackagesLock struct {
 
 type dispatcherPackageLockEntry struct {
 	Version string `json:"version"`
+	Source  string `json:"source"`
 }
 
 type dispatcherPackageJSON struct {
 	Version string `json:"version"`
 }
 
-// detectV2DispatcherProject identifies pinless Unity projects that use the V2 package.
-// Why: V2 projects have no project runner pin, but pin absence alone can also indicate a broken V3 installation.
+// detectV2DispatcherProject identifies V2 projects from Unity's currently resolved package state.
+// Why: a resolved V2 package must take precedence over stale V3 pins that can remain after a downgrade.
 func detectV2DispatcherProject(projectRoot string) (dispatcherV2Project, error) {
 	hasPackage, err := dispatcherProjectHasUnityPackage(projectRoot)
 	if err != nil {
@@ -52,15 +54,19 @@ func detectV2DispatcherProject(projectRoot string) (dispatcherV2Project, error) 
 		return dispatcherV2Project{}, nil
 	}
 
-	packageVersion, found, err := dispatcherV2PackageLockVersion(projectRoot)
+	lockEntry, found, err := dispatcherPackageLockEntryForProject(projectRoot)
 	if err != nil {
 		return dispatcherV2Project{}, err
 	}
+	packageVersion := lockEntry.Version
 	if found && sharedversion.IsValid(strings.TrimSpace(packageVersion)) {
 		if !isDispatcherV2PackageVersion(packageVersion) {
 			return dispatcherV2Project{}, nil
 		}
 		return dispatcherV2Project{IsV2: true, PackageVersion: packageVersion}, nil
+	}
+	if found && lockEntry.Source != dispatcherPackageLockSourceGit {
+		return dispatcherV2Project{}, nil
 	}
 
 	packageVersions, err := dispatcherPackageCacheVersions(projectRoot)
@@ -136,25 +142,25 @@ func dispatcherPackageCacheVersions(projectRoot string) ([]string, error) {
 	return result, nil
 }
 
-func dispatcherV2PackageLockVersion(projectRoot string) (string, bool, error) {
+func dispatcherPackageLockEntryForProject(projectRoot string) (dispatcherPackageLockEntry, bool, error) {
 	lockPath := filepath.Join(projectRoot, filepath.FromSlash(dispatcherPackagesLockRelativePath))
 	content, err := os.ReadFile(lockPath)
 	if errors.Is(err, os.ErrNotExist) {
-		return "", false, nil
+		return dispatcherPackageLockEntry{}, false, nil
 	}
 	if err != nil {
-		return "", false, err
+		return dispatcherPackageLockEntry{}, false, err
 	}
 
 	lock := dispatcherPackagesLock{}
 	if err := json.Unmarshal(content, &lock); err != nil {
-		return "", false, fmt.Errorf("parse %s: %w", lockPath, err)
+		return dispatcherPackageLockEntry{}, false, fmt.Errorf("parse %s: %w", lockPath, err)
 	}
 	entry, found := lock.Dependencies[dispatcherUnityPackageName]
 	if !found {
-		return "", false, nil
+		return dispatcherPackageLockEntry{}, false, nil
 	}
-	return entry.Version, entry.Version != "", nil
+	return entry, entry.Version != "", nil
 }
 
 func readDispatcherPackageVersion(packagePath string) (string, error) {

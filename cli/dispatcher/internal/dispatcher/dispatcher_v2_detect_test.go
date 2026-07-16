@@ -17,6 +17,7 @@ func TestDetectV2DispatcherProjectFindsPackageCacheVersion(t *testing.T) {
 	// Verifies a V2 package is detected from package.json even when its cache directory has a hash suffix.
 	projectRoot := createDispatcherUnityProject(t)
 	writeV2PackageManifest(t, projectRoot)
+	writePackagesLockWithSource(t, projectRoot, "https://example.invalid/package.git", "git")
 	writeV2PackageCachePackageJSON(t, projectRoot, "abc123", "2.2.0")
 
 	v2Project, err := detectV2DispatcherProject(projectRoot)
@@ -335,6 +336,16 @@ func TestRunDispatcherFallsBackToPinnedRunnerWhenV2DetectionFails(t *testing.T) 
 	}
 }
 
+func TestRunDispatcherKeepsPinnedRunnerForLocalPackageSource(t *testing.T) {
+	// Verifies a local V3 package cannot be replaced by a stale V2 PackageCache entry.
+	assertPackageLockSourceKeepsPinnedRunner(t, "file:../v3-package", "local")
+}
+
+func TestRunDispatcherKeepsPinnedRunnerForUnknownPackageSource(t *testing.T) {
+	// Verifies an unknown package source fails open to the pinned runner instead of stale V2 cache data.
+	assertPackageLockSourceKeepsPinnedRunner(t, "vendor:v3-package", "future-source")
+}
+
 func TestRunDispatcherDelegatesV2ProjectWithOriginalArguments(t *testing.T) {
 	// Verifies V2 delegation preserves the original argument sequence.
 	projectRoot := createDispatcherUnityProject(t)
@@ -451,9 +462,47 @@ func writeV2PackageCachePackageJSON(t *testing.T, projectRoot string, suffix str
 
 func writeV2PackagesLock(t *testing.T, projectRoot string, version string) {
 	t.Helper()
+	writePackagesLockWithSource(t, projectRoot, version, "")
+}
+
+func writePackagesLockWithSource(t *testing.T, projectRoot string, version string, source string) {
+	t.Helper()
 	lockPath := filepath.Join(projectRoot, "Packages", "packages-lock.json")
 	content := "{\n  \"dependencies\": {\n    \"" + dispatcherUnityPackageName + "\": {\n      \"version\": \"" + version + "\"\n    }\n  }\n}\n"
+	if source != "" {
+		content = "{\n  \"dependencies\": {\n    \"" + dispatcherUnityPackageName + "\": {\n      \"version\": \"" + version + "\",\n      \"source\": \"" + source + "\"\n    }\n  }\n}\n"
+	}
 	if err := os.WriteFile(lockPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write packages-lock.json: %v", err)
+	}
+}
+
+func assertPackageLockSourceKeepsPinnedRunner(t *testing.T, lockVersion string, source string) {
+	t.Helper()
+	projectRoot := createDispatcherUnityProject(t)
+	cacheRoot := t.TempDir()
+	writeV2PackageManifest(t, projectRoot)
+	writePackagesLockWithSource(t, projectRoot, lockVersion, source)
+	writeV2PackageCachePackageJSON(t, projectRoot, "stale", "2.2.0")
+	writeDispatcherProjectPin(t, projectRoot, "3.0.0")
+	writeCachedDispatcherRealCLI(t, cacheRoot, "3.0.0")
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
+	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
+	t.Chdir(projectRoot)
+
+	deps := defaultDispatcherRunDeps()
+	deps.runV2CLI = func(context.Context, string, []string, io.Writer, io.Writer) (int, error) {
+		t.Fatal("non-git package source must not delegate using stale V2 cache data")
+		return 0, nil
+	}
+	forwarded := false
+	deps.runRealCLI = func(context.Context, string, []string, io.Writer, io.Writer) int {
+		forwarded = true
+		return 13
+	}
+
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, io.Discard, deps)
+	if code != 13 || !forwarded {
+		t.Fatalf("pinned runner was not used: code=%d forwarded=%v", code, forwarded)
 	}
 }
