@@ -1,6 +1,7 @@
 package unityprocess
 
 import (
+	"encoding/base64"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -27,11 +28,13 @@ func TestParseMacUnityProcessesExtractsProjectPath(t *testing.T) {
 	}
 }
 
-// Verifies Windows Unity process parsing extracts project paths and skips batchmode workers.
+// Verifies Windows Unity process parsing decodes Base64 command lines, extracts project paths, and skips batchmode workers.
 func TestParseWindowsUnityProcessesExtractsProjectPath(t *testing.T) {
-	output := `123|C:\Program Files\Unity\Hub\Editor\6000.0.0f1\Editor\Unity.exe -projectPath "C:\Users\<USER_NAME>\My Project" -useHub
-456|C:\Program Files\Unity\Hub\Editor\6000.0.0f1\Editor\Unity.exe -batchmode -projectPath "C:\Users\<USER_NAME>\Batch"
-`
+	encode := func(commandLine string) string {
+		return base64.StdEncoding.EncodeToString([]byte(commandLine))
+	}
+	output := "123|" + encode(`C:\Program Files\Unity\Hub\Editor\6000.0.0f1\Editor\Unity.exe -projectPath "C:\Users\<USER_NAME>\My Project" -useHub`) + "\r\n" +
+		"456|" + encode(`C:\Program Files\Unity\Hub\Editor\6000.0.0f1\Editor\Unity.exe -batchmode -projectPath "C:\Users\<USER_NAME>\Batch"`) + "\r\n"
 
 	processes := parseWindowsUnityProcesses(output)
 
@@ -40,6 +43,50 @@ func TestParseWindowsUnityProcessesExtractsProjectPath(t *testing.T) {
 	}
 	if processes[0].Pid != 123 || processes[0].projectPath != `C:\Users\<USER_NAME>\My Project` {
 		t.Fatalf("process mismatch: %#v", processes[0])
+	}
+}
+
+// Verifies non-ASCII project paths survive the PowerShell boundary because command lines travel as UTF-8 Base64.
+func TestParseWindowsUnityProcessesPreservesNonASCIIProjectPath(t *testing.T) {
+	projectPath := `C:\Users\<USER_NAME>\test[1] 検証用\proj`
+	commandLine := `C:\Program Files\Unity\Hub\Editor\2022.3.62f3\Editor\Unity.exe -projectPath "` + projectPath + `" -useHub`
+	output := "123|" + base64.StdEncoding.EncodeToString([]byte(commandLine)) + "\r\n"
+
+	processes := parseWindowsUnityProcesses(output)
+
+	if len(processes) != 1 {
+		t.Fatalf("process count mismatch: %#v", processes)
+	}
+	if processes[0].projectPath != projectPath {
+		t.Fatalf("project path mismatch: %q", processes[0].projectPath)
+	}
+}
+
+// Verifies command fields that are not valid Base64 (e.g. legacy plain-text or OEM code page bytes) are skipped instead of mis-parsed.
+func TestParseWindowsUnityProcessesSkipsNonBase64CommandLines(t *testing.T) {
+	// 0x8C9F 0x8FD8 0x9770 is the measured CP932 byte sequence for "検証用"
+	// that Windows PowerShell 5.1 emitted before the Base64 contract.
+	cp932KenshouYou := string([]byte{0x8C, 0x9F, 0x8F, 0xD8, 0x97, 0x70})
+	output := "123|" + `C:\Editor\Unity.exe -projectPath "C:\Users\<USER_NAME>\` + cp932KenshouYou + `\proj"` + "\r\n"
+
+	processes := parseWindowsUnityProcesses(output)
+
+	if len(processes) != 0 {
+		t.Fatalf("non-Base64 command lines should be skipped: %#v", processes)
+	}
+}
+
+// Verifies the Windows process list script transports command lines as UTF-8 Base64 so the OEM console code page cannot corrupt non-ASCII paths.
+func TestWindowsUnityProcessListScriptEncodesCommandLineAsUTF8Base64(t *testing.T) {
+	script := windowsUnityProcessListScript()
+
+	for _, expected := range []string{
+		"[System.Text.Encoding]::UTF8.GetBytes($commandLine)",
+		"[Convert]::ToBase64String(",
+	} {
+		if !strings.Contains(script, expected) {
+			t.Fatalf("script missing %q: %s", expected, script)
+		}
 	}
 }
 
