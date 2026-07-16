@@ -172,31 +172,6 @@ func runDispatcherProcessCommandWithDeps(
 	return 1
 }
 
-func tryRunDetectedDispatcherV2Project(
-	ctx context.Context,
-	projectRoot string,
-	args []string,
-	stdout io.Writer,
-	stderr io.Writer,
-	deps dispatcherRunDeps,
-) (bool, int) {
-	v2Project, err := detectV2DispatcherProject(projectRoot)
-	if err != nil || !v2Project.IsV2 {
-		return false, 0
-	}
-	if v2Project.PackageVersion == "" {
-		clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project))
-		return true, 1
-	}
-
-	code, err := deps.runV2CLI(ctx, v2Project.PackageVersion, args, stdout, stderr)
-	if err == nil {
-		return true, code
-	}
-	clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project))
-	return true, 1
-}
-
 func shouldKeepDispatcherProcessCommand(args []string) bool {
 	if len(args) == 0 || clicore.ShouldHandleCompletionRequest(args) {
 		return true
@@ -486,42 +461,6 @@ func dispatcherPinResolutionError(projectRoot string, cause error) clierrors.CLI
 		},
 		Details: map[string]any{
 			"Cause": cause.Error(),
-		},
-	}
-}
-
-func dispatcherV2ProjectDetectedError(projectRoot string, v2Project dispatcherV2Project) clierrors.CLIError {
-	if len(v2Project.PackageVersionCandidates) > 0 {
-		return clierrors.CLIError{
-			ErrorCode:   clierrors.ErrorCodeV2ProjectDetected,
-			Phase:       clierrors.ErrorPhaseProjectResolve,
-			Message:     "This Unity project uses uloop V2, but its package version could not be resolved unambiguously.",
-			Retryable:   true,
-			SafeToRetry: true,
-			ProjectRoot: projectRoot,
-			NextActions: []string{
-				"Open the Unity project once so Unity Package Manager can refresh `Packages/packages-lock.json`, then retry the command.",
-				"As a last resort, run `npx uloop-cli@2 <command>` from this project.",
-			},
-			Details: map[string]any{
-				"V2PackageVersionCandidates": v2Project.PackageVersionCandidates,
-			},
-		}
-	}
-
-	return clierrors.CLIError{
-		ErrorCode:   clierrors.ErrorCodeV2ProjectDetected,
-		Phase:       clierrors.ErrorPhaseProjectResolve,
-		Message:     "This Unity project uses uloop V2 and requires Node.js 22 or later.",
-		Retryable:   true,
-		SafeToRetry: true,
-		ProjectRoot: projectRoot,
-		NextActions: []string{
-			"Install Node.js 22 or later, then retry the command.",
-			"As a last resort, run `npx uloop-cli@" + v2Project.PackageVersion + " <command>` from this project.",
-		},
-		Details: map[string]any{
-			"V2PackageVersion": v2Project.PackageVersion,
 		},
 	}
 }
