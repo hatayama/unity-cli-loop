@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,7 +18,7 @@ const (
 )
 
 type dispatcherV2InstallDeps struct {
-	runCommand func(context.Context, string, []string) error
+	runCommand func(context.Context, string, []string, io.Writer) error
 }
 
 func defaultDispatcherV2InstallDeps() dispatcherV2InstallDeps {
@@ -26,7 +27,7 @@ func defaultDispatcherV2InstallDeps() dispatcherV2InstallDeps {
 
 // installDispatcherV2CLI installs the exact V2 CLI version into its isolated cache directory.
 // Why: each Unity package version requires its matching CLI, so a shared cache slot would reinstall on every project switch.
-func installDispatcherV2CLI(ctx context.Context, cacheRoot string, version string, goos string, deps dispatcherV2InstallDeps) (string, error) {
+func installDispatcherV2CLI(ctx context.Context, cacheRoot string, version string, goos string, stderr io.Writer, deps dispatcherV2InstallDeps) (string, error) {
 	installPath := dispatcherV2InstallPath(cacheRoot, version)
 	if isInstalledDispatcherV2CLI(installPath, version) {
 		return installPath, nil
@@ -45,7 +46,7 @@ func installDispatcherV2CLI(ctx context.Context, cacheRoot string, version strin
 	}()
 
 	args := []string{"install", "--prefix", temporaryDirectory, dispatcherV2CLIPackageName + "@" + version}
-	if err := deps.runCommand(ctx, dispatcherV2NPMCommandName(goos), args); err != nil {
+	if err := deps.runCommand(ctx, dispatcherV2NPMCommandName(goos), args, stderr); err != nil {
 		return "", err
 	}
 	if !isInstalledDispatcherV2CLI(temporaryDirectory, version) {
@@ -83,11 +84,10 @@ func dispatcherV2NPMCommandName(goos string) string {
 	return dispatcherNPMCommandName
 }
 
-func runDispatcherV2InstallCommand(ctx context.Context, name string, args []string) error {
+func runDispatcherV2InstallCommand(ctx context.Context, name string, args []string, stderr io.Writer) error {
 	command := exec.CommandContext(ctx, name, args...)
-	command.Stdout = os.Stdout
-	command.Stderr = os.Stderr
-	command.Stdin = os.Stdin
+	command.Stdout = stderr
+	command.Stderr = stderr
 	command.Env = os.Environ()
 	return command.Run()
 }

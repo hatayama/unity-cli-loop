@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,7 +14,7 @@ func TestInstallDispatcherV2CLIInstallsVersionIntoVersionedCache(t *testing.T) {
 	var commandName string
 	var commandArgs []string
 	deps := dispatcherV2InstallDeps{
-		runCommand: func(ctx context.Context, name string, args []string) error {
+		runCommand: func(ctx context.Context, name string, args []string, stderr io.Writer) error {
 			commandName = name
 			commandArgs = append([]string{}, args...)
 			installPath := args[2]
@@ -22,7 +23,7 @@ func TestInstallDispatcherV2CLIInstallsVersionIntoVersionedCache(t *testing.T) {
 		},
 	}
 
-	installPath, err := installDispatcherV2CLI(context.Background(), cacheRoot, "2.2.0", "darwin", deps)
+	installPath, err := installDispatcherV2CLI(context.Background(), cacheRoot, "2.2.0", "darwin", io.Discard, deps)
 	if err != nil {
 		t.Fatalf("install V2 CLI: %v", err)
 	}
@@ -50,13 +51,13 @@ func TestInstallDispatcherV2CLISkipsNPMWhenRequestedVersionIsInstalled(t *testin
 	installPath := filepath.Join(cacheRoot, dispatcherV2CacheDirectoryName, "2.2.0")
 	writeInstalledDispatcherV2Package(t, installPath, "2.2.0")
 	deps := dispatcherV2InstallDeps{
-		runCommand: func(context.Context, string, []string) error {
+		runCommand: func(context.Context, string, []string, io.Writer) error {
 			t.Fatal("npm must not run for an installed matching V2 CLI")
 			return nil
 		},
 	}
 
-	actualPath, err := installDispatcherV2CLI(context.Background(), cacheRoot, "2.2.0", "darwin", deps)
+	actualPath, err := installDispatcherV2CLI(context.Background(), cacheRoot, "2.2.0", "darwin", io.Discard, deps)
 	if err != nil {
 		t.Fatalf("install V2 CLI: %v", err)
 	}

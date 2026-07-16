@@ -192,6 +192,68 @@ func TestRunDispatcherDelegatesV2ProjectWithOriginalArguments(t *testing.T) {
 	assertStringSliceEqual(t, actualArgs, []string{"compile", "--project-path", projectRoot})
 }
 
+func TestRunDispatcherDelegatesBareVersionForV2Project(t *testing.T) {
+	// Verifies a V2 project receives its own CLI version for the Setup window check.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "abc123", "2.2.0")
+	t.Chdir(projectRoot)
+	deps := defaultDispatcherRunDeps()
+	delegated := false
+	deps.runV2CLI = func(ctx context.Context, version string, args []string, stdout io.Writer, stderr io.Writer) (int, error) {
+		delegated = true
+		assertStringSliceEqual(t, args, []string{"--version"})
+		return 0, nil
+	}
+
+	code := runDispatcherWithDeps(context.Background(), []string{"--version"}, io.Discard, io.Discard, deps)
+	if code != 0 || !delegated {
+		t.Fatalf("V2 version was not delegated: code=%d delegated=%v", code, delegated)
+	}
+}
+
+func TestRunDispatcherReturnsDispatcherVersionOutsideProject(t *testing.T) {
+	// Verifies a version request outside a project remains handled by the dispatcher.
+	t.Chdir(t.TempDir())
+	deps := defaultDispatcherRunDeps()
+	deps.runV2CLI = func(context.Context, string, []string, io.Writer, io.Writer) (int, error) {
+		t.Fatal("V2 CLI must not run outside a project")
+		return 0, nil
+	}
+	var stdout bytes.Buffer
+	code := runDispatcherWithDeps(context.Background(), []string{"--version"}, &stdout, io.Discard, deps)
+	if code != 0 || stdout.String() != dispatcherVersion+"\n" {
+		t.Fatalf("dispatcher version output = %q, code=%d", stdout.String(), code)
+	}
+}
+
+func TestRunDispatcherDelegatesSkillsForV2Project(t *testing.T) {
+	// Verifies the project-scoped skills command is delegated to the V2 CLI.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "abc123", "2.2.0")
+	t.Chdir(projectRoot)
+	deps := defaultDispatcherRunDeps()
+	delegated := false
+	deps.runV2CLI = func(ctx context.Context, version string, args []string, stdout io.Writer, stderr io.Writer) (int, error) {
+		delegated = true
+		assertStringSliceEqual(t, args, []string{"skills", "list"})
+		return 0, nil
+	}
+
+	code := runDispatcherWithDeps(context.Background(), []string{"skills", "list"}, io.Discard, io.Discard, deps)
+	if code != 0 || !delegated {
+		t.Fatalf("V2 skills was not delegated: code=%d delegated=%v", code, delegated)
+	}
+}
+
+func TestShouldKeepDispatcherProcessCommandKeepsUpdate(t *testing.T) {
+	// Verifies global update remains owned by the V3 dispatcher.
+	if !shouldKeepDispatcherProcessCommand([]string{"update"}) {
+		t.Fatal("update must remain in the dispatcher")
+	}
+}
+
 func writeV2PackageManifest(t *testing.T, projectRoot string) {
 	t.Helper()
 	manifestPath := filepath.Join(projectRoot, "Packages", "manifest.json")

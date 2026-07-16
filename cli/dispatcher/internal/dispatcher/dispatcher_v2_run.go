@@ -16,7 +16,7 @@ func runDispatcherV2CLI(ctx context.Context, version string, args []string, stdo
 	if err != nil {
 		return 0, err
 	}
-	installPath, err := installDispatcherV2CLI(ctx, cacheRoot, version, runtime.GOOS, defaultDispatcherV2InstallDeps())
+	installPath, err := installDispatcherV2CLI(ctx, cacheRoot, version, runtime.GOOS, stderr, defaultDispatcherV2InstallDeps())
 	if err != nil {
 		return 0, err
 	}
