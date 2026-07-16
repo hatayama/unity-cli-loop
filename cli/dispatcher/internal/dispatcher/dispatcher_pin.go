@@ -53,16 +53,16 @@ func dispatcherPinCandidatePaths(projectRoot string) []dispatcherPinCandidatePat
 		{Path: filepath.Join(projectRoot, "Packages", "src", dispatcherPackagePinFileName)},
 		{Path: filepath.Join(projectRoot, "Packages", dispatcherUnityPackageName, dispatcherPackagePinFileName)},
 	}
-	packageCachePattern := filepath.Join(
-		projectRoot,
-		"Library",
-		"PackageCache",
-		dispatcherUnityPackageName+"@*",
-		dispatcherPackagePinFileName)
-	matches, err := filepath.Glob(packageCachePattern)
+	packageCacheDirectory := filepath.Join(projectRoot, "Library", "PackageCache")
+	entries, err := os.ReadDir(packageCacheDirectory)
 	if err == nil {
-		for _, match := range matches {
-			paths = append(paths, dispatcherPinCandidatePath{Path: match})
+		packageDirectoryPrefix := dispatcherUnityPackageName + "@"
+		for _, entry := range entries {
+			if !entry.IsDir() || !strings.HasPrefix(entry.Name(), packageDirectoryPrefix) {
+				continue
+			}
+			pinPath := filepath.Join(packageCacheDirectory, entry.Name(), dispatcherPackagePinFileName)
+			paths = append(paths, dispatcherPinCandidatePath{Path: pinPath})
 		}
 	}
 	return paths

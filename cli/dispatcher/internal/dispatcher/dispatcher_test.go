@@ -852,6 +852,26 @@ func TestLoadDispatcherPinSkipsInvalidPackageCandidate(t *testing.T) {
 	}
 }
 
+func TestLoadDispatcherPinFindsPackageCachePinWithBracketedProjectPath(t *testing.T) {
+	// Verifies PackageCache pin discovery treats glob metacharacters in the project path literally.
+	projectRoot := filepath.Join(t.TempDir(), "project[legacy]")
+	for _, directory := range []string{"Assets", "ProjectSettings"} {
+		if err := os.MkdirAll(filepath.Join(projectRoot, directory), 0o755); err != nil {
+			t.Fatalf("failed to create Unity project directory: %v", err)
+		}
+	}
+	cachePackageRoot := filepath.Join(projectRoot, "Library", "PackageCache", dispatcherUnityPackageName+"@3.0.0-beta.57")
+	writeDispatcherPinFile(t, filepath.Join(cachePackageRoot, dispatcherPackagePinFileName), "3.0.0-beta.57")
+
+	pin, err := loadDispatcherPin(projectRoot)
+	if err != nil {
+		t.Fatalf("loadDispatcherPin failed: %v", err)
+	}
+	if pin.ProjectRunnerVersion != "3.0.0-beta.57" {
+		t.Fatalf("projectRunnerVersion mismatch: %s", pin.ProjectRunnerVersion)
+	}
+}
+
 func TestLoadDispatcherPinNormalizesVersionPrefixes(t *testing.T) {
 	// Verifies v-prefixed pin versions are normalized before semantic-version validation.
 	projectRoot := createDispatcherUnityProject(t)
