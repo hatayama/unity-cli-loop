@@ -229,6 +229,28 @@ func TestDetectV2DispatcherProjectRejectsNonGitManifestFallbackWithoutLockEntry(
 	}
 }
 
+func TestIsDispatcherGitPackageDependencyAcceptsPathQueries(t *testing.T) {
+	// Verifies Unity Git dependencies with path queries remain eligible for PackageCache fallback.
+	testCases := []struct {
+		name       string
+		dependency string
+	}{
+		{name: "scp", dependency: "git@example.invalid:package.git?path=/sub"},
+		{name: "https", dependency: "https://example.invalid/package.git?path=/sub"},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			dependency, err := json.Marshal(testCase.dependency)
+			if err != nil {
+				t.Fatalf("marshal dependency: %v", err)
+			}
+			if !isDispatcherGitPackageDependency(dependency) {
+				t.Fatalf("Git dependency was rejected: %s", testCase.dependency)
+			}
+		})
+	}
+}
+
 func TestRunDispatcherReportsV2ProjectGuidanceWhenPinIsMissing(t *testing.T) {
 	// Verifies pinless V2 projects receive migration guidance instead of the missing-pin error.
 	projectRoot := createDispatcherUnityProject(t)
