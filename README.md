@@ -75,7 +75,11 @@ Select Window > Unity CLI Loop > Settings. A dedicated window will open. If the 
 
 The installer places the global `uloop` dispatcher on PATH. Project-specific `uloop-project-runner` binaries are downloaded into the user cache automatically from each project's `.uloop/project-runner-pin.json`.
 
-To return to the v2 line, press **Uninstall CLI** in Settings, downgrade the U-LOOP package to a v2 version such as `2.1.1`, then press **Install CLI** again from Settings.
+Keep the v3 dispatcher installed when working with both v2 and v3 projects. If Unity resolves a project to a v2 `io.github.hatayama.uloopmcp` package, the dispatcher automatically installs the matching v2 `uloop-cli` release into its versioned user cache and delegates the command to it. The resolved package version takes precedence over a stale v3 project-runner pin left after a downgrade. The initial npm installation and the v2-mode notice are written to stderr so stdout remains the delegated command's output. V3 projects continue to use the project runner selected by their pin.
+
+The global `install`, `update`, `uninstall`, `completion`, and `launch` commands remain owned by the v3 dispatcher in every project. Other project commands, help, and the project-scoped version request are delegated for detected v2 projects.
+
+V2 delegation requires Node.js 22 or later, including npm for the first command that populates the cache. Do not press **Update CLI** or **Downgrade CLI** in a v2 project's Settings window. These buttons are normally hidden because the delegated CLI reports the matching v2 version, but using one can restore a global npm CLI that hides the v3 dispatcher depending on PATH order.
 
 <details>
 <summary>CLI-only terminal install</summary>
@@ -128,11 +132,11 @@ If npm is unavailable or the old command belongs to a different Node prefix, the
 npm uninstall -g uloop-cli
 ```
 
-If the Unity UI path is not available or your terminal still resolves `uloop` to the v3 CLI, remove that command first, then install the v2 version you want:
+Do not install a v2 CLI globally to switch projects. If your terminal resolves `uloop` to an old npm installation instead of the native dispatcher, remove the npm installation and reinstall the native dispatcher:
 
 ```bash
-rm -f "$HOME/.local/bin/uloop"
-npm install -g uloop-cli@2.1.1
+npm uninstall -g uloop-cli
+# Run the verified native installer above again.
 which uloop
 uloop --version
 ```
@@ -140,8 +144,8 @@ uloop --version
 On Windows PowerShell:
 
 ```powershell
-Remove-Item "$env:LOCALAPPDATA\Programs\uloop\bin\uloop.exe" -Force -ErrorAction SilentlyContinue
-npm install -g uloop-cli@2.1.1
+npm uninstall -g uloop-cli
+# Run the verified native installer above again.
 Get-Command uloop
 uloop --version
 ```

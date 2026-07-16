@@ -74,7 +74,13 @@ Scope(s): io.github.hatayama.uloopmcp
 
 Window > Unity CLI Loop > Settingsを選択します。専用ウィンドウが開くので、**CLI** ボタンが青くなっていなければ **Install CLI** を押してください。
 
-v2系に戻したい場合は、Settings で **Uninstall CLI** を押し、Unity Package Manager か `manifest.json` で U-LOOP package を `2.1.1` などのv2系のバージョンへ下げてから、もう一度 Settings で **Install CLI** を押してください。
+installerはグローバルな`uloop` dispatcherをPATH上に配置します。プロジェクト固有の`uloop-project-runner` binaryは、各プロジェクトの`.uloop/project-runner-pin.json`に従ってuser cacheへ自動的にdownloadされます。
+
+v2とv3のプロジェクトを併用するときも、v3 dispatcherをインストールしたままにしてください。Unityがプロジェクトをv2系の`io.github.hatayama.uloopmcp` packageへ解決している場合、dispatcherは同じバージョンのv2 `uloop-cli` releaseをバージョン別user cacheへ自動的にインストールし、コマンドを委譲します。解決済みpackageのバージョンは、downgrade後に残った古いv3 project-runner pinより優先されます。初回のnpmインストールとv2モードの注記はstderrへ出力されるため、stdoutには委譲先コマンドの出力だけが残ります。v3プロジェクトはpinで選ばれたproject runnerを引き続き使用します。
+
+グローバルな`install`、`update`、`uninstall`、`completion`、`launch`コマンドは、どのプロジェクトでもv3 dispatcherが処理します。検出されたv2プロジェクトでは、それ以外のプロジェクトコマンド、help、プロジェクトスコープのversion表示が委譲されます。
+
+v2への委譲には、初回コマンドでcacheを作成するnpmを含むNode.js 22以降が必要です。v2プロジェクトのSettingsウィンドウでは、**Update CLI**または**Downgrade CLI**を押さないでください。委譲先CLIが同じv2バージョンを返すため通常はボタン自体が表示されませんが、使用するとグローバルnpm版CLIが復活し、PATHの順序によってv3 dispatcherが隠れる可能性があります。
 
 <details>
 <summary>CLIだけをterminalからinstallする場合はこちら</summary>
@@ -125,11 +131,11 @@ npm が見つからない場合や、古い command が別の Node prefix に属
 npm uninstall -g uloop-cli
 ```
 
-Unity UIから戻せない場合や、ターミナルの `uloop` がまだv3系のCLIを指している場合は、先にその `uloop` コマンドを削除してから、戻したいv2系のバージョンをインストールしてください。
+プロジェクトを切り替えるためにv2 CLIをグローバルインストールしないでください。ターミナルの`uloop`がnative dispatcherではなく古いnpm版を指している場合は、npm版を削除してnative dispatcherを再インストールしてください。
 
 ```bash
-rm -f "$HOME/.local/bin/uloop"
-npm install -g uloop-cli@2.1.1
+npm uninstall -g uloop-cli
+# 上記の検証済みnative installerをもう一度実行します。
 which uloop
 uloop --version
 ```
@@ -137,8 +143,8 @@ uloop --version
 Windows PowerShell の場合:
 
 ```powershell
-Remove-Item "$env:LOCALAPPDATA\Programs\uloop\bin\uloop.exe" -Force -ErrorAction SilentlyContinue
-npm install -g uloop-cli@2.1.1
+npm uninstall -g uloop-cli
+# 上記の検証済みnative installerをもう一度実行します。
 Get-Command uloop
 uloop --version
 ```
