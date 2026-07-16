@@ -178,8 +178,18 @@ test_publish_rejects_manifest_and_existing_tag_mismatches() {
 }
 
 test_release_tag_is_created_before_the_release() {
-  assert_contains 'gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/${RELEASE_TAG}" -f sha="${RELEASE_SHA}"'
+  assert_contains 'gh api "repos/${GITHUB_REPOSITORY}/git/refs" \'
+  assert_contains '  -f ref="refs/tags/${RELEASE_TAG}" \'
+  assert_contains '  -f sha="${RELEASE_SHA}" > "${tag_create_error_path}" 2>&1'
   assert_before 'gh api "repos/${GITHUB_REPOSITORY}/git/refs"' 'gh release create "${RELEASE_TAG}"'
+}
+
+test_recovery_target_403_errors_explain_the_manual_recovery() {
+  assert_contains 'RECOVERY_TARGET: ${{ github.event_name == '\''workflow_dispatch'\'' && inputs.recovery-target }}'
+  assert_contains 'grep -qE '\''HTTP 403|Resource not accessible by integration'\'''
+  assert_contains 'Recovery-target release creation was rejected for a historical commit by GitHub.'
+  assert_contains 'Recovery-target draft release creation was rejected for a historical commit by GitHub.'
+  assert_contains 'See docs/release-recovery-runbook.md for the recovery procedure.'
 }
 
 test_draft_creation_accepts_only_the_known_missing_tag_responses() {
