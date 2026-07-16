@@ -41,6 +41,7 @@ type dispatcherUpdateState struct {
 type dispatcherRunDeps struct {
 	now        func() time.Time
 	runRealCLI func(context.Context, string, []string, io.Writer, io.Writer) int
+	runV2CLI   func(context.Context, string, []string, io.Writer, io.Writer) (int, error)
 	runUpdate  func(context.Context) error
 	launch     launchDeps
 }
@@ -49,6 +50,7 @@ func defaultDispatcherRunDeps() dispatcherRunDeps {
 	return dispatcherRunDeps{
 		now:        time.Now,
 		runRealCLI: runRealCLICommand,
+		runV2CLI:   runDispatcherV2CLI,
 		runUpdate:  runDispatcherUpdateCommand,
 		launch:     defaultLaunchDeps(),
 	}
@@ -59,18 +61,31 @@ func RunDispatcher(ctx context.Context, args []string, stdout io.Writer, stderr 
 }
 
 func runDispatcherWithDeps(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer, deps dispatcherRunDeps) int {
-	if handled, code := tryHandleDispatcherInfoRequest(args, stdout); handled {
-		return code
-	}
-
 	remainingArgs, projectPath, err := clicore.ParseGlobalProjectPath(args)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{})
 		return 1
 	}
+	if len(args) == 0 || clicore.IsHelpRequest(remainingArgs) || clicore.IsVersionRequest(remainingArgs) || clicore.IsVersionJSONRequest(remainingArgs) {
+		if startPath, workingDirectoryErr := os.Getwd(); workingDirectoryErr == nil {
+			if projectRoot, resolveErr := resolveDispatcherProjectRoot(startPath, projectPath, remainingArgs); resolveErr == nil {
+				if v2Project, detectErr := detectV2DispatcherProject(projectRoot); detectErr == nil && v2Project.IsV2 {
+					code, runErr := deps.runV2CLI(ctx, v2Project.PackageVersion, args, stdout, stderr)
+					if runErr == nil {
+						return code
+					}
+					clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project.PackageVersion))
+					return 1
+				}
+			}
+		}
+		if handled, code := tryHandleDispatcherInfoRequest(args, stdout); handled {
+			return code
+		}
+	}
 
 	if shouldRunInDispatcherProcess(remainingArgs) {
-		return runDispatcherProcessCommandWithDeps(ctx, remainingArgs, projectPath, stdout, stderr, deps)
+		return runDispatcherProcessCommandWithDeps(ctx, args, remainingArgs, projectPath, stdout, stderr, deps)
 	}
 
 	startPath, err := os.Getwd()
@@ -89,6 +104,10 @@ func runDispatcherWithDeps(ctx context.Context, args []string, stdout io.Writer,
 	if err != nil {
 		v2Project, detectErr := detectV2DispatcherProject(projectRoot)
 		if detectErr == nil && v2Project.IsV2 {
+			code, runErr := deps.runV2CLI(ctx, v2Project.PackageVersion, args, stdout, stderr)
+			if runErr == nil {
+				return code
+			}
 			clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project.PackageVersion))
 			return 1
 		}
@@ -115,24 +134,36 @@ func runDispatcherWithDeps(ctx context.Context, args []string, stdout io.Writer,
 // execution path must not run through RunProjectLocal.
 func runDispatcherProcessCommandWithDeps(
 	ctx context.Context,
+	args []string,
 	remainingArgs []string,
 	projectPath string,
 	stdout io.Writer,
 	stderr io.Writer,
 	deps dispatcherRunDeps,
 ) int {
+	startPath, err := os.Getwd()
+	if err != nil {
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{})
+		return 1
+	}
+	if !shouldKeepDispatcherProcessCommand(remainingArgs) {
+		if projectRoot, resolveErr := resolveDispatcherProjectRoot(startPath, projectPath, remainingArgs); resolveErr == nil {
+			if v2Project, detectErr := detectV2DispatcherProject(projectRoot); detectErr == nil && v2Project.IsV2 {
+				code, runErr := deps.runV2CLI(ctx, v2Project.PackageVersion, args, stdout, stderr)
+				if runErr == nil {
+					return code
+				}
+				clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project.PackageVersion))
+				return 1
+			}
+		}
+	}
 	if handled, code := tryHandleProjectScopeHelpRequest(remainingArgs, projectPath, stdout); handled {
 		return code
 	}
 
 	command := remainingArgs[0]
 	commandArgs := remainingArgs[1:]
-
-	startPath, err := os.Getwd()
-	if err != nil {
-		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: command})
-		return 1
-	}
 
 	if handled, code := tryHandlePreConnectionRequestWithDeps(
 		ctx,
@@ -155,6 +186,18 @@ func runDispatcherProcessCommandWithDeps(
 		clierrors.ErrorContext{Command: command},
 	))
 	return 1
+}
+
+func shouldKeepDispatcherProcessCommand(args []string) bool {
+	if len(args) == 0 || clicore.ShouldHandleCompletionRequest(args) {
+		return true
+	}
+	switch args[0] {
+	case clicore.InstallCommandName, clicore.UpdateCommandName, clicore.UninstallCommandName, clicore.LaunchCommandName:
+		return true
+	default:
+		return false
+	}
 }
 
 func shouldRunInDispatcherProcess(args []string) bool {

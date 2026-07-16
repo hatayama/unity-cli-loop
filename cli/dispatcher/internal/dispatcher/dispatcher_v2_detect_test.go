@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -142,7 +143,11 @@ func TestRunDispatcherReportsV2ProjectGuidanceWhenPinIsMissing(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := RunDispatcher(context.Background(), []string{"compile"}, &stdout, &stderr)
+	deps := defaultDispatcherRunDeps()
+	deps.runV2CLI = func(context.Context, string, []string, io.Writer, io.Writer) (int, error) {
+		return 0, os.ErrNotExist
+	}
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, &stdout, &stderr, deps)
 
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1; stderr=%s", code, stderr.String())
@@ -157,6 +162,34 @@ func TestRunDispatcherReportsV2ProjectGuidanceWhenPinIsMissing(t *testing.T) {
 	if len(envelope.Error.NextActions) < 2 {
 		t.Fatalf("next actions = %#v, want Node and npx guidance", envelope.Error.NextActions)
 	}
+}
+
+func TestRunDispatcherDelegatesV2ProjectWithOriginalArguments(t *testing.T) {
+	// Verifies V2 delegation preserves the original argument sequence.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "abc123", "2.2.0")
+	t.Chdir(projectRoot)
+	deps := defaultDispatcherRunDeps()
+	var actualVersion string
+	var actualArgs []string
+	deps.runV2CLI = func(ctx context.Context, version string, args []string, stdout io.Writer, stderr io.Writer) (int, error) {
+		actualVersion = version
+		actualArgs = append([]string{}, args...)
+		return 7, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runDispatcherWithDeps(context.Background(), []string{"compile", "--project-path", projectRoot}, &stdout, &stderr, deps)
+
+	if code != 7 {
+		t.Fatalf("exit code = %d, want 7", code)
+	}
+	if actualVersion != "2.2.0" {
+		t.Fatalf("V2 version = %q, want 2.2.0", actualVersion)
+	}
+	assertStringSliceEqual(t, actualArgs, []string{"compile", "--project-path", projectRoot})
 }
 
 func writeV2PackageManifest(t *testing.T, projectRoot string) {
