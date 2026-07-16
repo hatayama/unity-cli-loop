@@ -24,7 +24,7 @@ func tryRunDetectedDispatcherV2Project(
 		return false, 0
 	}
 	if v2Project.PackageVersion == "" {
-		clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project))
+		clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project, nil))
 		return true, 1
 	}
 
@@ -32,11 +32,11 @@ func tryRunDetectedDispatcherV2Project(
 	if err == nil {
 		return true, code
 	}
-	clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project))
+	clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project, err))
 	return true, 1
 }
 
-func dispatcherV2ProjectDetectedError(projectRoot string, v2Project dispatcherV2Project) clierrors.CLIError {
+func dispatcherV2ProjectDetectedError(projectRoot string, v2Project dispatcherV2Project, executionErr error) clierrors.CLIError {
 	if len(v2Project.PackageVersionCandidates) > 0 {
 		return clierrors.CLIError{
 			ErrorCode:   clierrors.ErrorCodeV2ProjectDetected,
@@ -55,6 +55,12 @@ func dispatcherV2ProjectDetectedError(projectRoot string, v2Project dispatcherV2
 		}
 	}
 
+	details := map[string]any{
+		"V2PackageVersion": v2Project.PackageVersion,
+	}
+	if executionErr != nil {
+		details["Cause"] = executionErr.Error()
+	}
 	return clierrors.CLIError{
 		ErrorCode:   clierrors.ErrorCodeV2ProjectDetected,
 		Phase:       clierrors.ErrorPhaseProjectResolve,
@@ -66,9 +72,7 @@ func dispatcherV2ProjectDetectedError(projectRoot string, v2Project dispatcherV2
 			"Install Node.js 22 or later, then retry the command.",
 			"As a last resort, run `npx uloop-cli@" + v2Project.PackageVersion + " <command>` from this project.",
 		},
-		Details: map[string]any{
-			"V2PackageVersion": v2Project.PackageVersion,
-		},
+		Details: details,
 	}
 }
 

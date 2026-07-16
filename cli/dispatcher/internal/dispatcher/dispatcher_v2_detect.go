@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -46,7 +47,7 @@ type dispatcherPackageJSON struct {
 // detectV2DispatcherProject identifies V2 projects from Unity's currently resolved package state.
 // Why: a resolved V2 package must take precedence over stale V3 pins that can remain after a downgrade.
 func detectV2DispatcherProject(projectRoot string) (dispatcherV2Project, error) {
-	hasPackage, err := dispatcherProjectHasUnityPackage(projectRoot)
+	manifestDependency, hasPackage, err := dispatcherProjectUnityPackageDependency(projectRoot)
 	if err != nil {
 		return dispatcherV2Project{}, err
 	}
@@ -66,6 +67,9 @@ func detectV2DispatcherProject(projectRoot string) (dispatcherV2Project, error) 
 		return dispatcherV2Project{IsV2: true, PackageVersion: packageVersion}, nil
 	}
 	if found && lockEntry.Source != dispatcherPackageLockSourceGit {
+		return dispatcherV2Project{}, nil
+	}
+	if !found && !isDispatcherGitPackageDependency(manifestDependency) {
 		return dispatcherV2Project{}, nil
 	}
 
@@ -91,22 +95,43 @@ func detectV2DispatcherProject(projectRoot string) (dispatcherV2Project, error) 
 	return dispatcherV2Project{IsV2: true, PackageVersionCandidates: packageVersions}, nil
 }
 
-func dispatcherProjectHasUnityPackage(projectRoot string) (bool, error) {
+func dispatcherProjectUnityPackageDependency(projectRoot string) (json.RawMessage, bool, error) {
 	manifestPath := filepath.Join(projectRoot, filepath.FromSlash(dispatcherPackagesManifestRelativePath))
 	content, err := os.ReadFile(manifestPath)
 	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
+		return nil, false, nil
 	}
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
 
 	manifest := dispatcherPackagesManifest{}
 	if err := json.Unmarshal(content, &manifest); err != nil {
-		return false, fmt.Errorf("parse %s: %w", manifestPath, err)
+		return nil, false, fmt.Errorf("parse %s: %w", manifestPath, err)
 	}
-	_, found := manifest.Dependencies[dispatcherUnityPackageName]
-	return found, nil
+	dependency, found := manifest.Dependencies[dispatcherUnityPackageName]
+	return dependency, found, nil
+}
+
+func isDispatcherGitPackageDependency(dependency json.RawMessage) bool {
+	value := ""
+	if err := json.Unmarshal(dependency, &value); err != nil {
+		return false
+	}
+	withoutRevision, _, _ := strings.Cut(strings.TrimSpace(value), "#")
+	if strings.HasPrefix(withoutRevision, "git@") {
+		return strings.HasSuffix(withoutRevision, ".git")
+	}
+	parsed, err := url.Parse(withoutRevision)
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "git", "ssh", "http", "https", "git+ssh", "git+http", "git+https":
+		return strings.HasSuffix(strings.TrimSuffix(parsed.Path, "/"), ".git")
+	default:
+		return false
+	}
 }
 
 func dispatcherPackageCacheVersions(projectRoot string) ([]string, error) {
@@ -160,7 +185,7 @@ func dispatcherPackageLockEntryForProject(projectRoot string) (dispatcherPackage
 	if !found {
 		return dispatcherPackageLockEntry{}, false, nil
 	}
-	return entry, entry.Version != "", nil
+	return entry, true, nil
 }
 
 func readDispatcherPackageVersion(packagePath string) (string, error) {

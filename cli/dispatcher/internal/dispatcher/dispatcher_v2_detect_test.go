@@ -186,6 +186,49 @@ func TestDetectV2DispatcherProjectSkipsV3PackageLockVersion(t *testing.T) {
 	}
 }
 
+func TestDetectV2DispatcherProjectRejectsEmptyLocalPackageLockVersion(t *testing.T) {
+	// Verifies an existing local lock entry cannot use a stale V2 cache when its version is empty.
+	projectRoot := createDispatcherUnityProject(t)
+	writePackageManifest(t, projectRoot, "file:../v3-package")
+	writePackagesLockWithSource(t, projectRoot, "", "local")
+	writeV2PackageCachePackageJSON(t, projectRoot, "stale", "2.2.0")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if v2Project.IsV2 {
+		t.Fatalf("unexpected V2 project: %#v", v2Project)
+	}
+}
+
+func TestDetectV2DispatcherProjectRejectsNonGitManifestFallbackWithoutLockEntry(t *testing.T) {
+	// Verifies local, embedded, and unknown manifest sources cannot use stale V2 cache data without a lock entry.
+	testCases := []struct {
+		name       string
+		dependency string
+	}{
+		{name: "local", dependency: "file:../v3-package"},
+		{name: "embedded", dependency: "file:../Packages/v3-package"},
+		{name: "unknown", dependency: "vendor:v3-package"},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			projectRoot := createDispatcherUnityProject(t)
+			writePackageManifest(t, projectRoot, testCase.dependency)
+			writeV2PackageCachePackageJSON(t, projectRoot, "stale", "2.2.0")
+
+			v2Project, err := detectV2DispatcherProject(projectRoot)
+			if err != nil {
+				t.Fatalf("detect V2 project: %v", err)
+			}
+			if v2Project.IsV2 {
+				t.Fatalf("unexpected V2 project: %#v", v2Project)
+			}
+		})
+	}
+}
+
 func TestRunDispatcherReportsV2ProjectGuidanceWhenPinIsMissing(t *testing.T) {
 	// Verifies pinless V2 projects receive migration guidance instead of the missing-pin error.
 	projectRoot := createDispatcherUnityProject(t)
@@ -213,6 +256,9 @@ func TestRunDispatcherReportsV2ProjectGuidanceWhenPinIsMissing(t *testing.T) {
 	}
 	if len(envelope.Error.NextActions) < 2 {
 		t.Fatalf("next actions = %#v, want Node and npx guidance", envelope.Error.NextActions)
+	}
+	if envelope.Error.Details["Cause"] != os.ErrNotExist.Error() {
+		t.Fatalf("cause = %#v, want %q", envelope.Error.Details["Cause"], os.ErrNotExist.Error())
 	}
 }
 
@@ -438,11 +484,16 @@ func TestShouldKeepDispatcherProcessCommandKeepsUpdate(t *testing.T) {
 
 func writeV2PackageManifest(t *testing.T, projectRoot string) {
 	t.Helper()
+	writePackageManifest(t, projectRoot, "https://example.invalid/package.git")
+}
+
+func writePackageManifest(t *testing.T, projectRoot string, dependency string) {
+	t.Helper()
 	manifestPath := filepath.Join(projectRoot, "Packages", "manifest.json")
 	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
 		t.Fatalf("create Packages directory: %v", err)
 	}
-	content := "{\n  \"dependencies\": {\n    \"" + dispatcherUnityPackageName + "\": \"https://example.invalid/package.git\"\n  }\n}\n"
+	content := "{\n  \"dependencies\": {\n    \"" + dispatcherUnityPackageName + "\": \"" + dependency + "\"\n  }\n}\n"
 	if err := os.WriteFile(manifestPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
