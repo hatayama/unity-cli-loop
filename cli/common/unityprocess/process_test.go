@@ -63,39 +63,56 @@ func TestExtractProjectPathSupportsEqualsAndSpaces(t *testing.T) {
 	}
 }
 
-// Verifies the embedded Windows focus script throws instead of silently returning on failures.
-func TestBuildFocusUnityProcessWindowsScriptThrowsOnFailures(t *testing.T) {
+// Verifies the embedded Windows focus script verifies the foreground result and throws instead of trusting API return values.
+func TestBuildFocusUnityProcessWindowsScriptVerifiesForegroundAndThrowsOnFailures(t *testing.T) {
 	script := buildFocusUnityProcessWindowsScript(123)
 
-	for _, expected := range []string{
-		"throw 'Unity process was not found: 123'",
-		"throw 'Unity process has no main window handle: 123'",
-		"throw 'Failed to show Unity window'",
-		"$focused = $shell.AppActivate(123)",
-		"throw 'Failed to focus Unity window'",
-	} {
-		if !strings.Contains(script, expected) {
-			t.Fatalf("script missing %q: %s", expected, script)
-		}
-	}
-	if strings.Contains(script, "catch { return }") || strings.Contains(script, "{ return }") {
-		t.Fatalf("script should not silently return: %s", script)
-	}
+	assertWindowsFocusScriptContract(t, script)
 }
 
-// Verifies the embedded Windows focus-with-restore script captures the previous foreground window.
+// Verifies the embedded Windows focus-with-restore script captures the previous foreground window and shares the focus contract.
 func TestBuildFocusUnityProcessWindowsWithRestoreScriptCapturesForegroundWindow(t *testing.T) {
 	script := buildFocusUnityProcessWindowsWithRestoreScript(123)
 
+	assertWindowsFocusScriptContract(t, script)
 	for _, expected := range []string{
-		"GetForegroundWindow",
 		"$previous = [Win32Interop]::GetForegroundWindow()",
 		"Write-Output $previous.ToInt64()",
-		"$focused = $shell.AppActivate(123)",
 	} {
 		if !strings.Contains(script, expected) {
 			t.Fatalf("script missing %q: %s", expected, script)
 		}
+	}
+}
+
+// Asserts the shared Windows focus contract: escalation techniques, foreground verification, and no trust in AppActivate.
+func assertWindowsFocusScriptContract(t *testing.T, script string) {
+	t.Helper()
+	for _, expected := range []string{
+		"throw 'Unity process was not found: 123'",
+		"throw 'Unity process has no main window handle: 123'",
+		"if ([Win32Interop]::IsIconic($handle)) {",
+		"throw 'Failed to show Unity window'",
+		"function Test-TargetForeground",
+		"[Win32Interop]::GetWindowProcessId([Win32Interop]::GetForegroundWindow()) -eq 123",
+		"AttachThreadInput($currentThreadId, $foregroundThreadId, $true)",
+		"AttachThreadInput($currentThreadId, $targetThreadId, $true)",
+		"AttachThreadInput($currentThreadId, $targetThreadId, $false)",
+		"AttachThreadInput($currentThreadId, $foregroundThreadId, $false)",
+		"BringWindowToTop",
+		"keybd_event(0x12, 0, 0, [UIntPtr]::Zero)",
+		"keybd_event(0x12, 0, 2, [UIntPtr]::Zero)",
+		"throw 'Windows refused to bring the Unity window (PID: 123) to the foreground (foreground lock). Click the Unity window or its taskbar icon to focus it manually.'",
+	} {
+		if !strings.Contains(script, expected) {
+			t.Fatalf("script missing %q: %s", expected, script)
+		}
+	}
+	if strings.Contains(script, "AppActivate") {
+		t.Fatalf("script must not trust AppActivate return values: %s", script)
+	}
+	if strings.Contains(script, "catch { return }") || strings.Contains(script, "{ return }") {
+		t.Fatalf("script should not silently return: %s", script)
 	}
 }
 

@@ -16,7 +16,7 @@ func FocusUnityProcess(ctx context.Context, pid int) error {
 	command := exec.CommandContext(commandContext, windowsPowerShellCommand, "-NoProfile", "-Command", script)
 	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
-		return commandErrorWithStderr(err, stderr.String())
+		return focusCommandError(commandContext.Err(), err, stderr.String())
 	}
 	return nil
 }
@@ -30,7 +30,7 @@ func FocusUnityProcessWithRestore(ctx context.Context, pid int) (RestoreFocusFun
 	command.Stderr = &stderr
 	output, err := command.Output()
 	if err != nil {
-		return nil, commandErrorWithStderr(err, stderr.String())
+		return nil, focusCommandError(commandContext.Err(), err, stderr.String())
 	}
 	previousHandle := parseWindowsForegroundHandle(string(output))
 	if previousHandle == 0 {
@@ -49,7 +49,7 @@ func restoreWindowsForegroundWindow(ctx context.Context, handle int64) error {
 	command := exec.CommandContext(commandContext, windowsPowerShellCommand, "-NoProfile", "-Command", script)
 	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
-		return commandErrorWithStderr(err, stderr.String())
+		return focusCommandError(commandContext.Err(), err, stderr.String())
 	}
 	return nil
 }
