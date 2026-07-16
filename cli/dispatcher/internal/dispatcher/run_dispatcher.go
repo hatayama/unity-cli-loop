@@ -87,6 +87,11 @@ func runDispatcherWithDeps(ctx context.Context, args []string, stdout io.Writer,
 
 	pin, err := loadDispatcherPin(projectRoot)
 	if err != nil {
+		v2Project, detectErr := detectV2DispatcherProject(projectRoot)
+		if detectErr == nil && v2Project.IsV2 {
+			clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project.PackageVersion))
+			return 1
+		}
 		clierrors.WriteErrorEnvelope(stderr, dispatcherPinResolutionError(projectRoot, err))
 		return 1
 	}
@@ -429,6 +434,24 @@ func dispatcherPinResolutionError(projectRoot string, cause error) clierrors.CLI
 		},
 		Details: map[string]any{
 			"Cause": cause.Error(),
+		},
+	}
+}
+
+func dispatcherV2ProjectDetectedError(projectRoot string, packageVersion string) clierrors.CLIError {
+	return clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeV2ProjectDetected,
+		Phase:       clierrors.ErrorPhaseProjectResolve,
+		Message:     "This Unity project uses uloop V2 and requires Node.js 22 or later.",
+		Retryable:   true,
+		SafeToRetry: true,
+		ProjectRoot: projectRoot,
+		NextActions: []string{
+			"Install Node.js 22 or later, then retry the command.",
+			"As a last resort, run `npx uloop-cli@" + packageVersion + " <command>` from this project.",
+		},
+		Details: map[string]any{
+			"V2PackageVersion": packageVersion,
 		},
 	}
 }
