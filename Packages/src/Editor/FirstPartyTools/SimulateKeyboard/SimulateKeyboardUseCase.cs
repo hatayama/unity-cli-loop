@@ -104,49 +104,59 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId: correlationId
             );
 
-            using InputSimulationRunInBackgroundScope runInBackgroundScope = InputSimulationRunInBackgroundScope.Enable();
-
-            EnsureOverlayExists();
-
-            SimulateKeyboardResponse response;
-
-            switch (parameters.Action)
+            // Why not `using`: the executor awaits below use ConfigureAwait(false), so this method
+            // can resume on a thread-pool thread. Application.runInBackground is main-thread-only,
+            // so the scope must be disposed after switching back to the main thread.
+            InputSimulationRunInBackgroundScope runInBackgroundScope = InputSimulationRunInBackgroundScope.Enable();
+            try
             {
-                case UnityCliLoopKeyboardAction.Press:
-                    response = await KeyboardInputActionExecutor.ExecutePress(
-                        keyboard,
-                        key,
-                        parameters.Duration,
-                        ct).ConfigureAwait(false);
-                    break;
+                EnsureOverlayExists();
 
-                case UnityCliLoopKeyboardAction.KeyDown:
-                    response = await KeyboardInputActionExecutor.ExecuteKeyDown(keyboard, key, ct).ConfigureAwait(false);
-                    break;
+                SimulateKeyboardResponse response;
 
-                case UnityCliLoopKeyboardAction.KeyUp:
-                    response = await KeyboardInputActionExecutor.ExecuteKeyUp(keyboard, key, ct).ConfigureAwait(false);
-                    break;
+                switch (parameters.Action)
+                {
+                    case UnityCliLoopKeyboardAction.Press:
+                        response = await KeyboardInputActionExecutor.ExecutePress(
+                            keyboard,
+                            key,
+                            parameters.Duration,
+                            ct).ConfigureAwait(false);
+                        break;
 
-                default:
-                    // Only reachable when an out-of-range enum value is cast from an integer;
-                    // surface as a Success=false response so the CLI treats it as a normal validation failure.
-                    return new SimulateKeyboardResponse
-                    {
-                        Success = false,
-                        Message = $"Unknown keyboard action: {parameters.Action}",
-                        Action = parameters.Action.ToString()
-                    };
+                    case UnityCliLoopKeyboardAction.KeyDown:
+                        response = await KeyboardInputActionExecutor.ExecuteKeyDown(keyboard, key, ct).ConfigureAwait(false);
+                        break;
+
+                    case UnityCliLoopKeyboardAction.KeyUp:
+                        response = await KeyboardInputActionExecutor.ExecuteKeyUp(keyboard, key, ct).ConfigureAwait(false);
+                        break;
+
+                    default:
+                        // Only reachable when an out-of-range enum value is cast from an integer;
+                        // surface as a Success=false response so the CLI treats it as a normal validation failure.
+                        return new SimulateKeyboardResponse
+                        {
+                            Success = false,
+                            Message = $"Unknown keyboard action: {parameters.Action}",
+                            Action = parameters.Action.ToString()
+                        };
+                }
+
+                VibeLogger.LogInfo(
+                    "simulate_keyboard_complete",
+                    $"Keyboard simulation completed: {response.Message}",
+                    new { Action = parameters.Action.ToString(), Success = response.Success },
+                    correlationId: correlationId
+                );
+
+                return response;
             }
-
-            VibeLogger.LogInfo(
-                "simulate_keyboard_complete",
-                $"Keyboard simulation completed: {response.Message}",
-                new { Action = parameters.Action.ToString(), Success = response.Success },
-                correlationId: correlationId
-            );
-
-            return response;
+            finally
+            {
+                await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+                runInBackgroundScope.Dispose();
+            }
 #endif
         }
 
