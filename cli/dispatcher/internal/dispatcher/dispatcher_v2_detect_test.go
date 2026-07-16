@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 )
 
 func TestDetectV2DispatcherProjectFindsPackageCacheVersion(t *testing.T) {
@@ -122,19 +123,19 @@ func TestDetectV2DispatcherProjectRejectsAmbiguousPackageCacheVersions(t *testin
 	assertStringSliceEqual(t, v2Project.PackageVersionCandidates, []string{"2.1.0", "2.2.0"})
 }
 
-func TestDetectV2DispatcherProjectSkipsProjectWithPin(t *testing.T) {
-	// Verifies a project with a dispatcher pin is not classified as V2.
+func TestDetectV2DispatcherProjectUsesResolvedV2PackageDespiteStalePin(t *testing.T) {
+	// Verifies a resolved V2 package wins over a stale pin left by a previous V3 package.
 	projectRoot := createDispatcherUnityProject(t)
 	writeV2PackageManifest(t, projectRoot)
-	writeV2PackageCachePackageJSON(t, projectRoot, "abc123", "2.2.0")
+	writeV2PackagesLock(t, projectRoot, "2.2.0")
 	writeDispatcherProjectPin(t, projectRoot, "3.0.0")
 
 	v2Project, err := detectV2DispatcherProject(projectRoot)
 	if err != nil {
 		t.Fatalf("detect V2 project: %v", err)
 	}
-	if v2Project.IsV2 {
-		t.Fatalf("unexpected V2 project: %#v", v2Project)
+	if !v2Project.IsV2 || v2Project.PackageVersion != "2.2.0" {
+		t.Fatalf("V2 project = %#v, want package version 2.2.0", v2Project)
 	}
 }
 
@@ -244,6 +245,93 @@ func TestRunDispatcherReportsVersionResolutionGuidanceForAmbiguousV2Cache(t *tes
 		if !bytes.Contains(stderr.Bytes(), []byte(expected)) {
 			t.Fatalf("V2 recovery guidance missing %q: %s", expected, stderr.String())
 		}
+	}
+}
+
+func TestRunDispatcherDelegatesResolvedV2PackageDespiteStalePin(t *testing.T) {
+	// Verifies a resolved V2 lock version delegates before loading a stale V3 project-runner pin.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackagesLock(t, projectRoot, "2.2.0")
+	writeDispatcherProjectPin(t, projectRoot, "3.0.0")
+	t.Chdir(projectRoot)
+
+	deps := defaultDispatcherRunDeps()
+	deps.runV2CLI = func(ctx context.Context, version string, args []string, stdout io.Writer, stderr io.Writer) (int, error) {
+		if version != "2.2.0" {
+			t.Fatalf("V2 version = %q, want 2.2.0", version)
+		}
+		return 7, nil
+	}
+	deps.runRealCLI = func(context.Context, string, []string, io.Writer, io.Writer) int {
+		t.Fatal("stale V3 pin must not run the project runner")
+		return 0
+	}
+
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, io.Discard, deps)
+	if code != 7 {
+		t.Fatalf("exit code = %d, want 7", code)
+	}
+}
+
+func TestRunDispatcherForwardsResolvedV3PackageToPinnedRunner(t *testing.T) {
+	// Verifies a resolved V3 lock version keeps using the pinned project runner.
+	projectRoot := createDispatcherUnityProject(t)
+	cacheRoot := t.TempDir()
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackagesLock(t, projectRoot, "3.0.0")
+	writeDispatcherProjectPin(t, projectRoot, "3.0.0")
+	writeCachedDispatcherRealCLI(t, cacheRoot, "3.0.0")
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
+	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
+	t.Chdir(projectRoot)
+
+	deps := defaultDispatcherRunDeps()
+	deps.runV2CLI = func(context.Context, string, []string, io.Writer, io.Writer) (int, error) {
+		t.Fatal("resolved V3 package must not delegate to V2")
+		return 0, nil
+	}
+	forwarded := false
+	deps.runRealCLI = func(context.Context, string, []string, io.Writer, io.Writer) int {
+		forwarded = true
+		return 9
+	}
+
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, io.Discard, deps)
+	if code != 9 || !forwarded {
+		t.Fatalf("V3 runner was not forwarded: code=%d forwarded=%v", code, forwarded)
+	}
+}
+
+func TestRunDispatcherFallsBackToPinnedRunnerWhenV2DetectionFails(t *testing.T) {
+	// Verifies a malformed package lock cannot block a healthy pinned V3 runner.
+	projectRoot := createDispatcherUnityProject(t)
+	cacheRoot := t.TempDir()
+	writeV2PackageManifest(t, projectRoot)
+	lockPath := filepath.Join(projectRoot, filepath.FromSlash(dispatcherPackagesLockRelativePath))
+	if err := os.WriteFile(lockPath, []byte("{"), 0o644); err != nil {
+		t.Fatalf("write malformed packages lock: %v", err)
+	}
+	writeDispatcherProjectPin(t, projectRoot, "3.0.0")
+	writeCachedDispatcherRealCLI(t, cacheRoot, "3.0.0")
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
+	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
+	t.Chdir(projectRoot)
+
+	deps := defaultDispatcherRunDeps()
+	deps.runV2CLI = func(context.Context, string, []string, io.Writer, io.Writer) (int, error) {
+		t.Fatal("failed V2 detection must not delegate")
+		return 0, nil
+	}
+	forwarded := false
+	deps.runRealCLI = func(context.Context, string, []string, io.Writer, io.Writer) int {
+		forwarded = true
+		return 11
+	}
+
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, io.Discard, deps)
+	if code != 11 || !forwarded {
+		t.Fatalf("V3 runner fallback failed: code=%d forwarded=%v", code, forwarded)
 	}
 }
 

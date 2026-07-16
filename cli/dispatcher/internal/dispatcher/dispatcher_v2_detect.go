@@ -44,14 +44,6 @@ type dispatcherPackageJSON struct {
 // detectV2DispatcherProject identifies pinless Unity projects that use the V2 package.
 // Why: V2 projects have no project runner pin, but pin absence alone can also indicate a broken V3 installation.
 func detectV2DispatcherProject(projectRoot string) (dispatcherV2Project, error) {
-	hasPin, err := dispatcherProjectHasPin(projectRoot)
-	if err != nil {
-		return dispatcherV2Project{}, err
-	}
-	if hasPin {
-		return dispatcherV2Project{}, nil
-	}
-
 	hasPackage, err := dispatcherProjectHasUnityPackage(projectRoot)
 	if err != nil {
 		return dispatcherV2Project{}, err
@@ -91,19 +83,6 @@ func detectV2DispatcherProject(projectRoot string) (dispatcherV2Project, error) 
 	}
 
 	return dispatcherV2Project{IsV2: true, PackageVersionCandidates: packageVersions}, nil
-}
-
-func dispatcherProjectHasPin(projectRoot string) (bool, error) {
-	for _, candidate := range dispatcherPinCandidatePaths(projectRoot) {
-		_, err := os.Stat(candidate.Path)
-		if err == nil {
-			return true, nil
-		}
-		if !errors.Is(err, os.ErrNotExist) {
-			return false, err
-		}
-	}
-	return false, nil
 }
 
 func dispatcherProjectHasUnityPackage(projectRoot string) (bool, error) {

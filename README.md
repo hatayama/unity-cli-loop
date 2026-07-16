@@ -75,7 +75,7 @@ Select Window > Unity CLI Loop > Settings. A dedicated window will open. If the 
 
 The installer places the global `uloop` dispatcher on PATH. Project-specific `uloop-project-runner` binaries are downloaded into the user cache automatically from each project's `.uloop/project-runner-pin.json`.
 
-Keep the v3 dispatcher installed when working with both v2 and v3 projects. If a Unity project has a v2 `io.github.hatayama.uloopmcp` package and no v3 project-runner pin, the dispatcher automatically installs the matching v2 `uloop-cli` release into its versioned user cache and delegates the command to it. The initial npm installation and the v2-mode notice are written to stderr so stdout remains the delegated command's output. V3 projects continue to use the project runner selected by their pin.
+Keep the v3 dispatcher installed when working with both v2 and v3 projects. If Unity resolves a project to a v2 `io.github.hatayama.uloopmcp` package, the dispatcher automatically installs the matching v2 `uloop-cli` release into its versioned user cache and delegates the command to it. The resolved package version takes precedence over a stale v3 project-runner pin left after a downgrade. The initial npm installation and the v2-mode notice are written to stderr so stdout remains the delegated command's output. V3 projects continue to use the project runner selected by their pin.
 
 The global `install`, `update`, `uninstall`, `completion`, and `launch` commands remain owned by the v3 dispatcher in every project. Other project commands, help, and the project-scoped version request are delegated for detected v2 projects.
 

@@ -94,12 +94,12 @@ func runDispatcherWithDeps(ctx context.Context, args []string, stdout io.Writer,
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{})
 		return 1
 	}
+	if handled, code := tryRunDetectedDispatcherV2Project(ctx, projectRoot, args, stdout, stderr, deps); handled {
+		return code
+	}
 
 	pin, err := loadDispatcherPin(projectRoot)
 	if err != nil {
-		if handled, code := tryRunDetectedDispatcherV2Project(ctx, projectRoot, args, stdout, stderr, deps); handled {
-			return code
-		}
 		clierrors.WriteErrorEnvelope(stderr, dispatcherPinResolutionError(projectRoot, err))
 		return 1
 	}
