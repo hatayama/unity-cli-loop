@@ -29,6 +29,48 @@ func TestDetectV2DispatcherProjectFindsPackageCacheVersion(t *testing.T) {
 	}
 }
 
+func TestDetectV2DispatcherProjectFindsPackageCacheVersionWithBracketedProjectPath(t *testing.T) {
+	// Verifies PackageCache discovery treats glob characters in project paths literally.
+	projectRoot := filepath.Join(t.TempDir(), "project[legacy]")
+	for _, directory := range []string{"Assets", "ProjectSettings"} {
+		if err := os.MkdirAll(filepath.Join(projectRoot, directory), 0o755); err != nil {
+			t.Fatalf("create Unity project directory: %v", err)
+		}
+	}
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "abc123", "2.2.0")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if !v2Project.IsV2 {
+		t.Fatal("expected V2 project")
+	}
+}
+
+func TestDetectV2DispatcherProjectSkipsInvalidPackageCacheEntry(t *testing.T) {
+	// Verifies an invalid stale PackageCache entry does not hide another valid V2 package.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	invalidPackagePath := filepath.Join(projectRoot, "Library", "PackageCache", dispatcherUnityPackageName+"@broken", "package.json")
+	if err := os.MkdirAll(filepath.Dir(invalidPackagePath), 0o755); err != nil {
+		t.Fatalf("create invalid package cache: %v", err)
+	}
+	if err := os.WriteFile(invalidPackagePath, []byte("{"), 0o644); err != nil {
+		t.Fatalf("write invalid package.json: %v", err)
+	}
+	writeV2PackageCachePackageJSON(t, projectRoot, "valid", "2.2.0")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if !v2Project.IsV2 {
+		t.Fatal("expected V2 project")
+	}
+}
+
 func TestDetectV2DispatcherProjectSkipsProjectWithPin(t *testing.T) {
 	// Verifies a project with a dispatcher pin is not classified as V2.
 	projectRoot := createDispatcherUnityProject(t)

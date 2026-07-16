@@ -107,15 +107,24 @@ func dispatcherProjectHasUnityPackage(projectRoot string) (bool, error) {
 }
 
 func dispatcherV2PackageCacheVersion(projectRoot string) (string, bool, error) {
-	pattern := filepath.Join(projectRoot, "Library", "PackageCache", dispatcherUnityPackageName+"@*", dispatcherPackageJSONFileName)
-	packagePaths, err := filepath.Glob(pattern)
+	cacheDirectory := filepath.Join(projectRoot, "Library", "PackageCache")
+	entries, err := os.ReadDir(cacheDirectory)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false, nil
+	}
 	if err != nil {
 		return "", false, err
 	}
-	for _, packagePath := range packagePaths {
+
+	prefix := dispatcherUnityPackageName + "@"
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), prefix) {
+			continue
+		}
+		packagePath := filepath.Join(cacheDirectory, entry.Name(), dispatcherPackageJSONFileName)
 		version, err := readDispatcherPackageVersion(packagePath)
 		if err != nil {
-			return "", false, err
+			continue
 		}
 		if isDispatcherV2PackageVersion(version) {
 			return version, true, nil
