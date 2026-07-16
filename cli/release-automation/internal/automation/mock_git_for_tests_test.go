@@ -3,6 +3,7 @@ package automation
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -68,8 +69,12 @@ func setupMockGitBin(t *testing.T) (string, string) {
 func writeExistenceMockGit(t *testing.T, binDir string, fixture mockGitExistenceFixture) {
 	t.Helper()
 
-	script := buildExistenceMockGitScript(fixture)
 	path := filepath.Join(binDir, "git")
+	if runtime.GOOS == "windows" {
+		installMockCliExecutable(t, path, existenceMockCliConfig(fixture))
+		return
+	}
+	script := buildExistenceMockGitScript(fixture)
 	writeFile(t, path, script)
 	if err := os.Chmod(path, 0o755); err != nil {
 		t.Fatalf("failed to chmod mock git: %v", err)
