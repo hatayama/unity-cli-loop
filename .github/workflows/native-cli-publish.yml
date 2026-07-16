@@ -282,6 +282,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          RECOVERY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.recovery-target }}
         run: |
           set -eu
           tag_error_path="${RUNNER_TEMP}/native-cli-release-tag-error"
@@ -305,7 +306,22 @@ jobs:
             # Why the tag is created before the release: with an active tag ruleset the
             # workflow token cannot create a release for a not-yet-existing tag, while
             # explicit ref creation is permitted and pins the tag to the verified commit.
-            gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/${RELEASE_TAG}" -f sha="${RELEASE_SHA}"
+            tag_create_error_path="${RUNNER_TEMP}/native-cli-release-tag-create-error"
+            set +e
+            gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${RELEASE_TAG}" \
+              -f sha="${RELEASE_SHA}" > "${tag_create_error_path}" 2>&1
+            tag_create_status=$?
+            set -e
+            if [ "${tag_create_status}" -ne 0 ]; then
+              cat "${tag_create_error_path}" >&2
+              if [ "${RECOVERY_TARGET}" = "true" ] && grep -qE 'HTTP 403|Resource not accessible by integration' "${tag_create_error_path}"; then
+                echo "Recovery-target release creation was rejected for a historical commit by GitHub." >&2
+                echo "Create the tag and draft release as the repository owner, then rerun this workflow." >&2
+                echo "See docs/release-recovery-runbook.md for the recovery procedure." >&2
+              fi
+              exit "${tag_create_status}"
+            fi
           fi
           if gh release view "${RELEASE_TAG}" --json isDraft,targetCommitish > release-input/release-state.json 2>/dev/null; then
             is_draft=$(jq -r '.isDraft' release-input/release-state.json)
@@ -318,7 +334,20 @@ jobs:
           fi
           prerelease_flag=""
           case "${RELEASE_TAG}" in *-beta.*) prerelease_flag="--prerelease" ;; esac
-          gh release create "${RELEASE_TAG}" --draft --title "${RELEASE_TAG}" --notes-file release-input/release-notes.md --target "${RELEASE_SHA}" ${prerelease_flag}
+          release_create_error_path="${RUNNER_TEMP}/native-cli-release-create-error"
+          set +e
+          gh release create "${RELEASE_TAG}" --draft --title "${RELEASE_TAG}" --notes-file release-input/release-notes.md --target "${RELEASE_SHA}" ${prerelease_flag} > "${release_create_error_path}" 2>&1
+          release_create_status=$?
+          set -e
+          if [ "${release_create_status}" -ne 0 ]; then
+            cat "${release_create_error_path}" >&2
+            if [ "${RECOVERY_TARGET}" = "true" ] && grep -qE 'HTTP 403|Resource not accessible by integration' "${release_create_error_path}"; then
+              echo "Recovery-target draft release creation was rejected for a historical commit by GitHub." >&2
+              echo "Create the tag and draft release as the repository owner, then rerun this workflow." >&2
+              echo "See docs/release-recovery-runbook.md for the recovery procedure." >&2
+            fi
+            exit "${release_create_status}"
+          fi
           echo "release_published=false" >> "$GITHUB_OUTPUT"
 
       - name: Attest native CLI release assets
