@@ -119,10 +119,11 @@ func isDispatcherGitPackageDependency(dependency json.RawMessage) bool {
 		return false
 	}
 	withoutRevision, _, _ := strings.Cut(strings.TrimSpace(value), "#")
-	if strings.HasPrefix(withoutRevision, "git@") {
-		return strings.HasSuffix(withoutRevision, ".git")
+	withoutQuery, _, _ := strings.Cut(withoutRevision, "?")
+	if strings.HasPrefix(withoutQuery, "git@") {
+		return strings.HasSuffix(withoutQuery, ".git")
 	}
-	parsed, err := url.Parse(withoutRevision)
+	parsed, err := url.Parse(withoutQuery)
 	if err != nil {
 		return false
 	}
