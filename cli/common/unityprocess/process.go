@@ -74,6 +74,16 @@ func listUnityProcessesMac(ctx context.Context) ([]UnityProcess, error) {
 }
 
 func listUnityProcessesWindows(ctx context.Context) ([]UnityProcess, error) {
+	commandContext, cancel := withCommandTimeout(ctx, ProcessListCommandTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(commandContext, windowsPowerShellCommand, "-NoProfile", "-Command", windowsUnityProcessListScript()).Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve Unity process list on Windows: %w", err)
+	}
+	return parseWindowsUnityProcesses(string(output)), nil
+}
+
+func windowsUnityProcessListScript() string {
 	scriptLines := []string{
 		"$ErrorActionPreference = 'Stop'",
 		"$processes = Get-CimInstance Win32_Process -Filter \"Name = 'Unity.exe'\" | Where-Object { $_.CommandLine }",
@@ -82,13 +92,7 @@ func listUnityProcessesWindows(ctx context.Context) ([]UnityProcess, error) {
 		"  Write-Output (\"{0}|{1}\" -f $process.ProcessId, $commandLine)",
 		"}",
 	}
-	commandContext, cancel := withCommandTimeout(ctx, ProcessListCommandTimeout)
-	defer cancel()
-	output, err := exec.CommandContext(commandContext, windowsPowerShellCommand, "-NoProfile", "-Command", strings.Join(scriptLines, "\n")).Output()
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve Unity process list on Windows: %w", err)
-	}
-	return parseWindowsUnityProcesses(string(output)), nil
+	return strings.Join(scriptLines, "\n")
 }
 
 func parseMacUnityProcesses(output string) []UnityProcess {
