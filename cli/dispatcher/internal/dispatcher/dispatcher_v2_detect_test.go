@@ -72,6 +72,56 @@ func TestDetectV2DispatcherProjectSkipsInvalidPackageCacheEntry(t *testing.T) {
 	}
 }
 
+func TestDetectV2DispatcherProjectPrefersV2PackageLockVersionOverStaleCache(t *testing.T) {
+	// Verifies the resolved V2 lock version wins when PackageCache also contains an older version.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "aaa-older", "2.1.0")
+	writeV2PackageCachePackageJSON(t, projectRoot, "zzz-current", "2.2.0")
+	writeV2PackagesLock(t, projectRoot, "2.2.0")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if !v2Project.IsV2 || v2Project.PackageVersion != "2.2.0" {
+		t.Fatalf("V2 project = %#v, want package version 2.2.0", v2Project)
+	}
+}
+
+func TestDetectV2DispatcherProjectPrefersV3PackageLockVersionOverStaleV2Cache(t *testing.T) {
+	// Verifies a resolved V3 lock version prevents a stale V2 cache entry from causing delegation.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "stale", "2.2.0")
+	writeV2PackagesLock(t, projectRoot, "3.0.0")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if v2Project.IsV2 {
+		t.Fatalf("unexpected V2 project: %#v", v2Project)
+	}
+}
+
+func TestDetectV2DispatcherProjectRejectsAmbiguousPackageCacheVersions(t *testing.T) {
+	// Verifies a git dependency with multiple cached V2 versions is identified without choosing one arbitrarily.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "older", "2.1.0")
+	writeV2PackageCachePackageJSON(t, projectRoot, "newer", "2.2.0")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if !v2Project.IsV2 || v2Project.PackageVersion != "" {
+		t.Fatalf("ambiguous V2 project = %#v", v2Project)
+	}
+	assertStringSliceEqual(t, v2Project.PackageVersionCandidates, []string{"2.1.0", "2.2.0"})
+}
+
 func TestDetectV2DispatcherProjectSkipsProjectWithPin(t *testing.T) {
 	// Verifies a project with a dispatcher pin is not classified as V2.
 	projectRoot := createDispatcherUnityProject(t)
@@ -161,6 +211,39 @@ func TestRunDispatcherReportsV2ProjectGuidanceWhenPinIsMissing(t *testing.T) {
 	}
 	if len(envelope.Error.NextActions) < 2 {
 		t.Fatalf("next actions = %#v, want Node and npx guidance", envelope.Error.NextActions)
+	}
+}
+
+func TestRunDispatcherReportsVersionResolutionGuidanceForAmbiguousV2Cache(t *testing.T) {
+	// Verifies ambiguous V2 cache versions produce V2-specific recovery guidance without attempting delegation.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "older", "2.1.0")
+	writeV2PackageCachePackageJSON(t, projectRoot, "newer", "2.2.0")
+	t.Chdir(projectRoot)
+
+	var stderr bytes.Buffer
+	deps := defaultDispatcherRunDeps()
+	deps.runV2CLI = func(context.Context, string, []string, io.Writer, io.Writer) (int, error) {
+		t.Fatal("ambiguous V2 package version must not be delegated")
+		return 0, nil
+	}
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, &stderr, deps)
+
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr=%s", code, stderr.String())
+	}
+	envelope := clierrors.CLIErrorEnvelope{}
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("parse error envelope: %v; stderr=%s", err, stderr.String())
+	}
+	if envelope.Error.ErrorCode != clierrors.ErrorCodeV2ProjectDetected {
+		t.Fatalf("error code = %q, want %q", envelope.Error.ErrorCode, clierrors.ErrorCodeV2ProjectDetected)
+	}
+	for _, expected := range []string{"Packages/packages-lock.json", "npx uloop-cli@2", "2.1.0", "2.2.0"} {
+		if !bytes.Contains(stderr.Bytes(), []byte(expected)) {
+			t.Fatalf("V2 recovery guidance missing %q: %s", expected, stderr.String())
+		}
 	}
 }
 

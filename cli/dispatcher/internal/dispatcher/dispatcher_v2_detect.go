@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	sharedversion "github.com/hatayama/unity-cli-loop/common/version"
@@ -19,8 +20,9 @@ const (
 )
 
 type dispatcherV2Project struct {
-	IsV2           bool
-	PackageVersion string
+	IsV2                     bool
+	PackageVersion           string
+	PackageVersionCandidates []string
 }
 
 type dispatcherPackagesManifest struct {
@@ -58,21 +60,37 @@ func detectV2DispatcherProject(projectRoot string) (dispatcherV2Project, error) 
 		return dispatcherV2Project{}, nil
 	}
 
-	packageVersion, found, err := dispatcherV2PackageCacheVersion(projectRoot)
+	packageVersion, found, err := dispatcherV2PackageLockVersion(projectRoot)
 	if err != nil {
 		return dispatcherV2Project{}, err
 	}
-	if !found {
-		packageVersion, found, err = dispatcherV2PackageLockVersion(projectRoot)
-		if err != nil {
-			return dispatcherV2Project{}, err
+	if found && sharedversion.IsValid(strings.TrimSpace(packageVersion)) {
+		if !isDispatcherV2PackageVersion(packageVersion) {
+			return dispatcherV2Project{}, nil
 		}
-	}
-	if !found || !isDispatcherV2PackageVersion(packageVersion) {
-		return dispatcherV2Project{}, nil
+		return dispatcherV2Project{IsV2: true, PackageVersion: packageVersion}, nil
 	}
 
-	return dispatcherV2Project{IsV2: true, PackageVersion: packageVersion}, nil
+	packageVersions, err := dispatcherPackageCacheVersions(projectRoot)
+	if err != nil {
+		return dispatcherV2Project{}, err
+	}
+	if len(packageVersions) == 0 {
+		return dispatcherV2Project{}, nil
+	}
+	if len(packageVersions) == 1 {
+		if !isDispatcherV2PackageVersion(packageVersions[0]) {
+			return dispatcherV2Project{}, nil
+		}
+		return dispatcherV2Project{IsV2: true, PackageVersion: packageVersions[0]}, nil
+	}
+	for _, version := range packageVersions {
+		if !isDispatcherV2PackageVersion(version) {
+			return dispatcherV2Project{}, fmt.Errorf("multiple package generations found in %s", filepath.Join(projectRoot, "Library", "PackageCache"))
+		}
+	}
+
+	return dispatcherV2Project{IsV2: true, PackageVersionCandidates: packageVersions}, nil
 }
 
 func dispatcherProjectHasPin(projectRoot string) (bool, error) {
@@ -106,17 +124,18 @@ func dispatcherProjectHasUnityPackage(projectRoot string) (bool, error) {
 	return found, nil
 }
 
-func dispatcherV2PackageCacheVersion(projectRoot string) (string, bool, error) {
+func dispatcherPackageCacheVersions(projectRoot string) ([]string, error) {
 	cacheDirectory := filepath.Join(projectRoot, "Library", "PackageCache")
 	entries, err := os.ReadDir(cacheDirectory)
 	if errors.Is(err, os.ErrNotExist) {
-		return "", false, nil
+		return nil, nil
 	}
 	if err != nil {
-		return "", false, err
+		return nil, err
 	}
 
 	prefix := dispatcherUnityPackageName + "@"
+	versions := map[string]struct{}{}
 	for _, entry := range entries {
 		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), prefix) {
 			continue
@@ -126,11 +145,16 @@ func dispatcherV2PackageCacheVersion(projectRoot string) (string, bool, error) {
 		if err != nil {
 			continue
 		}
-		if isDispatcherV2PackageVersion(version) {
-			return version, true, nil
+		if sharedversion.IsValid(strings.TrimSpace(version)) {
+			versions[strings.TrimSpace(version)] = struct{}{}
 		}
 	}
-	return "", false, nil
+	result := make([]string, 0, len(versions))
+	for version := range versions {
+		result = append(result, version)
+	}
+	sort.Strings(result)
+	return result, nil
 }
 
 func dispatcherV2PackageLockVersion(projectRoot string) (string, bool, error) {

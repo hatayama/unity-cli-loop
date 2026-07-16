@@ -69,13 +69,8 @@ func runDispatcherWithDeps(ctx context.Context, args []string, stdout io.Writer,
 	if len(args) == 0 || clicore.IsHelpRequest(remainingArgs) || clicore.IsVersionRequest(remainingArgs) || clicore.IsVersionJSONRequest(remainingArgs) {
 		if startPath, workingDirectoryErr := os.Getwd(); workingDirectoryErr == nil {
 			if projectRoot, resolveErr := resolveDispatcherProjectRoot(startPath, projectPath, remainingArgs); resolveErr == nil {
-				if v2Project, detectErr := detectV2DispatcherProject(projectRoot); detectErr == nil && v2Project.IsV2 {
-					code, runErr := deps.runV2CLI(ctx, v2Project.PackageVersion, args, stdout, stderr)
-					if runErr == nil {
-						return code
-					}
-					clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project.PackageVersion))
-					return 1
+				if handled, code := tryRunDetectedDispatcherV2Project(ctx, projectRoot, args, stdout, stderr, deps); handled {
+					return code
 				}
 			}
 		}
@@ -102,14 +97,8 @@ func runDispatcherWithDeps(ctx context.Context, args []string, stdout io.Writer,
 
 	pin, err := loadDispatcherPin(projectRoot)
 	if err != nil {
-		v2Project, detectErr := detectV2DispatcherProject(projectRoot)
-		if detectErr == nil && v2Project.IsV2 {
-			code, runErr := deps.runV2CLI(ctx, v2Project.PackageVersion, args, stdout, stderr)
-			if runErr == nil {
-				return code
-			}
-			clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project.PackageVersion))
-			return 1
+		if handled, code := tryRunDetectedDispatcherV2Project(ctx, projectRoot, args, stdout, stderr, deps); handled {
+			return code
 		}
 		clierrors.WriteErrorEnvelope(stderr, dispatcherPinResolutionError(projectRoot, err))
 		return 1
@@ -148,13 +137,8 @@ func runDispatcherProcessCommandWithDeps(
 	}
 	if !shouldKeepDispatcherProcessCommand(remainingArgs) {
 		if projectRoot, resolveErr := resolveDispatcherProjectRoot(startPath, projectPath, remainingArgs); resolveErr == nil {
-			if v2Project, detectErr := detectV2DispatcherProject(projectRoot); detectErr == nil && v2Project.IsV2 {
-				code, runErr := deps.runV2CLI(ctx, v2Project.PackageVersion, args, stdout, stderr)
-				if runErr == nil {
-					return code
-				}
-				clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project.PackageVersion))
-				return 1
+			if handled, code := tryRunDetectedDispatcherV2Project(ctx, projectRoot, args, stdout, stderr, deps); handled {
+				return code
 			}
 		}
 	}
@@ -186,6 +170,31 @@ func runDispatcherProcessCommandWithDeps(
 		clierrors.ErrorContext{Command: command},
 	))
 	return 1
+}
+
+func tryRunDetectedDispatcherV2Project(
+	ctx context.Context,
+	projectRoot string,
+	args []string,
+	stdout io.Writer,
+	stderr io.Writer,
+	deps dispatcherRunDeps,
+) (bool, int) {
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil || !v2Project.IsV2 {
+		return false, 0
+	}
+	if v2Project.PackageVersion == "" {
+		clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project))
+		return true, 1
+	}
+
+	code, err := deps.runV2CLI(ctx, v2Project.PackageVersion, args, stdout, stderr)
+	if err == nil {
+		return true, code
+	}
+	clierrors.WriteErrorEnvelope(stderr, dispatcherV2ProjectDetectedError(projectRoot, v2Project))
+	return true, 1
 }
 
 func shouldKeepDispatcherProcessCommand(args []string) bool {
@@ -481,7 +490,25 @@ func dispatcherPinResolutionError(projectRoot string, cause error) clierrors.CLI
 	}
 }
 
-func dispatcherV2ProjectDetectedError(projectRoot string, packageVersion string) clierrors.CLIError {
+func dispatcherV2ProjectDetectedError(projectRoot string, v2Project dispatcherV2Project) clierrors.CLIError {
+	if len(v2Project.PackageVersionCandidates) > 0 {
+		return clierrors.CLIError{
+			ErrorCode:   clierrors.ErrorCodeV2ProjectDetected,
+			Phase:       clierrors.ErrorPhaseProjectResolve,
+			Message:     "This Unity project uses uloop V2, but its package version could not be resolved unambiguously.",
+			Retryable:   true,
+			SafeToRetry: true,
+			ProjectRoot: projectRoot,
+			NextActions: []string{
+				"Open the Unity project once so Unity Package Manager can refresh `Packages/packages-lock.json`, then retry the command.",
+				"As a last resort, run `npx uloop-cli@2 <command>` from this project.",
+			},
+			Details: map[string]any{
+				"V2PackageVersionCandidates": v2Project.PackageVersionCandidates,
+			},
+		}
+	}
+
 	return clierrors.CLIError{
 		ErrorCode:   clierrors.ErrorCodeV2ProjectDetected,
 		Phase:       clierrors.ErrorPhaseProjectResolve,
@@ -491,10 +518,10 @@ func dispatcherV2ProjectDetectedError(projectRoot string, packageVersion string)
 		ProjectRoot: projectRoot,
 		NextActions: []string{
 			"Install Node.js 22 or later, then retry the command.",
-			"As a last resort, run `npx uloop-cli@" + packageVersion + " <command>` from this project.",
+			"As a last resort, run `npx uloop-cli@" + v2Project.PackageVersion + " <command>` from this project.",
 		},
 		Details: map[string]any{
-			"V2PackageVersion": packageVersion,
+			"V2PackageVersion": v2Project.PackageVersion,
 		},
 	}
 }
