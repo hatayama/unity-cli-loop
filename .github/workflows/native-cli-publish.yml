@@ -425,6 +425,45 @@ jobs:
             fi
           done < release-input/release-assets.manifest
 
+      - name: Verify remote attestation digest matches release tag
+        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '.sha')
+          if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match approved release commit ${RELEASE_SHA}." >&2
+            exit 1
+          fi
+          verification_directory=$(mktemp -d "${RUNNER_TEMP}/native-cli-attestation-verify.XXXXXX")
+          while IFS=' ' read -r checksum asset_path; do
+            asset_name=$(basename "${asset_path}")
+            bundle_name="${asset_name}.sigstore.json"
+            asset_directory="${verification_directory}/${asset_name}"
+            mkdir "${asset_directory}"
+            gh release download "${RELEASE_TAG}" --pattern "${asset_name}" --pattern "${bundle_name}" --dir "${asset_directory}"
+            downloaded_asset_path="${asset_directory}/${asset_name}"
+            downloaded_bundle_path="${asset_directory}/${bundle_name}"
+            verification_output_path="${asset_directory}/verification.json"
+            digest_output_path="${asset_directory}/digests.txt"
+            gh attestation verify "${downloaded_asset_path}" --bundle "${downloaded_bundle_path}" --format json > "${verification_output_path}"
+            verification_count=$(jq 'length' "${verification_output_path}")
+            digest_count=$(jq '[.[].verificationResult.signature.certificate.sourceRepositoryDigest | select(type == "string" and length > 0)] | length' "${verification_output_path}")
+            if [ "${verification_count}" -eq 0 ] || [ "${verification_count}" -ne "${digest_count}" ]; then
+              echo "Attestation verification did not return a source repository digest for ${asset_name}." >&2
+              exit 1
+            fi
+            jq -r '.[].verificationResult.signature.certificate.sourceRepositoryDigest' "${verification_output_path}" > "${digest_output_path}"
+            while IFS= read -r digest; do
+              if [ "${digest}" != "${tag_sha}" ]; then
+                echo "Attestation digest for ${asset_name} does not match release tag ${RELEASE_TAG}." >&2
+                exit 1
+              fi
+            done < "${digest_output_path}"
+          done < release-input/release-assets.manifest
+
       - name: Publish draft release
         if: env.DRY_RUN != 'true' && steps.draft.outputs.release_published != 'true'
         env:

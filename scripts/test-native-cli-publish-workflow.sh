@@ -144,7 +144,7 @@ test_recovery_dispatch_is_bound_to_the_resolver_target() {
   assert_contains 'compare_status=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${TARGET_SHA}...${GITHUB_SHA}" --jq '\''.status'\'')'
   assert_contains 'if [ "${compare_status}" != "ahead" ] && [ "${compare_status}" != "identical" ]; then'
   assert_contains 'printf '\''RELEASE_SHA=%s\n'\'' "${release_sha}" >> "$GITHUB_ENV"'
-  assert_count 2 'if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
+  assert_count 3 'if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
   assert_contains 'if [ -n "${tag_sha}" ] && [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
   assert_not_contains '--target "${GITHUB_SHA}"'
   assert_contains '--target "${RELEASE_SHA}"'
@@ -167,6 +167,21 @@ test_assets_are_attested_after_the_manifest_is_verified() {
   assert_before "      - name: Attach attestation bundles to release assets" "      - name: Upload native CLI assets"
   assert_before "      - name: Upload native CLI assets" "      - name: Verify remote release assets"
   assert_before "      - name: Verify remote release assets" "      - name: Publish draft release"
+}
+
+test_remote_attestation_digests_match_the_release_tag_before_publishing() {
+  # Verify the remote assets and their attached bundles are fail-closed checked
+  # against the release tag before the draft release becomes public.
+  assert_contains "      - name: Verify remote attestation digest matches release tag"
+  assert_contains "        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'"
+  assert_contains 'gh release download "${RELEASE_TAG}" --pattern "${asset_name}" --pattern "${bundle_name}" --dir "${asset_directory}"'
+  assert_contains 'gh attestation verify "${downloaded_asset_path}" --bundle "${downloaded_bundle_path}" --format json'
+  assert_contains '.verificationResult.signature.certificate.sourceRepositoryDigest'
+  assert_contains 'gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '\''.sha'\'''
+  assert_contains 'if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
+  assert_contains 'if [ "${digest}" != "${tag_sha}" ]; then'
+  assert_before "      - name: Verify remote release assets" "      - name: Verify remote attestation digest matches release tag"
+  assert_before "      - name: Verify remote attestation digest matches release tag" "      - name: Publish draft release"
 }
 
 test_publish_rejects_manifest_and_existing_tag_mismatches() {
@@ -250,6 +265,7 @@ test_recovery_dispatch_is_bound_to_the_resolver_target
 test_publish_validates_metadata_without_checking_out_source
 test_checkout_free_publish_has_explicit_repository_context
 test_assets_are_attested_after_the_manifest_is_verified
+test_remote_attestation_digests_match_the_release_tag_before_publishing
 test_publish_rejects_manifest_and_existing_tag_mismatches
 test_release_tag_is_created_before_the_release
 test_recovery_target_403_errors_explain_the_manual_recovery
