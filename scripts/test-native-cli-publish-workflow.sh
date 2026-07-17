@@ -62,6 +62,14 @@ publish_draft_section() {
   ' "$WORKFLOW"
 }
 
+remote_attestation_verification_section() {
+  awk '
+    /^      - name: Verify remote attestation digest matches release tag$/ { printing = 1; next }
+    printing && /^      - name:/ { exit }
+    printing { print }
+  ' "$WORKFLOW"
+}
+
 post_publish_section() {
   awk '
     /^  post-publish:/ { printing = 1 }
@@ -144,7 +152,7 @@ test_recovery_dispatch_is_bound_to_the_resolver_target() {
   assert_contains 'compare_status=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${TARGET_SHA}...${GITHUB_SHA}" --jq '\''.status'\'')'
   assert_contains 'if [ "${compare_status}" != "ahead" ] && [ "${compare_status}" != "identical" ]; then'
   assert_contains 'printf '\''RELEASE_SHA=%s\n'\'' "${release_sha}" >> "$GITHUB_ENV"'
-  assert_count 2 'if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
+  assert_count 3 'if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
   assert_contains 'if [ -n "${tag_sha}" ] && [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
   assert_not_contains '--target "${GITHUB_SHA}"'
   assert_contains '--target "${RELEASE_SHA}"'
@@ -167,6 +175,47 @@ test_assets_are_attested_after_the_manifest_is_verified() {
   assert_before "      - name: Attach attestation bundles to release assets" "      - name: Upload native CLI assets"
   assert_before "      - name: Upload native CLI assets" "      - name: Verify remote release assets"
   assert_before "      - name: Verify remote release assets" "      - name: Publish draft release"
+}
+
+test_remote_attestation_digests_match_the_release_tag_before_publishing() {
+  # Verify the remote assets and their attached bundles are fail-closed checked
+  # against the release tag before the draft release becomes public.
+  assert_contains "      - name: Verify remote attestation digest matches release tag"
+  assert_contains "        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'"
+  assert_contains 'gh release download "${RELEASE_TAG}" --pattern "${asset_name}" --pattern "${bundle_name}" --dir "${asset_directory}"'
+  assert_contains 'gh attestation verify "${downloaded_asset_path}" --repo "${GITHUB_REPOSITORY}" --bundle "${downloaded_bundle_path}" --signer-workflow "${SIGNER_WORKFLOW}" --format json'
+  assert_contains '.verificationResult.signature.certificate.sourceRepositoryDigest'
+  assert_contains 'gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '\''.sha'\'''
+  assert_contains 'if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
+  assert_contains 'if [ "${digest}" != "${tag_sha}" ]; then'
+  assert_contains 'if [ "${verification_count}" -eq 0 ] || [ "${verification_count}" -ne "${digest_count}" ]; then'
+  assert_before "      - name: Verify remote release assets" "      - name: Verify remote attestation digest matches release tag"
+  assert_before "      - name: Verify remote attestation digest matches release tag" "      - name: Publish draft release"
+  verification_section=$(remote_attestation_verification_section)
+  for required_environment in \
+    'GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}' \
+    'GITHUB_REPOSITORY: ${{ github.repository }}' \
+    'SIGNER_WORKFLOW: ${{ github.repository }}/.github/workflows/native-cli-publish.yml'; do
+    if ! printf '%s\n' "${verification_section}" | grep -F -- "${required_environment}" >/dev/null 2>&1; then
+      echo "Remote attestation verification must define ${required_environment}." >&2
+      exit 1
+    fi
+  done
+  tag_mismatch_guard='if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match approved release commit ${RELEASE_SHA}." >&2
+            exit 1
+          fi'
+  digest_mismatch_guard='if [ "${digest}" != "${tag_sha}" ]; then
+                echo "Attestation digest for ${asset_name} does not match release tag ${RELEASE_TAG}." >&2
+                exit 1
+              fi'
+  case "${verification_section}" in
+    *"${tag_mismatch_guard}"*"${digest_mismatch_guard}"*) ;;
+    *)
+      echo "Remote attestation verification must fail for tag or digest mismatches." >&2
+      exit 1
+      ;;
+  esac
 }
 
 test_publish_rejects_manifest_and_existing_tag_mismatches() {
@@ -250,6 +299,7 @@ test_recovery_dispatch_is_bound_to_the_resolver_target
 test_publish_validates_metadata_without_checking_out_source
 test_checkout_free_publish_has_explicit_repository_context
 test_assets_are_attested_after_the_manifest_is_verified
+test_remote_attestation_digests_match_the_release_tag_before_publishing
 test_publish_rejects_manifest_and_existing_tag_mismatches
 test_release_tag_is_created_before_the_release
 test_recovery_target_403_errors_explain_the_manual_recovery
