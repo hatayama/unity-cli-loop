@@ -192,6 +192,15 @@ test_remote_attestation_digests_match_the_release_tag_before_publishing() {
   assert_before "      - name: Verify remote release assets" "      - name: Verify remote attestation digest matches release tag"
   assert_before "      - name: Verify remote attestation digest matches release tag" "      - name: Publish draft release"
   verification_section=$(remote_attestation_verification_section)
+  for required_environment in \
+    'GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}' \
+    'GITHUB_REPOSITORY: ${{ github.repository }}' \
+    'SIGNER_WORKFLOW: ${{ github.repository }}/.github/workflows/native-cli-publish.yml'; do
+    if ! printf '%s\n' "${verification_section}" | grep -F -- "${required_environment}" >/dev/null 2>&1; then
+      echo "Remote attestation verification must define ${required_environment}." >&2
+      exit 1
+    fi
+  done
   tag_mismatch_guard='if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then
             echo "Release tag ${RELEASE_TAG} does not match approved release commit ${RELEASE_SHA}." >&2
             exit 1

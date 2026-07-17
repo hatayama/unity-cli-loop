@@ -293,7 +293,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          SIGNER_WORKFLOW: ${{ github.repository }}/.github/workflows/native-cli-publish.yml
           RECOVERY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.recovery-target }}
         run: |
           set -eu
@@ -431,6 +430,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          SIGNER_WORKFLOW: ${{ github.repository }}/.github/workflows/native-cli-publish.yml
         run: |
           set -eu
           tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '.sha')
