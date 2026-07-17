@@ -97,46 +97,56 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId: correlationId
             );
 
-            using InputSimulationRunInBackgroundScope runInBackgroundScope = InputSimulationRunInBackgroundScope.Enable();
-
-            EnsureOverlayExists();
-
-            SimulateMouseInputResponse response;
-
-            switch (parameters.Action)
+            // Why not `using`: the executor awaits below use ConfigureAwait(false), so this method
+            // can resume on a thread-pool thread. Application.runInBackground is main-thread-only,
+            // so the scope must be disposed after switching back to the main thread.
+            InputSimulationRunInBackgroundScope runInBackgroundScope = InputSimulationRunInBackgroundScope.Enable();
+            try
             {
-                case UnityCliLoopMouseInputAction.Click:
-                    response = await MouseInputPressActionExecutor.ExecuteClick(mouse, parameters, ct).ConfigureAwait(false);
-                    break;
+                EnsureOverlayExists();
 
-                case UnityCliLoopMouseInputAction.LongPress:
-                    response = await MouseInputPressActionExecutor.ExecuteLongPress(mouse, parameters, ct).ConfigureAwait(false);
-                    break;
+                SimulateMouseInputResponse response;
 
-                case UnityCliLoopMouseInputAction.MoveDelta:
-                    response = await MouseInputMotionActionExecutor.ExecuteMoveDelta(mouse, parameters, ct).ConfigureAwait(false);
-                    break;
+                switch (parameters.Action)
+                {
+                    case UnityCliLoopMouseInputAction.Click:
+                        response = await MouseInputPressActionExecutor.ExecuteClick(mouse, parameters, ct).ConfigureAwait(false);
+                        break;
 
-                case UnityCliLoopMouseInputAction.Scroll:
-                    response = await MouseInputMotionActionExecutor.ExecuteScroll(mouse, parameters, ct).ConfigureAwait(false);
-                    break;
+                    case UnityCliLoopMouseInputAction.LongPress:
+                        response = await MouseInputPressActionExecutor.ExecuteLongPress(mouse, parameters, ct).ConfigureAwait(false);
+                        break;
 
-                case UnityCliLoopMouseInputAction.SmoothDelta:
-                    response = await MouseInputMotionActionExecutor.ExecuteSmoothDelta(mouse, parameters, ct).ConfigureAwait(false);
-                    break;
+                    case UnityCliLoopMouseInputAction.MoveDelta:
+                        response = await MouseInputMotionActionExecutor.ExecuteMoveDelta(mouse, parameters, ct).ConfigureAwait(false);
+                        break;
 
-                default:
-                    throw new ArgumentException($"Unknown mouse input action: {parameters.Action}");
+                    case UnityCliLoopMouseInputAction.Scroll:
+                        response = await MouseInputMotionActionExecutor.ExecuteScroll(mouse, parameters, ct).ConfigureAwait(false);
+                        break;
+
+                    case UnityCliLoopMouseInputAction.SmoothDelta:
+                        response = await MouseInputMotionActionExecutor.ExecuteSmoothDelta(mouse, parameters, ct).ConfigureAwait(false);
+                        break;
+
+                    default:
+                        throw new ArgumentException($"Unknown mouse input action: {parameters.Action}");
+                }
+
+                VibeLogger.LogInfo(
+                    "simulate_mouse_input_complete",
+                    $"Mouse input simulation completed: {response.Message}",
+                    new { Action = parameters.Action.ToString(), Success = response.Success },
+                    correlationId: correlationId
+                );
+
+                return response;
             }
-
-            VibeLogger.LogInfo(
-                "simulate_mouse_input_complete",
-                $"Mouse input simulation completed: {response.Message}",
-                new { Action = parameters.Action.ToString(), Success = response.Success },
-                correlationId: correlationId
-            );
-
-            return response;
+            finally
+            {
+                await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+                runInBackgroundScope.Dispose();
+            }
 #endif
         }
 

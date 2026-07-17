@@ -119,12 +119,16 @@ jobs:
           cache: false
 
       # Windows-only code paths (named pipe transport, winio deadlines, typed error
-      # classification) are otherwise never executed by CI. Scoped to the transport
-      # package: the wider test suite still has Windows-incompatible tests (path
-      # separators, missing .exe suffixes, TCP-only fixtures) that predate this job.
-      - name: Test native Go CLI transport on Windows
+      # classification, process management) are otherwise never executed by CI.
+      # Runs every go.work module: the formerly Windows-incompatible tests (POSIX-only
+      # fake executables, TCP-only fixtures, shell-script git/gh mocks) now install
+      # portable fixtures on Windows.
+      - name: Test native Go CLI on Windows
         shell: bash
-        run: cd cli/common && go test ./unityipc/
+        run: |
+          for module in common dispatcher project-runner release-automation; do
+            (cd "cli/$module" && go test ./...)
+          done
 
       - name: Test install release filter in Git Bash
         shell: bash

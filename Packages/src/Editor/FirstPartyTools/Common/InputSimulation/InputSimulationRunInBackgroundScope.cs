@@ -1,6 +1,8 @@
 #nullable enable
 using System;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -29,6 +31,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public void Dispose()
         {
+            // Precondition: Application.runInBackground is main-thread-only, so callers resuming
+            // from ConfigureAwait(false) continuations must switch back to the main thread first.
+            UnityEngine.Debug.Assert(
+                MainThreadSwitcher.IsMainThread,
+                "InputSimulationRunInBackgroundScope.Dispose must be called on the main thread.");
+
             if (_isDisposed)
             {
                 return;

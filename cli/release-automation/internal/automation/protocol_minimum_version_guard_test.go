@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -600,6 +601,11 @@ func buildProtocolMinimumVersionPin(projectRunnerVersion string) string {
 func writeProtocolMinimumVersionMockGit(t *testing.T, path string) {
 	t.Helper()
 
+	if runtime.GOOS == "windows" {
+		installMockCliExecutable(t, path, mockCliExecutableConfig{Mode: "protocolMinimumVersionGit"})
+		return
+	}
+
 	content := `#!/bin/sh
 set -eu
 
@@ -694,6 +700,11 @@ exit 1
 
 func writeProtocolMinimumVersionMockGH(t *testing.T, path string) {
 	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		installMockCliExecutable(t, path, mockCliExecutableConfig{Mode: "protocolMinimumVersionGh"})
+		return
+	}
 
 	content := `#!/bin/sh
 set -eu

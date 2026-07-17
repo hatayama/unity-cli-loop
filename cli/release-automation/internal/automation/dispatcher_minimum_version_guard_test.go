@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -216,6 +217,11 @@ func buildDispatcherMinimumVersionPin(projectRunnerVersion string, minimumDispat
 
 func writeDispatcherMinimumVersionMockGit(t *testing.T, path string) {
 	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		installMockCliExecutable(t, path, mockCliExecutableConfig{Mode: "dispatcherMinimumVersionGit"})
+		return
+	}
 
 	content := `#!/bin/sh
 set -eu

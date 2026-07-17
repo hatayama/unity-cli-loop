@@ -2,6 +2,7 @@ package unityprocess
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -74,21 +75,32 @@ func listUnityProcessesMac(ctx context.Context) ([]UnityProcess, error) {
 }
 
 func listUnityProcessesWindows(ctx context.Context) ([]UnityProcess, error) {
+	commandContext, cancel := withCommandTimeout(ctx, ProcessListCommandTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(commandContext, windowsPowerShellCommand, "-NoProfile", "-Command", windowsUnityProcessListScript()).Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve Unity process list on Windows: %w", err)
+	}
+	return parseWindowsUnityProcesses(string(output)), nil
+}
+
+// windowsUnityProcessListScript builds the PowerShell script that lists Unity
+// processes as "pid|base64(UTF-8 command line)" lines.
+// why: Windows PowerShell 5.1 encodes redirected stdout with the OEM code page
+// (e.g. CP932 on Japanese Windows), so non-ASCII project paths in the command
+// line get corrupted when Go reads the output as UTF-8. Base64 over UTF-8
+// bytes keeps the stream ASCII-only regardless of the console code page.
+func windowsUnityProcessListScript() string {
 	scriptLines := []string{
 		"$ErrorActionPreference = 'Stop'",
 		"$processes = Get-CimInstance Win32_Process -Filter \"Name = 'Unity.exe'\" | Where-Object { $_.CommandLine }",
 		"foreach ($process in $processes) {",
 		"  $commandLine = $process.CommandLine -replace \"`r\", ' ' -replace \"`n\", ' '",
-		"  Write-Output (\"{0}|{1}\" -f $process.ProcessId, $commandLine)",
+		"  $encodedCommandLine = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($commandLine))",
+		"  Write-Output (\"{0}|{1}\" -f $process.ProcessId, $encodedCommandLine)",
 		"}",
 	}
-	commandContext, cancel := withCommandTimeout(ctx, ProcessListCommandTimeout)
-	defer cancel()
-	output, err := exec.CommandContext(commandContext, windowsPowerShellCommand, "-NoProfile", "-Command", strings.Join(scriptLines, "\n")).Output()
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve Unity process list on Windows: %w", err)
-	}
-	return parseWindowsUnityProcesses(string(output)), nil
+	return strings.Join(scriptLines, "\n")
 }
 
 func parseMacUnityProcesses(output string) []UnityProcess {
@@ -136,7 +148,12 @@ func parseWindowsUnityProcesses(output string) []UnityProcess {
 			continue
 		}
 
-		command := strings.TrimSpace(trimmed[delimiterIndex+1:])
+		decodedCommand, err := base64.StdEncoding.DecodeString(strings.TrimSpace(trimmed[delimiterIndex+1:]))
+		if err != nil {
+			continue
+		}
+
+		command := strings.TrimSpace(string(decodedCommand))
 		if !isUnityEditorCommand(command, windowsUnityExecutablePattern) {
 			continue
 		}
