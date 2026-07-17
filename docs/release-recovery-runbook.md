@@ -13,8 +13,10 @@ do not try to repair the broken release in place.
    attached asset attestation.
 
    ```sh
+   gh release download <release-tag> --repo <owner>/<repo> \
+     --pattern <asset-name> --dir <download-directory>
    gh api repos/<owner>/<repo>/commits/<release-tag> --jq .sha
-   gh attestation verify <asset> --repo <owner>/<repo> --format json \
+   gh attestation verify <download-directory>/<asset-name> --repo <owner>/<repo> --format json \
      | jq -r '.[].verificationResult.signature.certificate.sourceRepositoryDigest'
    ```
 
@@ -68,17 +70,31 @@ Check the original run before rerunning it:
 ```sh
 gh run view <run-id> --repo <owner>/<repo> --json headSha,workflowName,url
 gh api repos/<owner>/<repo>/commits/<release-tag> --jq .sha
+gh run view <run-id> --repo <owner>/<repo> --log-failed
 ```
 
 If the run used an older workflow revision that lacks a required fix, or its
 head SHA differs from the intended release commit, do not rerun it. Use the
 roll-forward procedure instead.
 
+When all conditions hold, rerun the failed jobs from the original run and
+approve the `cli-release` environment if GitHub requests approval:
+
+```sh
+gh run rerun <run-id> --repo <owner>/<repo> --failed
+```
+
 ## Operational notes
 
 - Do not dispatch `recovery-target` to publish a historical release. It is
   limited to validation because a later run cannot produce valid attestations
   for an earlier commit.
+- Cancel an older run waiting for `cli-release` approval before retrying. The
+  workflow concurrency group does not cancel it automatically, so it can block
+  the newer run indefinitely.
+- Delete a broken release only after the version bump is merged. Deleting it
+  first can make the resolver target the historical commit again and cause
+  later push builds to fail.
 - Do not grant GitHub Actions tag-ruleset bypass permissions. That does not
   resolve the attestation invariant and expands bot authority unnecessarily.
 - A broken release may remain published while the roll-forward release is cut;
