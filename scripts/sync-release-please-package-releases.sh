@@ -433,6 +433,58 @@ wait_for_cli_release_ready() {
   done
 }
 
+fail_cli_release_attestation() {
+  asset_name=$1
+
+  printf 'Project runner release attestation is invalid for %s. See docs/release-recovery-runbook.md for recovery steps.\n' "$asset_name" >&2
+  exit 1
+}
+
+verify_cli_release_attestations() {
+  release_tag=$1
+  verification_directory="$TMP_DIR/$release_tag-attestations"
+  signer_workflow="$REPO_FULL_NAME/.github/workflows/native-cli-publish.yml"
+
+  mkdir "$verification_directory"
+  tag_digest_file="$verification_directory/tag-digest.txt"
+  gh api "repos/$REPO_FULL_NAME/commits/$release_tag" --jq '.sha' > "$tag_digest_file"
+  tag_digest=$(strip_carriage_returns < "$tag_digest_file")
+  [ -n "$tag_digest" ] || fail_cli_release_attestation "$release_tag"
+
+  asset_names=$(release_asset_requirements "scripts/verify-native-cli-release-assets.sh" "$release_tag") || fail_cli_release_attestation "$release_tag"
+  for asset_name in $asset_names; do
+    asset_directory="$verification_directory/$asset_name"
+    bundle_name="$asset_name.sigstore.json"
+    asset_path="$asset_directory/$asset_name"
+    bundle_path="$asset_directory/$bundle_name"
+    verification_output_path="$asset_directory/verification.json"
+    verification_count_path="$asset_directory/verification-count.txt"
+    digest_count_path="$asset_directory/digest-count.txt"
+    digest_output_path="$asset_directory/digests.txt"
+    normalized_digest_output_path="$asset_directory/normalized-digests.txt"
+
+    mkdir "$asset_directory"
+    gh release download "$release_tag" --repo "$REPO_FULL_NAME" --pattern "$asset_name" --pattern "$bundle_name" --dir "$asset_directory"
+    [ -s "$asset_path" ] || fail_cli_release_attestation "$asset_name"
+    [ -s "$bundle_path" ] || fail_cli_release_attestation "$asset_name"
+    gh attestation verify "$asset_path" --repo "$REPO_FULL_NAME" --bundle "$bundle_path" --signer-workflow "$signer_workflow" --format json > "$verification_output_path"
+    jq 'length' "$verification_output_path" > "$verification_count_path"
+    jq '[.[].verificationResult.signature.certificate.sourceRepositoryDigest | select(type == "string" and length > 0)] | length' "$verification_output_path" > "$digest_count_path"
+    verification_count=$(strip_carriage_returns < "$verification_count_path")
+    digest_count=$(strip_carriage_returns < "$digest_count_path")
+    if [ "$verification_count" -eq 0 ] || [ "$verification_count" -ne "$digest_count" ]; then
+      fail_cli_release_attestation "$asset_name"
+    fi
+    jq -r '.[].verificationResult.signature.certificate.sourceRepositoryDigest' "$verification_output_path" > "$digest_output_path"
+    strip_carriage_returns < "$digest_output_path" > "$normalized_digest_output_path"
+    while IFS= read -r digest; do
+      if [ "$digest" != "$tag_digest" ]; then
+        fail_cli_release_attestation "$asset_name"
+      fi
+    done < "$normalized_digest_output_path"
+  done
+}
+
 wait_for_dispatcher_release_ready() {
   release_tag=$1
   timeout_seconds=${DISPATCHER_RELEASE_WAIT_TIMEOUT_SECONDS:-600}
@@ -516,6 +568,7 @@ if [ -n "$cli_version" ] && jq -e --arg package_path "$CLI_PACKAGE_PATH" '.packa
     exit 0
   fi
   fetch_cli_release_tag "$cli_release_tag"
+  verify_cli_release_attestations "$cli_release_tag"
 fi
 
 minimum_dispatcher_version=$(jq -r '.minimumDispatcherVersion // empty' "$ROOT_DIR/$UNITY_PACKAGE_CLI_PIN_FILE" | strip_carriage_returns)

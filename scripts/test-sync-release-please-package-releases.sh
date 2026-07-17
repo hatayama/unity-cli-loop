@@ -140,6 +140,41 @@ if [ "$1" = "release" ] && [ "$2" = "edit" ]; then
   exit 0
 fi
 
+if [ "$1" = "api" ]; then
+  case "$2" in
+    repos/*/commits/*)
+      printf '%s\n' "${CLI_RELEASE_TARGET:-cli-release-sha}"
+      exit 0
+      ;;
+  esac
+fi
+
+if [ "$1" = "release" ] && [ "$2" = "download" ]; then
+  download_dir=""
+  previous_argument=""
+  for argument in "$@"; do
+    if [ "$previous_argument" = "--dir" ]; then
+      download_dir=$argument
+      break
+    fi
+    previous_argument=$argument
+  done
+  mkdir -p "$download_dir"
+  for argument in "$@"; do
+    case "$argument" in
+      uloop-project-runner-*.tar.gz|uloop-project-runner-*.zip|uloop-project-runner-*.sha256|*.sigstore.json)
+        printf '%s\n' "mock release asset" > "$download_dir/$argument"
+        ;;
+    esac
+  done
+  exit 0
+fi
+
+if [ "$1" = "attestation" ] && [ "$2" = "verify" ]; then
+  printf '[{"verificationResult":{"signature":{"certificate":{"sourceRepositoryDigest":"%s"}}}}]\n' "${CLI_ATTESTATION_DIGEST:-${CLI_RELEASE_TARGET:-cli-release-sha}}"
+  exit 0
+fi
+
 echo "unexpected gh command: $*" >&2
 exit 1
 MOCK_GH
@@ -425,6 +460,7 @@ run_sync() {
   cli_release_ready_after_attempts=${9:-}
   dispatcher_release_state=${10:-published}
   dispatcher_release_assets=${11:-complete}
+  cli_release_target=${CLI_RELEASE_TARGET:-$(cat "$work_dir/release-sha.txt")}
 
   touch "$work_dir/gh.log"
   touch "$work_dir/go.log"
@@ -443,6 +479,8 @@ run_sync() {
     CLI_RELEASE_STATE="$cli_release_state" \
     CLI_RELEASE_ASSETS="$cli_release_assets" \
     CLI_RELEASE_TAG="${CLI_RELEASE_TAG:-uloop-project-runner-v3.0.0-beta.6}" \
+    CLI_RELEASE_TARGET="$cli_release_target" \
+    CLI_ATTESTATION_DIGEST="${CLI_ATTESTATION_DIGEST:-$cli_release_target}" \
     CLI_RELEASE_WAIT_TIMEOUT_SECONDS="$cli_release_wait_timeout" \
     CLI_RELEASE_WAIT_INTERVAL_SECONDS="$cli_release_wait_interval" \
     CLI_RELEASE_READY_AFTER_ATTEMPTS="$cli_release_ready_after_attempts" \
@@ -543,6 +581,21 @@ test_waits_for_cli_assets_before_creating_root_release() {
   assert_contains "$work_dir/output.txt" "Project runner release uloop-project-runner-v3.0.0-beta.6 is not published with complete assets; package release sync will wait."
   assert_not_contains "$work_dir/gh.log" "release create v3.0.0-beta.6"
   assert_contains "$work_dir/github-output.txt" "ready=false"
+}
+
+# Verifies an attestation digest mismatch fails instead of waiting for a runner release that cannot recover.
+test_fails_for_cli_release_attestation_digest_mismatch() {
+  work_dir=$(create_release_repo cli-attestation-mismatch)
+  release_sha=$(cat "$work_dir/release-sha.txt")
+
+  if CLI_RELEASE_TARGET="$release_sha" CLI_ATTESTATION_DIGEST=wrong-digest run_sync "$work_dir" "" false ""; then
+    echo "Expected an attestation digest mismatch to fail." >&2
+    exit 1
+  fi
+
+  assert_contains "$work_dir/stderr.txt" "docs/release-recovery-runbook.md"
+  assert_not_contains "$work_dir/output.txt" "package release sync will wait"
+  assert_not_contains "$work_dir/gh.log" "release create v3.0.0-beta.6"
 }
 
 # Verifies package releases wait until the minimum dispatcher release has all dispatcher assets.
@@ -717,6 +770,7 @@ test_existing_draft_root_release_is_published
 test_existing_draft_root_release_without_release_commit_fails
 test_waits_for_cli_release_before_creating_root_release
 test_waits_for_cli_assets_before_creating_root_release
+test_fails_for_cli_release_attestation_digest_mismatch
 test_waits_for_dispatcher_assets_before_creating_root_release
 test_waits_when_dispatcher_asset_list_fails
 test_dispatcher_release_ready_uses_tag_generation_asset_list

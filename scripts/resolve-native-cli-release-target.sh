@@ -2,7 +2,6 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
-LEGACY_CLI_RELEASE_TAG_PREFIX="cli-v"
 
 : "${EVENT_NAME:?EVENT_NAME is required}"
 
@@ -164,93 +163,6 @@ release_commit_updates_cli_version() {
     '
 }
 
-release_commit_sha_for_version() {
-  version=$1
-  build_sha=$2
-  release_branch=${EVENT_REF_NAME:-}
-
-  git log --format='%H	%s' "$build_sha" \
-    | awk -F '	' -v version="$version" -v release_branch="$release_branch" '
-      function value_appears_as_release_token(remainder, value, parts, part_index) {
-        split(remainder, parts, " ")
-        for (part_index in parts) {
-          if (parts[part_index] == value) {
-            return 1
-          }
-        }
-        return 0
-      }
-
-      function release_remainder_matches_version(remainder) {
-        if (value_appears_as_release_token(remainder, version)) {
-          return "version"
-        }
-
-        return ""
-      }
-
-      function release_remainder_matches_branch(remainder) {
-        if (release_branch != "" && value_appears_as_release_token(remainder, release_branch)) {
-          return "branch"
-        }
-
-        return ""
-      }
-
-      function is_release_please_subject(subject) {
-        plain_prefix = "chore: release "
-        scoped_marker = "): release "
-
-        if (index(subject, plain_prefix) == 1) {
-          release_remainder = substr(subject, length(plain_prefix) + 1)
-          release_match = release_remainder_matches_version(release_remainder)
-          if (release_match != "") {
-            return release_match
-          }
-
-          return release_remainder_matches_branch(release_remainder)
-        }
-
-        if (index(subject, "chore(") != 1) {
-          return ""
-        }
-
-        scope_end = index(subject, ")")
-        marker_start = scope_end
-        marker = substr(subject, marker_start, length(scoped_marker))
-        if (scope_end == 0 || marker != scoped_marker) {
-          return ""
-        }
-
-        release_remainder = substr(subject, marker_start + length(scoped_marker))
-        release_match = release_remainder_matches_version(release_remainder)
-        if (release_match != "") {
-          return release_match
-        }
-
-        return release_remainder_matches_branch(release_remainder)
-      }
-
-      {
-        release_match = is_release_please_subject($2)
-        if (release_match != "") {
-          print $1 "\t" release_match
-        }
-      }
-    ' \
-    | while IFS='	' read -r candidate_sha release_match; do
-      if [ "$release_match" = "version" ]; then
-        printf '%s\n' "$candidate_sha"
-        return
-      fi
-
-      if release_commit_updates_cli_version "$candidate_sha" "$version"; then
-        printf '%s\n' "$candidate_sha"
-        return
-      fi
-    done
-}
-
 VERSION=$(jq -r '.["cli/project-runner"]' .release-please-manifest.json)
 if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
   echo "Could not resolve project runner release version from .release-please-manifest.json." >&2
@@ -313,17 +225,7 @@ fi
 
 TARGET_SHA=$(git rev-parse HEAD)
 BUILD_SHA=$TARGET_SHA
-RELEASE_TARGET_SHA=$(release_commit_sha_for_version "$VERSION" "$BUILD_SHA")
-if [ -z "$RELEASE_TARGET_SHA" ]; then
-  RELEASE_TARGET_SHA=$BUILD_SHA
-fi
-LEGACY_CLI_RELEASE_TAG="$LEGACY_CLI_RELEASE_TAG_PREFIX$VERSION"
-if [ "$CAN_EVALUATE_CLI_RELEASE" = "true" ] &&
-   [ "$RELEASE_TARGET_SHA" != "$BUILD_SHA" ] &&
-   release_is_published "$LEGACY_CLI_RELEASE_TAG"; then
-  echo "Project runner release tag namespace changed for $VERSION; targeting build commit $BUILD_SHA instead of legacy release commit $RELEASE_TARGET_SHA." >&2
-  RELEASE_TARGET_SHA=$BUILD_SHA
-fi
+RELEASE_TARGET_SHA=$BUILD_SHA
 
 if [ "$CAN_EVALUATE_CLI_RELEASE" != "true" ]; then
   SHOULD_PUBLISH=false
@@ -343,8 +245,8 @@ else
   if [ -z "$PREVIOUS_CLI_RELEASE_TAG" ]; then
     echo "No previous project runner asset release found; publishing native project runner assets." >&2
     SHOULD_PUBLISH=true
-  elif release_commit_updates_cli_version "$RELEASE_TARGET_SHA" "$VERSION"; then
-    echo "Project runner release metadata changed in $RELEASE_TARGET_SHA; publishing native project runner assets." >&2
+  elif release_commit_updates_cli_version "$BUILD_SHA" "$VERSION"; then
+    echo "Project runner release metadata changed in $BUILD_SHA; publishing native project runner assets." >&2
     SHOULD_PUBLISH=true
   elif cli_release_inputs_changed "$PREVIOUS_CLI_RELEASE_TAG" "$TARGET_SHA"; then
     echo "Project runner release inputs changed since $PREVIOUS_CLI_RELEASE_TAG; publishing native project runner assets." >&2
