@@ -293,6 +293,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          SIGNER_WORKFLOW: ${{ github.repository }}/.github/workflows/native-cli-publish.yml
           RECOVERY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.recovery-target }}
         run: |
           set -eu
@@ -448,7 +449,7 @@ jobs:
             downloaded_bundle_path="${asset_directory}/${bundle_name}"
             verification_output_path="${asset_directory}/verification.json"
             digest_output_path="${asset_directory}/digests.txt"
-            gh attestation verify "${downloaded_asset_path}" --bundle "${downloaded_bundle_path}" --format json > "${verification_output_path}"
+            gh attestation verify "${downloaded_asset_path}" --repo "${GITHUB_REPOSITORY}" --bundle "${downloaded_bundle_path}" --signer-workflow "${SIGNER_WORKFLOW}" --format json > "${verification_output_path}"
             verification_count=$(jq 'length' "${verification_output_path}")
             digest_count=$(jq '[.[].verificationResult.signature.certificate.sourceRepositoryDigest | select(type == "string" and length > 0)] | length' "${verification_output_path}")
             if [ "${verification_count}" -eq 0 ] || [ "${verification_count}" -ne "${digest_count}" ]; then

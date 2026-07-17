@@ -175,7 +175,7 @@ test_remote_attestation_digests_match_the_release_tag_before_publishing() {
   assert_contains "      - name: Verify remote attestation digest matches release tag"
   assert_contains "        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'"
   assert_contains 'gh release download "${RELEASE_TAG}" --pattern "${asset_name}" --pattern "${bundle_name}" --dir "${asset_directory}"'
-  assert_contains 'gh attestation verify "${downloaded_asset_path}" --bundle "${downloaded_bundle_path}" --format json'
+  assert_contains 'gh attestation verify "${downloaded_asset_path}" --repo "${GITHUB_REPOSITORY}" --bundle "${downloaded_bundle_path}" --signer-workflow "${SIGNER_WORKFLOW}" --format json'
   assert_contains '.verificationResult.signature.certificate.sourceRepositoryDigest'
   assert_contains 'gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '\''.sha'\'''
   assert_contains 'if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
