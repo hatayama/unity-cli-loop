@@ -49,9 +49,9 @@ Revival is structurally impossible for three independent reasons:
    the failure.
 2. A new workflow run attests its own `github.sha`, which is the current branch
    head. It cannot create attestations for an earlier release commit.
-3. The release resolver binds the historical version to its original release
-   commit. A later publish run therefore produces a tag-to-attestation digest
-   mismatch even when an owner pre-creates the tag or draft release.
+3. The current workflow permits a release target only when it equals the
+   approved event commit. A new run for a historical version therefore fails
+   before it can create a tag or publish assets.
 
 For example, beta.48's tag pointed at `2d8d1b94` while its published asset
 attestations carried `2c73c6ac`. Reusing that version would preserve the same
@@ -86,15 +86,14 @@ gh run rerun <run-id> --repo <owner>/<repo> --failed
 
 ## Operational notes
 
-- Do not dispatch `recovery-target` to publish a historical release. It is
-  limited to validation because a later run cannot produce valid attestations
-  for an earlier commit.
+- Do not start a new workflow run to publish a historical release. A later run
+  cannot produce valid attestations for an earlier commit.
 - Cancel an older run waiting for `cli-release` approval before retrying. The
   workflow concurrency group does not cancel it automatically, so it can block
   the newer run indefinitely.
 - Delete a broken release only after the version bump is merged. Deleting it
-  first can make the resolver target the historical commit again and cause
-  later push builds to fail.
+  first leaves the historical version unresolved and can make later push builds
+  attempt to recreate it and fail.
 - Do not grant GitHub Actions tag-ruleset bypass permissions. That does not
   resolve the attestation invariant and expands bot authority unnecessarily.
 - A broken release may remain published while the roll-forward release is cut;
