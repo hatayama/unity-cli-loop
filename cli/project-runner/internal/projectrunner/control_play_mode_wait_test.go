@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -23,13 +25,7 @@ func TestRunControlPlayModeWithStateWaitPollsStatusAfterStaleInitialResponse(t *
 		controlPlayModeStatePoll = originalPoll
 	})
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
-	defer func() {
-		_ = listener.Close()
-	}()
+	listener := newLoopbackIpcListener(t)
 
 	requests := make(chan map[string]any, 2)
 	serverErr := make(chan error, 1)
@@ -44,7 +40,7 @@ func TestRunControlPlayModeWithStateWaitPollsStatusAfterStaleInitialResponse(t *
 
 	connection := unityipc.Connection{
 		Endpoint: unityipc.Endpoint{
-			Network: "tcp",
+			Network: listener.Addr().Network(),
 			Address: listener.Addr().String(),
 		},
 		ProjectRoot: t.TempDir(),
@@ -101,13 +97,7 @@ func TestRunControlPlayModeWithStateWaitPreservesStopChangeFields(t *testing.T) 
 		controlPlayModeStatePoll = originalPoll
 	})
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
-	defer func() {
-		_ = listener.Close()
-	}()
+	listener := newLoopbackIpcListener(t)
 
 	serverErr := make(chan error, 1)
 	go serveControlPlayModeResponses(
@@ -121,7 +111,7 @@ func TestRunControlPlayModeWithStateWaitPreservesStopChangeFields(t *testing.T) 
 
 	connection := unityipc.Connection{
 		Endpoint: unityipc.Endpoint{
-			Network: "tcp",
+			Network: listener.Addr().Network(),
 			Address: listener.Addr().String(),
 		},
 		ProjectRoot: t.TempDir(),
@@ -184,13 +174,7 @@ func TestRunControlPlayModeWithStateWaitFailsWhenStateNeverMatches(t *testing.T)
 		controlPlayModeStatePoll = originalPoll
 	})
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
-	defer func() {
-		_ = listener.Close()
-	}()
+	listener := newLoopbackIpcListener(t)
 
 	serverErr := make(chan error, 1)
 	go serveRepeatedControlPlayModeResponse(
@@ -200,7 +184,7 @@ func TestRunControlPlayModeWithStateWaitFailsWhenStateNeverMatches(t *testing.T)
 
 	connection := unityipc.Connection{
 		Endpoint: unityipc.Endpoint{
-			Network: "tcp",
+			Network: listener.Addr().Network(),
 			Address: listener.Addr().String(),
 		},
 		ProjectRoot: t.TempDir(),
@@ -240,13 +224,7 @@ func TestRunControlPlayModeWithStateWaitFailsImmediatelyWhenCompileErrorsBlockPl
 		controlPlayModeStatePoll = originalPoll
 	})
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
-	defer func() {
-		_ = listener.Close()
-	}()
+	listener := newLoopbackIpcListener(t)
 
 	requests := make(chan map[string]any, 2)
 	serverErr := make(chan error, 1)
@@ -260,7 +238,7 @@ func TestRunControlPlayModeWithStateWaitFailsImmediatelyWhenCompileErrorsBlockPl
 
 	connection := unityipc.Connection{
 		Endpoint: unityipc.Endpoint{
-			Network: "tcp",
+			Network: listener.Addr().Network(),
 			Address: listener.Addr().String(),
 		},
 		ProjectRoot: t.TempDir(),
@@ -321,13 +299,7 @@ func TestRunControlPlayModeWithStateWaitFailsWhenCompileErrorsAppearDuringPollin
 		controlPlayModeStatePoll = originalPoll
 	})
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
-	defer func() {
-		_ = listener.Close()
-	}()
+	listener := newLoopbackIpcListener(t)
 
 	requests := make(chan map[string]any, 3)
 	serverErr := make(chan error, 1)
@@ -342,7 +314,7 @@ func TestRunControlPlayModeWithStateWaitFailsWhenCompileErrorsAppearDuringPollin
 
 	connection := unityipc.Connection{
 		Endpoint: unityipc.Endpoint{
-			Network: "tcp",
+			Network: listener.Addr().Network(),
 			Address: listener.Addr().String(),
 		},
 		ProjectRoot: t.TempDir(),
@@ -421,6 +393,14 @@ func serveRepeatedControlPlayModeResponse(
 
 		if _, err := unityipc.Read(bufio.NewReader(conn)); err != nil {
 			_ = conn.Close()
+			// Why tolerated: when the client's wait deadline expires it closes a
+			// freshly dialed poll connection without sending a request. TCP hides
+			// this because the request is already buffered in the socket, but a
+			// named pipe surfaces it as EOF here; either way it is client-side
+			// cancellation, not a server failure.
+			if isClientAbandonedConnectionError(err) {
+				continue
+			}
 			serverErr <- err
 			return
 		}
@@ -479,6 +459,12 @@ func serveControlPlayModeResponses(
 		}
 		_ = conn.Close()
 	}
+}
+
+// isClientAbandonedConnectionError reports whether a fixture-server read
+// failed only because the client hung up before sending a request.
+func isClientAbandonedConnectionError(err error) bool {
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed)
 }
 
 func readControlPlayModeRequest(t *testing.T, requests <-chan map[string]any) map[string]any {

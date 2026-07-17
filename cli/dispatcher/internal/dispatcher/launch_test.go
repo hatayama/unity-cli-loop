@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -264,8 +265,9 @@ func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
+	fakeUnityPath := fakeUnityExecutablePath(t)
 	deps.resolveUnityExecutablePath = func(string) (string, error) {
-		return "/usr/bin/true", nil
+		return fakeUnityPath, nil
 	}
 	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error {
 		return nil
@@ -506,8 +508,9 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 		waitedPid = pid
 		return nil
 	}
+	fakeUnityPath := fakeUnityExecutablePath(t)
 	deps.resolveUnityExecutablePath = func(string) (string, error) {
-		return "/usr/bin/true", nil
+		return fakeUnityPath, nil
 	}
 	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error {
 		return nil
@@ -609,9 +612,10 @@ func TestRunLaunchRestartReportsProcessExitWaitFailure(t *testing.T) {
 	deps.waitForUnityProcessExit = func(ctx context.Context, projectRoot string, pid int, pollInterval time.Duration, timeout time.Duration) error {
 		return errors.New("still exiting")
 	}
+	fakeUnityPath := fakeUnityExecutablePath(t)
 	deps.resolveUnityExecutablePath = func(string) (string, error) {
 		resolverCalled = true
-		return "/usr/bin/true", nil
+		return fakeUnityPath, nil
 	}
 
 	projectRoot := createLaunchTestProject(t)
@@ -828,6 +832,22 @@ func TestResolveExistingUnityExecutablePathReportsSearchedCandidates(t *testing.
 	if !strings.Contains(err.Error(), missingPath) {
 		t.Fatalf("error should include searched candidate: %v", err)
 	}
+}
+
+// fakeUnityExecutablePath returns a no-op executable standing in for Unity in
+// launch tests that really spawn the resolved path. Why: /usr/bin/true does
+// not exist on Windows, so Windows needs a native no-op batch file instead.
+func fakeUnityExecutablePath(t *testing.T) string {
+	t.Helper()
+
+	if runtime.GOOS != "windows" {
+		return "/usr/bin/true"
+	}
+	path := filepath.Join(t.TempDir(), "fake-unity.bat")
+	if err := os.WriteFile(path, []byte("@exit /b 0\r\n"), 0o755); err != nil {
+		t.Fatalf("failed to write fake Unity executable: %v", err)
+	}
+	return path
 }
 
 func createLaunchTestProject(t *testing.T) string {
