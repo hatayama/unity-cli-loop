@@ -441,7 +441,6 @@ func unityExecutableCandidates(version string) []string {
 		return []string{}
 	}
 }
-
 func windowsUnityExecutableCandidates(version string) []string {
 	candidates := []string{}
 	for _, base := range []string{
@@ -457,7 +456,6 @@ func windowsUnityExecutableCandidates(version string) []string {
 	}
 	return candidates
 }
-
 func readUnityEditorVersion(projectRoot string) (string, error) {
 	content, err := os.ReadFile(filepath.Join(projectRoot, projectVersionFilePath))
 	if err != nil {
