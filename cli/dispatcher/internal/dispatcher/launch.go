@@ -105,6 +105,7 @@ func runLaunchWithDeps(ctx context.Context, options launchOptions, startPath str
 	if !deleteLaunchRecoveryIfRequested(options, projectRoot, stderr) {
 		return 1
 	}
+	v2Project, _ := detectV2DispatcherProject(projectRoot)
 
 	runningProcess, handled, code := findLaunchRunningProcess(ctx, options, projectRoot, stdout, stderr, deps)
 	if handled {
@@ -112,7 +113,7 @@ func runLaunchWithDeps(ctx context.Context, options launchOptions, startPath str
 	}
 
 	if runningProcess != nil {
-		if handled, code := handleExistingLaunchProcess(ctx, options, projectRoot, runningProcess, stdout, stderr, deps); handled {
+		if handled, code := handleExistingLaunchProcess(ctx, options, projectRoot, runningProcess, v2Project.IsV2, stdout, stderr, deps); handled {
 			return code
 		}
 	}
@@ -121,7 +122,7 @@ func runLaunchWithDeps(ctx context.Context, options launchOptions, startPath str
 		return writeLaunchQuitResponse(stdout, stderr, projectRoot, nil, launchNoProcessMessage)
 	}
 
-	return startUnityAndWaitForReadiness(ctx, options, projectRoot, runningProcess, stdout, stderr, deps)
+	return startUnityAndWaitForReadiness(ctx, options, projectRoot, runningProcess, v2Project.IsV2, stdout, stderr, deps)
 }
 
 func writeLaunchProjectSearch(stdout io.Writer, options launchOptions, startPath string) {
@@ -173,6 +174,7 @@ func handleExistingLaunchProcess(
 	options launchOptions,
 	projectRoot string,
 	runningProcess *unityprocess.UnityProcess,
+	isV2 bool,
 	stdout io.Writer,
 	stderr io.Writer,
 	deps launchDeps,
@@ -181,6 +183,9 @@ func handleExistingLaunchProcess(
 		if options.editorVersion != "" {
 			clierrors.WriteClassifiedError(stderr, launchEditorVersionRequiresRestartError(options.editorVersion), clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 			return true, 1
+		}
+		if isV2 {
+			return true, writeExistingV2LaunchOpenedResponse(stdout, stderr, projectRoot, runningProcess.Pid)
 		}
 		return true, waitForExistingLaunchReadiness(ctx, projectRoot, runningProcess.Pid, stdout, stderr, deps)
 	}
@@ -228,6 +233,7 @@ func startUnityAndWaitForReadiness(
 	options launchOptions,
 	projectRoot string,
 	runningProcess *unityprocess.UnityProcess,
+	isV2 bool,
 	stdout io.Writer,
 	stderr io.Writer,
 	deps launchDeps,
@@ -265,6 +271,7 @@ func startUnityAndWaitForReadiness(
 	clicore.WriteFormat(stdout, "Detected Unity version: %s\n", unityVersion)
 	clicore.WriteLine(stdout, "Unity Hub launch options: none")
 
+	launchStartedAt := deps.now()
 	command := newUnityLaunchCommand(unityPath, buildUnityLaunchArgs(projectRoot, options))
 	if err := command.Start(); err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
@@ -274,6 +281,18 @@ func startUnityAndWaitForReadiness(
 	if err := command.Process.Release(); err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
+	}
+	if isV2 {
+		if err := deps.waitForFreshUnityLockfile(ctx, unityLockfilePath(projectRoot), launchStartedAt, launchLockfilePoll, launchReadinessTimeout); err != nil {
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
+			return 1
+		}
+		spinner.Stop()
+		var previousPid *int
+		if runningProcess != nil {
+			previousPid = &runningProcess.Pid
+		}
+		return writeLaunchedV2ProjectOpenedResponse(stdout, stderr, projectRoot, previousPid, currentPid)
 	}
 	if err := deps.waitForUnityStartupMarker(ctx, unityLockfilePath(projectRoot), launchLockfilePoll, launchLockfileTimeout); err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})

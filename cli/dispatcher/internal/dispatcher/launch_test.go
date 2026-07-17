@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -304,6 +305,34 @@ func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("launch output missing %q:\n%s", expected, output)
 		}
+	}
+}
+
+// Verifies a V2 launch confirms only that Unity opened the project and never waits for the V3 named pipe.
+func TestRunLaunchForV2ProjectWaitsForFreshLockfileWithoutServerProbe(t *testing.T) {
+	projectRoot := createLaunchTestProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "abc123", "2.2.0")
+	deps := defaultLaunchDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) { return nil, nil }
+	deps.resolveUnityExecutablePath = func(string) (string, error) { return fakeUnityExecutablePath(t), nil }
+	deps.waitForFreshUnityLockfile = func(context.Context, string, time.Time, time.Duration, time.Duration) error { return nil }
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
+		t.Fatal("V2 launch must not wait for the V3 server")
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	code := runLaunchWithDeps(context.Background(), launchOptions{projectPath: projectRoot, editorVersion: "6000.0.0f1"}, projectRoot, &stdout, io.Discard, deps)
+	if code != 0 {
+		t.Fatalf("V2 launch exit code = %d", code)
+	}
+	response := decodeLaunchResponseFromOutput(t, stdout.String())
+	if !response.Success || !response.Ready || response.ServerReady || response.ProjectIpcReady {
+		t.Fatalf("V2 launch readiness flags = %#v", response)
+	}
+	if !strings.Contains(response.Message, "V2 server readiness was not checked") {
+		t.Fatalf("V2 launch message = %q", response.Message)
 	}
 }
 
