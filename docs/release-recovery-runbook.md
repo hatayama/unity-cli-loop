@@ -86,9 +86,8 @@ gh run rerun <run-id> --repo <owner>/<repo> --failed
 
 ## Operational notes
 
-- Do not dispatch `recovery-target` to publish a historical release. It is
-  limited to validation because a later run cannot produce valid attestations
-  for an earlier commit.
+- Do not start a new workflow run to publish a historical release. A later run
+  cannot produce valid attestations for an earlier commit.
 - Cancel an older run waiting for `cli-release` approval before retrying. The
   workflow concurrency group does not cancel it automatically, so it can block
   the newer run indefinitely.
