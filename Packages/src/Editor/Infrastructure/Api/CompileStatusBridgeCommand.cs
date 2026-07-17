@@ -177,7 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ["Warnings"] = JValue.CreateNull(),
                 ["Message"] = message,
                 ["ErrorCode"] = ForceCompileUnknownResult.ErrorCodeText,
-                ["NextActions"] = new JArray("Wait for domain reload to complete, then run `uloop compile` without --force-recompile to obtain a definitive result."),
+                ["NextActions"] = new JArray(ForceCompileUnknownResult.NextActionText),
                 ["ProjectRoot"] = UnityCliLoopPathResolver.GetProjectRoot()
             };
         }

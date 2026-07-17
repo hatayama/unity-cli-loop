@@ -84,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings: null,
                 message: unknownResult.Message);
             response.ErrorCode = ForceCompileUnknownResult.ErrorCodeText;
-            response.NextActions = new[] { "Wait for domain reload to complete, then run `uloop compile` without --force-recompile to obtain a definitive result." };
+            response.NextActions = new[] { ForceCompileUnknownResult.NextActionText };
             return response;
         }
 

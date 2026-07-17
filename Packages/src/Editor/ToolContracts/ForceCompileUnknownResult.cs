@@ -7,6 +7,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     {
         public const string MessageText = "Forced full compilation was triggered, but Unity did not provide a definitive result after domain reload.";
         public const string ErrorCodeText = "COMPILE_RESULT_UNKNOWN";
+        public const string NextActionText = "Wait for domain reload to complete, then run `uloop compile` without --force-recompile to obtain a definitive result.";
 
         private ForceCompileUnknownResult()
         {

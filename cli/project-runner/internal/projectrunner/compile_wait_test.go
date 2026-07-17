@@ -472,8 +472,8 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 	var stderr bytes.Buffer
 
 	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, params, &stdout, &stderr, deps)
-	if code != 0 {
-		t.Fatalf("runCompileWithDomainReloadWait failed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	if code != 1 {
+		t.Fatalf("expected failed compile envelope to exit 1: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 
 	logContent := readOnlyCliVibeLog(t, projectRoot)

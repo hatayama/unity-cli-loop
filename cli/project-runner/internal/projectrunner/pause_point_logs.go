@@ -72,6 +72,7 @@ type pausePointWaitResult struct {
 }
 
 type pausePointGetLogsResponse struct {
+	Success           bool                    `json:"Success"`
 	TotalCount        int                     `json:"TotalCount"`
 	DisplayedCount    int                     `json:"DisplayedCount"`
 	LogType           string                  `json:"LogType"`

@@ -306,7 +306,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 );
                 return new ScreenshotResponse
                 {
+                    Success = false,
                     Message = notFoundMessage,
+                    NextActions = new[] { "Open the requested Unity window, then retry the screenshot." }
                 };
             }
 
