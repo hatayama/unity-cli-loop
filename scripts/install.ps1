@@ -494,6 +494,8 @@ function Invoke-CompatibilityWindowsInstall {
 
 $TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("uloop-stage-" + [System.Guid]::NewGuid().ToString("N"))
 $StagedUloopPath = $null
+$FinalUloopPath = Join-Path $InstallDir "uloop.exe"
+$ReplacedUloopBackupPath = $null
 New-Item -ItemType Directory -Path $TempDir | Out-Null
 
 try {
@@ -535,12 +537,28 @@ try {
     Expand-UloopArchive -ArchivePath $ArchivePath -DestinationPath $TempDir
 
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+
+    # Why: earlier installs rename the then-running uloop.exe aside (see below);
+    # those processes have exited by now, so reclaim the leftovers. A backup
+    # whose process is still running stays locked and is skipped silently until
+    # a later install can remove it.
+    Get-ChildItem -LiteralPath $InstallDir -Filter "uloop.exe.old-*" -File -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+
     $StagedUloopPath = Join-Path $InstallDir ("uloop-staged-" + [System.Guid]::NewGuid().ToString("N") + ".exe")
     Copy-Item -Path (Join-Path $TempDir "uloop.exe") -Destination $StagedUloopPath -Force
     Assert-UloopVersionSucceeds -UloopPath $StagedUloopPath -Quiet
     $NativeInstallSupported = Test-UloopNativeInstallSupported -UloopPath $StagedUloopPath
 
-    $FinalUloopPath = Join-Path $InstallDir "uloop.exe"
+    # Why: Windows locks the image file of a running executable against
+    # overwrite and delete but still allows rename. `uloop update` runs this
+    # script as a child of the running uloop.exe, so overwriting the target in
+    # place can never succeed there. Move the existing binary aside first; the
+    # finally block restores it if the new binary was not placed.
+    if (Test-Path -LiteralPath $FinalUloopPath) {
+        $ReplacedUloopBackupPath = $FinalUloopPath + ".old-" + [System.Guid]::NewGuid().ToString("N")
+        Move-Item -LiteralPath $FinalUloopPath -Destination $ReplacedUloopBackupPath -Force
+    }
     Copy-Item -Path $StagedUloopPath -Destination $FinalUloopPath -Force
     Remove-Item -Path $StagedUloopPath -Force
     $StagedUloopPath = $null
@@ -555,6 +573,11 @@ try {
     Assert-UloopVersionSucceeds -UloopPath $FinalUloopPath
 }
 finally {
+    # Why: if the install failed after the old binary was moved aside, put it
+    # back so a failed update never leaves the user without a working uloop.
+    if ($ReplacedUloopBackupPath -and (Test-Path -LiteralPath $ReplacedUloopBackupPath) -and -not (Test-Path -LiteralPath $FinalUloopPath)) {
+        Move-Item -LiteralPath $ReplacedUloopBackupPath -Destination $FinalUloopPath -Force
+    }
     if ($StagedUloopPath -and (Test-Path $StagedUloopPath)) {
         Remove-Item -Path $StagedUloopPath -Force -ErrorAction SilentlyContinue
     }
