@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.1.0-beta.14](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.1.0-beta.13...dispatcher-v3.1.0-beta.14) (2026-07-17)
+
+
+### Features
+
+* Delegate V2 projects through the V3 dispatcher ([#1807](https://github.com/hatayama/unity-cli-loop/issues/1807)) ([3882b19](https://github.com/hatayama/unity-cli-loop/commit/3882b1913184dcbce0f94f6e5b6cf806b7405eb1))
+
+
+### Bug Fixes
+
+* make Windows v3 workflows reliable ([#1818](https://github.com/hatayama/unity-cli-loop/issues/1818)) ([21eae0a](https://github.com/hatayama/unity-cli-loop/commit/21eae0a96af05355cbf57eb3ab98dd7388fc7b2a))
+* Project commands now work from paths containing glob characters ([#1810](https://github.com/hatayama/unity-cli-loop/issues/1810)) ([c56843a](https://github.com/hatayama/unity-cli-loop/commit/c56843a11e7e794d27c378dbaddeac90bf87be75))
+* V2 delegation now recognizes SCP Git dependencies with path queries ([#1811](https://github.com/hatayama/unity-cli-loop/issues/1811)) ([b42f918](https://github.com/hatayama/unity-cli-loop/commit/b42f91857c51556102a35514da89c305d3feb1bf))
+
 ## [3.1.0-beta.13](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.1-beta.13...dispatcher-v3.1.0-beta.13) (2026-07-15)
 
 

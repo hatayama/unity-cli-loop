@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.51](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.50...v3.0.0-beta.51) (2026-07-17)
+
+
+### Bug Fixes
+
+* make Windows v3 workflows reliable ([#1818](https://github.com/hatayama/unity-cli-loop/issues/1818)) ([21eae0a](https://github.com/hatayama/unity-cli-loop/commit/21eae0a96af05355cbf57eb3ab98dd7388fc7b2a))
+
 ## [3.0.0-beta.50](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.49...v3.0.0-beta.50) (2026-07-15)
 
 

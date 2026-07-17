@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.0.0-beta.49](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.48...uloop-project-runner-v3.0.0-beta.49) (2026-07-17)
+
+
+### Features
+
+* Delegate V2 projects through the V3 dispatcher ([#1807](https://github.com/hatayama/unity-cli-loop/issues/1807)) ([3882b19](https://github.com/hatayama/unity-cli-loop/commit/3882b1913184dcbce0f94f6e5b6cf806b7405eb1))
+
+
+### Bug Fixes
+
+* make Windows v3 workflows reliable ([#1818](https://github.com/hatayama/unity-cli-loop/issues/1818)) ([21eae0a](https://github.com/hatayama/unity-cli-loop/commit/21eae0a96af05355cbf57eb3ab98dd7388fc7b2a))
+
 ## [3.0.0-beta.48](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.47...uloop-project-runner-v3.0.0-beta.48) (2026-07-15)
 
 
