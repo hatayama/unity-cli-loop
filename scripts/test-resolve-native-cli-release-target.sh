@@ -38,24 +38,12 @@ case "$1" in
   rev-parse)
     printf '%s\n' "${BUILD_SHA_VALUE:-target-sha}"
     ;;
-  log)
-    printf '%s\t%s\n' "${BUILD_SHA_VALUE:-target-sha}" "$BUILD_COMMIT_SUBJECT"
-    if [ -n "${RELEASE_COMMIT_SHA:-}" ] && [ "$RELEASE_COMMIT_SHA" != "${BUILD_SHA_VALUE:-target-sha}" ]; then
-      printf '%s\t%s\n' "$RELEASE_COMMIT_SHA" "$RELEASE_COMMIT_SUBJECT"
-    fi
-    ;;
   show)
     commit_sha=$3
     if [ "$commit_sha" = "${BUILD_SHA_VALUE:-target-sha}" ] && [ "${BUILD_COMMIT_UPDATES_CLI:-false}" = "true" ]; then
       emit_cli_release_diff "$CURRENT_VERSION"
       exit 0
     fi
-
-    if [ -n "${RELEASE_COMMIT_SHA:-}" ] && [ "$commit_sha" = "$RELEASE_COMMIT_SHA" ] && [ "${RELEASE_COMMIT_UPDATES_CLI:-false}" = "true" ]; then
-      emit_cli_release_diff "$CURRENT_VERSION"
-      exit 0
-    fi
-
     exit 0
     ;;
   *)
@@ -105,11 +93,6 @@ if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   tag=$3
 	  if [ "$tag" = "uloop-project-runner-v$CURRENT_VERSION" ]; then
 	    release_json "$CURRENT_RELEASE_STATE" "$CURRENT_RELEASE_HAS_ASSETS"
-	    exit 0
-	  fi
-	
-	  if [ "$tag" = "cli-v$CURRENT_VERSION" ]; then
-	    release_json "$LEGACY_CURRENT_RELEASE_STATE" true
 	    exit 0
 	  fi
 	
@@ -196,18 +179,7 @@ run_success_case() {
   expected_release=${13}
   expected_sha=${14:-target-sha}
   build_sha_value=${15:-target-sha}
-  release_commit_sha=${16:-target-sha}
-  release_commit_subject=${17:-}
-	  build_commit_subject=${18:-}
-	  build_commit_updates_cli=${19:-false}
-	  release_commit_updates_cli=${20:-false}
-	  legacy_current_release_state=${21:-missing}
-	  if [ -z "$release_commit_subject" ]; then
-	    release_commit_subject="chore(v3-beta): release $current_version"
-	  fi
-  if [ -z "$build_commit_subject" ]; then
-    build_commit_subject=$release_commit_subject
-  fi
+  build_commit_updates_cli=${16:-false}
 
   work_dir="$TMP_DIR/$name"
   mock_bin="$work_dir/bin"
@@ -222,12 +194,7 @@ run_success_case() {
       CURRENT_RELEASE_STATE="$current_release_state" \
       CURRENT_RELEASE_HAS_ASSETS="$current_release_has_assets" \
       BUILD_SHA_VALUE="$build_sha_value" \
-      BUILD_COMMIT_SUBJECT="$build_commit_subject" \
       BUILD_COMMIT_UPDATES_CLI="$build_commit_updates_cli" \
-	      RELEASE_COMMIT_SHA="$release_commit_sha" \
-	      RELEASE_COMMIT_SUBJECT="$release_commit_subject" \
-	      RELEASE_COMMIT_UPDATES_CLI="$release_commit_updates_cli" \
-	      LEGACY_CURRENT_RELEASE_STATE="$legacy_current_release_state" \
 	      PREVIOUS_RELEASE_TAG="$previous_release_tag" \
 	      PREVIOUS_RELEASE_HAS_ASSETS="$previous_release_has_assets" \
       CLI_SOURCE_CHANGED="$cli_source_changed" \
@@ -273,10 +240,6 @@ run_failure_case() {
       CURRENT_RELEASE_STATE="$current_release_state" \
       CURRENT_RELEASE_HAS_ASSETS=false \
       BUILD_SHA_VALUE=target-sha \
-      BUILD_COMMIT_SUBJECT="chore(v3-beta): release $current_version" \
-	      RELEASE_COMMIT_SHA=target-sha \
-	      RELEASE_COMMIT_SUBJECT="chore(v3-beta): release $current_version" \
-	      LEGACY_CURRENT_RELEASE_STATE=missing \
 	      PREVIOUS_RELEASE_TAG=uloop-project-runner-v3.0.0-beta.1 \
       PREVIOUS_RELEASE_HAS_ASSETS=true \
       CLI_SOURCE_CHANGED=false \
@@ -332,52 +295,17 @@ test_cli_requirement_change_publishes() {
 
 # Verifies Project runner release metadata-only release commits still publish native Project runner assets.
 test_cli_release_metadata_change_publishes() {
-  run_success_case cli-release-metadata-change 3.0.0-beta.3 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true false false false true true target-sha target-sha target-sha "chore: release v3-beta" "chore: release v3-beta" true false
+  run_success_case cli-release-metadata-change 3.0.0-beta.3 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true false false false true true target-sha target-sha true
 }
 
-# Verifies the first renamed project runner tag targets the commit that contains the rename.
-test_renamed_tag_with_existing_legacy_release_targets_build_commit() {
-  run_success_case renamed-tag-targets-build 3.0.0-beta.43 push v3-beta missing false "" false true false false true true build-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.43" "refactor: rename project runner" false true published
+# Verifies publishing always targets the approved event-head commit.
+test_release_target_is_event_head() {
+  run_success_case event-head-target 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true build-sha build-sha
 }
 
 # Verifies the first Project runner asset release is published when no previous asset tag exists.
 test_missing_previous_cli_release_publishes() {
   run_success_case bootstrap 3.0.0-beta.0 push v3-beta missing false "" false false false false true true
-}
-
-# Verifies a recovered release still tags the original release PR merge commit.
-test_recovery_targets_release_commit() {
-  run_success_case recovery-target 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: follow-up change"
-}
-
-# Verifies grouped manifest release commits remain the recovery target.
-test_recovery_targets_grouped_release_commit() {
-  run_success_case recovery-grouped-target 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore: release v3-beta" "fix: follow-up change" false true
-}
-
-# Verifies package-only grouped release commits do not steal the Project runner release target.
-test_recovery_ignores_grouped_package_only_release_commit() {
-  run_success_case recovery-grouped-package-only-target 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore: release v3-beta" false false
-}
-
-# Verifies recovery ignores follow-up commits that only mention the release version.
-test_recovery_ignores_non_release_subject_mentions() {
-  run_success_case recovery-non-release-subject 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: keep release 3.0.0-beta.2 on the release commit"
-}
-
-# Verifies recovery ignores metadata-touching commits unless their subject is a release commit.
-test_recovery_ignores_non_release_metadata_commit() {
-  run_success_case recovery-non-release-metadata 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "fix: repair release metadata" true false
-}
-
-# Verifies recovery ignores non-release subjects with a later release marker.
-test_recovery_requires_release_marker_after_scope() {
-  run_success_case recovery-scoped-marker 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore(v3-beta) follow-up): release 3.0.0-beta.2"
-}
-
-# Verifies version matching does not confuse beta.2 with beta.20.
-test_recovery_target_uses_exact_version_boundary() {
-  run_success_case recovery-boundary 3.0.0-beta.2 push v3-beta missing false uloop-project-runner-v3.0.0-beta.1 true true false false true true release-sha build-sha release-sha "chore(v3-beta): release 3.0.0-beta.2" "chore(v3-beta): release 3.0.0-beta.20"
 }
 
 # Verifies main refuses prerelease versions.
@@ -418,15 +346,8 @@ test_published_current_release_can_receive_cli_assets
 test_cli_contract_change_publishes
 test_cli_requirement_change_publishes
 test_cli_release_metadata_change_publishes
-test_renamed_tag_with_existing_legacy_release_targets_build_commit
+test_release_target_is_event_head
 test_missing_previous_cli_release_publishes
-test_recovery_targets_release_commit
-test_recovery_targets_grouped_release_commit
-test_recovery_ignores_grouped_package_only_release_commit
-test_recovery_ignores_non_release_subject_mentions
-test_recovery_ignores_non_release_metadata_commit
-test_recovery_requires_release_marker_after_scope
-test_recovery_target_uses_exact_version_boundary
 test_main_prerelease_fails
 test_v3_beta_stable_fails
 test_release_lookup_error_fails

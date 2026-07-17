@@ -62,6 +62,14 @@ publish_draft_section() {
   ' "$WORKFLOW"
 }
 
+remote_attestation_verification_section() {
+  awk '
+    /^      - name: Verify remote attestation digest matches release tag$/ { printing = 1; next }
+    printing && /^      - name:/ { exit }
+    printing { print }
+  ' "$WORKFLOW"
+}
+
 post_publish_section() {
   awk '
     /^  post-publish:/ { printing = 1 }
@@ -129,24 +137,15 @@ test_checkout_free_publish_has_explicit_repository_context() {
   fi
 }
 
-test_recovery_dispatch_is_bound_to_the_resolver_target() {
-  assert_contains "      recovery-target:"
-  assert_not_contains "inputs.sha"
-  assert_not_contains "INPUT_SHA"
-  assert_contains "      - name: Check out resolver-derived recovery target"
-  assert_contains 'if ! git merge-base --is-ancestor "${TARGET_SHA}" "${GITHUB_SHA}"; then'
-  assert_contains 'git checkout --detach "${TARGET_SHA}"'
-  assert_before "      - name: Check out resolver-derived recovery target" "      - name: Verify release target matches build commit"
-  assert_contains 'build_sha=$(git rev-parse HEAD)'
-  assert_contains 'if [ "${TARGET_SHA}" != "${build_sha}" ]; then'
-  assert_contains "          RECOVERY_TARGET: \${{ github.event_name == 'workflow_dispatch' && inputs.recovery-target }}"
-  assert_contains 'if [ "${BUILD_SHA}" != "${TARGET_SHA}" ]; then'
-  assert_contains 'compare_status=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${TARGET_SHA}...${GITHUB_SHA}" --jq '\''.status'\'')'
-  assert_contains 'if [ "${compare_status}" != "ahead" ] && [ "${compare_status}" != "identical" ]; then'
+test_publish_has_no_recovery_target_mode() {
+  # Verify publishing always uses the event-head release target without a recovery-only path.
+  assert_not_contains "recovery-target"
+  assert_not_contains "RECOVERY_TARGET"
+  assert_not_contains "Recovery-target"
+  assert_not_contains "Check out resolver-derived recovery target"
   assert_contains 'printf '\''RELEASE_SHA=%s\n'\'' "${release_sha}" >> "$GITHUB_ENV"'
-  assert_count 2 'if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
+  assert_count 3 'if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
   assert_contains 'if [ -n "${tag_sha}" ] && [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
-  assert_not_contains '--target "${GITHUB_SHA}"'
   assert_contains '--target "${RELEASE_SHA}"'
 }
 
@@ -169,6 +168,47 @@ test_assets_are_attested_after_the_manifest_is_verified() {
   assert_before "      - name: Verify remote release assets" "      - name: Publish draft release"
 }
 
+test_remote_attestation_digests_match_the_release_tag_before_publishing() {
+  # Verify the remote assets and their attached bundles are fail-closed checked
+  # against the release tag before the draft release becomes public.
+  assert_contains "      - name: Verify remote attestation digest matches release tag"
+  assert_contains "        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'"
+  assert_contains 'gh release download "${RELEASE_TAG}" --pattern "${asset_name}" --pattern "${bundle_name}" --dir "${asset_directory}"'
+  assert_contains 'gh attestation verify "${downloaded_asset_path}" --repo "${GITHUB_REPOSITORY}" --bundle "${downloaded_bundle_path}" --signer-workflow "${SIGNER_WORKFLOW}" --format json'
+  assert_contains '.verificationResult.signature.certificate.sourceRepositoryDigest'
+  assert_contains 'gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '\''.sha'\'''
+  assert_contains 'if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
+  assert_contains 'if [ "${digest}" != "${tag_sha}" ]; then'
+  assert_contains 'if [ "${verification_count}" -eq 0 ] || [ "${verification_count}" -ne "${digest_count}" ]; then'
+  assert_before "      - name: Verify remote release assets" "      - name: Verify remote attestation digest matches release tag"
+  assert_before "      - name: Verify remote attestation digest matches release tag" "      - name: Publish draft release"
+  verification_section=$(remote_attestation_verification_section)
+  for required_environment in \
+    'GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}' \
+    'GITHUB_REPOSITORY: ${{ github.repository }}' \
+    'SIGNER_WORKFLOW: ${{ github.repository }}/.github/workflows/native-cli-publish.yml'; do
+    if ! printf '%s\n' "${verification_section}" | grep -F -- "${required_environment}" >/dev/null 2>&1; then
+      echo "Remote attestation verification must define ${required_environment}." >&2
+      exit 1
+    fi
+  done
+  tag_mismatch_guard='if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match approved release commit ${RELEASE_SHA}." >&2
+            exit 1
+          fi'
+  digest_mismatch_guard='if [ "${digest}" != "${tag_sha}" ]; then
+                echo "Attestation digest for ${asset_name} does not match release tag ${RELEASE_TAG}." >&2
+                exit 1
+              fi'
+  case "${verification_section}" in
+    *"${tag_mismatch_guard}"*"${digest_mismatch_guard}"*) ;;
+    *)
+      echo "Remote attestation verification must fail for tag or digest mismatches." >&2
+      exit 1
+      ;;
+  esac
+}
+
 test_publish_rejects_manifest_and_existing_tag_mismatches() {
   assert_contains "Unexpected release files are not listed in the manifest."
   assert_contains "Release manifest is missing files or has duplicate entries."
@@ -184,24 +224,13 @@ test_release_tag_is_created_before_the_release() {
   assert_before 'gh api "repos/${GITHUB_REPOSITORY}/git/refs"' 'gh release create "${RELEASE_TAG}"'
 }
 
-test_recovery_target_403_errors_explain_the_manual_recovery() {
-  # Verify recovery-target 403 failures explain the owner-assisted recovery procedure.
-  assert_contains 'RECOVERY_TARGET: ${{ github.event_name == '\''workflow_dispatch'\'' && inputs.recovery-target }}'
-  assert_contains 'grep -qE '\''HTTP 403|Resource not accessible by integration'\'''
-  assert_contains 'Recovery-target release creation was rejected for a historical commit by GitHub.'
-  assert_contains 'Recovery-target draft release creation was rejected for a historical commit by GitHub.'
-  assert_contains 'See docs/release-recovery-runbook.md for the recovery procedure.'
-}
-
-test_recovery_dispatch_refuses_to_publish_from_a_different_head() {
-  # Verify recovery dispatch fails closed before publishing assets: the
-  # attestation certificate digest is always the run head, so publishing for an
-  # older release commit would create a release that never passes verification.
-  assert_contains 'if [ "${should_publish}" = "true" ] && [ "${release_sha}" != "${GITHUB_SHA}" ]; then'
-  assert_contains 'Recovery-target dispatch cannot publish release assets'
-  assert_contains 'Rerun the original failed workflow run whose head commit is the release commit instead.'
-  assert_before 'release_sha="${TARGET_SHA}"' 'Recovery-target dispatch cannot publish release assets'
-  assert_before 'Recovery-target dispatch cannot publish release assets' 'printf '\''RELEASE_SHA=%s\n'\'' "${release_sha}" >> "$GITHUB_ENV"'
+test_release_creation_403_points_to_roll_forward_recovery() {
+  # Verify authorization failures direct operators to the supported recovery procedure.
+  assert_contains 'if grep -qE '\''HTTP 403|Resource not accessible by integration'\'' "${error_path}"; then'
+  assert_contains 'report_release_creation_failure "${tag_create_error_path}"'
+  assert_contains 'report_release_creation_failure "${release_create_error_path}"'
+  assert_contains 'See docs/release-recovery-runbook.md for the roll-forward recovery procedure.'
+  assert_not_contains 'Create the tag and draft release as the repository owner, then rerun this workflow.'
 }
 
 test_draft_creation_accepts_only_the_known_missing_tag_responses() {
@@ -246,14 +275,14 @@ test_post_publish_automation_remains_outside_the_privileged_job() {
 
 test_build_and_publish_jobs_have_separate_trust_boundaries
 test_unprivileged_build_uses_only_the_approved_event_commit
-test_recovery_dispatch_is_bound_to_the_resolver_target
+test_publish_has_no_recovery_target_mode
 test_publish_validates_metadata_without_checking_out_source
 test_checkout_free_publish_has_explicit_repository_context
 test_assets_are_attested_after_the_manifest_is_verified
+test_remote_attestation_digests_match_the_release_tag_before_publishing
 test_publish_rejects_manifest_and_existing_tag_mismatches
 test_release_tag_is_created_before_the_release
-test_recovery_target_403_errors_explain_the_manual_recovery
-test_recovery_dispatch_refuses_to_publish_from_a_different_head
+test_release_creation_403_points_to_roll_forward_recovery
 test_draft_creation_accepts_only_the_known_missing_tag_responses
 test_publish_rechecks_the_tag_and_uses_least_privilege_post_publish_permissions
 test_build_verifies_assets_before_writing_the_publish_input
