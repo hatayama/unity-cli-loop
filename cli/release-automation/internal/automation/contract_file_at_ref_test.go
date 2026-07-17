@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -406,6 +407,10 @@ func writeSleepingMockGit(t *testing.T, binDir string) {
 	t.Helper()
 
 	path := filepath.Join(binDir, "git")
+	if runtime.GOOS == "windows" {
+		installMockCliExecutable(t, path, mockCliExecutableConfig{Mode: "sleeping"})
+		return
+	}
 	writeFile(t, path, "#!/bin/sh\nsleep 10\n")
 	if err := os.Chmod(path, 0o755); err != nil {
 		t.Fatalf("failed to chmod mock git: %v", err)

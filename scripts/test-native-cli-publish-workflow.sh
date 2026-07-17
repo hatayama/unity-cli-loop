@@ -193,6 +193,17 @@ test_recovery_target_403_errors_explain_the_manual_recovery() {
   assert_contains 'See docs/release-recovery-runbook.md for the recovery procedure.'
 }
 
+test_recovery_dispatch_refuses_to_publish_from_a_different_head() {
+  # Verify recovery dispatch fails closed before publishing assets: the
+  # attestation certificate digest is always the run head, so publishing for an
+  # older release commit would create a release that never passes verification.
+  assert_contains 'if [ "${should_publish}" = "true" ] && [ "${release_sha}" != "${GITHUB_SHA}" ]; then'
+  assert_contains 'Recovery-target dispatch cannot publish release assets'
+  assert_contains 'Rerun the original failed workflow run whose head commit is the release commit instead.'
+  assert_before 'release_sha="${TARGET_SHA}"' 'Recovery-target dispatch cannot publish release assets'
+  assert_before 'Recovery-target dispatch cannot publish release assets' 'printf '\''RELEASE_SHA=%s\n'\'' "${release_sha}" >> "$GITHUB_ENV"'
+}
+
 test_draft_creation_accepts_only_the_known_missing_tag_responses() {
   assert_contains '*"HTTP 404"*) tag_sha="" ;;'
   assert_contains '*"HTTP 422"*"No commit found for SHA"*|*"No commit found for SHA"*"HTTP 422"*) tag_sha="" ;;'
@@ -242,6 +253,7 @@ test_assets_are_attested_after_the_manifest_is_verified
 test_publish_rejects_manifest_and_existing_tag_mismatches
 test_release_tag_is_created_before_the_release
 test_recovery_target_403_errors_explain_the_manual_recovery
+test_recovery_dispatch_refuses_to_publish_from_a_different_head
 test_draft_creation_accepts_only_the_known_missing_tag_responses
 test_publish_rechecks_the_tag_and_uses_least_privilege_post_publish_permissions
 test_build_verifies_assets_before_writing_the_publish_input

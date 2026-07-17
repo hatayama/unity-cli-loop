@@ -20,6 +20,30 @@ and [29459266044](https://github.com/hatayama/unity-cli-loop/actions/runs/294592
 The precise condition is a ref target different from the run's `GITHUB_SHA`,
 not merely an unreachable commit. Normal head-based releases are unaffected.
 
+## Publishing invariant: assets may only be published by the original run
+
+Attestation certificates bind `SourceRepositoryDigest` to the workflow run's
+head commit (`GITHUB_SHA`), never to the commit the build checked out. The
+dispatcher verifies that the release tag's commit equals the certificate
+digest, so a release is only downloadable when the publishing run's head IS
+the release commit.
+
+Therefore the only valid way to publish recovery assets is to **rerun the
+original failed run whose head is the release commit** (step 5 below). Never
+publish through a new `recovery-target` workflow-dispatch run on a later
+branch head: its certificates would carry the later head's digest while the
+tag points at the historical release commit, producing a release that
+permanently fails attestation verification. The workflow now rejects this
+combination in the publish job's "Verify release metadata" step; recovery
+dispatch runs remain usable for build validation only.
+
+This is not theoretical: `uloop-project-runner-v3.0.0-beta.48` was published
+on 2026-07-15 through a recovery dispatch run after the owner pre-created the
+tag and draft release. The tag points at the historical release commit
+(`2d8d1b94`) while the attestation certificates carry the dispatch run's head
+digest (`2c73c6ac`), so every cold-cache download of beta.48 fails
+verification on all platforms.
+
 ## Recovery procedure
 
 Run these commands with an owner-authenticated `gh` session. Replace every
@@ -67,8 +91,11 @@ Run these commands with an owner-authenticated `gh` session. Replace every
 
    Add `--prerelease` when the release tag is a prerelease tag.
 
-5. Rerun the failed publish job and approve the release environment if
-   prompted.
+5. Rerun the failed publish job of the original run whose head is the release
+   commit, and approve the release environment if prompted. Do not dispatch a
+   new `recovery-target` run to publish instead: a dispatch run on a later
+   head cannot produce valid attestations for the release commit, and the
+   workflow rejects it (see "Publishing invariant" above).
 
    ```sh
    gh run rerun <run-id> --repo <owner>/<repo> --failed
@@ -118,7 +145,9 @@ Run these commands with an owner-authenticated `gh` session. Replace every
 
 `native-cli-publish.yml` is the workflow with `recovery-target` and now emits
 this runbook path when tag or draft-release creation returns the observed 403.
-The creation and reuse logic is unchanged.
+The creation and reuse logic is unchanged. Its publish job refuses to publish
+assets from a recovery dispatch run whose head differs from the release
+commit, because such a run cannot produce matching attestations.
 
 `dispatcher-publish.yml` has no recovery-target input and requires its release
 target to equal `GITHUB_SHA`, so it has no historical-commit creation path.

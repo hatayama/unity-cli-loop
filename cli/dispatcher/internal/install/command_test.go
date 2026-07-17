@@ -714,13 +714,19 @@ func TestWindowsInstallScriptParsesOnWindows(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	// The script path must be embedded in the command text: powershell -Command
+	// concatenates trailing arguments into the command instead of exposing them
+	// via $args, so a trailing path argument would be invoked as a command and
+	// execute the installer setup for real.
+	parseCommand := `$parseErrors = $null; $null = [System.Management.Automation.PSParser]::Tokenize((Get-Content -Raw -LiteralPath ` +
+		powerShellSingleQuote(scriptPath) +
+		`), [ref]$parseErrors); if ($parseErrors) { $parseErrors | Out-String; exit 1 }`
 	command := exec.CommandContext(
 		ctx,
 		"powershell",
 		"-NoProfile",
 		"-Command",
-		`$parseErrors = $null; $null = [System.Management.Automation.PSParser]::Tokenize((Get-Content -Raw $args[0]), [ref]$parseErrors); if ($parseErrors) { $parseErrors | Out-String; exit 1 }`,
-		scriptPath)
+		parseCommand)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("embedded setup script does not parse: %v\n%s", err, output)

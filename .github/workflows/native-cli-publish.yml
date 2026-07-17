@@ -213,6 +213,17 @@ jobs:
               exit 1
             fi
             release_sha="${TARGET_SHA}"
+            # Why publishing is blocked here: the attestation certificate binds
+            # SourceRepositoryDigest to the workflow run head (GITHUB_SHA), never
+            # to the checked-out build commit, so assets published for an older
+            # release commit can never pass the dispatcher's tag-to-certificate
+            # verification. Recovery dispatch may only validate builds.
+            if [ "${should_publish}" = "true" ] && [ "${release_sha}" != "${GITHUB_SHA}" ]; then
+              echo "Recovery-target dispatch cannot publish release assets: the release commit ${release_sha} differs from the run head ${GITHUB_SHA}, so the attestation certificate digest would never match the release tag." >&2
+              echo "Rerun the original failed workflow run whose head commit is the release commit instead." >&2
+              echo "See docs/release-recovery-runbook.md for the recovery procedure." >&2
+              exit 1
+            fi
           else
             if [ "${BUILD_SHA}" != "${GITHUB_SHA}" ] || [ "${TARGET_SHA}" != "${GITHUB_SHA}" ]; then
               echo "Build SHA and release target must match the approved event commit." >&2
