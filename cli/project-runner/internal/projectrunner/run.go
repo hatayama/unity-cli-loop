@@ -92,9 +92,10 @@ func runTool(ctx context.Context, connection unityipc.Connection, command string
 		})
 		return 1
 	}
-	clicore.WriteJSON(stdout, stripDebugTimingResult(command, outcome.Result))
+	result := stripDebugTimingResult(command, outcome.Result)
+	clicore.WriteJSON(stdout, result)
 	writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
-	return 0
+	return toolEnvelopeExitCode(result)
 }
 
 func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection unityipc.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
@@ -143,9 +144,10 @@ func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection u
 
 	spinner.Stop()
 	result := stripExecuteDynamicCodeControlResult(outcome.Result)
-	clicore.WriteJSON(stdout, stripDebugTimingResult(clicore.ExecuteDynamicCodeCommandName, result))
+	result = stripDebugTimingResult(clicore.ExecuteDynamicCodeCommandName, result)
+	clicore.WriteJSON(stdout, result)
 	writeDebugTiming(stderr, clicore.ExecuteDynamicCodeCommandName, time.Since(startedAt), outcome)
-	return 0
+	return toolEnvelopeExitCode(result)
 }
 
 func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
@@ -227,7 +229,7 @@ func runCompileWithDomainReloadWaitWithDeps(
 	spinner.Stop()
 	clicore.WriteJSON(stdout, result)
 	writeDebugTiming(stderr, clicore.CompileCommandName, time.Since(startedAt), outcome)
-	return 0
+	return toolEnvelopeExitCode(result)
 }
 
 func writePostCompileWarmupWarning(stderr io.Writer, err error) {

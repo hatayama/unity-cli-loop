@@ -254,7 +254,7 @@ func TestRunLaunchQuitDoesNotLaunchWhenUnityIsNotRunning(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code mismatch: %d stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "No Unity process is running") {
+	if !strings.Contains(stdout.String(), launchNoProcessMessage) {
 		t.Fatalf("stdout mismatch: %s", stdout.String())
 	}
 }

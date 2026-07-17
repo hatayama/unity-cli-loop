@@ -28,13 +28,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class CompileResponse : UnityCliLoopToolResponse
     {
         /// <summary>
-        /// Whether compilation was successful.
-        /// Null is used when the tool cannot reliably determine the result yet (e.g., forced recompile/domain reload),
-        /// to avoid misleading clients into treating "0 errors" as a confirmed success.
-        /// </summary>
-        public bool? Success { get; set; }
-
-        /// <summary>
         /// Number of compilation errors.
         /// Null is used when the tool intentionally does not provide details (e.g., forced recompile),
         /// because Unity reports errors/warnings after domain reload and clients should fetch logs later.
@@ -67,6 +60,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public string Message { get; set; }
 
+        public string ErrorCode { get; set; }
+
         /// <summary>
         /// Optional recovery steps when compile cannot proceed automatically.
         /// </summary>
@@ -82,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Create a new CompileResponse
         /// </summary>
         public CompileResponse(
-            bool? success,
+            bool success,
             int? errorCount,
             int? warningCount,
             CompileIssue[] errors,

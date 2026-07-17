@@ -1,4 +1,5 @@
 {
+  "Success": true,
   "Ready": true,
   "HasResult": true,
   "IsCompiling": true,
@@ -11,6 +12,7 @@
     "Errors": [],
     "Warnings": [],
     "Message": "Compile result is available.",
+    "ErrorCode": null,
     "NextActions": null,
     "ProjectRoot": null
   },

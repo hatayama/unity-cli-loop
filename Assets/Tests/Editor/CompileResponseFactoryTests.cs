@@ -77,12 +77,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResponse response =
                 CompileResponseFactory.CreateResponse(result, forceRecompile: true);
 
-            Assert.That(response.Success, Is.Null);
+            Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCount, Is.Null);
             Assert.That(response.WarningCount, Is.Null);
             Assert.That(response.Errors, Is.Null);
             Assert.That(response.Warnings, Is.Null);
             Assert.That(response.Message, Is.EqualTo(ForceCompileUnknownResult.MessageText));
+            Assert.That(response.ErrorCode, Is.EqualTo(ForceCompileUnknownResult.ErrorCodeText));
+            Assert.That(response.NextActions, Is.Not.Empty);
         }
 
         [Test]
@@ -102,12 +104,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResponse response =
                 CompileResponseFactory.CreateResponse(result, forceRecompile: true);
 
-            Assert.That(response.Success, Is.True);
+            Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCount, Is.Null);
             Assert.That(response.WarningCount, Is.Null);
             Assert.That(response.Errors, Is.Null);
             Assert.That(response.Warnings, Is.Null);
             Assert.That(response.Message, Is.EqualTo(ForceCompileUnknownResult.MessageText));
+            Assert.That(response.ErrorCode, Is.EqualTo(ForceCompileUnknownResult.ErrorCodeText));
+            Assert.That(response.NextActions, Is.Not.Empty);
         }
 
         [Test]
@@ -142,7 +146,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResponse response =
                 CompileResponseFactory.CreateResponse(result, forceRecompile: false);
 
-            Assert.That(response.Success, Is.Null);
+            Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCount, Is.EqualTo(1));
             Assert.That(response.WarningCount, Is.EqualTo(1));
             Assert.That(response.Errors, Is.Null);

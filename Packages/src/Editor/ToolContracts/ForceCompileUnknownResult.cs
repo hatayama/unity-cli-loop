@@ -5,24 +5,25 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     /// </summary>
     public sealed class ForceCompileUnknownResult
     {
-        public const string MessageText = "Forced full compilation completed. Unity does not return a definitive compile result for this forced full compile path, so fields that Unity did not provide are intentionally null; run get-logs to inspect the compiler output.";
+        public const string MessageText = "Forced full compilation was triggered, but Unity did not provide a definitive result after domain reload.";
+        public const string ErrorCodeText = "COMPILE_RESULT_UNKNOWN";
 
-        private ForceCompileUnknownResult(bool? success)
+        private ForceCompileUnknownResult()
         {
-            Success = success;
+            Success = false;
             ErrorCount = null;
             WarningCount = null;
             Message = MessageText;
         }
 
-        public bool? Success { get; }
+        public bool Success { get; }
         public int? ErrorCount { get; }
         public int? WarningCount { get; }
         public string Message { get; }
 
-        public static ForceCompileUnknownResult Create(bool? success)
+        public static ForceCompileUnknownResult Create()
         {
-            return new ForceCompileUnknownResult(success);
+            return new ForceCompileUnknownResult();
         }
     }
 }

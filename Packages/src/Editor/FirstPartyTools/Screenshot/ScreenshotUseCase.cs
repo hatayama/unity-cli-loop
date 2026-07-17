@@ -57,7 +57,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "CaptureMode.rendering requires PlayMode",
                     correlationId: correlationId
                 );
-                return new ScreenshotResponse();
+                return new ScreenshotResponse
+                {
+                    Success = false,
+                    Message = "Rendering screenshots require PlayMode, but Unity is currently in EditMode.",
+                    NextActions = new[] { "Start PlayMode with `uloop control-play-mode --action Play`, then retry the rendering screenshot." }
+                };
             }
 
             List<UIElementInfo> annotatedElements = new();
@@ -193,7 +198,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Play Mode view RenderTexture is not available. Open the Game view or Device Simulator and wait for a frame before retrying.",
                     correlationId: correlationId
                 );
-                return new ScreenshotResponse();
+                return new ScreenshotResponse
+                {
+                    Success = false,
+                    Message = "PlayMode rendering did not produce an image.",
+                    NextActions = new[] { "Open the Game view or Device Simulator, wait for a frame, then retry the rendering screenshot." }
+                };
             }
 
             int width = texture.width;
@@ -399,8 +409,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return new ScreenshotResponse
             {
+                Success = false,
                 TimedOut = true,
                 Message = message,
+                NextActions = new[] { "Retry the screenshot after Unity finishes rendering the requested frame." },
                 Screenshots = screenshots,
             };
         }

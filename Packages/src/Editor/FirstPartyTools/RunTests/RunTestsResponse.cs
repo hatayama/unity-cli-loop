@@ -20,11 +20,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             $"run-tests requires the Unity Test Framework package ({UnityCliLoopConstants.PACKAGE_NAME_TEST_FRAMEWORK}). Install it via Package Manager to use test execution.";
 
         /// <summary>
-        /// Whether test execution was successful
-        /// </summary>
-        public bool Success { get; set; }
-
-        /// <summary>
         /// Machine-readable execution status
         /// </summary>
         public string Status { get; set; }

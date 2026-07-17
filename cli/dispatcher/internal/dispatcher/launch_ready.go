@@ -16,7 +16,7 @@ const (
 	launchReadyMessage               = "Unity CLI Loop is ready."
 	launchAlreadyRunningReadyMessage = "Unity is already running and ready."
 	launchStoppedMessage             = "Unity process stopped."
-	launchNoProcessMessage           = "No Unity process is running for this project."
+	launchNoProcessMessage           = "No matching Unity process was found; it may have already exited."
 )
 
 type launchReadyResponse struct {

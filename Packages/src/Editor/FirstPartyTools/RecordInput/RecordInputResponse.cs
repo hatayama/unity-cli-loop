@@ -9,7 +9,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class RecordInputResponse : UnityCliLoopToolResponse
     {
-        public bool Success { get; set; }
         public string Message { get; set; } = "";
         public string Action { get; set; } = "";
         public string? OutputPath { get; set; }
