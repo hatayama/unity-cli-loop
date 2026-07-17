@@ -9,7 +9,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class ReplayInputResponse : UnityCliLoopToolResponse
     {
-        public bool Success { get; set; }
         public string Message { get; set; } = "";
         public string Action { get; set; } = "";
         public string? InputPath { get; set; }

@@ -270,7 +270,7 @@ func TestWaitForCompileCompletionForceCompileWaitsForStoredResult(t *testing.T) 
 		return compileStatusResponse{
 			Ready:     true,
 			HasResult: true,
-			Result:    json.RawMessage(`{"Success":null,"ErrorCount":null,"Message":"Force compilation completed"}`),
+			Result:    json.RawMessage(`{"Success":false,"ErrorCount":null,"Message":"Force compilation completed"}`),
 		}, nil
 	})
 
@@ -295,8 +295,8 @@ func TestWaitForCompileCompletionForceCompileWaitsForStoredResult(t *testing.T) 
 	if err := json.Unmarshal(result, &payload); err != nil {
 		t.Fatalf("force compile result is not JSON: %v", err)
 	}
-	if payload["Success"] != nil {
-		t.Fatalf("force compile success should be unknown: %#v", payload["Success"])
+	if payload["Success"] != false {
+		t.Fatalf("force compile must fail closed when the result is unknown: %#v", payload["Success"])
 	}
 	if payload["ErrorCount"] != nil || payload["WarningCount"] != nil {
 		t.Fatalf("force compile counts should be unknown: %#v", payload)
@@ -472,8 +472,8 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 	var stderr bytes.Buffer
 
 	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, params, &stdout, &stderr, deps)
-	if code != 0 {
-		t.Fatalf("runCompileWithDomainReloadWait failed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	if code != 1 {
+		t.Fatalf("expected failed compile envelope to exit 1: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 
 	logContent := readOnlyCliVibeLog(t, projectRoot)
@@ -529,7 +529,7 @@ func TestCompileResultReadinessWaitMode(t *testing.T) {
 	cases := map[string]compileReadinessWaitMode{
 		`{"Success":true}`: compileReadinessWaitWarmup,
 		`{"Success":false,"Errors":[{"Message":"boom"}]}`: compileReadinessWaitNone,
-		`{"Success":null,"Message":"indeterminate"}`:      compileReadinessWaitNone,
+		`{"Success":false,"Message":"indeterminate"}`:     compileReadinessWaitNone,
 		`{"Message":"indeterminate"}`:                     compileReadinessWaitNone,
 	}
 

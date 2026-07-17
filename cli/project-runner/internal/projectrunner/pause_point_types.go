@@ -1,6 +1,7 @@
 package projectrunner
 
 type pausePointStatusResponse struct {
+	Success                         bool                             `json:"Success"`
 	Id                              string                           `json:"Id"`
 	Status                          string                           `json:"Status"`
 	IsEnabled                       bool                             `json:"IsEnabled"`

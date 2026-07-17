@@ -5,6 +5,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     /// </summary>
     public abstract class UnityCliLoopToolResponse
     {
+        public bool Success { get; set; } = true;
     }
 
     public interface IUnityCliLoopTimingResponse

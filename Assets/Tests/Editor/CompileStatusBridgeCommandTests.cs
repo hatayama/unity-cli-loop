@@ -158,7 +158,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.True);
-            Assert.That(response.Result["Success"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(response.Result["Success"]?.Value<bool>(), Is.False);
             Assert.That(response.Result["ErrorCount"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(response.Result["Warnings"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(response.Result["Message"]?.ToString(), Does.Contain("reloaded scripts"));
@@ -216,11 +216,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.True);
-            Assert.That(response.Result["Success"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(response.Result["Success"]?.Value<bool>(), Is.False);
             Assert.That(response.Result["ErrorCount"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(
                 response.Result["Message"]?.ToString(),
                 Is.EqualTo(ForceCompileUnknownResult.MessageText));
+            Assert.That(response.Result["ErrorCode"]?.ToString(), Is.EqualTo(ForceCompileUnknownResult.ErrorCodeText));
+            Assert.That(response.Result["NextActions"]?.Type, Is.EqualTo(JTokenType.Array));
         }
 
     }

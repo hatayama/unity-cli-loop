@@ -11,7 +11,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class SimulateMouseUiResponse : UnityCliLoopToolResponse
     {
-        public bool Success { get; set; }
         public string Message { get; set; } = "";
         public string Action { get; set; } = "";
         public string? HitGameObjectName { get; set; }

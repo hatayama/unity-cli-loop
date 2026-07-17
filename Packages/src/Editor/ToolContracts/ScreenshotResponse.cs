@@ -37,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public List<ScreenshotInfo> Screenshots { get; set; } = new List<ScreenshotInfo>();
         public bool TimedOut { get; set; }
         public string Message { get; set; } = "";
+        public string[] NextActions { get; set; } = new string[0];
 
         public int ScreenshotCount => Screenshots.Count;
     }

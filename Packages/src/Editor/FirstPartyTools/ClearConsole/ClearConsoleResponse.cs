@@ -11,11 +11,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class ClearConsoleResponse : UnityCliLoopToolResponse
     {
         /// <summary>
-        /// Whether the console clear operation was successful
-        /// </summary>
-        public bool Success { get; set; }
-
-        /// <summary>
         /// Number of logs that were cleared from the console
         /// </summary>
         public int ClearedLogCount { get; set; }
@@ -101,4 +96,4 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             LogCount = logCount;
         }
     }
-} 
+}

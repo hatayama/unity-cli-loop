@@ -12,9 +12,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class ExecuteDynamicCodeResponse : UnityCliLoopToolResponse, IUnityCliLoopTimingResponse
     {
-        /// <summary>Execution success flag</summary>
-        public bool Success { get; set; }
-        
         /// <summary>Execution result</summary>
         public string Result { get; set; }
         

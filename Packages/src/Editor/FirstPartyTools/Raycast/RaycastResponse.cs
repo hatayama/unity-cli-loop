@@ -9,7 +9,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class RaycastResponse : UnityCliLoopToolResponse
     {
-        public bool Success { get; set; }
         public string Message { get; set; } = "";
         public bool Hit { get; set; }
         public string? HitGameObjectName { get; set; }
