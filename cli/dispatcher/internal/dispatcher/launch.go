@@ -441,6 +441,7 @@ func unityExecutableCandidates(version string) []string {
 		return []string{}
 	}
 }
+
 func killUnityProcess(pid int) error {
 	process, err := os.FindProcess(pid)
 	if err != nil {
