@@ -62,6 +62,14 @@ publish_draft_section() {
   ' "$WORKFLOW"
 }
 
+remote_attestation_verification_section() {
+  awk '
+    /^      - name: Verify remote attestation digest matches release tag$/ { printing = 1; next }
+    printing && /^      - name:/ { exit }
+    printing { print }
+  ' "$WORKFLOW"
+}
+
 post_publish_section() {
   awk '
     /^  post-publish:/ { printing = 1 }
@@ -180,8 +188,25 @@ test_remote_attestation_digests_match_the_release_tag_before_publishing() {
   assert_contains 'gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '\''.sha'\'''
   assert_contains 'if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
   assert_contains 'if [ "${digest}" != "${tag_sha}" ]; then'
+  assert_contains 'if [ "${verification_count}" -eq 0 ] || [ "${verification_count}" -ne "${digest_count}" ]; then'
   assert_before "      - name: Verify remote release assets" "      - name: Verify remote attestation digest matches release tag"
   assert_before "      - name: Verify remote attestation digest matches release tag" "      - name: Publish draft release"
+  verification_section=$(remote_attestation_verification_section)
+  tag_mismatch_guard='if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match approved release commit ${RELEASE_SHA}." >&2
+            exit 1
+          fi'
+  digest_mismatch_guard='if [ "${digest}" != "${tag_sha}" ]; then
+                echo "Attestation digest for ${asset_name} does not match release tag ${RELEASE_TAG}." >&2
+                exit 1
+              fi'
+  case "${verification_section}" in
+    *"${tag_mismatch_guard}"*"${digest_mismatch_guard}"*) ;;
+    *)
+      echo "Remote attestation verification must fail for tag or digest mismatches." >&2
+      exit 1
+      ;;
+  esac
 }
 
 test_publish_rejects_manifest_and_existing_tag_mismatches() {
