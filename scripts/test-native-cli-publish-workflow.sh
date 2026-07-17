@@ -144,6 +144,7 @@ test_publish_has_no_recovery_target_mode() {
   assert_not_contains "Recovery-target"
   assert_not_contains "Check out resolver-derived recovery target"
   assert_contains 'printf '\''RELEASE_SHA=%s\n'\'' "${release_sha}" >> "$GITHUB_ENV"'
+  assert_count 3 'if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
   assert_contains 'if [ -n "${tag_sha}" ] && [ "${tag_sha}" != "${RELEASE_SHA}" ]; then'
   assert_contains '--target "${RELEASE_SHA}"'
 }
