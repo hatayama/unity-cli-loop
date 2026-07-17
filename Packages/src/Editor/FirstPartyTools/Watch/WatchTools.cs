@@ -40,7 +40,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public sealed class WatchResponse : UnityCliLoopToolResponse
     {
-        public bool Success { get; set; } = true;
         public string Id { get; set; } = string.Empty;
         public string Expression { get; set; } = string.Empty;
         public int MaxHistory { get; set; }

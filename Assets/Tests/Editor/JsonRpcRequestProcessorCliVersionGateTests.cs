@@ -923,7 +923,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private sealed class SingleFlightTestResponse : UnityCliLoopToolResponse
         {
-            public bool Success { get; set; } = true;
         }
     }
 }

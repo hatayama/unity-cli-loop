@@ -164,18 +164,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (pendingRequest.ForceRecompile)
             {
                 ForceCompileUnknownResult unknownForceCompileResult =
-                    ForceCompileUnknownResult.Create(null);
+                    ForceCompileUnknownResult.Create();
                 message = unknownForceCompileResult.Message;
             }
 
             return new JObject
             {
-                ["Success"] = JValue.CreateNull(),
+                ["Success"] = false,
                 ["ErrorCount"] = JValue.CreateNull(),
                 ["WarningCount"] = JValue.CreateNull(),
                 ["Errors"] = JValue.CreateNull(),
                 ["Warnings"] = JValue.CreateNull(),
                 ["Message"] = message,
+                ["ErrorCode"] = ForceCompileUnknownResult.ErrorCodeText,
+                ["NextActions"] = new JArray(ForceCompileUnknownResult.NextActionText),
                 ["ProjectRoot"] = UnityCliLoopPathResolver.GetProjectRoot()
             };
         }

@@ -39,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (result.IsIndeterminate)
             {
                 return new CompileResponse(
-                    success: result.Success,
+                    success: result.Success == true,
                     errorCount: result.ErrorCount,
                     warningCount: result.WarningCount,
                     errors: null,
@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             CompileResponse response = new CompileResponse(
-                success: result.Success,
+                success: result.Success == true,
                 errorCount: result.Errors?.Length ?? 0,
                 warningCount: result.Warnings?.Length ?? 0,
                 errors: ToIssues(result.Errors),
@@ -75,14 +75,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static CompileResponse CreateForceCompileResult(CompileResult result)
         {
-            ForceCompileUnknownResult unknownResult = ForceCompileUnknownResult.Create(result.Success);
-            return new CompileResponse(
+            ForceCompileUnknownResult unknownResult = ForceCompileUnknownResult.Create();
+            CompileResponse response = new CompileResponse(
                 success: unknownResult.Success,
                 errorCount: unknownResult.ErrorCount,
                 warningCount: unknownResult.WarningCount,
                 errors: null,
                 warnings: null,
                 message: unknownResult.Message);
+            response.ErrorCode = ForceCompileUnknownResult.ErrorCodeText;
+            response.NextActions = new[] { ForceCompileUnknownResult.NextActionText };
+            return response;
         }
 
         private static CompileIssue[] ToIssues(UnityEditor.Compilation.CompilerMessage[] messages)

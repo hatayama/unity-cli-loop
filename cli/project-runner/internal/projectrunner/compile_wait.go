@@ -40,6 +40,7 @@ type compileCompletionOptions struct {
 }
 
 type compileStatusResponse struct {
+	Success                  bool            `json:"Success"`
 	Ready                    bool            `json:"Ready"`
 	HasResult                bool            `json:"HasResult"`
 	IsCompiling              bool            `json:"IsCompiling"`

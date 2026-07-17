@@ -46,9 +46,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class PausePointResponse : UnityCliLoopToolResponse
     {
-        // Defaults to true so existing snapshot/clear paths keep their prior semantics.
-        // Only explicit validation failures set this to false.
-        public bool Success { get; set; } = true;
         public string Id { get; set; } = string.Empty;
         public int ResolvedLine { get; set; }
         public string ResolvedMethod { get; set; } = string.Empty;

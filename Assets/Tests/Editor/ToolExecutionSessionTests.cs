@@ -256,7 +256,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private sealed class SessionTestResponse : UnityCliLoopToolResponse
         {
-            public bool Success { get; set; } = true;
         }
     }
 }

@@ -143,7 +143,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private sealed class DeterministicSuccessResponse : UnityCliLoopToolResponse
         {
-            public bool Success { get; set; } = true;
         }
 
         private sealed class DeterministicSuccessTool : IUnityCliLoopTool
