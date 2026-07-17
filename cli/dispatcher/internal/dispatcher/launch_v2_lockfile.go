@@ -3,14 +3,16 @@ package dispatcher
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
 type v2LaunchLockfileTimeoutError struct {
-	projectRoot  string
 	lockfilePath string
 }
 
@@ -69,4 +71,25 @@ func waitForFreshUnityLockfile(
 		case <-ticker.C:
 		}
 	}
+}
+
+func waitForV2ProjectOpened(
+	ctx context.Context,
+	projectRoot string,
+	runningProcess *unityprocess.UnityProcess,
+	currentPid int,
+	stdout io.Writer,
+	stderr io.Writer,
+	launchStartedAt time.Time,
+	deps launchDeps,
+) int {
+	if err := deps.waitForFreshUnityLockfile(ctx, unityLockfilePath(projectRoot), launchStartedAt, launchLockfilePoll, launchReadinessTimeout); err != nil {
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
+		return 1
+	}
+	var previousPid *int
+	if runningProcess != nil {
+		previousPid = &runningProcess.Pid
+	}
+	return writeLaunchedV2ProjectOpenedResponse(stdout, stderr, projectRoot, previousPid, currentPid)
 }
