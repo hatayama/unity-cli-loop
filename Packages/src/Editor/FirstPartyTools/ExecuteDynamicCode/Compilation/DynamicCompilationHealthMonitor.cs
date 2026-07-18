@@ -66,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static void ReportSharedWorkerLifecycleClosed(object context = null)
         {
             LogInfoOnce(
-                $"shared_worker_lifecycle_closed::{SharedWorkerFailureReasons.LifecycleClosed}",
+                SharedWorkerFailureReasons.LifecycleClosed,
                 "dynamic_code_shared_worker_lifecycle_closed",
                 "execute-dynamic-code shared Roslyn worker closed during an expected Unity lifecycle transition",
                 context ?? new { reason = SharedWorkerFailureReasons.LifecycleClosed });

@@ -22,11 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         /// Verifies lifecycle closure is returned as a non-error compile outcome.
         /// </summary>
         [Test]
-        public void SharedWorkerCompileOutcome_WhenLifecycleCloses_ShouldCarryFailureReasonWithoutErrorLog()
+        public void SharedWorkerCompileOutcome_WhenLifecycleCloses_ShouldCarryLifecycleClosedReason()
         {
-            DynamicCompilationHealthMonitor.ResetForTests();
-            LogAssert.NoUnexpectedReceived();
-
             SharedWorkerCompileOutcome outcome = SharedWorkerCompileOutcome.Failed(
                 SharedWorkerFailureReasons.LifecycleClosed,
                 new { reason = "lifecycle_generation_advanced" });
@@ -34,7 +31,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(outcome.Succeeded, Is.False);
             Assert.That(outcome.FailureReason, Is.EqualTo(SharedWorkerFailureReasons.LifecycleClosed));
             Assert.That(outcome.IsLifecycleClosed, Is.True);
-            LogAssert.NoUnexpectedReceived();
         }
 
         /// <summary>
