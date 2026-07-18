@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.50](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.49...uloop-project-runner-v3.0.0-beta.50) (2026-07-18)
+
+
+### Bug Fixes
+
+* align tool exit codes with response success ([#1824](https://github.com/hatayama/unity-cli-loop/issues/1824)) ([1cc123b](https://github.com/hatayama/unity-cli-loop/commit/1cc123b8d450b137ef489d55af0d13f9f587c16f))
+
 ## [3.0.0-beta.49](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.48...uloop-project-runner-v3.0.0-beta.49) (2026-07-17)
 
 

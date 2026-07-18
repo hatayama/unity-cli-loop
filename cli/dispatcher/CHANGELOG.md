@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.0-beta.15](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.1.0-beta.14...dispatcher-v3.1.0-beta.15) (2026-07-18)
+
+
+### Bug Fixes
+
+* align tool exit codes with response success ([#1824](https://github.com/hatayama/unity-cli-loop/issues/1824)) ([1cc123b](https://github.com/hatayama/unity-cli-loop/commit/1cc123b8d450b137ef489d55af0d13f9f587c16f))
+* Launch V2 Unity projects without hanging ([#1826](https://github.com/hatayama/unity-cli-loop/issues/1826)) ([4ace5b4](https://github.com/hatayama/unity-cli-loop/commit/4ace5b49f3cbc7fa92ff7c3871f5064091c4b5cc))
+
 ## [3.1.0-beta.14](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.1.0-beta.13...dispatcher-v3.1.0-beta.14) (2026-07-17)
 
 
