@@ -94,8 +94,57 @@ Watch expressions are in-memory Editor state. A domain reload clears them, so re
 ## Marker Types
 
 - `uloop enable-pause-point --file --line` patches the already-compiled method at a source line. No code edit or recompile is required.
-- `UloopPausePoint.Pause(id)` is a hand-written marker call for code paths that file:line patching cannot reach. Pair it with `uloop enable-pause-point --id <id>` (no `--file`/`--line`).
+- `UloopPausePoint.Pause(id)` is a hand-written marker call for code paths that file:line patching cannot reach. Pair it with `uloop enable-pause-point --id <id>` (no `--file`/`--line`). The call does not need to live in committed source — a dynamic-code watcher can fire it (see the next section).
 - For ordinary file:line debugging you do not need `UloopPausePoint.Pause` in source. Prefer CLI enable when the target line can be patched.
+
+## Catching a Runtime Condition with a Dynamic-Code Trigger
+
+A file:line pause point freezes a specific source line. When the moment you need is defined by a runtime condition instead — an animation passing a normalized time, HP reaching zero, an enemy spawning — combine an id-only marker with `execute-dynamic-code`. Timing-sensitive verification such as short motions or one-frame effects cannot be captured by sleeping and then taking a screenshot; this pattern freezes the first frame where the condition holds, without writing any .cs file.
+
+1. Enable an id-only marker: `uloop enable-pause-point --id hit-peak --timeout-seconds 120` (single-shot by default).
+2. Run `uloop execute-dynamic-code` to trigger the action and register a watcher on `EditorApplication.update`, then return immediately. The watcher evaluates the condition every frame; on the first frame it holds, it removes itself and calls `UloopPausePoint.Pause("hit-peak")`.
+3. Wait on the CLI side: `uloop await-pause-point --id hit-peak --timeout-seconds 120`.
+4. While Unity is paused, collect evidence: `uloop screenshot`, state reads with `execute-dynamic-code`, or `control-play-mode --action Step` frame stepping.
+5. Resume with `uloop control-play-mode --action Play`.
+
+Example watcher (freeze when the Hit animation passes 30% of the motion):
+
+```csharp
+using UnityEngine;
+using UnityEditor;
+using io.github.hatayama.UnityCliLoop.Runtime;
+Animator animator = GameObject.Find("Zombie").GetComponent<Animator>();
+// Match the marker's --timeout-seconds so an unmet condition cannot leak the delegate
+double deadline = EditorApplication.timeSinceStartup + 120d;
+EditorApplication.CallbackFunction watcher = null;
+watcher = () =>
+{
+    if (EditorApplication.timeSinceStartup > deadline)
+    {
+        EditorApplication.update -= watcher;
+        return;
+    }
+    AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(0);
+    if (!state.IsName("Hit") || state.normalizedTime < 0.3f) return;
+    EditorApplication.update -= watcher;
+    UloopPausePoint.Pause("hit-peak");
+};
+EditorApplication.update += watcher;
+return "watcher registered";
+```
+
+Rules for this pattern:
+
+- The dynamic-code body runs synchronously on the main thread. Never poll or sleep inside the snippet — frames stop advancing and the animation freezes with them. Register the watcher and return; the waiting belongs to `await-pause-point`.
+- The watcher must unsubscribe itself from `EditorApplication.update` when it fires, and also on a deadline in case the condition never holds — a leaked delegate keeps running until the next domain reload. Match the deadline to the marker's `--timeout-seconds`.
+- `UloopPausePoint.Pause(id)` is a public static Runtime API, and dynamic code compiles against the project's assemblies, so the watcher can call it exactly like game code. It fires only while the same id is enabled; otherwise it is a no-op, so a stray watcher cannot pause Unity unexpectedly.
+- A single-shot marker disarms after the first hit. To catch repeated occurrences, enable with `--mode continuous` and run `await-pause-point` again after each resume.
+
+## Pausing Right After Simulated Input, Plus N Frames
+
+To freeze the frame where a `simulate-mouse-ui` click or a `simulate-keyboard` key press lands, you do not need a watcher: enable a file:line pause point on the input-consuming line before sending the input. When the pause lands mid-command, the `simulate-*` command returns promptly with `InterruptedByPausePoint=true` (see Line Placement).
+
+For "N frames after the input" (for example, three frames after a key press), advance from that hit with `control-play-mode --action Step` exactly N times — `Step` works right after a hit. Do not compute frame offsets in a dynamic-code watcher (recording `Time.frameCount` and pausing at `recorded + N`): frames keep advancing between CLI commands, so the recorded baseline is race-prone and the pause lands on an unpredictable frame. Reserve the watcher pattern for condition-defined moments; use hit-then-Step for frame-offset positioning.
 
 ## Hit Preconditions
 
