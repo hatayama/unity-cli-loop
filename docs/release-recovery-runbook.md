@@ -86,6 +86,18 @@ gh run rerun <run-id> --repo <owner>/<repo> --failed
 
 ## Operational notes
 
+### Preserved negative attestation specimen
+
+Do not delete `uloop-project-runner-v3.0.0-beta.48`. It is an intentionally
+preserved broken release: its tag commit is `2d8d1b94`, while its asset
+attestations carry `2c73c6ac`.
+
+This is the only current production specimen that can prove attestation
+mismatches fail against real release data. Use it to verify each of the
+following rejects a mismatched release: the publish workflow digest check,
+sync's `verify_cli_release_attestations`, and the dispatcher download-time
+verification. Do not pin this version; use beta.49 or later.
+
 - Do not start a new workflow run to publish a historical release. A later run
   cannot produce valid attestations for an earlier commit.
 - Cancel an older run waiting for `cli-release` approval before retrying. The
