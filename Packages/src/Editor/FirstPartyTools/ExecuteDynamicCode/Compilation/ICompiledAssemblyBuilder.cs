@@ -10,6 +10,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         Task<CompiledAssemblyBuildResult> BuildAsync(
             DynamicCompilationPlan plan,
+            RoslynCompilerOptions compilerOptions,
             CancellationToken ct = default);
     }
 }
