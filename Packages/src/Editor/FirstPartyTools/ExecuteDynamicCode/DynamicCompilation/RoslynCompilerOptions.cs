@@ -1,5 +1,5 @@
-using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -19,10 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyCollection<string> defineSymbols,
             bool allowUnsafeCode)
         {
-            if (defineSymbols == null)
-            {
-                throw new ArgumentNullException(nameof(defineSymbols));
-            }
+            Debug.Assert(defineSymbols != null, "defineSymbols must not be null");
 
             List<string> filteredDefineSymbols = new(defineSymbols.Count);
             foreach (string defineSymbol in defineSymbols)

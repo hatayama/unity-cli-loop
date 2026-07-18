@@ -47,15 +47,5 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(options.AllowUnsafeCode, Is.False);
         }
 
-        /// <summary>
-        /// Verifies a null define-symbol collection fails fast at the snapshot boundary.
-        /// </summary>
-        [Test]
-        public void Constructor_WithNullDefineSymbols_ThrowsArgumentNullException()
-        {
-            Assert.That(
-                () => new RoslynCompilerOptions(null, false),
-                Throws.ArgumentNullException);
-        }
     }
 }
