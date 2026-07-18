@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using UnityEditor;
 using Debug = UnityEngine.Debug;
 using Stopwatch = System.Diagnostics.Stopwatch;
 
@@ -61,6 +62,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrWhiteSpace(request.Code), "request.Code must not be empty");
 
             ct.ThrowIfCancellationRequested();
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            string[] activeDefineSymbols = EditorUserBuildSettings.activeScriptCompilationDefines ?? Array.Empty<string>();
+            RoslynCompilerOptions compilerOptions = new(
+                activeDefineSymbols,
+                PlayerSettings.allowUnsafeCode);
             LastBuildCount = 0;
             Stopwatch compilerTotalStopwatch = Stopwatch.StartNew();
             Stopwatch planStopwatch = Stopwatch.StartNew();
@@ -95,7 +101,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Stopwatch builderTotalStopwatch = Stopwatch.StartNew();
-            CompiledAssemblyBuildResult buildResult = await _assemblyBuilder.BuildAsync(plan, ct).ConfigureAwait(false);
+            CompiledAssemblyBuildResult buildResult = await _assemblyBuilder.BuildAsync(
+                plan,
+                compilerOptions,
+                ct).ConfigureAwait(false);
             builderTotalStopwatch.Stop();
             LastBuildCount = buildResult.BuildCount;
 

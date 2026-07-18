@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
 
@@ -52,14 +51,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string dllPath,
             List<string> references,
             ExternalCompilerPaths externalCompilerPaths,
+            RoslynCompilerOptions compilerOptions,
             CancellationToken ct,
             Action markBuildStarted,
             Action markBuildFinished,
             Action incrementBuildCount)
         {
             string workerRequestFilePath = Path.ChangeExtension(sourcePath, ".worker");
-            string[] defineSymbols = GetActiveDefineSymbols();
-            bool allowUnsafeCode = PlayerSettings.allowUnsafeCode;
+            IReadOnlyCollection<string> defineSymbols = compilerOptions.DefineSymbols;
+            bool allowUnsafeCode = compilerOptions.AllowUnsafeCode;
 
             try
             {
@@ -269,26 +269,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             File.WriteAllLines(Path.GetFullPath(requestFilePath), lines);
-        }
-
-        private static string[] GetActiveDefineSymbols()
-        {
-            string[] activeDefines = EditorUserBuildSettings.activeScriptCompilationDefines;
-            if (activeDefines == null || activeDefines.Length == 0)
-            {
-                return Array.Empty<string>();
-            }
-
-            List<string> filteredDefines = new(activeDefines.Length);
-            foreach (string define in activeDefines)
-            {
-                if (!string.IsNullOrWhiteSpace(define))
-                {
-                    filteredDefines.Add(define);
-                }
-            }
-
-            return filteredDefines.ToArray();
         }
 
         private static string BuildDefineOption(IReadOnlyCollection<string> defineSymbols)
