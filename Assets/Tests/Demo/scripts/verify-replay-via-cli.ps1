@@ -77,7 +77,11 @@ function ConvertTo-WindowsPowerShellNativeArgument {
         return $backslashes + $backslashes + '\"'
     })
 
-    return [regex]::Replace($escapedArgument, '(\\*)$', {
+    if ($Argument -notmatch '\s') {
+        return $escapedArgument
+    }
+
+    return [regex]::Replace($escapedArgument, '(\\*)\z', {
         param($match)
 
         [string]$backslashes = $match.Groups[1].Value

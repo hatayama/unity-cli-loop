@@ -54,6 +54,27 @@ function Assert-Equal {
     }
 }
 
+function Invoke-WindowsPowerShellNativeArgumentRoundTrip {
+    param(
+        [string]$Argument
+    )
+
+    [string]$childScriptPath = Join-Path ([System.IO.Path]::GetTempPath()) ("uloop-native-argument-round-trip-" + [Guid]::NewGuid().ToString("N") + ".ps1")
+    Set-Content -LiteralPath $childScriptPath -Value '[Console]::Out.Write([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($args[0])))' -Encoding UTF8
+    [string[]]$childArguments = @("-NoProfile", "-File", $childScriptPath, $Argument)
+    [string[]]$escapedArguments = @($childArguments | ForEach-Object {
+        ConvertTo-WindowsPowerShellNativeArgument -Argument $_
+    })
+    [string]$encodedOutput = & powershell.exe @escapedArguments
+    if ($LASTEXITCODE -ne 0) {
+        Remove-Item -LiteralPath $childScriptPath
+        throw "Windows PowerShell native argument round trip failed."
+    }
+
+    Remove-Item -LiteralPath $childScriptPath
+    return [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($encodedOutput))
+}
+
 [string[]]$definitions = @($ScriptPaths | ForEach-Object {
     Get-FunctionDefinition -ScriptPath $_ -FunctionName "ConvertTo-WindowsPowerShellNativeArgument"
 })
@@ -68,9 +89,16 @@ Set-Content -LiteralPath $temporaryFunctionPath -Value $definitions[0] -Encoding
 Remove-Item -LiteralPath $temporaryFunctionPath
 
 Assert-Equal -Actual (ConvertTo-WindowsPowerShellNativeArgument -Argument '\"') -Expected '\\\"' -Context "Existing escaped quote"
-Assert-Equal -Actual (ConvertTo-WindowsPowerShellNativeArgument -Argument 'C:\Users\Example\') -Expected 'C:\Users\Example\\' -Context "Trailing backslash"
+Assert-Equal -Actual (ConvertTo-WindowsPowerShellNativeArgument -Argument 'C:\Users\Example Name\') -Expected 'C:\Users\Example Name\\' -Context "Trailing backslash in quoted argument"
 Assert-Equal -Actual (ConvertTo-WindowsPowerShellNativeArgument -Argument '\\\"') -Expected '\\\\\\\"' -Context "Consecutive backslashes before quote"
 Assert-Equal -Actual (ConvertTo-WindowsPowerShellNativeArgument -Argument 'C:\Users\Example\Project') -Expected 'C:\Users\Example\Project' -Context "Ordinary Windows path"
 Assert-Equal -Actual (ConvertTo-WindowsPowerShellNativeArgument -Argument '日本語\パス"値') -Expected '日本語\パス\"値' -Context "Japanese text"
+Assert-Equal -Actual (ConvertTo-WindowsPowerShellNativeArgument -Argument 'C:\Users\Example\') -Expected 'C:\Users\Example\' -Context "Unquoted path with trailing backslash"
+Assert-Equal -Actual (ConvertTo-WindowsPowerShellNativeArgument -Argument '\') -Expected '\' -Context "Unquoted standalone backslash"
+Assert-Equal -Actual (ConvertTo-WindowsPowerShellNativeArgument -Argument "C:\Users\Example\`n") -Expected "C:\Users\Example\`n" -Context "Trailing backslash before line feed"
+if ($PSVersionTable.PSVersion.Major -lt 6) {
+    Assert-Equal -Actual (Invoke-WindowsPowerShellNativeArgumentRoundTrip -Argument 'C:\Users\Example\') -Expected 'C:\Users\Example\' -Context "Native process receives unquoted path with trailing backslash"
+    Assert-Equal -Actual (Invoke-WindowsPowerShellNativeArgumentRoundTrip -Argument 'C:\Users\Example Name\') -Expected 'C:\Users\Example Name\' -Context "Native process receives quoted path with trailing backslash"
+}
 
 Write-Host "PowerShell native argument escaping tests passed."
