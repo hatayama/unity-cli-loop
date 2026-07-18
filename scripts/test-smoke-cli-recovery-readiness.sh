@@ -22,6 +22,8 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 mkdir -p "$PROJECT_PATH/Assets" "$PROJECT_PATH/ProjectSettings"
+mkdir -p "$PROJECT_PATH/.uloop"
+cp "$ROOT_DIR/.uloop/project-runner-pin.json" "$PROJECT_PATH/.uloop/project-runner-pin.json"
 
 cat > "$FAKE_ULOOP_SOURCE" <<'EOF'
 package main
