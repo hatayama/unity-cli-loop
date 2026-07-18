@@ -63,6 +63,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "Investigate worker startup, request handling, and Unity-version-specific runtime assumptions.");
         }
 
+        public static void ReportSharedWorkerLifecycleClosed(object context = null)
+        {
+            LogInfoOnce(
+                SharedWorkerFailureReasons.LifecycleClosed,
+                "dynamic_code_shared_worker_lifecycle_closed",
+                "execute-dynamic-code shared Roslyn worker closed during an expected Unity lifecycle transition",
+                context ?? new { reason = SharedWorkerFailureReasons.LifecycleClosed });
+        }
+
         public static void ReportOneShotCompilerStartFailure(object context)
         {
             LogErrorOnce(
@@ -99,6 +108,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 humanNote: humanNote,
                 aiTodo: aiTodo);
             Debug.LogError(FormatConsoleErrorMessage(operation, message, context));
+        }
+
+        private static void LogInfoOnce(
+            string issueKey,
+            string operation,
+            string message,
+            object context)
+        {
+            string effectiveIssueKey = CreateEffectiveIssueKey(issueKey);
+
+            lock (ReportedIssueLock)
+            {
+                if (!ReportedIssues.Add(effectiveIssueKey))
+                {
+                    return;
+                }
+            }
+
+            VibeLogger.LogInfo(operation, message, context);
         }
 
         private static string CreateEffectiveIssueKey(string issueKey)

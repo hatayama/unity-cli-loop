@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             EditorApplication.quitting += ShutdownForQuit;
         }
 
-        public static Task<CompilerMessage[]> TryCompileAsync(
+        public static Task<SharedWorkerCompileOutcome> TryCompileAsync(
             string requestFilePath,
             ExternalCompilerPaths externalCompilerPaths,
             CancellationToken ct,
@@ -47,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ct);
         }
 
-        private static async Task<CompilerMessage[]> TryCompileWithRetriesAsync(
+        private static async Task<SharedWorkerCompileOutcome> TryCompileWithRetriesAsync(
             string requestFilePath,
             ExternalCompilerPaths externalCompilerPaths,
             CancellationToken ct,
@@ -71,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 if (attemptResult.Succeeded)
                 {
-                    return attemptResult.Messages;
+                    return SharedWorkerCompileOutcome.SucceededWith(attemptResult.Messages);
                 }
 
                 ServiceValue.ExecuteWithStateLock(ServiceValue.ShutdownProcessLocked);
@@ -81,13 +81,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                DynamicCompilationHealthMonitor.ReportSharedWorkerFailure(
-                    attemptResult.FailureReason,
-                    AppendAttempt(attemptResult.FailureContext, attempt));
-                return null;
+                object failureContext = AppendAttempt(attemptResult.FailureContext, attempt);
+                if (attemptResult.FailureReason == SharedWorkerFailureReasons.LifecycleClosed)
+                {
+                    DynamicCompilationHealthMonitor.ReportSharedWorkerLifecycleClosed(failureContext);
+                }
+                else
+                {
+                    DynamicCompilationHealthMonitor.ReportSharedWorkerFailure(
+                        attemptResult.FailureReason,
+                        failureContext);
+                }
+
+                return SharedWorkerCompileOutcome.Failed(attemptResult.FailureReason, failureContext);
             }
 
-            return null;
+            return SharedWorkerCompileOutcome.Failed(
+                "worker_unknown_failure",
+                new { reason = "retry_loop_exhausted" });
         }
 
         private static async Task<WorkerAttemptResult> TryCompileOnceAsync(

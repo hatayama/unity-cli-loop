@@ -293,6 +293,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             }
         }
 
+        /// <summary>
+        /// Verifies a lifecycle transition during worker startup silently falls back to one-shot Roslyn.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_WhenWorkerLifecycleClosesDuringStartup_ShouldFallbackWithoutErrorLogs()
+        {
+            ExternalCompilerPaths externalCompilerPaths = ExternalCompilerPathResolver.Resolve();
+            Assert.That(externalCompilerPaths, Is.Not.Null, "Unity external compiler layout should be available.");
+
+            string sourcePath = Path.Combine(_tempDirectoryPath, "LifecycleFallbackSmoke.cs");
+            string dllPath = Path.Combine(_tempDirectoryPath, "LifecycleFallbackSmoke.dll");
+            File.WriteAllText(
+                sourcePath,
+                "public static class LifecycleFallbackSmoke { public static int Execute() { return 11; } }");
+            List<string> references = new DynamicReferenceSetBuilderService().BuildReferenceSet(
+                new List<string>(),
+                null,
+                externalCompilerPaths);
+            int buildCount = 0;
+            bool buildStarted = false;
+            bool buildFinished = false;
+
+            DynamicCompilationHealthMonitor.ResetForTests();
+            SharedRoslynCompilerWorkerHost.ShutdownForTests();
+            LogAssert.NoUnexpectedReceived();
+
+            Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]> previousWorkerCompiler =
+                SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(
+                    (ExternalCompilerPaths paths, string workerSourcePath, string workerAssemblyPath, string workerCompileResponseFilePath) =>
+                    {
+                        SharedRoslynCompilerWorkerHost.ShutdownForTests();
+                        return Array.Empty<CompilerMessage>();
+                    });
+
+            try
+            {
+                using CancellationTokenSource compileCancellationTokenSource = new CancellationTokenSource();
+                compileCancellationTokenSource.CancelAfter(FallbackCompileTimeoutMilliseconds);
+                DynamicCompilationBackendResult result = await RoslynCompilerBackend.CompileAsync(
+                    sourcePath,
+                    dllPath,
+                    references,
+                    externalCompilerPaths,
+                    new RoslynCompilerOptions(Array.Empty<string>(), false),
+                    compileCancellationTokenSource.Token,
+                    () => buildStarted = true,
+                    () => buildFinished = true,
+                    () => buildCount++);
+
+                Assert.That(result, Is.Not.Null);
+                Assert.That(result.BackendKind, Is.EqualTo(DynamicCompilationBackendKind.OneShotRoslyn));
+                Assert.That(File.Exists(dllPath), Is.True);
+                Assert.That(buildCount, Is.EqualTo(1));
+                Assert.That(buildStarted, Is.True);
+                Assert.That(buildFinished, Is.True);
+                LogAssert.NoUnexpectedReceived();
+            }
+            finally
+            {
+                SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(previousWorkerCompiler);
+                SharedRoslynCompilerWorkerHost.ShutdownForTests();
+            }
+        }
+
         [Test]
         public void ReportInfrastructureFallback_WhenCompilerPathLayoutIsKnown_ShouldIncludeLayoutKind()
         {
