@@ -6,7 +6,8 @@ set -eu
 SCENE_PATH="Assets/Scenes/SimulateMouseDemoScene.unity"
 TMP_DIR="${TMPDIR:-/tmp}/unity-cli-loop-simulate-mouse"
 ELEMENTS_JSON="$TMP_DIR/simulate-mouse-elements.json"
-ORIGINAL_GAME_VIEW_SIZE_INDEX=""
+ORIGINAL_GAME_VIEW_WIDTH=""
+ORIGINAL_GAME_VIEW_HEIGHT=""
 PROJECT_PATH=""
 ULOOP_PATH="${ULOOP_BIN:-uloop}"
 
@@ -17,8 +18,8 @@ fail() {
 
 cleanup() {
     run_uloop control-play-mode --action Stop >/dev/null 2>&1 || true
-    if [ -n "${ORIGINAL_GAME_VIEW_SIZE_INDEX:-}" ]; then
-        restore_game_view_size_index "$ORIGINAL_GAME_VIEW_SIZE_INDEX" >/dev/null 2>&1 || true
+    if [ -n "${ORIGINAL_GAME_VIEW_WIDTH:-}" ] && [ -n "${ORIGINAL_GAME_VIEW_HEIGHT:-}" ]; then
+        restore_game_view_size "$ORIGINAL_GAME_VIEW_WIDTH" "$ORIGINAL_GAME_VIEW_HEIGHT" >/dev/null 2>&1 || true
     fi
 }
 trap cleanup EXIT INT TERM
@@ -133,164 +134,25 @@ return SceneManager.GetActiveScene().path;
 }
 
 select_full_hd_game_view() {
-    # Unity exposes no public setter for the Game View resolution dropdown.
-    # This matches the manual "Full HD (1920x1080)" selection before reading UI coordinates.
-    code='
-using System;
-using System.Reflection;
-using UnityEditor;
-using UnityEngine;
-const int Width = 1920;
-const int Height = 1080;
-EditorApplication.ExecuteMenuItem("Window/General/Game");
-Type gameViewType = typeof(Editor).Assembly.GetType("UnityEditor.GameView");
-Debug.Assert(gameViewType != null, "GameView type must exist.");
-UnityEngine.Object[] gameViews = Resources.FindObjectsOfTypeAll(gameViewType);
-EditorWindow gameView = null;
-for (int i = 0; i < gameViews.Length; i++)
-{
-    EditorWindow candidate = gameViews[i] as EditorWindow;
-    if (candidate == null)
-    {
-        continue;
-    }
-    if (gameView == null || candidate.hasFocus)
-    {
-        gameView = candidate;
-    }
-}
-if (gameView == null)
-{
-    gameView = EditorWindow.GetWindow(gameViewType);
-}
-gameView.Show();
-Type gameViewSizesType = typeof(Editor).Assembly.GetType("UnityEditor.GameViewSizes");
-Debug.Assert(gameViewSizesType != null, "GameViewSizes type must exist.");
-Type singletonType = typeof(ScriptableSingleton<>).MakeGenericType(gameViewSizesType);
-PropertyInfo instanceProperty = singletonType.GetProperty("instance", BindingFlags.Public | BindingFlags.Static);
-Debug.Assert(instanceProperty != null, "GameViewSizes instance property must exist.");
-object gameViewSizes = instanceProperty.GetValue(null);
-MethodInfo getGroupMethod = gameViewSizesType.GetMethod("GetGroup", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-Debug.Assert(getGroupMethod != null, "GameViewSizes.GetGroup must exist.");
-object group = getGroupMethod.Invoke(gameViewSizes, new object[] { GameViewSizeGroupType.Standalone });
-Debug.Assert(group != null, "Standalone GameViewSize group must exist.");
-Type groupType = group.GetType();
-MethodInfo getDisplayTextsMethod = groupType.GetMethod("GetDisplayTexts", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-Debug.Assert(getDisplayTextsMethod != null, "GameViewSizeGroup.GetDisplayTexts must exist.");
-string[] displayTexts = (string[])getDisplayTextsMethod.Invoke(group, null);
-int selectedIndex = -1;
-for (int i = 0; i < displayTexts.Length; i++)
-{
-    if (displayTexts[i].Contains("1920x1080") || displayTexts[i].Contains("Full HD"))
-    {
-        selectedIndex = i;
-        break;
-    }
-}
-if (selectedIndex < 0)
-{
-    Type gameViewSizeType = typeof(Editor).Assembly.GetType("UnityEditor.GameViewSize");
-    Debug.Assert(gameViewSizeType != null, "GameViewSize type must exist.");
-    Type gameViewSizeTypeEnum = typeof(Editor).Assembly.GetType("UnityEditor.GameViewSizeType");
-    Debug.Assert(gameViewSizeTypeEnum != null, "GameViewSizeType enum must exist.");
-    object fixedResolution = Enum.Parse(gameViewSizeTypeEnum, "FixedResolution");
-    ConstructorInfo constructor = gameViewSizeType.GetConstructor(new Type[] { gameViewSizeTypeEnum, typeof(int), typeof(int), typeof(string) });
-    Debug.Assert(constructor != null, "GameViewSize constructor must exist.");
-    object selectedGameViewSize = constructor.Invoke(new object[] { fixedResolution, Width, Height, "Full HD" });
-    MethodInfo addCustomSizeMethod = groupType.GetMethod("AddCustomSize", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-    Debug.Assert(addCustomSizeMethod != null, "GameViewSizeGroup.AddCustomSize must exist.");
-    addCustomSizeMethod.Invoke(group, new object[] { selectedGameViewSize });
-    displayTexts = (string[])getDisplayTextsMethod.Invoke(group, null);
-    selectedIndex = displayTexts.Length - 1;
-}
-PropertyInfo selectedSizeIndexProperty = gameViewType.GetProperty("selectedSizeIndex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-Debug.Assert(selectedSizeIndexProperty != null, "GameView.selectedSizeIndex must exist.");
-selectedSizeIndexProperty.SetValue(gameView, selectedIndex, null);
-Screen.SetResolution(Width, Height, false);
-gameView.Repaint();
-Vector2 currentGameViewSize = Handles.GetMainGameViewSize();
-return displayTexts[selectedIndex] + " / " + currentGameViewSize.x + "x" + currentGameViewSize.y;
-'
-
-    json=$(run_uloop_json execute-dynamic-code --code "$code")
-    assert_json_success "$json" "Select Full HD Game View"
-    printf '    %s\n' "$(printf '%s\n' "$json" | jq -r '.Result')"
+    json=$(run_uloop_json set-game-view-size --width 1920 --height 1080)
+    assert_json_success "$json" "Set Full HD Game View"
+    ORIGINAL_GAME_VIEW_WIDTH=$(printf '%s\n' "$json" | jq -r '.PreviousWidth')
+    ORIGINAL_GAME_VIEW_HEIGHT=$(printf '%s\n' "$json" | jq -r '.PreviousHeight')
+    current_width=$(printf '%s\n' "$json" | jq -r '.CurrentWidth')
+    current_height=$(printf '%s\n' "$json" | jq -r '.CurrentHeight')
+    assert_text_equals "$current_width" "1920" "Game View width"
+    assert_text_equals "$current_height" "1080" "Game View height"
+    printf '    %sx%s (previous: %sx%s)\n' \
+        "$current_width" "$current_height" \
+        "$ORIGINAL_GAME_VIEW_WIDTH" "$ORIGINAL_GAME_VIEW_HEIGHT"
     sleep 1
 }
 
-capture_game_view_size_index() {
-    code='
-using System;
-using System.Reflection;
-using UnityEditor;
-using UnityEngine;
-Type gameViewType = typeof(Editor).Assembly.GetType("UnityEditor.GameView");
-Debug.Assert(gameViewType != null, "GameView type must exist.");
-UnityEngine.Object[] gameViews = Resources.FindObjectsOfTypeAll(gameViewType);
-EditorWindow gameView = null;
-for (int i = 0; i < gameViews.Length; i++)
-{
-    EditorWindow candidate = gameViews[i] as EditorWindow;
-    if (candidate == null)
-    {
-        continue;
-    }
-    if (gameView == null || candidate.hasFocus)
-    {
-        gameView = candidate;
-    }
-}
-if (gameView == null)
-{
-    gameView = EditorWindow.GetWindow(gameViewType);
-}
-PropertyInfo selectedSizeIndexProperty = gameViewType.GetProperty("selectedSizeIndex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-Debug.Assert(selectedSizeIndexProperty != null, "GameView.selectedSizeIndex must exist.");
-return selectedSizeIndexProperty.GetValue(gameView, null).ToString();
-'
-
-    json=$(run_uloop_json execute-dynamic-code --code "$code")
-    assert_json_success "$json" "Capture Game View size index"
-    printf '%s\n' "$json" | jq -r '.Result'
-}
-
-restore_game_view_size_index() {
-    selected_index=$1
-    code="
-using System;
-using System.Reflection;
-using UnityEditor;
-using UnityEngine;
-int selectedIndex = $selected_index;
-Debug.Assert(selectedIndex >= 0, \"GameView size index must be non-negative.\");
-Type gameViewType = typeof(Editor).Assembly.GetType(\"UnityEditor.GameView\");
-Debug.Assert(gameViewType != null, \"GameView type must exist.\");
-UnityEngine.Object[] gameViews = Resources.FindObjectsOfTypeAll(gameViewType);
-EditorWindow gameView = null;
-for (int i = 0; i < gameViews.Length; i++)
-{
-    EditorWindow candidate = gameViews[i] as EditorWindow;
-    if (candidate == null)
-    {
-        continue;
-    }
-    if (gameView == null || candidate.hasFocus)
-    {
-        gameView = candidate;
-    }
-}
-if (gameView == null)
-{
-    gameView = EditorWindow.GetWindow(gameViewType);
-}
-PropertyInfo selectedSizeIndexProperty = gameViewType.GetProperty(\"selectedSizeIndex\", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-Debug.Assert(selectedSizeIndexProperty != null, \"GameView.selectedSizeIndex must exist.\");
-selectedSizeIndexProperty.SetValue(gameView, selectedIndex, null);
-gameView.Repaint();
-return selectedIndex.ToString();
-"
-
-    run_uloop_json execute-dynamic-code --code "$code"
+restore_game_view_size() {
+    original_width=$1
+    original_height=$2
+    json=$(run_uloop_json set-game-view-size --width "$original_width" --height "$original_height")
+    assert_json_success "$json" "Restore Game View resolution"
 }
 
 capture_annotated_elements() {
@@ -557,7 +419,6 @@ wait_play_mode
 sleep 1
 
 printf '[3/8] Selecting Full HD Game View resolution...\n'
-ORIGINAL_GAME_VIEW_SIZE_INDEX=$(capture_game_view_size_index)
 select_full_hd_game_view
 
 printf '[4/8] Reading annotated UI coordinates...\n'

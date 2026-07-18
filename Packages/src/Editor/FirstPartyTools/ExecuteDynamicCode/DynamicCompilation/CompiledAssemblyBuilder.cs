@@ -64,9 +64,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public async Task<CompiledAssemblyBuildResult> BuildAsync(
             DynamicCompilationPlan plan,
+            RoslynCompilerOptions compilerOptions,
             CancellationToken ct = default)
         {
             Debug.Assert(plan != null, "plan must not be null");
+            Debug.Assert(compilerOptions != null, "compilerOptions must not be null");
 
             ct.ThrowIfCancellationRequested();
 
@@ -98,6 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         resolvedDllPath,
                         resolvedReferences,
                         externalCompilerPaths,
+                        compilerOptions,
                         cancellationToken,
                         () => canDeleteTempFiles = false,
                         () => canDeleteTempFiles = true,

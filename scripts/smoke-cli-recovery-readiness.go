@@ -17,6 +17,7 @@ import (
 
 const (
 	stateRelativePath         = "Temp/UnityCliLoop/server-state.json"
+	projectRunnerPinPath      = ".uloop/project-runner-pin.json"
 	expectedDynamicCodeResult = "cli-recovery-readiness-e2e"
 	e2eDynamicCode            = `return "cli-recovery-readiness-e2e";`
 	timeoutExitCode           = 124
@@ -61,7 +62,7 @@ func run() error {
 	if err := runLiveRecoverySequence(opts); err != nil {
 		return err
 	}
-	if err := runStaleRecoveryStateIgnoredSequence(opts.uloopPath, opts.timeout); err != nil {
+	if err := runStaleRecoveryStateIgnoredSequence(opts.uloopPath, opts.projectPath, opts.timeout); err != nil {
 		return err
 	}
 
@@ -211,7 +212,7 @@ func runLiveRecoverySequence(opts options) error {
 	return assertDynamicCodeResult(dynamicPayload)
 }
 
-func runStaleRecoveryStateIgnoredSequence(uloopPath string, timeout time.Duration) error {
+func runStaleRecoveryStateIgnoredSequence(uloopPath string, sourceProjectPath string, timeout time.Duration) error {
 	projectPath, err := os.MkdirTemp("", "uloop-stale-state-")
 	if err != nil {
 		return err
@@ -219,6 +220,10 @@ func runStaleRecoveryStateIgnoredSequence(uloopPath string, timeout time.Duratio
 	defer os.RemoveAll(projectPath)
 
 	if err := createMinimalUnityProject(projectPath); err != nil {
+		return err
+	}
+	// Why: the dispatcher requires the runner pin before this sequence can reach the connection failure assertion.
+	if err := copyProjectRunnerPin(sourceProjectPath, projectPath); err != nil {
 		return err
 	}
 	if err := writeStaleServerState(projectPath); err != nil {
@@ -242,6 +247,20 @@ func runStaleRecoveryStateIgnoredSequence(uloopPath string, timeout time.Duratio
 		return fmt.Errorf("stale recovery state should be ignored, not removed: %s", statePath)
 	}
 	return nil
+}
+
+func copyProjectRunnerPin(sourceProjectPath string, targetProjectPath string) error {
+	sourcePath := filepath.Join(sourceProjectPath, filepath.FromSlash(projectRunnerPinPath))
+	data, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return err
+	}
+
+	targetPath := filepath.Join(targetProjectPath, filepath.FromSlash(projectRunnerPinPath))
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(targetPath, data, 0o644)
 }
 
 func runUloop(uloopPath string, projectPath string, args []string, timeout time.Duration) commandResult {

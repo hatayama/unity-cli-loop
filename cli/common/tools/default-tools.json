@@ -724,6 +724,23 @@
           }
         }
       }
+    },
+    {
+      "name": "set-game-view-size",
+      "description": "Set or inspect the Unity Game View custom rendering resolution.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Width": {
+            "type": "integer",
+            "description": "Target Game View rendering width in pixels. Provide with Height to change the resolution."
+          },
+          "Height": {
+            "type": "integer",
+            "description": "Target Game View rendering height in pixels. Provide with Width to change the resolution."
+          }
+        }
+      }
     }
   ]
 }

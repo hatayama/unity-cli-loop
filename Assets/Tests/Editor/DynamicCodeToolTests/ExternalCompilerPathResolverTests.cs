@@ -273,6 +273,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     dllPath,
                     references,
                     externalCompilerPaths,
+                    new RoslynCompilerOptions(Array.Empty<string>(), false),
                     compileCancellationTokenSource.Token,
                     () => buildStarted = true,
                     () => buildFinished = true,
