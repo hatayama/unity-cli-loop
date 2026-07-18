@@ -54,6 +54,32 @@ function Get-UloopArguments {
     return $arguments
 }
 
+function ConvertTo-WindowsPowerShellNativeArgument {
+    param(
+        [string]$Argument
+    )
+
+    # Windows argv rules treat backslashes specially only before a quote or the closing quote.
+    # Do not double every backslash: ordinary paths such as C:\Users must stay unchanged.
+    [string]$escapedArgument = [regex]::Replace($Argument, '(\\*)"', {
+        param($match)
+
+        [string]$backslashes = $match.Groups[1].Value
+        return $backslashes + $backslashes + '\"'
+    })
+
+    if ($Argument -notmatch '\s') {
+        return $escapedArgument
+    }
+
+    return [regex]::Replace($escapedArgument, '(\\*)\z', {
+        param($match)
+
+        [string]$backslashes = $match.Groups[1].Value
+        return $backslashes + $backslashes
+    })
+}
+
 function Invoke-UloopCapture {
     param(
         [string[]]$CommandArguments
@@ -61,8 +87,7 @@ function Invoke-UloopCapture {
 
     [string[]]$arguments = Get-UloopArguments -CommandArguments $CommandArguments
     if ($PSVersionTable.PSVersion.Major -lt 6) {
-        # Windows PowerShell strips embedded quotes before native processes see them.
-        $arguments = @($arguments | ForEach-Object { $_.Replace('"', '\"') })
+        $arguments = @($arguments | ForEach-Object { ConvertTo-WindowsPowerShellNativeArgument -Argument $_ })
     }
 
     [string]$previousErrorActionPreference = $ErrorActionPreference
