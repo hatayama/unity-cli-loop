@@ -70,6 +70,17 @@ func writeExistingLaunchReadyResponse(stdout io.Writer, stderr io.Writer, projec
 	})
 }
 
+func writeExistingV2LaunchOpenedResponse(stdout io.Writer, stderr io.Writer, projectRoot string, currentPid int) int {
+	return writeLaunchResponse(stdout, stderr, launchReadyResponse{
+		Success:          true,
+		Ready:            true,
+		AlreadyRunning:   true,
+		CurrentProcessId: &currentPid,
+		ProjectRoot:      projectRoot,
+		Message:          "Unity is already running for this V2 project. V2 server readiness was not checked.",
+	})
+}
+
 func writeLaunchedReadyResponse(
 	stdout io.Writer,
 	stderr io.Writer,
@@ -88,6 +99,25 @@ func writeLaunchedReadyResponse(
 		CurrentProcessId:  &currentPid,
 		ProjectRoot:       projectRoot,
 		Message:           launchReadyMessage,
+	})
+}
+
+func writeLaunchedV2ProjectOpenedResponse(
+	stdout io.Writer,
+	stderr io.Writer,
+	projectRoot string,
+	previousPid *int,
+	currentPid int,
+) int {
+	return writeLaunchResponse(stdout, stderr, launchReadyResponse{
+		Success:           true,
+		Ready:             true,
+		Launched:          true,
+		Restarted:         previousPid != nil,
+		PreviousProcessId: previousPid,
+		CurrentProcessId:  &currentPid,
+		ProjectRoot:       projectRoot,
+		Message:           "Unity started and opened the V2 project. V2 server readiness was not checked.",
 	})
 }
 

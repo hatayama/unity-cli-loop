@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"runtime"
 
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 )
 
@@ -19,6 +20,9 @@ func tryRunDetectedDispatcherV2Project(
 	stderr io.Writer,
 	deps dispatcherRunDeps,
 ) (bool, int) {
+	if len(args) > 0 && args[0] == clicore.LaunchCommandName {
+		return false, 0
+	}
 	v2Project, err := detectV2DispatcherProject(projectRoot)
 	if err != nil || !v2Project.IsV2 {
 		return false, 0
