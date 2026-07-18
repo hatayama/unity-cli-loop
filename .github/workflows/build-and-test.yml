@@ -143,10 +143,18 @@ jobs:
           $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/install.ps1))
           $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/check-release-installer.ps1))
           $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-check-release-installer.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/run-windows-e2e.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-simulate-mouse-demo.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 Assets/Tests/Demo/scripts/verify-replay-via-cli.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-powershell51-native-argument-escaping.ps1))
 
       - name: Test release installer smoke helper
         shell: powershell
         run: .\scripts\test-check-release-installer.ps1
+
+      - name: Test Windows PowerShell native argument escaping
+        shell: powershell
+        run: .\scripts\test-powershell51-native-argument-escaping.ps1
 
   test-unity-package:
     runs-on: ubuntu-latest
