@@ -222,6 +222,7 @@ func runStaleRecoveryStateIgnoredSequence(uloopPath string, sourceProjectPath st
 	if err := createMinimalUnityProject(projectPath); err != nil {
 		return err
 	}
+	// Why: the dispatcher requires the runner pin before this sequence can reach the connection failure assertion.
 	if err := copyProjectRunnerPin(sourceProjectPath, projectPath); err != nil {
 		return err
 	}
