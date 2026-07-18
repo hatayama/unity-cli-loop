@@ -66,7 +66,7 @@ run_uloop_json() {
         printf '%s\n' "$output" >&2
         fail "uloop $* failed"
     }
-    if printf '%s\n' "$output" | grep -Eq '"success"[[:space:]]*:[[:space:]]*false'; then
+    if printf '%s\n' "$output" | grep -Eq '"Success"[[:space:]]*:[[:space:]]*false'; then
         printf '%s\n' "$output" >&2
         fail "uloop $* returned success=false"
     fi
@@ -79,7 +79,7 @@ assert_json_result() {
     expected=$2
     context=$3
 
-    actual=$(printf '%s\n' "$json" | sed -n 's/.*"result"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    actual=$(printf '%s\n' "$json" | sed -n 's/.*"Result"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
     [ "$actual" = "$expected" ] || fail "$context: expected '$expected', got '$actual'"
 }
 
@@ -208,7 +208,7 @@ fi
 echo "[5/9] Stopping recording via CLI..."
 RECORD_STOP_RESULT=$(run_uloop_json record-input --action Stop)
 echo "  $RECORD_STOP_RESULT"
-RECORDING_INPUT_PATH=$(printf '%s\n' "$RECORD_STOP_RESULT" | sed -n 's/.*"outputPath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+RECORDING_INPUT_PATH=$(printf '%s\n' "$RECORD_STOP_RESULT" | sed -n 's/.*"OutputPath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
 
 echo "[6/9] Saving recording event log..."
 save_log "$RECORDING_LOG"
@@ -239,13 +239,13 @@ sleep 2
 waited=0
 while [ $waited -lt 60 ]; do
     STATUS_RESULT=$(run_uloop replay-input --action Status 2>&1) || true
-    playing=$(echo "$STATUS_RESULT" | grep -o '"isReplaying": *[a-z]*' | sed 's/.*: *//')
+    playing=$(echo "$STATUS_RESULT" | grep -o '"IsReplaying": *[a-z]*' | sed 's/.*: *//')
     if [ "$playing" = "false" ]; then
         echo "  Replay completed."
         break
     fi
     if [ $((waited % 5)) -eq 0 ]; then
-        progress=$(echo "$STATUS_RESULT" | grep -o '"progress": *[0-9.]*' | sed 's/.*: *//')
+        progress=$(echo "$STATUS_RESULT" | grep -o '"Progress": *[0-9.]*' | sed 's/.*: *//')
         echo "  Progress: ${progress:-...}"
     fi
     sleep 1
