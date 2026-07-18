@@ -2,6 +2,47 @@ using UnityEditor.Compilation;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
+    internal static class SharedWorkerFailureReasons
+    {
+        internal const string LifecycleClosed = "shared_worker_lifecycle_closed";
+    }
+
+    /// <summary>
+    /// Carries shared worker compilation messages and the reason for a failed compilation.
+    /// </summary>
+    internal sealed class SharedWorkerCompileOutcome
+    {
+        public CompilerMessage[] Messages { get; }
+
+        public string FailureReason { get; }
+
+        public object FailureContext { get; }
+
+        private SharedWorkerCompileOutcome(
+            CompilerMessage[] messages,
+            string failureReason,
+            object failureContext)
+        {
+            Messages = messages;
+            FailureReason = failureReason;
+            FailureContext = failureContext;
+        }
+
+        public bool Succeeded => Messages != null;
+
+        public bool IsLifecycleClosed => FailureReason == SharedWorkerFailureReasons.LifecycleClosed;
+
+        public static SharedWorkerCompileOutcome SucceededWith(CompilerMessage[] messages)
+        {
+            return new SharedWorkerCompileOutcome(messages, null, null);
+        }
+
+        public static SharedWorkerCompileOutcome Failed(string failureReason, object failureContext)
+        {
+            return new SharedWorkerCompileOutcome(null, failureReason, failureContext);
+        }
+    }
+
     /// <summary>
     /// Carries the result data produced by Worker Attempt behavior.
     /// </summary>
@@ -85,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new WorkerStartupResult(
                 false,
                 false,
-                "shared_worker_lifecycle_closed",
+                SharedWorkerFailureReasons.LifecycleClosed,
                 new { reason = "lifecycle_generation_advanced" });
         }
     }

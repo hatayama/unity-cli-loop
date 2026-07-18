@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using UnityEngine.TestTools;
 using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -17,6 +18,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
     [TestFixture]
     public class SharedRoslynCompilerWorkerHostTests
     {
+        /// <summary>
+        /// Verifies lifecycle closure is returned as a non-error compile outcome.
+        /// </summary>
+        [Test]
+        public void SharedWorkerCompileOutcome_WhenLifecycleCloses_ShouldCarryLifecycleClosedReason()
+        {
+            SharedWorkerCompileOutcome outcome = SharedWorkerCompileOutcome.Failed(
+                SharedWorkerFailureReasons.LifecycleClosed,
+                new { reason = "lifecycle_generation_advanced" });
+
+            Assert.That(outcome.Succeeded, Is.False);
+            Assert.That(outcome.FailureReason, Is.EqualTo(SharedWorkerFailureReasons.LifecycleClosed));
+            Assert.That(outcome.IsLifecycleClosed, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies non-lifecycle worker failures retain their failure reason for error reporting.
+        /// </summary>
+        [Test]
+        public void SharedWorkerCompileOutcome_WhenWorkerStartFails_ShouldCarryFailureReason()
+        {
+            SharedWorkerCompileOutcome outcome = SharedWorkerCompileOutcome.Failed(
+                "worker_start_failed",
+                new { reason = "process_start_failed" });
+
+            Assert.That(outcome.Succeeded, Is.False);
+            Assert.That(outcome.FailureReason, Is.EqualTo("worker_start_failed"));
+        }
+
         [Test]
         public void ConfigureWorkerDotnetRuntimeEnvironment_WhenCalled_ShouldDisableMultilevelLookup()
         {

@@ -71,29 +71,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     defineSymbols,
                     allowUnsafeCode);
 
-                CompilerMessage[] workerMessages = await SharedRoslynCompilerWorkerHost.TryCompileAsync(
+                SharedWorkerCompileOutcome workerOutcome = await SharedRoslynCompilerWorkerHost.TryCompileAsync(
                     workerRequestFilePath,
                     externalCompilerPaths,
                     ct,
                     markBuildStarted,
                     markBuildFinished,
                     incrementBuildCount).ConfigureAwait(false);
-                if (workerMessages != null)
+                UnityEngine.Debug.Assert(workerOutcome != null, "Shared worker compile outcome must not be null");
+                if (workerOutcome.Succeeded)
                 {
                     return new DynamicCompilationBackendResult(
-                        workerMessages,
+                        workerOutcome.Messages,
                         DynamicCompilationBackendKind.SharedRoslynWorker);
                 }
 
-                DynamicCompilationHealthMonitor.ReportSharedWorkerFallback(
-                    "worker_unavailable",
-                    new
-                    {
-                        platform = UnityEngine.Application.platform.ToString(),
-                        dotnet_host_path = externalCompilerPaths.DotnetHostPath,
-                        compiler_dll_path = externalCompilerPaths.CompilerDllPath,
-                        layout_kind = externalCompilerPaths.LayoutKind.ToString()
-                    });
+                if (!workerOutcome.IsLifecycleClosed)
+                {
+                    DynamicCompilationHealthMonitor.ReportSharedWorkerFallback(
+                        "worker_unavailable",
+                        new
+                        {
+                            platform = UnityEngine.Application.platform.ToString(),
+                            dotnet_host_path = externalCompilerPaths.DotnetHostPath,
+                            compiler_dll_path = externalCompilerPaths.CompilerDllPath,
+                            layout_kind = externalCompilerPaths.LayoutKind.ToString()
+                        });
+                }
 
                 ct.ThrowIfCancellationRequested();
                 OneShotCompileResult oneShotResult = await CompileWithOneShotAsync(
