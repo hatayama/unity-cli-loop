@@ -114,9 +114,16 @@ using UnityEngine;
 using UnityEditor;
 using io.github.hatayama.UnityCliLoop.Runtime;
 Animator animator = GameObject.Find("Zombie").GetComponent<Animator>();
+// Match the marker's --timeout-seconds so an unmet condition cannot leak the delegate
+double deadline = EditorApplication.timeSinceStartup + 120d;
 EditorApplication.CallbackFunction watcher = null;
 watcher = () =>
 {
+    if (EditorApplication.timeSinceStartup > deadline)
+    {
+        EditorApplication.update -= watcher;
+        return;
+    }
     AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(0);
     if (!state.IsName("Hit") || state.normalizedTime < 0.3f) return;
     EditorApplication.update -= watcher;
@@ -129,7 +136,7 @@ return "watcher registered";
 Rules for this pattern:
 
 - The dynamic-code body runs synchronously on the main thread. Never poll or sleep inside the snippet — frames stop advancing and the animation freezes with them. Register the watcher and return; the waiting belongs to `await-pause-point`.
-- The watcher must unsubscribe itself from `EditorApplication.update` when it fires. A leaked delegate keeps running until the next domain reload.
+- The watcher must unsubscribe itself from `EditorApplication.update` when it fires, and also on a deadline in case the condition never holds — a leaked delegate keeps running until the next domain reload. Match the deadline to the marker's `--timeout-seconds`.
 - `UloopPausePoint.Pause(id)` is a public static Runtime API, and dynamic code compiles against the project's assemblies, so the watcher can call it exactly like game code. It fires only while the same id is enabled; otherwise it is a no-op, so a stray watcher cannot pause Unity unexpectedly.
 - A single-shot marker disarms after the first hit. To catch repeated occurrences, enable with `--mode continuous` and run `await-pause-point` again after each resume.
 
