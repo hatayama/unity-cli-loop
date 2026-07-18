@@ -7,8 +7,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 )
@@ -340,6 +342,32 @@ func TestRunDispatcherDelegatesResolvedV2PackageDespiteStalePin(t *testing.T) {
 	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, io.Discard, deps)
 	if code != 7 {
 		t.Fatalf("exit code = %d, want 7", code)
+	}
+}
+
+// Verifies launch stays in the native dispatcher for a V2 project while live commands still use the V2 CLI.
+func TestRunDispatcherKeepsV2LaunchInNativeDispatcher(t *testing.T) {
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "abc123", "2.2.0")
+	t.Chdir(projectRoot)
+
+	deps := defaultDispatcherRunDeps()
+	deps.runV2CLI = func(context.Context, string, []string, io.Writer, io.Writer) (int, error) {
+		t.Fatal("V2 launch must not be delegated to the V2 CLI")
+		return 0, nil
+	}
+	deps.launch.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return nil, nil
+	}
+
+	var stdout bytes.Buffer
+	code := runDispatcherWithDeps(context.Background(), []string{"launch", "--quit", projectRoot}, &stdout, io.Discard, deps)
+	if code != 0 {
+		t.Fatalf("V2 launch quit exit code = %d", code)
+	}
+	if !strings.Contains(stdout.String(), `"Quit": true`) {
+		t.Fatalf("native V2 launch response missing quit result: %s", stdout.String())
 	}
 }
 
