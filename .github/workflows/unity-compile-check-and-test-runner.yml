@@ -222,8 +222,8 @@ jobs:
               WARNING_PATTERN='warning CS[0-9]*:'
             fi
 
-            ERROR_COUNT=$(grep -Ec "$ERROR_PATTERN" "$LOG_FILE" 2>/dev/null || echo "0")
-            WARNING_COUNT=$(grep -Ec "$WARNING_PATTERN" "$LOG_FILE" 2>/dev/null || echo "0")
+            ERROR_COUNT=$(grep -Ec "$ERROR_PATTERN" "$LOG_FILE" 2>/dev/null || true)
+            WARNING_COUNT=$(grep -Ec "$WARNING_PATTERN" "$LOG_FILE" 2>/dev/null || true)
 
             echo ""
             echo "=== Compilation Results ==="
