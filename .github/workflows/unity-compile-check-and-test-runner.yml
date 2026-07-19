@@ -129,6 +129,15 @@ jobs:
           ERROR_COUNT=0
           WARNING_COUNT=0
 
+          if [ "${{ matrix.package-warning-scope }}" == "true" ]; then
+            PACKAGE_ASSEMBLY_COUNT=$(find "${{ matrix.project-path }}/Library/ScriptAssemblies" -maxdepth 1 -type f -name 'UnityCLILoop*.dll' 2>/dev/null | wc -l | tr -d ' ')
+            if [ "$PACKAGE_ASSEMBLY_COUNT" -eq 0 ]; then
+              echo "::error::Unity did not resolve or compile the io.github.hatayama.uloopmcp package"
+              exit 1
+            fi
+            echo "Package assembly evidence found: $PACKAGE_ASSEMBLY_COUNT assembly(s)."
+          fi
+
           if [ -f "$LOG_FILE" ]; then
             echo "Analyzing log file: $LOG_FILE"
 
@@ -179,8 +188,8 @@ jobs:
             echo "✅ No compile errors or warnings found!"
           else
             echo "::warning::Could not find Unity log file for analysis"
-            # Fall back to checking if build step failed
-            if [ "${{ steps.compile.outcome }}" == "failure" ]; then
+            # Unity 6000.5's builder reports an untitled-scene build failure after successful script compilation.
+            if [ "${{ matrix.package-warning-scope }}" != "true" ] && [ "${{ steps.compile.outcome }}" == "failure" ]; then
               echo "::error::Unity compilation failed"
               exit 1
             fi
