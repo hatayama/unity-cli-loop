@@ -28,11 +28,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ? DynamicReferenceSetBuilder.MergeReferencesByAssemblyName(Array.Empty<string>(), references)
                 : Array.Empty<string>();
 
+#pragma warning disable 618 // Unity's fallback compiler API has no supported replacement on older editor versions.
             AssemblyBuilder builder = new(dllPath, sourcePath)
             {
                 referencesOptions = ReferencesOptions.UseEngineModules,
                 additionalReferences = referenceArray
             };
+#pragma warning restore 618
 
             builder.buildFinished += (string assemblyPath, CompilerMessage[] compilerMessages) =>
             {
