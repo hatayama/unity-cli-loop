@@ -158,8 +158,7 @@ describe('launch command', () => {
 
   it('shows startup spinner before orchestrateLaunch resolves', async () => {
     let resolveLaunch:
-      | ((value: { action: 'focused'; projectPath: string; pid: number }) => void)
-      | undefined;
+      ((value: { action: 'focused'; projectPath: string; pid: number }) => void) | undefined;
     orchestrateLaunchMock.mockReturnValue(
       new Promise((resolve) => {
         resolveLaunch = resolve;
