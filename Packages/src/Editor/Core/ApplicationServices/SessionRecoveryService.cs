@@ -114,8 +114,8 @@ namespace io.github.hatayama.uLoopMCP
                 }
                 else
                 {
-                    // Clear session when maximum retry count is reached
-                    McpEditorSettings.ClearServerSession();
+                    // Preserve the user's start intent so the watchdog can retry after the conflicting port is released.
+                    McpEditorSettings.MarkServerRecoveryPending();
                     return ValidationResult.Failure($"Failed to restore server after {MAX_RETRIES} retries: {ex.Message}");
                 }
             }
