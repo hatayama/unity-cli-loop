@@ -167,7 +167,7 @@ func runWaitForPausePoint(
 			payload = pausePointWaitResult{
 				pausePointStatusResponse: response,
 				MatchingLogs:             logs.Logs,
-				EvidenceSummary:          buildPausePointEvidenceSummary(response, logs),
+				Warning:                  buildPausePointWarning(logs, response.HitCount),
 			}
 		}
 		result, marshalErr := json.Marshal(payload)
@@ -193,7 +193,10 @@ func runWaitForPausePoint(
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
 		if logsErr == nil {
 			waitErr.Details["MatchingLogs"] = logs.Logs
-			waitErr.Details["EvidenceSummary"] = buildPausePointEvidenceSummary(response, logs)
+			warning := buildPausePointWarning(logs, response.HitCount)
+			if warning != "" {
+				waitErr.Details["Warning"] = warning
+			}
 		}
 	}
 	clierrors.WriteErrorEnvelope(stderr, waitErr)

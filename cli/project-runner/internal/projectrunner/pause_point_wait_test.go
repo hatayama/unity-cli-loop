@@ -477,23 +477,14 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnHit(t *testing.T) {
 	if result.MatchingLogs[0].StackTrace != "trace one" {
 		t.Fatalf("matching log stack trace mismatch: %#v", result.MatchingLogs)
 	}
-	if result.EvidenceSummary.EditorState.CapturedAt != "PausePointHit" {
-		t.Fatalf("editor state summary mismatch: %#v", result.EvidenceSummary)
+	if result.EditorState.CapturedAt != "PausePointHit" {
+		t.Fatalf("editor state mismatch: %#v", result.EditorState)
 	}
-	if result.EvidenceSummary.PausePoint.Generation != 7 || result.EvidenceSummary.PausePoint.FirstHitSequence != 3 {
-		t.Fatalf("pause point summary mismatch: %#v", result.EvidenceSummary)
+	if result.Generation != 7 || result.FirstHitSequence != 3 {
+		t.Fatalf("pause point fields mismatch: %#v", result)
 	}
-	if !result.EvidenceSummary.MatchingLogs.MultipleMatchingLogsObserved ||
-		result.EvidenceSummary.MatchingLogs.MatchingLogCount != 2 ||
-		result.EvidenceSummary.MatchingLogs.ReturnedLogCount != 2 {
-		t.Fatalf("matching log summary mismatch: %#v", result.EvidenceSummary)
-	}
-	if result.EvidenceSummary.MatchingLogs.LogType != "Error" ||
-		!result.EvidenceSummary.MatchingLogs.IncludeStackTrace {
-		t.Fatalf("matching log metadata mismatch: %#v", result.EvidenceSummary)
-	}
-	if !strings.Contains(result.EvidenceSummary.Warning, "Multiple matching logs") {
-		t.Fatalf("warning mismatch: %#v", result.EvidenceSummary)
+	if !strings.Contains(result.Warning, "Multiple matching logs") {
+		t.Fatalf("warning mismatch: %#v", result.Warning)
 	}
 }
 
@@ -552,8 +543,11 @@ func TestRunWaitForPausePointEmbedsEmptyMatchingLogsWhenNoneMatch(t *testing.T) 
 	if result.MatchingLogs == nil || len(result.MatchingLogs) != 0 {
 		t.Fatalf("MatchingLogs must be an explicit empty array: %#v", result.MatchingLogs)
 	}
-	if result.EvidenceSummary.Warning != "" {
-		t.Fatalf("warning should be empty when there are no matching logs: %#v", result.EvidenceSummary)
+	if result.Warning != "" {
+		t.Fatalf("warning should be empty when there are no matching logs: %#v", result.Warning)
+	}
+	if strings.Contains(stdout.String(), "Warning") {
+		t.Fatalf("Warning must be omitted from JSON when empty: %s", stdout.String())
 	}
 }
 
@@ -603,8 +597,8 @@ func TestRunWaitForPausePointIgnoresLogFetchFailure(t *testing.T) {
 	if strings.Contains(stdout.String(), "MatchingLogs") {
 		t.Fatalf("MatchingLogs must be omitted when the fetch fails: %s", stdout.String())
 	}
-	if strings.Contains(stdout.String(), "EvidenceSummary") {
-		t.Fatalf("EvidenceSummary must be omitted when the fetch fails: %s", stdout.String())
+	if strings.Contains(stdout.String(), "Warning") {
+		t.Fatalf("Warning must be omitted when the fetch fails: %s", stdout.String())
 	}
 }
 
@@ -674,13 +668,9 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnTimeout(t *testing.T) {
 	if !ok || len(matchingLogs) != 1 {
 		t.Fatalf("MatchingLogs detail mismatch: %#v", envelope.Error.Details)
 	}
-	evidenceSummary, ok := envelope.Error.Details["EvidenceSummary"].(map[string]any)
-	if !ok {
-		t.Fatalf("EvidenceSummary detail missing: %#v", envelope.Error.Details)
-	}
-	evidenceLogs, ok := evidenceSummary["MatchingLogs"].(map[string]any)
-	if !ok || evidenceLogs["MayBeTruncated"] != true || evidenceLogs["MatchingLogCount"] != float64(3) {
-		t.Fatalf("EvidenceSummary matching logs mismatch: %#v", evidenceSummary)
+	warning, ok := envelope.Error.Details["Warning"].(string)
+	if !ok || !strings.Contains(warning, "may be truncated") {
+		t.Fatalf("Warning detail mismatch: %#v", envelope.Error.Details)
 	}
 }
 
