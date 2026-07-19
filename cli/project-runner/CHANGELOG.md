@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.51](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.50...uloop-project-runner-v3.0.0-beta.51) (2026-07-19)
+
+
+### Bug Fixes
+
+* Pause points and watch expressions no longer leave silent gaps in debugging feedback ([#1854](https://github.com/hatayama/unity-cli-loop/issues/1854)) ([77658f8](https://github.com/hatayama/unity-cli-loop/commit/77658f89efb4a302058d4f546f39839a092e223e))
+* pause-pointの応答から重複情報を削減し、変数値だけを後から選んで取得できるように改善 ([#1857](https://github.com/hatayama/unity-cli-loop/issues/1857)) ([d507274](https://github.com/hatayama/unity-cli-loop/commit/d507274f14f61236aee30c3886139aa48c1a46d1))
+
 ## [3.0.0-beta.50](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.49...uloop-project-runner-v3.0.0-beta.50) (2026-07-18)
 
 

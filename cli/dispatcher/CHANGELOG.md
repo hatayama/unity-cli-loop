@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.0-beta.17](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.1.0-beta.16...dispatcher-v3.1.0-beta.17) (2026-07-19)
+
+
+### Bug Fixes
+
+* pause-pointの応答から重複情報を削減し、変数値だけを後から選んで取得できるように改善 ([#1857](https://github.com/hatayama/unity-cli-loop/issues/1857)) ([d507274](https://github.com/hatayama/unity-cli-loop/commit/d507274f14f61236aee30c3886139aa48c1a46d1))
+
 ## [3.1.0-beta.16](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.1.0-beta.15...dispatcher-v3.1.0-beta.16) (2026-07-19)
 
 
