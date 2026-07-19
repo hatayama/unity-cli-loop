@@ -58,11 +58,22 @@ type pausePointCapturedHistoryFrame struct {
 // EntityId there), so independent omitempty per field is safe: Kind still surfaces in that
 // case, and no consumer needs InstanceId==0 to mean "not a Unity object".
 type pausePointCapturedVariable struct {
-	Name                  string `json:"Name"`
-	Scope                 string `json:"Scope"`
-	TypeName              string `json:"TypeName"`
-	Value                 string `json:"Value,omitempty"`
-	UnityObjectKind       string `json:"UnityObjectKind,omitempty"`
-	UnityObjectPath       string `json:"UnityObjectPath,omitempty"`
-	UnityObjectInstanceId int    `json:"UnityObjectInstanceId,omitempty"`
+	Name     string `json:"Name"`
+	Scope    string `json:"Scope"`
+	TypeName string `json:"TypeName"`
+
+	// Value is a pointer so a genuinely empty string (e.g. a captured `string s = ""`) still
+	// serializes as "Value":"" in full mode, distinct from names mode setting it to nil to omit
+	// the field entirely. A plain string with `omitempty` cannot make that distinction, since an
+	// empty string and an absent value would both be omitted.
+	Value                 *string `json:"Value,omitempty"`
+	UnityObjectKind       string  `json:"UnityObjectKind,omitempty"`
+	UnityObjectPath       string  `json:"UnityObjectPath,omitempty"`
+	UnityObjectInstanceId int     `json:"UnityObjectInstanceId,omitempty"`
+}
+
+// pausePointVariableValue returns a pointer to value for use in pausePointCapturedVariable
+// struct literals, where a plain string literal cannot have its address taken inline.
+func pausePointVariableValue(value string) *string {
+	return &value
 }

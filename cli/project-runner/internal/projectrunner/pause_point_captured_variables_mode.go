@@ -54,7 +54,7 @@ func applyPausePointCapturedVariablesMode(
 func stripPausePointCapturedVariableValues(variables []pausePointCapturedVariable) []pausePointCapturedVariable {
 	stripped := make([]pausePointCapturedVariable, len(variables))
 	for index, variable := range variables {
-		variable.Value = ""
+		variable.Value = nil
 		stripped[index] = variable
 	}
 	return stripped

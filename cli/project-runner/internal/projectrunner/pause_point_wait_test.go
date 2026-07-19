@@ -1068,13 +1068,13 @@ func TestRunPausePointStatusReturnsCapturedVariables(t *testing.T) {
 					Name:     "speed",
 					Scope:    "Local",
 					TypeName: "System.Int32",
-					Value:    "5",
+					Value:    pausePointVariableValue("5"),
 				},
 				{
 					Name:                  "enemy",
 					Scope:                 "InstanceField",
 					TypeName:              "UnityEngine.GameObject",
-					Value:                 "Enemy",
+					Value:                 pausePointVariableValue("Enemy"),
 					UnityObjectKind:       "SceneObject",
 					UnityObjectPath:       "MainScene:/Root/Enemy",
 					UnityObjectInstanceId: -1234,
@@ -1106,8 +1106,9 @@ func TestRunPausePointStatusReturnsCapturedVariables(t *testing.T) {
 	if len(response.CapturedVariables) != 2 {
 		t.Fatalf("expected 2 captured variables, got %#v", response.CapturedVariables)
 	}
-	if response.CapturedVariables[0].Name != "speed" || response.CapturedVariables[0].Value != "5" {
-		t.Fatalf("first captured variable mismatch: %#v", response.CapturedVariables[0])
+	first := response.CapturedVariables[0]
+	if first.Name != "speed" || first.Value == nil || *first.Value != "5" {
+		t.Fatalf("first captured variable mismatch: %#v", first)
 	}
 	second := response.CapturedVariables[1]
 	if second.Name != "enemy" || second.UnityObjectKind != "SceneObject" ||
@@ -1136,13 +1137,13 @@ func TestRunPausePointStatusCapturedVariablesNamesOmitsValues(t *testing.T) {
 			Mode:            "continuous",
 			LastHitSequence: 2,
 			CapturedVariables: []pausePointCapturedVariable{
-				{Name: "speed", Scope: "Local", TypeName: "System.Int32", Value: "5"},
+				{Name: "speed", Scope: "Local", TypeName: "System.Int32", Value: pausePointVariableValue("5")},
 			},
 			CapturedVariableHistory: []pausePointCapturedHistoryFrame{
 				{
 					HitSequence: 1,
 					CapturedVariables: []pausePointCapturedVariable{
-						{Name: "speed", Scope: "Local", TypeName: "System.Int32", Value: "3"},
+						{Name: "speed", Scope: "Local", TypeName: "System.Int32", Value: pausePointVariableValue("3")},
 					},
 				},
 			},
@@ -1190,7 +1191,7 @@ func TestPausePointStatusResponseCapturedVariablesJSONRoundTrip(t *testing.T) {
 				Name:                  "speed",
 				Scope:                 "Local",
 				TypeName:              "System.Int32",
-				Value:                 "5",
+				Value:                 pausePointVariableValue("5"),
 				UnityObjectKind:       "SceneObject",
 				UnityObjectPath:       "MainScene:/Root/Enemy",
 				UnityObjectInstanceId: -1234,
@@ -1226,7 +1227,7 @@ func TestPausePointCapturedVariableOmitsUnityObjectFieldsWhenNotAUnityObject(t *
 		Name:     "speed",
 		Scope:    "Local",
 		TypeName: "System.Int32",
-		Value:    "5",
+		Value:    pausePointVariableValue("5"),
 	}
 
 	marshaled, err := json.Marshal(variable)
@@ -1251,7 +1252,7 @@ func TestPausePointCapturedVariableKeepsUnityObjectKindWhenInstanceIdIsZero(t *t
 		Name:                  "destroyedEnemy",
 		Scope:                 "Local",
 		TypeName:              "UnityEngine.GameObject",
-		Value:                 "(destroyed)",
+		Value:                 pausePointVariableValue("(destroyed)"),
 		UnityObjectKind:       "Destroyed",
 		UnityObjectInstanceId: 0,
 	}
@@ -1266,6 +1267,35 @@ func TestPausePointCapturedVariableKeepsUnityObjectKindWhenInstanceIdIsZero(t *t
 	}
 	if strings.Contains(string(marshaled), "UnityObjectInstanceId") {
 		t.Fatalf("UnityObjectInstanceId must still be omitted when zero, even alongside a non-empty Kind: %s", marshaled)
+	}
+}
+
+// Verifies a genuinely empty string Value (e.g. a captured `string s = ""`) still serializes as
+// "Value":"" in full mode, distinguishable from names mode omitting Value entirely via a nil pointer.
+func TestPausePointCapturedVariableKeepsGenuinelyEmptyValueInFullMode(t *testing.T) {
+	variable := pausePointCapturedVariable{
+		Name:     "label",
+		Scope:    "Local",
+		TypeName: "System.String",
+		Value:    pausePointVariableValue(""),
+	}
+
+	marshaled, err := json.Marshal(variable)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	if !strings.Contains(string(marshaled), `"Value":""`) {
+		t.Fatalf("a genuinely empty Value must still be serialized in full mode: %s", marshaled)
+	}
+
+	stripped := stripPausePointCapturedVariableValues([]pausePointCapturedVariable{variable})
+	strippedMarshaled, err := json.Marshal(stripped[0])
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	if strings.Contains(string(strippedMarshaled), `"Value"`) {
+		t.Fatalf("names mode must omit Value entirely, even when the original value was empty: %s", strippedMarshaled)
 	}
 }
 
