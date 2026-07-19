@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.0-beta.16](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.1.0-beta.15...dispatcher-v3.1.0-beta.16) (2026-07-19)
+
+
+### Bug Fixes
+
+* Detect V2 Unity projects with file:/embedded package references or ambiguous git cache generations ([#1847](https://github.com/hatayama/unity-cli-loop/issues/1847)) ([85509a8](https://github.com/hatayama/unity-cli-loop/commit/85509a8d5b50cf5354e0506332f5f335d012cfa4))
+
 ## [3.1.0-beta.15](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.1.0-beta.14...dispatcher-v3.1.0-beta.15) (2026-07-18)
 
 
