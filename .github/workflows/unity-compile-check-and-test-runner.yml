@@ -110,7 +110,7 @@ jobs:
           unityVersion: ${{ matrix.unity-version }}
           targetPlatform: StandaloneLinux64
           buildMethod: ''
-          customParameters: -logFile=/github/workspace/artifacts/unity-build.log
+          customParameters: -logfile /github/workspace/artifacts/unity-build.log
           allowDirtyBuild: true
         continue-on-error: true
 
