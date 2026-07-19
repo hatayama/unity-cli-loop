@@ -22,12 +22,20 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // the pending flag must still be consumed on the main thread.
             UloopPausePointRegistry.ApplyPendingClientDisconnectResume();
 
+            // Why before the isPaused gate: control-play-mode's Play/Stop and the Editor's own
+            // pause button unpause without ever calling back into the registry, so an open pause
+            // window must be detected and closed here instead of only through Clear/ClearAll/etc.
+            UloopPausePointRegistry.ClosePauseWindowIfEditorResumedExternally();
+
             if (!EditorApplication.isPaused)
             {
                 return;
             }
 
-            // Why while paused only: abandoned Hit windows must expire without a CLI poll.
+            // Why while paused only: abandoned Hit windows must expire without a CLI poll. This is
+            // a no-op while the pause was caused by a hit still holding the freeze window open
+            // (see UloopPausePointRegistry.TryExpire); it still matters for a manually-paused
+            // Editor, where an unrelated marker's timeout can still elapse.
             UloopPausePointRegistry.ApplyCaptureWindowExpirations();
         }
 

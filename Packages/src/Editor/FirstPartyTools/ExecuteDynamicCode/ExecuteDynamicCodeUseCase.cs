@@ -4,6 +4,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using UnityEditor;
+
+using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -72,6 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ? new List<string>(finalResult.Timings)
                         : cancelledResponse.Timings;
                     cancelledResponse.EmitTimingsInJsonResponse = parameters.IncludeTimings;
+                    ApplyPauseState(cancelledResponse);
                     return cancelledResponse;
                 }
 
@@ -80,6 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ExecuteDynamicCodeResponse restartingResponse =
                         DynamicCodeExecutionResponseFactory.CreateRuntimeRestartingResponse();
                     restartingResponse.EmitTimingsInJsonResponse = parameters.IncludeTimings;
+                    ApplyPauseState(restartingResponse);
                     return restartingResponse;
                 }
 
@@ -90,14 +95,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 bool domainReloadWaitRequired =
                     await domainReloadWaitSignal.ShouldWaitAsync(cancellationToken).ConfigureAwait(false);
                 response.DomainReloadWaitRequired = domainReloadWaitRequired;
+                ApplyPauseState(response);
                 return response;
             }
             catch (OperationCanceledException)
             {
                 ExecuteDynamicCodeResponse response = DynamicCodeExecutionResponseFactory.CreateCancelledResponse();
                 response.EmitTimingsInJsonResponse = parameters?.IncludeTimings ?? false;
+                ApplyPauseState(response);
                 return response;
             }
+        }
+
+        // Lets an agent recognize a post-interrupt state (e.g. a pause point hit mid-execution)
+        // instead of mistaking a stale-looking result for a bug. ActivePausePointId stays empty
+        // when the Editor is paused for a reason unrelated to a pause point.
+        private static void ApplyPauseState(ExecuteDynamicCodeResponse response)
+        {
+            (bool editorPaused, string activePausePointId) = ExecuteDynamicCodePauseStateResolver.Resolve(
+                EditorApplication.isPaused, UloopPausePointRegistry.GetActivePausePointId());
+            response.EditorPaused = editorPaused;
+            response.ActivePausePointId = activePausePointId;
         }
 
         private static void LogExecutionStart(

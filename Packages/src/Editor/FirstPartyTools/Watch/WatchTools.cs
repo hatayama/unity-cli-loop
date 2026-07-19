@@ -64,17 +64,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public IReadOnlyList<WatchHistoryResponse> History { get; set; } =
             Array.Empty<WatchHistoryResponse>();
 
+        /// <summary>
+        /// Non-empty when recent evaluations returned the same value, suggesting the linked
+        /// pause point has not been hit again since watches only refresh on a changed, paused frame.
+        /// </summary>
+        public string ValueFrozenHint { get; set; } = string.Empty;
+
         internal static WatchEntryResponse FromEntry(WatchExpressionEntry entry)
         {
+            List<WatchHistoryResponse> history = entry.CreateHistorySnapshot()
+                .Select(WatchHistoryResponse.FromEntry)
+                .ToList();
             return new WatchEntryResponse
             {
                 Id = entry.Id,
                 Expression = entry.Expression,
                 MaxHistory = entry.MaxHistory,
                 HistoryDroppedCount = entry.HistoryDroppedCount,
-                History = entry.CreateHistorySnapshot()
-                    .Select(WatchHistoryResponse.FromEntry)
-                    .ToList()
+                History = history,
+                ValueFrozenHint = WatchValueFreezeHintEvaluator.EvaluateFreezeHint(history)
             };
         }
     }

@@ -40,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         Expression = "1 + 2",
                         MaxHistory = 20,
                         HistoryDroppedCount = 0,
+                        ValueFrozenHint = "",
                         History = new List<WatchHistoryResponse>
                         {
                             new()

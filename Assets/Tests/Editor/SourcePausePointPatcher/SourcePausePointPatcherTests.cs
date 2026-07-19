@@ -140,6 +140,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Patch_PhysicsMessageMethodOnMonoBehaviour_ReturnsCachedDispatchWarning()
+        {
+            // Verifies OnCollisionEnter2D on a MonoBehaviour-derived type reports the informational
+            // warning about Unity's physics message dispatch caching its call path independently of
+            // this patch (see To-Do 2 investigation: an already-existing GameObject's collision
+            // callback can miss the pause point even though the method body runs).
+            const string id = "patcher-physical-callback-method";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherPhysicalCallbackMethodFixture.cs", 13);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+
+            Assert.That(patchResult.Success, Is.True);
+            Assert.That(patchResult.Warning, Is.EqualTo(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning));
+        }
+
+        [Test]
+        public void Patch_OrdinaryMessageMethodOnSameMonoBehaviour_DoesNotReturnCachedDispatchWarning()
+        {
+            // Verifies Update() on the same MonoBehaviour fixture does not trigger the
+            // physics-message warning, since only physics message methods carry the caching risk.
+            const string id = "patcher-ordinary-message-method";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherPhysicalCallbackMethodFixture.cs", 18);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+
+            Assert.That(patchResult.Success, Is.True);
+            Assert.That(patchResult.Warning, Is.Empty);
+        }
+
+        [Test]
+        public void Patch_PhysicsNamedMethodOnNonMonoBehaviourType_DoesNotReturnCachedDispatchWarning()
+        {
+            // Verifies the warning requires both a matching method name AND a MonoBehaviour-derived
+            // declaring type, so an unrelated plain class that happens to name a method
+            // "OnTriggerEnter2D" does not produce a false positive.
+            const string id = "patcher-physics-named-method-plain-class";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherPhysicsNamedMethodOnPlainClassFixture.cs", 9);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+
+            Assert.That(patchResult.Success, Is.True);
+            Assert.That(patchResult.Warning, Is.Empty);
+        }
+
+        [Test]
         public void Patch_LoopMethod_PreservesBackEdgeBranchTargetAndCapturesFirstIterationState()
         {
             // Verifies CodeInstruction.labels are moved to the injected sequence's first instruction

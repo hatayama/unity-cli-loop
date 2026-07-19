@@ -47,6 +47,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "The declaring type is a ref struct; this-instance fields are not captured "
             + "(locals and parameters are still captured normally).";
 
+        // Unity's physics message dispatch (OnCollision*/OnTrigger*/OnParticleCollision) resolves
+        // its call path once when the GameObject registers with the physics engine; a Harmony
+        // patch applied after that registration does not reach the cached path, so the pause
+        // point can silently miss a GameObject that already existed before this call. This is
+        // informational only: the same method on a newly created GameObject patches correctly.
+        public const string PhysicalCallbackMayMissExistingInstanceWarning =
+            "This resolves to a Unity physics message method (OnCollision*/OnTrigger*/OnParticleCollision). "
+            + "If the target GameObject already existed before this pause point was enabled, Unity's "
+            + "cached message dispatch may not route through the patch and the pause point may never "
+            + "hit even though the method body runs. Workarounds: destroy and recreate the GameObject "
+            + "after enabling this pause point, or embed UloopPausePoint.Pause(\"id\") directly in the "
+            + "method body and arm it with enable-pause-point --id instead.";
+
         // Release code optimization strips most sequence points and hoists/elides locals, so the
         // Resolver's PDB-driven lookup cannot reliably find a patch location; rejecting up front
         // avoids patching the wrong instruction instead of failing later in a confusing way.

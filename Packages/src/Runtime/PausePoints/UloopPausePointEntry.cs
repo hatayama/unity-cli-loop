@@ -37,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string Mode { get; }
         public int MaxHistory { get; }
         public DateTime EnabledAtUtc { get; }
-        public DateTime ExpiresAtUtc { get; }
+        public DateTime ExpiresAtUtc { get; private set; }
         public int Generation { get; }
         public string Status { get; private set; }
         public bool IsEnabled { get; private set; }
@@ -81,6 +81,26 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 ? "Pause point expired before it was hit."
                 : $"Pause point capture window expired after {HitCount} hit(s); capture history is preserved.";
             return true;
+        }
+
+        // Pushes ExpiresAtUtc forward by the length of an Editor-paused window, so the countdown
+        // does not keep running while a hit has stopped the Editor for inspection. Clamps the
+        // window start to EnabledAtUtc so a pause that began before this entry existed does not
+        // over-credit it.
+        public void ExtendExpiryForPause(DateTime pauseWindowStartUtc, DateTime pauseWindowEndUtc)
+        {
+            if (Status == UloopPausePointStatus.Cleared || Status == UloopPausePointStatus.Expired)
+            {
+                return;
+            }
+
+            DateTime effectiveStart = pauseWindowStartUtc > EnabledAtUtc ? pauseWindowStartUtc : EnabledAtUtc;
+            if (pauseWindowEndUtc <= effectiveStart)
+            {
+                return;
+            }
+
+            ExpiresAtUtc += pauseWindowEndUtc - effectiveStart;
         }
 
         public void MarkCleared(string clearedReason, string message = "Pause point cleared.")

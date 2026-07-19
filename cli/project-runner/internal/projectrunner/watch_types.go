@@ -17,6 +17,7 @@ type watchEntryResponse struct {
 	Expression          string                 `json:"Expression"`
 	MaxHistory          int                    `json:"MaxHistory"`
 	HistoryDroppedCount int                    `json:"HistoryDroppedCount"`
+	ValueFrozenHint     string                 `json:"ValueFrozenHint"`
 	History             []watchHistoryResponse `json:"History"`
 }
 
