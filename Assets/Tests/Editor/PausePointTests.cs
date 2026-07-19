@@ -784,6 +784,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Success, Is.True);
             Assert.That(response.Id, Is.EqualTo($"{FixtureFilePath}:{FixtureLine}"));
             Assert.That(response.ResolvedLine, Is.EqualTo(FixtureLine));
+            Assert.That(response.ResolvedLineText, Is.EqualTo("return sum;"));
             Assert.That(response.ResolvedMethod, Does.Contain("Add"));
 
             EnableBySourceLocationFixture fixture = new();
