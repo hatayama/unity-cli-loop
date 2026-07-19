@@ -45,6 +45,25 @@ namespace io.github.hatayama.uLoopMCP.UnitTests
         }
 
         /// <summary>
+        /// Verifies that matching ports require no settings rewrite.
+        /// </summary>
+        [Test]
+        public void DecideAction_WhenServerPortMatchesSettings_ShouldDoNothing()
+        {
+            WatchdogObservation observation = new(
+                settingsClaimServerRunning: true,
+                serverIsRunning: true,
+                settingsPort: 6000,
+                serverPort: 6000,
+                currentUtc: DateTime.UtcNow,
+                lastRecoveryAttemptUtc: null);
+
+            WatchdogAction action = ServerStateWatchdogService.DecideAction(observation);
+
+            Assert.That(action, Is.EqualTo(WatchdogAction.None));
+        }
+
+        /// <summary>
         /// Verifies that an intentional stop is never undone by the watchdog.
         /// </summary>
         [Test]
@@ -80,6 +99,25 @@ namespace io.github.hatayama.uLoopMCP.UnitTests
             WatchdogAction action = ServerStateWatchdogService.DecideAction(observation);
 
             Assert.That(action, Is.EqualTo(WatchdogAction.None));
+        }
+
+        /// <summary>
+        /// Verifies that a stopped server is recovered on the first watchdog evaluation.
+        /// </summary>
+        [Test]
+        public void DecideAction_WhenNoRecoveryAttemptHasBeenRecorded_ShouldRecoverServer()
+        {
+            WatchdogObservation observation = new(
+                settingsClaimServerRunning: true,
+                serverIsRunning: false,
+                settingsPort: 6000,
+                serverPort: null,
+                currentUtc: DateTime.UtcNow,
+                lastRecoveryAttemptUtc: null);
+
+            WatchdogAction action = ServerStateWatchdogService.DecideAction(observation);
+
+            Assert.That(action, Is.EqualTo(WatchdogAction.RecoverServer));
         }
 
         /// <summary>
