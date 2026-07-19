@@ -262,6 +262,18 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return _latestHitSnapshot;
         }
 
+        /// <summary>
+        /// Read-only signal for callers outside this registry (e.g. execute-dynamic-code) that
+        /// need to know whether the Editor is currently paused because of a pause-point hit, and
+        /// which marker's hit is responsible. Reuses the same _pauseWindowStartUtc window that
+        /// gates expiry instead of introducing new tracking state. Returns empty when no window
+        /// is open, even if the Editor happens to be paused for an unrelated reason.
+        /// </summary>
+        public static string GetActivePausePointId()
+        {
+            return _pauseWindowStartUtc.HasValue ? _latestHitSnapshot?.Id ?? string.Empty : string.Empty;
+        }
+
         public static void ClearLatestHitSnapshot()
         {
             _latestHitSnapshot = null;

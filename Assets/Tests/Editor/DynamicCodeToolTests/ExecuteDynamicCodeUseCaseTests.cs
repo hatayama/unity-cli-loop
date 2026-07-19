@@ -10,6 +10,7 @@ using NUnit.Framework;
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
@@ -759,6 +760,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         [Test]
+        public async Task ExecuteAsync_WhenNoPausePointHasPausedTheEditor_ReturnsEmptyActivePausePointId()
+        {
+            // Tests the default (no pause-point interrupt) path reports an empty ActivePausePointId.
+            MarkForegroundWarmupCompleted();
+            FakeDynamicCodeExecutionRuntime runtime = new(
+                new ExecutionResult { Success = true, Result = "ok" });
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema { Code = "return 1;", CompileOnly = false },
+                CancellationToken.None);
+
+            Assert.That(response.ActivePausePointId, Is.Empty);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenAPausePointHitHoldsTheEditorPaused_ReportsThatMarkerId()
+        {
+            // Tests that a pause point interrupting an in-flight execution is surfaced on the
+            // response, so an agent recognizes a post-interrupt state instead of a stale bug.
+            MarkForegroundWarmupCompleted();
+            FakePausePointPauseController pauseController = new();
+            UloopPausePointRegistry.ConfigureForTests(pauseController, () => DateTime.UtcNow);
+            try
+            {
+                UloopPausePointRegistry.Enable("jump", 30);
+                UloopPausePointRegistry.Hit("jump");
+
+                FakeDynamicCodeExecutionRuntime runtime = new(
+                    new ExecutionResult { Success = true, Result = "ok" });
+                ExecuteDynamicCodeUseCase useCase = new(runtime);
+                ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                    new ExecuteDynamicCodeSchema { Code = "return 1;", CompileOnly = false },
+                    CancellationToken.None);
+
+                Assert.That(response.ActivePausePointId, Is.EqualTo("jump"));
+            }
+            finally
+            {
+                UloopPausePointRegistry.ResetForTests();
+            }
+        }
+
+        [Test]
         public async Task ExecuteAsync_WhenWarmupThrowsObjectDisposedException_ContinuesAsSilentNoOp()
         {
             // Verifies Warm-path ODE is incomplete warm (no CLI error), while Execute still succeeds afterward.
@@ -942,6 +986,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 {
                     _isMainThread = false;
                 }
+            }
+        }
+
+        private sealed class FakePausePointPauseController : IUloopPausePointPauseController
+        {
+            public bool IsPlaying => true;
+            public bool IsPaused { get; private set; }
+
+            public void Pause()
+            {
+                IsPaused = true;
+            }
+
+            public void Resume()
+            {
+                IsPaused = false;
             }
         }
 
