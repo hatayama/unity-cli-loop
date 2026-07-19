@@ -32,6 +32,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // own hit freezes every marker's countdown for the duration of the inspection pause,
         // and the frozen duration is credited back to each entry's ExpiresAtUtc on resume.
         private static DateTime? _pauseWindowStartUtc;
+        // The id of the marker whose hit is actually holding the Editor paused. Kept separate
+        // from _latestHitSnapshot, which every hit overwrites (including Trace-mode hits that
+        // never pause): using _latestHitSnapshot here would let an unrelated Trace hit that
+        // occurs while already paused (e.g. via execute-dynamic-code or Step) misattribute the
+        // pause to itself. Overwritten by a later non-Trace hit, since a second marker hitting
+        // while already paused becomes the new (only) reason the Editor stays paused.
+        private static string _pauseWindowOwnerId;
         // One input can hit several markers in the same frame; tools need the full list,
         // not just the latest hit, to report every marker that interrupted them.
         private static readonly List<UloopPausePointSnapshot> _hitSnapshots = new();
@@ -233,6 +240,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             {
                 _pauseController.Pause();
                 _pauseWindowStartUtc ??= now;
+                _pauseWindowOwnerId = id;
             }
 
             int hitSequence = ++_nextHitSequence;
@@ -265,13 +273,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         /// <summary>
         /// Read-only signal for callers outside this registry (e.g. execute-dynamic-code) that
         /// need to know whether the Editor is currently paused because of a pause-point hit, and
-        /// which marker's hit is responsible. Reuses the same _pauseWindowStartUtc window that
-        /// gates expiry instead of introducing new tracking state. Returns empty when no window
-        /// is open, even if the Editor happens to be paused for an unrelated reason.
+        /// which marker's hit is responsible. Reads _pauseWindowOwnerId rather than
+        /// _latestHitSnapshot, which every hit overwrites (including Trace-mode hits that never
+        /// pause) and would otherwise misattribute an open pause window to an unrelated marker.
+        /// Returns empty when no window is open, even if the Editor happens to be paused for an
+        /// unrelated reason.
         /// </summary>
         public static string GetActivePausePointId()
         {
-            return _pauseWindowStartUtc.HasValue ? _latestHitSnapshot?.Id ?? string.Empty : string.Empty;
+            return _pauseWindowStartUtc.HasValue ? _pauseWindowOwnerId ?? string.Empty : string.Empty;
         }
 
         public static void ClearLatestHitSnapshot()
@@ -370,6 +380,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             DateTime pauseWindowStart = _pauseWindowStartUtc.Value;
             _pauseWindowStartUtc = null;
+            _pauseWindowOwnerId = null;
             foreach (UloopPausePointEntry entry in Entries.Values)
             {
                 entry.ExtendExpiryForPause(pauseWindowStart, now);
@@ -435,6 +446,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             _latestHitSnapshot = null;
             _hitSnapshots.Clear();
             _pauseWindowStartUtc = null;
+            _pauseWindowOwnerId = null;
             Interlocked.Exchange(ref _pendingClientDisconnectResume, 0);
             _pauseController = new UnityEditorPausePointPauseController();
             _nowProvider = () => DateTime.UtcNow;

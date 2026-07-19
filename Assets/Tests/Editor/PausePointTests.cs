@@ -423,6 +423,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void GetActivePausePointId_WhenATraceMarkerHitsWhileAnotherMarkerHoldsThePause_StaysOnTheOriginalMarker()
+        {
+            // Verifies a Trace-mode hit (which never pauses, e.g. fired via execute-dynamic-code
+            // or Step while already paused) does not steal attribution from the marker actually
+            // holding the Editor paused.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Enable("trace-marker", 30, UloopPausePointCaptureMode.Trace);
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePoint.Pause("trace-marker");
+
+            Assert.That(UloopPausePointRegistry.GetActivePausePointId(), Is.EqualTo("jump"));
+        }
+
+        [Test]
+        public void GetActivePausePointId_WhenASecondMarkerHitsWhileAlreadyPaused_UpdatesToTheNewMarker()
+        {
+            // Verifies a second non-Trace hit while already paused becomes the new (only) reason
+            // the Editor stays paused, so attribution correctly moves to it.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Enable("dash", 30);
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePoint.Pause("dash");
+
+            Assert.That(UloopPausePointRegistry.GetActivePausePointId(), Is.EqualTo("dash"));
+        }
+
+        [Test]
         public void GetActivePausePointId_AfterTheFreezeWindowIsClosed_ReturnsEmpty()
         {
             // Verifies the signal clears once the freeze window closes (Clear here), not just once
