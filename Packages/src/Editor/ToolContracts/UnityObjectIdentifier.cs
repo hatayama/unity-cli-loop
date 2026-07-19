@@ -13,11 +13,9 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public static int GetInstanceId(Object unityObject)
         {
             Debug.Assert(unityObject is not null, "unityObject must not be null.");
-#if UNITY_6000_4_OR_NEWER
-            return unchecked((int)EntityId.ToULong(unityObject.GetEntityId()));
-#else
+#pragma warning disable 618, 619 // The public and Go contracts remain int, and Unity provides no supported EntityId-to-int conversion.
             return unityObject.GetInstanceID();
-#endif
+#pragma warning restore 618, 619
         }
     }
 }
