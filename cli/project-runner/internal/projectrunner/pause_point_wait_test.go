@@ -1111,6 +1111,56 @@ func TestPausePointStatusResponseCapturedVariablesJSONRoundTrip(t *testing.T) {
 	}
 }
 
+// Verifies a non-Unity-object variable omits all three UnityObject* fields from its JSON,
+// since Unity always sets them to their zero value ("", "", 0) for such variables.
+func TestPausePointCapturedVariableOmitsUnityObjectFieldsWhenNotAUnityObject(t *testing.T) {
+	variable := pausePointCapturedVariable{
+		Name:     "speed",
+		Scope:    "Local",
+		TypeName: "System.Int32",
+		Value:    "5",
+	}
+
+	marshaled, err := json.Marshal(variable)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	for _, field := range []string{"UnityObjectKind", "UnityObjectPath", "UnityObjectInstanceId"} {
+		if strings.Contains(string(marshaled), field) {
+			t.Fatalf("%s must be omitted for a non-Unity-object variable: %s", field, marshaled)
+		}
+	}
+}
+
+// Verifies UnityObjectKind is the discriminator for "is this a Unity object variable": even
+// when UnityObjectInstanceId happens to be its zero value, UnityObjectKind (and Path, if set)
+// still appear in the JSON because they are non-zero. This locks in the contract that consumers
+// must check UnityObjectKind's presence, not UnityObjectInstanceId's value, to detect a Unity
+// object variable.
+func TestPausePointCapturedVariableKeepsUnityObjectKindWhenInstanceIdIsZero(t *testing.T) {
+	variable := pausePointCapturedVariable{
+		Name:                  "destroyedEnemy",
+		Scope:                 "Local",
+		TypeName:              "UnityEngine.GameObject",
+		Value:                 "(destroyed)",
+		UnityObjectKind:       "Destroyed",
+		UnityObjectInstanceId: 0,
+	}
+
+	marshaled, err := json.Marshal(variable)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	if !strings.Contains(string(marshaled), `"UnityObjectKind":"Destroyed"`) {
+		t.Fatalf("UnityObjectKind must be present when non-empty: %s", marshaled)
+	}
+	if strings.Contains(string(marshaled), "UnityObjectInstanceId") {
+		t.Fatalf("UnityObjectInstanceId must still be omitted when zero, even alongside a non-empty Kind: %s", marshaled)
+	}
+}
+
 // Verifies pause-point-status derives Expired from Status when older Unity packages omit the bool field.
 func TestRunPausePointStatusDerivesExpiredFromStatus(t *testing.T) {
 	originalQuery := queryPausePointStatus
