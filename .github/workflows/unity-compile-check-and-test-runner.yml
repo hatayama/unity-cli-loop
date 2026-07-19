@@ -25,11 +25,13 @@ jobs:
           - unity-version: 2022.3.62f1
             project-path: .
             library-path: Library
+            compile-mode: legacy-builder
             package-warning-scope: false
             run-unit-tests: true
           - unity-version: 6000.5.4f1
             project-path: ci/unity-projects/6000.5
             library-path: ci/unity-projects/6000.5/Library
+            compile-mode: direct-editor
             package-warning-scope: true
             run-unit-tests: false
     # Dependabot PRs cannot access repository secrets (UNITY_LICENSE etc.)
@@ -93,7 +95,7 @@ jobs:
             Library-${{ matrix.unity-version }}-
 
       - name: Purge cached script assemblies
-        if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true' && matrix.package-warning-scope == true
+        if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true' && matrix.compile-mode == 'direct-editor'
         run: rm -rf "${{ matrix.project-path }}/Library/ScriptAssemblies"
 
       - name: Prepare Unity log directory
@@ -101,7 +103,7 @@ jobs:
         run: mkdir -p artifacts
 
       - name: Compile Unity project (2022.3)
-        if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true' && matrix.package-warning-scope == false
+        if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true' && matrix.compile-mode == 'legacy-builder'
         id: compile
         uses: game-ci/unity-builder@1d4ee0697f193f54668e98961d79907911f4b4f2
         timeout-minutes: 30
@@ -118,7 +120,7 @@ jobs:
         continue-on-error: true
 
       - name: Compile Unity project (6000.5)
-        if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true' && matrix.package-warning-scope == true
+        if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true' && matrix.compile-mode == 'direct-editor'
         id: compile-6000-5
         timeout-minutes: 30
         env:
