@@ -674,6 +674,60 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnTimeout(t *testing.T) {
 	}
 }
 
+// Verifies CapturedVariableHistory never repeats the latest hit: CapturedVariables already
+// carries it, so the history must contain only strictly older frames.
+func TestFilterPausePointCapturedVariableHistoryExcludesLatestFrame(t *testing.T) {
+	cases := []struct {
+		name            string
+		lastHitSequence int
+		history         []pausePointCapturedHistoryFrame
+		wantSequences   []int
+	}{
+		{
+			name:            "single-shot leaves history empty",
+			lastHitSequence: 1,
+			history:         []pausePointCapturedHistoryFrame{{HitSequence: 1, FrameCount: 10}},
+			wantSequences:   []int{},
+		},
+		{
+			name:            "continuous with three hits keeps only older frames",
+			lastHitSequence: 3,
+			history: []pausePointCapturedHistoryFrame{
+				{HitSequence: 1, FrameCount: 10},
+				{HitSequence: 2, FrameCount: 20},
+				{HitSequence: 3, FrameCount: 30},
+			},
+			wantSequences: []int{1, 2},
+		},
+		{
+			name:            "no history stays empty",
+			lastHitSequence: 0,
+			history:         nil,
+			wantSequences:   []int{},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			response := filterPausePointCapturedVariableHistory(pausePointStatusResponse{
+				LastHitSequence:         testCase.lastHitSequence,
+				CapturedVariableHistory: testCase.history,
+			})
+
+			gotSequences := make([]int, len(response.CapturedVariableHistory))
+			for index, frame := range response.CapturedVariableHistory {
+				gotSequences[index] = frame.HitSequence
+			}
+			if !reflect.DeepEqual(gotSequences, testCase.wantSequences) {
+				t.Fatalf("filtered history mismatch: got %#v, want %#v", gotSequences, testCase.wantSequences)
+			}
+			if response.CapturedVariableHistory == nil {
+				t.Fatalf("CapturedVariableHistory must never be nil so the JSON shape stays constant")
+			}
+		})
+	}
+}
+
 // Verifies timeout errors include a deterministic diagnosis hint for common stuck states.
 func TestPausePointTimeoutErrorIncludesDiagnosisHint(t *testing.T) {
 	cases := []struct {

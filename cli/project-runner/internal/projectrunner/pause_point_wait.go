@@ -80,6 +80,21 @@ func normalizePausePointStatusResponse(response pausePointStatusResponse) pauseP
 	return response
 }
 
+// filterPausePointCapturedVariableHistory keeps only frames strictly older than the latest
+// hit: CapturedVariables already carries the latest hit's variables, so single-shot mode
+// (one hit) always yields an empty history and continuous mode never repeats it.
+func filterPausePointCapturedVariableHistory(response pausePointStatusResponse) pausePointStatusResponse {
+	filtered := make([]pausePointCapturedHistoryFrame, 0, len(response.CapturedVariableHistory))
+	for _, frame := range response.CapturedVariableHistory {
+		if frame.HitSequence == response.LastHitSequence {
+			continue
+		}
+		filtered = append(filtered, frame)
+	}
+	response.CapturedVariableHistory = filtered
+	return response
+}
+
 func runWaitForPausePointCommand(
 	ctx context.Context,
 	connection unityipc.Connection,
@@ -124,6 +139,7 @@ func runPausePointStatusCommand(
 		return 1
 	}
 	response = normalizePausePointStatusResponse(response)
+	response = filterPausePointCapturedVariableHistory(response)
 
 	result, err := json.Marshal(response)
 	if err != nil {
@@ -158,6 +174,7 @@ func runWaitForPausePoint(
 	}
 
 	if state == pausePointWaitStateHit {
+		response = filterPausePointCapturedVariableHistory(response)
 		// Best-effort: a hit must stay a success even if Unity is busy while paused.
 		// On fetch failure MatchingLogs is omitted entirely, so an empty array always
 		// means "the fetch succeeded and no matching log exists".
