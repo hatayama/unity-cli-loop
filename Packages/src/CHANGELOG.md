@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.0.0-beta.53](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.52...v3.0.0-beta.53) (2026-07-19)
+
+
+### Bug Fixes
+
+* Improve compile and pause-point skill guidance for AI agents ([#1836](https://github.com/hatayama/unity-cli-loop/issues/1836)) ([c7c650e](https://github.com/hatayama/unity-cli-loop/commit/c7c650eceaacb0d0e32d6c1208224c205d1e1210))
+* Keep the Setup Wizard skill target dropdown available ([#1842](https://github.com/hatayama/unity-cli-loop/issues/1842)) ([2d73535](https://github.com/hatayama/unity-cli-loop/commit/2d735357b3e378947b98aa3d4eea02f2e3b0f60a))
+* resolve macOS E2E failures ([#1834](https://github.com/hatayama/unity-cli-loop/issues/1834)) ([6d498b4](https://github.com/hatayama/unity-cli-loop/commit/6d498b490265f986c7250e96ef0a19bc50a16f78))
+* Setup falls back to skill target selection when folders are missing ([#1839](https://github.com/hatayama/unity-cli-loop/issues/1839)) ([7deb9d2](https://github.com/hatayama/unity-cli-loop/commit/7deb9d2412b982e02fe0fc8ea57f8f261e4ef1dd))
+* suppress expected launch-time worker errors ([#1837](https://github.com/hatayama/unity-cli-loop/issues/1837)) ([0be8528](https://github.com/hatayama/unity-cli-loop/commit/0be8528a6c786f699b1fed073437f880bda53c75))
+
 ## [3.0.0-beta.52](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.51...v3.0.0-beta.52) (2026-07-18)
 
 
