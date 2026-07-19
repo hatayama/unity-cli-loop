@@ -1,5 +1,6 @@
 import {
   appendCliTimingsToDynamicCodeResult,
+  diagnoseProjectMismatchError,
   diagnoseRetryableProjectConnectionError,
   isTransportDisconnectError,
   prewarmDynamicCodeAfterLaunch,
@@ -624,6 +625,64 @@ describe('diagnoseRetryableProjectConnectionError', () => {
     });
 
     expect(error).toBe(originalError);
+  });
+});
+
+describe('diagnoseProjectMismatchError', () => {
+  it('returns UnityNotRunningError when the target Unity process is absent', async () => {
+    const mismatch = new ProjectMismatchError('/expected', '/connected');
+
+    const error = await diagnoseProjectMismatchError(mismatch, '/expected', true, {
+      findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue(null),
+    });
+
+    expect(error).toBeInstanceOf(UnityNotRunningError);
+  });
+
+  it('returns a server-starting error when the target Unity process has a fresh startup lock', async () => {
+    const mismatch = new ProjectMismatchError('/expected', '/connected');
+
+    const error = await diagnoseProjectMismatchError(mismatch, '/expected', true, {
+      findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue({ pid: 1234 }),
+      existsSyncFn: jest.fn().mockReturnValue(true),
+      statSyncFn: jest.fn().mockReturnValue(createStatResult(Date.now())),
+    });
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('UNITY_SERVER_STARTING');
+  });
+
+  it('returns UnityServerNotRunningError when Unity is running without a startup lock', async () => {
+    const mismatch = new ProjectMismatchError('/expected', '/connected');
+
+    const error = await diagnoseProjectMismatchError(mismatch, '/expected', true, {
+      findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue({ pid: 1234 }),
+      existsSyncFn: jest.fn().mockReturnValue(false),
+    });
+
+    expect(error).toBeInstanceOf(UnityServerNotRunningError);
+  });
+
+  it('preserves ProjectMismatchError when process detection fails', async () => {
+    const mismatch = new ProjectMismatchError('/expected', '/connected');
+
+    const error = await diagnoseProjectMismatchError(mismatch, '/expected', true, {
+      findRunningUnityProcessForProjectFn: jest.fn().mockResolvedValue(undefined),
+    });
+
+    expect(error).toBe(mismatch);
+  });
+
+  it('preserves ProjectMismatchError when an explicit port disables diagnosis', async () => {
+    const mismatch = new ProjectMismatchError('/expected', '/connected');
+    const findRunningUnityProcessForProjectFn = jest.fn();
+
+    const error = await diagnoseProjectMismatchError(mismatch, '/expected', false, {
+      findRunningUnityProcessForProjectFn,
+    });
+
+    expect(error).toBe(mismatch);
+    expect(findRunningUnityProcessForProjectFn).not.toHaveBeenCalled();
   });
 });
 

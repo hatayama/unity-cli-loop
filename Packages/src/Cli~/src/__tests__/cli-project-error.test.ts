@@ -27,7 +27,7 @@ describe('getProjectResolutionErrorLines', () => {
       '  Connected to: /connected/project',
       '',
       'Another Unity instance was found, but it belongs to a different project.',
-      'Start the Unity Editor for this project, or use --project-path to specify the target.',
+      'This can happen when multiple Unity Editors leave a stale server port. Restart the target Unity with: uloop launch -r /expected/project',
     ]);
   });
 
@@ -39,7 +39,8 @@ describe('getProjectResolutionErrorLines', () => {
       '',
       '  Project: /project/root',
       '',
-      'Start the server from: Window > Unity CLI Loop > Server',
+      'If the installed package includes the server state watchdog, wait several seconds for it to recover the server and retry.',
+      'If recovery does not complete, restart Unity with: uloop launch -r /project/root',
     ]);
   });
 });

@@ -45,6 +45,15 @@ namespace io.github.hatayama.uLoopMCP
         public static int ServerPort => mcpServer?.Port ?? McpEditorSettings.GetCustomPort();
 
         /// <summary>
+        /// Rewrites the persisted session to match the currently running server.
+        /// </summary>
+        internal static void SynchronizeRunningServerSettings()
+        {
+            Debug.Assert(mcpServer?.IsRunning == true, "A running server is required to synchronize settings.");
+            SaveRunningServerSession(mcpServer.Port);
+        }
+
+        /// <summary>
         /// Current recovery task. Can be awaited by other components to ensure recovery completes first.
         /// </summary>
         public static Task RecoveryTask => _currentRecoveryTask;
@@ -404,8 +413,8 @@ namespace io.github.hatayama.uLoopMCP
                 }
                 else
                 {
-                    // If it ultimately fails, clear the SessionState.
-                    McpEditorSettings.ClearServerSession();
+                    // Preserve the user's start intent so the watchdog can retry after the conflicting port is released.
+                    McpEditorSettings.MarkServerRecoveryPending();
                 }
             }
         }
@@ -482,7 +491,7 @@ namespace io.github.hatayama.uLoopMCP
                             "server_auto_recovery_failed",
                             $"Automatic recovery after unexpected exit failed: {task.Exception?.GetBaseException().Message}"
                         );
-                        McpEditorSettings.ClearServerSession();
+                        McpEditorSettings.MarkServerRecoveryPending();
                     }
                 }, TaskScheduler.FromCurrentSynchronizationContext());
             };
@@ -812,8 +821,8 @@ namespace io.github.hatayama.uLoopMCP
 
                 if (!started)
                 {
-                    // Ensure session reflects stopped state on failure
-                    McpEditorSettings.ClearServerSession();
+                    // Preserve the user's start intent so the watchdog can retry after the conflicting port is released.
+                    McpEditorSettings.MarkServerRecoveryPending();
                     McpEditorSettings.ClearReconnectingFlags();
                     Debug.LogError($"[{McpConstants.PROJECT_NAME}] Recovery failed: no available port to bind. SavedPort={savedPort}, LastAttemptPort={chosenPort}");
                     throw new InvalidOperationException($"Failed to bind any recovery port. SavedPort={savedPort}, LastAttemptPort={chosenPort}.");

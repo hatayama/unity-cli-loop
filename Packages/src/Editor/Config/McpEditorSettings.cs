@@ -44,7 +44,8 @@ namespace io.github.hatayama.uLoopMCP
         public bool installSkillsFlat = true;
         
         // Session State Settings (moved from McpSessionManager)
-        // Default to true so the server starts automatically on fresh install
+        // This is the desired server state: automatic recovery failures preserve true,
+        // while an intentional stop changes it to false.
         public bool isServerRunning = true;
         public bool isAfterCompile = false;
         public bool isDomainReloadInProgress = false;
@@ -565,6 +566,18 @@ namespace io.github.hatayama.uLoopMCP
             UpdateSettings(settings => settings with
             {
                 isServerRunning = false,
+                serverSessionId = string.Empty
+            });
+        }
+
+        /// <summary>
+        /// Preserves the user's request for an active server after an automatic recovery failure.
+        /// </summary>
+        public static void MarkServerRecoveryPending()
+        {
+            UpdateSettings(settings => settings with
+            {
+                isServerRunning = true,
                 serverSessionId = string.Empty
             });
         }
