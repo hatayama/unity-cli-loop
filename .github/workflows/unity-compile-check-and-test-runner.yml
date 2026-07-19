@@ -134,9 +134,11 @@ jobs:
               mkdir -p /root/.local/share/unity3d/Unity
               printf "%s" "$UNITY_LICENSE" > /root/.local/share/unity3d/Unity/Unity_lic.ulf
               unity-editor -batchmode -nographics -quit \
+                -manualLicenseFile /root/.local/share/unity3d/Unity/Unity_lic.ulf \
                 -projectPath /workspace/ci/unity-projects/6000.5 \
                 -logFile /workspace/artifacts/unity-build.log
             '
+        continue-on-error: true
 
       - name: Check for compile errors and warnings
         if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true'
