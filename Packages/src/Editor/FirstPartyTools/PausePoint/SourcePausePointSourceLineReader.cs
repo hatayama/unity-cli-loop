@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -15,13 +16,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return string.Empty;
             }
 
-            string[] lines = File.ReadAllLines(absoluteFilePath);
-            if (lineNumber > lines.Length)
-            {
-                return string.Empty;
-            }
-
-            return lines[lineNumber - 1].Trim();
+            string line = File.ReadLines(absoluteFilePath).Skip(lineNumber - 1).FirstOrDefault();
+            return line != null ? line.Trim() : string.Empty;
         }
     }
 }
