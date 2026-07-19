@@ -189,7 +189,7 @@ jobs:
           else
             echo "::warning::Could not find Unity log file for analysis"
             # Unity 6000.5's builder reports an untitled-scene build failure after successful script compilation.
-            if [ "${{ matrix.package-warning-scope }}" != "true" ] && [ "${{ steps.compile.outcome }}" == "failure" ]; then
+            if [ "${{ matrix.package-warning-scope }}" == "true" ] || [ "${{ steps.compile.outcome }}" == "failure" ]; then
               echo "::error::Unity compilation failed"
               exit 1
             fi
