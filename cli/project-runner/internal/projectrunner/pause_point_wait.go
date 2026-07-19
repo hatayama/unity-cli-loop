@@ -35,14 +35,16 @@ var (
 )
 
 type waitForPausePointOptions struct {
-	id                   string
-	timeoutSeconds       int
-	timeout              time.Duration
-	matchingLogsMaxCount int
+	id                    string
+	timeoutSeconds        int
+	timeout               time.Duration
+	matchingLogsMaxCount  int
+	capturedVariablesMode pausePointCapturedVariablesMode
 }
 
 type pausePointStatusOptions struct {
-	id string
+	id                    string
+	capturedVariablesMode pausePointCapturedVariablesMode
 }
 
 type pausePointWaitState string
@@ -77,6 +79,21 @@ func normalizePausePointStatusResponse(response pausePointStatusResponse) pauseP
 	}
 
 	response.RemainingMilliseconds = remainingMilliseconds
+	return response
+}
+
+// filterPausePointCapturedVariableHistory keeps only frames strictly older than the latest
+// hit: CapturedVariables already carries the latest hit's variables, so single-shot mode
+// (one hit) always yields an empty history and continuous mode never repeats it.
+func filterPausePointCapturedVariableHistory(response pausePointStatusResponse) pausePointStatusResponse {
+	filtered := make([]pausePointCapturedHistoryFrame, 0, len(response.CapturedVariableHistory))
+	for _, frame := range response.CapturedVariableHistory {
+		if frame.HitSequence == response.LastHitSequence {
+			continue
+		}
+		filtered = append(filtered, frame)
+	}
+	response.CapturedVariableHistory = filtered
 	return response
 }
 
@@ -124,6 +141,8 @@ func runPausePointStatusCommand(
 		return 1
 	}
 	response = normalizePausePointStatusResponse(response)
+	response = filterPausePointCapturedVariableHistory(response)
+	response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 
 	result, err := json.Marshal(response)
 	if err != nil {
@@ -158,6 +177,8 @@ func runWaitForPausePoint(
 	}
 
 	if state == pausePointWaitStateHit {
+		response = filterPausePointCapturedVariableHistory(response)
+		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 		// Best-effort: a hit must stay a success even if Unity is busy while paused.
 		// On fetch failure MatchingLogs is omitted entirely, so an empty array always
 		// means "the fetch succeeded and no matching log exists".
@@ -167,7 +188,7 @@ func runWaitForPausePoint(
 			payload = pausePointWaitResult{
 				pausePointStatusResponse: response,
 				MatchingLogs:             logs.Logs,
-				EvidenceSummary:          buildPausePointEvidenceSummary(response, logs),
+				Warning:                  buildPausePointWarning(logs, response.HitCount),
 			}
 		}
 		result, marshalErr := json.Marshal(payload)
@@ -193,7 +214,10 @@ func runWaitForPausePoint(
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
 		if logsErr == nil {
 			waitErr.Details["MatchingLogs"] = logs.Logs
-			waitErr.Details["EvidenceSummary"] = buildPausePointEvidenceSummary(response, logs)
+			warning := buildPausePointWarning(logs, response.HitCount)
+			if warning != "" {
+				waitErr.Details["Warning"] = warning
+			}
 		}
 	}
 	clierrors.WriteErrorEnvelope(stderr, waitErr)
@@ -202,9 +226,10 @@ func runWaitForPausePoint(
 
 func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, error) {
 	options := waitForPausePointOptions{
-		timeoutSeconds:       pausePointDefaultTimeoutSeconds,
-		timeout:              time.Duration(pausePointDefaultTimeoutSeconds) * time.Second,
-		matchingLogsMaxCount: pausePointDefaultLogsMaxCount,
+		timeoutSeconds:        pausePointDefaultTimeoutSeconds,
+		timeout:               time.Duration(pausePointDefaultTimeoutSeconds) * time.Second,
+		matchingLogsMaxCount:  pausePointDefaultLogsMaxCount,
+		capturedVariablesMode: pausePointCapturedVariablesModeFull,
 	}
 
 	for index := 0; index < len(args); index++ {
@@ -231,6 +256,12 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 					"--"+clicore.PausePointLogsMaxCountFlagName, value, "positive integer")
 			}
 			options.matchingLogsMaxCount = maxCount
+		case clicore.PausePointCapturedVariablesFlagName:
+			mode, parseErr := parsePausePointCapturedVariablesMode(value)
+			if parseErr != nil {
+				return waitForPausePointOptions{}, parseErr
+			}
+			options.capturedVariablesMode = mode
 		default:
 			return waitForPausePointOptions{}, &clierrors.ArgumentError{
 				Message:     "Unknown option for await-pause-point: --" + name,
@@ -259,7 +290,7 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 }
 
 func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error) {
-	options := pausePointStatusOptions{}
+	options := pausePointStatusOptions{capturedVariablesMode: pausePointCapturedVariablesModeFull}
 
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
@@ -271,6 +302,12 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 		switch name {
 		case clicore.PausePointIDFlagName:
 			options.id = value
+		case clicore.PausePointCapturedVariablesFlagName:
+			mode, parseErr := parsePausePointCapturedVariablesMode(value)
+			if parseErr != nil {
+				return pausePointStatusOptions{}, parseErr
+			}
+			options.capturedVariablesMode = mode
 		default:
 			return pausePointStatusOptions{}, &clierrors.ArgumentError{
 				Message:     "Unknown option for pause-point-status: --" + name,

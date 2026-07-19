@@ -22,10 +22,12 @@ var nativeCommandOptions = map[string][]string{
 		"--" + clicore.PausePointIDFlagName,
 		"--" + clicore.PausePointTimeoutFlagName,
 		"--" + clicore.PausePointLogsMaxCountFlagName,
+		"--" + clicore.PausePointCapturedVariablesFlagName,
 		"--" + tooldocs.ProjectPathFlagName,
 	},
 	clicore.PausePointStatusUserCommandName: {
 		"--" + clicore.PausePointIDFlagName,
+		"--" + clicore.PausePointCapturedVariablesFlagName,
 		"--" + tooldocs.ProjectPathFlagName,
 	},
 }

@@ -35,7 +35,7 @@ uloop await-pause-point --id "Assets/Scripts/Enemy.cs:42" --timeout-seconds 30
 Choose the capture mode when enabling a pause point:
 
 - `single-shot` is the default. The first hit pauses Unity and disarms the marker.
-- `continuous` pauses Unity on every hit and remains armed. Each hit adds a frame to `CapturedVariableHistory`, while `CapturedVariables` remains the latest-hit compatibility view.
+- `continuous` pauses Unity on every hit and remains armed. `CapturedVariables` always holds the latest hit; `CapturedVariableHistory` holds only strictly older frames (the frame matching the latest hit is never repeated there), so with a single hit the history is empty by design.
 - `trace` remains armed and records each hit without pausing Unity.
 
 `--max-history` defaults to 20 and accepts values from 1 through 100. When the limit is exceeded, the oldest frames are dropped and `HistoryDroppedCount` reports how many were removed. `pause-point-status` returns the current `Mode`, `MaxHistory`, history frames, and dropped count.
@@ -58,14 +58,35 @@ Every hit response embeds `CapturedVariables`: the method's in-scope locals, its
 - `execute-dynamic-code` during the pause sees the interrupted method's **post-interrupt** state, not this pre-line snapshot. Use `CapturedVariables` for pre-line evidence; use the raw capture API below when you need live references while paused. If you suspect a captured value is stale or wrong, cross-check it against the live scene object with `execute-dynamic-code` (for example reading `transform.position` off the instance found via `UnityObjectPath`) rather than trusting either source alone. `execute-dynamic-code` responses also carry `EditorPaused` and `ActivePausePointId` — these fields appear only while the Editor is paused, so a call made while a pause point still has Unity paused is unambiguous instead of looking like a stale or buggy result.
 - `Scope` is `Local`, `Parameter`, `InstanceField`, or `This`.
 - The snapshot also includes a synthetic `this` entry (Scope `This`) for the paused instance itself, so you can tell which instance or GameObject was hit via its `UnityObjectPath` and `UnityObjectInstanceId`. For an async or coroutine method it resolves to the original outer instance, not the compiler-generated state machine, and static methods emit no `this` entry. While Unity is still paused, `UloopPausePoint.TryGetCapturedValue("this")` returns the live instance reference (for example so a watch expression can read `transform.position`).
-- `UnityEngine.Object` values additionally carry `UnityObjectKind` (`SceneObject`, `PrefabAsset`, `Asset`, `RuntimeInstance`, or `Destroyed`), `UnityObjectPath`, and `UnityObjectInstanceId`. Use these as handles for the next dig: a `SceneObject` path feeds `get-hierarchy`/`find-game-objects`, an asset path locates the asset, and the InstanceID works with `execute-dynamic-code`.
+- `UnityEngine.Object` values additionally carry `UnityObjectKind` (`SceneObject`, `PrefabAsset`, `Asset`, `RuntimeInstance`, or `Destroyed`), `UnityObjectPath`, and `UnityObjectInstanceId`. These three fields appear only for Unity object values; a non-Unity-object variable (an `int`, a `string`, a plain class) omits all three from the JSON entirely instead of sending them as empty/zero. Check whether `UnityObjectKind` is present to tell the two cases apart. Use the fields as handles for the next dig: a `SceneObject` path feeds `get-hierarchy`/`find-game-objects`, an asset path locates the asset, and the InstanceID works with `execute-dynamic-code`.
 - `CapturedVariablesTruncated=true` means at least one value was clipped to the length cap or the variable-count cap stopped enumeration; clipped values are still present up to the cap.
 - async and coroutine methods work: hoisted locals and the original `this` fields appear under their normal names.
 - If the patched method ran off the main thread, values degrade to type names with a `(captured off main thread)` note; the hit itself is still recorded.
 
-Read `EvidenceSummary` first when it is present. It groups `EditorState`, pause point hit metadata, matching-log counts, truncation status, and warnings so you can tell whether the evidence is a single clean hit or needs closer inspection. `MatchingLogs` (log entries whose text contains the marker id) is still embedded, but source-derived ids rarely appear in log text, so treat `CapturedVariables` as the primary variable evidence.
+`await-pause-point`'s hit response also carries a top-level `Warning` (omitted when empty): it flags multiple hits, multiple matching logs, or truncated matching logs, so you can tell a single clean hit apart from evidence that needs closer inspection. `MatchingLogs` (log entries whose text contains the marker id) is still embedded, but source-derived ids rarely appear in log text, so treat `CapturedVariables` as the primary variable evidence.
 
 Use `Generation`, `EnabledAtUtc`, and the hit sequence fields from the hit or status response to tell a fresh marker from stale evidence with the same id. `RemainingMilliseconds` and `Expired` are returned directly so you do not need to infer marker lifetime from elapsed time.
+
+### Pulling More Than the Default Response Carries
+
+The hit and status responses are push-first and kept lean by default: no field is ever a re-summary of another field, and a variable's `Value` is the only per-entry cost. For a class with dozens of `[SerializeField]` fields, a `continuous` marker's history still multiplies entry count by `MaxHistory` (default 20), which can be a lot of `Value` strings to carry around when you only need to know which names were captured.
+
+Pull only what you need instead of paying for it all up front:
+
+- `--captured-variables names` on `await-pause-point`/`pause-point-status` drops `Value` from every captured variable (including every history frame) and keeps `Name`/`Scope`/`TypeName`. Use it first on a field-heavy class, then fetch specific values afterward.
+- `uloop pause-point-status --id <id>` returns the full response again, including every `Value`, whenever you need it — call it plain (no `--captured-variables`) for the complete picture after a lightweight `names` scan.
+
+### Choosing the Right Evidence Source
+
+Three different sources answer three different questions about a captured variable; pick by what you actually need:
+
+| Need | Source | Notes |
+|---|---|---|
+| A value type's value at capture time | `UloopPausePoint.TryGetCapturedValue("name")` | Faithful: value types are a boxed copy taken at capture time, so this never drifts. |
+| A reference type's *live* current state | `UloopPausePoint.TryGetCapturedValue("name")` | The reference itself is live, so the object it points to may have changed since capture (or been destroyed/resumed away). Only available while Unity is still paused. |
+| A reference type's state *as it was at capture time* | `uloop pause-point-status --id <id>` | The only faithful source for this: the response is a formatted string snapshot taken at capture time and stored in the registry, so it never drifts and stays retrievable after resume until the next clear or domain reload. |
+
+Capturing a deep copy at hit time was deliberately not adopted: it would cost hot-path performance and risk getter side effects, so the formatted-string snapshot (`pause-point-status`) remains the only way to get capture-time-faithful evidence for reference types.
 
 ## Raw Capture While Paused
 

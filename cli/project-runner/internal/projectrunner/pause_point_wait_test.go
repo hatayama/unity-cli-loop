@@ -399,6 +399,50 @@ func TestParseWaitForPausePointOptionsParsesMatchingLogFlags(t *testing.T) {
 	}
 }
 
+// Verifies --captured-variables defaults to full, accepts "names", and rejects other values,
+// for both await-pause-point and pause-point-status option parsing.
+func TestParsePausePointCapturedVariablesModeFlag(t *testing.T) {
+	waitDefaults, err := parseWaitForPausePointOptions([]string{"--id", "jump"})
+	if err != nil {
+		t.Fatalf("default parse failed: %v", err)
+	}
+	if waitDefaults.capturedVariablesMode != pausePointCapturedVariablesModeFull {
+		t.Fatalf("default captured-variables mode mismatch: %#v", waitDefaults)
+	}
+
+	waitNames, err := parseWaitForPausePointOptions([]string{"--id", "jump", "--captured-variables", "names"})
+	if err != nil {
+		t.Fatalf("names parse failed: %v", err)
+	}
+	if waitNames.capturedVariablesMode != pausePointCapturedVariablesModeNames {
+		t.Fatalf("names captured-variables mode mismatch: %#v", waitNames)
+	}
+
+	if _, err := parseWaitForPausePointOptions([]string{"--id", "jump", "--captured-variables", "bogus"}); err == nil {
+		t.Fatalf("expected error for invalid captured-variables value")
+	}
+
+	statusDefaults, err := parsePausePointStatusOptions([]string{"--id", "jump"})
+	if err != nil {
+		t.Fatalf("default status parse failed: %v", err)
+	}
+	if statusDefaults.capturedVariablesMode != pausePointCapturedVariablesModeFull {
+		t.Fatalf("default status captured-variables mode mismatch: %#v", statusDefaults)
+	}
+
+	statusNames, err := parsePausePointStatusOptions([]string{"--id", "jump", "--captured-variables", "names"})
+	if err != nil {
+		t.Fatalf("names status parse failed: %v", err)
+	}
+	if statusNames.capturedVariablesMode != pausePointCapturedVariablesModeNames {
+		t.Fatalf("names status captured-variables mode mismatch: %#v", statusNames)
+	}
+
+	if _, err := parsePausePointStatusOptions([]string{"--id", "jump", "--captured-variables", "bogus"}); err == nil {
+		t.Fatalf("expected error for invalid status captured-variables value")
+	}
+}
+
 // Verifies a hit response always embeds marker-matching logs.
 func TestRunWaitForPausePointEmbedsMatchingLogsOnHit(t *testing.T) {
 	originalQuery := queryPausePointStatus
@@ -477,23 +521,14 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnHit(t *testing.T) {
 	if result.MatchingLogs[0].StackTrace != "trace one" {
 		t.Fatalf("matching log stack trace mismatch: %#v", result.MatchingLogs)
 	}
-	if result.EvidenceSummary.EditorState.CapturedAt != "PausePointHit" {
-		t.Fatalf("editor state summary mismatch: %#v", result.EvidenceSummary)
+	if result.EditorState.CapturedAt != "PausePointHit" {
+		t.Fatalf("editor state mismatch: %#v", result.EditorState)
 	}
-	if result.EvidenceSummary.PausePoint.Generation != 7 || result.EvidenceSummary.PausePoint.FirstHitSequence != 3 {
-		t.Fatalf("pause point summary mismatch: %#v", result.EvidenceSummary)
+	if result.Generation != 7 || result.FirstHitSequence != 3 {
+		t.Fatalf("pause point fields mismatch: %#v", result)
 	}
-	if !result.EvidenceSummary.MatchingLogs.MultipleMatchingLogsObserved ||
-		result.EvidenceSummary.MatchingLogs.MatchingLogCount != 2 ||
-		result.EvidenceSummary.MatchingLogs.ReturnedLogCount != 2 {
-		t.Fatalf("matching log summary mismatch: %#v", result.EvidenceSummary)
-	}
-	if result.EvidenceSummary.MatchingLogs.LogType != "Error" ||
-		!result.EvidenceSummary.MatchingLogs.IncludeStackTrace {
-		t.Fatalf("matching log metadata mismatch: %#v", result.EvidenceSummary)
-	}
-	if !strings.Contains(result.EvidenceSummary.Warning, "Multiple matching logs") {
-		t.Fatalf("warning mismatch: %#v", result.EvidenceSummary)
+	if !strings.Contains(result.Warning, "Multiple matching logs") {
+		t.Fatalf("warning mismatch: %#v", result.Warning)
 	}
 }
 
@@ -552,8 +587,11 @@ func TestRunWaitForPausePointEmbedsEmptyMatchingLogsWhenNoneMatch(t *testing.T) 
 	if result.MatchingLogs == nil || len(result.MatchingLogs) != 0 {
 		t.Fatalf("MatchingLogs must be an explicit empty array: %#v", result.MatchingLogs)
 	}
-	if result.EvidenceSummary.Warning != "" {
-		t.Fatalf("warning should be empty when there are no matching logs: %#v", result.EvidenceSummary)
+	if result.Warning != "" {
+		t.Fatalf("warning should be empty when there are no matching logs: %#v", result.Warning)
+	}
+	if strings.Contains(stdout.String(), "Warning") {
+		t.Fatalf("Warning must be omitted from JSON when empty: %s", stdout.String())
 	}
 }
 
@@ -603,8 +641,8 @@ func TestRunWaitForPausePointIgnoresLogFetchFailure(t *testing.T) {
 	if strings.Contains(stdout.String(), "MatchingLogs") {
 		t.Fatalf("MatchingLogs must be omitted when the fetch fails: %s", stdout.String())
 	}
-	if strings.Contains(stdout.String(), "EvidenceSummary") {
-		t.Fatalf("EvidenceSummary must be omitted when the fetch fails: %s", stdout.String())
+	if strings.Contains(stdout.String(), "Warning") {
+		t.Fatalf("Warning must be omitted when the fetch fails: %s", stdout.String())
 	}
 }
 
@@ -674,13 +712,63 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnTimeout(t *testing.T) {
 	if !ok || len(matchingLogs) != 1 {
 		t.Fatalf("MatchingLogs detail mismatch: %#v", envelope.Error.Details)
 	}
-	evidenceSummary, ok := envelope.Error.Details["EvidenceSummary"].(map[string]any)
-	if !ok {
-		t.Fatalf("EvidenceSummary detail missing: %#v", envelope.Error.Details)
+	warning, ok := envelope.Error.Details["Warning"].(string)
+	if !ok || !strings.Contains(warning, "may be truncated") {
+		t.Fatalf("Warning detail mismatch: %#v", envelope.Error.Details)
 	}
-	evidenceLogs, ok := evidenceSummary["MatchingLogs"].(map[string]any)
-	if !ok || evidenceLogs["MayBeTruncated"] != true || evidenceLogs["MatchingLogCount"] != float64(3) {
-		t.Fatalf("EvidenceSummary matching logs mismatch: %#v", evidenceSummary)
+}
+
+// Verifies CapturedVariableHistory never repeats the latest hit: CapturedVariables already
+// carries it, so the history must contain only strictly older frames.
+func TestFilterPausePointCapturedVariableHistoryExcludesLatestFrame(t *testing.T) {
+	cases := []struct {
+		name            string
+		lastHitSequence int
+		history         []pausePointCapturedHistoryFrame
+		wantSequences   []int
+	}{
+		{
+			name:            "single-shot leaves history empty",
+			lastHitSequence: 1,
+			history:         []pausePointCapturedHistoryFrame{{HitSequence: 1, FrameCount: 10}},
+			wantSequences:   []int{},
+		},
+		{
+			name:            "continuous with three hits keeps only older frames",
+			lastHitSequence: 3,
+			history: []pausePointCapturedHistoryFrame{
+				{HitSequence: 1, FrameCount: 10},
+				{HitSequence: 2, FrameCount: 20},
+				{HitSequence: 3, FrameCount: 30},
+			},
+			wantSequences: []int{1, 2},
+		},
+		{
+			name:            "no history stays empty",
+			lastHitSequence: 0,
+			history:         nil,
+			wantSequences:   []int{},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			response := filterPausePointCapturedVariableHistory(pausePointStatusResponse{
+				LastHitSequence:         testCase.lastHitSequence,
+				CapturedVariableHistory: testCase.history,
+			})
+
+			gotSequences := make([]int, len(response.CapturedVariableHistory))
+			for index, frame := range response.CapturedVariableHistory {
+				gotSequences[index] = frame.HitSequence
+			}
+			if !reflect.DeepEqual(gotSequences, testCase.wantSequences) {
+				t.Fatalf("filtered history mismatch: got %#v, want %#v", gotSequences, testCase.wantSequences)
+			}
+			if response.CapturedVariableHistory == nil {
+				t.Fatalf("CapturedVariableHistory must never be nil so the JSON shape stays constant")
+			}
+		})
 	}
 }
 
@@ -980,13 +1068,13 @@ func TestRunPausePointStatusReturnsCapturedVariables(t *testing.T) {
 					Name:     "speed",
 					Scope:    "Local",
 					TypeName: "System.Int32",
-					Value:    "5",
+					Value:    pausePointVariableValue("5"),
 				},
 				{
 					Name:                  "enemy",
 					Scope:                 "InstanceField",
 					TypeName:              "UnityEngine.GameObject",
-					Value:                 "Enemy",
+					Value:                 pausePointVariableValue("Enemy"),
 					UnityObjectKind:       "SceneObject",
 					UnityObjectPath:       "MainScene:/Root/Enemy",
 					UnityObjectInstanceId: -1234,
@@ -1018,13 +1106,78 @@ func TestRunPausePointStatusReturnsCapturedVariables(t *testing.T) {
 	if len(response.CapturedVariables) != 2 {
 		t.Fatalf("expected 2 captured variables, got %#v", response.CapturedVariables)
 	}
-	if response.CapturedVariables[0].Name != "speed" || response.CapturedVariables[0].Value != "5" {
-		t.Fatalf("first captured variable mismatch: %#v", response.CapturedVariables[0])
+	first := response.CapturedVariables[0]
+	if first.Name != "speed" || first.Value == nil || *first.Value != "5" {
+		t.Fatalf("first captured variable mismatch: %#v", first)
 	}
 	second := response.CapturedVariables[1]
 	if second.Name != "enemy" || second.UnityObjectKind != "SceneObject" ||
 		second.UnityObjectPath != "MainScene:/Root/Enemy" || second.UnityObjectInstanceId != -1234 {
 		t.Fatalf("second captured variable mismatch: %#v", second)
+	}
+}
+
+// Verifies --captured-variables names strips Value from every captured variable (including
+// history frames) while keeping Name/Scope/TypeName, for pause-point-status output.
+func TestRunPausePointStatusCapturedVariablesNamesOmitsValues(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	defer func() {
+		queryPausePointStatus = originalQuery
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:              id,
+			Status:          pausePointStatusHit,
+			IsHit:           true,
+			Mode:            "continuous",
+			LastHitSequence: 2,
+			CapturedVariables: []pausePointCapturedVariable{
+				{Name: "speed", Scope: "Local", TypeName: "System.Int32", Value: pausePointVariableValue("5")},
+			},
+			CapturedVariableHistory: []pausePointCapturedHistoryFrame{
+				{
+					HitSequence: 1,
+					CapturedVariables: []pausePointCapturedVariable{
+						{Name: "speed", Scope: "Local", TypeName: "System.Int32", Value: pausePointVariableValue("3")},
+					},
+				},
+			},
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointStatusCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump", "--captured-variables", "names"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), `"Value"`) {
+		t.Fatalf("Value must be omitted in names mode: %s", stdout.String())
+	}
+
+	var response pausePointStatusResponse
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
+	}
+	if len(response.CapturedVariables) != 1 || response.CapturedVariables[0].Name != "speed" ||
+		response.CapturedVariables[0].TypeName != "System.Int32" {
+		t.Fatalf("CapturedVariables mismatch: %#v", response.CapturedVariables)
+	}
+	if len(response.CapturedVariableHistory) != 1 ||
+		len(response.CapturedVariableHistory[0].CapturedVariables) != 1 ||
+		response.CapturedVariableHistory[0].CapturedVariables[0].Name != "speed" {
+		t.Fatalf("CapturedVariableHistory mismatch: %#v", response.CapturedVariableHistory)
 	}
 }
 
@@ -1038,7 +1191,7 @@ func TestPausePointStatusResponseCapturedVariablesJSONRoundTrip(t *testing.T) {
 				Name:                  "speed",
 				Scope:                 "Local",
 				TypeName:              "System.Int32",
-				Value:                 "5",
+				Value:                 pausePointVariableValue("5"),
 				UnityObjectKind:       "SceneObject",
 				UnityObjectPath:       "MainScene:/Root/Enemy",
 				UnityObjectInstanceId: -1234,
@@ -1064,6 +1217,85 @@ func TestPausePointStatusResponseCapturedVariablesJSONRoundTrip(t *testing.T) {
 	if original.CapturedVariablesTruncated != roundTripped.CapturedVariablesTruncated {
 		t.Fatalf("capturedVariablesTruncated mismatch after round trip: got %v, want %v",
 			roundTripped.CapturedVariablesTruncated, original.CapturedVariablesTruncated)
+	}
+}
+
+// Verifies a non-Unity-object variable omits all three UnityObject* fields from its JSON,
+// since Unity always sets them to their zero value ("", "", 0) for such variables.
+func TestPausePointCapturedVariableOmitsUnityObjectFieldsWhenNotAUnityObject(t *testing.T) {
+	variable := pausePointCapturedVariable{
+		Name:     "speed",
+		Scope:    "Local",
+		TypeName: "System.Int32",
+		Value:    pausePointVariableValue("5"),
+	}
+
+	marshaled, err := json.Marshal(variable)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	for _, field := range []string{"UnityObjectKind", "UnityObjectPath", "UnityObjectInstanceId"} {
+		if strings.Contains(string(marshaled), field) {
+			t.Fatalf("%s must be omitted for a non-Unity-object variable: %s", field, marshaled)
+		}
+	}
+}
+
+// Verifies UnityObjectKind is the discriminator for "is this a Unity object variable": even
+// when UnityObjectInstanceId happens to be its zero value, UnityObjectKind (and Path, if set)
+// still appear in the JSON because they are non-zero. This locks in the contract that consumers
+// must check UnityObjectKind's presence, not UnityObjectInstanceId's value, to detect a Unity
+// object variable.
+func TestPausePointCapturedVariableKeepsUnityObjectKindWhenInstanceIdIsZero(t *testing.T) {
+	variable := pausePointCapturedVariable{
+		Name:                  "destroyedEnemy",
+		Scope:                 "Local",
+		TypeName:              "UnityEngine.GameObject",
+		Value:                 pausePointVariableValue("(destroyed)"),
+		UnityObjectKind:       "Destroyed",
+		UnityObjectInstanceId: 0,
+	}
+
+	marshaled, err := json.Marshal(variable)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	if !strings.Contains(string(marshaled), `"UnityObjectKind":"Destroyed"`) {
+		t.Fatalf("UnityObjectKind must be present when non-empty: %s", marshaled)
+	}
+	if strings.Contains(string(marshaled), "UnityObjectInstanceId") {
+		t.Fatalf("UnityObjectInstanceId must still be omitted when zero, even alongside a non-empty Kind: %s", marshaled)
+	}
+}
+
+// Verifies a genuinely empty string Value (e.g. a captured `string s = ""`) still serializes as
+// "Value":"" in full mode, distinguishable from names mode omitting Value entirely via a nil pointer.
+func TestPausePointCapturedVariableKeepsGenuinelyEmptyValueInFullMode(t *testing.T) {
+	variable := pausePointCapturedVariable{
+		Name:     "label",
+		Scope:    "Local",
+		TypeName: "System.String",
+		Value:    pausePointVariableValue(""),
+	}
+
+	marshaled, err := json.Marshal(variable)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	if !strings.Contains(string(marshaled), `"Value":""`) {
+		t.Fatalf("a genuinely empty Value must still be serialized in full mode: %s", marshaled)
+	}
+
+	stripped := stripPausePointCapturedVariableValues([]pausePointCapturedVariable{variable})
+	strippedMarshaled, err := json.Marshal(stripped[0])
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	if strings.Contains(string(strippedMarshaled), `"Value"`) {
+		t.Fatalf("names mode must omit Value entirely, even when the original value was empty: %s", strippedMarshaled)
 	}
 }
 

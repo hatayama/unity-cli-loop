@@ -49,12 +49,31 @@ type pausePointCapturedHistoryFrame struct {
 // pausePointCapturedVariable mirrors the flat Unity-side
 // PausePointStatusCapturedVariable/UloopCapturedVariable DTO field-for-field: one variable
 // captured at a source pause point (a local, a parameter, or a `this` instance field).
+//
+// UnityObjectKind is the discriminator for "is this a Unity object variable", not
+// UnityObjectInstanceId: Unity's SourcePausePointVariableFormatter hardcodes all three
+// UnityObject* fields to their zero value for non-Unity-object variables, but always sets a
+// non-empty Kind for Unity object variables (including destroyed ones). InstanceId can in
+// theory land on zero for a real Unity object on 6000.4+ (it is the lower 32 bits of an
+// EntityId there), so independent omitempty per field is safe: Kind still surfaces in that
+// case, and no consumer needs InstanceId==0 to mean "not a Unity object".
 type pausePointCapturedVariable struct {
-	Name                  string `json:"Name"`
-	Scope                 string `json:"Scope"`
-	TypeName              string `json:"TypeName"`
-	Value                 string `json:"Value"`
-	UnityObjectKind       string `json:"UnityObjectKind"`
-	UnityObjectPath       string `json:"UnityObjectPath"`
-	UnityObjectInstanceId int    `json:"UnityObjectInstanceId"`
+	Name     string `json:"Name"`
+	Scope    string `json:"Scope"`
+	TypeName string `json:"TypeName"`
+
+	// Value is a pointer so a genuinely empty string (e.g. a captured `string s = ""`) still
+	// serializes as "Value":"" in full mode, distinct from names mode setting it to nil to omit
+	// the field entirely. A plain string with `omitempty` cannot make that distinction, since an
+	// empty string and an absent value would both be omitted.
+	Value                 *string `json:"Value,omitempty"`
+	UnityObjectKind       string  `json:"UnityObjectKind,omitempty"`
+	UnityObjectPath       string  `json:"UnityObjectPath,omitempty"`
+	UnityObjectInstanceId int     `json:"UnityObjectInstanceId,omitempty"`
+}
+
+// pausePointVariableValue returns a pointer to value for use in pausePointCapturedVariable
+// struct literals, where a plain string literal cannot have its address taken inline.
+func pausePointVariableValue(value string) *string {
+	return &value
 }
