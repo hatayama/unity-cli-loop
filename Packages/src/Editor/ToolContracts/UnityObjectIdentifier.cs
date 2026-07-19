@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
     /// <summary>
     /// Provides the integer object handle required by the current pause-point response contract.
@@ -12,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public static int GetInstanceId(Object unityObject)
         {
-            Debug.Assert(unityObject != null, "unityObject must not be null.");
+            Debug.Assert(unityObject is not null, "unityObject must not be null.");
 #if UNITY_6000_4_OR_NEWER
             return (int)unityObject.GetEntityId();
 #else
