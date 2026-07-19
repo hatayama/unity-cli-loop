@@ -13,7 +13,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static int GetInstanceId(Object unityObject)
         {
             Debug.Assert(unityObject != null, "unityObject must not be null.");
-
 #if UNITY_6000_4_OR_NEWER
             return (int)unityObject.GetEntityId();
 #else
