@@ -43,9 +43,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string assetPath = AssetDatabase.GetAssetPath(unityObject);
             return string.IsNullOrEmpty(assetPath)
                 ? new Classification(
-                    UloopCapturedVariableUnityObjectKind.RuntimeInstance, unityObject.name, unityObject.GetInstanceID())
+                    UloopCapturedVariableUnityObjectKind.RuntimeInstance, unityObject.name, UnityObjectIdentifier.GetInstanceId(unityObject))
                 : new Classification(
-                    UloopCapturedVariableUnityObjectKind.Asset, assetPath, unityObject.GetInstanceID());
+                    UloopCapturedVariableUnityObjectKind.Asset, assetPath, UnityObjectIdentifier.GetInstanceId(unityObject));
         }
 
         private static Classification ClassifyGameObjectOrComponent(GameObject gameObject, Object handleSource)
@@ -55,13 +55,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new Classification(
                     UloopCapturedVariableUnityObjectKind.SceneObject,
                     $"{gameObject.scene.name}:{BuildHierarchyPath(gameObject.transform)}",
-                    handleSource.GetInstanceID());
+                    UnityObjectIdentifier.GetInstanceId(handleSource));
             }
 
             return new Classification(
                 UloopCapturedVariableUnityObjectKind.PrefabAsset,
                 AssetDatabase.GetAssetPath(handleSource),
-                handleSource.GetInstanceID());
+                UnityObjectIdentifier.GetInstanceId(handleSource));
         }
 
         private static string BuildHierarchyPath(Transform transform)

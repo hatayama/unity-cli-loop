@@ -189,7 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // The 4-connected component split in CollectPhysicsColliderElements re-derives one annotation per
             // visually closed region so a single GameObject can produce multiple entries when UI occlusion
             // splits its reachable samples.
-            return collider!.gameObject.GetInstanceID();
+            return UnityObjectIdentifier.GetInstanceId(collider!.gameObject);
         }
 
         private static RaycastClusterSample CreateClusterSample(
