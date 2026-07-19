@@ -253,6 +253,187 @@ func TestIsDispatcherGitPackageDependencyAcceptsPathQueries(t *testing.T) {
 	}
 }
 
+func TestDetectV2DispatcherProjectFindsFileDependencyPackage(t *testing.T) {
+	// Verifies a file: manifest dependency is detected as V2 by reading the target package.json directly.
+	projectRoot := createDispatcherUnityProject(t)
+	writePackageManifest(t, projectRoot, "file:../v2-file-pkg")
+	writeDispatcherPackageJSONFile(t, filepath.Join(projectRoot, "v2-file-pkg", "package.json"), dispatcherUnityPackageName, "2.1.6")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if !v2Project.IsV2 || v2Project.PackageVersion != "2.1.6" {
+		t.Fatalf("V2 project = %#v, want package version 2.1.6", v2Project)
+	}
+}
+
+func TestDetectV2DispatcherProjectSkipsFileDependencyV3Package(t *testing.T) {
+	// Verifies a file: dependency pointing at a V3 source checkout is not misdetected as V2.
+	projectRoot := createDispatcherUnityProject(t)
+	writePackageManifest(t, projectRoot, "file:../v3-file-pkg")
+	writeDispatcherPackageJSONFile(t, filepath.Join(projectRoot, "v3-file-pkg", "package.json"), dispatcherUnityPackageName, "3.0.0")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if v2Project.IsV2 {
+		t.Fatalf("unexpected V2 project: %#v", v2Project)
+	}
+}
+
+func TestDetectV2DispatcherProjectSkipsFileDependencyWithoutMatchingPackage(t *testing.T) {
+	// Verifies a file: dependency whose target has no package.json, or a mismatched name, stays non-detected without error.
+	testCases := []struct {
+		name        string
+		writeTarget func(t *testing.T, projectRoot string)
+	}{
+		{
+			name:        "missing package.json",
+			writeTarget: func(t *testing.T, projectRoot string) {},
+		},
+		{
+			name: "mismatched name",
+			writeTarget: func(t *testing.T, projectRoot string) {
+				writeDispatcherPackageJSONFile(t, filepath.Join(projectRoot, "unrelated-pkg", "package.json"), "com.example.other", "2.0.0")
+			},
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			projectRoot := createDispatcherUnityProject(t)
+			writePackageManifest(t, projectRoot, "file:../unrelated-pkg")
+			testCase.writeTarget(t, projectRoot)
+
+			v2Project, err := detectV2DispatcherProject(projectRoot)
+			if err != nil {
+				t.Fatalf("detect V2 project: %v", err)
+			}
+			if v2Project.IsV2 {
+				t.Fatalf("unexpected V2 project: %#v", v2Project)
+			}
+		})
+	}
+}
+
+func TestDetectV2DispatcherProjectFindsEmbeddedPackage(t *testing.T) {
+	// Verifies an embedded package (no manifest dependency entry) is detected as V2 from its on-disk package.json.
+	projectRoot := createDispatcherUnityProject(t)
+	writeDispatcherPackageJSONFile(t, filepath.Join(projectRoot, "Packages", "v2-embedded-pkg", "package.json"), dispatcherUnityPackageName, "2.3.0")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if !v2Project.IsV2 || v2Project.PackageVersion != "2.3.0" {
+		t.Fatalf("V2 project = %#v, want package version 2.3.0", v2Project)
+	}
+}
+
+func TestDetectV2DispatcherProjectSkipsEmbeddedV3Package(t *testing.T) {
+	// Verifies an embedded V3 package does not get misdetected as V2.
+	projectRoot := createDispatcherUnityProject(t)
+	writeDispatcherPackageJSONFile(t, filepath.Join(projectRoot, "Packages", "v3-embedded-pkg", "package.json"), dispatcherUnityPackageName, "3.0.0")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if v2Project.IsV2 {
+		t.Fatalf("unexpected V2 project: %#v", v2Project)
+	}
+}
+
+func TestDetectV2DispatcherProjectMarksAmbiguousEmbeddedCandidates(t *testing.T) {
+	// Verifies multiple embedded V2 package directories are flagged as embedded-sourced ambiguity,
+	// which needs different recovery guidance than a PackageCache multi-generation ambiguity.
+	projectRoot := createDispatcherUnityProject(t)
+	writeDispatcherPackageJSONFile(t, filepath.Join(projectRoot, "Packages", "v2-embedded-a", "package.json"), dispatcherUnityPackageName, "2.1.0")
+	writeDispatcherPackageJSONFile(t, filepath.Join(projectRoot, "Packages", "v2-embedded-b", "package.json"), dispatcherUnityPackageName, "2.2.0")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if !v2Project.IsV2 || v2Project.PackageVersion != "" || !v2Project.AmbiguousEmbedded {
+		t.Fatalf("ambiguous embedded V2 project = %#v", v2Project)
+	}
+	assertStringSliceEqual(t, v2Project.PackageVersionCandidates, []string{"2.1.0", "2.2.0"})
+}
+
+func TestDetectV2DispatcherProjectResolvesFileDependencyWithBackslashPath(t *testing.T) {
+	// Verifies a file: dependency value with backslash separators (Windows-authored manifest) still resolves.
+	projectRoot := createDispatcherUnityProject(t)
+	writePackageManifest(t, projectRoot, "file:..\\v2-windows-pkg")
+	writeDispatcherPackageJSONFile(t, filepath.Join(projectRoot, "v2-windows-pkg", "package.json"), dispatcherUnityPackageName, "2.0.1")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if !v2Project.IsV2 || v2Project.PackageVersion != "2.0.1" {
+		t.Fatalf("V2 project = %#v, want package version 2.0.1", v2Project)
+	}
+}
+
+func TestDetectV2DispatcherProjectDisambiguatesPackageCacheUsingLockHash(t *testing.T) {
+	// Verifies a git dependency's packages-lock.json hash resolves the exact PackageCache generation
+	// instead of surfacing the multi-version candidates ambiguity error.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "aaaaaaaaaa", "2.1.0")
+	writeV2PackageCachePackageJSON(t, projectRoot, "bbbbbbbbbb", "2.2.0")
+	writePackagesLockWithGitHash(t, projectRoot, "bbbbbbbbbbccccccccccddddddddddeeeeeeeeee")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if !v2Project.IsV2 || v2Project.PackageVersion != "2.2.0" {
+		t.Fatalf("V2 project = %#v, want package version 2.2.0", v2Project)
+	}
+	if len(v2Project.PackageVersionCandidates) != 0 {
+		t.Fatalf("unexpected candidates: %#v", v2Project.PackageVersionCandidates)
+	}
+}
+
+func TestDetectV2DispatcherProjectDisambiguatesPackageCacheUsingLockHashWithNonDefaultSuffixLength(t *testing.T) {
+	// Verifies the hash match is a prefix comparison, not a hardcoded suffix length, since Unity's
+	// PackageCache directory suffix length is not guaranteed to be identical across Editor versions.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "aaaaaaaa", "2.1.0")
+	writeV2PackageCachePackageJSON(t, projectRoot, "bbbbbbbbbbbbbbbb", "2.2.0")
+	writePackagesLockWithGitHash(t, projectRoot, "bbbbbbbbbbbbbbbbccccccccccdddddddddd")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if !v2Project.IsV2 || v2Project.PackageVersion != "2.2.0" {
+		t.Fatalf("V2 project = %#v, want package version 2.2.0", v2Project)
+	}
+}
+
+func TestDetectV2DispatcherProjectFallsBackToAmbiguousCandidatesWhenHashHasNoMatch(t *testing.T) {
+	// Verifies a lock hash that matches no cached directory still falls back to listing all candidates.
+	projectRoot := createDispatcherUnityProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "aaaaaaaaaa", "2.1.0")
+	writeV2PackageCachePackageJSON(t, projectRoot, "bbbbbbbbbb", "2.2.0")
+	writePackagesLockWithGitHash(t, projectRoot, "ccccccccccddddddddddeeeeeeeeeeffffffffff")
+
+	v2Project, err := detectV2DispatcherProject(projectRoot)
+	if err != nil {
+		t.Fatalf("detect V2 project: %v", err)
+	}
+	if !v2Project.IsV2 || v2Project.PackageVersion != "" {
+		t.Fatalf("ambiguous V2 project = %#v", v2Project)
+	}
+	assertStringSliceEqual(t, v2Project.PackageVersionCandidates, []string{"2.1.0", "2.2.0"})
+}
+
 func TestRunDispatcherReportsV2ProjectGuidanceWhenPinIsMissing(t *testing.T) {
 	// Verifies pinless V2 projects receive migration guidance instead of the missing-pin error.
 	projectRoot := createDispatcherUnityProject(t)
@@ -316,6 +497,33 @@ func TestRunDispatcherReportsVersionResolutionGuidanceForAmbiguousV2Cache(t *tes
 		if !bytes.Contains(stderr.Bytes(), []byte(expected)) {
 			t.Fatalf("V2 recovery guidance missing %q: %s", expected, stderr.String())
 		}
+	}
+}
+
+func TestRunDispatcherReportsEmbeddedDuplicateGuidanceForAmbiguousEmbeddedPackages(t *testing.T) {
+	// Verifies ambiguous embedded packages recommend removing duplicate directories, since the
+	// PackageCache guidance (refresh packages-lock.json) does not fix an embedded duplication.
+	projectRoot := createDispatcherUnityProject(t)
+	writeDispatcherPackageJSONFile(t, filepath.Join(projectRoot, "Packages", "v2-embedded-a", "package.json"), dispatcherUnityPackageName, "2.1.0")
+	writeDispatcherPackageJSONFile(t, filepath.Join(projectRoot, "Packages", "v2-embedded-b", "package.json"), dispatcherUnityPackageName, "2.2.0")
+	t.Chdir(projectRoot)
+
+	var stderr bytes.Buffer
+	deps := defaultDispatcherRunDeps()
+	deps.runV2CLI = func(context.Context, string, []string, io.Writer, io.Writer) (int, error) {
+		t.Fatal("ambiguous embedded V2 packages must not be delegated")
+		return 0, nil
+	}
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, &stderr, deps)
+
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr=%s", code, stderr.String())
+	}
+	if bytes.Contains(stderr.Bytes(), []byte("packages-lock.json")) {
+		t.Fatalf("embedded ambiguity must not reuse PackageCache guidance: %s", stderr.String())
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("duplicate embedded package directories")) {
+		t.Fatalf("embedded ambiguity guidance missing duplicate-directory advice: %s", stderr.String())
 	}
 }
 
@@ -543,7 +751,11 @@ func writePackageManifest(t *testing.T, projectRoot string, dependency string) {
 	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
 		t.Fatalf("create Packages directory: %v", err)
 	}
-	content := "{\n  \"dependencies\": {\n    \"" + dispatcherUnityPackageName + "\": \"" + dependency + "\"\n  }\n}\n"
+	encodedDependency, err := json.Marshal(dependency)
+	if err != nil {
+		t.Fatalf("marshal dependency: %v", err)
+	}
+	content := "{\n  \"dependencies\": {\n    \"" + dispatcherUnityPackageName + "\": " + string(encodedDependency) + "\n  }\n}\n"
 	if err := os.WriteFile(manifestPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
@@ -556,6 +768,26 @@ func writeV2PackageCachePackageJSON(t *testing.T, projectRoot string, suffix str
 		t.Fatalf("create package cache: %v", err)
 	}
 	content := "{\n  \"version\": \"" + version + "\"\n}\n"
+	if err := os.WriteFile(packagePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write package.json: %v", err)
+	}
+}
+
+func writePackagesLockWithGitHash(t *testing.T, projectRoot string, hash string) {
+	t.Helper()
+	lockPath := filepath.Join(projectRoot, "Packages", "packages-lock.json")
+	content := "{\n  \"dependencies\": {\n    \"" + dispatcherUnityPackageName + "\": {\n      \"version\": \"https://example.invalid/package.git\",\n      \"source\": \"git\",\n      \"hash\": \"" + hash + "\"\n    }\n  }\n}\n"
+	if err := os.WriteFile(lockPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write packages-lock.json: %v", err)
+	}
+}
+
+func writeDispatcherPackageJSONFile(t *testing.T, packagePath string, name string, version string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(packagePath), 0o755); err != nil {
+		t.Fatalf("create package directory: %v", err)
+	}
+	content := "{\n  \"name\": \"" + name + "\",\n  \"version\": \"" + version + "\"\n}\n"
 	if err := os.WriteFile(packagePath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write package.json: %v", err)
 	}

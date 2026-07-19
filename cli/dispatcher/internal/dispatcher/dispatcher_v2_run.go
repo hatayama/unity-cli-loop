@@ -42,6 +42,16 @@ func tryRunDetectedDispatcherV2Project(
 
 func dispatcherV2ProjectDetectedError(projectRoot string, v2Project dispatcherV2Project, executionErr error) clierrors.CLIError {
 	if len(v2Project.PackageVersionCandidates) > 0 {
+		nextActions := []string{
+			"Open the Unity project once so Unity Package Manager can refresh `Packages/packages-lock.json`, then retry the command.",
+			"As a last resort, run `npx uloop-cli@2 <command>` from this project.",
+		}
+		if v2Project.AmbiguousEmbedded {
+			nextActions = []string{
+				"Remove the duplicate embedded package directories under `Packages/` so only one copy of the V2 package remains, then retry the command.",
+				"As a last resort, run `npx uloop-cli@2 <command>` from this project.",
+			}
+		}
 		return clierrors.CLIError{
 			ErrorCode:   clierrors.ErrorCodeV2ProjectDetected,
 			Phase:       clierrors.ErrorPhaseProjectResolve,
@@ -49,10 +59,7 @@ func dispatcherV2ProjectDetectedError(projectRoot string, v2Project dispatcherV2
 			Retryable:   true,
 			SafeToRetry: true,
 			ProjectRoot: projectRoot,
-			NextActions: []string{
-				"Open the Unity project once so Unity Package Manager can refresh `Packages/packages-lock.json`, then retry the command.",
-				"As a last resort, run `npx uloop-cli@2 <command>` from this project.",
-			},
+			NextActions: nextActions,
 			Details: map[string]any{
 				"V2PackageVersionCandidates": v2Project.PackageVersionCandidates,
 			},
