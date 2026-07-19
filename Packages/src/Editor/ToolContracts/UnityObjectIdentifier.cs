@@ -14,7 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         {
             Debug.Assert(unityObject is not null, "unityObject must not be null.");
 #if UNITY_6000_4_OR_NEWER
-            return (int)unityObject.GetEntityId();
+            return unchecked((int)EntityId.ToULong(unityObject.GetEntityId()));
 #else
             return unityObject.GetInstanceID();
 #endif

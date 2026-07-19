@@ -92,6 +92,10 @@ jobs:
           restore-keys: |
             Library-${{ matrix.unity-version }}-
 
+      - name: Prepare Unity log directory
+        if: env.HAS_UNITY_LICENSE == 'true'
+        run: mkdir -p artifacts
+
       - name: Compile Unity project
         if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true'
         id: compile
@@ -106,6 +110,7 @@ jobs:
           unityVersion: ${{ matrix.unity-version }}
           targetPlatform: StandaloneLinux64
           buildMethod: ''
+          customParameters: -logFile artifacts/unity-build.log
           allowDirtyBuild: true
         continue-on-error: true
 
