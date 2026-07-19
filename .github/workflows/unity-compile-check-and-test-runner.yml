@@ -137,7 +137,7 @@ jobs:
               set -eu
               trap '\''unity-editor -batchmode -nographics -quit -returnlicense \
                 -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" \
-                -projectPath /BlankProject >/dev/null 2>&1 || true'\'' EXIT
+                -projectPath /workspace/ci/unity-projects/6000.5 >/dev/null 2>&1 || true'\'' EXIT
 
               LICENSE_VALUE=$(printf "%s" "$UNITY_LICENSE" | tr "\\n" " " | sed -n '\''s/.*<DeveloperData Value="\([^"]*\)"\/>.*/\1/p'\'')
               test -n "$LICENSE_VALUE"
@@ -156,7 +156,7 @@ jobs:
                   -serial "$SERIAL" \
                   -username "$UNITY_EMAIL" \
                   -password "$UNITY_PASSWORD" \
-                  -projectPath /BlankProject; then
+                  -projectPath /workspace/ci/unity-projects/6000.5; then
                   ACTIVATED=true
                   break
                 fi
