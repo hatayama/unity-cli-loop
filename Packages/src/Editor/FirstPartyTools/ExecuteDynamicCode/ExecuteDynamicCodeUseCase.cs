@@ -112,8 +112,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // when the Editor is paused for a reason unrelated to a pause point.
         private static void ApplyPauseState(ExecuteDynamicCodeResponse response)
         {
-            response.EditorPaused = EditorApplication.isPaused;
-            response.ActivePausePointId = UloopPausePointRegistry.GetActivePausePointId();
+            (bool editorPaused, string activePausePointId) = ExecuteDynamicCodePauseStateResolver.Resolve(
+                EditorApplication.isPaused, UloopPausePointRegistry.GetActivePausePointId());
+            response.EditorPaused = editorPaused;
+            response.ActivePausePointId = activePausePointId;
         }
 
         private static void LogExecutionStart(

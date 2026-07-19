@@ -775,10 +775,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         [Test]
-        public async Task ExecuteAsync_WhenAPausePointHitHoldsTheEditorPaused_ReportsThatMarkerId()
+        public async Task ExecuteAsync_WhenRegistryReportsAnActiveIdButTheRealEditorIsNotPaused_StaysEmpty()
         {
-            // Tests that a pause point interrupting an in-flight execution is surfaced on the
-            // response, so an agent recognizes a post-interrupt state instead of a stale bug.
+            // Tests the ExecuteDynamicCodePauseStateResolver contract end to end: this test's own
+            // process never actually pauses EditorApplication, so even though a fake pause
+            // controller drives the registry into reporting an active pause point id, the
+            // response must not surface it while the real Editor is unpaused.
             MarkForegroundWarmupCompleted();
             FakePausePointPauseController pauseController = new();
             UloopPausePointRegistry.ConfigureForTests(pauseController, () => DateTime.UtcNow);
@@ -794,7 +796,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     new ExecuteDynamicCodeSchema { Code = "return 1;", CompileOnly = false },
                     CancellationToken.None);
 
-                Assert.That(response.ActivePausePointId, Is.EqualTo("jump"));
+                Assert.That(response.EditorPaused, Is.False);
+                Assert.That(response.ActivePausePointId, Is.Empty);
             }
             finally
             {
