@@ -114,6 +114,7 @@ namespace io.github.hatayama.uLoopMCP
         
         // Reconnection settings
         public const int RECONNECTION_TIMEOUT_SECONDS = 10;
+        public const int SERVER_STATE_WATCHDOG_INTERVAL_SECONDS = 3;
         
         // TypeScript server related constants
         public const string TYPESCRIPT_SERVER_DIR = "TypeScriptServer~";

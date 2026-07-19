@@ -21,7 +21,7 @@ import {
   UnityServerNotRunningError,
   validateProjectPath,
 } from './port-resolver.js';
-import { validateConnectedProject } from './project-validator.js';
+import { ProjectMismatchError, validateConnectedProject } from './project-validator.js';
 import { saveToolsCache, getCacheFilePath, ToolsCache, ToolDefinition } from './tool-cache.js';
 import { isToolEnabled } from './tool-settings-loader.js';
 import { VERSION } from './version.js';
@@ -253,6 +253,39 @@ export async function diagnoseRetryableProjectConnectionError(
   return new UnityServerNotRunningError(projectRoot);
 }
 
+export async function diagnoseProjectMismatchError(
+  error: unknown,
+  projectRoot: string | null,
+  shouldDiagnoseProjectState: boolean,
+  dependencies: ConnectionFailureDiagnosisDependencies = defaultConnectionFailureDiagnosisDependencies,
+): Promise<unknown> {
+  if (
+    !(error instanceof ProjectMismatchError) ||
+    !shouldDiagnoseProjectState ||
+    projectRoot === null
+  ) {
+    return error;
+  }
+
+  const runningProcess = await dependencies
+    .findRunningUnityProcessForProjectFn(projectRoot)
+    .catch(() => undefined);
+
+  if (runningProcess === undefined) {
+    return error;
+  }
+
+  if (runningProcess === null) {
+    return new UnityNotRunningError(projectRoot);
+  }
+
+  if (isServerStarting(projectRoot, dependencies)) {
+    return createServerStartingError(error);
+  }
+
+  return new UnityServerNotRunningError(projectRoot);
+}
+
 export async function shouldRetryWhenUnityProcessIsRunning(
   error: unknown,
   projectRoot: string | null,
@@ -421,9 +454,15 @@ async function throwFinalToolError(
   projectRoot: string | null,
   shouldDiagnoseProjectState: boolean,
 ): Promise<never> {
+  const diagnosedProjectMismatchError = await diagnoseProjectMismatchError(
+    error,
+    projectRoot,
+    shouldDiagnoseProjectState,
+  );
+
   if (
     await shouldPromoteToServerStartingError(
-      error,
+      diagnosedProjectMismatchError,
       toolName,
       projectRoot,
       shouldDiagnoseProjectState,
@@ -433,7 +472,7 @@ async function throwFinalToolError(
   }
 
   const diagnosedError = await diagnoseRetryableProjectConnectionError(
-    error,
+    diagnosedProjectMismatchError,
     projectRoot,
     shouldDiagnoseProjectState,
   );
