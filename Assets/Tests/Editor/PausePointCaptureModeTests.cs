@@ -125,13 +125,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies expiry after a continuous hit reports a capture-window message and retains history.
+        /// Verifies expiry after a continuous hit's pause is resumed reports a capture-window
+        /// message and retains history. The hit itself freezes the capture window while the
+        /// Editor stays paused for inspection, so time elapsing before resume must not count.
         /// </summary>
         [Test]
-        public void Expire_WhenContinuousMarkerHasHits_DisarmsAndPreservesHistory()
+        public void Expire_WhenContinuousMarkerHasHitsAndIsResumed_DisarmsAndPreservesHistory()
         {
             UloopPausePointRegistry.Enable("jump", 1, UloopPausePointCaptureMode.Continuous, 20);
             UloopPausePointRegistry.Hit("jump");
+            _nowUtc = _nowUtc.AddSeconds(5);
+            UloopPausePointRegistry.ResumeEditorPauseForClientDisconnect();
+            UloopPausePointRegistry.ApplyPendingClientDisconnectResume();
             _nowUtc = _nowUtc.AddSeconds(2);
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
