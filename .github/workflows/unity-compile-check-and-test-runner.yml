@@ -110,7 +110,7 @@ jobs:
           unityVersion: ${{ matrix.unity-version }}
           targetPlatform: StandaloneLinux64
           buildMethod: ''
-          customParameters: -logfile /github/workspace/artifacts/unity-build.log
+          customParameters: -logFile /github/workspace/unity-build.log
           allowDirtyBuild: true
         continue-on-error: true
 
@@ -121,7 +121,7 @@ jobs:
 
           if [ -z "$LOG_FILE" ]; then
             echo "No Unity log file found, checking artifacts..."
-            LOG_FILE="artifacts/unity-build.log"
+            LOG_FILE="unity-build.log"
           fi
 
           echo "=== Checking Unity compilation output ==="
