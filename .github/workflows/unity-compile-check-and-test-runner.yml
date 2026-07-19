@@ -92,12 +92,16 @@ jobs:
           restore-keys: |
             Library-${{ matrix.unity-version }}-
 
+      - name: Purge cached script assemblies
+        if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true' && matrix.package-warning-scope == true
+        run: rm -rf "${{ matrix.project-path }}/Library/ScriptAssemblies"
+
       - name: Prepare Unity log directory
         if: env.HAS_UNITY_LICENSE == 'true'
         run: mkdir -p artifacts
 
-      - name: Compile Unity project
-        if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true'
+      - name: Compile Unity project (2022.3)
+        if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true' && matrix.package-warning-scope == false
         id: compile
         uses: game-ci/unity-builder@1d4ee0697f193f54668e98961d79907911f4b4f2
         timeout-minutes: 30
@@ -110,38 +114,29 @@ jobs:
           unityVersion: ${{ matrix.unity-version }}
           targetPlatform: StandaloneLinux64
           buildMethod: ''
-          customParameters: -logFile /github/workspace/unity-build.log
           allowDirtyBuild: true
         continue-on-error: true
 
-      - name: Capture Unity job log
-        if: always() && steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true'
-        continue-on-error: true
+      - name: Compile Unity project (6000.5)
+        if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true' && matrix.package-warning-scope == true
+        id: compile-6000-5
+        timeout-minutes: 30
         env:
-          GH_TOKEN: ${{ github.token }}
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
         run: |
-          JOB_NAME="Compile Check (${{ matrix.unity-version }})"
-          JOB_ID=$(curl --fail --silent --show-error \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
-            | jq -r --arg job_name "$JOB_NAME" '.jobs[] | select(.name == $job_name) | .id')
-          if [ -z "$JOB_ID" ]; then
-            echo "::error::Could not resolve the current Unity job id"
-            exit 1
-          fi
-          for attempt in 1 2 3 4 5; do
-            if curl --fail --silent --show-error -L \
-              -H "Authorization: Bearer $GH_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs" \
-              > artifacts/unity-build.log && [ -s artifacts/unity-build.log ]; then
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "::error::Could not capture the Unity job log"
-          exit 1
+          docker run --rm \
+            --workdir /workspace \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --env UNITY_LICENSE \
+            unityci/editor:ubuntu-6000.5.4f1-base-3 \
+            /bin/bash -c '
+              set -eu
+              mkdir -p /root/.local/share/unity3d/Unity
+              printf "%s" "$UNITY_LICENSE" > /root/.local/share/unity3d/Unity/Unity_lic.ulf
+              unity-editor -batchmode -nographics -quit \
+                -projectPath /workspace/ci/unity-projects/6000.5 \
+                -logFile /workspace/artifacts/unity-build.log
+            '
 
       - name: Check for compile errors and warnings
         if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true'
@@ -150,7 +145,7 @@ jobs:
 
           if [ -z "$LOG_FILE" ]; then
             echo "No Unity log file found, checking artifacts..."
-            LOG_FILE="unity-build.log"
+            LOG_FILE="artifacts/unity-build.log"
           fi
 
           echo "=== Checking Unity compilation output ==="
