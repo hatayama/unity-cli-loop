@@ -205,6 +205,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool canManageSkills,
             List<SkillSetupTargetInfo> targets)
         {
+            List<SkillSetupTargetInfo> installableTargets =
+                SetupWizardSkillsStepPresenter.FilterInstallableSkillTargets(targets);
+            _shouldUseFirstInstallSkillsUi = SetupWizardSkillsStepPresenter.ResolveUseFirstInstallSkillsUi(
+                _shouldUseFirstInstallSkillsUi,
+                installableTargets.Count);
             _groupSkillsToggle.SetEnabled(canManageSkills && !_isInstallingSkills);
             _skillsStepPresenter.Update(
                 canManageSkills,
@@ -225,17 +230,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             CancelSkillInstallStateRefresh();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             List<SkillSetupTargetInfo> targets = DetectDisplayedSkillTargets(projectRoot);
-            List<SkillSetupTargetInfo> filteredTargets =
-                SetupWizardSkillsStepPresenter.FilterInstallableSkillTargets(targets);
-            bool useFirstInstallSkillsUi = SetupWizardSkillsStepPresenter.ResolveUseFirstInstallSkillsUi(
-                _shouldUseFirstInstallSkillsUi,
-                filteredTargets.Count);
-            List<SkillSetupTargetInfo> installableTargets = useFirstInstallSkillsUi
+            List<SkillSetupTargetInfo> installableTargets = _shouldUseFirstInstallSkillsUi
                 ? SetupWizardSkillsStepPresenter.GetFirstInstallableSkillTargets(
                     targets,
                     _skillsTarget,
                     !_installSkillsFlat)
-                : filteredTargets;
+                : SetupWizardSkillsStepPresenter.FilterInstallableSkillTargets(targets);
             if (installableTargets.Count == 0) return;
 
             bool shouldShowSkillsInstalledDialog =
