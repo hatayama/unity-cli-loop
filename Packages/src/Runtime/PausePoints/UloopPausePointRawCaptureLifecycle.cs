@@ -22,6 +22,11 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // the pending flag must still be consumed on the main thread.
             UloopPausePointRegistry.ApplyPendingClientDisconnectResume();
 
+            // Why before the isPaused gate: control-play-mode's Play/Stop and the Editor's own
+            // pause button unpause without ever calling back into the registry, so an open pause
+            // window must be detected and closed here instead of only through Clear/ClearAll/etc.
+            UloopPausePointRegistry.ClosePauseWindowIfEditorResumedExternally();
+
             if (!EditorApplication.isPaused)
             {
                 return;

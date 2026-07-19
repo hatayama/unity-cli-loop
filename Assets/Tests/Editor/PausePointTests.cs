@@ -366,6 +366,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void ClosePauseWindowIfEditorResumedExternally_WhenEditorUnpausedOutsideRegistry_ClosesWindowAndCreditsTime()
+        {
+            // Verifies an external unpause (control-play-mode Play/Stop, or the Editor's own
+            // pause button) that never calls back into Clear/ClearAll/ResumeEditorPause still
+            // closes the open freeze window, so the countdown resumes instead of staying frozen
+            // forever and expiry does not later over-credit game-running time.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            _nowUtc = _nowUtc.AddSeconds(20);
+            _pauseController.ResumeExternally();
+
+            UloopPausePointRegistry.ClosePauseWindowIfEditorResumedExternally();
+
+            _nowUtc = _nowUtc.AddSeconds(25);
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+            Assert.That(UloopPausePointRegistry.GetStatus("jump").Status, Is.EqualTo(UloopPausePointStatus.Hit));
+
+            _nowUtc = _nowUtc.AddSeconds(6);
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+            Assert.That(UloopPausePointRegistry.GetStatus("jump").Status, Is.EqualTo(UloopPausePointStatus.Expired));
+        }
+
+        [Test]
+        public void ClosePauseWindowIfEditorResumedExternally_WhileStillPaused_KeepsWindowOpen()
+        {
+            // Verifies the close only triggers once the controller reports Unpaused; a stray call
+            // while still genuinely paused must not clear the freeze early.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            _nowUtc = _nowUtc.AddSeconds(31);
+
+            UloopPausePointRegistry.ClosePauseWindowIfEditorResumedExternally();
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+
+            Assert.That(UloopPausePointRegistry.GetStatus("jump").Status, Is.EqualTo(UloopPausePointStatus.Hit));
+        }
+
+        [Test]
         public void ResumeEditorPauseForClientDisconnect_WhenPaused_ShouldResumeOnMainThreadApply()
         {
             // Verifies disconnect only arms a pending flag; main-thread apply resumes once (Option B).
@@ -1044,6 +1082,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void Resume()
             {
                 ResumeCount++;
+                IsPaused = false;
+            }
+
+            // Simulates an external unpause (control-play-mode's Play/Stop, or the Editor's own
+            // pause button) that never calls back into this registry's Resume().
+            public void ResumeExternally()
+            {
                 IsPaused = false;
             }
         }

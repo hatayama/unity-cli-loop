@@ -325,23 +325,48 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         private static void ResumeEditorPause()
         {
-            if (_pauseWindowStartUtc.HasValue)
-            {
-                DateTime pauseWindowStart = _pauseWindowStartUtc.Value;
-                DateTime pauseWindowEnd = NowUtc();
-                _pauseWindowStartUtc = null;
-                foreach (UloopPausePointEntry entry in Entries.Values)
-                {
-                    entry.ExtendExpiryForPause(pauseWindowStart, pauseWindowEnd);
-                }
-            }
-
+            CreditPauseWindowAndClose(NowUtc());
             _pauseController.Resume();
         }
 
+        /// <summary>
+        /// Closes an open pause window when the Editor was unpaused through a path that never
+        /// calls back into this registry - control-play-mode's Play/Stop
+        /// (<c>ControlPlayModeUseCase</c> sets <c>EditorApplication.isPaused</c> directly) or the
+        /// Editor's own pause button. Without this, a window left open by such an external resume
+        /// would freeze every marker's countdown forever and later over-credit the elapsed
+        /// wall-clock time back onto ExpiresAtUtc. Call every main-thread Editor update.
+        /// </summary>
+        public static void ClosePauseWindowIfEditorResumedExternally()
+        {
+            if (!_pauseWindowStartUtc.HasValue || _pauseController.IsPaused)
+            {
+                return;
+            }
+
+            CreditPauseWindowAndClose(NowUtc());
+        }
+
+        // Credits the frozen duration (now - max(pauseWindowStart, EnabledAtUtc)) back onto every
+        // entry's ExpiresAtUtc and closes the window. A no-op when no window is open.
+        private static void CreditPauseWindowAndClose(DateTime now)
+        {
+            if (!_pauseWindowStartUtc.HasValue)
+            {
+                return;
+            }
+
+            DateTime pauseWindowStart = _pauseWindowStartUtc.Value;
+            _pauseWindowStartUtc = null;
+            foreach (UloopPausePointEntry entry in Entries.Values)
+            {
+                entry.ExtendExpiryForPause(pauseWindowStart, now);
+            }
+        }
+
         // While a hit has the Editor paused, no entry may expire: the countdown is frozen for
-        // everyone until ResumeEditorPause credits the frozen duration back (see
-        // ExtendExpiryForPause). Without this gate, TryExpire callers would still expire a
+        // everyone until the open window is closed and credits the frozen duration back (see
+        // CreditPauseWindowAndClose). Without this gate, TryExpire callers would still expire a
         // different marker mid-inspection even though wall-clock time during the pause should
         // not count against it.
         private static bool TryExpire(UloopPausePointEntry entry, DateTime now)
