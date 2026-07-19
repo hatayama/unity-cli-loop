@@ -65,13 +65,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool groupSkillsUnderUnityCliLoop,
             bool isInstallingSkills)
         {
+            List<SkillSetupTargetInfo> installableTargets = FilterInstallableSkillTargets(targets);
+            bool useFirstInstallSkillsUi = ResolveUseFirstInstallSkillsUi(
+                shouldUseFirstInstallSkillsUi,
+                installableTargets.Count);
             _skillsTargetList.Clear();
             ViewDataBinder.SetVisible(
                 _skillsTargetRow,
-                ShouldShowSkillsTargetRowForSetupWizard(shouldUseFirstInstallSkillsUi));
+                ShouldShowSkillsTargetRowForSetupWizard(useFirstInstallSkillsUi));
             ViewDataBinder.SetVisible(
                 _skillsTargetList,
-                ShouldShowSkillsTargetListForSetupWizard(canManageSkills, shouldUseFirstInstallSkillsUi));
+                ShouldShowSkillsTargetListForSetupWizard(canManageSkills, useFirstInstallSkillsUi));
 
             if (!canManageSkills)
             {
@@ -84,7 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            if (shouldUseFirstInstallSkillsUi)
+            if (useFirstInstallSkillsUi)
             {
                 SkillSetupTargetInfo selectedTargetInfo = GetSelectedSkillTargetInfo(
                     targets,
@@ -101,8 +105,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     selectedTargetInfo.InstallState));
                 return;
             }
-
-            List<SkillSetupTargetInfo> installableTargets = FilterInstallableSkillTargets(targets);
 
             foreach (SkillSetupTargetInfo target in installableTargets)
             {
@@ -124,15 +126,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 item.Add(statusLabel);
 
                 _skillsTargetList.Add(item);
-            }
-
-            if (installableTargets.Count == 0)
-            {
-                UpdateSkillsStatusLabel(
-                    "Create a tool folder to enable skill installation (.claude/, .agents/, etc.)");
-                _installSkillsButton.SetEnabled(false);
-                _installSkillsButton.text = "Install Skills";
-                return;
             }
 
             bool isCheckingSkills = installableTargets.Any(
@@ -173,6 +166,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return targets
                 .Where(target => target.HasSkillsDirectory)
                 .ToList();
+        }
+
+        /// <summary>
+        /// Resolves whether the setup wizard should show the first-install skill UI.
+        /// </summary>
+        internal static bool ResolveUseFirstInstallSkillsUi(
+            bool shouldUseFirstInstallSkillsUi,
+            int installableTargetCount)
+        {
+            Debug.Assert(installableTargetCount >= 0, "installableTargetCount must not be negative");
+            return shouldUseFirstInstallSkillsUi || installableTargetCount == 0;
         }
 
         internal static bool ShouldShowSkillsTargetRowForSetupWizard(bool shouldUseFirstInstallSkillsUi)

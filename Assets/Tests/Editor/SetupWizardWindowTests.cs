@@ -462,6 +462,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(installableTargets[1].DirName, Is.EqualTo(".codex"));
         }
 
+        [TestCase(true, 0, true)]
+        [TestCase(false, 0, true)]
+        [TestCase(false, 1, false)]
+        public void ResolveUseFirstInstallSkillsUi_ReturnsExpectedMode(
+            bool shouldUseFirstInstallSkillsUi,
+            int installableTargetCount,
+            bool expected)
+        {
+            // Verifies that empty installable target results fall back to the first-install skill UI.
+            bool actual = SetupWizardSkillsStepPresenter.ResolveUseFirstInstallSkillsUi(
+                shouldUseFirstInstallSkillsUi,
+                installableTargetCount);
+
+            Assert.That(actual, Is.EqualTo(expected));
+        }
+
         [Test]
         public void ShouldUseFirstInstallSkillsUi_WhenVersionWasNeverSeen_ReturnsTrue()
         {
