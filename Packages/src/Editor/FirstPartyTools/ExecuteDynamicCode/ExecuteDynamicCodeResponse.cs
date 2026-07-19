@@ -60,6 +60,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string[] NextActions { get; set; }
 
         /// <summary>
+        /// Whether the Editor is paused as this response is returned. Lets an agent recognize a
+        /// post-interrupt state (e.g. a pause point hit during this execution) instead of mistaking
+        /// stale-looking results for a bug.
+        /// </summary>
+        public bool EditorPaused { get; set; } = false;
+
+        /// <summary>
+        /// The pause point id responsible for the current pause, when EditorPaused is caused by a
+        /// pause-point hit. Empty when the Editor is not paused, or is paused for an unrelated reason.
+        /// </summary>
+        public string ActivePausePointId { get; set; } = string.Empty;
+
+        /// <summary>
         /// Lightweight internal timings for benchmark comparison.
         /// </summary>
         [JsonProperty("Timings")]
@@ -99,6 +112,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ShouldSerializeNextActions()
         {
             return NextActions != null && NextActions.Length > 0;
+        }
+
+        public bool ShouldSerializeEditorPaused()
+        {
+            return EditorPaused;
+        }
+
+        public bool ShouldSerializeActivePausePointId()
+        {
+            return !string.IsNullOrEmpty(ActivePausePointId);
         }
     }
     

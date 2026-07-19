@@ -404,6 +404,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void GetActivePausePointId_WhenNoMarkerHasPausedTheEditor_ReturnsEmpty()
+        {
+            // Verifies the read-only signal used by execute-dynamic-code stays empty before any hit.
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            Assert.That(UloopPausePointRegistry.GetActivePausePointId(), Is.Empty);
+        }
+
+        [Test]
+        public void GetActivePausePointId_WhileAMarkerHitHoldsTheEditorPaused_ReturnsThatMarkerId()
+        {
+            // Verifies execute-dynamic-code can attribute an in-progress pause to the hitting marker.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            Assert.That(UloopPausePointRegistry.GetActivePausePointId(), Is.EqualTo("jump"));
+        }
+
+        [Test]
+        public void GetActivePausePointId_AfterTheFreezeWindowIsClosed_ReturnsEmpty()
+        {
+            // Verifies the signal clears once the freeze window closes (Clear here), not just once
+            // the Editor itself unpauses, so a resumed session never keeps reporting a stale id.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(UloopPausePointRegistry.GetActivePausePointId(), Is.Empty);
+        }
+
+        [Test]
         public void ResumeEditorPauseForClientDisconnect_WhenPaused_ShouldResumeOnMainThreadApply()
         {
             // Verifies disconnect only arms a pending flag; main-thread apply resumes once (Option B).
