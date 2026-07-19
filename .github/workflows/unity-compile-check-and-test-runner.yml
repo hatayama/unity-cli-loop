@@ -135,9 +135,11 @@ jobs:
             unityci/editor:ubuntu-6000.5.4f1-base-3 \
             /bin/bash -c '
               set -eu
+              mkdir -p /BlankProject/Assets
               trap '\''unity-editor -batchmode -nographics -quit -returnlicense \
+                -logFile /dev/stdout \
                 -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" \
-                -projectPath /workspace/ci/unity-projects/6000.5 >/dev/null 2>&1 || true'\'' EXIT
+                -projectPath /BlankProject >/dev/null 2>&1 || true'\'' EXIT
 
               LICENSE_VALUE=$(printf "%s" "$UNITY_LICENSE" | tr "\\n" " " | sed -n '\''s/.*<DeveloperData Value="\([^"]*\)"\/>.*/\1/p'\'')
               test -n "$LICENSE_VALUE"
@@ -153,10 +155,11 @@ jobs:
               ACTIVATED=false
               for ATTEMPT in 1 2 3; do
                 if unity-editor -batchmode -nographics -quit \
+                  -logFile /dev/stdout \
                   -serial "$SERIAL" \
                   -username "$UNITY_EMAIL" \
                   -password "$UNITY_PASSWORD" \
-                  -projectPath /workspace/ci/unity-projects/6000.5; then
+                  -projectPath /BlankProject; then
                   ACTIVATED=true
                   break
                 fi
