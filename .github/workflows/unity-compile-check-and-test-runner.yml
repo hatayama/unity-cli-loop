@@ -1,7 +1,7 @@
 name: Unity Compile Check
 
-# This job is a required status check, so it must report exactly one
-# "Compile Check (Linux)" result on every PR. Path filters at the workflow
+# These jobs are required status checks, so they must report one result per
+# Unity version on every PR. Path filters at the workflow
 # level cannot express that: a `paths`/`paths-ignore` pair both fire on a PR
 # that mixes C# and non-C# files, producing duplicate required checks. Instead
 # the workflow always runs and a change-detection step decides whether to do
@@ -17,8 +17,21 @@ permissions:
 
 jobs:
   compile-check:
-    name: Compile Check (Linux)
+    name: Compile Check (${{ matrix.unity-version }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - unity-version: 2022.3.62f1
+            project-path: .
+            library-path: Library
+            package-warning-scope: false
+            run-unit-tests: true
+          - unity-version: 6000.5.4f1
+            project-path: ci/unity-projects/6000.5
+            library-path: ci/unity-projects/6000.5/Library
+            package-warning-scope: true
+            run-unit-tests: false
     # Dependabot PRs cannot access repository secrets (UNITY_LICENSE etc.)
     env:
       HAS_UNITY_LICENSE: ${{ secrets.UNITY_LICENSE != '' }}
@@ -47,7 +60,7 @@ jobs:
           echo "=== Changed files ==="
           echo "$CHANGED"
 
-          if echo "$CHANGED" | grep -qE '^(Packages/src/Editor/.*\.cs|Packages/src/Runtime/.*\.cs|Assets/.*\.cs|tests/.*\.cs|tests/.*\.csproj|Packages/.*\.asmdef|Assets/.*\.asmdef|Packages/manifest\.json|Packages/packages-lock\.json|\.github/workflows/unity-compile-check-and-test-runner\.yml)$'; then
+          if echo "$CHANGED" | grep -qE '^(Packages/src/Editor/.*\.cs|Packages/src/Runtime/.*\.cs|Assets/.*\.cs|tests/.*\.cs|tests/.*\.csproj|Packages/.*\.asmdef|Assets/.*\.asmdef|Packages/manifest\.json|Packages/packages-lock\.json|ci/unity-projects/.*|\.github/workflows/unity-compile-check-and-test-runner\.yml)$'; then
             echo "csharp=true" >> "$GITHUB_OUTPUT"
           else
             echo "csharp=false" >> "$GITHUB_OUTPUT"
@@ -58,13 +71,13 @@ jobs:
         run: echo "No C# changes detected; compile check is satisfied without running Unity."
 
       - name: Setup .NET
-        if: steps.changes.outputs.csharp == 'true'
+        if: steps.changes.outputs.csharp == 'true' && matrix.run-unit-tests == true
         uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
         with:
           dotnet-version: 10.0.x
 
       - name: Run concurrency unit tests
-        if: steps.changes.outputs.csharp == 'true'
+        if: steps.changes.outputs.csharp == 'true' && matrix.run-unit-tests == true
         run: |
           dotnet test tests/DynamicCodeExecutionScheduler.UnitTests/DynamicCodeExecutionScheduler.UnitTests.csproj --configuration Release
           dotnet test tests/SharedRoslynCompilerWorker.UnitTests/SharedRoslynCompilerWorker.UnitTests.csproj --configuration Release
@@ -74,10 +87,10 @@ jobs:
         if: env.HAS_UNITY_LICENSE == 'true'
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
-          path: Library
-          key: Library-2022.3.62f1-${{ hashFiles('Packages/src/**/*.cs', 'Assets/**/*.cs', 'Packages/manifest.json', 'Packages/packages-lock.json') }}
+          path: ${{ matrix.library-path }}
+          key: Library-${{ matrix.unity-version }}-${{ hashFiles('Packages/src/**/*.cs', 'Assets/**/*.cs', 'Packages/manifest.json', 'Packages/packages-lock.json', 'ci/unity-projects/6000.5/**') }}
           restore-keys: |
-            Library-2022.3.62f1-
+            Library-${{ matrix.unity-version }}-
 
       - name: Compile Unity project
         if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true'
@@ -89,7 +102,8 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
-          unityVersion: 2022.3.62f1
+          projectPath: ${{ matrix.project-path }}
+          unityVersion: ${{ matrix.unity-version }}
           targetPlatform: StandaloneLinux64
           buildMethod: ''
           allowDirtyBuild: true
@@ -113,11 +127,27 @@ jobs:
           if [ -f "$LOG_FILE" ]; then
             echo "Analyzing log file: $LOG_FILE"
 
-            # Count errors (CS errors from compiler)
-            ERROR_COUNT=$(grep -c "error CS[0-9]*:" "$LOG_FILE" 2>/dev/null || echo "0")
+            if [ "${{ matrix.package-warning-scope }}" == "true" ]; then
+              PACKAGE_EVIDENCE_PATTERN='io\.github\.hatayama\.uloopmcp|UnityCLILoop\.Runtime'
+              if ! grep -Eq "$PACKAGE_EVIDENCE_PATTERN" "$LOG_FILE"; then
+                echo "::error::Unity did not resolve or compile the io.github.hatayama.uloopmcp package"
+                exit 1
+              fi
+              echo "Package compilation evidence found in Unity log."
+            fi
 
-            # Count warnings (CS warnings from compiler, excluding specific noise)
-            WARNING_COUNT=$(grep -c "warning CS[0-9]*:" "$LOG_FILE" 2>/dev/null || echo "0")
+            if [ "${{ matrix.package-warning-scope }}" == "true" ]; then
+              # Unity 6000.5 can emit compiler noise from other packages. Only
+              # package source diagnostics determine this compatibility check.
+              ERROR_PATTERN='(Packages/src/|io\.github\.hatayama\.uloopmcp).*error CS[0-9]*:|error CS[0-9]*:.*(Packages/src/|io\.github\.hatayama\.uloopmcp)'
+              WARNING_PATTERN='(Packages/src/|io\.github\.hatayama\.uloopmcp).*warning CS[0-9]*:|warning CS[0-9]*:.*(Packages/src/|io\.github\.hatayama\.uloopmcp)'
+            else
+              ERROR_PATTERN='error CS[0-9]*:'
+              WARNING_PATTERN='warning CS[0-9]*:'
+            fi
+
+            ERROR_COUNT=$(grep -Ec "$ERROR_PATTERN" "$LOG_FILE" 2>/dev/null || echo "0")
+            WARNING_COUNT=$(grep -Ec "$WARNING_PATTERN" "$LOG_FILE" 2>/dev/null || echo "0")
 
             echo ""
             echo "=== Compilation Results ==="
@@ -129,7 +159,7 @@ jobs:
               echo "::error::Found $ERROR_COUNT compile error(s)"
               echo ""
               echo "=== Errors ==="
-              grep "error CS[0-9]*:" "$LOG_FILE" | head -20
+              grep -E "$ERROR_PATTERN" "$LOG_FILE" | head -20
               exit 1
             fi
 
@@ -137,7 +167,7 @@ jobs:
               echo "::warning::Found $WARNING_COUNT compile warning(s)"
               echo ""
               echo "=== Warnings ==="
-              grep "warning CS[0-9]*:" "$LOG_FILE" | head -20
+              grep -E "$WARNING_PATTERN" "$LOG_FILE" | head -20
               exit 1
             fi
 
