@@ -122,7 +122,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HashSet<GameObject> processedObjects,
             UiRaycastHelper.RaycastContext? raycastContext)
         {
+#if UNITY_6000_4_OR_NEWER
+            MonoBehaviour[] allBehaviours = Object.FindObjectsByType<MonoBehaviour>();
+#else
             MonoBehaviour[] allBehaviours = Object.FindObjectsOfType<MonoBehaviour>();
+#endif
             foreach (MonoBehaviour behaviour in allBehaviours)
             {
                 if (!behaviour.isActiveAndEnabled)

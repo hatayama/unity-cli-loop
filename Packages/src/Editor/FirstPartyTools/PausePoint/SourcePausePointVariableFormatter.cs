@@ -81,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return new UloopCapturedVariable(
                     name, scope, typeName, DestroyedValue,
-                    UloopCapturedVariableUnityObjectKind.Destroyed, string.Empty, unityObjectCandidate.GetInstanceID());
+                    UloopCapturedVariableUnityObjectKind.Destroyed, string.Empty, UnityObjectIdentifier.GetInstanceId(unityObjectCandidate));
             }
 
             SourcePausePointUnityObjectClassifier.Classification classification =
