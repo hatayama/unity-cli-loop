@@ -61,7 +61,7 @@ type pausePointCapturedVariable struct {
 	Name                  string `json:"Name"`
 	Scope                 string `json:"Scope"`
 	TypeName              string `json:"TypeName"`
-	Value                 string `json:"Value"`
+	Value                 string `json:"Value,omitempty"`
 	UnityObjectKind       string `json:"UnityObjectKind,omitempty"`
 	UnityObjectPath       string `json:"UnityObjectPath,omitempty"`
 	UnityObjectInstanceId int    `json:"UnityObjectInstanceId,omitempty"`

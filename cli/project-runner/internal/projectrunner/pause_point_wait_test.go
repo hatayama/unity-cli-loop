@@ -399,6 +399,50 @@ func TestParseWaitForPausePointOptionsParsesMatchingLogFlags(t *testing.T) {
 	}
 }
 
+// Verifies --captured-variables defaults to full, accepts "names", and rejects other values,
+// for both await-pause-point and pause-point-status option parsing.
+func TestParsePausePointCapturedVariablesModeFlag(t *testing.T) {
+	waitDefaults, err := parseWaitForPausePointOptions([]string{"--id", "jump"})
+	if err != nil {
+		t.Fatalf("default parse failed: %v", err)
+	}
+	if waitDefaults.capturedVariablesMode != pausePointCapturedVariablesModeFull {
+		t.Fatalf("default captured-variables mode mismatch: %#v", waitDefaults)
+	}
+
+	waitNames, err := parseWaitForPausePointOptions([]string{"--id", "jump", "--captured-variables", "names"})
+	if err != nil {
+		t.Fatalf("names parse failed: %v", err)
+	}
+	if waitNames.capturedVariablesMode != pausePointCapturedVariablesModeNames {
+		t.Fatalf("names captured-variables mode mismatch: %#v", waitNames)
+	}
+
+	if _, err := parseWaitForPausePointOptions([]string{"--id", "jump", "--captured-variables", "bogus"}); err == nil {
+		t.Fatalf("expected error for invalid captured-variables value")
+	}
+
+	statusDefaults, err := parsePausePointStatusOptions([]string{"--id", "jump"})
+	if err != nil {
+		t.Fatalf("default status parse failed: %v", err)
+	}
+	if statusDefaults.capturedVariablesMode != pausePointCapturedVariablesModeFull {
+		t.Fatalf("default status captured-variables mode mismatch: %#v", statusDefaults)
+	}
+
+	statusNames, err := parsePausePointStatusOptions([]string{"--id", "jump", "--captured-variables", "names"})
+	if err != nil {
+		t.Fatalf("names status parse failed: %v", err)
+	}
+	if statusNames.capturedVariablesMode != pausePointCapturedVariablesModeNames {
+		t.Fatalf("names status captured-variables mode mismatch: %#v", statusNames)
+	}
+
+	if _, err := parsePausePointStatusOptions([]string{"--id", "jump", "--captured-variables", "bogus"}); err == nil {
+		t.Fatalf("expected error for invalid status captured-variables value")
+	}
+}
+
 // Verifies a hit response always embeds marker-matching logs.
 func TestRunWaitForPausePointEmbedsMatchingLogsOnHit(t *testing.T) {
 	originalQuery := queryPausePointStatus
@@ -1069,6 +1113,70 @@ func TestRunPausePointStatusReturnsCapturedVariables(t *testing.T) {
 	if second.Name != "enemy" || second.UnityObjectKind != "SceneObject" ||
 		second.UnityObjectPath != "MainScene:/Root/Enemy" || second.UnityObjectInstanceId != -1234 {
 		t.Fatalf("second captured variable mismatch: %#v", second)
+	}
+}
+
+// Verifies --captured-variables names strips Value from every captured variable (including
+// history frames) while keeping Name/Scope/TypeName, for pause-point-status output.
+func TestRunPausePointStatusCapturedVariablesNamesOmitsValues(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	defer func() {
+		queryPausePointStatus = originalQuery
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:              id,
+			Status:          pausePointStatusHit,
+			IsHit:           true,
+			Mode:            "continuous",
+			LastHitSequence: 2,
+			CapturedVariables: []pausePointCapturedVariable{
+				{Name: "speed", Scope: "Local", TypeName: "System.Int32", Value: "5"},
+			},
+			CapturedVariableHistory: []pausePointCapturedHistoryFrame{
+				{
+					HitSequence: 1,
+					CapturedVariables: []pausePointCapturedVariable{
+						{Name: "speed", Scope: "Local", TypeName: "System.Int32", Value: "3"},
+					},
+				},
+			},
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointStatusCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump", "--captured-variables", "names"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), `"Value"`) {
+		t.Fatalf("Value must be omitted in names mode: %s", stdout.String())
+	}
+
+	var response pausePointStatusResponse
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
+	}
+	if len(response.CapturedVariables) != 1 || response.CapturedVariables[0].Name != "speed" ||
+		response.CapturedVariables[0].TypeName != "System.Int32" {
+		t.Fatalf("CapturedVariables mismatch: %#v", response.CapturedVariables)
+	}
+	if len(response.CapturedVariableHistory) != 1 ||
+		len(response.CapturedVariableHistory[0].CapturedVariables) != 1 ||
+		response.CapturedVariableHistory[0].CapturedVariables[0].Name != "speed" {
+		t.Fatalf("CapturedVariableHistory mismatch: %#v", response.CapturedVariableHistory)
 	}
 }
 
