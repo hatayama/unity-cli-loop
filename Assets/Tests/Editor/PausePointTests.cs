@@ -314,9 +314,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ApplyCaptureWindowExpirations_WhenHitPastTimeout_ShouldExpireAndResume()
+        public void ApplyCaptureWindowExpirations_WhenHitPastTimeoutWhilePaused_DoesNotExpireUntilResumed()
         {
-            // Verifies abandoned SingleShot hits still expire at ExpiresAtUtc and resume without a Clear poll.
+            // Verifies a hit's own Editor pause freezes the capture window countdown, so an
+            // abandoned SingleShot hit does not expire mid-inspection even past its original timeout.
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePoint.Pause("jump");
             _nowUtc = _nowUtc.AddSeconds(31);
@@ -324,8 +325,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.ApplyCaptureWindowExpirations();
 
             UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus("jump");
-            Assert.That(status.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(status.Status, Is.EqualTo(UloopPausePointStatus.Hit));
+            Assert.That(_pauseController.IsPaused, Is.True);
+        }
+
+        [Test]
+        public void ApplyCaptureWindowExpirations_AfterResumeFollowingFrozenPause_ExpiresOnlyAfterCreditedDeadline()
+        {
+            // Verifies the frozen duration is credited back to ExpiresAtUtc on resume: expiry
+            // does not fire at the original deadline, only after the extended one elapses.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            _nowUtc = _nowUtc.AddSeconds(20);
+            UloopPausePointRegistry.ResumeEditorPauseForClientDisconnect();
+            UloopPausePointRegistry.ApplyPendingClientDisconnectResume();
             Assert.That(_pauseController.IsPaused, Is.False);
+
+            _nowUtc = _nowUtc.AddSeconds(25);
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+            Assert.That(UloopPausePointRegistry.GetStatus("jump").Status, Is.EqualTo(UloopPausePointStatus.Hit));
+
+            _nowUtc = _nowUtc.AddSeconds(6);
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+            Assert.That(UloopPausePointRegistry.GetStatus("jump").Status, Is.EqualTo(UloopPausePointStatus.Expired));
+        }
+
+        [Test]
+        public void ApplyCaptureWindowExpirations_WhenAnotherMarkerHoldsEditorPaused_FreezesUnrelatedMarkerToo()
+        {
+            // Verifies the freeze is registry-wide: an unrelated marker's countdown is also
+            // frozen for as long as any hit is holding the Editor paused for inspection.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Enable("dash", 10);
+            UloopPausePoint.Pause("jump");
+
+            _nowUtc = _nowUtc.AddSeconds(15);
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+
+            Assert.That(UloopPausePointRegistry.GetStatus("dash").Status, Is.EqualTo(UloopPausePointStatus.Enabled));
         }
 
         [Test]

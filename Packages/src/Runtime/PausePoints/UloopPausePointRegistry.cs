@@ -27,6 +27,11 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // Why Interlocked: disconnect monitor / DisconnectAllClients run on the thread pool.
         private static int _pendingClientDisconnectResume;
         private static UloopPausePointSnapshot _latestHitSnapshot;
+        // Set when a hit pauses the Editor (see HitCore), cleared when ResumeEditorPause runs.
+        // While set, no entry's capture window is allowed to expire (see TryExpire): a marker's
+        // own hit freezes every marker's countdown for the duration of the inspection pause,
+        // and the frozen duration is credited back to each entry's ExpiresAtUtc on resume.
+        private static DateTime? _pauseWindowStartUtc;
         // One input can hit several markers in the same frame; tools need the full list,
         // not just the latest hit, to report every marker that interrupted them.
         private static readonly List<UloopPausePointSnapshot> _hitSnapshots = new();
@@ -77,7 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             UloopPausePointEntry entry = Entries[id];
             // Resolve expiry first so a clear after the timeout reports "expired", not a normal clear.
-            entry.ExpireIfNeeded(now);
+            TryExpire(entry, now);
             string message = !entry.IsEnabled && entry.Status == UloopPausePointStatus.Hit
                 ? "Pause point was already hit (auto-disarmed); nothing to clear."
                 : entry.Status switch
@@ -113,7 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 }
 
                 // Resolve expiry first so ClearAll after timeout keeps AfterExpired visibility.
-                entry.ExpireIfNeeded(now);
+                TryExpire(entry, now);
                 clearedIds.Add(entry.Id);
                 entry.MarkCleared(clearedReason);
             }
@@ -139,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             UloopPausePointEntry entry = Entries[id];
-            if (entry.ExpireIfNeeded(now))
+            if (TryExpire(entry, now))
             {
                 ResumeEditorPause();
             }
@@ -203,7 +208,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             UloopPausePointEntry entry = Entries[id];
-            if (entry.ExpireIfNeeded(now))
+            if (TryExpire(entry, now))
             {
                 ResumeEditorPause();
                 return entry.ToSnapshot(now, _pauseController);
@@ -227,6 +232,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             if (entry.Mode != UloopPausePointCaptureMode.Trace)
             {
                 _pauseController.Pause();
+                _pauseWindowStartUtc ??= now;
             }
 
             int hitSequence = ++_nextHitSequence;
@@ -273,7 +279,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             bool anyExpired = false;
             foreach (UloopPausePointEntry entry in Entries.Values)
             {
-                if (entry.ExpireIfNeeded(now))
+                if (TryExpire(entry, now))
                 {
                     anyExpired = true;
                 }
@@ -319,7 +325,33 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         private static void ResumeEditorPause()
         {
+            if (_pauseWindowStartUtc.HasValue)
+            {
+                DateTime pauseWindowStart = _pauseWindowStartUtc.Value;
+                DateTime pauseWindowEnd = NowUtc();
+                _pauseWindowStartUtc = null;
+                foreach (UloopPausePointEntry entry in Entries.Values)
+                {
+                    entry.ExtendExpiryForPause(pauseWindowStart, pauseWindowEnd);
+                }
+            }
+
             _pauseController.Resume();
+        }
+
+        // While a hit has the Editor paused, no entry may expire: the countdown is frozen for
+        // everyone until ResumeEditorPause credits the frozen duration back (see
+        // ExtendExpiryForPause). Without this gate, TryExpire callers would still expire a
+        // different marker mid-inspection even though wall-clock time during the pause should
+        // not count against it.
+        private static bool TryExpire(UloopPausePointEntry entry, DateTime now)
+        {
+            if (_pauseWindowStartUtc.HasValue)
+            {
+                return false;
+            }
+
+            return entry.ExpireIfNeeded(now);
         }
 
         // Drops the id's own hit-history entry and, if it currently owns the latest hit, that
@@ -365,6 +397,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             _nextHitSequence = 0;
             _latestHitSnapshot = null;
             _hitSnapshots.Clear();
+            _pauseWindowStartUtc = null;
             Interlocked.Exchange(ref _pendingClientDisconnectResume, 0);
             _pauseController = new UnityEditorPausePointPauseController();
             _nowProvider = () => DateTime.UtcNow;
