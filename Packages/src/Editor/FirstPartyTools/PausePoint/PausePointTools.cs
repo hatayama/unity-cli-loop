@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -48,6 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public string Id { get; set; } = string.Empty;
         public int ResolvedLine { get; set; }
+        public string ResolvedLineText { get; set; } = string.Empty;
         public string ResolvedMethod { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
         public bool IsEnabled { get; set; }
@@ -354,9 +356,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxHistory);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.ResolvedLine = resolveResult.Resolution.ResolvedLine;
+            response.ResolvedLineText = ReadResolvedLineText(parameters.File, resolveResult.Resolution.ResolvedLine);
             response.ResolvedMethod = resolveResult.Resolution.MethodDisplayName;
             response.Warning = MergeWarnings(CreateEnableWarning(), patchResult.Warning);
             return response;
+        }
+
+        // The resolved line can be rounded forward from the requested line (the Resolver picks
+        // the closest sequence point on or after it), so returning the actual source text lets
+        // the caller notice a mismatch immediately instead of assuming the requested line hit.
+        private static string ReadResolvedLineText(string requestedFile, int resolvedLine)
+        {
+            string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(requestedFile);
+            string absoluteFilePath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), normalizedFile);
+            return SourcePausePointSourceLineReader.ReadLineText(absoluteFilePath, resolvedLine);
         }
 
         // The derived id must use the originally requested file/line (not the resolved/rounded
