@@ -123,18 +123,48 @@ jobs:
         timeout-minutes: 30
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         run: |
           docker run --rm \
             --workdir /workspace \
             --volume "$GITHUB_WORKSPACE:/workspace" \
             --env UNITY_LICENSE \
+            --env UNITY_EMAIL \
+            --env UNITY_PASSWORD \
             unityci/editor:ubuntu-6000.5.4f1-base-3 \
             /bin/bash -c '
               set -eu
-              mkdir -p /root/.local/share/unity3d/Unity
-              printf "%s" "$UNITY_LICENSE" > /root/.local/share/unity3d/Unity/Unity_lic.ulf
+              trap '\''unity-editor -batchmode -nographics -quit -returnlicense \
+                -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" \
+                -projectPath /BlankProject >/dev/null 2>&1 || true'\'' EXIT
+
+              LICENSE_VALUE=$(printf "%s" "$UNITY_LICENSE" | tr "\\n" " " | sed -n '\''s/.*<DeveloperData Value="\([^"]*\)"\/>.*/\1/p'\'')
+              test -n "$LICENSE_VALUE"
+              printf "%s" "$LICENSE_VALUE" | base64 -d > /tmp/developer-data.bin
+              SERIAL=$(tail -c +5 /tmp/developer-data.bin | tr -d "\\r\\n")
+              test "${#SERIAL}" -eq 27
+              if [[ "$SERIAL" == F* ]]; then
+                dbus-uuidgen > /etc/machine-id
+                mkdir -p /var/lib/dbus
+                ln -sf /etc/machine-id /var/lib/dbus/machine-id
+              fi
+
+              ACTIVATED=false
+              for ATTEMPT in 1 2 3; do
+                if unity-editor -batchmode -nographics -quit \
+                  -serial "$SERIAL" \
+                  -username "$UNITY_EMAIL" \
+                  -password "$UNITY_PASSWORD" \
+                  -projectPath /BlankProject; then
+                  ACTIVATED=true
+                  break
+                fi
+                sleep $((ATTEMPT * 5))
+              done
+              test "$ACTIVATED" = true
+
               unity-editor -batchmode -nographics -quit \
-                -manualLicenseFile /root/.local/share/unity3d/Unity/Unity_lic.ulf \
                 -projectPath /workspace/ci/unity-projects/6000.5 \
                 -logFile /workspace/artifacts/unity-build.log
             '
