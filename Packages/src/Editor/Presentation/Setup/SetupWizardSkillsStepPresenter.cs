@@ -66,16 +66,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isInstallingSkills)
         {
             List<SkillSetupTargetInfo> installableTargets = FilterInstallableSkillTargets(targets);
-            bool useFirstInstallSkillsUi = ResolveUseFirstInstallSkillsUi(
-                shouldUseFirstInstallSkillsUi,
-                installableTargets.Count);
             _skillsTargetList.Clear();
             ViewDataBinder.SetVisible(
                 _skillsTargetRow,
-                ShouldShowSkillsTargetRowForSetupWizard(useFirstInstallSkillsUi));
+                ShouldShowSkillsTargetRowForSetupWizard(shouldUseFirstInstallSkillsUi));
             ViewDataBinder.SetVisible(
                 _skillsTargetList,
-                ShouldShowSkillsTargetListForSetupWizard(canManageSkills, useFirstInstallSkillsUi));
+                ShouldShowSkillsTargetListForSetupWizard(canManageSkills, shouldUseFirstInstallSkillsUi));
 
             if (!canManageSkills)
             {
@@ -88,7 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            if (useFirstInstallSkillsUi)
+            if (shouldUseFirstInstallSkillsUi)
             {
                 SkillSetupTargetInfo selectedTargetInfo = GetSelectedSkillTargetInfo(
                     targets,
