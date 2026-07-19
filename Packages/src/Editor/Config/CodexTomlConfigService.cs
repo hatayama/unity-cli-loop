@@ -12,6 +12,9 @@ namespace io.github.hatayama.uLoopMCP
         private static readonly Regex SectionRegex = new Regex(
             @"(?ms)^\[mcp_servers\.uLoopMCP\]\s*.*?(?=^\[|\z)",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex LegacyEnvSectionRegex = new Regex(
+            @"(?ms)^\[mcp_servers\.uLoopMCP\.env\]\s*.*?(?=^\[|\z)",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex AnyMcpServerRegex = new Regex(
             @"(?ms)^\[mcp_servers\.[^\]]+\]\s*.*?(?=^\[|\z)",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -50,6 +53,9 @@ namespace io.github.hatayama.uLoopMCP
             if (!File.Exists(path)) return true;
             string content = File.ReadAllText(path);
 
+            // Migrate the legacy table-style env section before writing the inline env value.
+            if (LegacyEnvSectionRegex.IsMatch(content)) return true;
+
             string serverAbsolutePath = UnityMcpPathResolver.GetTypeScriptServerPath();
             if (string.IsNullOrEmpty(serverAbsolutePath) || !File.Exists(serverAbsolutePath)) return false;
             string expectedArg0 = UnityMcpPathResolver.MakeRelativeToConfigurationRoot(serverAbsolutePath);
@@ -81,6 +87,7 @@ namespace io.github.hatayama.uLoopMCP
             string path = UnityMcpPathResolver.GetCodexConfigPath();
             EnsureDirectory(path);
             string content = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+            content = RemoveLegacyEnvSection(content);
 
             string serverPath = UnityMcpPathResolver.GetTypeScriptServerPath();
             if (string.IsNullOrEmpty(serverPath) || !File.Exists(serverPath))
@@ -135,6 +142,7 @@ namespace io.github.hatayama.uLoopMCP
 
             string content = File.ReadAllText(path);
             string result = SectionRegex.Replace(content, string.Empty);
+            result = LegacyEnvSectionRegex.Replace(result, string.Empty);
             if (ReferenceEquals(content, result))
             {
                 return;
@@ -153,6 +161,7 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             string content = File.ReadAllText(path);
+            content = RemoveLegacyEnvSection(content);
 
             // If section not exists, create it first and reload
             if (!SectionRegex.IsMatch(content))
@@ -351,7 +360,12 @@ namespace io.github.hatayama.uLoopMCP
             string dir = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
         }
+
+        private static string RemoveLegacyEnvSection(string content)
+        {
+            string result = LegacyEnvSectionRegex.Replace(content, string.Empty);
+            return Regex.Replace(result, @"(\r?\n){3,}", System.Environment.NewLine + System.Environment.NewLine);
+        }
     }
 }
-
 

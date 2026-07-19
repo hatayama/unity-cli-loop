@@ -86,6 +86,46 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         // ----------------------------------------------------------------
+        // Legacy table-style env migration
+        // ----------------------------------------------------------------
+
+        [Test]
+        public void RemoveLegacyEnvSection_Should_RemoveOnlyLegacyULoopEnvTable()
+        {
+            string toml = @"[mcp_servers.uLoopMCP]
+command = ""node""
+args = ['server.js']
+env = { ""UNITY_TCP_PORT"" = ""8700"" }
+
+[mcp_servers.uLoopMCP.env]
+UNITY_TCP_PORT = ""8700""
+
+[mcp_servers.other]
+command = ""python""
+";
+
+            string result = InvokeRemoveLegacyEnvSection(toml);
+
+            StringAssert.DoesNotContain("[mcp_servers.uLoopMCP.env]", result);
+            StringAssert.Contains("env = { \"UNITY_TCP_PORT\" = \"8700\" }", result);
+            StringAssert.Contains("[mcp_servers.other]", result);
+        }
+
+        [Test]
+        public void RemoveLegacyEnvSection_Should_ReturnUnchanged_WhenLegacyTableIsAbsent()
+        {
+            string toml = @"[mcp_servers.uLoopMCP]
+command = ""node""
+args = ['server.js']
+env = { ""UNITY_TCP_PORT"" = ""8700"" }
+";
+
+            string result = InvokeRemoveLegacyEnvSection(toml);
+
+            Assert.AreEqual(toml, result);
+        }
+
+        // ----------------------------------------------------------------
         // MakeRelativeToConfigurationRoot
         // ----------------------------------------------------------------
 
@@ -187,6 +227,13 @@ namespace io.github.hatayama.uLoopMCP
             MethodInfo method = CodexServiceType.GetMethod("NormalizeForCompare", PrivateStatic);
             Debug.Assert(method != null, "NormalizeForCompare method not found");
             return (string)method.Invoke(null, new object[] { path });
+        }
+
+        private static string InvokeRemoveLegacyEnvSection(string content)
+        {
+            MethodInfo method = CodexServiceType.GetMethod("RemoveLegacyEnvSection", PrivateStatic);
+            Debug.Assert(method != null, "RemoveLegacyEnvSection method not found");
+            return (string)method.Invoke(null, new object[] { content });
         }
     }
 }
