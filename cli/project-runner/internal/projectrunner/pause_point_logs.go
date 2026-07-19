@@ -33,42 +33,15 @@ type pausePointMatchingLogsResult struct {
 	Logs              []pausePointMatchingLog `json:"Logs"`
 }
 
-type pausePointEvidenceSummary struct {
-	EditorState  pausePointEditorState        `json:"EditorState"`
-	PausePoint   pausePointEvidencePausePoint `json:"PausePoint"`
-	MatchingLogs pausePointEvidenceLogs       `json:"MatchingLogs"`
-	Warning      string                       `json:"Warning"`
-}
-
-type pausePointEvidencePausePoint struct {
-	Id                   string `json:"Id"`
-	Status               string `json:"Status"`
-	Generation           int    `json:"Generation"`
-	HitCount             int    `json:"HitCount"`
-	MultipleHitsObserved bool   `json:"MultipleHitsObserved"`
-	FirstHitAtUtc        string `json:"FirstHitAtUtc"`
-	LastHitAtUtc         string `json:"LastHitAtUtc"`
-	FirstHitSequence     int    `json:"FirstHitSequence"`
-	LastHitSequence      int    `json:"LastHitSequence"`
-}
-
-type pausePointEvidenceLogs struct {
-	SearchText                   string `json:"SearchText"`
-	MatchingLogCount             int    `json:"MatchingLogCount"`
-	ReturnedLogCount             int    `json:"ReturnedLogCount"`
-	LogType                      string `json:"LogType"`
-	MaxCount                     int    `json:"MaxCount"`
-	IncludeStackTrace            bool   `json:"IncludeStackTrace"`
-	MayBeTruncated               bool   `json:"MayBeTruncated"`
-	MultipleMatchingLogsObserved bool   `json:"MultipleMatchingLogsObserved"`
-}
-
-// pausePointWaitResult extends the hit response with marker-matching logs and
-// evidence summary so agents do not need a separate get-logs call while Unity is paused.
+// pausePointWaitResult extends the hit response with marker-matching logs so
+// agents do not need a separate get-logs call while Unity is paused. Warning
+// carries the only actionable signal that used to live inside a now-removed
+// EvidenceSummary; everything else in that summary duplicated fields already
+// present on pausePointStatusResponse or MatchingLogs.
 type pausePointWaitResult struct {
 	pausePointStatusResponse
-	MatchingLogs    []pausePointMatchingLog   `json:"MatchingLogs"`
-	EvidenceSummary pausePointEvidenceSummary `json:"EvidenceSummary"`
+	MatchingLogs []pausePointMatchingLog `json:"MatchingLogs"`
+	Warning      string                  `json:"Warning,omitempty"`
 }
 
 type pausePointGetLogsResponse struct {
@@ -134,55 +107,20 @@ func fetchMatchingLogsFromUnity(
 	}, nil
 }
 
-func buildPausePointEvidenceSummary(
-	response pausePointStatusResponse,
-	logs pausePointMatchingLogsResult,
-) pausePointEvidenceSummary {
-	return pausePointEvidenceSummary{
-		EditorState: response.EditorState,
-		PausePoint: pausePointEvidencePausePoint{
-			Id:                   response.Id,
-			Status:               response.Status,
-			Generation:           response.Generation,
-			HitCount:             response.HitCount,
-			MultipleHitsObserved: response.HitCount > 1,
-			FirstHitAtUtc:        response.FirstHitAtUtc,
-			LastHitAtUtc:         response.LastHitAtUtc,
-			FirstHitSequence:     response.FirstHitSequence,
-			LastHitSequence:      response.LastHitSequence,
-		},
-		MatchingLogs: buildPausePointEvidenceLogs(logs),
-		Warning:      buildPausePointEvidenceWarning(logs, response.HitCount),
-	}
-}
-
-func buildPausePointEvidenceLogs(logs pausePointMatchingLogsResult) pausePointEvidenceLogs {
+func buildPausePointWarning(logs pausePointMatchingLogsResult, hitCount int) string {
 	matchingLogCount := logs.TotalCount
 	if matchingLogCount < len(logs.Logs) {
 		matchingLogCount = len(logs.Logs)
 	}
 	returnedLogCount := len(logs.Logs)
-	return pausePointEvidenceLogs{
-		SearchText:                   logs.SearchText,
-		MatchingLogCount:             matchingLogCount,
-		ReturnedLogCount:             returnedLogCount,
-		LogType:                      logs.LogType,
-		MaxCount:                     logs.MaxCount,
-		IncludeStackTrace:            logs.IncludeStackTrace,
-		MayBeTruncated:               matchingLogCount > returnedLogCount,
-		MultipleMatchingLogsObserved: matchingLogCount > 1,
-	}
-}
 
-func buildPausePointEvidenceWarning(logs pausePointMatchingLogsResult, hitCount int) string {
-	evidenceLogs := buildPausePointEvidenceLogs(logs)
 	warnings := []string{}
-	if evidenceLogs.MayBeTruncated {
+	if matchingLogCount > returnedLogCount {
 		warnings = append(
 			warnings,
 			"Matching logs may be truncated by --matching-logs-max-count; increase the limit before treating this as complete evidence.")
 	}
-	if evidenceLogs.MultipleMatchingLogsObserved {
+	if matchingLogCount > 1 {
 		warnings = append(
 			warnings,
 			"Multiple matching logs were observed for this pause point id; inspect MatchingLogs before treating the scenario as single-fire evidence.")
