@@ -185,7 +185,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new TargetPathLookupResult(null, 0);
             }
 
+#if UNITY_6000_4_OR_NEWER
+            GameObject[] gameObjects = UnityEngine.Object.FindObjectsByType<GameObject>();
+#else
             GameObject[] gameObjects = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
+#endif
             GameObject? matchedTarget = null;
             int matchCount = 0;
 

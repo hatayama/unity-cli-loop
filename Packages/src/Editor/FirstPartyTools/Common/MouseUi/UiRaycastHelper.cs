@@ -28,7 +28,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static List<CanvasRaycastSource> CollectCanvasRaycastSources()
         {
+#if UNITY_6000_4_OR_NEWER
+            Canvas[] canvases = Object.FindObjectsByType<Canvas>();
+#else
             Canvas[] canvases = Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+#endif
             List<CanvasRaycastSource> canvasRaycastSources = new List<CanvasRaycastSource>();
 
             foreach (Canvas canvas in canvases)

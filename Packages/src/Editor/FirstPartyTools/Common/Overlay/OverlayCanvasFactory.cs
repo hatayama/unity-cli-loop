@@ -38,8 +38,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             // Domain Reload resets _instance but DontDestroyOnLoad objects survive; reclaim one and destroy duplicates
+#if UNITY_6000_4_OR_NEWER
+            InputVisualizationCanvas[] existing = Object.FindObjectsByType<InputVisualizationCanvas>();
+#else
             InputVisualizationCanvas[] existing =
                 Object.FindObjectsByType<InputVisualizationCanvas>(FindObjectsSortMode.None);
+#endif
             for (int i = 0; i < existing.Length; i++)
             {
                 if (_instance == null)
