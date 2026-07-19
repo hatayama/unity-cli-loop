@@ -114,6 +114,35 @@ jobs:
           allowDirtyBuild: true
         continue-on-error: true
 
+      - name: Capture Unity job log
+        if: always() && steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          JOB_NAME="Compile Check (${{ matrix.unity-version }})"
+          JOB_ID=$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
+            | jq -r --arg job_name "$JOB_NAME" '.jobs[] | select(.name == $job_name) | .id')
+          if [ -z "$JOB_ID" ]; then
+            echo "::error::Could not resolve the current Unity job id"
+            exit 1
+          fi
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error -L \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${JOB_ID}/logs" \
+              > artifacts/unity-build.log && [ -s artifacts/unity-build.log ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Could not capture the Unity job log"
+          exit 1
+
       - name: Check for compile errors and warnings
         if: steps.changes.outputs.csharp == 'true' && env.HAS_UNITY_LICENSE == 'true'
         run: |
