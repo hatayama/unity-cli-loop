@@ -314,9 +314,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ApplyCaptureWindowExpirations_WhenHitPastTimeout_ShouldExpireAndResume()
+        public void ApplyCaptureWindowExpirations_WhenHitPastTimeoutWhilePaused_DoesNotExpireUntilResumed()
         {
-            // Verifies abandoned SingleShot hits still expire at ExpiresAtUtc and resume without a Clear poll.
+            // Verifies a hit's own Editor pause freezes the capture window countdown, so an
+            // abandoned SingleShot hit does not expire mid-inspection even past its original timeout.
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePoint.Pause("jump");
             _nowUtc = _nowUtc.AddSeconds(31);
@@ -324,8 +325,143 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.ApplyCaptureWindowExpirations();
 
             UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus("jump");
-            Assert.That(status.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(status.Status, Is.EqualTo(UloopPausePointStatus.Hit));
+            Assert.That(_pauseController.IsPaused, Is.True);
+        }
+
+        [Test]
+        public void ApplyCaptureWindowExpirations_AfterResumeFollowingFrozenPause_ExpiresOnlyAfterCreditedDeadline()
+        {
+            // Verifies the frozen duration is credited back to ExpiresAtUtc on resume: expiry
+            // does not fire at the original deadline, only after the extended one elapses.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            _nowUtc = _nowUtc.AddSeconds(20);
+            UloopPausePointRegistry.ResumeEditorPauseForClientDisconnect();
+            UloopPausePointRegistry.ApplyPendingClientDisconnectResume();
             Assert.That(_pauseController.IsPaused, Is.False);
+
+            _nowUtc = _nowUtc.AddSeconds(25);
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+            Assert.That(UloopPausePointRegistry.GetStatus("jump").Status, Is.EqualTo(UloopPausePointStatus.Hit));
+
+            _nowUtc = _nowUtc.AddSeconds(6);
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+            Assert.That(UloopPausePointRegistry.GetStatus("jump").Status, Is.EqualTo(UloopPausePointStatus.Expired));
+        }
+
+        [Test]
+        public void ApplyCaptureWindowExpirations_WhenAnotherMarkerHoldsEditorPaused_FreezesUnrelatedMarkerToo()
+        {
+            // Verifies the freeze is registry-wide: an unrelated marker's countdown is also
+            // frozen for as long as any hit is holding the Editor paused for inspection.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Enable("dash", 10);
+            UloopPausePoint.Pause("jump");
+
+            _nowUtc = _nowUtc.AddSeconds(15);
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+
+            Assert.That(UloopPausePointRegistry.GetStatus("dash").Status, Is.EqualTo(UloopPausePointStatus.Enabled));
+        }
+
+        [Test]
+        public void ClosePauseWindowIfEditorResumedExternally_WhenEditorUnpausedOutsideRegistry_ClosesWindowAndCreditsTime()
+        {
+            // Verifies an external unpause (control-play-mode Play/Stop, or the Editor's own
+            // pause button) that never calls back into Clear/ClearAll/ResumeEditorPause still
+            // closes the open freeze window, so the countdown resumes instead of staying frozen
+            // forever and expiry does not later over-credit game-running time.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            _nowUtc = _nowUtc.AddSeconds(20);
+            _pauseController.ResumeExternally();
+
+            UloopPausePointRegistry.ClosePauseWindowIfEditorResumedExternally();
+
+            _nowUtc = _nowUtc.AddSeconds(25);
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+            Assert.That(UloopPausePointRegistry.GetStatus("jump").Status, Is.EqualTo(UloopPausePointStatus.Hit));
+
+            _nowUtc = _nowUtc.AddSeconds(6);
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+            Assert.That(UloopPausePointRegistry.GetStatus("jump").Status, Is.EqualTo(UloopPausePointStatus.Expired));
+        }
+
+        [Test]
+        public void ClosePauseWindowIfEditorResumedExternally_WhileStillPaused_KeepsWindowOpen()
+        {
+            // Verifies the close only triggers once the controller reports Unpaused; a stray call
+            // while still genuinely paused must not clear the freeze early.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            _nowUtc = _nowUtc.AddSeconds(31);
+
+            UloopPausePointRegistry.ClosePauseWindowIfEditorResumedExternally();
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+
+            Assert.That(UloopPausePointRegistry.GetStatus("jump").Status, Is.EqualTo(UloopPausePointStatus.Hit));
+        }
+
+        [Test]
+        public void GetActivePausePointId_WhenNoMarkerHasPausedTheEditor_ReturnsEmpty()
+        {
+            // Verifies the read-only signal used by execute-dynamic-code stays empty before any hit.
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            Assert.That(UloopPausePointRegistry.GetActivePausePointId(), Is.Empty);
+        }
+
+        [Test]
+        public void GetActivePausePointId_WhileAMarkerHitHoldsTheEditorPaused_ReturnsThatMarkerId()
+        {
+            // Verifies execute-dynamic-code can attribute an in-progress pause to the hitting marker.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            Assert.That(UloopPausePointRegistry.GetActivePausePointId(), Is.EqualTo("jump"));
+        }
+
+        [Test]
+        public void GetActivePausePointId_WhenATraceMarkerHitsWhileAnotherMarkerHoldsThePause_StaysOnTheOriginalMarker()
+        {
+            // Verifies a Trace-mode hit (which never pauses, e.g. fired via execute-dynamic-code
+            // or Step while already paused) does not steal attribution from the marker actually
+            // holding the Editor paused.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Enable("trace-marker", 30, UloopPausePointCaptureMode.Trace);
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePoint.Pause("trace-marker");
+
+            Assert.That(UloopPausePointRegistry.GetActivePausePointId(), Is.EqualTo("jump"));
+        }
+
+        [Test]
+        public void GetActivePausePointId_WhenASecondMarkerHitsWhileAlreadyPaused_UpdatesToTheNewMarker()
+        {
+            // Verifies a second non-Trace hit while already paused becomes the new (only) reason
+            // the Editor stays paused, so attribution correctly moves to it.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Enable("dash", 30);
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePoint.Pause("dash");
+
+            Assert.That(UloopPausePointRegistry.GetActivePausePointId(), Is.EqualTo("dash"));
+        }
+
+        [Test]
+        public void GetActivePausePointId_AfterTheFreezeWindowIsClosed_ReturnsEmpty()
+        {
+            // Verifies the signal clears once the freeze window closes (Clear here), not just once
+            // the Editor itself unpauses, so a resumed session never keeps reporting a stale id.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(UloopPausePointRegistry.GetActivePausePointId(), Is.Empty);
         }
 
         [Test]
@@ -784,6 +920,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Success, Is.True);
             Assert.That(response.Id, Is.EqualTo($"{FixtureFilePath}:{FixtureLine}"));
             Assert.That(response.ResolvedLine, Is.EqualTo(FixtureLine));
+            Assert.That(response.ResolvedLineText, Is.EqualTo("return sum;"));
             Assert.That(response.ResolvedMethod, Does.Contain("Add"));
 
             EnableBySourceLocationFixture fixture = new();
@@ -1006,6 +1143,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void Resume()
             {
                 ResumeCount++;
+                IsPaused = false;
+            }
+
+            // Simulates an external unpause (control-play-mode's Play/Stop, or the Editor's own
+            // pause button) that never calls back into this registry's Resume().
+            public void ResumeExternally()
+            {
                 IsPaused = false;
             }
         }

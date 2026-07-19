@@ -118,9 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            string warning = !method.IsStatic && IsByRefLikeType(method.DeclaringType)
-                ? SourcePausePointConstants.RefStructInstanceNotCapturedWarning
-                : string.Empty;
+            string warning = BuildPatchWarning(method);
             return SourcePausePointPatchResult.SuccessResult(warning);
         }
 
@@ -251,6 +249,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return false;
+        }
+
+        private static string BuildPatchWarning(MethodBase method)
+        {
+            List<string> warnings = new();
+
+            if (!method.IsStatic && IsByRefLikeType(method.DeclaringType))
+            {
+                warnings.Add(SourcePausePointConstants.RefStructInstanceNotCapturedWarning);
+            }
+
+            if (SourcePausePointPhysicalMessageMethods.IsPhysicalMessageMethod(method.Name) &&
+                typeof(MonoBehaviour).IsAssignableFrom(method.DeclaringType))
+            {
+                warnings.Add(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning);
+            }
+
+            return string.Join(" ", warnings);
         }
 
         private static bool IsByRefLikeType(Type type)
