@@ -225,12 +225,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             CancelSkillInstallStateRefresh();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             List<SkillSetupTargetInfo> targets = DetectDisplayedSkillTargets(projectRoot);
-            List<SkillSetupTargetInfo> installableTargets = _shouldUseFirstInstallSkillsUi
+            List<SkillSetupTargetInfo> filteredTargets =
+                SetupWizardSkillsStepPresenter.FilterInstallableSkillTargets(targets);
+            bool useFirstInstallSkillsUi = SetupWizardSkillsStepPresenter.ResolveUseFirstInstallSkillsUi(
+                _shouldUseFirstInstallSkillsUi,
+                filteredTargets.Count);
+            List<SkillSetupTargetInfo> installableTargets = useFirstInstallSkillsUi
                 ? SetupWizardSkillsStepPresenter.GetFirstInstallableSkillTargets(
                     targets,
                     _skillsTarget,
                     !_installSkillsFlat)
-                : SetupWizardSkillsStepPresenter.FilterInstallableSkillTargets(targets);
+                : filteredTargets;
             if (installableTargets.Count == 0) return;
 
             bool shouldShowSkillsInstalledDialog =
