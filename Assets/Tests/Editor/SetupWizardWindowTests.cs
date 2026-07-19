@@ -479,6 +479,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void ResolveUseFirstInstallSkillsUi_WhenLatched_RemainsEnabled()
+        {
+            // Verifies that the first-install UI remains enabled after a target folder is created.
+            bool latchedMode = SetupWizardSkillsStepPresenter.ResolveUseFirstInstallSkillsUi(
+                shouldUseFirstInstallSkillsUi: false,
+                installableTargetCount: 0);
+            bool actual = SetupWizardSkillsStepPresenter.ResolveUseFirstInstallSkillsUi(
+                latchedMode,
+                installableTargetCount: 1);
+
+            Assert.That(actual, Is.True);
+        }
+
+        [Test]
         public void ShouldUseFirstInstallSkillsUi_WhenVersionWasNeverSeen_ReturnsTrue()
         {
             bool shouldUseFirstInstallUi = SetupWizardWindow.ShouldUseFirstInstallSkillsUi("");
