@@ -159,6 +159,12 @@ jobs:
             PACKAGE_ASSEMBLY_COUNT=$(find "${{ matrix.project-path }}/Library/ScriptAssemblies" -maxdepth 1 -type f -name 'UnityCLILoop*.dll' 2>/dev/null | wc -l | tr -d ' ')
             if [ "$PACKAGE_ASSEMBLY_COUNT" -eq 0 ]; then
               echo "::error::Unity did not resolve or compile the io.github.hatayama.uloopmcp package"
+              if [ -f "$LOG_FILE" ]; then
+                echo "=== Unity log tail ==="
+                tail -100 "$LOG_FILE"
+              else
+                echo "::error::Unity log file is missing: $LOG_FILE"
+              fi
               exit 1
             fi
             echo "Package assembly evidence found: $PACKAGE_ASSEMBLY_COUNT assembly(s)."
