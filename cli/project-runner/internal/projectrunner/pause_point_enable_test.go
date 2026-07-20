@@ -16,7 +16,7 @@ import (
 
 // Verifies --await is extracted and the remaining args are left untouched for schema parsing.
 func TestExtractPausePointEnableAwaitFlagsExtractsAwait(t *testing.T) {
-	remaining, await, mode, names, err := extractPausePointEnableAwaitFlags([]string{"--id", "jump", "--await"})
+	remaining, await, mode, names, expectations, err := extractPausePointEnableAwaitFlags([]string{"--id", "jump", "--await"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -29,6 +29,9 @@ func TestExtractPausePointEnableAwaitFlagsExtractsAwait(t *testing.T) {
 	if names != nil {
 		t.Fatalf("expected no captured variable names, got %#v", names)
 	}
+	if expectations != nil {
+		t.Fatalf("expected no expectations, got %#v", expectations)
+	}
 	if len(remaining) != 2 || remaining[0] != "--id" || remaining[1] != "jump" {
 		t.Fatalf("remaining args mismatch: %#v", remaining)
 	}
@@ -36,7 +39,7 @@ func TestExtractPausePointEnableAwaitFlagsExtractsAwait(t *testing.T) {
 
 // Verifies --captured-variables/--captured-variable-names are extracted alongside --await.
 func TestExtractPausePointEnableAwaitFlagsExtractsCapturedVariableOptions(t *testing.T) {
-	remaining, await, mode, names, err := extractPausePointEnableAwaitFlags([]string{
+	remaining, await, mode, names, _, err := extractPausePointEnableAwaitFlags([]string{
 		"--id", "jump", "--await", "--captured-variables", "names", "--captured-variable-names", "a,b",
 	})
 	if err != nil {
@@ -56,9 +59,45 @@ func TestExtractPausePointEnableAwaitFlagsExtractsCapturedVariableOptions(t *tes
 	}
 }
 
+// Verifies --expect is extracted (repeatably) alongside --await, and unrelated args are untouched.
+func TestExtractPausePointEnableAwaitFlagsExtractsExpect(t *testing.T) {
+	remaining, await, _, _, expectations, err := extractPausePointEnableAwaitFlags([]string{
+		"--id", "jump", "--await", "--expect", "Health=100", "--expect", "Name=Enemy",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !await {
+		t.Fatalf("expected await to be true")
+	}
+	if len(expectations) != 2 {
+		t.Fatalf("expectations mismatch: %#v", expectations)
+	}
+	if expectations[0] != (pausePointExpectation{Name: "Health", Expected: "100"}) {
+		t.Fatalf("expectation[0] mismatch: %#v", expectations[0])
+	}
+	if expectations[1] != (pausePointExpectation{Name: "Name", Expected: "Enemy"}) {
+		t.Fatalf("expectation[1] mismatch: %#v", expectations[1])
+	}
+	if len(remaining) != 2 || remaining[0] != "--id" || remaining[1] != "jump" {
+		t.Fatalf("remaining args mismatch: %#v", remaining)
+	}
+}
+
 // Verifies --captured-variables without --await is rejected, since it has no effect otherwise.
 func TestExtractPausePointEnableAwaitFlagsRequiresAwaitForCapturedVariables(t *testing.T) {
-	_, _, _, _, err := extractPausePointEnableAwaitFlags([]string{"--id", "jump", "--captured-variables", "names"})
+	_, _, _, _, _, err := extractPausePointEnableAwaitFlags([]string{"--id", "jump", "--captured-variables", "names"})
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+	if !strings.Contains(err.Error(), "require --await") {
+		t.Fatalf("error message mismatch: %v", err)
+	}
+}
+
+// Verifies --expect without --await is rejected, since it has no effect otherwise.
+func TestExtractPausePointEnableAwaitFlagsRequiresAwaitForExpect(t *testing.T) {
+	_, _, _, _, _, err := extractPausePointEnableAwaitFlags([]string{"--id", "jump", "--expect", "Health=100"})
 	if err == nil {
 		t.Fatalf("expected an error")
 	}
@@ -69,7 +108,7 @@ func TestExtractPausePointEnableAwaitFlagsRequiresAwaitForCapturedVariables(t *t
 
 // Verifies enable-pause-point without --await leaves File/Line/Id/Mode args untouched.
 func TestExtractPausePointEnableAwaitFlagsWithoutAwaitLeavesArgsUnchanged(t *testing.T) {
-	remaining, await, _, _, err := extractPausePointEnableAwaitFlags([]string{"--file", "Assets/Foo.cs", "--line", "10"})
+	remaining, await, _, _, _, err := extractPausePointEnableAwaitFlags([]string{"--file", "Assets/Foo.cs", "--line", "10"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -17,6 +17,7 @@ const (
 	PausePointLogsMaxCountFlagName          = "matching-logs-max-count"
 	PausePointCapturedVariablesFlagName     = "captured-variables"
 	PausePointCapturedVariableNamesFlagName = "captured-variable-names"
+	PausePointExpectFlagName                = "expect"
 )
 
 // runnerNativeCommandOptions lists the flags accepted by each runner-owned
@@ -30,6 +31,7 @@ var runnerNativeCommandOptions = map[string][]string{
 		"--" + PausePointLogsMaxCountFlagName,
 		"--" + PausePointCapturedVariablesFlagName,
 		"--" + PausePointCapturedVariableNamesFlagName,
+		"--" + PausePointExpectFlagName,
 	},
 	clicore.PausePointStatusUserCommandName: {
 		"--" + PausePointIDFlagName,

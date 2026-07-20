@@ -25,15 +25,18 @@ const pausePointEnableCommandName = "enable-pause-point"
 const pausePointEnableAwaitFlagName = "await"
 
 // extractPausePointEnableAwaitFlags pulls the CLI-only --await/--captured-variables/
-// --captured-variable-names flags out of enable-pause-point args before generic schema parsing,
-// because none of them are part of the Unity-side EnablePausePointSchema.
-func extractPausePointEnableAwaitFlags(args []string) ([]string, bool, pausePointCapturedVariablesMode, []string, error) {
+// --captured-variable-names/--expect flags out of enable-pause-point args before generic schema
+// parsing, because none of them are part of the Unity-side EnablePausePointSchema.
+func extractPausePointEnableAwaitFlags(
+	args []string,
+) ([]string, bool, pausePointCapturedVariablesMode, []string, []pausePointExpectation, error) {
 	remaining := make([]string, 0, len(args))
 	await := false
 	mode := pausePointCapturedVariablesModeFull
 	modeSet := false
 	var capturedVariableNames []string
 	namesSet := false
+	var expectations []pausePointExpectation
 
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
@@ -46,7 +49,7 @@ func extractPausePointEnableAwaitFlags(args []string) ([]string, bool, pausePoin
 		if isPausePointFlag(arg, PausePointCapturedVariablesFlagName) {
 			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 			if err != nil {
-				return nil, false, mode, nil, err
+				return nil, false, mode, nil, nil, err
 			}
 			if name != PausePointCapturedVariablesFlagName {
 				remaining = append(remaining, arg)
@@ -54,7 +57,7 @@ func extractPausePointEnableAwaitFlags(args []string) ([]string, bool, pausePoin
 			}
 			parsedMode, err := parsePausePointCapturedVariablesMode(value)
 			if err != nil {
-				return nil, false, mode, nil, err
+				return nil, false, mode, nil, nil, err
 			}
 			mode = parsedMode
 			modeSet = true
@@ -67,7 +70,7 @@ func extractPausePointEnableAwaitFlags(args []string) ([]string, bool, pausePoin
 		if isPausePointFlag(arg, PausePointCapturedVariableNamesFlagName) {
 			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 			if err != nil {
-				return nil, false, mode, nil, err
+				return nil, false, mode, nil, nil, err
 			}
 			if name != PausePointCapturedVariableNamesFlagName {
 				remaining = append(remaining, arg)
@@ -81,12 +84,32 @@ func extractPausePointEnableAwaitFlags(args []string) ([]string, bool, pausePoin
 			continue
 		}
 
+		if isPausePointFlag(arg, PausePointExpectFlagName) {
+			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
+			if err != nil {
+				return nil, false, mode, nil, nil, err
+			}
+			if name != PausePointExpectFlagName {
+				remaining = append(remaining, arg)
+				continue
+			}
+			expectation, parseErr := parsePausePointExpectFlagValue(value)
+			if parseErr != nil {
+				return nil, false, mode, nil, nil, parseErr
+			}
+			expectations = append(expectations, expectation)
+			if consumedNext {
+				index++
+			}
+			continue
+		}
+
 		remaining = append(remaining, arg)
 	}
 
-	if !await && (modeSet || namesSet) {
-		return nil, false, mode, nil, &clierrors.ArgumentError{
-			Message: "--captured-variables and --captured-variable-names require --await",
+	if !await && (modeSet || namesSet || len(expectations) > 0) {
+		return nil, false, mode, nil, nil, &clierrors.ArgumentError{
+			Message: "--captured-variables, --captured-variable-names, and --expect require --await",
 			Option:  "--" + PausePointCapturedVariablesFlagName,
 			Command: pausePointEnableCommandName,
 			NextActions: []string{
@@ -95,7 +118,7 @@ func extractPausePointEnableAwaitFlags(args []string) ([]string, bool, pausePoin
 		}
 	}
 
-	return remaining, await, mode, capturedVariableNames, nil
+	return remaining, await, mode, capturedVariableNames, expectations, nil
 }
 
 func isPausePointFlag(arg string, flagName string) bool {
@@ -110,7 +133,7 @@ func runEnablePausePointCommand(
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
-	remainingArgs, await, capturedVariablesMode, capturedVariableNames, err := extractPausePointEnableAwaitFlags(args)
+	remainingArgs, await, capturedVariablesMode, capturedVariableNames, expectations, err := extractPausePointEnableAwaitFlags(args)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
@@ -161,7 +184,8 @@ func runEnablePausePointCommand(
 		return 1
 	}
 
-	return runEnablePausePointAndAwait(ctx, connection, params, capturedVariablesMode, capturedVariableNames, stdout, stderr)
+	return runEnablePausePointAndAwait(
+		ctx, connection, params, capturedVariablesMode, capturedVariableNames, expectations, stdout, stderr)
 }
 
 // runEnablePausePointAndAwait sends the same single enable-pause-point IPC request the
@@ -174,6 +198,7 @@ func runEnablePausePointAndAwait(
 	params map[string]any,
 	capturedVariablesMode pausePointCapturedVariablesMode,
 	capturedVariableNames []string,
+	expectations []pausePointExpectation,
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
@@ -221,6 +246,7 @@ func runEnablePausePointAndAwait(
 		matchingLogsMaxCount:  pausePointDefaultLogsMaxCount,
 		capturedVariablesMode: capturedVariablesMode,
 		capturedVariableNames: capturedVariableNames,
+		expectations:          expectations,
 	}
 
 	return runPausePointWaitAfterEnable(ctx, connection, waitOptions, enableResponse.Warning, stdout, stderr)
@@ -250,6 +276,10 @@ func runPausePointWaitAfterEnable(
 	}
 
 	if state == pausePointWaitStateHit {
+		// Evaluated against the raw, unfiltered CapturedVariables before the filters below can
+		// narrow or strip values, same as the plain await-pause-point path.
+		expectations := evaluatePausePointExpectations(response.CapturedVariables, options.expectations)
+
 		response = filterPausePointCapturedVariableHistory(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
@@ -262,14 +292,19 @@ func runPausePointWaitAfterEnable(
 				pausePointStatusResponse: response,
 				MatchingLogs:             logs.Logs,
 				Warning:                  joinPausePointWarnings(enableWarning, buildPausePointWarning(logs, response.HitCount)),
+				Expectations:             expectations,
+				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
 			}
-		case enableWarning != "":
+		case enableWarning != "" || len(expectations) > 0:
 			// Best-effort like the plain await path: a failed log fetch must not also drop the
-			// enable-time warning, since that is the only warning source left in this branch.
+			// enable-time warning or --expect results, since those are the only evidence left in
+			// this branch.
 			payload = pausePointWaitResult{
 				pausePointStatusResponse: response,
 				MatchingLogs:             []pausePointMatchingLog{},
 				Warning:                  enableWarning,
+				Expectations:             expectations,
+				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
 			}
 		}
 		result, marshalErr := json.Marshal(payload)
