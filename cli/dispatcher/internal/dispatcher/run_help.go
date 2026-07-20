@@ -121,15 +121,3 @@ func commandListDescription(description string) string {
 	}
 	return strings.TrimSpace(string(runes[:maxCommandListDescriptionLength-3])) + "..."
 }
-
-func loadCompletionTools(startPath string, projectPath string) clicore.ToolsCache {
-	connection, err := project.ResolveConnection(startPath, projectPath)
-	if err != nil {
-		return clicore.LoadDefaultTools()
-	}
-	cache, err := clicore.LoadTools(connection.ProjectRoot)
-	if err != nil {
-		return clicore.LoadDefaultTools()
-	}
-	return cache
-}

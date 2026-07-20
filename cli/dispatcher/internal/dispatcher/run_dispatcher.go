@@ -173,11 +173,11 @@ func runDispatcherProcessCommandWithDeps(
 }
 
 func shouldKeepDispatcherProcessCommand(args []string) bool {
-	if len(args) == 0 || clicore.ShouldHandleCompletionRequest(args) {
+	if len(args) == 0 {
 		return true
 	}
 	switch args[0] {
-	case clicore.InstallCommandName, clicore.UpdateCommandName, clicore.UninstallCommandName, clicore.LaunchCommandName:
+	case clicore.InstallCommandName, clicore.UpdateCommandName, clicore.UninstallCommandName, clicore.LaunchCommandName, clicore.CompletionCommand:
 		return true
 	default:
 		return false
@@ -196,9 +196,6 @@ func shouldRunInDispatcherProcess(args []string) bool {
 		return false
 	}
 	if clicore.IsUnknownLeadingOption(args[0]) {
-		return true
-	}
-	if clicore.ShouldHandleCompletionRequest(args) {
 		return true
 	}
 
