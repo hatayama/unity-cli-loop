@@ -118,6 +118,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ExecuteDynamicCodeResponse response,
             CancellationToken cancellationToken)
         {
+            // No ConfigureAwait(false) here: SwitchToMainThreadAwaitable is not a Task and does not
+            // expose that method. Its continuation is scheduled onto the main thread by
+            // MainThreadSwitcher itself, so the code below always runs there regardless.
             await MainThreadSwitcher.SwitchToMainThread(cancellationToken);
 
             (bool editorPaused, string activePausePointId) = ExecuteDynamicCodePauseStateResolver.Resolve(
