@@ -49,7 +49,7 @@ uloop pause-point-status --id "Assets/Scripts/Enemy.cs:42"
 
 Repeat the Step/status pair to inspect the history tail. A new frame is captured only when the patched line executes during that frame; event handlers such as `OnCollisionEnter` update only when the event occurs again. Use a longer `--timeout-seconds` for a Step session because the enable-time timeout does not extend after hits.
 
-For multi-step verification, avoid repeating enable→await→clear cycles with the default single-shot mode: use `continuous` mode (the marker re-arms automatically after each hit and keeps history), or enable several file:line markers at once — markers are independent and can stay armed simultaneously.
+For multi-step verification, avoid repeating enable→await→clear cycles with the default single-shot mode: pass `--mode continuous` to `enable-pause-point` (the marker re-arms automatically after each hit and keeps history), or enable several file:line markers at once — markers are independent and can stay armed simultaneously.
 
 ## Reading CapturedVariables
 
