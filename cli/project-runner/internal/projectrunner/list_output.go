@@ -178,6 +178,11 @@ func appendPausePointEnableAwaitListOptions(tool clicore.ToolDefinition, options
 			Type:        "string",
 			Description: "Requires --await. Same as await-pause-point's --captured-variable-names",
 		},
+		listOption{
+			Name:        "--" + PausePointExpectFlagName,
+			Type:        "string",
+			Description: "Requires --await. Same as await-pause-point's --expect (repeatable)",
+		},
 	)
 }
 

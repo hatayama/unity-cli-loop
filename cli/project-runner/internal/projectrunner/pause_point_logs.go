@@ -42,6 +42,24 @@ type pausePointWaitResult struct {
 	pausePointStatusResponse
 	MatchingLogs []pausePointMatchingLog `json:"MatchingLogs"`
 	Warning      string                  `json:"Warning,omitempty"`
+
+	// Expectations and AllExpectationsPassed are populated only when --expect was passed, so a
+	// caller that never used --expect sees neither field rather than a vacuous
+	// "AllExpectationsPassed":true with no Expectations behind it. AllExpectationsPassed is a
+	// pointer so omitempty can distinguish "no --expect given" (nil, omitted) from "the given
+	// expectations failed" (non-nil false, still emitted).
+	Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
+	AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
+}
+
+// pausePointAllExpectationsPassedPointer returns nil when no --expect was given, and otherwise
+// a pointer to whether every expectation passed.
+func pausePointAllExpectationsPassedPointer(results []pausePointExpectationResult) *bool {
+	if results == nil {
+		return nil
+	}
+	passed := allPausePointExpectationsPassed(results)
+	return &passed
 }
 
 type pausePointGetLogsResponse struct {

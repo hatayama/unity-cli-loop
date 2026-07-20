@@ -558,6 +558,37 @@ func TestParsePausePointCapturedVariablesModeFlag(t *testing.T) {
 	}
 }
 
+// Verifies --expect is parsed repeatably and rejects a value with no "=".
+func TestParseWaitForPausePointOptionsParsesExpectFlag(t *testing.T) {
+	defaults, err := parseWaitForPausePointOptions([]string{"--id", "jump"})
+	if err != nil {
+		t.Fatalf("default parse failed: %v", err)
+	}
+	if defaults.expectations != nil {
+		t.Fatalf("expected no expectations by default, got %#v", defaults.expectations)
+	}
+
+	options, err := parseWaitForPausePointOptions([]string{
+		"--id", "jump", "--expect", "Health=100", "--expect", "Name=Enemy",
+	})
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if len(options.expectations) != 2 {
+		t.Fatalf("expectations mismatch: %#v", options.expectations)
+	}
+	if options.expectations[0] != (pausePointExpectation{Name: "Health", Expected: "100"}) {
+		t.Fatalf("expectation[0] mismatch: %#v", options.expectations[0])
+	}
+	if options.expectations[1] != (pausePointExpectation{Name: "Name", Expected: "Enemy"}) {
+		t.Fatalf("expectation[1] mismatch: %#v", options.expectations[1])
+	}
+
+	if _, err := parseWaitForPausePointOptions([]string{"--id", "jump", "--expect", "NoEqualsSign"}); err == nil {
+		t.Fatalf("expected error for --expect value without '='")
+	}
+}
+
 // Verifies a hit response always embeds marker-matching logs.
 func TestRunWaitForPausePointEmbedsMatchingLogsOnHit(t *testing.T) {
 	originalQuery := queryPausePointStatus
