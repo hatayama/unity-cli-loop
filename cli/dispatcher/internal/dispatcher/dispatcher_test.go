@@ -159,6 +159,36 @@ func TestRunDispatcherForwardsProjectScopedVersionJSONToPinnedRunner(t *testing.
 	}
 }
 
+func TestRunDispatcherForwardsRunnerOwnedCommandHelpToPinnedRunner(t *testing.T) {
+	// Verifies await-pause-point --help is forwarded to the pinned runner instead of being answered locally.
+	projectRoot := createDispatcherUnityProject(t)
+	cacheRoot := t.TempDir()
+	writeDispatcherProjectPin(t, projectRoot, clicontract.ProjectRunnerVersion())
+	writeCachedDispatcherRealCLI(t, cacheRoot, clicontract.ProjectRunnerVersion())
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
+	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
+	t.Chdir(projectRoot)
+
+	deps := defaultDispatcherRunDeps()
+	var actualArgs []string
+	deps.runRealCLI = func(ctx context.Context, realCLIPath string, args []string, stdout io.Writer, stderr io.Writer) int {
+		actualArgs = append([]string{}, args...)
+		return 0
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runDispatcherWithDeps(context.Background(), []string{clicore.PausePointAwaitCommandName, "--help"}, &stdout, &stderr, deps)
+
+	if code != 0 {
+		t.Fatalf("dispatcher failed: code=%d stderr=%s", code, stderr.String())
+	}
+	assertStringSliceEqual(t, actualArgs, []string{clicore.PausePointAwaitCommandName, "--help"})
+	if stdout.String() != "" {
+		t.Fatalf("dispatcher must not answer runner-owned command help locally: %s", stdout.String())
+	}
+}
+
 func TestRunDispatcherCommandHelpDoesNotRequireProjectPin(t *testing.T) {
 	// Verifies dispatcher handles command help before project and pin resolution.
 	t.Chdir(t.TempDir())

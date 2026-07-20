@@ -19,8 +19,6 @@ func TestRunProjectLocalRejectsDispatcherOwnedCommands(t *testing.T) {
 		"uninstall",
 		"skills",
 		"completion",
-		"--list-commands",
-		"--list-options",
 	} {
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer

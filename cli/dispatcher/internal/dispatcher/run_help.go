@@ -69,7 +69,6 @@ func printMainHelp(stdout io.Writer, displayVersion string, description string, 
 	clicore.WriteLine(stdout, "  uloop list                                  Show the live Unity tool list")
 	clicore.WriteLine(stdout, "  uloop --project-path /path/to/project list  Show tools for another Unity project")
 	clicore.WriteLine(stdout, "  uloop <command> --help                      Show help for native and Unity tool commands")
-	clicore.WriteLine(stdout, "  uloop completion --help                     Show shell completion setup and helpers")
 }
 
 func printNativeCommandHelp(stdout io.Writer) {
@@ -87,7 +86,9 @@ func printGlobalOptionsHelp(stdout io.Writer) {
 func printUnityToolCommandHelp(stdout io.Writer, cache clicore.ToolsCache, hasProjectToolCache bool) {
 	if !hasProjectToolCache {
 		clicore.WriteLine(stdout, "Unity tool commands are project-specific.")
+		clicore.WriteLine(stdout, "  This output does not include the full command list; it depends on a resolved Unity project.")
 		clicore.WriteLine(stdout, "  Run `uloop list` inside a Unity project to show the live tool list.")
+		clicore.WriteLine(stdout, "  Run `uloop --project-path /path/to/project --help` to see the full command list and help for that project.")
 		clicore.WriteLine(stdout, "  Run `uloop sync` after the Editor tool set changes to refresh cached commands.")
 		return
 	}
@@ -120,16 +121,4 @@ func commandListDescription(description string) string {
 		return line
 	}
 	return strings.TrimSpace(string(runes[:maxCommandListDescriptionLength-3])) + "..."
-}
-
-func loadCompletionTools(startPath string, projectPath string) clicore.ToolsCache {
-	connection, err := project.ResolveConnection(startPath, projectPath)
-	if err != nil {
-		return clicore.LoadDefaultTools()
-	}
-	cache, err := clicore.LoadTools(connection.ProjectRoot)
-	if err != nil {
-		return clicore.LoadDefaultTools()
-	}
-	return cache
 }

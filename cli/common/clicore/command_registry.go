@@ -1,23 +1,17 @@
 package clicore
 
 const (
-	LaunchCommandName                   = "launch"
-	InstallCommandName                  = "install"
-	UpdateCommandName                   = "update"
-	UninstallCommandName                = "uninstall"
-	SkillsCommandName                   = "skills"
-	CompileCommandName                  = "compile"
-	ExecuteDynamicCodeCommandName       = "execute-dynamic-code"
-	PausePointAwaitCommandName          = "await-pause-point"
-	PausePointStatusUserCommandName     = "pause-point-status"
-	RunTestsCommandName                 = "run-tests"
-	CompletionCommand                   = "completion"
-	ListCommandsFlag                    = "--list-commands"
-	ListOptionsFlag                     = "--list-options"
-	PausePointIDFlagName                = "id"
-	PausePointTimeoutFlagName           = "timeout-seconds"
-	PausePointLogsMaxCountFlagName      = "matching-logs-max-count"
-	PausePointCapturedVariablesFlagName = "captured-variables"
+	LaunchCommandName               = "launch"
+	InstallCommandName              = "install"
+	UpdateCommandName               = "update"
+	UninstallCommandName            = "uninstall"
+	SkillsCommandName               = "skills"
+	CompileCommandName              = "compile"
+	ExecuteDynamicCodeCommandName   = "execute-dynamic-code"
+	PausePointAwaitCommandName      = "await-pause-point"
+	PausePointStatusUserCommandName = "pause-point-status"
+	RunTestsCommandName             = "run-tests"
+	CompletionCommand               = "completion"
 )
 
 type NativeCommandEntry struct {
@@ -41,7 +35,7 @@ var NativeCommands = []NativeCommandEntry{
 	{Name: PausePointAwaitCommandName, Description: "Wait until a named UloopPausePoint.Pause marker pauses Unity", Owner: RunnerOwned},
 	{Name: PausePointStatusUserCommandName, Description: "Show the state of a named UloopPausePoint.Pause marker", Owner: RunnerOwned},
 	{Name: SkillsCommandName, Description: "List, install, or uninstall agent skills", Owner: DispatcherOwned},
-	{Name: CompletionCommand, Description: "Print or install shell completion", Owner: DispatcherOwned},
+	{Name: CompletionCommand, Description: "Deprecated: shell completion has been removed; this command is now a no-op", Owner: DispatcherOwned},
 	{Name: InstallCommandName, Description: "Configure the global uloop launcher binary", Owner: DispatcherOwned},
 	{Name: UpdateCommandName, Description: "Update the global uloop launcher binary", Owner: DispatcherOwned},
 	{Name: UninstallCommandName, Description: "Remove the global uloop launcher binary", Owner: DispatcherOwned},
