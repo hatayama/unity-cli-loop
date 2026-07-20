@@ -3,8 +3,9 @@
 Use this document when a component's release-please version series must be
 moved backward (for example, a component accidentally escaped the shared
 `3.0.0-beta` line because a bootstrap release made release-please treat a
-final version as shipped). The 2026-07-21 dispatcher realignment (PR #1888)
-followed this procedure: an unintended `dispatcher-v3.0.0` bootstrap release
+final version as shipped). The dispatcher realignment that shipped as
+`dispatcher-v3.0.0-beta.19` (PR #1888) followed this procedure: an
+unintended `dispatcher-v3.0.0` bootstrap release
 had pushed the dispatcher onto a `3.1.0-beta` series, and it was rewound to
 `3.0.0-beta.19`.
 
