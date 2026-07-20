@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.0-beta.18](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.1.0-beta.17...dispatcher-v3.1.0-beta.18) (2026-07-20)
+
+
+### Bug Fixes
+
+* Runner-owned command flags and help no longer require a dispatcher release ([#1862](https://github.com/hatayama/unity-cli-loop/issues/1862)) ([96e75f8](https://github.com/hatayama/unity-cli-loop/commit/96e75f8a19c23e4c3d587e91efa3e52574716060))
+
 ## [3.1.0-beta.17](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.1.0-beta.16...dispatcher-v3.1.0-beta.17) (2026-07-19)
 
 
