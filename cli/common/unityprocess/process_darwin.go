@@ -33,8 +33,9 @@ func listUnityProcessesMac(ctx context.Context) ([]UnityProcess, error) {
 
 		args, err := macProcessArgs(pid)
 		if err != nil || len(args) == 0 {
-			// Reading another user's process args fails (EPERM); ps could not see
-			// those processes either, so skipping them preserves prior behavior.
+			// Reading another user's process args fails (EPERM). Non-root ps could
+			// not read those processes' arguments either, so they never matched
+			// before; skipping them preserves prior behavior.
 			continue
 		}
 
