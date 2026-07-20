@@ -54,71 +54,22 @@ Repeat the Step/status pair to inspect the history tail. A new frame is captured
 Every hit response embeds `CapturedVariables`: the method's in-scope locals, its parameters, and the `this` instance fields, captured at the exact moment execution reached the patched line. Values are point-in-time strings, not live references, so they stay valid as evidence even after Unity resumes.
 
 - The snapshot is taken **before** the resolved line executes, exactly like an IDE breakpoint on that line. To inspect a value after an assignment, place the pause point on the following line.
-- The pause itself only takes effect at the next frame boundary: the frame that hit the pause point still runs to completion first, so any event that fires later in that same frame (a chained collision, a cascading destroy) has already happened by the time Unity actually stops. Trust `CapturedVariables` (the pre-line snapshot) as evidence for what was true up to the patched line; do not assume the paused state still matches it for events later in the same frame.
-- `execute-dynamic-code` during the pause sees the interrupted method's **post-interrupt** state, not this pre-line snapshot. Use `CapturedVariables` for pre-line evidence; use the raw capture API below when you need live references while paused. If you suspect a captured value is stale or wrong, cross-check it against the live scene object with `execute-dynamic-code` (for example reading `transform.position` off the instance found via `UnityObjectPath`) rather than trusting either source alone. `execute-dynamic-code` responses also carry `EditorPaused` and `ActivePausePointId` — these fields appear only while the Editor is paused, so a call made while a pause point still has Unity paused is unambiguous instead of looking like a stale or buggy result.
-- `Scope` is `Local`, `Parameter`, `InstanceField`, or `This`. `InstanceField` entries come from a reflection walk of the paused instance's declared type, not from the method's IL usage, so a field the method never reads can still appear — and `MaxCapturedVariableCount` still caps the total entry count across all scopes, so a field-heavy type can push some instance fields out of the snapshot. If a specific field you want is missing, read it directly from the live instance instead of waiting on the capped snapshot: while still paused, `UloopPausePoint.TryGetCapturedValue("this")` returns the live `this` reference, so `execute-dynamic-code` can read any field or property off it regardless of the cap.
-- The snapshot also includes a synthetic `this` entry (Scope `This`) for the paused instance itself, so you can tell which instance or GameObject was hit via its `UnityObjectPath` and `UnityObjectInstanceId`. For an async or coroutine method it resolves to the original outer instance, not the compiler-generated state machine, and static methods emit no `this` entry. While Unity is still paused, `UloopPausePoint.TryGetCapturedValue("this")` returns the live instance reference (for example so a watch expression can read `transform.position`).
-- Nested previews stop at `MaxCollectionPreviewDepth` (2 levels) below each captured variable: past that, an object or collection renders as type-name-only text instead of expanding — a type name where you expected contents means you hit this cap, not a bug. The budget is counted per captured variable, so reaching a value through `this` costs one extra level compared to reading it as a direct local: `this.CurrentPiece.Origin` bottoms out as a type name, while a `dropped` local holding the same piece expands to `{Kind, RotationState, Origin: {X, Y}}`. When the value you need sits too deep, pick a pause point line where it is a direct local or parameter — as its own top-level entry it starts with a fresh full budget. Primitive leaves (numbers, strings, booleans, and any type that overrides `ToString()`) always render regardless of depth; only nested objects and collections get cut off.
-- `UnityEngine.Object` values additionally carry `UnityObjectKind` (`SceneObject`, `PrefabAsset`, `Asset`, `RuntimeInstance`, or `Destroyed`), `UnityObjectPath`, and `UnityObjectInstanceId`. These three fields appear only for Unity object values; a non-Unity-object variable (an `int`, a `string`, a plain class) omits all three from the JSON entirely instead of sending them as empty/zero. Check whether `UnityObjectKind` is present to tell the two cases apart. Use the fields as handles for the next dig: a `SceneObject` path feeds `get-hierarchy`/`find-game-objects`, an asset path locates the asset, and the InstanceID works with `execute-dynamic-code`.
-- A captured `UnityEngine.Object` value's `Value` string is only the object's `name` — its fields never appear there, and its `ToString()` is not consulted either. A `MonoBehaviour` parameter therefore reads as something like `Block(Clone)`, indistinguishable from every other clone, with none of its `[SerializeField]` values visible. To tell instances apart in snapshots, assign distinguishing names when you create them (for example `gameObject.name = $"Block_{blockId}"`). To read a specific field, stay paused and read it off the live instance with `execute-dynamic-code` (via `UnityObjectPath`/`UnityObjectInstanceId`, or `UloopPausePoint.TryGetCapturedValue("this")` for the paused instance itself).
-- `CapturedVariablesTruncated=true` means at least one value was clipped to the length cap or the variable-count cap stopped enumeration; clipped values are still present up to the cap.
-- A value's `Value` string is not always its plain `ToString()`. A materialized collection (`List<T>`, arrays, dictionaries, ...) previews as a shallow JSON array/object instead of the default type-name text. A custom struct/class whose declared type does not override `ToString()` previews the same way — a shallow JSON object of its fields — so you do not need to add a temporary `ToString()` override just to see its contents. A type that does override `ToString()` keeps using that result unchanged. Either kind of preview is capped by depth, element count, and length like any other captured value.
-- async and coroutine methods work: hoisted locals and the original `this` fields appear under their normal names.
-- If the patched method ran off the main thread, values degrade to type names with a `(captured off main thread)` note; the hit itself is still recorded.
+- `Scope` is `Local`, `Parameter`, `InstanceField`, or `This`. The synthetic `this` entry identifies which instance or GameObject was hit via `UnityObjectPath` and `UnityObjectInstanceId`; `UnityEngine.Object` values carry the same handle fields for follow-up digs with `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code`.
+- `--captured-variables names` on `await-pause-point`/`pause-point-status` drops every `Value` and keeps `Name`/`Scope`/`TypeName` — use it first on field-heavy classes, then fetch full values with a plain `pause-point-status` call.
+- While Unity is still paused, `UloopPausePoint.TryGetCapturedValue("name")` (and `"this"`) returns live captured references for `execute-dynamic-code`; the holder clears on resume.
 
-`await-pause-point`'s hit response also carries a top-level `Warning` (omitted when empty): it flags multiple hits, multiple matching logs, or truncated matching logs, so you can tell a single clean hit apart from evidence that needs closer inspection. `MatchingLogs` (log entries whose text contains the marker id) is still embedded, but source-derived ids rarely appear in log text, so treat `CapturedVariables` as the primary variable evidence.
-
-Use `Generation`, `EnabledAtUtc`, and the hit sequence fields from the hit or status response to tell a fresh marker from stale evidence with the same id. `RemainingMilliseconds` and `Expired` are returned directly so you do not need to infer marker lifetime from elapsed time.
-
-### Pulling More Than the Default Response Carries
-
-The hit and status responses are push-first and kept lean by default: no field is ever a re-summary of another field, and a variable's `Value` is the only per-entry cost. For a class with dozens of `[SerializeField]` fields, a `continuous` marker's history still multiplies entry count by `MaxHistory` (default 20), which can be a lot of `Value` strings to carry around when you only need to know which names were captured.
-
-Pull only what you need instead of paying for it all up front:
-
-- `--captured-variables names` on `await-pause-point`/`pause-point-status` drops `Value` from every captured variable (including every history frame) and keeps `Name`/`Scope`/`TypeName`. Use it first on a field-heavy class, then fetch specific values afterward.
-- `uloop pause-point-status --id <id>` returns the full response again, including every `Value`, whenever you need it — call it plain (no `--captured-variables`) for the complete picture after a lightweight `names` scan.
-
-### Choosing the Right Evidence Source
-
-Three different sources answer three different questions about a captured variable; pick by what you actually need:
-
-| Need | Source | Notes |
-|---|---|---|
-| A value type's value at capture time | `UloopPausePoint.TryGetCapturedValue("name")` | Faithful: value types are a boxed copy taken at capture time, so this never drifts. |
-| A reference type's *live* current state | `UloopPausePoint.TryGetCapturedValue("name")` | The reference itself is live, so the object it points to may have changed since capture (or been destroyed/resumed away). Only available while Unity is still paused. |
-| A reference type's state *as it was at capture time* | `uloop pause-point-status --id <id>` | The only faithful source for this: the response is a formatted string snapshot taken at capture time and stored in the registry, so it never drifts and stays retrievable after resume until the next clear or domain reload. |
-
-Capturing a deep copy at hit time was deliberately not adopted: it would cost hot-path performance and risk getter side effects, so the formatted-string snapshot (`pause-point-status`) remains the only way to get capture-time-faithful evidence for reference types.
-
-## Raw Capture While Paused
-
-While Unity is paused on a hit, `execute-dynamic-code` can read live captured references through `UloopPausePoint`:
-
-- `TryGetCapturedValue(string name)` returns `(bool Found, object Value)` for the latest hit only. When multiple captured variables share the same name, the last one wins.
-- `GetCapturedNames()` lists captured variable names from that snapshot.
-- `GetCapturedPausePointId()` returns the pause-point id for the held snapshot.
-
-The holder clears when Unity resumes (not when you `Step` while still paused), when the matching pause point is cleared, when a new hit replaces the snapshot, or when PlayMode exits. After resume, `TryGetCapturedValue` returns `Found=false`. Re-enabling the same pause point while still paused (for example to refresh its timeout during a step session) keeps the held references, because a re-enable does not resume Unity.
-
-For a self-progressing game (a board that advances on a timer, an opponent that keeps moving), arranging a specific scenario through real input alone is a race you will usually lose: each `simulate-*` call is a separate CLI round trip, and the gap between two calls is often longer than the game's own tick. Instead, while paused on a hit, use `TryGetCapturedValue("this")` to get the live instance and call its production methods directly to build up the exact state you need, then send real simulated input for only the one action you are verifying. The setup becomes deterministic while the observed action still exercises the real input path.
+Before interpreting unexpected, missing, or truncated values, nested previews that render as type names, Unity-object `Value` strings, capture-time vs live evidence trade-offs, or the raw capture API in detail, read [references/captured-variables.md](references/captured-variables.md).
 
 ## Watch Expressions
 
-Use watch expressions when the value should be evaluated automatically after each paused Play Mode Step:
+Use watch expressions when a value should be re-evaluated automatically after each paused Play Mode Step:
 
 ```bash
 uloop enable-watch --id "speed" --expression "UloopPausePoint.TryGetCapturedValue(\"speed\").Value" --max-history 20
 uloop get-watch-values --id "speed"
 ```
 
-`enable-watch` compiles the C# expression once, evaluates it immediately for a baseline, and then evaluates it once per changed `Time.frameCount`, but only while Play Mode is running and the Editor is paused (each hit pause and each `Step`); nothing is recorded while the game runs unpaused. Multiple watches run in registration order. `enable-watch` rejects a duplicate id instead of overwriting; clear with `clear-watch --id <id>` before re-registering a changed expression. `clear-watch --id <id>` removes one watch; `clear-watch --all` removes all watches. `get-watch-values` without `--id` returns every registered watch.
-
-Because a watch only re-evaluates on a changed, paused frame, a value that looks stuck across several reads usually means no new paused frame has occurred — most often the linked pause point has not been hit again (a marker on a conditional line freezes after its first hit; see Line Placement). `get-watch-values` surfaces this as a non-empty `ValueFrozenHint` on the entry once the last few evaluations came back identical; treat it as a prompt to re-trigger the code path, not as proof the value cannot legitimately stay the same.
-
-The expression may use `UloopPausePoint.TryGetCapturedValue("name")` to inspect the latest raw pause-point capture while paused. Each history entry includes the frame and either a stringified value or an explicit error type and message. A throwing expression is recorded as an error and does not stop the Editor update loop. `--max-history` accepts 1 through 100 and drops the oldest entries after the limit.
-
-Watch expressions are in-memory Editor state. A domain reload clears them, so re-register them after `uloop compile`, script recompilation, or an Editor restart. For reliable per-Step changes, keep the expression attached to a continuous pause point on an `Update` or `FixedUpdate` line and use `control-play-mode --action Step`.
+A watch evaluates only on a changed, paused frame, and a domain reload clears all watches. For the full evaluation rules (baseline, ordering, duplicate ids, `ValueFrozenHint`, error handling), read [references/watch-expressions.md](references/watch-expressions.md).
 
 ## Marker Types
 
@@ -129,46 +80,9 @@ Watch expressions are in-memory Editor state. A domain reload clears them, so re
 
 ## Catching a Runtime Condition with a Dynamic-Code Trigger
 
-A file:line pause point freezes a specific source line. When the moment you need is defined by a runtime condition instead — an animation passing a normalized time, HP reaching zero, an enemy spawning — combine an id-only marker with `execute-dynamic-code`. Timing-sensitive verification such as short motions or one-frame effects cannot be captured by sleeping and then taking a screenshot; this pattern freezes the first frame where the condition holds, without writing any .cs file.
+A file:line pause point freezes a specific source line. When the moment you need is defined by a runtime condition instead — an animation passing a normalized time, HP reaching zero, an enemy spawning — enable an id-only marker (`uloop enable-pause-point --id <id>`, no `--file`/`--line`), then use `execute-dynamic-code` to register an `EditorApplication.update` watcher that calls `UloopPausePoint.Pause("<id>")` on the first frame the condition holds, and wait with `uloop await-pause-point --id <id>` on the CLI side. This freezes the first frame where the condition holds, without writing any .cs file.
 
-1. Enable an id-only marker: `uloop enable-pause-point --id hit-peak --timeout-seconds 120` (single-shot by default).
-2. Run `uloop execute-dynamic-code` to trigger the action and register a watcher on `EditorApplication.update`, then return immediately. The watcher evaluates the condition every frame; on the first frame it holds, it removes itself and calls `UloopPausePoint.Pause("hit-peak")`.
-3. Wait on the CLI side: `uloop await-pause-point --id hit-peak --timeout-seconds 120`.
-4. While Unity is paused, collect evidence: `uloop screenshot`, state reads with `execute-dynamic-code`, or `control-play-mode --action Step` frame stepping.
-5. Resume with `uloop control-play-mode --action Play`.
-
-Example watcher (freeze when the Hit animation passes 30% of the motion):
-
-```csharp
-using UnityEngine;
-using UnityEditor;
-using io.github.hatayama.UnityCliLoop.Runtime;
-Animator animator = GameObject.Find("Zombie").GetComponent<Animator>();
-// Match the marker's --timeout-seconds so an unmet condition cannot leak the delegate
-double deadline = EditorApplication.timeSinceStartup + 120d;
-EditorApplication.CallbackFunction watcher = null;
-watcher = () =>
-{
-    if (EditorApplication.timeSinceStartup > deadline)
-    {
-        EditorApplication.update -= watcher;
-        return;
-    }
-    AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(0);
-    if (!state.IsName("Hit") || state.normalizedTime < 0.3f) return;
-    EditorApplication.update -= watcher;
-    UloopPausePoint.Pause("hit-peak");
-};
-EditorApplication.update += watcher;
-return "watcher registered";
-```
-
-Rules for this pattern:
-
-- The dynamic-code body runs synchronously on the main thread. Never poll or sleep inside the snippet — frames stop advancing and the animation freezes with them. Register the watcher and return; the waiting belongs to `await-pause-point`.
-- The watcher must unsubscribe itself from `EditorApplication.update` when it fires, and also on a deadline in case the condition never holds — a leaked delegate keeps running until the next domain reload. Match the deadline to the marker's `--timeout-seconds`.
-- `UloopPausePoint.Pause(id)` is a public static Runtime API, and dynamic code compiles against the project's assemblies, so the watcher can call it exactly like game code. It fires only while the same id is enabled; otherwise it is a no-op, so a stray watcher cannot pause Unity unexpectedly.
-- A single-shot marker disarms after the first hit. To catch repeated occurrences, enable with `--mode continuous` and run `await-pause-point` again after each resume.
+Before using this pattern, read [references/condition-triggered-pause.md](references/condition-triggered-pause.md) for the full workflow, a complete watcher example, and the safety rules (never sleep in the snippet, watcher self-unsubscription, deadline handling).
 
 ## Pausing Right After Simulated Input, Plus N Frames
 
