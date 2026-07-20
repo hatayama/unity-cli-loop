@@ -30,61 +30,22 @@ Every test method must have a short comment that states what behavior the test v
 ## CLI / Unity Package Compatibility
 
 Runtime compatibility between the Unity package and the native CLI is gated on an integer
-protocol version, not on release numbers. Two declarations must always stay equal:
-
-- Go side: `protocolVersion` in `cli/common/clicontract/contract.json` (the generation the CLI advertises over IPC).
-- C# side: `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION` (the exact generation the package accepts).
-
-`TestProtocolVersionMatchesUnityPackage` fails the build if they diverge, so never bump one alone.
-The runtime gate expects equality because the protocol version is a contract generation, not a
-minimum-compatible range.
-Pull request CI also runs a non-blocking IPC protocol reminder when IPC-facing files changed
-without protocol declaration changes; treat it as a review prompt, not as proof that a bump is
-required.
-
-Bump both, together, in the same PR only when the IPC contract changes in a way that makes
-CLI and package builds from different protocol generations unable to interoperate — for example renaming
-or removing a request field, changing the readiness/dispatch handshake, or altering a response
-shape the other side parses. Ordinary CLI features and bug fixes that keep the wire format
-compatible must not bump it.
-
-Do not touch the protocol version to "keep up with releases":
-
-- `cli/common/clicontract/contract.json` `projectRunnerVersion`, the pin files'
-  `projectRunnerVersion`, and `cli/dispatcher/dispatchercontract/dispatcher-contract.json`
-  `dispatcherVersion` are stamped by release-please only. Never edit them by hand in a feature PR.
-- When a protocol bump changes `CliConstants.REQUIRED_CLI_PROTOCOL_VERSION`, prepare the matching
-  project runner release first. PR CI (`check-protocol-minimum-version`) fails until the pin's
-  `projectRunnerVersion` points at a published project runner release that advertises the
-  required protocol; release-please advances that value when the runner release is cut.
-- Runtime protocol mismatch guidance must use the unpinned CLI update path for older clients and
-  tell newer clients to align the package and CLI releases.
+protocol version. `protocolVersion` in `cli/common/clicontract/contract.json` and
+`CliConstants.REQUIRED_CLI_PROTOCOL_VERSION` must always stay equal — never bump one alone,
+and bump them (together, in the same PR) only when the IPC wire format becomes incompatible
+between generations; ordinary features and fixes must not bump it. Release version fields
+(`projectRunnerVersion`, `dispatcherVersion`, changelogs) are stamped by release-please only —
+never edit them by hand in a feature PR. Bump criteria and release sequencing:
+`docs/protocol-version.md`.
 
 ## Project Runner Pin
 
-`Packages/src/project-runner-pin.json` (mirrored byte-identically to `.uloop/project-runner-pin.json`
-by `CliPinSynchronizer`) is the single source for cross-component version requirements. Its
-required fields:
-
-- `projectRunnerVersion` — the project runner release the dispatcher must run for this package.
-  Stamped by release-please; never edit by hand.
-- `minimumDispatcherVersion` — the semver floor the package requires of the globally installed
-  dispatcher. The dispatcher force-updates itself when it is older than this value, and the
-  package reads it (via `CliPinReader`) for setup and installation checks. This is the only
-  manually maintained minimum-version declaration; raise it only when the package genuinely
-  needs a newly published dispatcher, not because the dispatcher implementation changed.
-- `dispatcherReleaseTag` and `dispatcherArchiveManifest` — the provenance-pinned dispatcher
-  release used for first installation and its verified asset hashes. Stamped by automation
-  against a published release; never edit by hand (see `docs/dispatcher-pin-release-order.md`).
-
-There is no dispatcher⇄package integer contract generation; the pin's semver floor is the only
-dispatcher gate. The IPC `protocolVersion` pair described above is the only integer generation
-in the system.
-
-Pin format discipline: the pin evolves additively only — never delete or rename an existing
-field. The forced-update instruction (`minimumDispatcherVersion`) travels inside the pin, so an
-old dispatcher that cannot parse a new pin never learns it must update. For the same reason the
-dispatcher must stay lenient when reading pins written by older packages.
+`Packages/src/project-runner-pin.json` (mirrored byte-identically to
+`.uloop/project-runner-pin.json`) is the single source for cross-component version
+requirements. `minimumDispatcherVersion` is the only manually maintained field — raise it only
+when the package genuinely needs a newly published dispatcher. All other fields are stamped by
+automation; never edit them by hand. The pin evolves additively only — never delete or rename
+an existing field. Field reference and rationale: `docs/project-runner-pin.md`.
 
 ## Generated Skill Files
 
@@ -125,23 +86,21 @@ as described in `docs/dead-code-scanner.md` (commands, and what `KeptByUnityOrRe
 
 ## Native Go CLI Validation
 
-When running `uloop` commands for this project during CLI development, do not use the `uloop` command resolved from `PATH`. Run this checkout's built development binary directly so validation uses the code under review:
+When running `uloop` commands for this project during CLI development, do not use the `uloop`
+resolved from `PATH`. Run this checkout's built development binary (rebuilt after relevant CLI
+source changes) so validation uses the code under review:
 
 ```bash
 dist/darwin-arm64/uloop compile --project-path "$(git rev-parse --show-toplevel)"
 ```
 
-Before running a command with `--project-path`, confirm that the path is the intended Unity project for the current task. Do not copy a sibling checkout path from another repository or prior session. When intentionally validating a different Unity project, use an explicit placeholder in notes and replace it at execution time:
+Before running a command with `--project-path`, confirm the path is the intended Unity project
+for the current task — do not copy a sibling checkout path from another repository or session.
 
-```bash
-dist/darwin-arm64/uloop compile --project-path <UNITY_PROJECT_ROOT>
-```
-
-If CLI source changes affect the command behavior you are validating, rebuild the development binary before running it.
-
-When changing Go source files under any of the Go modules (`cli/common`, `cli/dispatcher`, `cli/project-runner`, `cli/release-automation`), run `scripts/check-go-cli.sh`.
-Use `scripts/build-go-cli.sh` when you need to refresh local development binaries under `dist`; generated binaries are ignored and must not be committed.
-This script is the local equivalent of the Go CLI CI validation: it runs formatting checks, vet, lint, tests, rebuilds the built native binaries, and verifies that required platform binaries exist.
+When changing Go source files under any Go module (`cli/common`, `cli/dispatcher`,
+`cli/project-runner`, `cli/release-automation`), run `scripts/check-go-cli.sh` — the local
+equivalent of Go CLI CI (format, vet, lint, tests, binary rebuild). Use `scripts/build-go-cli.sh`
+to refresh `dist` binaries; they are git-ignored and must not be committed.
 
 ## Unity Freeze Prevention
 
