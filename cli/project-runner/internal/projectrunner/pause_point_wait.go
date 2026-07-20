@@ -291,12 +291,7 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 		case PausePointCapturedVariableNamesFlagName:
 			options.capturedVariableNames = parsePausePointCapturedVariableNames(value)
 		default:
-			return waitForPausePointOptions{}, &clierrors.ArgumentError{
-				Message:     "Unknown option for await-pause-point: --" + name,
-				Option:      "--" + name,
-				Command:     clicore.PausePointAwaitCommandName,
-				NextActions: []string{"Run `uloop await-pause-point --help` to inspect supported options."},
-			}
+			return waitForPausePointOptions{}, pausePointUnknownOptionError(clicore.PausePointAwaitCommandName, name)
 		}
 
 		if consumedNext {
@@ -339,12 +334,7 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 		case PausePointCapturedVariableNamesFlagName:
 			options.capturedVariableNames = parsePausePointCapturedVariableNames(value)
 		default:
-			return pausePointStatusOptions{}, &clierrors.ArgumentError{
-				Message:     "Unknown option for pause-point-status: --" + name,
-				Option:      "--" + name,
-				Command:     clicore.PausePointStatusUserCommandName,
-				NextActions: []string{"Run `uloop pause-point-status --help` to inspect supported options."},
-			}
+			return pausePointStatusOptions{}, pausePointUnknownOptionError(clicore.PausePointStatusUserCommandName, name)
 		}
 
 		if consumedNext {
