@@ -14,11 +14,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     internal static class PausePointStatusBridgeCommand
     {
         private const string IdParamName = "Id";
+        private const string MinimumRemainingSecondsParamName = "MinimumRemainingSeconds";
 
         public static PausePointStatusResponse Execute(JToken paramsToken)
         {
             string id = ReadId(paramsToken);
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(id);
+            return PausePointStatusResponse.FromSnapshot(snapshot);
+        }
+
+        // Called once when await-pause-point starts waiting, so a marker enabled well before a
+        // slow multi-step CLI round trip does not expire before the await itself observes a hit.
+        public static PausePointStatusResponse Extend(JToken paramsToken)
+        {
+            string id = ReadId(paramsToken);
+            int minimumRemainingSeconds = ReadMinimumRemainingSeconds(paramsToken);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.ExtendExpiryForAwait(id, minimumRemainingSeconds);
             return PausePointStatusResponse.FromSnapshot(snapshot);
         }
 
@@ -42,6 +53,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             JToken idToken = paramsObject.GetValue(IdParamName, StringComparison.OrdinalIgnoreCase);
             return idToken?.ToString() ?? string.Empty;
+        }
+
+        private static int ReadMinimumRemainingSeconds(JToken paramsToken)
+        {
+            if (paramsToken is not JObject paramsObject)
+            {
+                return 0;
+            }
+
+            JToken valueToken = paramsObject.GetValue(MinimumRemainingSecondsParamName, StringComparison.OrdinalIgnoreCase);
+            return valueToken?.ToObject<int>() ?? 0;
         }
     }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,6 +17,120 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
+
+// Verifies a successful extend request writes no warning to stderr.
+func TestExtendPausePointExpiryBeforeWaitWritesNothingOnSuccess(t *testing.T) {
+	originalExtend := extendPausePointExpiry
+	defer func() { extendPausePointExpiry = originalExtend }()
+
+	extendPausePointExpiry = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+		minimumRemainingSeconds int,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusEnabled}, nil
+	}
+
+	var stderr bytes.Buffer
+	extendPausePointExpiryBeforeWait(
+		context.Background(),
+		unityipc.Connection{},
+		waitForPausePointOptions{id: "jump", timeoutSeconds: 30},
+		&stderr)
+
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no warning, got: %s", stderr.String())
+	}
+}
+
+// Verifies a failed extend request is best-effort: it writes a warning but never blocks the wait.
+func TestExtendPausePointExpiryBeforeWaitWritesWarningOnFailure(t *testing.T) {
+	originalExtend := extendPausePointExpiry
+	defer func() { extendPausePointExpiry = originalExtend }()
+
+	extendPausePointExpiry = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+		minimumRemainingSeconds int,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{}, errors.New("unknown internal bridge command")
+	}
+
+	var stderr bytes.Buffer
+	extendPausePointExpiryBeforeWait(
+		context.Background(),
+		unityipc.Connection{},
+		waitForPausePointOptions{id: "jump", timeoutSeconds: 30},
+		&stderr)
+
+	if !strings.Contains(stderr.String(), "jump") || !strings.Contains(stderr.String(), "unknown internal bridge command") {
+		t.Fatalf("expected a warning mentioning the id and cause, got: %s", stderr.String())
+	}
+}
+
+// Verifies the await-pause-point command extends the marker's expiry to its own timeout before
+// the first status poll, so a slow multi-step CLI round trip cannot let the marker expire first.
+func TestRunWaitForPausePointCommandExtendsExpiryBeforePolling(t *testing.T) {
+	originalExtend := extendPausePointExpiry
+	originalQuery := queryPausePointStatus
+	defer func() {
+		extendPausePointExpiry = originalExtend
+		queryPausePointStatus = originalQuery
+	}()
+
+	var callOrder []string
+	var extendedID string
+	var extendedMinimumRemainingSeconds int
+	extendPausePointExpiry = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+		minimumRemainingSeconds int,
+	) (pausePointStatusResponse, error) {
+		callOrder = append(callOrder, "extend")
+		extendedID = id
+		extendedMinimumRemainingSeconds = minimumRemainingSeconds
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusEnabled}, nil
+	}
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		callOrder = append(callOrder, "query")
+		return pausePointStatusResponse{
+			Id:          id,
+			Status:      pausePointStatusHit,
+			IsHit:       true,
+			HitCount:    1,
+			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForPausePointCommand(
+		context.Background(),
+		unityipc.Connection{},
+		[]string{"--id", "jump", "--timeout-seconds", "7"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+	if len(callOrder) == 0 || callOrder[0] != "extend" {
+		t.Fatalf("expected extend to run before the first status query, got order: %v", callOrder)
+	}
+	if extendedID != "jump" {
+		t.Fatalf("extended id mismatch: %s", extendedID)
+	}
+	if extendedMinimumRemainingSeconds != 7 {
+		t.Fatalf("extended minimum remaining seconds mismatch: %d", extendedMinimumRemainingSeconds)
+	}
+}
 
 // Verifies await-pause-point polls until Unity reports the marker hit.
 func TestWaitForPausePointReturnsHitAfterEnabledStatus(t *testing.T) {

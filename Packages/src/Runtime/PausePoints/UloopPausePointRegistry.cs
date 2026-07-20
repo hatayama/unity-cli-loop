@@ -159,6 +159,34 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return entry.ToSnapshot(now, _pauseController);
         }
 
+        /// <summary>
+        /// Extends a marker's capture window to at least minimumRemainingSeconds from now, so a
+        /// slow multi-step CLI round trip (enable -&gt; seed state -&gt; await) does not let the marker
+        /// expire before await-pause-point even starts observing it. Called once when the wait
+        /// begins. A no-op for markers that are already Cleared/Expired or unknown.
+        /// </summary>
+        public static UloopPausePointSnapshot ExtendExpiryForAwait(string id, int minimumRemainingSeconds)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
+            Debug.Assert(minimumRemainingSeconds > 0, "minimumRemainingSeconds must be greater than zero");
+
+            DateTime now = NowUtc();
+            if (!Entries.ContainsKey(id))
+            {
+                return UloopPausePointSnapshot.NotEnabled(id, _pauseController);
+            }
+
+            UloopPausePointEntry entry = Entries[id];
+            if (TryExpire(entry, now))
+            {
+                ResumeEditorPause();
+                return entry.ToSnapshot(now, _pauseController);
+            }
+
+            entry.ExtendExpiryToAtLeast(now.AddSeconds(minimumRemainingSeconds));
+            return entry.ToSnapshot(now, _pauseController);
+        }
+
         public static UloopPausePointSnapshot Hit(string id)
         {
             return HitCore(id, null, Array.Empty<UloopCapturedVariable>(), false);
