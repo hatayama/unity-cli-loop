@@ -63,8 +63,8 @@ Do not touch the protocol version to "keep up with releases":
 ## Project Runner Pin
 
 `Packages/src/project-runner-pin.json` (mirrored byte-identically to `.uloop/project-runner-pin.json`
-by `CliPinSynchronizer`) is the single source for cross-component version requirements. It
-currently has two required fields:
+by `CliPinSynchronizer`) is the single source for cross-component version requirements. Its
+required fields:
 
 - `projectRunnerVersion` — the project runner release the dispatcher must run for this package.
   Stamped by release-please; never edit by hand.
@@ -73,6 +73,11 @@ currently has two required fields:
   package reads it (via `CliPinReader`) for setup and installation checks. This is the only
   manually maintained minimum-version declaration; raise it only when the package genuinely
   needs a newly published dispatcher, not because the dispatcher implementation changed.
+- `dispatcherReleaseTag` and `dispatcherArchiveManifest` — the provenance-pinned dispatcher
+  release used for first installation and its verified asset hashes. Stamped by the pin stamp
+  automation against a published release; never edit by hand — `VerifyDispatcherPinSubjects`
+  requires the manifest to match the published release's verified subjects exactly, so a
+  hand-written value cannot pass CI (see `docs/dispatcher-pin-release-order.md`).
 
 There is no dispatcher⇄package integer contract generation; the pin's semver floor is the only
 dispatcher gate. The IPC `protocolVersion` pair described above is the only integer generation
