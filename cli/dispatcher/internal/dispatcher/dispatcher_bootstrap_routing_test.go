@@ -123,24 +123,9 @@ func TestRunDispatcherSkillsHelpDoesNotRequireProjectPin(t *testing.T) {
 	}
 }
 
-// Verifies command name completion works in the dispatcher process from the embedded tool catalog.
-func TestRunDispatcherListCommandsDoesNotRequireProjectPin(t *testing.T) {
-	t.Chdir(t.TempDir())
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	code := RunDispatcher(context.Background(), []string{"--list-commands"}, &stdout, &stderr)
-
-	if code != 0 {
-		t.Fatalf("dispatcher list-commands failed: code=%d stderr=%s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "compile") {
-		t.Fatalf("list-commands output mismatch: %s", stdout.String())
-	}
-}
-
-// Verifies completion script generation works in the dispatcher process without a project pin.
-func TestRunDispatcherCompletionScriptDoesNotRequireProjectPin(t *testing.T) {
+// Verifies the completion stub runs in the dispatcher process without a project pin, since
+// shells with a stale `eval "$(uloop completion --shell zsh)"` block must keep starting up.
+func TestRunDispatcherCompletionStubDoesNotRequireProjectPin(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	var stdout bytes.Buffer
@@ -150,7 +135,7 @@ func TestRunDispatcherCompletionScriptDoesNotRequireProjectPin(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("dispatcher completion failed: code=%d stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "complete -F _uloop_completions uloop") {
-		t.Fatalf("completion script output mismatch: %s", stdout.String())
+	if stdout.String() != "" {
+		t.Fatalf("completion stub must print nothing: %s", stdout.String())
 	}
 }

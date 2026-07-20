@@ -95,19 +95,3 @@ func ContainsHelpRequest(args []string) bool {
 	}
 	return false
 }
-
-// ShouldHandleCompletionRequest reports whether args target the native completion
-// command or its list-commands/list-options helper flags, so run.go can route them
-// before falling back to the project-connected Unity tool dispatch path.
-func ShouldHandleCompletionRequest(args []string) bool {
-	if len(args) == 0 {
-		return false
-	}
-
-	switch args[0] {
-	case ListCommandsFlag, ListOptionsFlag, CompletionCommand:
-		return true
-	default:
-		return false
-	}
-}

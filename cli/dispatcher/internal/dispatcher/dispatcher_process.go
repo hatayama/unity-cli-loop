@@ -47,11 +47,8 @@ func tryHandlePreConnectionRequestWithDeps(
 	stderr io.Writer,
 	deps dispatcherRunDeps,
 ) (bool, int) {
-	if clicore.ShouldHandleCompletionRequest(remainingArgs) {
-		completionTools := loadCompletionTools(startPath, projectPath)
-		if handled, code := tryHandleCompletionRequest(remainingArgs, completionTools, stdout, stderr); handled {
-			return true, code
-		}
+	if handled, code := tryHandleCompletionRequest(remainingArgs); handled {
+		return true, code
 	}
 	if clicore.IsUnknownLeadingOption(command) {
 		clierrors.WriteClassifiedError(stderr, &clierrors.ArgumentError{
