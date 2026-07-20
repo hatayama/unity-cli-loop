@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -67,6 +68,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PrepareResultStorage(request);
             string correlationId = ResolveCorrelationId(request);
             LogCompileRequestReceived(request, correlationId);
+
+            // Captured before PlayMode preparation can stop Play Mode, so the warning reflects
+            // the state compile was actually requested in, not the state after this method mutates it.
+            bool wasPlayingAtRequestStart = EditorApplication.isPlaying;
+            int activePausePointCountAtRequestStart = UloopPausePointRegistry.GetActiveCount();
 
             DateTime utcNow = DateTime.UtcNow;
             _compileSessionLifecycleService.ClearExpiredCompileResult(utcNow);
@@ -159,6 +165,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // 4. Result formatting
             CompileResponse successResponse =
                 CompileResponseFactory.CreateResponse(result, request.ForceRecompile);
+            successResponse.Warning = CompilePausePointWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart,
+                activePausePointCountAtRequestStart);
             StampProjectRootForDelayedResponseIfNeeded(request, successResponse);
             return successResponse;
         }

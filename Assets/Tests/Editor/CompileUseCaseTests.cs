@@ -67,6 +67,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(compileResultSessionRepository.StoreCount, Is.EqualTo(1));
                 Assert.That(response.Success, Is.True);
                 Assert.That(response.ProjectRoot, Is.Not.Empty);
+                // Verifies no pause-point Warning appears outside Play Mode (the only state an EditMode test can exercise).
+                Assert.That(response.Warning, Is.Null);
                 UnityCliLoopStoredCompileResult storedResult =
                     compileResultSessionRepository.GetCompileResult("compile_test_request");
                 Assert.That(storedResult.ResultJson, Does.Contain("\"ProjectRoot\":"));
