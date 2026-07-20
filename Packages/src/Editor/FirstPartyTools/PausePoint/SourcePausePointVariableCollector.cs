@@ -134,12 +134,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                if (field.Name.StartsWith("<", StringComparison.Ordinal))
+                Match autoPropertyMatch = SourcePausePointConstants.AutoPropertyBackingFieldPattern.Match(field.Name);
+                string fieldName = autoPropertyMatch.Success ? autoPropertyMatch.Groups[1].Value : field.Name;
+
+                if (!autoPropertyMatch.Success && field.Name.StartsWith("<", StringComparison.Ordinal))
                 {
                     continue;
                 }
 
-                if (!TryAppendEntry(entries, capturedNames, ref truncated, field.Name, plainFieldScope, field.GetValue(source)))
+                if (!TryAppendEntry(entries, capturedNames, ref truncated, fieldName, plainFieldScope, field.GetValue(source)))
                 {
                     return (outerThis, true);
                 }

@@ -116,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
                 instance, parameters, locals);
 
-            Assert.That(variables.Select(v => v.Name), Is.EqualTo(new[] { "longText", "hp", "this", "PublicField" }));
+            Assert.That(variables.Select(v => v.Name), Is.EqualTo(new[] { "longText", "hp", "this", "PublicField", "Prop" }));
             Assert.That(variables.Single(v => v.Name == "hp").Value, Is.EqualTo("42"));
             Assert.That(variables.Single(v => v.Name == "PublicField").Value, Is.EqualTo("5"));
             Assert.That(truncated, Is.True);
@@ -145,8 +145,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void Format_WithInstanceFields_CapturesThemAfterLocalsAndParameters()
         {
             // Verifies the synthetic "this" entry (Scope=This) lands after locals/parameters and
-            // before instance fields (Scope=InstanceField), and compiler-generated backing fields
-            // ("<Prop>k__BackingField") are skipped.
+            // before instance fields (Scope=InstanceField), and an auto-property's
+            // compiler-generated backing field ("<Prop>k__BackingField") is un-mangled and
+            // captured under its property name.
             InstanceFieldFixture instance = new() { PublicField = 9 };
             instance.Prop = "hello";
             object[] locals = { "local", 1 };
@@ -155,11 +156,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             (List<UloopCapturedVariable> variables, _) = SourcePausePointVariableFormatter.Format(
                 instance, parameters, locals);
 
-            Assert.That(variables.Select(v => v.Name), Is.EqualTo(new[] { "local", "param", "this", "PublicField" }));
+            Assert.That(variables.Select(v => v.Name), Is.EqualTo(new[] { "local", "param", "this", "PublicField", "Prop" }));
             Assert.That(variables[2].Scope, Is.EqualTo(UloopCapturedVariableScope.This));
             Assert.That(variables[3].Scope, Is.EqualTo(UloopCapturedVariableScope.InstanceField));
             Assert.That(variables[3].Value, Is.EqualTo("9"));
-            Assert.That(variables.Any(v => v.Name.Contains("Prop")), Is.False);
+            Assert.That(variables[4].Scope, Is.EqualTo(UloopCapturedVariableScope.InstanceField));
+            Assert.That(variables[4].Value, Is.EqualTo("hello"));
         }
 
         [Test]

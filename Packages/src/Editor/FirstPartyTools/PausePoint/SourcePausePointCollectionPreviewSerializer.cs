@@ -20,7 +20,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class SourcePausePointCollectionPreviewSerializer
     {
-        private static readonly Regex AutoPropertyBackingFieldPattern = new(@"^<([^>]+)>k__BackingField$", RegexOptions.Compiled);
         private const string OffMainThreadValue = "(captured off main thread)";
         private const string DestroyedValue = "(destroyed)";
 
@@ -187,7 +186,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 foreach (FieldInfo field in current.GetFields(flags))
                 {
-                    Match backingFieldMatch = AutoPropertyBackingFieldPattern.Match(field.Name);
+                    Match backingFieldMatch = SourcePausePointConstants.AutoPropertyBackingFieldPattern.Match(field.Name);
                     if (backingFieldMatch.Success)
                     {
                         yield return (backingFieldMatch.Groups[1].Value, field);
