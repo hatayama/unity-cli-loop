@@ -21,6 +21,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string HarmonyId = "io.github.hatayama.uloop.source-pause-point";
         public const string BurstCompileAttributeFullName = "Unity.Burst.BurstCompileAttribute";
 
+        // A heuristic threshold, not a guarantee: Mono's JIT inlining decision depends on far more
+        // than IL byte count (call-site count, caller size, tiering), so this only flags methods
+        // small enough that inlining is plausible, to explain a HitCount=0 symptom after the fact.
+        public const int SmallMethodInliningRiskThresholdBytes = 32;
+
         // The only escape hatch a caller has when a method cannot be patched by file:line: the
         // hand-written marker path still works and does not depend on IL patching at all.
         public const string ManualMarkerFallbackHint =
@@ -59,6 +64,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "hit even though the method body runs. Workarounds: destroy and recreate the GameObject "
             + "after enabling this pause point, or embed UloopPausePoint.Pause(\"id\") directly in the "
             + "method body and arm it with enable-pause-point --id instead.";
+
+        // Surfaces the same JIT-inlining risk documented under Requirements & Safety in the skill,
+        // but at enable time instead of only after a confusing HitCount=0 timeout.
+        public const string SmallMethodInliningRiskWarning =
+            "The target method body is very small and may be inlined by Mono's JIT into its callers; "
+            + "if HitCount stays 0 while the line demonstrably runs, move the pause point into the calling method.";
 
         // Release code optimization strips most sequence points and hoists/elides locals, so the
         // Resolver's PDB-driven lookup cannot reliably find a patch location; rejecting up front

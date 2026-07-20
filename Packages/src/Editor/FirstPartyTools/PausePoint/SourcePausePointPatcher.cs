@@ -266,6 +266,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings.Add(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning);
             }
 
+            if (IsLikelyJitInlined(method))
+            {
+                warnings.Add(SourcePausePointConstants.SmallMethodInliningRiskWarning);
+            }
+
             return string.Join(" ", warnings);
         }
 
@@ -280,6 +285,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return false;
+        }
+
+        // Heuristic, not a guarantee: [AggressiveInlining] is only a hint the JIT may ignore, and
+        // IL body size alone cannot predict Mono's actual inlining decision (call-site count, caller
+        // size, and tiering all matter too). Both false positives (flagged but never inlined) and
+        // false negatives (inlined despite exceeding the threshold) are possible; this exists solely
+        // to explain a HitCount=0 symptom, not to predict it precisely.
+        // Harmony detours the JIT-compiled native code and never rewrites the metadata IL, so
+        // measuring after Patch still reads the original method body size.
+        internal static bool IsLikelyJitInlined(MethodBase method)
+        {
+            if ((method.GetMethodImplementationFlags() & MethodImplAttributes.AggressiveInlining) != 0)
+            {
+                return true;
+            }
+
+            byte[] ilBytes = method.GetMethodBody()?.GetILAsByteArray();
+            return ilBytes != null && ilBytes.Length <= SourcePausePointConstants.SmallMethodInliningRiskThresholdBytes;
         }
 
         private static IEnumerable<CodeInstruction> Transpiler(
