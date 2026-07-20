@@ -30,6 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
 
                 CompileResult result = await compileController.TryCompileAsync(
                     forceRecompile: false,
+                    pausePointWarning: null,
                     ct: CancellationToken.None);
                 CompilerMessage[] err = result.Errors;
                 CompilerMessage[] warning = result.Warnings;
@@ -71,6 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
                 // Example of forced re-compilation
                 CompileResult result = await compileController.TryCompileAsync(
                     forceRecompile: true,
+                    pausePointWarning: null,
                     ct: CancellationToken.None);
                 CompilerMessage[] err = result.Errors;
                 CompilerMessage[] warning = result.Warnings;

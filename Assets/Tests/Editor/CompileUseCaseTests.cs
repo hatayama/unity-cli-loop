@@ -49,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     compileSessionLifecycleService,
                     compileResultSessionRepository,
                     pendingCompileSessionRepository);
-                useCase.SetCompilationExecutionForTesting((compileRequest, ct) =>
+                useCase.SetCompilationExecutionForTesting((compileRequest, pausePointWarning, ct) =>
                 {
                     ct.ThrowIfCancellationRequested();
                     CompileResultSessionRecorder.RecordCompileResult(

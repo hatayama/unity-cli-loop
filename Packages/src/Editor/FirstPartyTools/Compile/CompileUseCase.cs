@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly UnityCliLoopCompileSessionLifecycleService _compileSessionLifecycleService;
         private readonly ICompileResultSessionRepository _compileResultSessionRepository;
         private readonly IPendingCompileSessionRepository _pendingCompileSessionRepository;
-        private Func<CompileSchema, CancellationToken, Task<CompileResult>> _executeCompilationAsync;
+        private Func<CompileSchema, string, CancellationToken, Task<CompileResult>> _executeCompilationAsync;
 
         public CompileUseCase(
             UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService,
@@ -45,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Replaces compilation execution for tests that must not start Unity's real compilation pipeline.
         /// </summary>
-        internal void SetCompilationExecutionForTesting(Func<CompileSchema, CancellationToken, Task<CompileResult>> executeCompilationAsync)
+        internal void SetCompilationExecutionForTesting(Func<CompileSchema, string, CancellationToken, Task<CompileResult>> executeCompilationAsync)
         {
             Debug.Assert(executeCompilationAsync != null, "executeCompilationAsync must not be null");
             _executeCompilationAsync = executeCompilationAsync ??
@@ -159,15 +159,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             // 3. Compilation execution
+            string pausePointWarning = CompilePausePointWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart,
+                activePausePointCountAtRequestStart);
             ct.ThrowIfCancellationRequested();
-            CompileResult result = await _executeCompilationAsync(request, ct).ConfigureAwait(false);
+            CompileResult result = await _executeCompilationAsync(request, pausePointWarning, ct).ConfigureAwait(false);
 
             // 4. Result formatting
             CompileResponse successResponse =
-                CompileResponseFactory.CreateResponse(result, request.ForceRecompile);
-            successResponse.Warning = CompilePausePointWarningBuilder.BuildWarning(
-                wasPlayingAtRequestStart,
-                activePausePointCountAtRequestStart);
+                CompileResponseFactory.CreateResponse(result, request.ForceRecompile, pausePointWarning);
             StampProjectRootForDelayedResponseIfNeeded(request, successResponse);
             return successResponse;
         }
@@ -356,14 +356,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return $"compile_{unixTimeMilliseconds}_{correlationId}";
         }
 
-        private Task<CompileResult> ExecuteCompilationWithDefaultServiceAsync(CompileSchema request, CancellationToken ct)
+        private Task<CompileResult> ExecuteCompilationWithDefaultServiceAsync(CompileSchema request, string pausePointWarning, CancellationToken ct)
         {
             Debug.Assert(request != null, "request must not be null");
 
             CompilationExecutionService executionService = new(
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository);
-            return executionService.ExecuteCompilationAsync(request, ct);
+            return executionService.ExecuteCompilationAsync(request, pausePointWarning, ct);
         }
     }
 }
