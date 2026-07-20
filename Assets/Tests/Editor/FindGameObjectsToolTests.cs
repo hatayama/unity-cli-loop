@@ -89,7 +89,62 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.ErrorMessage, Is.Not.Null);
             Assert.That(response.ErrorMessage, Does.Contain("At least one search criterion"));
         }
-        
+
+        [Test]
+        public async Task ExecuteAsync_WithExactModeZeroHits_ReturnsPartialMatchModeHint()
+        {
+            // Verifies a zero-hit Exact-mode name search returns a hint pointing at
+            // Contains/Regex, since Exact is the default and silently misses partial matches.
+            JObject paramsJson = new()            {
+                ["NamePattern"] = "Camera",
+                ["SearchMode"] = "Exact"
+            };
+
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
+            FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
+
+            Assert.That(response, Is.Not.Null);
+            Assert.That(response.TotalFound, Is.EqualTo(0));
+            Assert.That(response.Message, Is.Not.Null);
+            Assert.That(response.Message, Does.Contain("Exact match found nothing"));
+            Assert.That(response.Message, Does.Contain("--search-mode Contains"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WithContainsModeZeroHits_DoesNotReturnExactModeHint()
+        {
+            // Verifies the Exact-mode hint is scoped to Exact mode only, since Contains/Regex
+            // already support partial matching and have no equivalent trap to warn about.
+            JObject paramsJson = new()            {
+                ["NamePattern"] = "NoSuchObjectNameAtAll",
+                ["SearchMode"] = "Contains"
+            };
+
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
+            FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
+
+            Assert.That(response, Is.Not.Null);
+            Assert.That(response.TotalFound, Is.EqualTo(0));
+            Assert.That(response.Message, Is.Null);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WithExactModeNonZeroHits_DoesNotReturnHint()
+        {
+            // Verifies the hint only appears on a zero-hit result, not alongside real matches.
+            JObject paramsJson = new()            {
+                ["NamePattern"] = "TestObject1",
+                ["SearchMode"] = "Exact"
+            };
+
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
+            FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
+
+            Assert.That(response, Is.Not.Null);
+            Assert.That(response.TotalFound, Is.EqualTo(1));
+            Assert.That(response.Message, Is.Null);
+        }
+
         [Test]
         public async Task ExecuteAsync_WithComponentSearch_FindsObjectsWithSpecificComponent()
         {
