@@ -22,6 +22,7 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-beta'
     permissions:
       contents: read
+      actions: write
     outputs:
       should_publish: ${{ steps.release.outputs.publish }}
       should_release: ${{ steps.release.outputs.release }}
@@ -122,6 +123,18 @@ jobs:
       - name: Dry run summary
         if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run == 'true'
         run: ls -lh dist/dispatcher-release
+
+      - name: Cancel superseded approval-waiting runs
+        if: (steps.release.outputs.publish == 'true' || steps.release.outputs.release == 'true') && steps.release.outputs.dry_run != 'true'
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          go run ./cmd/cancel-superseded-waiting-runs
+          --repo "${{ github.repository }}"
+          --workflow dispatcher-publish.yml
+          --branch "${{ github.ref_name }}"
+          --current-run-id "${{ github.run_id }}"
 
   publish:
     needs: build
