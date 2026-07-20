@@ -71,6 +71,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "The target method body is very small and may be inlined by Mono's JIT into its callers; "
             + "if HitCount stays 0 while the line demonstrably runs, move the pause point into the calling method.";
 
+        // Callers have observed captured values that look like they belong to the line after
+        // ResolvedLine; this makes the pre-line snapshot timing explicit in the response itself
+        // instead of leaving it documented only in the skill.
+        public const string PreLineSnapshotTimingNote =
+            "pre-line: variables are captured before ResolvedLine executes";
+
         // Release code optimization strips most sequence points and hoists/elides locals, so the
         // Resolver's PDB-driven lookup cannot reliably find a patch location; rejecting up front
         // avoids patching the wrong instruction instead of failing later in a confusing way.
