@@ -11,7 +11,7 @@ Take a screenshot of any Unity EditorWindow by name and save as PNG.
 ## Usage
 
 ```bash
-uloop screenshot [--window-name <name>] [--resolution-scale <scale>] [--match-mode <mode>] [--capture-mode <mode>] [--annotate-elements] [--elements-only] [--output-directory <path>]
+uloop screenshot [--window-name <name>] [--resolution-scale <scale>] [--match-mode <mode>] [--capture-mode <mode>] [--annotate-elements] [--annotate-raycast-grid] [--raycast-layer-mask <layers>] [--elements-only] [--output-directory <path>]
 ```
 
 ## Parameters
@@ -24,7 +24,9 @@ uloop screenshot [--window-name <name>] [--resolution-scale <scale>] [--match-mo
 | `--capture-mode` | enum | `window` | `window`=capture EditorWindow including toolbar, `rendering`=capture game rendering only (PlayMode required, coordinates match simulate-mouse) |
 | `--output-directory` | string | `""` | Output directory path for saving screenshots. When empty, uses default path (.uloop/outputs/Screenshots/). Accepts absolute paths. |
 | `--annotate-elements` | flag | - | Annotate interactive UI elements with index labels and interaction hints (A / CLICK, B / DRAG, ...). Only works with `--capture-mode rendering` in PlayMode. |
-| `--elements-only` | flag | - | Return only annotated element JSON without capturing a screenshot image. Requires `--annotate-elements` and `--capture-mode rendering` in PlayMode. |
+| `--annotate-raycast-grid` | flag | - | Annotate clustered 3D physics collider candidates as `PhysicsCollider` entries in `AnnotatedElements`. Uses `Camera.main` visibility and the same top-left Game View coordinates as `simulate-mouse-input`. Only works with `--capture-mode rendering` in PlayMode. |
+| `--raycast-layer-mask` | string | `""` | Comma-separated physics layer names to narrow which layers `--annotate-raycast-grid` clusters. Hits are limited to layers also visible to `Camera.main.cullingMask`. When omitted, clusters against `Physics.DefaultRaycastLayers`. |
+| `--elements-only` | flag | - | Return only annotated element JSON without capturing a screenshot image. Requires `--annotate-elements` or `--annotate-raycast-grid`, and `--capture-mode rendering` in PlayMode. |
 
 ## Match Modes
 
@@ -58,9 +60,10 @@ Returns JSON with:
   - `ResolutionScale`: Resolution scale used for capture
   - `ImageToInputOffsetY`: Y offset used for top-left-game-view coordinate conversion
   - `ScreenshotToInputFormula`: Formula converting raw image pixels to simulate-mouse input coordinates
-  - `AnnotatedElements`: Array of annotated UI element metadata. Empty unless `--annotate-elements` is used.
+  - `AnnotatedElements`: Array of annotated UI element metadata. Empty unless `--annotate-elements` or `--annotate-raycast-grid` is used.
+  - `RaycastLayerSummaries` / `RaycastLayerNamesChecked`: Physics-layer diagnostics populated when `--annotate-raycast-grid` is used.
 
-For `AnnotatedElements` fields and gameView coordinate conversion, read [references/annotated-elements.md](references/annotated-elements.md) before using screenshot coordinates with mouse simulation tools.
+For `AnnotatedElements` / `RaycastLayerSummaries` fields and gameView coordinate conversion, read [references/annotated-elements.md](references/annotated-elements.md) before using screenshot coordinates with mouse simulation tools.
 
 When multiple windows match (e.g., multiple Inspector windows or when using `contains` mode), all matching windows are captured with numbered filenames (e.g., `Inspector_1_*.png`, `Inspector_2_*.png`).
 

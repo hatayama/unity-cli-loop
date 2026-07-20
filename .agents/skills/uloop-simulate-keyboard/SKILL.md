@@ -7,7 +7,7 @@ context: fork
 
 # Task
 
-Simulate keyboard input on Unity PlayMode: $ARGUMENTS
+Simulate keyboard input on Unity PlayMode.
 
 ## Workflow
 
@@ -45,9 +45,7 @@ If a successful `Press` or `KeyDown` leaves `Keyboard.current.<key>.isPressed` t
 
 ### Pause Point Inspection (Standard for E2E)
 
-For standard frame proof when this input drives a state transition, follow the `uloop-pause-point` skill. Pausing on the line that handles the key is safe: when the pause lands mid-command, `simulate-keyboard` returns promptly with `InterruptedByPausePoint: true` instead of running to completion. Prefer a line after the app consumed the key when you want the settled result state rather than the input-handling moment.
-
-- If `InterruptedByPausePoint: true`, Unity is paused and input bookkeeping was released. `PausePointId` and `PausePointHitCount` identify the marker. `PressEdgeObserved` is still reported on pause-point interruptions.
+For standard frame proof when this input drives a state transition, follow the `uloop-pause-point` skill — it covers line placement and interruption semantics. Tool-specific note: if `InterruptedByPausePoint: true`, Unity is paused and input bookkeeping was safely released; `PressEdgeObserved` is still reported on pause-point interruptions. Clear inspection-only pause points (`uloop clear-pause-point --all`) before final validation.
 
 ### KeyDown/KeyUp Rules
 
@@ -85,10 +83,7 @@ Returns JSON with:
 - `Message` (string): Description of what happened or why it failed
 - `Action` (string): The `--action` value that was applied (`Press`, `KeyDown`, or `KeyUp`)
 - `KeyName` (string, nullable): The key that was acted on; may be `null` when the action could not resolve a key
-- `InterruptedByPausePoint` (boolean): True when Unity paused during Pause Point inspection and the input bookkeeping was safely released
-- `PausePointId` (string, nullable): The derived `<file>:<line>` pause point id that caused the interruption (the `Id` returned by `enable-pause-point`)
-- `PausePointHitCount` (integer, nullable): The hit count for that pause point when it caused the interruption
-- `PausePointHits` (array, nullable): Every marker hit during this input as `{Id, HitCount}` entries, in hit order. Read this when one input may trigger several markers; `PausePointId` only names the latest one
+- `InterruptedByPausePoint` / `PausePointId` / `PausePointHitCount` / `PausePointHits`: Pause-point interruption info (all nullable except the boolean). `PausePointHits` lists every marker hit during this input in hit order; `PausePointId` only names the latest one. See the Pause Point Inspection section above
 - `PressEdgeObserved` (boolean, nullable): For `Press` and `KeyDown`, whether the press edge (`wasPressedThisFrame`) was actually visible inside a gameplay input update. `false` means the CLI succeeded but gameplay polling most likely missed the edge (e.g. the press was consumed by an editor-only input update) — retry the input or verify with a focused log instead of trusting `Success` alone. `null` only for `KeyUp` and for timed-out responses; pause-point interruptions still report the observed value
 
 ## Prerequisites
