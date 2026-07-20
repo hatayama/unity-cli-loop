@@ -305,10 +305,16 @@ func runPausePointWaitAfterEnable(
 		case enableWarning != "" || len(expectations) > 0:
 			// Best-effort like the plain await path: a failed log fetch must not also drop the
 			// enable-time warning or --expect results, since those are the only evidence left in
-			// this branch.
-			payload = pausePointWaitResult{
+			// this branch. Uses an anonymous struct (not pausePointWaitResult) so MatchingLogs is
+			// omitted entirely rather than serialized as an empty array, preserving "empty array
+			// only means a successful fetch with no matches".
+			payload = struct {
+				pausePointStatusResponse
+				Warning               string                        `json:"Warning,omitempty"`
+				Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
+				AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
+			}{
 				pausePointStatusResponse: response,
-				MatchingLogs:             []pausePointMatchingLog{},
 				Warning:                  enableWarning,
 				Expectations:             expectations,
 				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),

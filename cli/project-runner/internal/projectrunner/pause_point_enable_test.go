@@ -211,6 +211,94 @@ func TestRunEnablePausePointCommandAwaitsAfterSuccessfulEnable(t *testing.T) {
 	}
 }
 
+// Verifies a log fetch failure after --await never turns a successful hit into an error, and
+// omits MatchingLogs entirely (like the plain await-pause-point path) rather than emitting an
+// empty array, so "empty array" keeps meaning "fetch succeeded with no matches" for both commands.
+func TestRunEnablePausePointCommandOmitsMatchingLogsOnFetchFailureWhenExpectationsGiven(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	originalFetch := fetchMatchingLogs
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+		fetchMatchingLogs = originalFetch
+	})
+
+	velocityValue := "4.2"
+	statusResponses := []pausePointStatusResponse{
+		{Id: "jump", Status: pausePointStatusEnabled, IsEnabled: true},
+		{
+			Id:       "jump",
+			Status:   pausePointStatusHit,
+			IsHit:    true,
+			HitCount: 1,
+			CapturedVariables: []pausePointCapturedVariable{
+				{Name: "velocity", Value: &velocityValue},
+			},
+		},
+	}
+	statusCallCount := 0
+	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		response := statusResponses[statusCallCount]
+		statusCallCount++
+		return response, nil
+	}
+	fetchMatchingLogs = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		searchText string,
+		maxCount int,
+	) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{}, context.DeadlineExceeded
+	}
+
+	listener := newLoopbackIpcListener(t)
+	enableRequests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(
+		listener,
+		pausePointEnableCommandName,
+		enableRequests,
+		serverErr,
+		`{"Success":true,"Id":"jump","Status":"Enabled","IsEnabled":true,"TimeoutSeconds":30}`,
+	)
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runEnablePausePointCommand(
+		context.Background(),
+		connection,
+		[]string{"--id", "jump", "--await", "--expect", "velocity=4.2"},
+		t.TempDir(),
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success despite log fetch failure, got %d with stderr %s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "MatchingLogs") {
+		t.Fatalf("MatchingLogs must be omitted when the fetch fails: %s", stdout.String())
+	}
+	var result struct {
+		AllExpectationsPassed *bool `json:"AllExpectationsPassed"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("failed to decode stdout: %v\n%s", err, stdout.String())
+	}
+	if result.AllExpectationsPassed == nil || !*result.AllExpectationsPassed {
+		t.Fatalf("expected expectations to survive the log fetch failure, got: %s", stdout.String())
+	}
+}
+
 // Verifies a failed enable-pause-point call returns the enable failure directly instead of
 // proceeding to wait, since there is no marker to wait on.
 func TestRunEnablePausePointCommandDoesNotAwaitAfterFailedEnable(t *testing.T) {
