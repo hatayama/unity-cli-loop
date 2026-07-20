@@ -18,6 +18,7 @@ import (
 const (
 	pausePointStatusCommandName       = "get-pause-point-status"
 	pausePointClearStatusCommandName  = "clear-pause-point-status"
+	pausePointExtendStatusCommandName = "extend-pause-point-status"
 	pausePointDefaultTimeoutSeconds   = 30
 	pausePointStatusProbeTimeout      = 5 * time.Second
 	pausePointStatusEnabled           = "Enabled"
@@ -29,9 +30,10 @@ const (
 )
 
 var (
-	pausePointStatusPoll  = 50 * time.Millisecond
-	queryPausePointStatus = queryPausePointStatusFromUnity
-	clearPausePointStatus = clearPausePointStatusFromUnity
+	pausePointStatusPoll   = 50 * time.Millisecond
+	queryPausePointStatus  = queryPausePointStatusFromUnity
+	clearPausePointStatus  = clearPausePointStatusFromUnity
+	extendPausePointExpiry = extendPausePointExpiryFromUnity
 )
 
 type waitForPausePointOptions struct {
@@ -113,7 +115,28 @@ func runWaitForPausePointCommand(
 		return 1
 	}
 
+	extendPausePointExpiryBeforeWait(ctx, connection, options, stderr)
+
 	return runWaitForPausePoint(ctx, connection, options, stdout, stderr)
+}
+
+// A marker enabled well before a slow multi-step CLI round trip (enable -> seed state via
+// execute-dynamic-code -> await) can otherwise expire before this wait ever gets a chance to
+// observe a hit, since the marker's countdown starts at enable time, not at await time. Best
+// effort: an older Unity package without this bridge command, or a transient IPC failure, must
+// not fail the whole await-pause-point call over a lifetime extension it can still work without.
+func extendPausePointExpiryBeforeWait(
+	ctx context.Context,
+	connection unityipc.Connection,
+	options waitForPausePointOptions,
+	stderr io.Writer,
+) {
+	if _, err := extendPausePointExpiry(ctx, connection, options.id, options.timeoutSeconds); err != nil {
+		_, _ = fmt.Fprintf(
+			stderr,
+			"warning: could not extend pause point %q expiry before waiting: %v\n",
+			options.id, err)
+	}
 }
 
 func runPausePointStatusCommand(
@@ -465,6 +488,31 @@ func clearPausePointStatusFromUnity(
 		probeContext,
 		pausePointClearStatusCommandName,
 		map[string]any{"Id": id},
+	)
+	if err != nil {
+		return pausePointStatusResponse{}, err
+	}
+
+	response := pausePointStatusResponse{}
+	if err := json.Unmarshal(result, &response); err != nil {
+		return pausePointStatusResponse{}, err
+	}
+	return response, nil
+}
+
+func extendPausePointExpiryFromUnity(
+	ctx context.Context,
+	connection unityipc.Connection,
+	id string,
+	minimumRemainingSeconds int,
+) (pausePointStatusResponse, error) {
+	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
+	defer cancel()
+
+	result, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
+		probeContext,
+		pausePointExtendStatusCommandName,
+		map[string]any{"Id": id, "MinimumRemainingSeconds": minimumRemainingSeconds},
 	)
 	if err != nil {
 		return pausePointStatusResponse{}, err
