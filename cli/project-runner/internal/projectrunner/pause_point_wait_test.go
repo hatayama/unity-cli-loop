@@ -919,7 +919,7 @@ func TestPausePointTimeoutErrorIncludesDiagnosisHint(t *testing.T) {
 			wantHint: "Marker was enabled but never hit. Confirm the id matches UloopPausePoint.Pause(\"<id>\") and that the code path was executed. In fast-progressing games the state may have already moved past the marker (for example back to Ready or GameOver), so re-trigger the code path and wait again. " +
 				"If the marker targets a Unity message method such as OnCollisionEnter2D/OnTriggerEnter2D, check whether `enable-pause-point`'s response carried a Warning about cached message dispatch: Unity can resolve a GameObject's message dispatch before the marker patch is installed, so a GameObject that already existed at enable time may never reach the marker even though the method body runs. Recreating the GameObject after enabling, or embedding UloopPausePoint.Pause(\"id\") directly in the method body, avoids this. " +
 				"If the target line is inside a very small method, Mono's JIT may have inlined it into callers and the pause point never fires; move the pause point into the calling method. " +
-				"If PlayMode kept progressing on its own while you were arranging state (timers, gravity, spawners), the scenario may have already been consumed before this marker could fire; next time, run `control-play-mode --action Pause` before setup and only `Resume` after `enable-pause-point` succeeds.",
+				"If PlayMode kept progressing on its own while you were arranging state (timers, gravity, spawners), the scenario may have already been consumed before this marker could fire; next time, run `control-play-mode --action Pause` before setup and resume with `control-play-mode --action Play` only after `enable-pause-point` succeeds.",
 		},
 	}
 
@@ -1091,7 +1091,6 @@ func TestRunProjectLocalPausePointStatusRespectsToolSettings(t *testing.T) {
 	}
 }
 
-// Verifies await-pause-point requires a marker id.
 // Verifies an unrecognized flag on await-pause-point/pause-point-status carries a hint
 // that the installed project runner may be older than the skill docs.
 func TestParseUnknownOptionErrorsIncludeOutdatedRunnerHint(t *testing.T) {
@@ -1116,6 +1115,7 @@ func TestParseUnknownOptionErrorsIncludeOutdatedRunnerHint(t *testing.T) {
 	}
 }
 
+// Verifies await-pause-point requires a marker id.
 func TestParseWaitForPausePointOptionsRequiresID(t *testing.T) {
 	_, err := parseWaitForPausePointOptions([]string{"--timeout-seconds", "1"})
 
