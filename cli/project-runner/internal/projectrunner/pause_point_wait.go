@@ -41,11 +41,13 @@ type waitForPausePointOptions struct {
 	timeout               time.Duration
 	matchingLogsMaxCount  int
 	capturedVariablesMode pausePointCapturedVariablesMode
+	capturedVariableNames []string
 }
 
 type pausePointStatusOptions struct {
 	id                    string
 	capturedVariablesMode pausePointCapturedVariablesMode
+	capturedVariableNames []string
 }
 
 type pausePointWaitState string
@@ -164,6 +166,7 @@ func runPausePointStatusCommand(
 	}
 	response = normalizePausePointStatusResponse(response)
 	response = filterPausePointCapturedVariableHistory(response)
+	response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 	response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 
 	result, err := json.Marshal(response)
@@ -200,6 +203,7 @@ func runWaitForPausePoint(
 
 	if state == pausePointWaitStateHit {
 		response = filterPausePointCapturedVariableHistory(response)
+		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 		// Best-effort: a hit must stay a success even if Unity is busy while paused.
 		// On fetch failure MatchingLogs is omitted entirely, so an empty array always
@@ -284,6 +288,8 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 				return waitForPausePointOptions{}, parseErr
 			}
 			options.capturedVariablesMode = mode
+		case PausePointCapturedVariableNamesFlagName:
+			options.capturedVariableNames = parsePausePointCapturedVariableNames(value)
 		default:
 			return waitForPausePointOptions{}, &clierrors.ArgumentError{
 				Message:     "Unknown option for await-pause-point: --" + name,
@@ -330,6 +336,8 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 				return pausePointStatusOptions{}, parseErr
 			}
 			options.capturedVariablesMode = mode
+		case PausePointCapturedVariableNamesFlagName:
+			options.capturedVariableNames = parsePausePointCapturedVariableNames(value)
 		default:
 			return pausePointStatusOptions{}, &clierrors.ArgumentError{
 				Message:     "Unknown option for pause-point-status: --" + name,

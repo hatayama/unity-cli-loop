@@ -314,6 +314,166 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Message, Does.Contain("Prefab Stage: Assets/Prefabs/Hud.prefab"));
         }
 
+        [Test]
+        public async Task ExecuteAsync_WhenPlayResumesFromPause_OnlyClearsPauseAndReportsResumed()
+        {
+            // Verifies a true resume (paused while still playing) only clears isPaused, never
+            // reassigns isPlaying or triggers a scene save, and reports ResumedFromPause with no warning.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: true);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode resumed"));
+            Assert.That(response.ResumedFromPause, Is.True);
+            Assert.That(response.Warning, Is.Empty);
+            Assert.That(editorState.IsPaused, Is.False);
+            Assert.That(editorState.IsPlayingSetCount, Is.EqualTo(0));
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartsFreshSession_SetsPlayingAndReportsWarning()
+        {
+            // Verifies a fresh Play start (not a resume) sets isPlaying and surfaces the
+            // fresh-start warning so callers expecting a resume notice their state was lost.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode started"));
+            Assert.That(response.ResumedFromPause, Is.False);
+            Assert.That(response.Warning, Is.EqualTo(ControlPlayModeUseCase.FreshPlayStartFromNewSessionWarning));
+            Assert.That(editorState.IsPlaying, Is.True);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPause_SetsPausedWithoutTouchingPlayingOrStep()
+        {
+            // Regression: Pause must only flip isPaused, leaving isPlaying and Step untouched.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: false);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                editorStateService: editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Pause,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode paused"));
+            Assert.That(response.Changed, Is.True);
+            Assert.That(editorState.IsPaused, Is.True);
+            Assert.That(editorState.IsPlayingSetCount, Is.EqualTo(0));
+            Assert.That(editorState.StepCallCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStop_ClearsPlayingAndPausedAndReportsChanged()
+        {
+            // Regression: Stop from a playing+paused state must clear both flags and report Changed.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: true);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                editorStateService: editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Stop,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode stopped"));
+            Assert.That(response.Changed, Is.True);
+            Assert.That(response.WasAlreadyStopped, Is.False);
+            Assert.That(editorState.IsPlaying, Is.False);
+            Assert.That(editorState.IsPaused, Is.False);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStepDuringPlayMode_AdvancesOneFrame()
+        {
+            // Regression: Step while playing must call through to the editor state service once.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: false);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                editorStateService: editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Step,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Stepped one frame; play mode is paused."));
+            Assert.That(response.Changed, Is.True);
+            Assert.That(editorState.StepCallCount, Is.EqualTo(1));
+        }
+
+        private sealed class FakeControlPlayModeEditorStateService : IControlPlayModeEditorStateService
+        {
+            private bool _isPlaying;
+            private bool _isPaused;
+
+            // Constructor sets initial state directly (bypassing the counting setters below), so
+            // IsPlayingSetCount/IsPausedSetCount only reflect writes the use case makes during the test.
+            public FakeControlPlayModeEditorStateService(bool isPlaying, bool isPaused)
+            {
+                _isPlaying = isPlaying;
+                _isPaused = isPaused;
+            }
+
+            public bool IsPlaying
+            {
+                get => _isPlaying;
+                set
+                {
+                    _isPlaying = value;
+                    IsPlayingSetCount++;
+                }
+            }
+
+            public bool IsPaused
+            {
+                get => _isPaused;
+                set
+                {
+                    _isPaused = value;
+                    IsPausedSetCount++;
+                }
+            }
+
+            public int IsPlayingSetCount { get; private set; }
+            public int IsPausedSetCount { get; private set; }
+            public int StepCallCount { get; private set; }
+
+            public void Step()
+            {
+                StepCallCount++;
+            }
+        }
+
         private sealed class StubCompilationFailureProvider : IControlPlayModeCompilationFailureProvider
         {
             private readonly ControlPlayModeCompileError[] _errors;

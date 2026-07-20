@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using UnityEditor;
 using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -18,14 +17,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string UnsavedEditorChangesRemainingFailureMessage =
             "Play mode could not start while the editor has unsaved scene or prefab changes.";
 
+        // A fresh Play start looks identical to a resume in the response's "changed"/"message"
+        // fields unless callers already know they expected a resume; this makes the distinction
+        // explicit so a caller that expected to resume a paused session notices its state was lost.
+        internal const string FreshPlayStartFromNewSessionWarning =
+            "Play mode started a new session from Edit-time scene state. If you expected to resume "
+            + "a paused session, that session had already ended (for example, a recompile with "
+            + "\"Script Changes While Playing = Stop Playing And Recompile\" stops Play Mode); "
+            + "re-establish your runtime state before continuing verification.";
+
         private readonly IControlPlayModeCompilationFailureProvider _compilationFailureProvider;
         private readonly IControlPlayModeCompilationFailureGate _compilationFailureGate;
         private readonly IEditorUnsavedChangesQuietSaver _unsavedChangesQuietSaver;
+        private readonly IControlPlayModeEditorStateService _editorStateService;
 
         public ControlPlayModeUseCase(
             IControlPlayModeCompilationFailureProvider compilationFailureProvider = null,
             IControlPlayModeCompilationFailureGate compilationFailureGate = null,
-            IEditorUnsavedChangesQuietSaver unsavedChangesQuietSaver = null)
+            IEditorUnsavedChangesQuietSaver unsavedChangesQuietSaver = null,
+            IControlPlayModeEditorStateService editorStateService = null)
         {
             _compilationFailureProvider =
                 compilationFailureProvider ?? ControlPlayModeServices.CompilationFailureProvider;
@@ -33,6 +43,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compilationFailureGate ?? ControlPlayModeServices.CompilationFailureGate;
             _unsavedChangesQuietSaver =
                 unsavedChangesQuietSaver ?? new EditorUnsavedChangesQuietSaver();
+            _editorStateService =
+                editorStateService ?? ControlPlayModeServices.EditorStateService;
         }
 
         public Task<ControlPlayModeResponse> ExecuteAsync(ControlPlayModeSchema parameters, CancellationToken ct)
@@ -58,12 +70,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return Task.FromResult(CreateResponse(
                 actionResult.Message,
                 actionResult.Changed,
-                actionResult.WasAlreadyStopped));
+                actionResult.WasAlreadyStopped,
+                actionResult.ResumedFromPause,
+                actionResult.Warning));
         }
 
         private ControlPlayModeResponse CreateStatusOnlyResponse(ControlPlayModeSchema parameters)
         {
-            if (ShouldBlockPlayForCompileErrors(parameters.Action, EditorApplication.isPlaying))
+            if (ShouldBlockPlayForCompileErrors(parameters.Action, _editorStateService.IsPlaying))
             {
                 ControlPlayModeCompileError[] compileErrors =
                     _compilationFailureProvider.GetLastFailedErrors();
@@ -76,8 +90,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private ControlPlayModeActionResult ExecuteRequestedPlayModeAction(PlayModeAction action)
         {
             string message;
-            bool wasPaused = EditorApplication.isPaused;
-            bool wasPlaying = EditorApplication.isPlaying;
+            bool wasPaused = _editorStateService.IsPaused;
+            bool wasPlaying = _editorStateService.IsPlaying;
 
             switch (action)
             {
@@ -88,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return ExecutePlayModeStop(wasPaused, wasPlaying);
 
                 case PlayModeAction.Pause:
-                    EditorApplication.isPaused = true;
+                    _editorStateService.IsPaused = true;
                     return ControlPlayModeActionResult.FromState("Play mode paused", !wasPaused, false);
 
                 case PlayModeAction.Step:
@@ -131,18 +145,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (wasPaused)
             {
-                EditorApplication.isPaused = false;
+                _editorStateService.IsPaused = false;
             }
-            if (!EditorApplication.isPlaying)
+            if (!_editorStateService.IsPlaying)
             {
                 // Why: only CLI-started Play owns the override; manual Editor Play must keep project defaults.
                 ControlPlayModeServices.RunInBackgroundService.EnableForCliPlayStart();
-                EditorApplication.isPlaying = true;
+                _editorStateService.IsPlaying = true;
             }
 
             bool changed = wasPaused || !wasPlaying;
+            bool resumedFromPause = wasPaused && wasPlaying;
             string message = wasPaused ? "Play mode resumed" : "Play mode started";
-            return ControlPlayModeActionResult.FromState(message, changed, false);
+            string warning = wasPlaying ? string.Empty : FreshPlayStartFromNewSessionWarning;
+            return ControlPlayModeActionResult.FromState(message, changed, false, resumedFromPause, warning);
         }
 
         private ControlPlayModeActionResult SaveDirtyEditorChangesBeforePlayStart()
@@ -168,16 +184,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ControlPlayModeActionResult.FromState(string.Empty, false, false);
         }
 
-        private static ControlPlayModeActionResult ExecutePlayModeStop(bool wasPaused, bool wasPlaying)
+        private ControlPlayModeActionResult ExecutePlayModeStop(bool wasPaused, bool wasPlaying)
         {
             bool wasAlreadyStopped = !wasPlaying;
             if (wasPaused)
             {
-                EditorApplication.isPaused = false;
+                _editorStateService.IsPaused = false;
             }
-            if (EditorApplication.isPlaying)
+            if (_editorStateService.IsPlaying)
             {
-                EditorApplication.isPlaying = false;
+                _editorStateService.IsPlaying = false;
             }
 
             bool changed = wasPaused || wasPlaying;
@@ -185,7 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ControlPlayModeActionResult.FromState(message, changed, wasAlreadyStopped);
         }
 
-        private static ControlPlayModeActionResult ExecutePlayModeStep(bool wasPlaying)
+        private ControlPlayModeActionResult ExecutePlayModeStep(bool wasPlaying)
         {
             // Same API as the Editor's Next Frame button: advances one frame and
             // leaves the player paused, independent of Time.timeScale.
@@ -197,26 +213,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     false);
             }
 
-            EditorApplication.Step();
+            _editorStateService.Step();
             return ControlPlayModeActionResult.FromState("Stepped one frame; play mode is paused.", true, false);
         }
 
-        private static ControlPlayModeResponse CreateResponse(string message, bool changed, bool wasAlreadyStopped)
+        private ControlPlayModeResponse CreateResponse(
+            string message,
+            bool changed,
+            bool wasAlreadyStopped,
+            bool resumedFromPause = false,
+            string warning = "")
         {
             ControlPlayModeResponse response = new()
             {
-                IsPlaying = EditorApplication.isPlaying,
-                IsPaused = EditorApplication.isPaused,
+                IsPlaying = _editorStateService.IsPlaying,
+                IsPaused = _editorStateService.IsPaused,
                 Changed = changed,
                 WasAlreadyStopped = wasAlreadyStopped,
+                ResumedFromPause = resumedFromPause,
                 CompileErrors = Array.Empty<ControlPlayModeCompileError>(),
-                Message = message
+                Message = message,
+                Warning = warning
             };
 
             return response;
         }
 
-        private static ControlPlayModeResponse CreateSaveFailedResponse(string messagePrefix, string[] failedChanges)
+        private ControlPlayModeResponse CreateSaveFailedResponse(string messagePrefix, string[] failedChanges)
         {
             Debug.Assert(!string.IsNullOrEmpty(messagePrefix), "messagePrefix must not be null or empty");
             Debug.Assert(failedChanges != null, "failedChanges must not be null");
@@ -226,7 +249,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return CreateResponse(message, false, false);
         }
 
-        private static ControlPlayModeResponse CreateCompileErrorBlockedResponse(
+        private ControlPlayModeResponse CreateCompileErrorBlockedResponse(
             ControlPlayModeCompileError[] compileErrors)
         {
             ControlPlayModeCompileError[] errors = compileErrors ?? Array.Empty<ControlPlayModeCompileError>();
@@ -248,26 +271,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 bool changed,
                 bool wasAlreadyStopped,
                 ControlPlayModeResponse response,
-                bool hasResponse)
+                bool hasResponse,
+                bool resumedFromPause,
+                string warning)
             {
                 Message = message;
                 Changed = changed;
                 WasAlreadyStopped = wasAlreadyStopped;
                 Response = response;
                 HasResponse = hasResponse;
+                ResumedFromPause = resumedFromPause;
+                Warning = warning;
             }
 
             public static ControlPlayModeActionResult FromState(
                 string message,
                 bool changed,
-                bool wasAlreadyStopped)
+                bool wasAlreadyStopped,
+                bool resumedFromPause = false,
+                string warning = "")
             {
                 return new ControlPlayModeActionResult(
                     message,
                     changed,
                     wasAlreadyStopped,
                     null,
-                    false);
+                    false,
+                    resumedFromPause,
+                    warning);
             }
 
             public static ControlPlayModeActionResult FromResponse(
@@ -279,7 +310,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     changed,
                     response.WasAlreadyStopped,
                     response,
-                    true);
+                    true,
+                    false,
+                    string.Empty);
             }
 
             public string Message { get; }
@@ -287,6 +320,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public bool WasAlreadyStopped { get; }
             public ControlPlayModeResponse Response { get; }
             public bool HasResponse { get; }
+            public bool ResumedFromPause { get; }
+            public string Warning { get; }
         }
     }
 }
