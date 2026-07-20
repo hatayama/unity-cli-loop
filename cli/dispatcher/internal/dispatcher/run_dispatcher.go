@@ -17,6 +17,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/project"
 	sharedversion "github.com/hatayama/unity-cli-loop/common/version"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 	sharedupdate "github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
@@ -476,7 +477,12 @@ func dispatcherRealCLIResolutionError(projectRoot string, pin dispatcherPin, cau
 		Retryable:   true,
 		SafeToRetry: true,
 		ProjectRoot: projectRoot,
-		NextActions: []string{"Check network access to GitHub releases, then retry the command."},
+		NextActions: []string{
+			"Check network access to GitHub releases, then retry the command.",
+			"For dogfooding checkouts with an unpublished pin, set " +
+				nativepath.ProjectRunnerPathEnvName +
+				" to a locally built uloop-project-runner binary to bypass the download.",
+		},
 		Details: map[string]any{
 			"Cause":                cause.Error(),
 			"ProjectRunnerVersion": pin.ProjectRunnerVersion,

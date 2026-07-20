@@ -297,6 +297,43 @@ func TestResolveDispatcherRealCLIRejectsInvalidProjectRunnerVersion(t *testing.T
 	}
 }
 
+func TestResolveDispatcherRealCLIUsesProjectRunnerPathOverrideWithoutDownloading(t *testing.T) {
+	// Verifies the dev escape-hatch env var returns the local binary and skips pin/cache/download entirely.
+	overrideDir := t.TempDir()
+	overridePath := filepath.Join(overrideDir, "uloop-project-runner")
+	if err := os.WriteFile(overridePath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("failed to write override binary: %v", err)
+	}
+	t.Setenv(nativepath.ProjectRunnerPathEnvName, overridePath)
+	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
+
+	resolvedPath, err := resolveDispatcherRealCLI(
+		context.Background(),
+		dispatcherPin{ProjectRunnerVersion: "not-a-real-published-version"},
+		io.Discard)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolvedPath != overridePath {
+		t.Fatalf("resolvedPath = %q, want %q", resolvedPath, overridePath)
+	}
+}
+
+func TestResolveDispatcherRealCLIRejectsMissingProjectRunnerPathOverride(t *testing.T) {
+	// Verifies a clear error is returned when the override env var points at a missing file.
+	t.Setenv(nativepath.ProjectRunnerPathEnvName, filepath.Join(t.TempDir(), "missing-uloop-project-runner"))
+	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
+
+	_, err := resolveDispatcherRealCLI(context.Background(), dispatcherPin{ProjectRunnerVersion: "1.0.0"}, io.Discard)
+
+	if err == nil {
+		t.Fatal("expected an error for a missing override path")
+	}
+	if !strings.Contains(err.Error(), nativepath.ProjectRunnerPathEnvName) {
+		t.Fatalf("error message should mention %s: %v", nativepath.ProjectRunnerPathEnvName, err)
+	}
+}
+
 func TestEnforceDispatcherFreshnessRequiresManualUpdateWhenSelfUpdateDisabled(t *testing.T) {
 	// Verifies disabling mutation does not disable the minimum dispatcher version contract.
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
