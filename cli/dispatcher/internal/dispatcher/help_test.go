@@ -29,12 +29,13 @@ func TestPrintLauncherHelpListsNativeCommandsAndLiveToolGuidance(t *testing.T) {
 		"  skills",
 		"  uninstall",
 		"Unity tool commands are project-specific.",
+		"does not include the full command list",
+		"uloop --project-path /path/to/project --help",
 		"uloop list",
 		"--project-path <path>",
 		"uloop --project-path /path/to/project list",
 		"uloop <command> --help",
 		"Show help for native and Unity tool commands",
-		"uloop completion --help",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("help output missing %q:\n%s", expected, output)
@@ -68,10 +69,11 @@ func TestPrintProjectLocalHelpListsNativeCommandsAndLiveToolGuidance(t *testing.
 		"  sync",
 		"  uninstall",
 		"Unity tool commands are project-specific.",
+		"does not include the full command list",
+		"uloop --project-path /path/to/project --help",
 		"--project-path <path>",
 		"uloop --project-path /path/to/project list",
 		"uloop list",
-		"uloop completion --help",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("help output missing %q:\n%s", expected, output)
@@ -148,30 +150,6 @@ func TestRunDispatcherHelpShowsConciseProjectToolDescriptions(t *testing.T) {
 	}
 	if strings.Contains(output, "Second sentence") {
 		t.Fatalf("help output should not include long command details:\n%s", output)
-	}
-}
-
-// Tests that native project commands show the shared project path option.
-func TestRunDispatcherListHelpShowsGlobalOptions(t *testing.T) {
-	t.Chdir(t.TempDir())
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	code := RunDispatcher(context.Background(), []string{"list", "--help"}, &stdout, &stderr)
-
-	if code != 0 {
-		t.Fatalf("list help failed: code=%d stderr=%s", code, stderr.String())
-	}
-	output := stdout.String()
-	for _, expected := range []string{
-		"Usage:",
-		"uloop list",
-		"Global options:",
-		"--project-path <path>",
-	} {
-		if !strings.Contains(output, expected) {
-			t.Fatalf("list help missing %q:\n%s", expected, output)
-		}
 	}
 }
 
@@ -409,28 +387,52 @@ func TestRunDispatcherSkillsSubcommandHelpDoesNotRequireUnityProject(t *testing.
 	}
 }
 
-// Tests that native command help keeps the command description visible even
-// when the command has registered options.
-func TestRunDispatcherPausePointWaitHelpShowsDescriptionAndOptions(t *testing.T) {
+// Tests that a runner-owned command's --help outside a Unity project reports a
+// friendly project-resolution error instead of a raw forwarding failure, since
+// its help is only available from the pinned runner once a project resolves.
+func TestRunDispatcherRunnerOwnedCommandHelpOutsideProjectGivesProjectGuidance(t *testing.T) {
 	t.Chdir(t.TempDir())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
 	code := RunDispatcher(context.Background(), []string{clicore.PausePointAwaitCommandName, "--help"}, &stdout, &stderr)
 
-	if code != 0 {
-		t.Fatalf("pause-point-wait help failed: code=%d stderr=%s", code, stderr.String())
+	if code != 1 {
+		t.Fatalf("expected failure outside a Unity project: code=%d stdout=%s", code, stdout.String())
 	}
-	output := stdout.String()
+	output := stderr.String()
 	for _, expected := range []string{
-		"Usage:",
-		"uloop " + clicore.PausePointAwaitCommandName + " [options]",
-		"Wait until a named UloopPausePoint.Pause marker pauses Unity",
-		"Options:",
-		"--" + clicore.PausePointIDFlagName,
+		"PROJECT_NOT_FOUND",
+		"Run the command from inside a Unity project.",
+		"when targeting another Unity project.",
 	} {
 		if !strings.Contains(output, expected) {
-			t.Fatalf("pause-point-wait help missing %q:\n%s", expected, output)
+			t.Fatalf("runner-owned command help guidance missing %q:\n%s", expected, output)
+		}
+	}
+}
+
+// Tests that a Unity tool command without an embedded default definition gives
+// the same project-resolution guidance as runner-owned commands when run
+// outside a Unity project, since both depend on resolving a project.
+func TestRunDispatcherUnityToolCommandHelpOutsideProjectGivesProjectGuidance(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunDispatcher(context.Background(), []string{"some-project-only-tool", "--help"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected failure outside a Unity project: code=%d stdout=%s", code, stdout.String())
+	}
+	output := stderr.String()
+	for _, expected := range []string{
+		"PROJECT_NOT_FOUND",
+		"Run the command from inside a Unity project.",
+		"when targeting another Unity project.",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("Unity tool command help guidance missing %q:\n%s", expected, output)
 		}
 	}
 }

@@ -173,11 +173,11 @@ func runDispatcherProcessCommandWithDeps(
 }
 
 func shouldKeepDispatcherProcessCommand(args []string) bool {
-	if len(args) == 0 || clicore.ShouldHandleCompletionRequest(args) {
+	if len(args) == 0 {
 		return true
 	}
 	switch args[0] {
-	case clicore.InstallCommandName, clicore.UpdateCommandName, clicore.UninstallCommandName, clicore.LaunchCommandName:
+	case clicore.InstallCommandName, clicore.UpdateCommandName, clicore.UninstallCommandName, clicore.LaunchCommandName, clicore.CompletionCommand:
 		return true
 	default:
 		return false
@@ -185,8 +185,14 @@ func shouldKeepDispatcherProcessCommand(args []string) bool {
 }
 
 func shouldRunInDispatcherProcess(args []string) bool {
-	if len(args) == 0 || clicore.IsHelpRequest(args) || clicore.ContainsHelpRequest(args) {
+	if len(args) == 0 || clicore.IsHelpRequest(args) {
 		return true
+	}
+	if clicore.ContainsHelpRequest(args) {
+		// Runner-owned command help is answered by the pinned runner itself
+		// (see command_help.go), not by a dispatcher-side table, so it must be
+		// forwarded through the normal dispatch path instead of staying here.
+		return !clicore.IsRunnerOwnedCommandName(args[0])
 	}
 	// Why version requests must be forwarded: bare --version is answered by
 	// tryHandleDispatcherInfoRequest before global-argument parsing, so a
@@ -196,9 +202,6 @@ func shouldRunInDispatcherProcess(args []string) bool {
 		return false
 	}
 	if clicore.IsUnknownLeadingOption(args[0]) {
-		return true
-	}
-	if clicore.ShouldHandleCompletionRequest(args) {
 		return true
 	}
 

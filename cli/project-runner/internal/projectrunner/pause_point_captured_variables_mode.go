@@ -2,8 +2,6 @@ package projectrunner
 
 import (
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
-
-	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
 // pausePointCapturedVariablesMode controls how much of each captured variable's data the CLI
@@ -25,7 +23,7 @@ func parsePausePointCapturedVariablesMode(value string) (pausePointCapturedVaria
 		return pausePointCapturedVariablesModeNames, nil
 	default:
 		return "", clierrors.InvalidValueArgumentError(
-			"--"+clicore.PausePointCapturedVariablesFlagName, value, "full or names")
+			"--"+PausePointCapturedVariablesFlagName, value, "full or names")
 	}
 }
 

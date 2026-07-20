@@ -240,23 +240,23 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 		}
 
 		switch name {
-		case clicore.PausePointIDFlagName:
+		case PausePointIDFlagName:
 			options.id = value
-		case clicore.PausePointTimeoutFlagName:
+		case PausePointTimeoutFlagName:
 			timeoutSeconds, parseErr := parsePausePointTimeoutSeconds(value)
 			if parseErr != nil {
 				return waitForPausePointOptions{}, parseErr
 			}
 			options.timeoutSeconds = timeoutSeconds
 			options.timeout = time.Duration(timeoutSeconds) * time.Second
-		case clicore.PausePointLogsMaxCountFlagName:
+		case PausePointLogsMaxCountFlagName:
 			maxCount, parseErr := strconv.Atoi(value)
 			if parseErr != nil || maxCount <= 0 {
 				return waitForPausePointOptions{}, clierrors.InvalidValueArgumentError(
-					"--"+clicore.PausePointLogsMaxCountFlagName, value, "positive integer")
+					"--"+PausePointLogsMaxCountFlagName, value, "positive integer")
 			}
 			options.matchingLogsMaxCount = maxCount
-		case clicore.PausePointCapturedVariablesFlagName:
+		case PausePointCapturedVariablesFlagName:
 			mode, parseErr := parsePausePointCapturedVariablesMode(value)
 			if parseErr != nil {
 				return waitForPausePointOptions{}, parseErr
@@ -279,7 +279,7 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 	if options.id == "" {
 		return waitForPausePointOptions{}, &clierrors.ArgumentError{
 			Message:      "Missing required option: --id",
-			Option:       "--" + clicore.PausePointIDFlagName,
+			Option:       "--" + PausePointIDFlagName,
 			ExpectedType: "value",
 			Command:      clicore.PausePointAwaitCommandName,
 			NextActions:  []string{"Pass `--id <marker-id>` matching UloopPausePoint.Pause(\"<marker-id>\")."},
@@ -300,9 +300,9 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 		}
 
 		switch name {
-		case clicore.PausePointIDFlagName:
+		case PausePointIDFlagName:
 			options.id = value
-		case clicore.PausePointCapturedVariablesFlagName:
+		case PausePointCapturedVariablesFlagName:
 			mode, parseErr := parsePausePointCapturedVariablesMode(value)
 			if parseErr != nil {
 				return pausePointStatusOptions{}, parseErr
@@ -325,7 +325,7 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 	if options.id == "" {
 		return pausePointStatusOptions{}, &clierrors.ArgumentError{
 			Message:      "Missing required option: --id",
-			Option:       "--" + clicore.PausePointIDFlagName,
+			Option:       "--" + PausePointIDFlagName,
 			ExpectedType: "value",
 			Command:      clicore.PausePointStatusUserCommandName,
 			NextActions:  []string{"Pass `--id <marker-id>` matching UloopPausePoint.Pause(\"<marker-id>\")."},
@@ -338,7 +338,7 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 func parsePausePointTimeoutSeconds(value string) (int, error) {
 	timeoutSeconds, err := strconv.Atoi(value)
 	if err != nil || timeoutSeconds <= 0 {
-		return 0, clierrors.InvalidValueArgumentError("--"+clicore.PausePointTimeoutFlagName, value, "positive integer")
+		return 0, clierrors.InvalidValueArgumentError("--"+PausePointTimeoutFlagName, value, "positive integer")
 	}
 	return timeoutSeconds, nil
 }
