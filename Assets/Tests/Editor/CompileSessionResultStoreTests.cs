@@ -97,9 +97,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     errors: Array.Empty<CompilerMessage>(),
                     warnings: new[] { warning });
                 CompileResponse firstResponse =
-                    CompileResponseFactory.CreateResponse(result, forceRecompile: false);
+                    CompileResponseFactory.CreateResponse(result, forceRecompile: false, pausePointWarning: null);
                 CompileResponse secondResponse =
-                    CompileResponseFactory.CreateResponse(result, forceRecompile: false);
+                    CompileResponseFactory.CreateResponse(result, forceRecompile: false, pausePointWarning: null);
 
                 CompileSessionResultStore.StoreCompileResult(
                     compileResultSessionRepository,
