@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.52](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.51...uloop-project-runner-v3.0.0-beta.52) (2026-07-20)
+
+
+### Bug Fixes
+
+* Runner-owned command flags and help no longer require a dispatcher release ([#1862](https://github.com/hatayama/unity-cli-loop/issues/1862)) ([96e75f8](https://github.com/hatayama/unity-cli-loop/commit/96e75f8a19c23e4c3d587e91efa3e52574716060))
+
 ## [3.0.0-beta.51](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.50...uloop-project-runner-v3.0.0-beta.51) (2026-07-19)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.55](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.54...v3.0.0-beta.55) (2026-07-20)
+
+
+### Bug Fixes
+
+* Installed CLI now self-updates to a dispatcher release with V2 project support ([#1859](https://github.com/hatayama/unity-cli-loop/issues/1859)) ([985d3fe](https://github.com/hatayama/unity-cli-loop/commit/985d3fe03f1e57a5f2d74ef08336f11417a181bf))
+
 ## [3.0.0-beta.54](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.53...v3.0.0-beta.54) (2026-07-19)
 
 
