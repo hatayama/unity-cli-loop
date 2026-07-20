@@ -1,0 +1,29 @@
+name: PR Title Conventional Commit Check
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+    branches: [main, v3-beta]
+
+permissions:
+  contents: read
+
+jobs:
+  check-pr-title:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache: false
+
+      - name: Check PR title is a conventional commit header
+        working-directory: cli/release-automation
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: go run ./cmd/check-pr-title
