@@ -75,7 +75,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ? new List<string>(finalResult.Timings)
                         : cancelledResponse.Timings;
                     cancelledResponse.EmitTimingsInJsonResponse = parameters.IncludeTimings;
-                    await ApplyPauseStateAsync(cancelledResponse, cancellationToken).ConfigureAwait(false);
+                    // Why CancellationToken.None: finalResult can be cancelled by the internal
+                    // executionCancellationTokenSource (e.g. a domain reload) even when
+                    // cancellationToken itself is already cancelled; reusing it here would throw
+                    // again and lose the preserved Logs/Timings on the fallback path below.
+                    await ApplyPauseStateAsync(cancelledResponse, CancellationToken.None).ConfigureAwait(false);
                     return cancelledResponse;
                 }
 
@@ -84,7 +88,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ExecuteDynamicCodeResponse restartingResponse =
                         DynamicCodeExecutionResponseFactory.CreateRuntimeRestartingResponse();
                     restartingResponse.EmitTimingsInJsonResponse = parameters.IncludeTimings;
-                    await ApplyPauseStateAsync(restartingResponse, cancellationToken).ConfigureAwait(false);
+                    // Why CancellationToken.None: same reasoning as the cancelled-response branch
+                    // above, but reusing a cancelled token here would swap this RuntimeRestarting
+                    // response for a plain Cancelled one via the outer catch, which is worse than
+                    // losing Logs/Timings since the response kind itself changes.
+                    await ApplyPauseStateAsync(restartingResponse, CancellationToken.None).ConfigureAwait(false);
                     return restartingResponse;
                 }
 
