@@ -33,7 +33,7 @@ uloop find-game-objects [options]
 
 | Mode | Description |
 |------|-------------|
-| `Exact` | Exact name match (default) |
+| `Exact` | Exact name match (default). **Trap**: `--name-pattern "Camera"` will not match a GameObject named `"Main Camera"` — use `Contains` or `Regex` for partial matching. A zero-hit `Exact` search returns a `Message` hint pointing this out (see Output). |
 | `Path` | Hierarchy path search (e.g., `Canvas/Button`) |
 | `Regex` | Regular expression pattern |
 | `Contains` | Partial name match |
@@ -62,3 +62,7 @@ For `Selected` mode with **multiple** successfully serialized GameObjects, inlin
 - `Message` (string): Human-readable summary (e.g., "5 GameObjects exported")
 
 Single-selection and search-mode calls (`Exact`, `Path`, `Regex`, `Contains`) always return inline. No selection (`Selected` mode with empty selection) returns empty `Results` plus a `Message`.
+
+### Zero-hit Exact-mode hint
+
+If an `Exact` search with a non-empty `--name-pattern` finds nothing (`TotalFound: 0`), `Message` carries a hint suggesting `Contains` or `Regex` instead of leaving the zero hit unexplained. This does not change the default mode or matching logic — it only surfaces the same trap described above at the point it actually bites.
