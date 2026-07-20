@@ -30,6 +30,11 @@ type pausePointStatusResponse struct {
 	StatusBeforeClear               string                           `json:"StatusBeforeClear"`
 	LateHitDiscardedAfterClear      bool                             `json:"LateHitDiscardedAfterClear"`
 
+	// Warning carries the enable-time diagnostic (for example the physics-callback cached
+	// message dispatch warning) that PausePointResponse always includes on the Unity side, but
+	// which only the enable-pause-point --await path (pause_point_enable.go) currently reads.
+	Warning string `json:"Warning,omitempty"`
+
 	// CapturedVariableNameFilterNoMatch is set by the CLI, not Unity, when
 	// --captured-variable-names was passed but none of the requested names matched any
 	// captured variable (current or history), so an agent doesn't mistake an empty

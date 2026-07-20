@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -5,6 +7,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class SourcePausePointConstants
     {
+        // Shared by the variable collector (to un-mangle the field name for capture) and the
+        // collection preview serializer (to detect the same fields for preview formatting).
+        public static readonly Regex AutoPropertyBackingFieldPattern =
+            new(@"^<([^>]+)>k__BackingField$", RegexOptions.Compiled);
+
         public const string ScriptAssembliesRelativeDirectory = "Library/ScriptAssemblies";
         public const string CompiledAssemblyExtension = ".dll";
         public const string DebugSymbolsExtension = ".pdb";

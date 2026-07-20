@@ -27,24 +27,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static CompileResponse CreateResponse(
             CompileResult result,
-            bool forceRecompile)
+            bool forceRecompile,
+            string pausePointWarning)
         {
             Debug.Assert(result != null, "result must not be null");
 
             if (forceRecompile && !result.PreserveDetailsWhenForceRecompile)
             {
-                return CreateForceCompileResult(result);
+                return CreateForceCompileResult(result, pausePointWarning);
             }
 
             if (result.IsIndeterminate)
             {
-                return new CompileResponse(
+                CompileResponse indeterminateResponse = new CompileResponse(
                     success: result.Success == true,
                     errorCount: result.ErrorCount,
                     warningCount: result.WarningCount,
                     errors: null,
                     warnings: null,
                     message: result.Message ?? "Compilation status is unknown. Use get-logs to inspect the compiler output.");
+                indeterminateResponse.Warning = pausePointWarning;
+                return indeterminateResponse;
             }
 
             CompileResponse response = new CompileResponse(
@@ -55,6 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings: ToIssues(result.Warnings),
                 message: AddMissingTestFrameworkReferenceHint(result.Message, result.Errors));
             response.NextActions = CreateExternalSceneChangeNextActions(result.Message);
+            response.Warning = pausePointWarning;
             return response;
         }
 
@@ -73,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ExternalSceneChangeNextActions;
         }
 
-        private static CompileResponse CreateForceCompileResult(CompileResult result)
+        private static CompileResponse CreateForceCompileResult(CompileResult result, string pausePointWarning)
         {
             ForceCompileUnknownResult unknownResult = ForceCompileUnknownResult.Create();
             CompileResponse response = new CompileResponse(
@@ -85,6 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message: unknownResult.Message);
             response.ErrorCode = ForceCompileUnknownResult.ErrorCodeText;
             response.NextActions = new[] { ForceCompileUnknownResult.NextActionText };
+            response.Warning = pausePointWarning;
             return response;
         }
 

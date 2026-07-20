@@ -79,6 +79,7 @@ func listOptionsForTool(tool clicore.ToolDefinition) []listOption {
 	}
 
 	options = appendDynamicCodeFileListOption(tool, options)
+	options = appendPausePointEnableAwaitListOptions(tool, options)
 	sort.Slice(options, func(i int, j int) bool {
 		return options[i].Name < options[j].Name
 	})
@@ -146,4 +147,50 @@ func appendDynamicCodeFileListOption(tool clicore.ToolDefinition, options []list
 		Type:        "string",
 		Description: tooldocs.DynamicCodeFileOptionDescription,
 	})
+}
+
+// appendPausePointEnableAwaitListOptions documents --await/--captured-variables/
+// --captured-variable-names on enable-pause-point's catalog entry, mirroring
+// appendDynamicCodeFileListOption: these are CLI-only orchestration flags (pause_point_enable.go)
+// that are not part of the Unity-side EnablePausePointSchema, so they never appear in
+// listOptionsForTool's schema-driven loop above.
+func appendPausePointEnableAwaitListOptions(tool clicore.ToolDefinition, options []listOption) []listOption {
+	if tool.Name != pausePointEnableCommandName {
+		return options
+	}
+	if hasListOption(options, "--"+pausePointEnableAwaitFlagName) {
+		return options
+	}
+	return append(options,
+		listOption{
+			Name:        "--" + pausePointEnableAwaitFlagName,
+			Type:        "boolean",
+			Description: "Wait for the marker to be hit (or time out) after enabling, in a single call, instead of a separate await-pause-point call",
+		},
+		listOption{
+			Name:        "--" + PausePointCapturedVariablesFlagName,
+			Type:        "string",
+			Description: "Requires --await. Same as await-pause-point's --captured-variables",
+			Values:      []string{string(pausePointCapturedVariablesModeFull), string(pausePointCapturedVariablesModeNames)},
+		},
+		listOption{
+			Name:        "--" + PausePointCapturedVariableNamesFlagName,
+			Type:        "string",
+			Description: "Requires --await. Same as await-pause-point's --captured-variable-names",
+		},
+		listOption{
+			Name:        "--" + PausePointExpectFlagName,
+			Type:        "string",
+			Description: "Requires --await. Same as await-pause-point's --expect (repeatable)",
+		},
+	)
+}
+
+func hasListOption(options []listOption, name string) bool {
+	for _, option := range options {
+		if option.Name == name {
+			return true
+		}
+	}
+	return false
 }

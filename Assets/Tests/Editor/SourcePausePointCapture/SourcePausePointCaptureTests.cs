@@ -225,6 +225,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(frame.Truncated, Is.True);
         }
 
+        [Test]
+        public void Collect_WithAutoPropertyBackingField_CapturesUnmangledPropertyNameAsInstanceField()
+        {
+            // Verifies an auto-implemented property's compiler-generated backing field
+            // (<Name>k__BackingField) is captured as an instance field under the property name,
+            // instead of being skipped by the "<"-prefix filter.
+            AutoPropertyFixture instance = new();
+            instance.SetVerticalVelocity(4.5f);
+
+            UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
+                instance, Array.Empty<object>(), Array.Empty<object>());
+
+            UloopPausePointCapturedVariableEntry entry = frame.Entries.Single(entry => entry.Name == "VerticalVelocity");
+            Assert.That(entry.Scope, Is.EqualTo(UloopCapturedVariableScope.InstanceField));
+            Assert.That(entry.Value, Is.EqualTo(4.5f));
+        }
+
         private static (object StateMachine, Type StateMachineType) CreateStateMachine()
         {
             Type stateMachineType = typeof(AsyncStateMachineFixture)
@@ -237,6 +254,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private sealed class NormalInstanceFixture
         {
             public int Health;
+        }
+
+        private sealed class AutoPropertyFixture
+        {
+            public float VerticalVelocity { get; private set; }
+
+            public void SetVerticalVelocity(float value) => VerticalVelocity = value;
         }
 
         private sealed class AsyncStateMachineFixture

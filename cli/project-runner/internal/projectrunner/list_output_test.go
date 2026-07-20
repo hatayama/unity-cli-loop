@@ -132,6 +132,23 @@ func TestNewListCatalogIncludesExecuteDynamicCodeCodeFile(t *testing.T) {
 	findListOption(t, executeDynamicCode, tooldocs.DynamicCodeFileOptionName)
 }
 
+// Tests that list output includes the CLI-side --await orchestration flags for
+// enable-pause-point, which are not part of the Unity-side EnablePausePointSchema.
+func TestNewListCatalogIncludesEnablePausePointAwaitOptions(t *testing.T) {
+	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), pausePointEnableCommandName)
+	if !ok {
+		t.Fatal("enable-pause-point was not found in default tools")
+	}
+
+	catalog := newListCatalog(clicore.ToolsCache{Tools: []clicore.ToolDefinition{tool}})
+	enablePausePoint := findListTool(t, catalog, pausePointEnableCommandName)
+
+	findListOption(t, enablePausePoint, "--"+pausePointEnableAwaitFlagName)
+	findListOption(t, enablePausePoint, "--"+PausePointCapturedVariablesFlagName)
+	findListOption(t, enablePausePoint, "--"+PausePointCapturedVariableNamesFlagName)
+	findListOption(t, enablePausePoint, "--"+PausePointExpectFlagName)
+}
+
 func decodeListCatalog(t *testing.T, content []byte) listCatalog {
 	t.Helper()
 
