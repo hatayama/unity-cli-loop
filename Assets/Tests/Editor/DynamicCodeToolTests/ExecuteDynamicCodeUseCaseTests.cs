@@ -7,7 +7,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
-using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.Runtime;
@@ -155,6 +154,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             finally
             {
                 signal.Dispose();
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
+        [Test]
+        public void ExecuteAsync_WhenResumedOffMainThread_QueuesMainThreadSwitchBeforeReadingPauseState()
+        {
+            // Tests that applying EditorPaused/ActivePausePointId switches back to the main thread
+            // instead of reading EditorApplication.isPaused directly on whatever thread the
+            // ConfigureAwait(false) continuations resumed on. Deliberately does not wait for the
+            // outer ExecuteAsync Task to complete: once queued, resuming it depends on the TPL's own
+            // continuation scheduling, which is not something a test should spin-wait on.
+            MarkForegroundWarmupCompleted();
+            QueuedMainThreadDispatcher dispatcher = new();
+            MainThreadSwitcher.RegisterService(dispatcher);
+
+            try
+            {
+                FakeDynamicCodeExecutionRuntime runtime = new(
+                    new ExecutionResult { Success = true, Result = "ok" });
+                ExecuteDynamicCodeUseCase useCase = new(runtime);
+
+                Task<ExecuteDynamicCodeResponse> executeTask = useCase.ExecuteAsync(
+                    new ExecuteDynamicCodeSchema { Code = "return 1;", CompileOnly = false },
+                    CancellationToken.None);
+
+                Assert.That(executeTask.IsCompleted, Is.False);
+                Assert.That(dispatcher.PendingContinuationCount, Is.GreaterThan(0));
+
+                dispatcher.RunQueuedContinuationsAsMainThread();
+
+                Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(0));
+            }
+            finally
+            {
                 RestoreEditorMainThreadDispatcher();
             }
         }

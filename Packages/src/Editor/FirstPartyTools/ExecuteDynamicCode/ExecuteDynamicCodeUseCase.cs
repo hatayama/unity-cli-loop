@@ -75,7 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ? new List<string>(finalResult.Timings)
                         : cancelledResponse.Timings;
                     cancelledResponse.EmitTimingsInJsonResponse = parameters.IncludeTimings;
-                    ApplyPauseState(cancelledResponse);
+                    await ApplyPauseStateAsync(cancelledResponse, cancellationToken).ConfigureAwait(false);
                     return cancelledResponse;
                 }
 
@@ -84,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ExecuteDynamicCodeResponse restartingResponse =
                         DynamicCodeExecutionResponseFactory.CreateRuntimeRestartingResponse();
                     restartingResponse.EmitTimingsInJsonResponse = parameters.IncludeTimings;
-                    ApplyPauseState(restartingResponse);
+                    await ApplyPauseStateAsync(restartingResponse, cancellationToken).ConfigureAwait(false);
                     return restartingResponse;
                 }
 
@@ -95,14 +95,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 bool domainReloadWaitRequired =
                     await domainReloadWaitSignal.ShouldWaitAsync(cancellationToken).ConfigureAwait(false);
                 response.DomainReloadWaitRequired = domainReloadWaitRequired;
-                ApplyPauseState(response);
+                await ApplyPauseStateAsync(response, cancellationToken).ConfigureAwait(false);
                 return response;
             }
             catch (OperationCanceledException)
             {
                 ExecuteDynamicCodeResponse response = DynamicCodeExecutionResponseFactory.CreateCancelledResponse();
                 response.EmitTimingsInJsonResponse = parameters?.IncludeTimings ?? false;
-                ApplyPauseState(response);
+                // Why CancellationToken.None: cancellationToken is already cancelled on this path,
+                // and passing it to SwitchToMainThread would throw again instead of switching.
+                await ApplyPauseStateAsync(response, CancellationToken.None).ConfigureAwait(false);
                 return response;
             }
         }
@@ -110,8 +112,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Lets an agent recognize a post-interrupt state (e.g. a pause point hit mid-execution)
         // instead of mistaking a stale-looking result for a bug. ActivePausePointId stays empty
         // when the Editor is paused for a reason unrelated to a pause point.
-        private static void ApplyPauseState(ExecuteDynamicCodeResponse response)
+        // Why async: the preceding ConfigureAwait(false) continuations may resume this method on a
+        // thread-pool thread, and EditorApplication.isPaused throws when read off the main thread.
+        private static async Task ApplyPauseStateAsync(
+            ExecuteDynamicCodeResponse response,
+            CancellationToken cancellationToken)
         {
+            await MainThreadSwitcher.SwitchToMainThread(cancellationToken);
+
             (bool editorPaused, string activePausePointId) = ExecuteDynamicCodePauseStateResolver.Resolve(
                 EditorApplication.isPaused, UloopPausePointRegistry.GetActivePausePointId());
             response.EditorPaused = editorPaused;
