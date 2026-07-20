@@ -8,20 +8,27 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 )
 
+const (
+	PausePointIDFlagName                = "id"
+	PausePointTimeoutFlagName           = "timeout-seconds"
+	PausePointLogsMaxCountFlagName      = "matching-logs-max-count"
+	PausePointCapturedVariablesFlagName = "captured-variables"
+)
+
 // runnerNativeCommandOptions lists the flags accepted by each runner-owned
 // native command. It lives with the runner binary (rather than the
 // dispatcher) so that adding a flag to a runner-owned command never requires
 // a dispatcher code change or release.
 var runnerNativeCommandOptions = map[string][]string{
 	clicore.PausePointAwaitCommandName: {
-		"--" + clicore.PausePointIDFlagName,
-		"--" + clicore.PausePointTimeoutFlagName,
-		"--" + clicore.PausePointLogsMaxCountFlagName,
-		"--" + clicore.PausePointCapturedVariablesFlagName,
+		"--" + PausePointIDFlagName,
+		"--" + PausePointTimeoutFlagName,
+		"--" + PausePointLogsMaxCountFlagName,
+		"--" + PausePointCapturedVariablesFlagName,
 	},
 	clicore.PausePointStatusUserCommandName: {
-		"--" + clicore.PausePointIDFlagName,
-		"--" + clicore.PausePointCapturedVariablesFlagName,
+		"--" + PausePointIDFlagName,
+		"--" + PausePointCapturedVariablesFlagName,
 	},
 }
 

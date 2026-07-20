@@ -1,21 +1,17 @@
 package clicore
 
 const (
-	LaunchCommandName                   = "launch"
-	InstallCommandName                  = "install"
-	UpdateCommandName                   = "update"
-	UninstallCommandName                = "uninstall"
-	SkillsCommandName                   = "skills"
-	CompileCommandName                  = "compile"
-	ExecuteDynamicCodeCommandName       = "execute-dynamic-code"
-	PausePointAwaitCommandName          = "await-pause-point"
-	PausePointStatusUserCommandName     = "pause-point-status"
-	RunTestsCommandName                 = "run-tests"
-	CompletionCommand                   = "completion"
-	PausePointIDFlagName                = "id"
-	PausePointTimeoutFlagName           = "timeout-seconds"
-	PausePointLogsMaxCountFlagName      = "matching-logs-max-count"
-	PausePointCapturedVariablesFlagName = "captured-variables"
+	LaunchCommandName               = "launch"
+	InstallCommandName              = "install"
+	UpdateCommandName               = "update"
+	UninstallCommandName            = "uninstall"
+	SkillsCommandName               = "skills"
+	CompileCommandName              = "compile"
+	ExecuteDynamicCodeCommandName   = "execute-dynamic-code"
+	PausePointAwaitCommandName      = "await-pause-point"
+	PausePointStatusUserCommandName = "pause-point-status"
+	RunTestsCommandName             = "run-tests"
+	CompletionCommand               = "completion"
 )
 
 type NativeCommandEntry struct {
