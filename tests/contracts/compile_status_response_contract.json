@@ -14,7 +14,8 @@
     "Message": "Compile result is available.",
     "ErrorCode": null,
     "NextActions": null,
-    "ProjectRoot": null
+    "ProjectRoot": null,
+    "Warning": null
   },
   "Message": "Compile result is available."
 }

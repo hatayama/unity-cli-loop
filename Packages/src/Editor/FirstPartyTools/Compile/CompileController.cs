@@ -22,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private List<CompilerMessage> _compileMessages = new();
         private TaskCompletionSource<CompileResult> _currentCompileTask;
         private bool _isForceCompile = false;
+        private string _pendingPausePointWarning;
         private bool _reloadExternalSceneChanges = true;
         private CompileResultRecordingContext _resultRecordingContext = CompileResultRecordingContext.Disabled();
         private DateTime _compileStartedAtUtc = DateTime.MinValue;
@@ -96,6 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Executes compilation asynchronously.
         /// </summary>
         /// <param name="forceRecompile">Whether to force a recompile.</param>
+        /// <param name="pausePointWarning">Optional Warning to carry onto the shaped response, e.g. when Play Mode was active with enabled pause points.</param>
         /// <param name="ct">Cancellation token for the compile execution.</param>
         /// <returns>The compilation result.</returns>
         /// <exception cref="InvalidOperationException">Thrown when the task is not found during compilation.</exception>
@@ -103,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Callers must validate editor compilation state before invoking compile execution;
         /// the production pipeline does this in CompileUseCase.
         /// </remarks>
-        public async Task<CompileResult> TryCompileAsync(bool forceRecompile, CancellationToken ct)
+        public async Task<CompileResult> TryCompileAsync(bool forceRecompile, string pausePointWarning, CancellationToken ct)
         {
             if (_isCompiling)
             {
@@ -136,10 +138,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     });
                 CompileResult result =
                     CompileResultFactory.CreateExternalSceneChangeFailureResult(sceneChangeResult);
-                RecordCompileResultIfNeeded(result);
+                RecordCompileResultIfNeeded(result, pausePointWarning: null);
                 return result;
             }
 
+            _pendingPausePointWarning = pausePointWarning;
             _isCompiling = true;
             _compileMessages.Clear();
             _compileStartedAtUtc = DateTime.UtcNow;
@@ -321,7 +324,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Completion subscribers are outside this controller, so state cleanup cannot depend on them returning.
             try
             {
-                RecordCompileResultIfNeeded(result);
+                RecordCompileResultIfNeeded(result, _pendingPausePointWarning);
 
                 if (unregisterEvents)
                 {
@@ -341,13 +344,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     _isForceCompile = false;
                     _resultRecordingContext = CompileResultRecordingContext.Disabled();
                     _compileStartedAtUtc = DateTime.MinValue;
+                    _pendingPausePointWarning = null;
                 }
 
                 task?.TrySetResult(result);
             }
         }
 
-        private void RecordCompileResultIfNeeded(CompileResult result)
+        private void RecordCompileResultIfNeeded(CompileResult result, string pausePointWarning)
         {
             UnityEngine.Debug.Assert(result != null, "result must not be null");
 
@@ -362,7 +366,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _resultRecordingContext.RequestId,
                 _resultRecordingContext.ForceRecompile,
                 result,
-                _resultRecordingContext.RequestId);
+                _resultRecordingContext.RequestId,
+                pausePointWarning);
         }
 
         /// <summary>
@@ -462,6 +467,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _reloadExternalSceneChanges = true;
             _resultRecordingContext = CompileResultRecordingContext.Disabled();
             _compileStartedAtUtc = DateTime.MinValue;
+            _pendingPausePointWarning = null;
         }
 
         /// <summary>

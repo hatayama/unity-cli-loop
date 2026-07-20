@@ -42,6 +42,7 @@ type waitForPausePointOptions struct {
 	matchingLogsMaxCount  int
 	capturedVariablesMode pausePointCapturedVariablesMode
 	capturedVariableNames []string
+	expectations          []pausePointExpectation
 }
 
 type pausePointStatusOptions struct {
@@ -202,6 +203,11 @@ func runWaitForPausePoint(
 	}
 
 	if state == pausePointWaitStateHit {
+		// Evaluated against the raw, unfiltered CapturedVariables before the filters below can
+		// narrow or strip values, so an --expect target is never dropped just because it was not
+		// also requested via --captured-variable-names or --captured-variables=names.
+		expectations := evaluatePausePointExpectations(response.CapturedVariables, options.expectations)
+
 		response = filterPausePointCapturedVariableHistory(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
@@ -210,11 +216,29 @@ func runWaitForPausePoint(
 		// means "the fetch succeeded and no matching log exists".
 		var payload any = response
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
-		if logsErr == nil {
+		switch {
+		case logsErr == nil:
 			payload = pausePointWaitResult{
 				pausePointStatusResponse: response,
 				MatchingLogs:             logs.Logs,
 				Warning:                  buildPausePointWarning(logs, response.HitCount),
+				Expectations:             expectations,
+				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
+			}
+		case len(expectations) > 0:
+			// Best-effort: a failed log fetch must not also drop --expect results, since that is
+			// the only evidence a caller asked for by name in this branch. Uses an anonymous
+			// struct (not pausePointWaitResult) so MatchingLogs is omitted entirely rather than
+			// serialized as an empty array, preserving "empty array only means a successful
+			// fetch with no matches".
+			payload = struct {
+				pausePointStatusResponse
+				Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
+				AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
+			}{
+				pausePointStatusResponse: response,
+				Expectations:             expectations,
+				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
 			}
 		}
 		result, marshalErr := json.Marshal(payload)
@@ -290,13 +314,14 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 			options.capturedVariablesMode = mode
 		case PausePointCapturedVariableNamesFlagName:
 			options.capturedVariableNames = parsePausePointCapturedVariableNames(value)
-		default:
-			return waitForPausePointOptions{}, &clierrors.ArgumentError{
-				Message:     "Unknown option for await-pause-point: --" + name,
-				Option:      "--" + name,
-				Command:     clicore.PausePointAwaitCommandName,
-				NextActions: []string{"Run `uloop await-pause-point --help` to inspect supported options."},
+		case PausePointExpectFlagName:
+			expectation, parseErr := parsePausePointExpectFlagValue(value)
+			if parseErr != nil {
+				return waitForPausePointOptions{}, parseErr
 			}
+			options.expectations = append(options.expectations, expectation)
+		default:
+			return waitForPausePointOptions{}, pausePointUnknownOptionError(clicore.PausePointAwaitCommandName, name)
 		}
 
 		if consumedNext {
@@ -339,12 +364,7 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 		case PausePointCapturedVariableNamesFlagName:
 			options.capturedVariableNames = parsePausePointCapturedVariableNames(value)
 		default:
-			return pausePointStatusOptions{}, &clierrors.ArgumentError{
-				Message:     "Unknown option for pause-point-status: --" + name,
-				Option:      "--" + name,
-				Command:     clicore.PausePointStatusUserCommandName,
-				NextActions: []string{"Run `uloop pause-point-status --help` to inspect supported options."},
-			}
+			return pausePointStatusOptions{}, pausePointUnknownOptionError(clicore.PausePointStatusUserCommandName, name)
 		}
 
 		if consumedNext {

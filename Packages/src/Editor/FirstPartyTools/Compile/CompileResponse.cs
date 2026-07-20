@@ -74,6 +74,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string ProjectRoot { get; set; }
 
         /// <summary>
+        /// Optional warning about a condition compile does not block on, e.g. Play Mode being
+        /// active with enabled pause points whose patches the domain reload will discard.
+        /// </summary>
+        public string Warning { get; set; }
+
+        /// <summary>
         /// Create a new CompileResponse
         /// </summary>
         public CompileResponse(

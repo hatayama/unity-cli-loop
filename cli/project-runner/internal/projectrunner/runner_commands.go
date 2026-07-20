@@ -36,6 +36,8 @@ func runResolvedProjectCommand(
 		return runWaitForPausePointCommand(ctx, connection, commandArgs, stdout, stderr)
 	case clicore.PausePointStatusUserCommandName:
 		return runPausePointStatusCommand(ctx, connection, commandArgs, stdout, stderr)
+	case pausePointEnableCommandName:
+		return runEnablePausePointCommand(ctx, connection, commandArgs, startPath, stdout, stderr)
 	default:
 		return runDynamicProjectTool(ctx, connection, command, commandArgs, startPath, stdout, stderr)
 	}

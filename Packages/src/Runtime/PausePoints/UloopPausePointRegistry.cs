@@ -224,6 +224,23 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return Entries.TryGetValue(id, out UloopPausePointEntry entry) && entry.IsEnabled;
         }
 
+        /// <summary>
+        /// Counts entries still armed (IsEnabled), i.e. markers whose Harmony patch is currently
+        /// installed and would be lost on the next domain reload.
+        /// </summary>
+        public static int GetActiveCount()
+        {
+            int count = 0;
+            foreach (UloopPausePointEntry entry in Entries.Values)
+            {
+                if (entry.IsEnabled)
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+
         private static UloopPausePointSnapshot HitCore(
             string id,
             UloopPausePointCapturedVariableFrame capturedFrame,
