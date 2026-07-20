@@ -26,7 +26,7 @@ The response returns the derived marker `Id` (`Assets/Scripts/Enemy.cs:42`), the
 uloop await-pause-point --id "Assets/Scripts/Enemy.cs:42" --timeout-seconds 30
 ```
 
-4. Read `CapturedVariables` in the hit response first: the locals, parameters, and `this` instance fields at the paused line are already there (see the next section). Adding a temporary `Debug.Log` just to see a local variable is no longer necessary.
+4. Read `CapturedVariables` in the hit response first: the locals, parameters, and `this` instance fields at the paused line are already there (see the next section). Adding a temporary `Debug.Log` just to see a local variable is no longer necessary. (the snapshot is pre-line: taken before the resolved line executes, like an IDE breakpoint)
 5. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
 6. Clear the marker with `uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"` or stop PlayMode before moving on. Use `uloop clear-pause-point --all` to clear every active marker at once, for example when resetting between E2E scenarios. Clearing also removes the underlying code patch, so the method runs untouched afterwards.
 
@@ -49,6 +49,8 @@ uloop pause-point-status --id "Assets/Scripts/Enemy.cs:42"
 
 Repeat the Step/status pair to inspect the history tail. A new frame is captured only when the patched line executes during that frame; event handlers such as `OnCollisionEnter` update only when the event occurs again. Use a longer `--timeout-seconds` for a Step session because the enable-time timeout does not extend after hits.
 
+For multi-step verification, avoid repeating enable→await→clear cycles with the default single-shot mode: use `continuous` mode (the marker re-arms automatically after each hit and keeps history), or enable several file:line markers at once — markers are independent and can stay armed simultaneously.
+
 ## Reading CapturedVariables
 
 Every hit response embeds `CapturedVariables`: the method's in-scope locals, its parameters, and the `this` instance fields, captured at the exact moment execution reached the patched line. Values are point-in-time strings, not live references, so they stay valid as evidence even after Unity resumes.
@@ -56,7 +58,7 @@ Every hit response embeds `CapturedVariables`: the method's in-scope locals, its
 - The snapshot is taken **before** the resolved line executes, exactly like an IDE breakpoint on that line. To inspect a value after an assignment, place the pause point on the following line.
 - `Scope` is `Local`, `Parameter`, `InstanceField`, or `This`. The synthetic `this` entry identifies which instance or GameObject was hit via `UnityObjectPath` and `UnityObjectInstanceId`; `UnityEngine.Object` values carry the same handle fields for follow-up digs with `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code`.
 - `--captured-variables names` on `await-pause-point`/`pause-point-status` drops every `Value` and keeps `Name`/`Scope`/`TypeName` — use it first on field-heavy classes, then fetch full values with a plain `pause-point-status` call.
-- While Unity is still paused, `UloopPausePoint.TryGetCapturedValue("name")` (and `"this"`) returns live captured references for `execute-dynamic-code`; the holder clears on resume.
+- While Unity is still paused, `UloopPausePoint.TryGetCapturedValue("name")` (and `"this"`) returns live captured references for `execute-dynamic-code`; the holder clears on resume. (file:line marker hits only — id-only markers store no capture)
 
 Before interpreting unexpected, missing, or truncated values, nested previews that render as type names, Unity-object `Value` strings, capture-time vs live evidence trade-offs, the hit response's `Warning`/`MatchingLogs` fields, marker freshness (`Generation`, `EnabledAtUtc`), or the raw capture API in detail, read [references/captured-variables.md](references/captured-variables.md).
 
@@ -75,6 +77,7 @@ A watch evaluates only on a changed, paused frame, and a domain reload clears al
 
 - `uloop enable-pause-point --file --line` patches the already-compiled method at a source line. No code edit or recompile is required.
 - `UloopPausePoint.Pause(id)` is a hand-written marker call for code paths that file:line patching cannot reach. Pair it with `uloop enable-pause-point --id <id>` (no `--file`/`--line`). The call does not need to live in committed source — a dynamic-code watcher can fire it (see the next section).
+- The id-only marker records the hit itself and nothing more: `CapturedVariables` is always empty, and no raw capture is stored, so `TryGetCapturedValue`/`GetCapturedNames` return nothing for these hits. When you need variable values at an id-only marker, read the target objects directly with `execute-dynamic-code` while the Editor is paused, or use a file:line marker instead.
 - For ordinary file:line debugging you do not need `UloopPausePoint.Pause` in source. Prefer CLI enable when the target line can be patched.
 - Physical Unity message methods (`OnCollisionEnter2D`, `OnTriggerEnter2D`, and similar callbacks) can silently never hit even though the method body demonstrably runs: Unity can resolve a GameObject's message dispatch before the file:line patch is installed, so a GameObject that already existed at enable time may keep calling the pre-patch code. If `await-pause-point`/`pause-point-status` reports `HitCount=0` on a physical callback line, check the response `Warning` for this note, then work around it by recreating the GameObject after enabling, or by embedding `UloopPausePoint.Pause("<id>")` directly in the method body via an id-only marker instead of a file:line one.
 
@@ -112,6 +115,8 @@ If this command times out, the patched line was not reached while the command wa
 
 Use `uloop pause-point-status --id "Assets/Scripts/Enemy.cs:42"` only when you need to confirm the marker is armed or inspect the current hit state.
 
+If none of the above explains `HitCount=0`, suspect JIT inlining: Mono can inline very small target methods into callers, and the pause point then never fires even though the line runs. Move the pause point into the calling method (see Requirements & Safety).
+
 The `enable-pause-point --timeout-seconds` countdown freezes while a hit holds the Editor paused: the elapsed pause duration is credited back onto the marker's expiry on resume, so inspecting a paused hit for as long as you need does not erode the remaining timeout budget. The freeze applies only to a pause caused by a pause-point hit; a manual pause without a hit does not stop the countdown.
 
 ## Fast-Progressing Games
@@ -131,6 +136,8 @@ uloop control-play-mode --action Play
 Do not use `Time.timeScale = 0` for this: projects that read unscaled time keep advancing regardless, and the value silently persists into the next PlayMode session. Editor pause and `Step` freeze the entire player loop independent of `Time.timeScale`.
 
 A pause point hit leaves Unity in this same paused state, so `Step` also works right after a hit: inspect the paused frame, then step forward to watch the following frames commit one at a time.
+
+While the Editor is paused, injecting state by writing fields or transforms directly can silently fail to stick: `transform.position` and `Rigidbody2D.position` do not synchronize until the next simulation step, and any production `Update()` that recomputes the value will overwrite the injection on the next frame. Prefer arranging state through the game's own methods; after a direct write, advance one frame with `--action Step` and re-read the value to confirm it took effect.
 
 ## Line Placement
 
