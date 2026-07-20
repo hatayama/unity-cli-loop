@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.57](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.56...v3.0.0-beta.57) (2026-07-20)
+
+
+### Bug Fixes
+
+* Correct dispatcher version series back to the 3.0.0-beta line ([#1888](https://github.com/hatayama/unity-cli-loop/issues/1888)) ([ddaa473](https://github.com/hatayama/unity-cli-loop/commit/ddaa4731d90f61f4f277b0928c3afeaa85aad482))
+* Round-3 pause-point/dynamic-code usability and reliability fixes ([#1884](https://github.com/hatayama/unity-cli-loop/issues/1884)) ([f1de07e](https://github.com/hatayama/unity-cli-loop/commit/f1de07e8030eca5e70de418cf22e4a597d5a0e06))
+
 ## [3.0.0-beta.56](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.55...v3.0.0-beta.56) (2026-07-20)
 
 
