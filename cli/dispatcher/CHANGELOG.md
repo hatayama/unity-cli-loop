@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.1.0-beta.19](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.1.0-beta.18...dispatcher-v3.1.0-beta.19) (2026-07-20)
+
+
+### Features
+
+* dispatcher env override to use a locally built project runner ([#1863](https://github.com/hatayama/unity-cli-loop/issues/1863)) ([e6ec679](https://github.com/hatayama/unity-cli-loop/commit/e6ec67921fde80b5a8bdc5c3915618489d7f4615))
+
+
+### Bug Fixes
+
+* Launch no longer overclaims a crash for a stale UnityLockfile ([#1867](https://github.com/hatayama/unity-cli-loop/issues/1867)) ([7622db7](https://github.com/hatayama/unity-cli-loop/commit/7622db77b952243c1ca387ffca06af0fcf25217d))
+
 ## [3.1.0-beta.18](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.1.0-beta.17...dispatcher-v3.1.0-beta.18) (2026-07-20)
 
 
