@@ -227,10 +227,16 @@ func runWaitForPausePoint(
 			}
 		case len(expectations) > 0:
 			// Best-effort: a failed log fetch must not also drop --expect results, since that is
-			// the only evidence a caller asked for by name in this branch.
-			payload = pausePointWaitResult{
+			// the only evidence a caller asked for by name in this branch. Uses an anonymous
+			// struct (not pausePointWaitResult) so MatchingLogs is omitted entirely rather than
+			// serialized as an empty array, preserving "empty array only means a successful
+			// fetch with no matches".
+			payload = struct {
+				pausePointStatusResponse
+				Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
+				AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
+			}{
 				pausePointStatusResponse: response,
-				MatchingLogs:             []pausePointMatchingLog{},
 				Expectations:             expectations,
 				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
 			}

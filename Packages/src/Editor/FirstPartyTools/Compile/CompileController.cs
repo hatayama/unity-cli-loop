@@ -107,8 +107,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </remarks>
         public async Task<CompileResult> TryCompileAsync(bool forceRecompile, string pausePointWarning, CancellationToken ct)
         {
-            _pendingPausePointWarning = pausePointWarning;
-
             if (_isCompiling)
             {
                 // If compilation is already in progress, wait for the current task.
@@ -144,6 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return result;
             }
 
+            _pendingPausePointWarning = pausePointWarning;
             _isCompiling = true;
             _compileMessages.Clear();
             _compileStartedAtUtc = DateTime.UtcNow;

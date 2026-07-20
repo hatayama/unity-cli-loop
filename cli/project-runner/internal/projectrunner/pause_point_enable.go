@@ -108,9 +108,16 @@ func extractPausePointEnableAwaitFlags(
 	}
 
 	if !await && (modeSet || namesSet || len(expectations) > 0) {
+		option := "--" + PausePointCapturedVariablesFlagName
+		switch {
+		case len(expectations) > 0:
+			option = "--" + PausePointExpectFlagName
+		case namesSet:
+			option = "--" + PausePointCapturedVariableNamesFlagName
+		}
 		return nil, false, mode, nil, nil, &clierrors.ArgumentError{
 			Message: "--captured-variables, --captured-variable-names, and --expect require --await",
-			Option:  "--" + PausePointCapturedVariablesFlagName,
+			Option:  option,
 			Command: pausePointEnableCommandName,
 			NextActions: []string{
 				"Pass `--await` to wait for the marker after enabling, or drop these options.",
