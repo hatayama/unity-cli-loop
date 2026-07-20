@@ -35,7 +35,8 @@ protocol version. `protocolVersion` in `cli/common/clicontract/contract.json` an
 and bump them (together, in the same PR) only when the IPC wire format becomes incompatible
 between generations; ordinary features and fixes must not bump it. Release version fields
 (`projectRunnerVersion`, `dispatcherVersion`, changelogs) are stamped by release-please only —
-never edit them by hand in a feature PR. Bump criteria and release sequencing:
+never edit them by hand in a feature PR (sole exception: the documented version-series
+realignment; see `docs/version-series-realignment.md`). Bump criteria and release sequencing:
 `docs/protocol-version.md`.
 
 ## Project Runner Pin
@@ -94,6 +95,8 @@ source changes) so validation uses the code under review:
 ```bash
 dist/darwin-arm64/uloop compile --project-path "$(git rev-parse --show-toplevel)"
 ```
+
+Substitute the binary for your platform (e.g. `dist/windows-amd64/uloop.exe` on Windows).
 
 Before running a command with `--project-path`, confirm the path is the intended Unity project
 for the current task — do not copy a sibling checkout path from another repository or session.
