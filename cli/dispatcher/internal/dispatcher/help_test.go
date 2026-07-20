@@ -151,30 +151,6 @@ func TestRunDispatcherHelpShowsConciseProjectToolDescriptions(t *testing.T) {
 	}
 }
 
-// Tests that native project commands show the shared project path option.
-func TestRunDispatcherListHelpShowsGlobalOptions(t *testing.T) {
-	t.Chdir(t.TempDir())
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	code := RunDispatcher(context.Background(), []string{"list", "--help"}, &stdout, &stderr)
-
-	if code != 0 {
-		t.Fatalf("list help failed: code=%d stderr=%s", code, stderr.String())
-	}
-	output := stdout.String()
-	for _, expected := range []string{
-		"Usage:",
-		"uloop list",
-		"Global options:",
-		"--project-path <path>",
-	} {
-		if !strings.Contains(output, expected) {
-			t.Fatalf("list help missing %q:\n%s", expected, output)
-		}
-	}
-}
-
 // Tests that launch help documents both positional and global project selection.
 func TestRunDispatcherLaunchHelpShowsGlobalOptions(t *testing.T) {
 	t.Chdir(t.TempDir())
@@ -405,32 +381,6 @@ func TestRunDispatcherSkillsSubcommandHelpDoesNotRequireUnityProject(t *testing.
 	for _, expected := range []string{"Usage:", "uloop skills install", "--claude", "--codex"} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("skills install help missing %q:\n%s", expected, output)
-		}
-	}
-}
-
-// Tests that native command help keeps the command description visible even
-// when the command has registered options.
-func TestRunDispatcherPausePointWaitHelpShowsDescriptionAndOptions(t *testing.T) {
-	t.Chdir(t.TempDir())
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	code := RunDispatcher(context.Background(), []string{clicore.PausePointAwaitCommandName, "--help"}, &stdout, &stderr)
-
-	if code != 0 {
-		t.Fatalf("pause-point-wait help failed: code=%d stderr=%s", code, stderr.String())
-	}
-	output := stdout.String()
-	for _, expected := range []string{
-		"Usage:",
-		"uloop " + clicore.PausePointAwaitCommandName + " [options]",
-		"Wait until a named UloopPausePoint.Pause marker pauses Unity",
-		"Options:",
-		"--" + clicore.PausePointIDFlagName,
-	} {
-		if !strings.Contains(output, expected) {
-			t.Fatalf("pause-point-wait help missing %q:\n%s", expected, output)
 		}
 	}
 }

@@ -12,7 +12,11 @@ import (
 )
 
 func tryHandleCommandHelp(command string, startPath string, projectPath string, stdout io.Writer, stderr io.Writer) (bool, int) {
-	if _, ok := clicore.NativeCommand(command); ok {
+	// Runner-owned commands are intentionally excluded here: their --help must
+	// go through the normal dispatch path to the pinned runner (see
+	// shouldRunInDispatcherProcess), which answers with its own up-to-date
+	// flag list instead of a dispatcher-side table that can drift.
+	if clicore.IsDispatcherOwnedCommandName(command) {
 		printNativeSingleCommandHelp(command, stdout)
 		return true, 0
 	}
@@ -114,7 +118,7 @@ func nativeCommandDescription(command string) (string, bool) {
 
 func nativeCommandUsesProject(command string) bool {
 	switch command {
-	case clicore.LaunchCommandName, "list", "sync", "focus-window", clicore.SkillsCommandName, clicore.PausePointAwaitCommandName, clicore.PausePointStatusUserCommandName:
+	case clicore.LaunchCommandName, clicore.SkillsCommandName:
 		return true
 	default:
 		return false

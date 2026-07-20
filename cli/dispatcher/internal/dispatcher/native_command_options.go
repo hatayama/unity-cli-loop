@@ -22,16 +22,4 @@ var nativeCommandOptions = map[string][]string{
 	},
 	clicore.InstallCommandName: {"--" + installDirFlagName},
 	clicore.UpdateCommandName:  {"--" + updateToVersionFlagName},
-	clicore.PausePointAwaitCommandName: {
-		"--" + clicore.PausePointIDFlagName,
-		"--" + clicore.PausePointTimeoutFlagName,
-		"--" + clicore.PausePointLogsMaxCountFlagName,
-		"--" + clicore.PausePointCapturedVariablesFlagName,
-		"--" + tooldocs.ProjectPathFlagName,
-	},
-	clicore.PausePointStatusUserCommandName: {
-		"--" + clicore.PausePointIDFlagName,
-		"--" + clicore.PausePointCapturedVariablesFlagName,
-		"--" + tooldocs.ProjectPathFlagName,
-	},
 }
