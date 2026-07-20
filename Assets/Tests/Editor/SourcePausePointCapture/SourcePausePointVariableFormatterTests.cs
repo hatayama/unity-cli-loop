@@ -531,6 +531,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Format_WithShadowedFieldName_PrefersDerivedFieldOverBaseField()
+        {
+            // Verifies a derived class field that shadows a same-named base class field ("new"
+            // hiding) previews the derived (runtime-visible) value, not the base class's, since
+            // field enumeration walks derived-to-base and the derived name must win.
+            object[] locals = { "entity", new ShadowingDerivedType { Score = 2 } };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Is.EqualTo("{\"Score\":2}"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
         public void Format_WithSelfReferencingCustomType_DoesNotThrow()
         {
             // Verifies the field-based JSON preview reuses the existing circular-reference guard.
@@ -658,6 +673,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private sealed class SelfReferencingType
         {
             public SelfReferencingType Self;
+        }
+
+        private class ShadowingBaseType
+        {
+            public int Score;
+        }
+
+        private sealed class ShadowingDerivedType : ShadowingBaseType
+        {
+            public new int Score;
         }
 
         private sealed class ThrowingOnEnumerateCollection : ICollection

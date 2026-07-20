@@ -155,6 +155,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int fieldCount = 0;
             foreach ((string name, FieldInfo field) in EnumerateObjectFields(value.GetType()))
             {
+                // EnumerateObjectFields walks derived-to-base, so a name already present here is
+                // the derived class's own field; skip the base class's shadowed field instead of
+                // letting it silently overwrite the value that is actually in effect at runtime.
+                if (jsonObject.ContainsKey(name))
+                {
+                    continue;
+                }
+
                 if (fieldCount >= SourcePausePointConstants.MaxCollectionPreviewElementCount)
                 {
                     truncated = true;
