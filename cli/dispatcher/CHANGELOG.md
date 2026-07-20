@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.0.0-beta.19](https://github.com/hatayama/unity-cli-loop/releases/tag/dispatcher-v3.0.0-beta.19) (2026-07-21)
+
+Version realignment: the dispatcher rejoins the 3.0.0-beta line. The 3.1.0-beta series existed only because an unintended dispatcher-v3.0.0 bootstrap release made release-please treat 3.0.0 as shipped. No functional changes.
+
 ## [3.1.0-beta.19](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.1.0-beta.18...dispatcher-v3.1.0-beta.19) (2026-07-20)
 
 
