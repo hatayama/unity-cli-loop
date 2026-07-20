@@ -145,7 +145,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies OnCollisionEnter2D on a MonoBehaviour-derived type reports the informational
             // warning about Unity's physics message dispatch caching its call path independently of
             // this patch (see To-Do 2 investigation: an already-existing GameObject's collision
-            // callback can miss the pause point even though the method body runs).
+            // callback can miss the pause point even though the method body runs). This fixture's
+            // body is also small enough to additionally trigger the inlining-risk warning (see
+            // Patch_PhysicsMessageMethodOnMonoBehaviour_AlsoTriggersInliningWarning for the exact
+            // joined string), so this test only pins the physical-callback warning's presence.
             const string id = "patcher-physical-callback-method";
             SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
                 FixturesDirectory + "PatcherPhysicalCallbackMethodFixture.cs", 13);
@@ -155,7 +158,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
 
             Assert.That(patchResult.Success, Is.True);
-            Assert.That(patchResult.Warning, Is.EqualTo(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning));
+            Assert.That(patchResult.Warning, Does.Contain(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning));
+        }
+
+        [Test]
+        public void Patch_PhysicsMessageMethodOnMonoBehaviour_AlsoTriggersInliningWarning()
+        {
+            // Verifies that when both the physical-callback warning and the small-body
+            // inlining-risk warning apply to the same method (OnCollisionEnter2D's body is only
+            // 16 IL bytes, well under SmallMethodInliningRiskThresholdBytes), BuildPatchWarning
+            // joins them in the same order as the checks appear in its source (physical-callback
+            // first, then inlining-risk), space-separated.
+            const string id = "patcher-physical-callback-method-dual-warning";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherPhysicalCallbackMethodFixture.cs", 13);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+
+            Assert.That(patchResult.Success, Is.True);
+            Assert.That(patchResult.Warning, Is.EqualTo(
+                SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning + " "
+                + SourcePausePointConstants.SmallMethodInliningRiskWarning));
         }
 
         [Test]
@@ -163,6 +188,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies Update() on the same MonoBehaviour fixture does not trigger the
             // physics-message warning, since only physics message methods carry the caching risk.
+            // Update()'s body is also small (16 IL bytes), so the inlining-risk warning is still
+            // present; this test only asserts the physical-callback warning's absence.
             const string id = "patcher-ordinary-message-method";
             SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
                 FixturesDirectory + "PatcherPhysicalCallbackMethodFixture.cs", 18);
@@ -172,7 +199,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
 
             Assert.That(patchResult.Success, Is.True);
-            Assert.That(patchResult.Warning, Is.Empty);
+            Assert.That(patchResult.Warning, Does.Not.Contain(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning));
         }
 
         [Test]
@@ -180,7 +207,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies the warning requires both a matching method name AND a MonoBehaviour-derived
             // declaring type, so an unrelated plain class that happens to name a method
-            // "OnTriggerEnter2D" does not produce a false positive.
+            // "OnTriggerEnter2D" does not produce a false positive. This fixture's body is also
+            // small (16 IL bytes), so the inlining-risk warning is still present; this test only
+            // asserts the physical-callback warning's absence.
             const string id = "patcher-physics-named-method-plain-class";
             SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
                 FixturesDirectory + "PatcherPhysicsNamedMethodOnPlainClassFixture.cs", 9);
@@ -190,7 +219,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
 
             Assert.That(patchResult.Success, Is.True);
+            Assert.That(patchResult.Warning, Does.Not.Contain(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning));
+        }
+
+        [Test]
+        public void Patch_SmallMethodBody_ReturnsInliningRiskWarning()
+        {
+            // Verifies a method whose IL body is at or under SmallMethodInliningRiskThresholdBytes
+            // triggers the inlining-risk warning. The precondition assert guards against C# compiler
+            // version drift silently moving this fixture's IL size to the wrong side of the threshold.
+            byte[] ilBytes = typeof(PatcherStaticMethodFixture).GetMethod(nameof(PatcherStaticMethodFixture.Add))
+                .GetMethodBody().GetILAsByteArray();
+            Assert.That(ilBytes.Length, Is.LessThanOrEqualTo(SourcePausePointConstants.SmallMethodInliningRiskThresholdBytes),
+                "Fixture precondition failed: PatcherStaticMethodFixture.Add must stay at or under the inlining-risk threshold.");
+
+            const string id = "patcher-small-method-body";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherStaticMethodFixture.cs", 10);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+
+            Assert.That(patchResult.Success, Is.True);
+            Assert.That(patchResult.Warning, Is.EqualTo(SourcePausePointConstants.SmallMethodInliningRiskWarning));
+        }
+
+        [Test]
+        public void Patch_LargeMethodBody_DoesNotReturnInliningRiskWarning()
+        {
+            // Verifies a method whose IL body clearly exceeds SmallMethodInliningRiskThresholdBytes
+            // (with a safety margin against compiler version drift, rather than sizing the fixture
+            // to land just past the boundary) does not trigger the inlining-risk warning.
+            byte[] ilBytes = typeof(PatcherLargeMethodFixture).GetMethod(nameof(PatcherLargeMethodFixture.Classify))
+                .GetMethodBody().GetILAsByteArray();
+            Assert.That(ilBytes.Length, Is.GreaterThan(SourcePausePointConstants.SmallMethodInliningRiskThresholdBytes + 8),
+                "Fixture precondition failed: PatcherLargeMethodFixture.Classify must clearly exceed the inlining-risk threshold.");
+
+            const string id = "patcher-large-method-body";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherLargeMethodFixture.cs", 23);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+
+            Assert.That(patchResult.Success, Is.True);
             Assert.That(patchResult.Warning, Is.Empty);
+        }
+
+        [Test]
+        public void Patch_AggressiveInliningMethod_ReturnsInliningRiskWarningRegardlessOfSize()
+        {
+            // Verifies [MethodImpl(MethodImplOptions.AggressiveInlining)] triggers the inlining-risk
+            // warning independent of IL body size: this fixture's body is identical in shape to
+            // PatcherLargeMethodFixture (clearly over the threshold), so the warning here can only
+            // come from the attribute check, not the size check.
+            byte[] ilBytes = typeof(PatcherAggressiveInliningMethodFixture).GetMethod(nameof(PatcherAggressiveInliningMethodFixture.Classify))
+                .GetMethodBody().GetILAsByteArray();
+            Assert.That(ilBytes.Length, Is.GreaterThan(SourcePausePointConstants.SmallMethodInliningRiskThresholdBytes + 8),
+                "Fixture precondition failed: PatcherAggressiveInliningMethodFixture.Classify must clearly exceed the inlining-risk threshold so this test isolates the attribute check.");
+
+            const string id = "patcher-aggressive-inlining-method";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherAggressiveInliningMethodFixture.cs", 26);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+
+            Assert.That(patchResult.Success, Is.True);
+            Assert.That(patchResult.Warning, Is.EqualTo(SourcePausePointConstants.SmallMethodInliningRiskWarning));
         }
 
         [Test]

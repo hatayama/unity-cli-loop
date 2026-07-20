@@ -51,6 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int ResolvedLine { get; set; }
         public string ResolvedLineText { get; set; } = string.Empty;
         public string ResolvedMethod { get; set; } = string.Empty;
+        public string SnapshotTiming { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
         public bool IsEnabled { get; set; }
         public bool IsHit { get; set; }
@@ -358,6 +359,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ResolvedLine = resolveResult.Resolution.ResolvedLine;
             response.ResolvedLineText = ReadResolvedLineText(parameters.File, resolveResult.Resolution.ResolvedLine);
             response.ResolvedMethod = resolveResult.Resolution.MethodDisplayName;
+            response.SnapshotTiming = SourcePausePointConstants.PreLineSnapshotTimingNote;
             response.Warning = MergeWarnings(CreateEnableWarning(), patchResult.Warning);
             return response;
         }
