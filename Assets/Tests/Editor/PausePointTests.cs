@@ -594,6 +594,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.RemainingMilliseconds, Is.EqualTo(30000));
             Assert.That(response.Generation, Is.EqualTo(1));
             Assert.That(response.Expired, Is.False);
+            // An id-only marker has no resolved source line, so no pre-line timing note applies.
+            Assert.That(response.SnapshotTiming, Is.Empty);
             Assert.That(response.EditorState.CapturedAt, Is.EqualTo(UloopPausePointEditorStateCapturedAt.Current));
             Assert.That(response.RecommendedNextAction, Is.Empty);
         }
@@ -987,6 +989,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.ResolvedLine, Is.EqualTo(FixtureLine));
             Assert.That(response.ResolvedLineText, Is.EqualTo("return sum;"));
             Assert.That(response.ResolvedMethod, Does.Contain("Add"));
+            Assert.That(response.SnapshotTiming, Is.EqualTo(SourcePausePointConstants.PreLineSnapshotTimingNote));
 
             EnableBySourceLocationFixture fixture = new();
             int sum = fixture.Add(2, 3);

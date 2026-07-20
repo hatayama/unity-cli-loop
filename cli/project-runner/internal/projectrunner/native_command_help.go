@@ -9,10 +9,11 @@ import (
 )
 
 const (
-	PausePointIDFlagName                = "id"
-	PausePointTimeoutFlagName           = "timeout-seconds"
-	PausePointLogsMaxCountFlagName      = "matching-logs-max-count"
-	PausePointCapturedVariablesFlagName = "captured-variables"
+	PausePointIDFlagName                    = "id"
+	PausePointTimeoutFlagName               = "timeout-seconds"
+	PausePointLogsMaxCountFlagName          = "matching-logs-max-count"
+	PausePointCapturedVariablesFlagName     = "captured-variables"
+	PausePointCapturedVariableNamesFlagName = "captured-variable-names"
 )
 
 // runnerNativeCommandOptions lists the flags accepted by each runner-owned
@@ -25,10 +26,12 @@ var runnerNativeCommandOptions = map[string][]string{
 		"--" + PausePointTimeoutFlagName,
 		"--" + PausePointLogsMaxCountFlagName,
 		"--" + PausePointCapturedVariablesFlagName,
+		"--" + PausePointCapturedVariableNamesFlagName,
 	},
 	clicore.PausePointStatusUserCommandName: {
 		"--" + PausePointIDFlagName,
 		"--" + PausePointCapturedVariablesFlagName,
+		"--" + PausePointCapturedVariableNamesFlagName,
 	},
 }
 

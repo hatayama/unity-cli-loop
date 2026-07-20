@@ -2,30 +2,100 @@ package unityprocess
 
 import (
 	"encoding/base64"
+	"encoding/binary"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
 
-// Verifies macOS Unity process parsing extracts project paths and skips batchmode workers.
-func TestParseMacUnityProcessesExtractsProjectPath(t *testing.T) {
-	output := `123 /Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -projectPath "/Users/<USER_NAME>/My Project" -useHub -hubIPC
-456 /Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -batchmode -projectPath "/Users/<USER_NAME>/Batch"
-789 /Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -projectPath /Users/<USER_NAME>/Other -logFile -
-`
+// Verifies macOS Unity process matching extracts project paths and skips batchmode workers,
+// using the same (pid, command) shape produced by joining a process's sysctl-read argv.
+func TestMatchMacUnityProcessExtractsProjectPath(t *testing.T) {
+	editorProcess, matched := matchMacUnityProcess(
+		123,
+		`/Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -projectPath "/Users/<USER_NAME>/My Project" -useHub -hubIPC`)
+	if !matched {
+		t.Fatal("expected the Unity editor process to match")
+	}
+	if editorProcess.Pid != 123 || editorProcess.projectPath != "/Users/<USER_NAME>/My Project" {
+		t.Fatalf("editor process mismatch: %#v", editorProcess)
+	}
 
-	processes := parseMacUnityProcesses(output)
+	_, batchmodeMatched := matchMacUnityProcess(
+		456,
+		`/Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -batchmode -projectPath "/Users/<USER_NAME>/Batch"`)
+	if batchmodeMatched {
+		t.Fatal("expected a -batchmode process to be skipped")
+	}
 
-	if len(processes) != 2 {
-		t.Fatalf("process count mismatch: %#v", processes)
+	unquotedProcess, unquotedMatched := matchMacUnityProcess(
+		789,
+		`/Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -projectPath /Users/<USER_NAME>/Other -logFile -`)
+	if !unquotedMatched {
+		t.Fatal("expected an unquoted project path process to match")
 	}
-	if processes[0].Pid != 123 || processes[0].projectPath != "/Users/<USER_NAME>/My Project" {
-		t.Fatalf("first process mismatch: %#v", processes[0])
+	if unquotedProcess.Pid != 789 || unquotedProcess.projectPath != "/Users/<USER_NAME>/Other" {
+		t.Fatalf("unquoted process mismatch: %#v", unquotedProcess)
 	}
-	if processes[1].Pid != 789 || processes[1].projectPath != "/Users/<USER_NAME>/Other" {
-		t.Fatalf("second process mismatch: %#v", processes[1])
+}
+
+// Verifies the kern.procargs2 buffer parser decodes argc, skips the exec path and NUL
+// padding, and stops after argc argv entries.
+func TestParseMacProcArgs2DecodesArgv(t *testing.T) {
+	buf := buildProcArgs2Fixture(t, "/usr/bin/execpath", []string{"/usr/bin/execpath", "-projectPath", "/tmp/proj"})
+
+	args, err := parseMacProcArgs2(buf)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
 	}
+	expected := []string{"/usr/bin/execpath", "-projectPath", "/tmp/proj"}
+	if len(args) != len(expected) {
+		t.Fatalf("argv length mismatch: %#v", args)
+	}
+	for i, want := range expected {
+		if args[i] != want {
+			t.Fatalf("argv[%d] mismatch: got %q, want %q", i, args[i], want)
+		}
+	}
+}
+
+// Verifies a buffer shorter than the leading argc field is rejected instead of panicking.
+func TestParseMacProcArgs2RejectsShortBuffer(t *testing.T) {
+	_, err := parseMacProcArgs2([]byte{1, 2})
+
+	if err == nil {
+		t.Fatal("expected an error for a too-short buffer")
+	}
+}
+
+// Verifies a buffer missing the NUL-terminated exec path is rejected instead of scanning past the end.
+func TestParseMacProcArgs2RejectsMissingExecPathTerminator(t *testing.T) {
+	buf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(buf, 1)
+	buf = append(buf, []byte("/usr/bin/execpath-with-no-terminator")...)
+
+	_, err := parseMacProcArgs2(buf)
+
+	if err == nil {
+		t.Fatal("expected an error when the exec path has no NUL terminator")
+	}
+}
+
+// buildProcArgs2Fixture assembles a kern.procargs2-shaped buffer: argc, then the exec
+// path NUL terminated, one padding NUL, then each argv entry NUL terminated.
+func buildProcArgs2Fixture(t *testing.T, execPath string, argv []string) []byte {
+	t.Helper()
+
+	buf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(buf, uint32(len(argv)))
+	buf = append(buf, []byte(execPath)...)
+	buf = append(buf, 0)
+	for _, arg := range argv {
+		buf = append(buf, []byte(arg)...)
+		buf = append(buf, 0)
+	}
+	return buf
 }
 
 // Verifies Windows Unity process parsing decodes Base64 command lines, extracts project paths, and skips batchmode workers.

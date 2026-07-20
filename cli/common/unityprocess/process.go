@@ -1,8 +1,10 @@
 package unityprocess
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -17,7 +19,6 @@ const windowsPowerShellCommand = "powershell"
 var (
 	macUnityExecutablePattern     = regexp.MustCompile(`(?i)Unity\.app/Contents/MacOS/Unity`)
 	windowsUnityExecutablePattern = regexp.MustCompile(`(?i)Unity\.exe`)
-	macProcessLinePattern         = regexp.MustCompile(`^\s*(\d+)\s+(.*)$`)
 	projectPathFlagPattern        = regexp.MustCompile(`(?i)-projectpath(?:=|\s+)(.+)$`)
 	nextUnityFlagPattern          = regexp.MustCompile(`\s-[A-Za-z][A-Za-z0-9-]*(?:=|\s|$)`)
 )
@@ -64,16 +65,6 @@ func listUnityProcesses(ctx context.Context) ([]UnityProcess, error) {
 	}
 }
 
-func listUnityProcessesMac(ctx context.Context) ([]UnityProcess, error) {
-	commandContext, cancel := withCommandTimeout(ctx, ProcessListCommandTimeout)
-	defer cancel()
-	output, err := exec.CommandContext(commandContext, "ps", "-axo", "pid=,command=", "-ww").Output()
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve Unity process list: %w", err)
-	}
-	return parseMacUnityProcesses(string(output)), nil
-}
-
 func listUnityProcessesWindows(ctx context.Context) ([]UnityProcess, error) {
 	commandContext, cancel := withCommandTimeout(ctx, ProcessListCommandTimeout)
 	defer cancel()
@@ -103,31 +94,54 @@ func windowsUnityProcessListScript() string {
 	return strings.Join(scriptLines, "\n")
 }
 
-func parseMacUnityProcesses(output string) []UnityProcess {
-	processes := []UnityProcess{}
-	for _, line := range strings.Split(output, "\n") {
-		matches := macProcessLinePattern.FindStringSubmatch(line)
-		if len(matches) != 3 {
-			continue
-		}
-
-		pid, err := strconv.Atoi(matches[1])
-		if err != nil {
-			continue
-		}
-
-		command := matches[2]
-		if !isUnityEditorCommand(command, macUnityExecutablePattern) {
-			continue
-		}
-		projectPath := extractProjectPath(command)
-		if projectPath == "" {
-			continue
-		}
-
-		processes = append(processes, UnityProcess{Pid: pid, projectPath: projectPath})
+// matchMacUnityProcess checks a single process's (pid, space-joined argv) pair against
+// the same Unity-editor-command and project-path rules used for the ps-based command
+// text this replaced, so callers built from either a text source or a raw argv slice
+// share one matching implementation.
+func matchMacUnityProcess(pid int, command string) (UnityProcess, bool) {
+	if !isUnityEditorCommand(command, macUnityExecutablePattern) {
+		return UnityProcess{}, false
 	}
-	return processes
+	projectPath := extractProjectPath(command)
+	if projectPath == "" {
+		return UnityProcess{}, false
+	}
+	return UnityProcess{Pid: pid, projectPath: projectPath}, true
+}
+
+// parseMacProcArgs2 decodes the kern.procargs2 sysctl buffer layout: a leading int32
+// argc, followed by the exec path (NUL terminated), NUL padding, then argc consecutive
+// NUL-terminated argv strings. Darwin's supported architectures (amd64, arm64) are both
+// little-endian, so argc is read with binary.LittleEndian. This parser has no
+// darwin-specific dependency, only the sysctl call that supplies its input does, so it
+// stays in the shared, cross-platform-buildable file for CI coverage.
+func parseMacProcArgs2(buf []byte) ([]string, error) {
+	if len(buf) < 4 {
+		return nil, fmt.Errorf("procargs2 buffer too short: %d bytes", len(buf))
+	}
+
+	argc := int(binary.LittleEndian.Uint32(buf[:4]))
+	rest := buf[4:]
+
+	execPathEnd := bytes.IndexByte(rest, 0)
+	if execPathEnd < 0 {
+		return nil, fmt.Errorf("procargs2 missing exec path terminator")
+	}
+	rest = rest[execPathEnd:]
+	for len(rest) > 0 && rest[0] == 0 {
+		rest = rest[1:]
+	}
+
+	args := make([]string, 0, argc)
+	for len(rest) > 0 && len(args) < argc {
+		argEnd := bytes.IndexByte(rest, 0)
+		if argEnd < 0 {
+			break
+		}
+		args = append(args, string(rest[:argEnd]))
+		rest = rest[argEnd+1:]
+	}
+	return args, nil
 }
 
 func parseWindowsUnityProcesses(output string) []UnityProcess {

@@ -16,7 +16,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class CompiledAssemblyBuilder : ICompiledAssemblyBuilder
     {
         private static int _compileCounter;
-        private static readonly string[] LiteralHoistingFallbackErrorCodes = { "CS0133", "CS0150", "CS0182", "CS1736" };
+        // Hoisting turns constant literals into variables, which loses implicit narrowing
+        // conversions (e.g. an int literal argument no longer converts to a byte parameter
+        // such as Color32's), so CS1503 needs the same non-hoisted recompile fallback as the
+        // other hoisting-caused error codes below.
+        private static readonly string[] LiteralHoistingFallbackErrorCodes =
+            { "CS0133", "CS0150", "CS0182", "CS1736", "CS1503" };
 
         private readonly ExternalCompilerPathResolutionService _externalCompilerPathResolver;
         private readonly DynamicReferenceSetBuilderService _referenceSetBuilder;
@@ -314,7 +319,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 externalCompilerPaths);
         }
 
-        private static bool ShouldRetryWithoutLiteralHoisting(
+        internal static bool ShouldRetryWithoutLiteralHoisting(
             PreparedDynamicCode preparedCode,
             CompilerDiagnostics diagnostics)
         {
