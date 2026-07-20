@@ -87,5 +87,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo("PlayMode is paused. Resume PlayMode before simulating UI input."));
         }
 
+        [Test]
+        public void FormatPausePointPausedMessage_WithSimulateKeyboardSuffix_ReturnsExpectedWireString()
+        {
+            // Verifies the pause-point-aware message names the active pause point so agents calling
+            // simulate-keyboard right after a pause-point hit see the real cause instead of a generic rejection.
+            Assert.That(
+                PlayModeToolPreflightService.FormatPausePointPausedMessage(
+                    "example-pause-point-id",
+                    SimulateKeyboardUseCase.PausedActionDescription),
+                Is.EqualTo(
+                    "PlayMode is paused because pause point 'example-pause-point-id' is active " +
+                    "(check pause-point-status). Resume PlayMode before simulating keyboard input."));
+        }
+
+        [Test]
+        public void FormatPausePointPausedMessage_WithSimulateMouseInputSuffix_ReturnsExpectedWireString()
+        {
+            // Verifies the pause-point-aware message stays byte-identical for SimulateMouseInput's suffix too.
+            Assert.That(
+                PlayModeToolPreflightService.FormatPausePointPausedMessage(
+                    "example-pause-point-id",
+                    SimulateMouseInputUseCase.PausedActionDescription),
+                Is.EqualTo(
+                    "PlayMode is paused because pause point 'example-pause-point-id' is active " +
+                    "(check pause-point-status). Resume PlayMode before simulating mouse input."));
+        }
     }
 }
