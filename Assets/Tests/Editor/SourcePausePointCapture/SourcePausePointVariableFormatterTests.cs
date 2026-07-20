@@ -378,15 +378,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void Format_WithCompositeCollectionElements_FallsBackElementsToToString()
+        public void Format_WithCompositeCollectionElements_ExpandsElementFieldsAsJson()
         {
-            // Verifies composite element types stringify instead of expanding nested object graphs.
+            // Verifies composite element types without a ToString override expand their fields as
+            // JSON (via the same field-based preview custom types use), instead of falling back to
+            // the default type-name ToString.
             object[] locals = { "items", new List<InstanceFieldFixture> { new() { PublicField = 7 } } };
 
             (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
                 null, Array.Empty<object>(), locals);
 
-            Assert.That(variables.Single().Value, Does.Contain(nameof(InstanceFieldFixture)));
+            Assert.That(variables.Single().Value, Is.EqualTo("[{\"PublicField\":7,\"Prop\":null}]"));
             Assert.That(truncated, Is.False);
         }
 
@@ -466,6 +468,98 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(truncated, Is.False);
         }
 
+        [Test]
+        public void Format_WithPlainCustomTypeWithoutToStringOverride_PreviewsFieldsAsJson()
+        {
+            // Verifies a custom class without a ToString override previews its fields as JSON
+            // instead of the default type-name ToString.
+            object[] locals = { "stats", new PlainCustomType { Score = 42, Label = "gold" } };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Is.EqualTo("{\"Score\":42,\"Label\":\"gold\"}"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithCustomStructWithoutToStringOverride_PreviewsFieldsAsJson()
+        {
+            // Verifies value types without a ToString override also preview as JSON fields, not
+            // just reference types.
+            object[] locals = { "point", new PlainCustomStruct { X = 1, Y = 2 } };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Is.EqualTo("{\"X\":1,\"Y\":2}"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithCustomTypeOverridingToString_KeepsToStringResult()
+        {
+            // Verifies a custom type that overrides ToString keeps using ToString instead of the
+            // new field-based JSON preview.
+            object[] locals = { "stats", new CustomTypeWithToStringOverride { Score = 42 } };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Is.EqualTo("Score=42"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithNestedCustomTypeBeyondPreviewDepth_TruncatesInnermostLevelToToString()
+        {
+            // Verifies the field-based JSON preview reuses the existing depth cap: nesting beyond
+            // MaxCollectionPreviewDepth degrades the innermost level to ToString instead of
+            // expanding further.
+            NestingOuterType graph = new()
+            {
+                Middle = new NestingMiddleType { Inner = new NestingInnerType { Value = 9 } }
+            };
+            object[] locals = { "graph", graph };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Does.Contain(nameof(NestingInnerType)));
+            Assert.That(variables.Single().Value, Does.Not.Contain("\"Value\":9"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithShadowedFieldName_PrefersDerivedFieldOverBaseField()
+        {
+            // Verifies a derived class field that shadows a same-named base class field ("new"
+            // hiding) previews the derived (runtime-visible) value, not the base class's, since
+            // field enumeration walks derived-to-base and the derived name must win.
+            object[] locals = { "entity", new ShadowingDerivedType { Score = 2 } };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Is.EqualTo("{\"Score\":2}"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithSelfReferencingCustomType_DoesNotThrow()
+        {
+            // Verifies the field-based JSON preview reuses the existing circular-reference guard.
+            SelfReferencingType instance = new();
+            instance.Self = instance;
+            object[] locals = { "node", instance };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Does.Contain("(circular)"));
+            Assert.That(truncated, Is.False);
+        }
+
         [UnityTest]
         public IEnumerator Format_WhenCalledOffMainThread_DegradesUnityObjectValueWithoutEngineApiAccess()
         {
@@ -537,6 +631,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 OuterField += localValue;
                 return localValue;
             }
+        }
+
+        private sealed class PlainCustomType
+        {
+            public int Score;
+            public string Label;
+        }
+
+        private struct PlainCustomStruct
+        {
+            public int X;
+            public int Y;
+        }
+
+        private sealed class CustomTypeWithToStringOverride
+        {
+            public int Score;
+
+            public override string ToString()
+            {
+                return $"Score={Score}";
+            }
+        }
+
+        private sealed class NestingOuterType
+        {
+            public NestingMiddleType Middle;
+        }
+
+        private sealed class NestingMiddleType
+        {
+            public NestingInnerType Inner;
+        }
+
+        private sealed class NestingInnerType
+        {
+            public int Value;
+        }
+
+        private sealed class SelfReferencingType
+        {
+            public SelfReferencingType Self;
+        }
+
+        private class ShadowingBaseType
+        {
+            public int Score;
+        }
+
+        private sealed class ShadowingDerivedType : ShadowingBaseType
+        {
+            public new int Score;
         }
 
         private sealed class ThrowingOnEnumerateCollection : ICollection
