@@ -179,6 +179,7 @@ func runEnablePausePointAndAwait(
 ) int {
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, pausePointEnableCommandName)
+	applyDebugTimingParams(pausePointEnableCommandName, params)
 	outcome, err := sendWithTransientConnectionRetry(
 		ctx,
 		connection,
@@ -288,6 +289,7 @@ func runPausePointWaitAfterEnable(
 	}
 
 	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state)
+	waitErr.Command = pausePointEnableCommandName
 	if enableWarning != "" {
 		waitErr.Details["EnableWarning"] = enableWarning
 	}
