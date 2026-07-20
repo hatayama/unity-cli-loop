@@ -334,6 +334,21 @@ func TestResolveDispatcherRealCLIRejectsMissingProjectRunnerPathOverride(t *test
 	}
 }
 
+func TestResolveDispatcherRealCLIRejectsDirectoryProjectRunnerPathOverride(t *testing.T) {
+	// Verifies a clear error is returned when the override env var points at a directory instead of a binary.
+	t.Setenv(nativepath.ProjectRunnerPathEnvName, t.TempDir())
+	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
+
+	_, err := resolveDispatcherRealCLI(context.Background(), dispatcherPin{ProjectRunnerVersion: "1.0.0"}, io.Discard)
+
+	if err == nil {
+		t.Fatal("expected an error for a directory override path")
+	}
+	if !strings.Contains(err.Error(), nativepath.ProjectRunnerPathEnvName) {
+		t.Fatalf("error message should mention %s: %v", nativepath.ProjectRunnerPathEnvName, err)
+	}
+}
+
 func TestEnforceDispatcherFreshnessRequiresManualUpdateWhenSelfUpdateDisabled(t *testing.T) {
 	// Verifies disabling mutation does not disable the minimum dispatcher version contract.
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
