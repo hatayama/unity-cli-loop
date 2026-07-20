@@ -103,6 +103,23 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             ExpiresAtUtc += pauseWindowEndUtc - effectiveStart;
         }
 
+        // Called once when await-pause-point starts waiting, so a marker enabled well before a
+        // slow multi-step CLI round trip (enable -> seed state -> await) does not expire before
+        // the await itself even gets a chance to observe a hit. Only ever moves ExpiresAtUtc
+        // forward: it cannot un-expire a marker or shorten a window an earlier call already set.
+        public void ExtendExpiryToAtLeast(DateTime minimumExpiresAtUtc)
+        {
+            if (Status == UloopPausePointStatus.Cleared || Status == UloopPausePointStatus.Expired)
+            {
+                return;
+            }
+
+            if (minimumExpiresAtUtc > ExpiresAtUtc)
+            {
+                ExpiresAtUtc = minimumExpiresAtUtc;
+            }
+        }
+
         public void MarkCleared(string clearedReason, string message = "Pause point cleared.")
         {
             // Why: a second clear must not erase the first reason (e.g. RunTestsAutoClear).

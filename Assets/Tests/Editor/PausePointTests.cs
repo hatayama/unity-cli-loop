@@ -251,6 +251,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void ExtendExpiryForAwait_WhenRequestedMinimumExceedsRemaining_PushesExpiryForward()
+        {
+            // Verifies await-pause-point can extend a marker's countdown to at least its own
+            // deadline, so a slow multi-step CLI round trip does not expire the marker mid-wait.
+            UloopPausePointRegistry.Enable("jump", 10);
+            _nowUtc = _nowUtc.AddSeconds(5);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.ExtendExpiryForAwait("jump", 30);
+
+            Assert.That(snapshot.RemainingMilliseconds, Is.EqualTo(30000));
+        }
+
+        [Test]
+        public void ExtendExpiryForAwait_WhenRemainingAlreadyExceedsRequestedMinimum_DoesNotShrinkExpiry()
+        {
+            // Verifies extension only ever moves the deadline forward, never backward.
+            UloopPausePointRegistry.Enable("jump", 60);
+            _nowUtc = _nowUtc.AddSeconds(5);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.ExtendExpiryForAwait("jump", 10);
+
+            Assert.That(snapshot.RemainingMilliseconds, Is.EqualTo(55000));
+        }
+
+        [Test]
+        public void ExtendExpiryForAwait_WhenMarkerIsNotEnabled_ReturnsNotEnabledWithoutThrowing()
+        {
+            // Verifies extending an unknown/not-yet-enabled id is a safe no-op status query.
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.ExtendExpiryForAwait("jump", 30);
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.NotEnabled));
+        }
+
+        [Test]
+        public void ExtendExpiryForAwait_WhenMarkerAlreadyExpired_DoesNotResurrectIt()
+        {
+            // Verifies extension cannot bring an already-expired marker back to life.
+            UloopPausePointRegistry.Enable("jump", 1);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.ExtendExpiryForAwait("jump", 30);
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(snapshot.RemainingMilliseconds, Is.EqualTo(0));
+        }
+
+        [Test]
         public void Enable_WhenMarkerIsReenabled_IncrementsGeneration()
         {
             // Verifies callers can distinguish a fresh marker from stale status or log evidence with the same id.
@@ -592,6 +639,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.CapturedVariablesTruncated, Is.True);
             Assert.That(response.CapturedVariables.Select(v => v.Name), Is.EquivalentTo(new[] { "speed" }));
             Assert.That(response.CapturedVariables[0].Value, Is.EqualTo("5"));
+        }
+
+        [Test]
+        public void PausePointStatusBridge_Extend_PushesExpiryToRequestedMinimumRemaining()
+        {
+            // Verifies the internal extend-pause-point-status bridge command reaches the registry
+            // extension so a slow await-pause-point round trip can push a marker's deadline out.
+            UloopPausePointRegistry.Enable("jump", 10);
+            _nowUtc = _nowUtc.AddSeconds(5);
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["minimumRemainingSeconds"] = 30
+            };
+
+            PausePointStatusResponse response = PausePointStatusBridgeCommand.Extend(parameters);
+
+            Assert.That(response.RemainingMilliseconds, Is.EqualTo(30000));
         }
 
         [Test]

@@ -78,6 +78,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string COMMAND_NAME_PAUSE_POINT_STATUS = "pause-point-status";
         public const string COMMAND_NAME_GET_PAUSE_POINT_STATUS = "get-pause-point-status";
         public const string COMMAND_NAME_CLEAR_PAUSE_POINT_STATUS = "clear-pause-point-status";
+        public const string COMMAND_NAME_EXTEND_PAUSE_POINT_STATUS = "extend-pause-point-status";
 
         // Optional package names
         public const string PACKAGE_NAME_TEST_FRAMEWORK = "com.unity.test-framework";
