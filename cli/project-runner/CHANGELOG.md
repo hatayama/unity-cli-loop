@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.54](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.53...uloop-project-runner-v3.0.0-beta.54) (2026-07-20)
+
+
+### Bug Fixes
+
+* Round-3 pause-point/dynamic-code usability and reliability fixes ([#1884](https://github.com/hatayama/unity-cli-loop/issues/1884)) ([f1de07e](https://github.com/hatayama/unity-cli-loop/commit/f1de07e8030eca5e70de418cf22e4a597d5a0e06))
+
 ## [3.0.0-beta.53](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.52...uloop-project-runner-v3.0.0-beta.53) (2026-07-20)
 
 
