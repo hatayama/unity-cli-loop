@@ -790,6 +790,24 @@ func TestCleanStaleUnityTempDeletesTempWhenLockfileExists(t *testing.T) {
 	}
 }
 
+func TestWriteStaleUnityTempCleanupMessageDoesNotAssertCrash(t *testing.T) {
+	// Verifies the stale-lockfile message states the observed fact (no active Unity
+	// process) instead of overclaiming a crash, since a lockfile-only check cannot
+	// distinguish a crash from a normal shutdown that left cleanup incomplete.
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+
+	writeStaleUnityTempCleanupMessage(&stdout, projectRoot)
+
+	output := stdout.String()
+	if strings.Contains(output, "crash") {
+		t.Fatalf("message must not assert a crash, got: %s", output)
+	}
+	if !strings.Contains(output, "Stale UnityLockfile found (no active Unity process)") {
+		t.Fatalf("message must state the observed fact neutrally, got: %s", output)
+	}
+}
+
 func TestWaitForUnityStartupMarkerReturnsAfterLockfileAppears(t *testing.T) {
 	// Verifies the startup marker wait returns as soon as Unity creates the lockfile.
 	projectRoot := createLaunchTestProject(t)
