@@ -1,6 +1,7 @@
 ## Architecture Overview
 
-This project provides a **CLI tool (`uloop`)** that communicates with Unity Editor via TCP.
+This project provides a **CLI tool (`uloop`)** that communicates with Unity Editor over local IPC
+(a Unix domain socket on macOS/Linux, a named pipe on Windows — not TCP).
 AI agents interact with Unity through `uloop` CLI commands (e.g., `uloop get-logs`, `uloop compile`).
 The Unity Editor side hosts a local project IPC server that accepts short-lived CLI command sessions.
 
