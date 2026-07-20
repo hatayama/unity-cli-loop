@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.53](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.52...uloop-project-runner-v3.0.0-beta.53) (2026-07-20)
+
+
+### Bug Fixes
+
+* Pause points no longer expire before await-pause-point can observe them ([#1873](https://github.com/hatayama/unity-cli-loop/issues/1873)) ([00a166b](https://github.com/hatayama/unity-cli-loop/commit/00a166b2f267317813875b710dd1d75f2e6d5602))
+
 ## [3.0.0-beta.52](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.51...uloop-project-runner-v3.0.0-beta.52) (2026-07-20)
 
 

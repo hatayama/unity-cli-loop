@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.0.0-beta.56](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.55...v3.0.0-beta.56) (2026-07-20)
+
+
+### Features
+
+* Custom-type pause-point variables now preview as JSON instead of just a type name ([#1866](https://github.com/hatayama/unity-cli-loop/issues/1866)) ([357f879](https://github.com/hatayama/unity-cli-loop/commit/357f879b930dcee399e65e979b2ac9009b7854ed))
+* find-game-objects now hints at Contains/Regex when Exact matching finds nothing ([#1868](https://github.com/hatayama/unity-cli-loop/issues/1868)) ([a6ae04d](https://github.com/hatayama/unity-cli-loop/commit/a6ae04d37a6df4ed6fdb9bbd5b18d58e43282daa))
+
+
+### Bug Fixes
+
+* Document reflection-based state recovery and pause-point capture edge cases ([#1874](https://github.com/hatayama/unity-cli-loop/issues/1874)) ([af50cf4](https://github.com/hatayama/unity-cli-loop/commit/af50cf4b45e85e7a7f4baa0f14814d80df5a0a5a))
+* Dynamic code execution no longer reports a false failure right after a pause point ([#1864](https://github.com/hatayama/unity-cli-loop/issues/1864)) ([9610135](https://github.com/hatayama/unity-cli-loop/commit/9610135222b92d0bca34a4c4611832e3d0c97ac5))
+* Pause points no longer expire before await-pause-point can observe them ([#1873](https://github.com/hatayama/unity-cli-loop/issues/1873)) ([00a166b](https://github.com/hatayama/unity-cli-loop/commit/00a166b2f267317813875b710dd1d75f2e6d5602))
+* Simulate tools now say which pause point is blocking them instead of a generic paused error ([#1865](https://github.com/hatayama/unity-cli-loop/issues/1865)) ([fad146a](https://github.com/hatayama/unity-cli-loop/commit/fad146ae64a02c0a125db7881a6aa67ec671155a))
+* Slim down and deduplicate agent skill files, add repository map ([#1876](https://github.com/hatayama/unity-cli-loop/issues/1876)) ([6bf4f76](https://github.com/hatayama/unity-cli-loop/commit/6bf4f769ac1fe6de186bcbdd50cbe6c93d35b45a))
+
 ## [3.0.0-beta.55](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.54...v3.0.0-beta.55) (2026-07-20)
 
 
