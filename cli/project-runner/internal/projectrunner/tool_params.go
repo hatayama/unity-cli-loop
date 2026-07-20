@@ -2,6 +2,7 @@ package projectrunner
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -142,8 +143,34 @@ func convertValue(value string, property clicore.ToolProperty, option string) (a
 		return convertArrayValue(value, option)
 	case "object":
 		return convertObjectValue(value, option)
+	case "string":
+		return convertStringValue(value, property, option)
 	default:
 		return value, nil
+	}
+}
+
+// The C# side matches enum values case-insensitively (CaseInsensitiveStringEnumConverter),
+// so rejecting an invalid value here must use the same comparison rule the receiving side
+// uses, or a value this check accepts could still be rejected on the Unity side.
+func convertStringValue(value string, property clicore.ToolProperty, option string) (any, error) {
+	if len(property.Enum) == 0 {
+		return value, nil
+	}
+
+	for _, candidate := range property.Enum {
+		if strings.EqualFold(candidate, value) {
+			return value, nil
+		}
+	}
+
+	validValues := strings.Join(property.Enum, ", ")
+	return nil, &clierrors.ArgumentError{
+		Message:      fmt.Sprintf("Invalid value for %s: %s (valid values: %s)", option, value, validValues),
+		Option:       option,
+		Received:     value,
+		ExpectedType: validValues,
+		NextActions:  []string{fmt.Sprintf("Pass one of: %s for `%s`.", validValues, option)},
 	}
 }
 
