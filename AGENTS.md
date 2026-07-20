@@ -1,8 +1,25 @@
 ## Architecture Overview
 
-This project provides a **CLI tool (`uloop`)** that communicates with Unity Editor via TCP.
+This project provides a **CLI tool (`uloop`)** that communicates with Unity Editor over local IPC
+(a Unix domain socket on macOS/Linux, a named pipe on Windows — not TCP).
 AI agents interact with Unity through `uloop` CLI commands (e.g., `uloop get-logs`, `uloop compile`).
 The Unity Editor side hosts a local project IPC server that accepts short-lived CLI command sessions.
+
+## Repository Map
+
+Directory-level responsibilities. Kept deliberately coarse — check the directory itself for file-level detail.
+
+- `Packages/src/` — the Unity package (C#). Each first-party tool lives in `Editor/FirstPartyTools/<Tool>/` with its implementation and agent skill (`Skill/SKILL.md`, optional `Skill/references/`).
+- `Packages/src/Editor/CliOnlyTools~/<Tool>/Skill/` — skills for CLI-only commands (launch, pause-point, etc.) that have no Unity tool class. Tilde-suffixed folders are ignored by Unity, so files there need no `.meta`; files under `FirstPartyTools` do (run `uloop compile` to let Unity generate them).
+- `Assets/` — the development/test Unity project, including custom-command samples under `Assets/Editor/CustomCommandSamples/`.
+- `cli/dispatcher/` — the globally installed `uloop` entry command (also owns `uloop skills install` and skill syncing).
+- `cli/project-runner/` — the per-project CLI runner that talks to the Unity-side IPC server.
+- `cli/common/` — Go modules shared by dispatcher and project runner. Tool parameter schemas live in `cli/common/tools/default-tools.json`; skill discovery in `cli/common/skillscan/`.
+- `cli/release-automation/` — Go logic backing GitHub Actions release/CI workflows.
+- `tools/UnityCliLoop.DeadCodeScanner/` — the C# dead-code scanner described below.
+- `dist/` — locally built development binaries (`dist/darwin-arm64/uloop`, etc.); never committed.
+- `.claude/`, `.agents/` — generated skill copies; never edit directly (see Generated Skill Files).
+- `.uloop/` — runtime state and command outputs (screenshots, test results, hierarchy dumps).
 
 Do not rename public package, assembly, or extension API identifiers as part of cleanup-only changes.
 
@@ -69,7 +86,10 @@ dispatcher must stay lenient when reading pins written by older packages.
 ## Generated Skill Files
 
 Do not directly edit skill files under the project-root `.agents/` or `.claude/` directories.
-These files are generated copies. Update the source skill definitions instead, then regenerate the copies through the normal workflow.
+These files are generated copies. Update the source skill definitions instead, then regenerate the copies.
+
+- Sources: `Packages/src/Editor/FirstPartyTools/<Tool>/Skill/SKILL.md` and `Packages/src/Editor/CliOnlyTools~/<Tool>/Skill/SKILL.md` (plus each skill's `references/` files, which are copied along with it).
+- Regenerate: `dist/darwin-arm64/uloop skills install --claude --agents` from the project root, substituting the binary for your platform (e.g. `dist/windows-amd64/uloop.exe` on Windows). Only `.claude/` and `.agents/` are tracked in git; other targets are local-only.
 
 ## CI Automation Language
 
