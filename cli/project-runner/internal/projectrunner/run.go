@@ -44,6 +44,9 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		return 1
 	}
 	if clicore.ContainsHelpRequest(commandArgs) {
+		if tryPrintNativeCommandHelp(command, stdout) {
+			return 0
+		}
 		printRunnerUsage(stdout)
 		return 0
 	}
