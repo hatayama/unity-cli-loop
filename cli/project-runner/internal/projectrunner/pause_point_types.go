@@ -29,6 +29,12 @@ type pausePointStatusResponse struct {
 	ClearedReason                   string                           `json:"ClearedReason"`
 	StatusBeforeClear               string                           `json:"StatusBeforeClear"`
 	LateHitDiscardedAfterClear      bool                             `json:"LateHitDiscardedAfterClear"`
+
+	// CapturedVariableNameFilterNoMatch is set by the CLI, not Unity, when
+	// --captured-variable-names was passed but none of the requested names matched any
+	// captured variable (current or history), so an agent doesn't mistake an empty
+	// CapturedVariables array for "nothing was captured at this hit".
+	CapturedVariableNameFilterNoMatch bool `json:"CapturedVariableNameFilterNoMatch,omitempty"`
 }
 
 type pausePointEditorState struct {
