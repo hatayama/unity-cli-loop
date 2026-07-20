@@ -8,12 +8,13 @@ import (
 )
 
 const (
-	InstallDirEnvName       = "ULOOP_INSTALL_DIR"
-	CacheDirEnvName         = "ULOOP_CACHE_DIR"
-	LocalAppDataEnvName     = "LOCALAPPDATA"
-	WindowsProgramsDirName  = "Programs"
-	ProductDirectoryName    = "uloop"
-	InstallBinDirectoryName = "bin"
+	InstallDirEnvName        = "ULOOP_INSTALL_DIR"
+	CacheDirEnvName          = "ULOOP_CACHE_DIR"
+	ProjectRunnerPathEnvName = "ULOOP_PROJECT_RUNNER_PATH"
+	LocalAppDataEnvName      = "LOCALAPPDATA"
+	WindowsProgramsDirName   = "Programs"
+	ProductDirectoryName     = "uloop"
+	InstallBinDirectoryName  = "bin"
 )
 
 // ErrUnsupportedOS marks platforms without native install directory conventions.

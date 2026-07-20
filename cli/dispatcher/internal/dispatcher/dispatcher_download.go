@@ -32,6 +32,18 @@ var (
 const dispatcherRealCLIReadyFileName = "READY"
 
 func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin, stderr io.Writer) (string, error) {
+	// Why: dogfooding checkouts pin an unpublished projectRunnerVersion that release-please
+	// stamps ahead of the matching GitHub release, so the normal download path 404s. This env
+	// var lets local development point at a locally built binary without touching the pin.
+	if overridePath, ok := dispatcherProjectRunnerPathOverride(); ok {
+		if !isExecutableFile(overridePath) {
+			return "", fmt.Errorf(
+				"%s is set to %q, but no executable file exists there",
+				nativepath.ProjectRunnerPathEnvName, overridePath)
+		}
+		return overridePath, nil
+	}
+
 	pin.ProjectRunnerVersion = strings.TrimSpace(pin.ProjectRunnerVersion)
 	if err := validateDispatcherProjectRunnerVersion(pin.ProjectRunnerVersion); err != nil {
 		return "", err
@@ -50,6 +62,11 @@ func resolveDispatcherRealCLI(ctx context.Context, pin dispatcherPin, stderr io.
 	}
 
 	return downloadDispatcherRealCLIForPin(ctx, cacheRoot, pin, runtime.GOOS, runtime.GOARCH, stderr)
+}
+
+func dispatcherProjectRunnerPathOverride() (string, bool) {
+	overridePath := strings.TrimSpace(os.Getenv(nativepath.ProjectRunnerPathEnvName))
+	return overridePath, overridePath != ""
 }
 
 func dispatcherSiblingRealCLIPath(pin dispatcherPin) (string, bool) {
