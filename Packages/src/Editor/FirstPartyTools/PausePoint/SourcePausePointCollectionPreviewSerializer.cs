@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Text.RegularExpressions;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -13,11 +15,12 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Builds a shallow JSON preview for captured materialized collections so pause-point status can
-    /// show collection contents instead of the default type-name ToString.
+    /// Builds a shallow JSON preview for captured materialized collections and plain custom types
+    /// so pause-point status can show real contents instead of the default type-name ToString.
     /// </summary>
     internal static class SourcePausePointCollectionPreviewSerializer
     {
+        private static readonly Regex AutoPropertyBackingFieldPattern = new(@"^<([^>]+)>k__BackingField$", RegexOptions.Compiled);
         private const string OffMainThreadValue = "(captured off main thread)";
         private const string DestroyedValue = "(destroyed)";
 
@@ -41,9 +44,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
+            bool isMaterializedCollection = rawValue is ICollection || rawValue is IDictionary;
+
             // Why: deferred IEnumerable/LINQ must not execute user code during preview; only
-            // materialized ICollection/IDictionary snapshots are safe to walk.
-            if (rawValue is not ICollection && rawValue is not IDictionary)
+            // materialized ICollection/IDictionary snapshots and plain objects without a custom
+            // ToString (below) are safe to walk.
+            if (!isMaterializedCollection && rawValue is IEnumerable)
+            {
+                return false;
+            }
+
+            // Primitives and enums already have a meaningful ToString; only route custom types
+            // that never overrode it to the field-based JSON preview below.
+            if (!isMaterializedCollection && HasToStringOverride(rawValue.GetType()))
             {
                 return false;
             }
@@ -117,7 +130,78 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new JValue(SafeToString(value));
             }
 
+            if (!HasToStringOverride(value.GetType()))
+            {
+                if (!visited.Add(value))
+                {
+                    return new JValue("(circular)");
+                }
+
+                if (remainingDepth <= 0)
+                {
+                    return new JValue(SafeToString(value));
+                }
+
+                return BuildObjectFieldsToken(value, remainingDepth, visited, ref truncated);
+            }
+
             return new JValue(SafeToString(value));
+        }
+
+        private static JObject BuildObjectFieldsToken(
+            object value, int remainingDepth, HashSet<object> visited, ref bool truncated)
+        {
+            JObject jsonObject = new();
+            int fieldCount = 0;
+            foreach ((string name, FieldInfo field) in EnumerateObjectFields(value.GetType()))
+            {
+                if (fieldCount >= SourcePausePointConstants.MaxCollectionPreviewElementCount)
+                {
+                    truncated = true;
+                    break;
+                }
+
+                jsonObject[name] = BuildToken(field.GetValue(value), remainingDepth - 1, visited, ref truncated);
+                fieldCount++;
+            }
+
+            return jsonObject;
+        }
+
+        private static IEnumerable<(string Name, FieldInfo Field)> EnumerateObjectFields(Type type)
+        {
+            const BindingFlags flags =
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+
+            for (Type current = type;
+                 current != null && current != typeof(object) && current != typeof(ValueType);
+                 current = current.BaseType)
+            {
+                foreach (FieldInfo field in current.GetFields(flags))
+                {
+                    Match backingFieldMatch = AutoPropertyBackingFieldPattern.Match(field.Name);
+                    if (backingFieldMatch.Success)
+                    {
+                        yield return (backingFieldMatch.Groups[1].Value, field);
+                        continue;
+                    }
+
+                    if (field.Name.StartsWith("<", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    yield return (field.Name, field);
+                }
+            }
+        }
+
+        private static bool HasToStringOverride(Type type)
+        {
+            MethodInfo toStringMethod = type.GetMethod(nameof(ToString), Type.EmptyTypes);
+            return toStringMethod != null
+                && toStringMethod.DeclaringType != typeof(object)
+                && toStringMethod.DeclaringType != typeof(ValueType);
         }
 
         private static JArray BuildArrayToken(
