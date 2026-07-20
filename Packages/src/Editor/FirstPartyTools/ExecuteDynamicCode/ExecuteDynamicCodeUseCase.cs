@@ -75,7 +75,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ? new List<string>(finalResult.Timings)
                         : cancelledResponse.Timings;
                     cancelledResponse.EmitTimingsInJsonResponse = parameters.IncludeTimings;
-                    ApplyPauseState(cancelledResponse);
+                    // Why CancellationToken.None: finalResult can be cancelled by the internal
+                    // executionCancellationTokenSource (e.g. a domain reload) even when
+                    // cancellationToken itself is already cancelled; reusing it here would throw
+                    // again and lose the preserved Logs/Timings on the fallback path below.
+                    await ApplyPauseStateAsync(cancelledResponse, CancellationToken.None).ConfigureAwait(false);
                     return cancelledResponse;
                 }
 
@@ -84,7 +88,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ExecuteDynamicCodeResponse restartingResponse =
                         DynamicCodeExecutionResponseFactory.CreateRuntimeRestartingResponse();
                     restartingResponse.EmitTimingsInJsonResponse = parameters.IncludeTimings;
-                    ApplyPauseState(restartingResponse);
+                    // Why CancellationToken.None: same reasoning as the cancelled-response branch
+                    // above, but reusing a cancelled token here would swap this RuntimeRestarting
+                    // response for a plain Cancelled one via the outer catch, which is worse than
+                    // losing Logs/Timings since the response kind itself changes.
+                    await ApplyPauseStateAsync(restartingResponse, CancellationToken.None).ConfigureAwait(false);
                     return restartingResponse;
                 }
 
@@ -95,14 +103,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 bool domainReloadWaitRequired =
                     await domainReloadWaitSignal.ShouldWaitAsync(cancellationToken).ConfigureAwait(false);
                 response.DomainReloadWaitRequired = domainReloadWaitRequired;
-                ApplyPauseState(response);
+                await ApplyPauseStateAsync(response, cancellationToken).ConfigureAwait(false);
                 return response;
             }
             catch (OperationCanceledException)
             {
                 ExecuteDynamicCodeResponse response = DynamicCodeExecutionResponseFactory.CreateCancelledResponse();
                 response.EmitTimingsInJsonResponse = parameters?.IncludeTimings ?? false;
-                ApplyPauseState(response);
+                // Why CancellationToken.None: cancellationToken is already cancelled on this path,
+                // and passing it to SwitchToMainThread would throw again instead of switching.
+                await ApplyPauseStateAsync(response, CancellationToken.None).ConfigureAwait(false);
                 return response;
             }
         }
@@ -110,8 +120,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Lets an agent recognize a post-interrupt state (e.g. a pause point hit mid-execution)
         // instead of mistaking a stale-looking result for a bug. ActivePausePointId stays empty
         // when the Editor is paused for a reason unrelated to a pause point.
-        private static void ApplyPauseState(ExecuteDynamicCodeResponse response)
+        // Why async: the preceding ConfigureAwait(false) continuations may resume this method on a
+        // thread-pool thread, and EditorApplication.isPaused throws when read off the main thread.
+        private static async Task ApplyPauseStateAsync(
+            ExecuteDynamicCodeResponse response,
+            CancellationToken cancellationToken)
         {
+            // No ConfigureAwait(false) here: SwitchToMainThreadAwaitable is not a Task and does not
+            // expose that method. Its continuation is scheduled onto the main thread by
+            // MainThreadSwitcher itself, so the code below always runs there regardless.
+            await MainThreadSwitcher.SwitchToMainThread(cancellationToken);
+
             (bool editorPaused, string activePausePointId) = ExecuteDynamicCodePauseStateResolver.Resolve(
                 EditorApplication.isPaused, UloopPausePointRegistry.GetActivePausePointId());
             response.EditorPaused = editorPaused;

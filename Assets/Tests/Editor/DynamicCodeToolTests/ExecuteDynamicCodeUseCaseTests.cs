@@ -7,7 +7,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
-using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.Runtime;
@@ -155,6 +154,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             finally
             {
                 signal.Dispose();
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
+        [Test]
+        public void ExecuteAsync_WhenResumedOffMainThread_QueuesMainThreadSwitchBeforeReadingPauseState()
+        {
+            // Tests that applying EditorPaused/ActivePausePointId switches back to the main thread
+            // instead of reading EditorApplication.isPaused directly on whatever thread the
+            // ConfigureAwait(false) continuations resumed on. Deliberately does not wait for the
+            // outer ExecuteAsync Task to complete: once queued, resuming it depends on the TPL's own
+            // continuation scheduling, which is not something a test should spin-wait on.
+            MarkForegroundWarmupCompleted();
+            QueuedMainThreadDispatcher dispatcher = new();
+            MainThreadSwitcher.RegisterService(dispatcher);
+
+            try
+            {
+                FakeDynamicCodeExecutionRuntime runtime = new(
+                    new ExecutionResult { Success = true, Result = "ok" });
+                ExecuteDynamicCodeUseCase useCase = new(runtime);
+
+                Task<ExecuteDynamicCodeResponse> executeTask = useCase.ExecuteAsync(
+                    new ExecuteDynamicCodeSchema { Code = "return 1;", CompileOnly = false },
+                    CancellationToken.None);
+
+                Assert.That(executeTask.IsCompleted, Is.False);
+                Assert.That(dispatcher.PendingContinuationCount, Is.GreaterThan(0));
+
+                dispatcher.RunQueuedContinuationsAsMainThread();
+
+                Assert.That(dispatcher.PendingContinuationCount, Is.EqualTo(0));
+            }
+            finally
+            {
                 RestoreEditorMainThreadDispatcher();
             }
         }
@@ -650,6 +684,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(response.ErrorMessage, Is.EqualTo(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
             Assert.That(response.Logs, Contains.Item("Execution cancelled"));
             Assert.That(response.Timings, Contains.Item("compile_ms=1"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenOuterTokenAlreadyCancelledAndResultIsCancelled_ShouldPreserveLogsAndTimings()
+        {
+            // Tests that a cancelled-result response keeps its preserved Logs/Timings instead of
+            // falling back to the outer catch's plain CreateCancelledResponse() when the caller's
+            // own cancellationToken is already cancelled (e.g. an internal executionCancellationTokenSource
+            // cancelled the runtime while the caller's token was cancelled too).
+            MarkForegroundWarmupCompleted();
+            FakeDynamicCodeExecutionRuntime runtime = new(
+                new ExecutionResult
+                {
+                    Success = false,
+                    ErrorMessage = UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED,
+                    Logs = new List<string> { "Execution cancelled" },
+                    Timings = new List<string> { "compile_ms=5" }
+                });
+            ExecuteDynamicCodeUseCase useCase = new(runtime);
+            using CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            cancellationTokenSource.Cancel();
+
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema
+                {
+                    Code = "return 1;"
+                },
+                cancellationTokenSource.Token);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.ErrorMessage, Is.EqualTo(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
+            Assert.That(response.Logs, Contains.Item("Execution cancelled"));
+            Assert.That(response.Timings, Contains.Item("compile_ms=5"));
         }
 
         [Test]
