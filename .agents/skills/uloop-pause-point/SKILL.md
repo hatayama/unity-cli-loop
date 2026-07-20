@@ -58,7 +58,7 @@ Every hit response embeds `CapturedVariables`: the method's in-scope locals, its
 - `--captured-variables names` on `await-pause-point`/`pause-point-status` drops every `Value` and keeps `Name`/`Scope`/`TypeName` — use it first on field-heavy classes, then fetch full values with a plain `pause-point-status` call.
 - While Unity is still paused, `UloopPausePoint.TryGetCapturedValue("name")` (and `"this"`) returns live captured references for `execute-dynamic-code`; the holder clears on resume.
 
-Before interpreting unexpected, missing, or truncated values, nested previews that render as type names, Unity-object `Value` strings, capture-time vs live evidence trade-offs, or the raw capture API in detail, read [references/captured-variables.md](references/captured-variables.md).
+Before interpreting unexpected, missing, or truncated values, nested previews that render as type names, Unity-object `Value` strings, capture-time vs live evidence trade-offs, the hit response's `Warning`/`MatchingLogs` fields, marker freshness (`Generation`, `EnabledAtUtc`), or the raw capture API in detail, read [references/captured-variables.md](references/captured-variables.md).
 
 ## Watch Expressions
 
