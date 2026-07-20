@@ -1,0 +1,278 @@
+package projectrunner
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
+)
+
+// Verifies --await is extracted and the remaining args are left untouched for schema parsing.
+func TestExtractPausePointEnableAwaitFlagsExtractsAwait(t *testing.T) {
+	remaining, await, mode, names, err := extractPausePointEnableAwaitFlags([]string{"--id", "jump", "--await"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !await {
+		t.Fatalf("expected await to be true")
+	}
+	if mode != pausePointCapturedVariablesModeFull {
+		t.Fatalf("mode mismatch: %s", mode)
+	}
+	if names != nil {
+		t.Fatalf("expected no captured variable names, got %#v", names)
+	}
+	if len(remaining) != 2 || remaining[0] != "--id" || remaining[1] != "jump" {
+		t.Fatalf("remaining args mismatch: %#v", remaining)
+	}
+}
+
+// Verifies --captured-variables/--captured-variable-names are extracted alongside --await.
+func TestExtractPausePointEnableAwaitFlagsExtractsCapturedVariableOptions(t *testing.T) {
+	remaining, await, mode, names, err := extractPausePointEnableAwaitFlags([]string{
+		"--id", "jump", "--await", "--captured-variables", "names", "--captured-variable-names", "a,b",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !await {
+		t.Fatalf("expected await to be true")
+	}
+	if mode != pausePointCapturedVariablesModeNames {
+		t.Fatalf("mode mismatch: %s", mode)
+	}
+	if len(names) != 2 || names[0] != "a" || names[1] != "b" {
+		t.Fatalf("names mismatch: %#v", names)
+	}
+	if len(remaining) != 2 || remaining[0] != "--id" || remaining[1] != "jump" {
+		t.Fatalf("remaining args mismatch: %#v", remaining)
+	}
+}
+
+// Verifies --captured-variables without --await is rejected, since it has no effect otherwise.
+func TestExtractPausePointEnableAwaitFlagsRequiresAwaitForCapturedVariables(t *testing.T) {
+	_, _, _, _, err := extractPausePointEnableAwaitFlags([]string{"--id", "jump", "--captured-variables", "names"})
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+	if !strings.Contains(err.Error(), "require --await") {
+		t.Fatalf("error message mismatch: %v", err)
+	}
+}
+
+// Verifies enable-pause-point without --await leaves File/Line/Id/Mode args untouched.
+func TestExtractPausePointEnableAwaitFlagsWithoutAwaitLeavesArgsUnchanged(t *testing.T) {
+	remaining, await, _, _, err := extractPausePointEnableAwaitFlags([]string{"--file", "Assets/Foo.cs", "--line", "10"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if await {
+		t.Fatalf("expected await to be false")
+	}
+	if len(remaining) != 4 {
+		t.Fatalf("remaining args mismatch: %#v", remaining)
+	}
+}
+
+// Verifies enable-pause-point --await enables the marker then waits, returning a single merged
+// hit response without a second enable-pause-point IPC call.
+func TestRunEnablePausePointCommandAwaitsAfterSuccessfulEnable(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	originalFetch := fetchMatchingLogs
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+		fetchMatchingLogs = originalFetch
+	})
+
+	statusResponses := []pausePointStatusResponse{
+		{Id: "jump", Status: pausePointStatusEnabled, IsEnabled: true},
+		{Id: "jump", Status: pausePointStatusHit, IsHit: true, HitCount: 1},
+	}
+	statusCallCount := 0
+	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		if id != "jump" {
+			t.Fatalf("id mismatch: %s", id)
+		}
+		response := statusResponses[statusCallCount]
+		statusCallCount++
+		return response, nil
+	}
+	fetchMatchingLogs = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		searchText string,
+		maxCount int,
+	) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{SearchText: searchText, Logs: []pausePointMatchingLog{}}, nil
+	}
+
+	listener := newLoopbackIpcListener(t)
+	enableRequests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(
+		listener,
+		pausePointEnableCommandName,
+		enableRequests,
+		serverErr,
+		`{"Success":true,"Id":"jump","Status":"Enabled","IsEnabled":true,"TimeoutSeconds":30,"Warning":"cached message dispatch warning"}`,
+	)
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runEnablePausePointCommand(
+		context.Background(),
+		connection,
+		[]string{"--id", "jump", "--await"},
+		t.TempDir(),
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	request := readIPCRequest(t, enableRequests)
+	if request["Id"] != "jump" {
+		t.Fatalf("enable request Id mismatch: %#v", request)
+	}
+	if _, hasAwait := request["Await"]; hasAwait {
+		t.Fatalf("--await must not leak into the Unity-side request: %#v", request)
+	}
+
+	var response pausePointWaitResult
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode stdout: %v\n%s", err, stdout.String())
+	}
+	if response.Status != pausePointStatusHit || response.HitCount != 1 {
+		t.Fatalf("response mismatch: %#v", response)
+	}
+	if !strings.Contains(response.Warning, "cached message dispatch warning") {
+		t.Fatalf("expected enable-time warning to be propagated, got: %q", response.Warning)
+	}
+	if statusCallCount != 2 {
+		t.Fatalf("status call count mismatch: %d", statusCallCount)
+	}
+}
+
+// Verifies a failed enable-pause-point call returns the enable failure directly instead of
+// proceeding to wait, since there is no marker to wait on.
+func TestRunEnablePausePointCommandDoesNotAwaitAfterFailedEnable(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	statusCalled := false
+	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		statusCalled = true
+		return pausePointStatusResponse{}, nil
+	}
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+	})
+
+	listener := newLoopbackIpcListener(t)
+	enableRequests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(
+		listener,
+		pausePointEnableCommandName,
+		enableRequests,
+		serverErr,
+		`{"Success":false,"Message":"Id must not be null or empty."}`,
+	)
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runEnablePausePointCommand(
+		context.Background(),
+		connection,
+		[]string{"--id", "jump", "--await"},
+		t.TempDir(),
+		&stdout,
+		&stderr)
+
+	if code != 1 {
+		t.Fatalf("expected failure, got %d with stdout %s", code, stdout.String())
+	}
+	if statusCalled {
+		t.Fatalf("await must not poll status after a failed enable")
+	}
+	if !strings.Contains(stdout.String(), "Id must not be null or empty.") {
+		t.Fatalf("expected enable failure message in stdout: %s", stdout.String())
+	}
+}
+
+func serveSingleIPCResponse(
+	listener net.Listener,
+	expectedMethod string,
+	requests chan<- map[string]any,
+	serverErr chan<- error,
+	result string,
+) {
+	conn, err := listener.Accept()
+	if err != nil {
+		serverErr <- err
+		return
+	}
+	defer func() { _ = conn.Close() }()
+
+	payload, err := unityipc.Read(bufio.NewReader(conn))
+	if err != nil {
+		serverErr <- err
+		return
+	}
+
+	request := struct {
+		Method string         `json:"method"`
+		Params map[string]any `json:"params"`
+	}{}
+	if err := json.Unmarshal(payload, &request); err != nil {
+		serverErr <- err
+		return
+	}
+	if request.Method != expectedMethod {
+		serverErr <- fmt.Errorf("method mismatch: %s", request.Method)
+		return
+	}
+	requests <- request.Params
+
+	response := []byte(fmt.Sprintf(`{"jsonrpc":"2.0","result":%s,"id":1}`, result))
+	if err := unityipc.Write(conn, response); err != nil {
+		serverErr <- err
+		return
+	}
+}
+
+func readIPCRequest(t *testing.T, requests <-chan map[string]any) map[string]any {
+	t.Helper()
+	select {
+	case request := <-requests:
+		return request
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for request")
+		return nil
+	}
+}

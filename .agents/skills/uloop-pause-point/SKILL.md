@@ -9,30 +9,27 @@ description: "Pauses Unity playback at any source file:line without editing code
 
 Use this small loop for one representative frame you care about. No source edit and no recompile: the pause point is patched into the already-compiled code and can be enabled mid-PlayMode.
 
-1. Enter PlayMode, then enable a pause point on the line you want to freeze:
+1. Enter PlayMode, then enable a pause point on the line you want to freeze, waiting for the hit in the same call with `--await`:
 
 ```bash
-uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 30
+uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 30 --await
 ```
 
-`--timeout-seconds` on enable starts the marker lifetime clock at enable time, not when you later run `await-pause-point`. Size it to cover only the setup steps you run between `enable-pause-point` and the `await-pause-point` call (for example seeding state with `execute-dynamic-code`): once `await-pause-point` starts waiting, it extends the marker's remaining lifetime to at least its own `--timeout-seconds`, so you no longer need to also budget for the wait itself. The extension cannot revive a marker that has already expired, so the enable timeout still has to outlive the setup steps themselves.
+Run this in the background: it blocks until the marker is hit or the timeout elapses, and the next step needs to run a `simulate-*` command while it is still waiting.
 
-The response returns the derived marker `Id` (`Assets/Scripts/Enemy.cs:42`), the `ResolvedLine` that was actually patched, the `ResolvedMethod`, and `ResolvedLineText` — the actual source text at `ResolvedLine`. When the requested line has no executable statement, the pause point rounds forward to the next executable line — check `ResolvedLine`/`ResolvedLineText` when precision matters, and re-check them after every code edit: a rewritten file shifts line numbers, so do not assume a previously-derived line number still points at the same statement. Use the returned `Id` for every follow-up command.
+`--timeout-seconds` on enable starts the marker lifetime clock at enable time and is also the deadline `--await` waits against, so size it to cover both the setup steps before the trigger and the wait itself.
 
-2. Trigger the action with a `simulate-*` command.
-3. Wait for the hit, even if the trigger command already returned `InterruptedByPausePoint=true`:
+The response returns the derived marker `Id` (`Assets/Scripts/Enemy.cs:42`), the `ResolvedLine` that was actually patched, the `ResolvedMethod`, and `ResolvedLineText` — the actual source text at `ResolvedLine`. When the requested line has no executable statement, the pause point rounds forward to the next executable line — check `ResolvedLine`/`ResolvedLineText` when precision matters, and re-check them after every code edit: a rewritten file shifts line numbers, so do not assume a previously-derived line number still points at the same statement. Use the returned `Id` for every follow-up command. On a hit, the same response also carries `CapturedVariables` and every other field `await-pause-point` would have returned — no separate `await-pause-point` call is needed.
 
-```bash
-uloop await-pause-point --id "Assets/Scripts/Enemy.cs:42" --timeout-seconds 30
-```
-
+2. Trigger the action with a `simulate-*` command while the backgrounded call above is still waiting.
+3. Read the backgrounded call's output for the hit result.
 4. Read `CapturedVariables` in the hit response first: the locals, parameters, and `this` instance fields at the paused line are already there (see the next section). Adding a temporary `Debug.Log` just to see a local variable is no longer necessary. (the snapshot is pre-line: taken before the resolved line executes, like an IDE breakpoint)
 5. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
-6. Clear the marker with `uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"` or stop PlayMode before moving on. Use `uloop clear-pause-point --all` to clear every active marker at once, for example when resetting between E2E scenarios. Clearing also removes the underlying code patch, so the method runs untouched afterwards.
+6. A `single-shot` marker (the default) disarms itself after the hit, so no clear call is required before moving on. Clearing is still what removes the underlying code patch (a disarmed marker leaves the patch installed), so for `continuous`/`trace` markers, or when the method must run fully untouched again, clear it with `uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"` (or `--all` to clear every active marker at once, for example when resetting between E2E scenarios) or stop PlayMode.
 
 A hit pauses Unity at the next frame boundary — the patched method and the rest of that frame still run to completion. Only `CapturedVariables` is evidence of the values at the patched line; state read after the pause (for example via `execute-dynamic-code`) may already have advanced past it.
 
-If the game progresses on its own (timers, gravity, spawners), run `control-play-mode` `Pause` before setting up scenario state and `Resume` only after `enable-pause-point` succeeds — otherwise the scenario can be consumed before your input arrives. See Fast-Progressing Games below.
+If the game progresses on its own (timers, gravity, spawners), run `control-play-mode` `Pause` before setting up scenario state and resume with `control-play-mode --action Play` only after `enable-pause-point` succeeds — otherwise the scenario can be consumed before your input arrives. See Fast-Progressing Games below.
 
 ## Capture Modes and History
 
