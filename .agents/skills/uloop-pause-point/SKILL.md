@@ -30,6 +30,10 @@ uloop await-pause-point --id "Assets/Scripts/Enemy.cs:42" --timeout-seconds 30
 5. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
 6. Clear the marker with `uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"` or stop PlayMode before moving on. Use `uloop clear-pause-point --all` to clear every active marker at once, for example when resetting between E2E scenarios. Clearing also removes the underlying code patch, so the method runs untouched afterwards.
 
+A hit pauses Unity at the next frame boundary — the patched method and the rest of that frame still run to completion. Only `CapturedVariables` is evidence of the values at the patched line; state read after the pause (for example via `execute-dynamic-code`) may already have advanced past it.
+
+If the game progresses on its own (timers, gravity, spawners), run `control-play-mode` `Pause` before setting up scenario state and `Resume` only after `enable-pause-point` succeeds — otherwise the scenario can be consumed before your input arrives. See Fast-Progressing Games below.
+
 ## Capture Modes and History
 
 Choose the capture mode when enabling a pause point:
