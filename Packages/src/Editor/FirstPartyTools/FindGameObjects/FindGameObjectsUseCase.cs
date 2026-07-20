@@ -107,9 +107,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 
                 FindGameObjectsResponse response = new()                {
                     Results = results.ToArray(),
-                    TotalFound = results.Count
+                    TotalFound = results.Count,
+                    Message = BuildZeroHitExactModeHint(parameters, results.Count)
                 };
-                
+
                 // Underlying services are synchronous; wrapping in Task.FromResult for API consistency.
                 return Task.FromResult(response);
             }
@@ -130,6 +131,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ErrorMessage = "Search execution failed. Please check the logs for details."
                 });
             }
+        }
+
+        /// <summary>
+        /// Builds a hint pointing agents at partial-matching search modes when an Exact name-pattern
+        /// search finds nothing, since Exact is the tool's default and a literal-looking pattern
+        /// (e.g. "Camera") silently misses partial matches (e.g. "Main Camera") without this hint.
+        /// </summary>
+        private static string BuildZeroHitExactModeHint(FindGameObjectsSchema parameters, int totalFound)
+        {
+            if (totalFound != 0 ||
+                parameters.SearchMode != SearchMode.Exact ||
+                string.IsNullOrEmpty(parameters.NamePattern))
+            {
+                return null;
+            }
+
+            return $"Exact match found nothing for name pattern '{parameters.NamePattern}'. " +
+                   "Try --search-mode Contains or Regex for partial matching.";
         }
 
         /// <summary>
