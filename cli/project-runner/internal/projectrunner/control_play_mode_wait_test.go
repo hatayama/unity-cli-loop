@@ -166,12 +166,16 @@ func TestRunControlPlayModeWithStateWaitPreservesResumeAndWarningFields(t *testi
 	listener := newLoopbackIpcListener(t)
 
 	serverErr := make(chan error, 1)
+	// ResumedFromPause=true paired with a non-empty Warning never happens in production
+	// (Warning is only set on a fresh Play start); the sentinel text here only exists to
+	// prove the JSON round trip preserves a non-zero-value Warning string, not to assert
+	// a real response shape.
 	go serveControlPlayModeResponses(
 		listener,
 		make(chan map[string]any, 2),
 		serverErr,
 		[]string{
-			`{"IsPlaying":true,"IsPaused":true,"Changed":true,"ResumedFromPause":true,"Warning":"","Message":"Play mode resumed"}`,
+			`{"IsPlaying":true,"IsPaused":true,"Changed":true,"ResumedFromPause":true,"Warning":"warning sentinel from initial response","Message":"Play mode resumed"}`,
 			`{"IsPlaying":true,"IsPaused":false,"Message":"Play mode status"}`,
 		})
 
@@ -206,8 +210,8 @@ func TestRunControlPlayModeWithStateWaitPreservesResumeAndWarningFields(t *testi
 	if !response.ResumedFromPause {
 		t.Fatalf("response should preserve ResumedFromPause=true: %#v", response)
 	}
-	if response.Warning != "" {
-		t.Fatalf("response should preserve empty Warning: %#v", response)
+	if response.Warning != "warning sentinel from initial response" {
+		t.Fatalf("response should preserve non-empty Warning: %#v", response)
 	}
 	if response.Message != "Play mode resumed" {
 		t.Fatalf("response message mismatch: %s", response.Message)
