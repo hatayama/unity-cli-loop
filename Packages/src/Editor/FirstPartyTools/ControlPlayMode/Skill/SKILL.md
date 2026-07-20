@@ -34,5 +34,7 @@ Returns JSON with the current play mode state:
 ## Notes
 
 - Stop on an already-stopped Editor sets `Changed: false`, `WasAlreadyStopped: true`
+- `Play` on an Editor that is already playing is a no-op: it sets `Changed: false` and leaves the current session (its accumulated state, spawned objects, progress) untouched instead of restarting it. If you need a clean state for verification, explicitly `Stop` then `Play` rather than relying on `Play` alone to reset anything.
 - `Step` advances exactly one frame and leaves PlayMode paused (the Editor's Next Frame button); it is independent of `Time.timeScale` and requires PlayMode to be running
 - The command waits for the requested state before returning. Increase `--timeout-seconds` for projects with slow PlayMode entry.
+- Before relying on PlayMode behavior as verification evidence, check `uloop get-logs --log-type Error` for pre-existing errors. An error already present when PlayMode starts can otherwise be mistaken for one caused by the action under test.
