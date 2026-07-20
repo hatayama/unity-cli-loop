@@ -294,7 +294,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // to explain a HitCount=0 symptom, not to predict it precisely.
         // Harmony detours the JIT-compiled native code and never rewrites the metadata IL, so
         // measuring after Patch still reads the original method body size.
-        internal static bool IsLikelyJitInlined(MethodBase method)
+        private static bool IsLikelyJitInlined(MethodBase method)
         {
             if ((method.GetMethodImplementationFlags() & MethodImplAttributes.AggressiveInlining) != 0)
             {
