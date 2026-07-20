@@ -8,18 +8,19 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
-func queryPausePointStatusFromUnity(
+func sendPausePointStatusCommand(
 	ctx context.Context,
 	connection unityipc.Connection,
-	id string,
+	commandName string,
+	params map[string]any,
 ) (pausePointStatusResponse, error) {
 	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
 	defer cancel()
 
 	result, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
 		probeContext,
-		pausePointStatusCommandName,
-		map[string]any{"Id": id},
+		commandName,
+		params,
 	)
 	if err != nil {
 		return pausePointStatusResponse{}, err
@@ -32,28 +33,20 @@ func queryPausePointStatusFromUnity(
 	return response, nil
 }
 
+func queryPausePointStatusFromUnity(
+	ctx context.Context,
+	connection unityipc.Connection,
+	id string,
+) (pausePointStatusResponse, error) {
+	return sendPausePointStatusCommand(ctx, connection, pausePointStatusCommandName, map[string]any{"Id": id})
+}
+
 func clearPausePointStatusFromUnity(
 	ctx context.Context,
 	connection unityipc.Connection,
 	id string,
 ) (pausePointStatusResponse, error) {
-	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
-	defer cancel()
-
-	result, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
-		probeContext,
-		pausePointClearStatusCommandName,
-		map[string]any{"Id": id},
-	)
-	if err != nil {
-		return pausePointStatusResponse{}, err
-	}
-
-	response := pausePointStatusResponse{}
-	if err := json.Unmarshal(result, &response); err != nil {
-		return pausePointStatusResponse{}, err
-	}
-	return response, nil
+	return sendPausePointStatusCommand(ctx, connection, pausePointClearStatusCommandName, map[string]any{"Id": id})
 }
 
 func extendPausePointExpiryFromUnity(
@@ -62,23 +55,10 @@ func extendPausePointExpiryFromUnity(
 	id string,
 	minimumRemainingSeconds int,
 ) (pausePointStatusResponse, error) {
-	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
-	defer cancel()
-
-	result, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
-		probeContext,
-		pausePointExtendStatusCommandName,
-		map[string]any{"Id": id, "MinimumRemainingSeconds": minimumRemainingSeconds},
-	)
-	if err != nil {
-		return pausePointStatusResponse{}, err
-	}
-
-	response := pausePointStatusResponse{}
-	if err := json.Unmarshal(result, &response); err != nil {
-		return pausePointStatusResponse{}, err
-	}
-	return response, nil
+	return sendPausePointStatusCommand(ctx, connection, pausePointExtendStatusCommandName, map[string]any{
+		"Id":                      id,
+		"MinimumRemainingSeconds": minimumRemainingSeconds,
+	})
 }
 
 func clearPausePointAfterWaitTimeout(ctx context.Context, connection unityipc.Connection, id string) {
