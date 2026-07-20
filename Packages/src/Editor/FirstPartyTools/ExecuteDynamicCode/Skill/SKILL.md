@@ -15,6 +15,8 @@ This tool can inspect reachable Unity state, such as GameObjects, components, pu
 
 The reverse combination also works: to freeze Unity on the first frame where a runtime condition holds (an animation peak, HP reaching zero, an enemy spawning), enable an id-only pause point, then use this tool to register an `EditorApplication.update` watcher that calls `UloopPausePoint.Pause(id)` when the condition is met, and return immediately. Wait with `uloop await-pause-point` on the CLI side — never poll or sleep inside the snippet itself, because the body runs synchronously on the main thread and frames stop advancing. See "Catching a Runtime Condition with a Dynamic-Code Trigger" in the `uloop-pause-point` skill.
 
+Live state injection: when a running PlayMode session ends up in an unrecoverable state (for example, a stuck end-to-end test scenario), use this tool to write directly to private fields via reflection and recover or steer the running state, instead of stopping Play mode, editing code, and recompiling. This needs no code change, no recompile, and no re-entering Play mode — the session's in-memory state (component references, in-progress test fixtures, accumulated counters) survives. Reflection is otherwise disallowed without explicit user permission project-wide; `execute-dynamic-code` is the one place it is allowed, which is exactly what this technique relies on.
+
 ## Parameters
 
 - `--code '<code>'`: Inline C# statements to execute. Use direct statements only; `return` is optional, and `using` directives may appear at the top of the snippet.
