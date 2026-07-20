@@ -2,6 +2,7 @@
 using UnityEditor;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -43,7 +44,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (EditorApplication.isPaused)
             {
-                return ValidationResult.Failure(FormatPausedMessage(pausedActionDescription));
+                string activePausePointId = UloopPausePointRegistry.GetActivePausePointId();
+                string message = string.IsNullOrEmpty(activePausePointId)
+                    ? FormatPausedMessage(pausedActionDescription)
+                    : FormatPausePointPausedMessage(activePausePointId, pausedActionDescription);
+                return ValidationResult.Failure(message);
             }
 
             return ValidationResult.Success();
@@ -57,6 +62,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(!string.IsNullOrEmpty(pausedActionDescription), "pausedActionDescription must not be null or empty");
             return $"PlayMode is paused. Resume PlayMode before {pausedActionDescription}.";
+        }
+
+        /// <summary>
+        /// Composes the paused-mode failure message for the common case where a pause point is
+        /// what's holding PlayMode paused, so agents calling a simulate/record tool right after a
+        /// pause-point hit see the real cause instead of a generic "PlayMode is paused" rejection.
+        /// </summary>
+        public static string FormatPausePointPausedMessage(string pausePointId, string pausedActionDescription)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(pausePointId), "pausePointId must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(pausedActionDescription), "pausedActionDescription must not be null or empty");
+            return
+                $"PlayMode is paused because pause point '{pausePointId}' is active (check pause-point-status). Resume PlayMode before {pausedActionDescription}.";
         }
     }
 }
