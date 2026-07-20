@@ -32,10 +32,12 @@ type controlPlayModeResponse struct {
 	IsPaused               bool                          `json:"IsPaused"`
 	Changed                bool                          `json:"Changed"`
 	WasAlreadyStopped      bool                          `json:"WasAlreadyStopped"`
+	ResumedFromPause       bool                          `json:"ResumedFromPause"`
 	BlockedByCompileErrors bool                          `json:"BlockedByCompileErrors"`
 	CompileErrorCount      int                           `json:"CompileErrorCount"`
 	CompileErrors          []controlPlayModeCompileError `json:"CompileErrors"`
 	Message                string                        `json:"Message"`
+	Warning                string                        `json:"Warning"`
 }
 
 type controlPlayModeCompileError struct {
@@ -134,6 +136,8 @@ func runControlPlayModeWithStateWait(
 	if hasInitialResponse {
 		response.Changed = initialResponse.Changed
 		response.WasAlreadyStopped = initialResponse.WasAlreadyStopped
+		response.ResumedFromPause = initialResponse.ResumedFromPause
+		response.Warning = initialResponse.Warning
 	}
 	result, marshalErr := json.Marshal(response)
 	if marshalErr != nil {

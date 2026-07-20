@@ -154,6 +154,72 @@ func TestRunControlPlayModeWithStateWaitPreservesStopChangeFields(t *testing.T) 
 	}
 }
 
+// Verifies that ResumedFromPause and Warning from the initial Play response survive the
+// wait-and-remarshal path instead of being dropped by the Go-side response struct.
+func TestRunControlPlayModeWithStateWaitPreservesResumeAndWarningFields(t *testing.T) {
+	originalPoll := controlPlayModeStatePoll
+	controlPlayModeStatePoll = time.Millisecond
+	t.Cleanup(func() {
+		controlPlayModeStatePoll = originalPoll
+	})
+
+	listener := newLoopbackIpcListener(t)
+
+	serverErr := make(chan error, 1)
+	go serveControlPlayModeResponses(
+		listener,
+		make(chan map[string]any, 2),
+		serverErr,
+		[]string{
+			`{"IsPlaying":true,"IsPaused":true,"Changed":true,"ResumedFromPause":true,"Warning":"","Message":"Play mode resumed"}`,
+			`{"IsPlaying":true,"IsPaused":false,"Message":"Play mode status"}`,
+		})
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runControlPlayModeWithStateWait(
+		context.Background(),
+		connection,
+		map[string]any{
+			controlPlayModeActionParam:  "Play",
+			controlPlayModeTimeoutParam: 1,
+		},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("runControlPlayModeWithStateWait failed with %d: %s", code, stderr.String())
+	}
+
+	response := controlPlayModeResponse{}
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode stdout: %v\n%s", err, stdout.String())
+	}
+	if !response.ResumedFromPause {
+		t.Fatalf("response should preserve ResumedFromPause=true: %#v", response)
+	}
+	if response.Warning != "" {
+		t.Fatalf("response should preserve empty Warning: %#v", response)
+	}
+	if response.Message != "Play mode resumed" {
+		t.Fatalf("response message mismatch: %s", response.Message)
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
+
 // Verifies that dispatched PlayMode disconnects are treated as post-reload waits.
 func TestShouldWaitForControlPlayModeDisconnectWaitsAfterDispatchedTransportLoss(t *testing.T) {
 	outcome := unityipc.UnitySendOutcome{RequestDispatched: true}
