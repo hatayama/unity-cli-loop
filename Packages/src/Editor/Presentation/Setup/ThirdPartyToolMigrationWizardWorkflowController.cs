@@ -260,7 +260,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal void ShowCheckingState(ThirdPartyToolMigrationProgress progress)
         {
             _view.ShowCheckingState(progress, _isMigrating);
-            _scheduleResize();
         }
 
         internal void RefreshMigrationSkillState()
@@ -280,7 +279,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _migrationSkillTarget,
                 _migrationSkillInstallState,
                 _isUpdatingMigrationSkill);
-            _scheduleResize();
         }
 
         internal void HandleMigrationSkillTargetChanged(SkillsTarget target)
