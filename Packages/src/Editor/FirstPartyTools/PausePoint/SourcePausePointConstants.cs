@@ -72,6 +72,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "after enabling this pause point, or embed UloopPausePoint.Pause(\"id\") directly in the "
             + "method body and arm it with enable-pause-point --id instead.";
 
+        // The same cached-dispatch risk as PhysicalCallbackMayMissExistingInstanceWarning, but for a
+        // method that is not itself named after a physics message method and is instead called (one
+        // level deep) from one elsewhere in the same compiled assembly - the call site scan cannot
+        // tell whether the calling GameObject predates patching, so the same GameObject-recreation or
+        // manual-marker workaround applies.
+        public const string PhysicalCallbackIndirectCallMayMissExistingInstanceWarning =
+            "This method is called from a Unity physics message method (OnCollision*/OnTrigger*/OnParticleCollision) "
+            + "elsewhere in the same compiled assembly. If the target GameObject already existed before this pause "
+            + "point was enabled, Unity's cached message dispatch may not route through the patch and the pause "
+            + "point may never hit even though the method body runs. Workarounds: destroy and recreate the "
+            + "GameObject after enabling this pause point, or embed UloopPausePoint.Pause(\"id\") directly in the "
+            + "method body and arm it with enable-pause-point --id instead.";
+
         // Surfaces the same JIT-inlining risk documented under Requirements & Safety in the skill,
         // but at enable time instead of only after a confusing HitCount=0 timeout.
         public const string SmallMethodInliningRiskWarning =
