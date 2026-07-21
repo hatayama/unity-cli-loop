@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.Compilation;
+using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -271,6 +272,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class PausePointUseCase
     {
+        // Tracks which currently-armed source pause point ids carry a physics-callback warning,
+        // and their declaring type, so a later expiry (LogExpired) can attribute the same
+        // diagnostics snapshot to a miss that was never hit. Volatile by design: a domain reload
+        // clears the Harmony patches this tracks anyway, so this dictionary does not need to
+        // survive one, and entries are removed as soon as their pause point is cleared.
+        private static readonly Dictionary<string, Type> PhysicsFlaggedDeclaringTypesById = new();
+
         public PausePointResponse Enable(EnablePausePointSchema parameters)
         {
             string captureSettingsError = ValidateCaptureSettings(parameters);
@@ -315,6 +323,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Patcher directly.
                 UloopPausePointClearAllResult clearAllResult = UloopPausePointRegistry.ClearAll();
                 LogCleared("all", string.Empty);
+                PhysicsFlaggedDeclaringTypesById.Clear();
                 return PausePointResponse.FromClearAll(clearAllResult);
             }
 
@@ -329,7 +338,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
             {
                 LogExpired(snapshot.Id, snapshot.ElapsedSinceEnabledMilliseconds);
+                if (PhysicsFlaggedDeclaringTypesById.TryGetValue(snapshot.Id, out Type declaringType))
+                {
+                    LogPhysicsDispatchDiagnostics("pause_point_expired_without_hit_physics", snapshot.Id, declaringType);
+                }
             }
+            PhysicsFlaggedDeclaringTypesById.Remove(snapshot.Id);
 
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             if (resumedFromPause)
@@ -401,6 +415,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.SnapshotTiming = SourcePausePointConstants.PreLineSnapshotTimingNote;
             response.Warning = MergeWarnings(CreateEnableWarning(), patchResult.Warning);
             LogEnable(response.Id, response.ResolvedMethod, $"{parameters.File}:{response.ResolvedLine}", response.Mode, response.Warning);
+
+            if (patchResult.HasPhysicsCallbackWarning)
+            {
+                PhysicsFlaggedDeclaringTypesById[id] = patchResult.DeclaringType;
+                LogPhysicsDispatchDiagnostics("pause_point_physics_dispatch_diagnostics", id, patchResult.DeclaringType);
+            }
+
             return response;
         }
 
@@ -410,6 +431,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "pause_point_enable",
                 $"Pause point enabled: {id}",
                 new { Id = id, ResolvedMethod = resolvedMethod, FileLine = fileLine, Mode = mode, HasWarning = !string.IsNullOrEmpty(warning) });
+        }
+
+        // Captures the state needed to diagnose a physics-callback dispatch miss if one recurs:
+        // whether Play Mode is running, how long the current domain has been alive without a
+        // reload (a suspected factor -- see docs/regression-harness.md), the declaring type, and
+        // (for MonoBehaviour-derived types only) how many instances currently exist in the loaded
+        // scenes.
+        private static void LogPhysicsDispatchDiagnostics(string operation, string id, Type declaringType)
+        {
+            bool isMonoBehaviourDerived = typeof(MonoBehaviour).IsAssignableFrom(declaringType);
+            int monoBehaviourInstanceCount = isMonoBehaviourDerived
+                ? UnityEngine.Object.FindObjectsByType(declaringType, FindObjectsInactive.Include, FindObjectsSortMode.None).Length
+                : 0;
+            int instanceCount = PausePointPhysicsDispatchDiagnostics.ResolveInstanceCount(isMonoBehaviourDerived, monoBehaviourInstanceCount);
+
+            VibeLogger.LogInfo(
+                operation,
+                $"Physics-callback pause point dispatch diagnostics: {id}",
+                new
+                {
+                    Id = id,
+                    IsPlaying = EditorApplication.isPlaying,
+                    IsPaused = EditorApplication.isPaused,
+                    SecondsSinceLastDomainReload = PausePointDomainReloadTracker.SecondsSinceLoad(),
+                    DeclaringType = declaringType.FullName,
+                    InstanceCount = instanceCount
+                });
         }
 
         // The resolved line can be rounded forward from the requested line (the Resolver picks

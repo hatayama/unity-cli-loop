@@ -59,20 +59,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "The declaring type is a ref struct; this-instance fields are not captured "
             + "(locals and parameters are still captured normally).";
 
-        // Unity's physics message dispatch (OnCollision*/OnTrigger*/OnParticleCollision) resolves
-        // its call path once when the GameObject registers with the physics engine; a Harmony
-        // patch applied after that registration does not reach the cached path, so the pause
-        // point can silently miss a GameObject that already existed before this call. This is
-        // informational only: the same method on a newly created GameObject patches correctly.
+        // Unity's physics message dispatch (OnCollision*/OnTrigger*/OnParticleCollision) has been
+        // observed in real projects to bypass a Harmony patch applied while the GameObject already
+        // existed, so the pause point can silently miss even though the method body runs. The
+        // trigger condition is environment-dependent and has not been reproduced deterministically
+        // (fresh sessions, fresh Editor processes, primed JIT, runtime-created instances, and
+        // one-hop indirect callees all patched correctly in controlled experiments; see
+        // docs/regression-harness.md). This is informational only.
         public const string PhysicalCallbackMayMissExistingInstanceWarning =
             "This resolves to a Unity physics message method (OnCollision*/OnTrigger*/OnParticleCollision). "
             + "If the target GameObject already existed before this pause point was enabled, Unity's "
             + "cached message dispatch may not route through the patch and the pause point may never "
             + "hit even though the method body runs. Lightest workaround: after this pause point is "
             + "enabled (the patch must already be applied), toggle any one instance's enabled off and "
-            + "on once. This re-resolves Unity's message dispatch for the whole component type for the "
-            + "rest of this Editor session (until the next domain reload), fixing every instance, not "
-            + "just the toggled one. Note the toggle fires OnDisable/OnEnable, so watch for side effects "
+            + "on once. This re-resolves Unity's message dispatch for the whole component type, fixing "
+            + "every instance, not just the toggled one; once re-resolved, the miss has not been "
+            + "observed to recur. Note the toggle fires OnDisable/OnEnable, so watch for side effects "
             + "on components with game logic there. Heavier workarounds: destroy and recreate the "
             + "GameObject after enabling this pause point, or embed UloopPausePoint.Pause(\"id\") "
             + "directly in the method body and arm it with enable-pause-point --id instead.";
@@ -88,8 +90,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "point was enabled, Unity's cached message dispatch may not route through the patch and the pause "
             + "point may never hit even though the method body runs. Lightest workaround: after this pause point "
             + "is enabled (the patch must already be applied), toggle any one instance's enabled off and on once. "
-            + "This re-resolves Unity's message dispatch for the whole component type for the rest of this Editor "
-            + "session (until the next domain reload), fixing every instance, not just the toggled one. Note the "
+            + "This re-resolves Unity's message dispatch for the whole component type, fixing every instance, not "
+            + "just the toggled one; once re-resolved, the miss has not been observed to recur. Note the "
             + "toggle fires OnDisable/OnEnable, so watch for side effects on components with game logic there. "
             + "Heavier workarounds: destroy and recreate the GameObject after enabling this pause point, or embed "
             + "UloopPausePoint.Pause(\"id\") directly in the method body and arm it with enable-pause-point --id "
