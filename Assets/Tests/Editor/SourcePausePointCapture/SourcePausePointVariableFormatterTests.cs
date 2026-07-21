@@ -411,6 +411,146 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Format_WithNullableEnumMultidimensionalArray_AnnotatesPreviewWithShape()
+        {
+            // Verifies a T?[,] preview (e.g. a Tetris board of nullable piece-type cells) gets the
+            // same Shape/TotalElements/Elements treatment as a non-nullable T[,], including null
+            // cells rendering as JSON null rather than the whole array degrading to a type-name string.
+            PausePointTestEnum?[,] board = new PausePointTestEnum?[2, 2]
+            {
+                { PausePointTestEnum.Alpha, null },
+                { null, PausePointTestEnum.Beta }
+            };
+            object[] locals = { "board", board };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            string value = variables.Single().Value;
+            Assert.That(value, Does.Contain("\"TotalElements\":4"));
+            Assert.That(value, Does.Contain("\"Elements\":[\"Alpha\",null,null,\"Beta\"]"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithNullableEnumSingleDimensionalArray_SerializesAsPlainJsonArrayWithoutShape()
+        {
+            // Boundary case for the Shape annotation above: a T?[] (Rank 1) must stay a bare JSON
+            // array, mirroring the existing non-nullable single-dimensional array behavior.
+            PausePointTestEnum?[] row = { PausePointTestEnum.Alpha, null, PausePointTestEnum.Beta };
+            object[] locals = { "row", row };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Is.EqualTo("[\"Alpha\",null,\"Beta\"]"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithNullableIntMultidimensionalArray_AnnotatesPreviewWithShape()
+        {
+            // Boundary case distinguishing a nullable enum element from a nullable primitive
+            // element: both must hit the same Shape annotation path.
+            int?[,] board = new int?[1, 2] { { 1, null } };
+            object[] locals = { "board", board };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            string value = variables.Single().Value;
+            Assert.That(value, Does.Contain("\"TotalElements\":2"));
+            Assert.That(value, Does.Contain("\"Elements\":[1,null]"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithNullableEnumMultidimensionalArrayAsNestedField_AnnotatesPreviewWithShape()
+        {
+            // Reproduces the reported Tetris "Board._cells" shape: a T?[,] one member-access hop
+            // deep (not the top-level captured variable itself) must still get the Shape/Elements
+            // treatment instead of degrading to a bare type-name string.
+            BoardWithNullableEnumCells board = new(new PausePointTestEnum?[2, 2]
+            {
+                { PausePointTestEnum.Alpha, null },
+                { null, PausePointTestEnum.Beta }
+            });
+            object[] locals = { "board", board };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            string value = variables.Single().Value;
+            Assert.That(value, Does.Contain("\"TotalElements\":4"));
+            Assert.That(value, Does.Contain("\"Elements\":[\"Alpha\",null,null,\"Beta\"]"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithNullableEnumMultidimensionalArrayTwoFieldHopsDeep_AnnotatesPreviewWithShape()
+        {
+            // Reproduces the reported Tetris "Board._cells" bug exactly: with
+            // MaxCollectionPreviewDepth=2, a T?[,] reached via two field-access hops (captured
+            // object -> Board -> _cells) used to exhaust remainingDepth before BuildToken ever
+            // inspected the array itself, degrading the whole array to a bare type-name ToString
+            // fallback. A primitive/enum-element array must still get Shape/Elements here.
+            GameStateWithNestedBoard gameState = new(new BoardWithNullableEnumCells(new PausePointTestEnum?[2, 2]
+            {
+                { PausePointTestEnum.Alpha, null },
+                { null, PausePointTestEnum.Beta }
+            }));
+            object[] locals = { "gameState", gameState };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            string value = variables.Single().Value;
+            Assert.That(value, Does.Contain("\"TotalElements\":4"));
+            Assert.That(value, Does.Contain("\"Elements\":[\"Alpha\",null,null,\"Beta\"]"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithPrimitiveValueDictionaryTwoFieldHopsDeep_SerializesAsJsonObject()
+        {
+            // Dictionary counterpart of the array depth-exemption above: a Dictionary<string, int>
+            // reached via two field-access hops must still expand to a JSON object instead of
+            // degrading to a bare type-name string, since its key and value types are both
+            // primitives that resolve regardless of remaining depth budget.
+            GameStateWithNestedPrimitiveDictionary gameState = new(new WrapperWithPrimitiveDictionary(
+                new Dictionary<string, int> { { "hp", 100 }, { "mp", 50 } }));
+            object[] locals = { "gameState", gameState };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            string value = variables.Single().Value;
+            Assert.That(value, Does.Contain("\"hp\":100"));
+            Assert.That(value, Does.Contain("\"mp\":50"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithObjectValueDictionaryTwoFieldHopsDeep_FallsBackToTypeNameAtDepthLimit()
+        {
+            // Boundary case distinguishing the exemption above: a Dictionary<string, SomeObject>
+            // reached the same two hops deep must still hit the existing depth-limit fallback,
+            // since its value type is not a primitive/enum and so genuinely needs recursion budget
+            // this call no longer has.
+            GameStateWithNestedObjectValueDictionary gameState = new(new WrapperWithObjectValueDictionary(
+                new Dictionary<string, SimpleCustomValue> { { "item", new SimpleCustomValue { Number = 1 } } }));
+            object[] locals = { "gameState", gameState };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            string value = variables.Single().Value;
+            Assert.That(value, Does.Contain("Dictionary"));
+            Assert.That(value, Does.Not.Contain("\"item\""));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
         public void Format_WhenCollectionElementCountExceedsPreviewCap_TruncatesElementsAndSetsFlag()
         {
             // Verifies only the first preview-cap elements are serialized and truncation is reported.
@@ -748,6 +888,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public IEnumerator GetEnumerator()
             {
                 throw new InvalidOperationException("enum boom");
+            }
+        }
+
+        private enum PausePointTestEnum
+        {
+            Alpha,
+            Beta
+        }
+
+        private sealed class BoardWithNullableEnumCells
+        {
+            private readonly PausePointTestEnum?[,] _cells;
+
+            public BoardWithNullableEnumCells(PausePointTestEnum?[,] cells)
+            {
+                _cells = cells;
+            }
+        }
+
+        private sealed class GameStateWithNestedBoard
+        {
+            private readonly BoardWithNullableEnumCells _board;
+
+            public GameStateWithNestedBoard(BoardWithNullableEnumCells board)
+            {
+                _board = board;
+            }
+        }
+
+        private sealed class WrapperWithPrimitiveDictionary
+        {
+            private readonly Dictionary<string, int> _stats;
+
+            public WrapperWithPrimitiveDictionary(Dictionary<string, int> stats)
+            {
+                _stats = stats;
+            }
+        }
+
+        private sealed class GameStateWithNestedPrimitiveDictionary
+        {
+            private readonly WrapperWithPrimitiveDictionary _wrapper;
+
+            public GameStateWithNestedPrimitiveDictionary(WrapperWithPrimitiveDictionary wrapper)
+            {
+                _wrapper = wrapper;
+            }
+        }
+
+        private sealed class SimpleCustomValue
+        {
+            public int Number;
+        }
+
+        private sealed class WrapperWithObjectValueDictionary
+        {
+            private readonly Dictionary<string, SimpleCustomValue> _items;
+
+            public WrapperWithObjectValueDictionary(Dictionary<string, SimpleCustomValue> items)
+            {
+                _items = items;
+            }
+        }
+
+        private sealed class GameStateWithNestedObjectValueDictionary
+        {
+            private readonly WrapperWithObjectValueDictionary _wrapper;
+
+            public GameStateWithNestedObjectValueDictionary(WrapperWithObjectValueDictionary wrapper)
+            {
+                _wrapper = wrapper;
             }
         }
     }
