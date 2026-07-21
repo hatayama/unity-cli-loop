@@ -115,6 +115,7 @@ func TestRunWaitForPausePointCommandExtendsExpiryBeforePolling(t *testing.T) {
 		context.Background(),
 		unityipc.Connection{},
 		[]string{"--id", "jump", "--timeout-seconds", "7"},
+		"",
 		&stdout,
 		&stderr)
 
@@ -170,7 +171,7 @@ func TestWaitForPausePointReturnsHitAfterEnabledStatus(t *testing.T) {
 		return response, nil
 	}
 
-	response, state, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	response, state, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
 		timeout:        time.Second,
@@ -424,7 +425,7 @@ func TestWaitForPausePointReturnsNotEnabledStateImmediately(t *testing.T) {
 		}, nil
 	}
 
-	response, state, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	response, state, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
 		timeout:        time.Second,

@@ -25,11 +25,9 @@ const (
 	pausePointStatusNotEnabled        = "NotEnabled"
 	pausePointStatusExpired           = "Expired"
 	pausePointStatusCleared           = "Cleared"
-	pausePointFinalStatusProbeTimeout = 250 * time.Millisecond
 )
 
 var (
-	pausePointStatusPoll   = 50 * time.Millisecond
 	queryPausePointStatus  = queryPausePointStatusFromUnity
 	clearPausePointStatus  = clearPausePointStatusFromUnity
 	extendPausePointExpiry = extendPausePointExpiryFromUnity
@@ -43,6 +41,14 @@ type waitForPausePointOptions struct {
 	capturedVariablesMode pausePointCapturedVariablesMode
 	capturedVariableNames []string
 	expectations          []pausePointExpectation
+
+	// triggerCommand/triggerArgs come from --trigger. startPath is threaded through so the
+	// trigger, when dispatched via runResolvedProjectCommand, can satisfy that function's
+	// signature; --trigger forbids --project-path, so the nested-project-path branch it would
+	// otherwise feed is unreachable here.
+	triggerCommand string
+	triggerArgs    []string
+	startPath      string
 }
 
 type pausePointStatusOptions struct {
@@ -50,16 +56,6 @@ type pausePointStatusOptions struct {
 	capturedVariablesMode pausePointCapturedVariablesMode
 	capturedVariableNames []string
 }
-
-type pausePointWaitState string
-
-const (
-	pausePointWaitStateHit        pausePointWaitState = "hit"
-	pausePointWaitStateTimeout    pausePointWaitState = "timeout"
-	pausePointWaitStateNotEnabled pausePointWaitState = "not_enabled"
-	pausePointWaitStateExpired    pausePointWaitState = "expired"
-	pausePointWaitStateCleared    pausePointWaitState = "cleared"
-)
 
 func normalizePausePointStatusResponse(response pausePointStatusResponse) pausePointStatusResponse {
 	if response.Status == pausePointStatusExpired {
@@ -105,6 +101,7 @@ func runWaitForPausePointCommand(
 	ctx context.Context,
 	connection unityipc.Connection,
 	args []string,
+	startPath string,
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
@@ -116,6 +113,7 @@ func runWaitForPausePointCommand(
 		})
 		return 1
 	}
+	options.startPath = startPath
 
 	extendPausePointExpiryBeforeWait(ctx, connection, options, stderr)
 
@@ -192,7 +190,7 @@ func runWaitForPausePoint(
 ) int {
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, clicore.PausePointAwaitCommandName)
-	response, state, err := waitForPausePoint(ctx, connection, options)
+	response, state, triggerResult, err := waitForPausePoint(ctx, connection, options)
 	spinner.Stop()
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
@@ -208,6 +206,7 @@ func runWaitForPausePoint(
 		// also requested via --captured-variable-names or --captured-variables=names.
 		expectations := evaluatePausePointExpectations(response.CapturedVariables, options.expectations)
 
+		response.TriggerResult = triggerResult
 		response = filterPausePointCapturedVariableHistory(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
@@ -259,6 +258,9 @@ func runWaitForPausePoint(
 	}
 
 	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state)
+	if triggerResult != nil {
+		waitErr.Details["TriggerResult"] = triggerResult
+	}
 	if state == pausePointWaitStateTimeout {
 		// Best-effort: the timeout diagnosis must not depend on a second Unity round trip succeeding.
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
@@ -320,6 +322,13 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 				return waitForPausePointOptions{}, parseErr
 			}
 			options.expectations = append(options.expectations, expectation)
+		case PausePointTriggerFlagName:
+			triggerCommand, triggerArgs, parseErr := parsePausePointTriggerCommand(clicore.PausePointAwaitCommandName, value)
+			if parseErr != nil {
+				return waitForPausePointOptions{}, parseErr
+			}
+			options.triggerCommand = triggerCommand
+			options.triggerArgs = triggerArgs
 		default:
 			return waitForPausePointOptions{}, pausePointUnknownOptionError(clicore.PausePointAwaitCommandName, name)
 		}
@@ -391,90 +400,4 @@ func parsePausePointTimeoutSeconds(value string) (int, error) {
 		return 0, clierrors.InvalidValueArgumentError("--"+PausePointTimeoutFlagName, value, "positive integer")
 	}
 	return timeoutSeconds, nil
-}
-
-func waitForPausePoint(
-	ctx context.Context,
-	connection unityipc.Connection,
-	options waitForPausePointOptions,
-) (pausePointStatusResponse, pausePointWaitState, error) {
-	waitContext, cancel := context.WithTimeout(ctx, options.timeout)
-	defer cancel()
-
-	lastResponse := pausePointStatusResponse{Id: options.id}
-	var lastErr error
-	hasResponse := false
-	ticker := time.NewTicker(pausePointStatusPoll)
-	defer ticker.Stop()
-	for {
-		response, err := queryPausePointStatus(waitContext, connection, options.id)
-		if err == nil {
-			lastResponse = response
-			hasResponse = true
-			state := pausePointWaitStateForStatus(response.Status)
-			if state != "" {
-				return response, state, nil
-			}
-		} else {
-			lastErr = err
-		}
-
-		select {
-		case <-waitContext.Done():
-			if ctx.Err() != nil {
-				return lastResponse, "", ctx.Err()
-			}
-			finalResponse, finalState, hasFinalResponse, finalErr := queryPausePointStatusAtTimeout(ctx, connection, options.id)
-			if hasFinalResponse {
-				lastResponse = finalResponse
-				hasResponse = true
-				if finalState != "" {
-					return finalResponse, finalState, nil
-				}
-			} else if lastErr == nil {
-				lastErr = finalErr
-			}
-			if hasResponse {
-				return lastResponse, pausePointWaitStateTimeout, nil
-			}
-			if lastErr != nil {
-				return lastResponse, "", fmt.Errorf("timed out waiting for pause point status: %w", lastErr)
-			}
-			return lastResponse, pausePointWaitStateTimeout, nil
-		case <-ticker.C:
-		}
-	}
-}
-
-func queryPausePointStatusAtTimeout(
-	ctx context.Context,
-	connection unityipc.Connection,
-	id string,
-) (pausePointStatusResponse, pausePointWaitState, bool, error) {
-	finalContext, cancel := context.WithTimeout(ctx, pausePointFinalStatusProbeTimeout)
-	defer cancel()
-
-	response, err := queryPausePointStatus(finalContext, connection, id)
-	if err != nil {
-		return pausePointStatusResponse{}, "", false, err
-	}
-
-	return response, pausePointWaitStateForStatus(response.Status), true, nil
-}
-
-func pausePointWaitStateForStatus(status string) pausePointWaitState {
-	switch status {
-	case pausePointStatusHit:
-		return pausePointWaitStateHit
-	case pausePointStatusNotEnabled:
-		return pausePointWaitStateNotEnabled
-	case pausePointStatusExpired:
-		return pausePointWaitStateExpired
-	case pausePointStatusCleared:
-		return pausePointWaitStateCleared
-	case pausePointStatusEnabled:
-		return ""
-	default:
-		return ""
-	}
 }
