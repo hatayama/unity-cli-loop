@@ -187,6 +187,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return null;
             }
 
+            if (ThirdPartyToolMigrationRules.ContainsNonAutoPropertySuccessHidingUnityCliLoopToolResponse(source))
+            {
+                // why: a getter with logic can't be auto-rewritten safely, so surface it instead of migrating silently.
+                UnityEngine.Debug.LogWarning(
+                    $"[UnityCliLoop] {csharpFilePath} declares its own non-auto-property Success member that " +
+                    "hides UnityCliLoopToolResponse.Success. Migration cannot rewrite it automatically; " +
+                    "resolve the member-hiding manually.");
+            }
+
             string assemblyDirectory = FindNearestAssemblyDirectory(
                 csharpFilePath,
                 assemblyUsage.AsmdefDirectories,

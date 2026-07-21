@@ -3648,6 +3648,95 @@ public sealed class HelloResponse : UnityCliLoopToolResponse
         }
 
         [Test]
+        public async Task HasMigrationTargetsAsync_WhenAlreadyMigratedResponseOnlyHasSuccessHiding_ReturnsTrue()
+        {
+            // Verifies that a fully-migrated V3 file with no remaining legacy API, but a hiding Success
+            // auto-property, is still detected as a migration target.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "CurrentHelloTool.cs"),
+                    @"using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+[UnityCliLoopTool]
+public sealed class CurrentHelloTool : UnityCliLoopTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class HelloResponse : UnityCliLoopToolResponse
+{
+    public bool Success { get; }
+}");
+                File.WriteAllText(
+                    Path.Combine(toolDirectory, "VendorTools.Editor.asmdef"),
+                    @"{
+    ""name"": ""VendorTools.Editor"",
+    ""references"": [
+        ""GUID:fc3fd32eddbee40e39c2d76dc184957b""
+    ]
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+
+                bool hasTargets = await service.HasMigrationTargetsAsync(projectRoot, CancellationToken.None);
+
+                Assert.That(hasTargets, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public void ApplyMigration_WhenAlreadyMigratedResponseOnlyHasSuccessHiding_RemovesHidingDeclaration()
+        {
+            // Verifies that apply-migration removes an already-migrated file's own Success property from disk.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "CurrentHelloTool.cs");
+                File.WriteAllText(
+                    toolPath,
+                    @"using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+[UnityCliLoopTool]
+public sealed class CurrentHelloTool : UnityCliLoopTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : UnityCliLoopToolSchema
+{
+}
+
+public sealed class HelloResponse : UnityCliLoopToolResponse
+{
+    public bool Success { get; }
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationResult result = service.ApplyMigration(projectRoot);
+                string migratedSource = File.ReadAllText(toolPath);
+
+                Assert.That(result.FilePaths.Contains(toolPath), Is.True);
+                Assert.That(migratedSource, Does.Not.Contain("public bool Success"));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public async Task HasMigrationTargetsAsync_WhenLegacyGlobalUsingAndBareToolAttributeAreSplit_ReturnsTrue()
         {
             // Verifies that startup detection treats legacy global usings as assembly-scoped.

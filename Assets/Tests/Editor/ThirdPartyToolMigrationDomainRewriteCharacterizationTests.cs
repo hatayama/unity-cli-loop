@@ -147,5 +147,102 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 migrated,
                 Does.Contain($"{ThirdPartyToolMigrationRuleCatalog.CurrentNamespace}.UnityCliLoopToolRegistrar"));
         }
+
+        [Test]
+        public void RemoveSuccessPropertyHidingDeclarationsInCode_WhenAlreadyMigratedFileHasHidingAutoProperty_RemovesDeclarationAndKeepsConstructorAssignment()
+        {
+            // Pins removal of a real-world-shaped Success auto-property (attributes + XML doc + get-only) on a file already on UnityCliLoopToolResponse.
+            string source =
+                "using Newtonsoft.Json;\n" +
+                "using io.github.hatayama.UnityCliLoop.ToolContracts;\n" +
+                "\n" +
+                "public sealed class SampleResponse : UnityCliLoopToolResponse\n" +
+                "{\n" +
+                "    /// <summary>\n" +
+                "    /// Whether the operation succeeded.\n" +
+                "    /// </summary>\n" +
+                "    [JsonProperty(\"success\")]\n" +
+                "    public bool Success { get; }\n" +
+                "\n" +
+                "    public SampleResponse(bool success)\n" +
+                "    {\n" +
+                "        Success = success;\n" +
+                "    }\n" +
+                "}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationSuccessPropertyRules.RemoveSuccessPropertyHidingDeclarationsInCode(source);
+
+            Assert.That(replacementCount, Is.GreaterThan(0));
+            Assert.That(content, Does.Not.Contain("public bool Success { get; }"));
+            Assert.That(content, Does.Not.Contain("[JsonProperty(\"success\")]"));
+            Assert.That(content, Does.Not.Contain("Whether the operation succeeded."));
+            Assert.That(content, Does.Contain("Success = success;"));
+        }
+
+        [Test]
+        public void MigrateCSharpSource_WhenV2ResponseHasHidingSuccessProperty_ReplacesBaseTypeAndRemovesSuccessDeclaration()
+        {
+            // Pins the full orchestration: BaseToolResponse rename and hiding Success removal happen together for V2 sources.
+            string source =
+                "using io.github.hatayama.uLoopMCP;\n" +
+                "\n" +
+                "public sealed class LegacyResponse : BaseToolResponse\n" +
+                "{\n" +
+                "    public bool Success { get; set; }\n" +
+                "}\n";
+
+            ThirdPartyToolMigrationContentResult result =
+                ThirdPartyToolMigrationCSharpRules.MigrateCSharpSource(source);
+
+            Assert.That(result.Content, Does.Contain("UnityCliLoopToolResponse"));
+            Assert.That(result.Content, Does.Not.Contain("BaseToolResponse"));
+            Assert.That(result.Content, Does.Not.Contain("public bool Success"));
+            Assert.That(result.ReplacementCount, Is.GreaterThan(0));
+        }
+
+        [Test]
+        public void RemoveSuccessPropertyHidingDeclarationsInCode_WhenSuccessGetterHasLogic_DoesNotRewriteButIsDetectable()
+        {
+            // why: a getter with logic cannot be safely auto-rewritten; it must stay untouched but remain detectable so it can be surfaced.
+            string source =
+                "using io.github.hatayama.UnityCliLoop.ToolContracts;\n" +
+                "\n" +
+                "public sealed class CustomLogicResponse : UnityCliLoopToolResponse\n" +
+                "{\n" +
+                "    private readonly bool _succeeded;\n" +
+                "\n" +
+                "    public bool Success { get { return _succeeded && true; } }\n" +
+                "}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationSuccessPropertyRules.RemoveSuccessPropertyHidingDeclarationsInCode(source);
+            bool isDetectableAsNonAutoHiding =
+                ThirdPartyToolMigrationSuccessPropertyRules.ContainsNonAutoPropertySuccessHidingUnityCliLoopToolResponse(
+                    source);
+
+            Assert.That(replacementCount, Is.EqualTo(0));
+            Assert.That(content, Is.EqualTo(source));
+            Assert.That(isDetectableAsNonAutoHiding, Is.True);
+        }
+
+        [Test]
+        public void ContainsSuccessPropertyHidingUnityCliLoopToolResponse_WhenAlreadyMigratedFileOnlyHasSuccessHiding_ReturnsTrue()
+        {
+            // Pins detection extension: a file with no remaining legacy API but a hiding Success auto-property is still a migration target.
+            string source =
+                "using io.github.hatayama.UnityCliLoop.ToolContracts;\n" +
+                "\n" +
+                "public sealed class AlreadyMigratedResponse : UnityCliLoopToolResponse\n" +
+                "{\n" +
+                "    public bool Success { get; }\n" +
+                "}\n";
+
+            bool containsTarget =
+                ThirdPartyToolMigrationSuccessPropertyRules.ContainsSuccessPropertyHidingUnityCliLoopToolResponse(
+                    source);
+
+            Assert.That(containsTarget, Is.True);
+        }
     }
 }
