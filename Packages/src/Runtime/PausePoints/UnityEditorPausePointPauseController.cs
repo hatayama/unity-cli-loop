@@ -18,8 +18,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         public void Resume()
         {
-            // Why unconditional: Option B clears any Editor pause on disconnect/clear/expiry,
-            // including a manual pause that happens to be active.
+            // This is the low-level unpause primitive and is intentionally unconditional; it does
+            // not know why the Editor is paused. The registry decides when to call it: clear only
+            // resumes a pause-point-owned pause, while disconnect and expiry resume unconditionally.
             EditorApplication.isPaused = false;
         }
     }

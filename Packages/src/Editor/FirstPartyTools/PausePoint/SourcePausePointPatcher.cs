@@ -265,6 +265,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 warnings.Add(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning);
             }
+            else if (SourcePausePointPhysicalCallbackCallSiteScanner.IsCalledFromPhysicalMessageMethod(method))
+            {
+                warnings.Add(SourcePausePointConstants.PhysicalCallbackIndirectCallMayMissExistingInstanceWarning);
+            }
 
             if (IsLikelyJitInlined(method))
             {

@@ -4,6 +4,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -46,19 +47,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool pressWasApplied = false;
             bool pressEdgeObserved = false;
             int pressHoldExtendedFrames = 0;
+            PressEdgeMissDiagnostics edgeMissDiagnostics = new();
             InputSimulationWaitOutcome waitOutcome = InputSimulationWaitOutcome.Completed;
 
             // The edge must be probed inside gameplay input updates: editor-tick polling can
             // miss the single frame where wasPressedThisFrame is true, and an editor-update
             // consumed press is exactly the failure gameplay code cannot see.
             await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
-            Action pressEdgeMonitor = () => pressEdgeObserved |= IsGameplayPressEdgeVisible(keyboard, key);
+            Action pressEdgeMonitor = () =>
+            {
+                pressEdgeObserved |= IsGameplayPressEdgeVisible(keyboard, key);
+                RecordPressEdgeMissDiagnostics(keyboard, key, edgeMissDiagnostics);
+            };
             InputSystem.onAfterUpdate += pressEdgeMonitor;
 
             try
             {
                 waitOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                    () => KeyboardKeyState.SetKeyState(keyboard, key, true),
+                    () =>
+                    {
+                        edgeMissDiagnostics.KeyAlreadyPressedBeforeQueue = keyboard[key].isPressed;
+                        KeyboardKeyState.SetKeyState(keyboard, key, true);
+                    },
                     ct).ConfigureAwait(false);
                 if (waitOutcome == InputSimulationWaitOutcome.Completed)
                 {
@@ -142,7 +152,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             else
             {
                 edgeText =
-                    " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it, so retry or verify with a focused log)";
+                    " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it, so retry or verify with a focused log)" +
+                    PressEdgeDiagnosticsMessageFormatter.BuildSuffix(
+                        edgeMissDiagnostics.ConsumedByUpdateType,
+                        edgeMissDiagnostics.AnyDynamicUpdateObserved,
+                        edgeMissDiagnostics.KeyAlreadyPressedBeforeQueue);
             }
 
             return new SimulateKeyboardResponse
@@ -152,7 +166,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Action = UnityCliLoopKeyboardAction.Press.ToString(),
                 KeyName = keyName,
                 PressEdgeObserved = pressEdgeObserved,
-                PressHoldExtendedFrames = pressHoldExtendedFrames > 0 ? pressHoldExtendedFrames : null
+                PressHoldExtendedFrames = pressHoldExtendedFrames > 0 ? pressHoldExtendedFrames : null,
+                PressEdgeConsumedByUpdateType = pressEdgeObserved ? null : edgeMissDiagnostics.ConsumedByUpdateType,
+                PressEdgeAnyDynamicUpdateObserved = pressEdgeObserved ? null : edgeMissDiagnostics.AnyDynamicUpdateObserved,
+                PressEdgeKeyAlreadyPressedBeforeQueue = pressEdgeObserved ? null : edgeMissDiagnostics.KeyAlreadyPressedBeforeQueue
             };
         }
 
@@ -177,16 +194,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool keyDownApplied = false;
             bool committed = false;
             bool pressEdgeObserved = false;
+            PressEdgeMissDiagnostics edgeMissDiagnostics = new();
             InputSimulationWaitOutcome waitOutcome = InputSimulationWaitOutcome.Completed;
 
             await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
-            Action keyDownEdgeMonitor = () => pressEdgeObserved |= IsGameplayPressEdgeVisible(keyboard, key);
+            Action keyDownEdgeMonitor = () =>
+            {
+                pressEdgeObserved |= IsGameplayPressEdgeVisible(keyboard, key);
+                RecordPressEdgeMissDiagnostics(keyboard, key, edgeMissDiagnostics);
+            };
             InputSystem.onAfterUpdate += keyDownEdgeMonitor;
 
             try
             {
                 waitOutcome = await InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
-                    () => KeyboardKeyState.SetKeyState(keyboard, key, true),
+                    () =>
+                    {
+                        edgeMissDiagnostics.KeyAlreadyPressedBeforeQueue = keyboard[key].isPressed;
+                        KeyboardKeyState.SetKeyState(keyboard, key, true);
+                    },
                     ct).ConfigureAwait(false);
                 if (waitOutcome == InputSimulationWaitOutcome.Completed)
                 {
@@ -243,14 +269,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string keyDownEdgeText = pressEdgeObserved
                 ? ""
-                : " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it)";
+                : " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it)" +
+                  PressEdgeDiagnosticsMessageFormatter.BuildSuffix(
+                      edgeMissDiagnostics.ConsumedByUpdateType,
+                      edgeMissDiagnostics.AnyDynamicUpdateObserved,
+                      edgeMissDiagnostics.KeyAlreadyPressedBeforeQueue);
             return new SimulateKeyboardResponse
             {
                 Success = true,
                 Message = $"Key '{keyName}' held down{keyDownEdgeText}",
                 Action = UnityCliLoopKeyboardAction.KeyDown.ToString(),
                 KeyName = keyName,
-                PressEdgeObserved = pressEdgeObserved
+                PressEdgeObserved = pressEdgeObserved,
+                PressEdgeConsumedByUpdateType = pressEdgeObserved ? null : edgeMissDiagnostics.ConsumedByUpdateType,
+                PressEdgeAnyDynamicUpdateObserved = pressEdgeObserved ? null : edgeMissDiagnostics.AnyDynamicUpdateObserved,
+                PressEdgeKeyAlreadyPressedBeforeQueue = pressEdgeObserved ? null : edgeMissDiagnostics.KeyAlreadyPressedBeforeQueue
             };
         }
 
@@ -320,11 +353,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // consumed there never surfaces as wasPressedThisFrame to gameplay Update polling.
         private static bool IsGameplayPressEdgeVisible(Keyboard keyboard, Key key)
         {
-            if (UnityEngine.InputSystem.LowLevel.InputState.currentUpdateType == UnityEngine.InputSystem.LowLevel.InputUpdateType.Editor)
+            if (InputState.currentUpdateType == InputUpdateType.Editor)
             {
                 return false;
             }
             return keyboard[key].wasPressedThisFrame;
+        }
+
+        // Runs inside InputSystem.onAfterUpdate alongside the edge visibility check above.
+        // Why: the root cause of an unobserved edge could not be reproduced (see Round-6
+        // investigation), so this records which update type (if any) actually saw
+        // wasPressedThisFrame become true, and whether a Dynamic update ran at all, to diagnose
+        // the next real occurrence directly from the response instead of guessing.
+        private static void RecordPressEdgeMissDiagnostics(
+            Keyboard keyboard,
+            Key key,
+            PressEdgeMissDiagnostics diagnostics)
+        {
+            InputUpdateType currentUpdateType = InputState.currentUpdateType;
+            if (currentUpdateType == InputUpdateType.Dynamic)
+            {
+                diagnostics.AnyDynamicUpdateObserved = true;
+            }
+
+            if (diagnostics.ConsumedByUpdateType == null && keyboard[key].wasPressedThisFrame)
+            {
+                diagnostics.ConsumedByUpdateType = currentUpdateType.ToString();
+            }
+        }
+
+        // Mutable accumulator for RecordPressEdgeMissDiagnostics, captured by the onAfterUpdate
+        // monitor lambda. A class (not out/ref locals) so the lambda closure can write to it
+        // across repeated update callbacks without ref parameters.
+        private sealed class PressEdgeMissDiagnostics
+        {
+            public string? ConsumedByUpdateType;
+            public bool AnyDynamicUpdateObserved;
+            public bool KeyAlreadyPressedBeforeQueue;
         }
     }
 }
