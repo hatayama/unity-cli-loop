@@ -329,6 +329,8 @@ func TestWaitForPausePointJoinsTriggerResult(t *testing.T) {
 // Verifies --trigger is never dispatched when the initial status query finds the marker not
 // armed (unknown --id, already expired, etc.): dispatching the trigger's action into the running
 // game would be a side effect with no corresponding wait, since the wait itself is about to fail.
+// TriggerResult is still populated (Completed:false, explanatory Error) rather than omitted, so a
+// caller can tell "the trigger never ran" apart from "the trigger ran but never reported back."
 func TestWaitForPausePointSkipsTriggerWhenNotArmed(t *testing.T) {
 	originalQuery := queryPausePointStatus
 	originalDispatch := dispatchPausePointTriggerCommand
@@ -376,8 +378,17 @@ func TestWaitForPausePointSkipsTriggerWhenNotArmed(t *testing.T) {
 	if dispatchCalled {
 		t.Fatal("expected dispatchPausePointTriggerCommand not to be called for a not-armed marker")
 	}
-	if triggerResult != nil {
-		t.Fatalf("expected a nil trigger result, got %#v", triggerResult)
+	if triggerResult == nil {
+		t.Fatal("expected a non-nil trigger result explaining the skip, got nil")
+	}
+	if triggerResult.Completed {
+		t.Fatalf("expected Completed=false for a skipped trigger, got %#v", triggerResult)
+	}
+	if triggerResult.Command != "simulate-keyboard --action Press" {
+		t.Fatalf("command mismatch: %#v", triggerResult)
+	}
+	if triggerResult.Error == "" {
+		t.Fatalf("expected a non-empty Error explaining why the trigger was skipped, got %#v", triggerResult)
 	}
 }
 

@@ -426,11 +426,26 @@ func waitForPausePoint(
 	options waitForPausePointOptions,
 ) (pausePointStatusResponse, pausePointWaitState, *pausePointTriggerResult, error) {
 	var triggerHandle *pausePointTriggerHandle
-	if options.triggerCommand != "" && pausePointIsArmed(ctx, connection, options.id) {
-		triggerHandle = startPausePointTrigger(ctx, connection, options.startPath, options.triggerCommand, options.triggerArgs)
+	var skippedTriggerResult *pausePointTriggerResult
+	if options.triggerCommand != "" {
+		if pausePointIsArmed(ctx, connection, options.id) {
+			triggerHandle = startPausePointTrigger(ctx, connection, options.startPath, options.triggerCommand, options.triggerArgs)
+		} else {
+			// --trigger always yields a TriggerResult when given, even when skipped: a silently
+			// omitted TriggerResult would be indistinguishable from "the trigger ran but this CLI
+			// exited before it reported anything," hiding the real reason (marker not confirmed
+			// armed) behind a plain timeout/not-enabled error with no clue why the trigger never fired.
+			skippedTriggerResult = &pausePointTriggerResult{
+				Command: pausePointTriggerCommandString(options.triggerCommand, options.triggerArgs),
+				Error:   "trigger was not dispatched: the marker could not be confirmed armed at wait start",
+			}
+		}
 	}
 
 	response, state, err := waitForPausePointStatus(ctx, connection, options)
+	if skippedTriggerResult != nil {
+		return response, state, skippedTriggerResult, err
+	}
 	return response, state, triggerHandle.join(), err
 }
 
