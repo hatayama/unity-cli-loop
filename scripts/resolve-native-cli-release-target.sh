@@ -9,21 +9,6 @@ EVENT_REF_NAME=${EVENT_REF_NAME:-}
 INPUT_RELEASE_TAG=${INPUT_RELEASE_TAG:-}
 INPUT_DRY_RUN=${INPUT_DRY_RUN:-false}
 RELEASE_DATA=""
-CLI_RELEASE_INPUT_PATHS="
-cli/.go-version
-cli/go.work
-cli/go.work.sum
-layout-contract.json
-cli/common
-cli/project-runner/cmd
-cli/project-runner/go.mod
-cli/project-runner/go.sum
-cli/project-runner/internal
-scripts/build-go-cli.sh
-scripts/go-cli-toolchain.sh
-scripts/package-go-cli.sh
-scripts/verify-native-cli-release-assets.sh
-"
 
 is_semver_version() {
   version=$1
@@ -118,33 +103,6 @@ release_is_published() {
   [ "$is_draft" = "false" ]
 }
 
-latest_cli_asset_release_tag() {
-  excluded_tag=$1
-  release_list=$(gh release list --limit 100 --json tagName,isDraft)
-  release_tags=$(printf '%s\n' "$release_list" | jq -r '.[] | select(.isDraft == false) | .tagName')
-  for release_tag in $release_tags; do
-    if [ "$release_tag" = "$excluded_tag" ]; then
-      continue
-    fi
-
-    if release_has_all_cli_assets "$release_tag"; then
-      printf '%s\n' "$release_tag"
-      return
-    fi
-  done
-}
-
-cli_release_inputs_changed() {
-  base_ref=$1
-  head_ref=$2
-
-  if ! git diff --quiet "$base_ref" "$head_ref" -- $CLI_RELEASE_INPUT_PATHS; then
-    return 0
-  fi
-
-  return 1
-}
-
 release_commit_updates_cli_version() {
   commit_sha=$1
   version=$2
@@ -230,29 +188,19 @@ RELEASE_TARGET_SHA=$BUILD_SHA
 if [ "$CAN_EVALUATE_CLI_RELEASE" != "true" ]; then
   SHOULD_PUBLISH=false
   SHOULD_RELEASE=false
-elif release_is_published "$RELEASE_TAG"; then
-  SHOULD_RELEASE=false
-else
-  SHOULD_RELEASE=true
-fi
-
-if [ "$CAN_EVALUATE_CLI_RELEASE" != "true" ]; then
+elif [ "$EVENT_NAME" = "push" ] && ! release_commit_updates_cli_version "$BUILD_SHA" "$VERSION"; then
+  echo "HEAD commit $BUILD_SHA does not stamp project runner version $VERSION; skipping native CLI publish. Retry an incomplete release with workflow_dispatch." >&2
   SHOULD_PUBLISH=false
+  SHOULD_RELEASE=false
 elif release_is_published_with_cli_assets "$RELEASE_TAG"; then
   SHOULD_PUBLISH=false
+  SHOULD_RELEASE=false
 else
-  PREVIOUS_CLI_RELEASE_TAG=$(latest_cli_asset_release_tag "$RELEASE_TAG")
-  if [ -z "$PREVIOUS_CLI_RELEASE_TAG" ]; then
-    echo "No previous project runner asset release found; publishing native project runner assets." >&2
-    SHOULD_PUBLISH=true
-  elif release_commit_updates_cli_version "$BUILD_SHA" "$VERSION"; then
-    echo "Project runner release metadata changed in $BUILD_SHA; publishing native project runner assets." >&2
-    SHOULD_PUBLISH=true
-  elif cli_release_inputs_changed "$PREVIOUS_CLI_RELEASE_TAG" "$TARGET_SHA"; then
-    echo "Project runner release inputs changed since $PREVIOUS_CLI_RELEASE_TAG; publishing native project runner assets." >&2
-    SHOULD_PUBLISH=true
+  SHOULD_PUBLISH=true
+  if release_is_published "$RELEASE_TAG"; then
+    SHOULD_RELEASE=false
   else
-    echo "Project runner release inputs are unchanged since $PREVIOUS_CLI_RELEASE_TAG; skipping native CLI publish." >&2
+    SHOULD_RELEASE=true
   fi
 fi
 
