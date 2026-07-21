@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.55](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.54...uloop-project-runner-v3.0.0-beta.55) (2026-07-21)
+
+
+### Features
+
+* Round-5 pause-point diagnostics and observability improvements ([#1908](https://github.com/hatayama/unity-cli-loop/issues/1908)) ([958d85d](https://github.com/hatayama/unity-cli-loop/commit/958d85d9af0aba3ddbb57cf191574eeffe07449c))
+* Round-6 pause-point usability improvements ([#1914](https://github.com/hatayama/unity-cli-loop/issues/1914)) ([f8f5018](https://github.com/hatayama/unity-cli-loop/commit/f8f501872a1b47699717eb150168c254cae6fec4))
+
 ## [3.0.0-beta.54](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.53...uloop-project-runner-v3.0.0-beta.54) (2026-07-20)
 
 
