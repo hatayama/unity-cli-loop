@@ -61,13 +61,31 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static void ShowWindowForAutoScan()
         {
-            _ = RunAutoScanAsync(
-                HasMigrationTargetsForAutoScanAsync,
-                SwitchToMainThreadForAutoScanAsync,
-                OpenWindowAfterAutoScan,
-                ConsumeAutoScanSessionState,
-                LogAutoScanException,
-                CancellationToken.None);
+            _ = RunAutoScanWithProgressAsync(CancellationToken.None);
+        }
+
+        private static async Task RunAutoScanWithProgressAsync(CancellationToken ct)
+        {
+            int progressId = Progress.Start(
+                ThirdPartyToolMigrationWizardText.AutoScanProgressTitle,
+                ThirdPartyToolMigrationWizardText.AutoScanProgressDescription);
+            try
+            {
+                IProgress<ThirdPartyToolMigrationProgress> progress =
+                    new AutoScanMigrationProgressReporter(progressId);
+                await RunAutoScanAsync(
+                    innerCt => HasMigrationTargetsForAutoScanAsync(progress, innerCt),
+                    SwitchToMainThreadForAutoScanAsync,
+                    OpenWindowAfterAutoScan,
+                    ConsumeAutoScanSessionState,
+                    LogAutoScanException,
+                    ct);
+            }
+            finally
+            {
+                // Progress.Start/Report/Remove are all native-thread-safe, so no main-thread marshaling is needed here.
+                Progress.Remove(progressId);
+            }
         }
 
         internal static async Task<bool> RunAutoScanAsync(
@@ -107,16 +125,33 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
         }
 
-        private static async Task<bool> HasMigrationTargetsForAutoScanAsync(CancellationToken ct)
+        private static async Task<bool> HasMigrationTargetsForAutoScanAsync(
+            IProgress<ThirdPartyToolMigrationProgress> progress,
+            CancellationToken ct)
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             ThirdPartyToolMigrationUseCase migrationUseCase =
                 GetThirdPartyToolMigrationUseCase();
-            IProgress<ThirdPartyToolMigrationProgress> progress =
-                new Progress<ThirdPartyToolMigrationProgress>();
             ThirdPartyToolMigrationPreview preview = await Task.Run(async () =>
                 await migrationUseCase.PreviewMigrationAsync(projectRoot, progress, ct), ct);
             return preview.HasTargets;
+        }
+
+        // Progress.Start/Report/Remove are declared IsThreadSafe=true in Unity's native bindings,
+        // so this reporter can relay directly from the background scan thread.
+        private sealed class AutoScanMigrationProgressReporter : IProgress<ThirdPartyToolMigrationProgress>
+        {
+            private readonly int _progressId;
+
+            internal AutoScanMigrationProgressReporter(int progressId)
+            {
+                _progressId = progressId;
+            }
+
+            public void Report(ThirdPartyToolMigrationProgress value)
+            {
+                Progress.Report(_progressId, value.ProcessedItemCount, value.TotalItemCount);
+            }
         }
 
         private static async Task SwitchToMainThreadForAutoScanAsync(CancellationToken ct)
