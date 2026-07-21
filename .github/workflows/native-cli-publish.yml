@@ -37,7 +37,6 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_REF_NAME: ${{ github.ref_name }}
-          BEFORE_SHA: ${{ github.event.before }}
           INPUT_DRY_RUN: ${{ inputs.dry-run }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: scripts/resolve-native-cli-release-target.sh >> "$GITHUB_OUTPUT"
