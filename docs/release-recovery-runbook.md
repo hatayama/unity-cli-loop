@@ -84,6 +84,23 @@ approve the `cli-release` environment if GitHub requests approval:
 gh run rerun <run-id> --repo <owner>/<repo> --failed
 ```
 
+## Retrying after a cancelled or failed publish run
+
+`native-cli-publish.yml` and `dispatcher-publish.yml` only evaluate publish/
+release on push when HEAD's diff actually stamps the resolved version (the
+release-please manifest/contract entry or the component's `CHANGELOG.md`
+heading). Once a publish run is cancelled or fails, ordinary follow-up pushes
+to main/v3-beta no longer retry it, because their HEAD commits do not stamp
+that version. Recovery is limited to two paths:
+
+- (a) Rerun the original run, but only when the conditions in "When rerun
+  recovery is valid" above hold (its `headSha` is the intended release commit
+  and the workflow definition there is healthy).
+- (b) Trigger the workflow manually via `workflow_dispatch`, which bypasses
+  the push gate entirely and falls back to the same state-based evaluation
+  (missing release / missing assets / fully published) the gate used before
+  this change.
+
 ## Operational notes
 
 ### Preserved negative attestation specimen
@@ -104,8 +121,10 @@ verification. Do not pin this version; use beta.49 or later.
   workflow concurrency group does not cancel it automatically, so it can block
   the newer run indefinitely.
 - Delete a broken release only after the version bump is merged. Deleting it
-  first leaves the historical version unresolved and can make later push builds
-  attempt to recreate it and fail.
+  first leaves the historical version unresolved; later push builds will not
+  attempt to recreate it on their own (see "Retrying after a cancelled or
+  failed publish run" above), so recovery still requires an explicit rerun or
+  `workflow_dispatch`.
 - Do not grant GitHub Actions tag-ruleset bypass permissions. That does not
   resolve the attestation invariant and expands bot authority unnecessarily.
 - A broken release may remain published while the roll-forward release is cut;
