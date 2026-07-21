@@ -162,6 +162,124 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         // ----------------------------------------------------------------
+        // RemoveLegacyEnvTable
+        // ----------------------------------------------------------------
+
+        // Verifies that the legacy [mcp_servers.uLoopMCP.env] table is removed
+        // while the inline env line and unrelated sections are preserved.
+        [Test]
+        public void RemoveLegacyEnvTable_Should_RemoveOnlyLegacyTable_AndPreserveOtherSections()
+        {
+            string toml = "[mcp_servers.uLoopMCP]\n"
+                + "command = \"node\"\n"
+                + "args = ['server.js']\n"
+                + "env = { \"UNITY_TCP_PORT\" = \"8800\" }\n"
+                + "\n"
+                + "[mcp_servers.uLoopMCP.env]\n"
+                + "UNITY_TCP_PORT = \"8800\"\n"
+                + "\n"
+                + "[mcp_servers.other]\n"
+                + "command = \"python\"\n"
+                + "args = ['app.py']\n";
+
+            string result = InvokeRemoveLegacyEnvTable(toml);
+
+            StringAssert.DoesNotContain("[mcp_servers.uLoopMCP.env]", result);
+            StringAssert.Contains("env = { \"UNITY_TCP_PORT\" = \"8800\" }", result);
+            StringAssert.Contains("[mcp_servers.other]", result);
+            StringAssert.Contains("python", result);
+        }
+
+        // Verifies that content without a legacy table is returned unchanged.
+        [Test]
+        public void RemoveLegacyEnvTable_Should_ReturnUnchanged_WhenLegacyTableAbsent()
+        {
+            string toml = "[mcp_servers.uLoopMCP]\n"
+                + "command = \"node\"\n"
+                + "args = ['server.js']\n"
+                + "env = { \"UNITY_TCP_PORT\" = \"8800\" }\n"
+                + "\n"
+                + "[mcp_servers.other]\n"
+                + "command = \"python\"\n"
+                + "args = ['app.py']\n";
+
+            string result = InvokeRemoveLegacyEnvTable(toml);
+
+            Assert.AreEqual(toml, result);
+        }
+
+        // Verifies that a legacy table at the end of the file (no following section) is removed.
+        [Test]
+        public void RemoveLegacyEnvTable_Should_RemoveTable_WhenAtEndOfFile()
+        {
+            string toml = "[mcp_servers.uLoopMCP]\n"
+                + "command = \"node\"\n"
+                + "args = ['server.js']\n"
+                + "env = { \"UNITY_TCP_PORT\" = \"8800\" }\n"
+                + "\n"
+                + "[mcp_servers.uLoopMCP.env]\n"
+                + "UNITY_TCP_PORT = \"8800\"\n";
+
+            string result = InvokeRemoveLegacyEnvTable(toml);
+
+            StringAssert.DoesNotContain("[mcp_servers.uLoopMCP.env]", result);
+            StringAssert.Contains("env = { \"UNITY_TCP_PORT\" = \"8800\" }", result);
+        }
+
+        // Verifies that CRLF line endings in the surviving content are preserved (Windows compatibility guardrail).
+        [Test]
+        public void RemoveLegacyEnvTable_Should_PreserveCrlfLineEndings()
+        {
+            string toml = "[mcp_servers.uLoopMCP]\r\n"
+                + "command = \"node\"\r\n"
+                + "args = ['server.js']\r\n"
+                + "env = { \"UNITY_TCP_PORT\" = \"8800\" }\r\n"
+                + "\r\n"
+                + "[mcp_servers.uLoopMCP.env]\r\n"
+                + "UNITY_TCP_PORT = \"8800\"\r\n"
+                + "\r\n"
+                + "[mcp_servers.other]\r\n"
+                + "command = \"python\"\r\n"
+                + "args = ['app.py']\r\n";
+
+            string result = InvokeRemoveLegacyEnvTable(toml);
+
+            StringAssert.DoesNotContain("[mcp_servers.uLoopMCP.env]", result);
+            Assert.AreEqual(-1, result.Replace("\r\n", string.Empty).IndexOf('\n'),
+                "Surviving content must not contain a bare LF outside of a CRLF pair");
+        }
+
+        // ----------------------------------------------------------------
+        // BuildAutoConfiguredContent
+        // ----------------------------------------------------------------
+
+        // Verifies that running the write flow on content with both an inline env and a legacy
+        // table produces a single env definition and preserves unrelated sections (regression test
+        // for the duplicate-key bug fixed by removing the legacy table before rebuilding the block).
+        [Test]
+        public void BuildAutoConfiguredContent_Should_ProduceSingleEnvDefinition_WhenLegacyTableExists()
+        {
+            string toml = "[mcp_servers.uLoopMCP]\n"
+                + "command = \"node\"\n"
+                + "args = ['old/server.js']\n"
+                + "env = { \"UNITY_TCP_PORT\" = \"8800\" }\n"
+                + "\n"
+                + "[mcp_servers.uLoopMCP.env]\n"
+                + "UNITY_TCP_PORT = \"8800\"\n"
+                + "\n"
+                + "[mcp_servers.other]\n"
+                + "command = \"python\"\n"
+                + "args = ['app.py']\n";
+
+            string result = InvokeBuildAutoConfiguredContent(toml, 9999, "new/server.js");
+
+            StringAssert.DoesNotContain("[mcp_servers.uLoopMCP.env]", result);
+            Assert.AreEqual(1, CountOccurrences(result, "env ="));
+            StringAssert.Contains("[mcp_servers.other]", result);
+            StringAssert.Contains("python", result);
+        }
+
+        // ----------------------------------------------------------------
         // Reflection helpers
         // ----------------------------------------------------------------
 
@@ -187,6 +305,32 @@ namespace io.github.hatayama.uLoopMCP
             MethodInfo method = CodexServiceType.GetMethod("NormalizeForCompare", PrivateStatic);
             Debug.Assert(method != null, "NormalizeForCompare method not found");
             return (string)method.Invoke(null, new object[] { path });
+        }
+
+        private static string InvokeRemoveLegacyEnvTable(string content)
+        {
+            MethodInfo method = CodexServiceType.GetMethod("RemoveLegacyEnvTable", PrivateStatic);
+            Debug.Assert(method != null, "RemoveLegacyEnvTable method not found");
+            return (string)method.Invoke(null, new object[] { content });
+        }
+
+        private static string InvokeBuildAutoConfiguredContent(string content, int port, string relativeServerPath)
+        {
+            MethodInfo method = CodexServiceType.GetMethod("BuildAutoConfiguredContent", PrivateStatic);
+            Debug.Assert(method != null, "BuildAutoConfiguredContent method not found");
+            return (string)method.Invoke(null, new object[] { content, port, relativeServerPath });
+        }
+
+        private static int CountOccurrences(string text, string token)
+        {
+            int count = 0;
+            int index = 0;
+            while ((index = text.IndexOf(token, index, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += token.Length;
+            }
+            return count;
         }
     }
 }

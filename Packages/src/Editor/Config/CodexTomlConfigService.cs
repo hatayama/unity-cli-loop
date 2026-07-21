@@ -12,6 +12,11 @@ namespace io.github.hatayama.uLoopMCP
         private static readonly Regex SectionRegex = new Regex(
             @"(?ms)^\[mcp_servers\.uLoopMCP\]\s*.*?(?=^\[|\z)",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        // Matches the legacy child table some older uLoopMCP versions wrote in addition to the
+        // inline env line. SectionRegex stops at this table's own "[" so it never removes it.
+        private static readonly Regex LegacyEnvTableRegex = new Regex(
+            @"(?ms)^\[mcp_servers\.uLoopMCP\.env\]\s*.*?(?=^\[|\z)",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex AnyMcpServerRegex = new Regex(
             @"(?ms)^\[mcp_servers\.[^\]]+\]\s*.*?(?=^\[|\z)",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -52,8 +57,14 @@ namespace io.github.hatayama.uLoopMCP
 
             string serverAbsolutePath = UnityMcpPathResolver.GetTypeScriptServerPath();
             if (string.IsNullOrEmpty(serverAbsolutePath) || !File.Exists(serverAbsolutePath)) return false;
+
+            // A legacy child table means the config still has a duplicate env definition;
+            // AutoConfigure must run again to remove it. Checked after the guard above so an
+            // environment without the server bundle never reaches AutoConfigure's throw path.
+            if (LegacyEnvTableRegex.IsMatch(content)) return true;
+
             string expectedArg0 = UnityMcpPathResolver.MakeRelativeToConfigurationRoot(serverAbsolutePath);
-            
+
             (string arg0, int? existingPort) = ReadCurrentValues(content);
             if (string.IsNullOrEmpty(arg0) || existingPort == null) return true;
 
@@ -90,29 +101,40 @@ namespace io.github.hatayama.uLoopMCP
             // Use relative path for better portability (config is now project-level)
             string relativeServerPath = UnityMcpPathResolver.MakeRelativeToConfigurationRoot(serverPath);
 
-            string block = BuildBlock(port, relativeServerPath);
-
-            string result;
-            if (SectionRegex.IsMatch(content))
-            {
-                result = SectionRegex.Replace(content, block.TrimEnd() + System.Environment.NewLine);
-            }
-            else
-            {
-                var matches = AnyMcpServerRegex.Matches(content);
-                if (matches.Count > 0)
-                {
-                    var last = matches[matches.Count - 1];
-                    int insertIndex = last.Index + last.Length;
-                    result = content.Insert(insertIndex, System.Environment.NewLine + block);
-                }
-                else
-                {
-                    result = string.IsNullOrWhiteSpace(content) ? block : content.TrimEnd() + System.Environment.NewLine + System.Environment.NewLine + block;
-                }
-            }
+            string result = BuildAutoConfiguredContent(content, port, relativeServerPath);
 
             File.WriteAllText(path, result);
+        }
+
+        private static string BuildAutoConfiguredContent(string content, int port, string relativeServerPath)
+        {
+            content = RemoveLegacyEnvTable(content);
+
+            string block = BuildBlock(port, relativeServerPath);
+
+            if (SectionRegex.IsMatch(content))
+            {
+                return SectionRegex.Replace(content, block.TrimEnd() + System.Environment.NewLine);
+            }
+
+            var matches = AnyMcpServerRegex.Matches(content);
+            if (matches.Count > 0)
+            {
+                var last = matches[matches.Count - 1];
+                int insertIndex = last.Index + last.Length;
+                return content.Insert(insertIndex, System.Environment.NewLine + block);
+            }
+
+            return string.IsNullOrWhiteSpace(content) ? block : content.TrimEnd() + System.Environment.NewLine + System.Environment.NewLine + block;
+        }
+
+        // Removes the legacy [mcp_servers.uLoopMCP.env] table some older uLoopMCP versions wrote
+        // alongside the inline env line. Only the table is dropped, not migrated: it only ever
+        // held values (e.g. UNITY_TCP_PORT) that AutoConfigure / UpdateDevelopmentSettings
+        // regenerate from scratch on every write, so there is nothing to carry over.
+        private static string RemoveLegacyEnvTable(string content)
+        {
+            return LegacyEnvTableRegex.Replace(content, string.Empty);
         }
 
         public int GetConfiguredPort()
@@ -135,6 +157,7 @@ namespace io.github.hatayama.uLoopMCP
 
             string content = File.ReadAllText(path);
             string result = SectionRegex.Replace(content, string.Empty);
+            result = LegacyEnvTableRegex.Replace(result, string.Empty);
             if (ReferenceEquals(content, result))
             {
                 return;
@@ -153,6 +176,7 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             string content = File.ReadAllText(path);
+            content = RemoveLegacyEnvTable(content);
 
             // If section not exists, create it first and reload
             if (!SectionRegex.IsMatch(content))
