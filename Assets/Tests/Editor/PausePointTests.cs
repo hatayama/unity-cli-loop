@@ -392,6 +392,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Clear_WhenWindowOpenButEditorAlreadyExternallyUnpaused_DoesNotReportResumeAndClosesStaleWindow()
+        {
+            // Verifies the still-open window is reconciled before deciding: a hit opened the
+            // window, then the Editor was unpaused externally before the update tick observed it.
+            // Clear must not claim it resumed Play Mode (Resume is a no-op on an unpaused Editor)
+            // and must close the stale window so it stops freezing expiry. ClearAll shares the same
+            // ResumeEditorPauseIfOwnedByPausePoint path, so this covers both entry points.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            _pauseController.ResumeExternally();
+
+            (UloopPausePointSnapshot _, bool resumedFromPause) = UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(resumedFromPause, Is.False);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
+            // The stale window is closed: an unrelated marker's countdown is no longer frozen.
+            UloopPausePointRegistry.Enable("dash", 1);
+            _nowUtc = _nowUtc.AddSeconds(2);
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+            Assert.That(UloopPausePointRegistry.GetStatus("dash").Status, Is.EqualTo(UloopPausePointStatus.Expired));
+        }
+
+        [Test]
         public void ApplyCaptureWindowExpirations_WhenHitPastTimeoutWhilePaused_DoesNotExpireUntilResumed()
         {
             // Verifies a hit's own Editor pause freezes the capture window countdown, so an

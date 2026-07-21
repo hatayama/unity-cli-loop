@@ -412,6 +412,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // Editor even when the pause was manual.
         private static bool ResumeEditorPauseIfOwnedByPausePoint()
         {
+            // A manual unpause (Editor pause button / control-play-mode) may not have been observed
+            // yet, because the external-resume sync runs on the Editor update tick. Reconcile first
+            // so a window left open by that unobserved unpause is credited and closed here instead
+            // of being misreported as a resume this clear performed (it would be a no-op resume of
+            // an already-unpaused Editor) and instead of leaving the stale window freezing expiry.
+            ClosePauseWindowIfEditorResumedExternally();
             if (!_pauseWindowStartUtc.HasValue)
             {
                 return false;
