@@ -461,9 +461,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // -1 signals "not applicable": counting instances only means something when the
             // declaring type is a MonoBehaviour (the physics dispatch miss this diagnostic exists
             // for is scoped to MonoBehaviour physics message methods).
+#if UNITY_6000_4_OR_NEWER
+            int instanceCount = isMonoBehaviourDerived
+                ? UnityEngine.Object.FindObjectsByType(declaringType, FindObjectsInactive.Include).Length
+                : -1;
+#else
             int instanceCount = isMonoBehaviourDerived
                 ? UnityEngine.Object.FindObjectsByType(declaringType, FindObjectsInactive.Include, FindObjectsSortMode.None).Length
                 : -1;
+#endif
 
             VibeLogger.LogInfo(
                 operation,
