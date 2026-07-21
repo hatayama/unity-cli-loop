@@ -50,6 +50,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return PausePointStatusResponse.FromSnapshot(snapshot);
         }
 
+        // Why: PausePointTools.LogCleared duplicates this instead of sharing it, since this
+        // bridge must not reference that Editor-only tool assembly. Keep both in sync if the
+        // log shape or wording changes.
         private static void LogCleared(string target, string statusBeforeClear)
         {
             VibeLogger.LogInfo(
@@ -58,6 +61,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 new { Target = target, StatusBeforeClear = statusBeforeClear });
         }
 
+        // Why: PausePointTools.LogExpired duplicates this instead of sharing it, since this
+        // bridge must not reference that Editor-only tool assembly. Keep both in sync if the
+        // log shape or wording changes.
         private static void LogExpired(string id, long elapsedSinceEnabledMilliseconds)
         {
             VibeLogger.LogInfo(
