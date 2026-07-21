@@ -1,6 +1,4 @@
 using System;
-using System.Threading;
-using System.Threading.Tasks;
 
 using UnityEditor;
 using UnityEngine;
@@ -61,139 +59,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static void ShowWindowForAutoScan()
         {
-            _ = RunAutoScanWithProgressAsync(CancellationToken.None);
-        }
-
-        private static async Task RunAutoScanWithProgressAsync(CancellationToken ct)
-        {
-            int progressId = Progress.Start(
-                ThirdPartyToolMigrationWizardText.AutoScanProgressTitle,
-                ThirdPartyToolMigrationWizardText.AutoScanProgressDescription);
-            try
-            {
-                IProgress<ThirdPartyToolMigrationProgress> progress =
-                    new AutoScanMigrationProgressReporter(progressId);
-                await RunAutoScanAsync(
-                    innerCt => HasMigrationTargetsForAutoScanAsync(progress, innerCt),
-                    SwitchToMainThreadForAutoScanAsync,
-                    OpenWindowAfterAutoScan,
-                    ConsumeAutoScanSessionState,
-                    LogAutoScanException,
-                    ct);
-            }
-            finally
-            {
-                // Progress.Start/Report/Remove are all native-thread-safe, so no main-thread marshaling is needed here.
-                Progress.Remove(progressId);
-            }
-        }
-
-        internal static async Task<bool> RunAutoScanAsync(
-            Func<CancellationToken, Task<bool>> hasMigrationTargetsAsync,
-            Func<CancellationToken, Task> switchToMainThreadAsync,
-            Action openWindow,
-            Action consumeAutoScanSessionState,
-            Action<Exception> logException,
-            CancellationToken ct)
-        {
-            Debug.Assert(hasMigrationTargetsAsync != null, "hasMigrationTargetsAsync must not be null");
-            Debug.Assert(switchToMainThreadAsync != null, "switchToMainThreadAsync must not be null");
-            Debug.Assert(openWindow != null, "openWindow must not be null");
-            Debug.Assert(consumeAutoScanSessionState != null, "consumeAutoScanSessionState must not be null");
-            Debug.Assert(logException != null, "logException must not be null");
-
-            try
-            {
-                bool hasMigrationTargets = await hasMigrationTargetsAsync(ct);
-                await switchToMainThreadAsync(ct);
-                if (!ShouldOpenWindowAfterAutoScan(hasMigrationTargets, ct.IsCancellationRequested))
-                {
-                    return false;
-                }
-
-                openWindow();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                logException(ex);
-                return false;
-            }
-            finally
-            {
-                consumeAutoScanSessionState();
-            }
-        }
-
-        private static async Task<bool> HasMigrationTargetsForAutoScanAsync(
-            IProgress<ThirdPartyToolMigrationProgress> progress,
-            CancellationToken ct)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            ThirdPartyToolMigrationUseCase migrationUseCase =
-                GetThirdPartyToolMigrationUseCase();
-            ThirdPartyToolMigrationPreview preview = await Task.Run(() =>
-                migrationUseCase.PreviewMigrationAsync(projectRoot, progress, ct), ct);
-            return preview.HasTargets;
-        }
-
-        // Progress.Start/Report/Remove are declared IsThreadSafe=true in Unity's native bindings,
-        // so this reporter can relay directly from the background scan thread.
-        private sealed class AutoScanMigrationProgressReporter : IProgress<ThirdPartyToolMigrationProgress>
-        {
-            private readonly int _progressId;
-
-            internal AutoScanMigrationProgressReporter(int progressId)
-            {
-                _progressId = progressId;
-            }
-
-            public void Report(ThirdPartyToolMigrationProgress value)
-            {
-                // TotalItemCount <= 0 means "unknown total" (see ThirdPartyToolMigrationProjectFileInventory);
-                // Progress.Report's totalSteps=0 behavior is undocumented and unverifiable from managed code,
-                // so skip the items overload and leave the task showing as a plain busy indicator instead.
-                if (value.TotalItemCount <= 0)
-                {
-                    return;
-                }
-
-                Progress.Report(_progressId, value.ProcessedItemCount, value.TotalItemCount);
-            }
-        }
-
-        private static async Task SwitchToMainThreadForAutoScanAsync(CancellationToken ct)
-        {
-            if (ct.IsCancellationRequested)
-            {
-                return;
-            }
-
-            await MainThreadSwitcher.SwitchToMainThread();
-        }
-
-        private static void OpenWindowAfterAutoScan()
-        {
+            ConsumeAutoScanSessionState();
             ShowWindowInternal(true);
         }
 
         private static void ConsumeAutoScanSessionState()
         {
             GetSessionFlagsRepository().ConsumeShouldAutoScanThirdPartyToolMigration();
-        }
-
-        private static void LogAutoScanException(Exception ex)
-        {
-            Debug.Assert(ex != null, "ex must not be null");
-
-            Debug.LogException(ex);
-        }
-
-        internal static bool ShouldOpenWindowAfterAutoScan(
-            bool hasMigrationTargets,
-            bool isCancellationRequested)
-        {
-            return hasMigrationTargets && !isCancellationRequested;
         }
 
         internal static void PrepareForOpen(
