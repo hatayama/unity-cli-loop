@@ -59,18 +59,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "The declaring type is a ref struct; this-instance fields are not captured "
             + "(locals and parameters are still captured normally).";
 
-        // Unity's physics message dispatch (OnCollision*/OnTrigger*/OnParticleCollision) resolves
-        // its call path once when the GameObject registers with the physics engine; a Harmony
-        // patch applied after that registration does not reach the cached path, so the pause
-        // point can silently miss a GameObject that already existed before this call. This is
-        // informational only: the same method on a newly created GameObject patches correctly.
+        // Unity's physics message dispatch (OnCollision*/OnTrigger*/OnParticleCollision) has been
+        // observed in real projects to bypass a Harmony patch applied while the GameObject already
+        // existed, so the pause point can silently miss even though the method body runs. The
+        // trigger condition is environment-dependent and has not been reproduced deterministically
+        // (fresh sessions, fresh Editor processes, primed JIT, runtime-created instances, and
+        // one-hop indirect callees all patched correctly in controlled experiments; see
+        // docs/regression-harness.md). A lighter enabled-toggle workaround was investigated and
+        // rejected: every local "miss" that seemed to support it was a false positive where no new
+        // callback ran during the check window, so only the mechanism-sound workarounds (recreate
+        // the GameObject, or a manual marker) are recommended. This is informational only.
         public const string PhysicalCallbackMayMissExistingInstanceWarning =
             "This resolves to a Unity physics message method (OnCollision*/OnTrigger*/OnParticleCollision). "
             + "If the target GameObject already existed before this pause point was enabled, Unity's "
             + "cached message dispatch may not route through the patch and the pause point may never "
-            + "hit even though the method body runs. Workarounds: destroy and recreate the GameObject "
-            + "after enabling this pause point, or embed UloopPausePoint.Pause(\"id\") directly in the "
-            + "method body and arm it with enable-pause-point --id instead.";
+            + "hit even though the method body runs. If that happens, work around it by destroying and "
+            + "recreating the GameObject after enabling this pause point, or embed "
+            + "UloopPausePoint.Pause(\"id\") directly in the method body and arm it with "
+            + "enable-pause-point --id instead.";
 
         // The same cached-dispatch risk as PhysicalCallbackMayMissExistingInstanceWarning, but for a
         // method that is not itself named after a physics message method and is instead called (one
@@ -81,9 +87,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "This method is called from a Unity physics message method (OnCollision*/OnTrigger*/OnParticleCollision) "
             + "elsewhere in the same compiled assembly. If the target GameObject already existed before this pause "
             + "point was enabled, Unity's cached message dispatch may not route through the patch and the pause "
-            + "point may never hit even though the method body runs. Workarounds: destroy and recreate the "
-            + "GameObject after enabling this pause point, or embed UloopPausePoint.Pause(\"id\") directly in the "
-            + "method body and arm it with enable-pause-point --id instead.";
+            + "point may never hit even though the method body runs. If that happens, work around it by destroying "
+            + "and recreating the GameObject after enabling this pause point, or embed "
+            + "UloopPausePoint.Pause(\"id\") directly in the method body and arm it with enable-pause-point --id "
+            + "instead.";
 
         // Surfaces the same JIT-inlining risk documented under Requirements & Safety in the skill,
         // but at enable time instead of only after a confusing HitCount=0 timeout.
