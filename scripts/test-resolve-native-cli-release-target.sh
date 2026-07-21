@@ -168,7 +168,7 @@ run_success_case() {
       BUILD_SHA_VALUE="$build_sha_value" \
       EVENT_NAME="$event_name" \
       EVENT_REF_NAME="$branch_name" \
-      INPUT_RELEASE_TAG= \
+      INPUT_RELEASE_TAG='' \
       INPUT_DRY_RUN=false \
       "$SCRIPT" > output.txt 2> stderr.txt
 
@@ -257,7 +257,7 @@ test_push_unstamped_skips_and_reports_workflow_dispatch() {
       BUILD_SHA_VALUE=target-sha \
       EVENT_NAME=push \
       EVENT_REF_NAME=v3-beta \
-      INPUT_RELEASE_TAG= \
+      INPUT_RELEASE_TAG='' \
       INPUT_DRY_RUN=false \
       "$SCRIPT" > output.txt 2> stderr.txt
 
