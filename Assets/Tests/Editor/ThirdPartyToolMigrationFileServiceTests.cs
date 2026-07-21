@@ -4843,6 +4843,123 @@ public sealed class HelloResponse : BaseToolResponse
         }
 
         [Test]
+        public async Task PreviewMigrationAsync_WhenCalledTwiceWithoutProjectChanges_ReusesCachedPlanWithoutRescanning()
+        {
+            // Verifies that a second PreviewMigrationAsync call reuses the cached plan and skips the expensive
+            // migration analysis phase, even though it still walks the file inventory asynchronously to verify
+            // the cache's fingerprint is still valid.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+}
+
+public sealed class HelloResponse : BaseToolResponse
+{
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                List<ThirdPartyToolMigrationProgress> firstReports = new();
+                ThirdPartyToolMigrationPreview firstPreview =
+                    await service.PreviewMigrationAsync(
+                        projectRoot,
+                        new RecordingMigrationProgress(firstReports),
+                        CancellationToken.None);
+
+                List<ThirdPartyToolMigrationProgress> secondReports = new();
+                ThirdPartyToolMigrationPreview secondPreview =
+                    await service.PreviewMigrationAsync(
+                        projectRoot,
+                        new RecordingMigrationProgress(secondReports),
+                        CancellationToken.None);
+
+                Assert.That(firstPreview.HasTargets, Is.True);
+                Assert.That(secondPreview.FileCount, Is.EqualTo(firstPreview.FileCount));
+                Assert.That(secondPreview.FilePaths, Is.EqualTo(firstPreview.FilePaths));
+                Assert.That(firstReports, Is.Not.Empty);
+                // The cache-hit path still walks the file inventory asynchronously to verify the fingerprint,
+                // so it reports some progress, but far less than a full rebuild (which also analyzes assembly
+                // usage and processes every C# file).
+                Assert.That(secondReports, Is.Not.Empty);
+                Assert.That(secondReports.Count, Is.LessThan(firstReports.Count));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task PreviewMigrationAsync_WhenCanceledDuringCacheFingerprintCheck_DoesNotInvalidateCache()
+        {
+            // Verifies that canceling a call while it verifies the cache fingerprint does not discard an
+            // otherwise-valid cached plan (a canceled inventory walk returns a partial/empty inventory that
+            // would never match the fingerprint, so it must be treated as "unknown", not "changed").
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+}
+
+public sealed class HelloResponse : BaseToolResponse
+{
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                List<ThirdPartyToolMigrationProgress> firstReports = new();
+                ThirdPartyToolMigrationPreview firstPreview =
+                    await service.PreviewMigrationAsync(
+                        projectRoot,
+                        new RecordingMigrationProgress(firstReports),
+                        CancellationToken.None);
+
+                using CancellationTokenSource canceledSource = new();
+                canceledSource.Cancel();
+                await service.PreviewMigrationAsync(
+                    projectRoot,
+                    new RecordingMigrationProgress(new List<ThirdPartyToolMigrationProgress>()),
+                    canceledSource.Token);
+
+                List<ThirdPartyToolMigrationProgress> thirdReports = new();
+                ThirdPartyToolMigrationPreview thirdPreview =
+                    await service.PreviewMigrationAsync(
+                        projectRoot,
+                        new RecordingMigrationProgress(thirdReports),
+                        CancellationToken.None);
+
+                Assert.That(thirdPreview.FileCount, Is.EqualTo(firstPreview.FileCount));
+                Assert.That(thirdPreview.FilePaths, Is.EqualTo(firstPreview.FilePaths));
+                Assert.That(thirdReports.Count, Is.LessThan(firstReports.Count));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public async Task ApplyMigrationAsync_WhenProjectChangesAfterPreview_RebuildsPlan()
         {
             // Verifies that cached preview plans are not applied after project files change.
