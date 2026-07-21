@@ -112,8 +112,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             ThirdPartyToolMigrationUseCase migrationUseCase =
                 GetThirdPartyToolMigrationUseCase();
-            return await Task.Run(async () =>
-                await migrationUseCase.HasMigrationTargetsAsync(projectRoot, ct), ct);
+            IProgress<ThirdPartyToolMigrationProgress> progress =
+                new Progress<ThirdPartyToolMigrationProgress>();
+            ThirdPartyToolMigrationPreview preview = await Task.Run(async () =>
+                await migrationUseCase.PreviewMigrationAsync(projectRoot, progress, ct), ct);
+            return preview.HasTargets;
         }
 
         private static async Task SwitchToMainThreadForAutoScanAsync(CancellationToken ct)
