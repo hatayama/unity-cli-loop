@@ -152,85 +152,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GetMigrationStatusText_WhenTargetsExist_IncludesRelativeFilePaths()
+        public void GetMigrationStatusText_WhenTargetsExist_ReturnsCountOnlyMessage()
         {
-            // Verifies the migration status lists project-relative target paths after the summary.
-            string projectRoot = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                "UnityCliLoopMigrationStatusRoot",
-                System.Guid.NewGuid().ToString("N"));
-            System.IO.Directory.CreateDirectory(projectRoot);
-            try
-            {
-                string[] filePaths =
-                {
-                    System.IO.Path.Combine(projectRoot, "Assets", "Vendor", "One.cs"),
-                    System.IO.Path.Combine(projectRoot, "Assets", "Vendor", "Two.cs")
-                };
+            // Verifies the migration status is a brief count message with no file paths listed.
+            string text = ThirdPartyToolMigrationWizardWindow.GetMigrationStatusText(12);
 
-                string text = ThirdPartyToolMigrationWizardWindow.GetMigrationStatusText(
-                    filePaths,
-                    projectRoot);
-
-                Assert.That(text, Does.StartWith(
-                    "2 files need V3 C# source structure migration.\n" +
-                    "The Unity Console is showing errors because these files still use the old custom tool API.\n\n" +
-                    "Click Migrate to update them automatically. The errors should disappear after migration.\n\n" +
-                    "Files:\n"));
-                Assert.That(text, Does.Contain("Assets/Vendor/One.cs"));
-                Assert.That(text, Does.Contain("Assets/Vendor/Two.cs"));
-                Assert.That(text, Does.Not.Contain("\\"));
-            }
-            finally
-            {
-                System.IO.Directory.Delete(projectRoot, recursive: true);
-            }
+            Assert.That(text, Is.EqualTo("Found 12 C# files that need V3 migration."));
         }
 
         [Test]
-        public void NormalizeDisplayPathSeparators_WhenPathsUseBackslashes_NormalizesToForwardSlashes()
+        public void GetMigrationStatusText_WhenSingleTargetExists_UsesSingularNoun()
         {
-            // Verifies displayed migration paths always use forward slashes on every platform.
-            string normalized = ThirdPartyToolMigrationWizardStateRules.NormalizeDisplayPathSeparators(
-                "Assets\\Vendor\\Tool.cs");
+            // Verifies the singular file count does not pluralize the noun.
+            string text = ThirdPartyToolMigrationWizardWindow.GetMigrationStatusText(1);
 
-            Assert.That(normalized, Is.EqualTo("Assets/Vendor/Tool.cs"));
-        }
-
-        [Test]
-        public void FormatMigrationTargetPathsForStatus_WhenPathCountExceedsLimit_AppendsOverflowSummary()
-        {
-            // Verifies long target lists truncate with a +N more files suffix.
-            string projectRoot = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                "UnityCliLoopMigrationOverflowRoot",
-                System.Guid.NewGuid().ToString("N"));
-            System.IO.Directory.CreateDirectory(projectRoot);
-            try
-            {
-                int totalCount = ThirdPartyToolMigrationWizardStateRules.MaxMigrationTargetPathsInStatus + 3;
-                string[] filePaths = new string[totalCount];
-                for (int index = 0; index < totalCount; index++)
-                {
-                    filePaths[index] = System.IO.Path.Combine(projectRoot, "Assets", $"File{index:D3}.cs");
-                }
-
-                string text = ThirdPartyToolMigrationWizardText.FormatMigrationTargetPathsForStatus(
-                    filePaths,
-                    projectRoot);
-
-                Assert.That(text, Does.Contain("Assets/File000.cs"));
-                Assert.That(
-                    text,
-                    Does.Contain(
-                        $"Assets/File{(ThirdPartyToolMigrationWizardStateRules.MaxMigrationTargetPathsInStatus - 1):D3}.cs"));
-                Assert.That(text, Does.Contain("+3 more files"));
-                Assert.That(text, Does.Not.Contain($"Assets/File{ThirdPartyToolMigrationWizardStateRules.MaxMigrationTargetPathsInStatus:D3}.cs"));
-            }
-            finally
-            {
-                System.IO.Directory.Delete(projectRoot, recursive: true);
-            }
+            Assert.That(text, Is.EqualTo("Found 1 C# file that needs V3 migration."));
         }
 
         [Test]

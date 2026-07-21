@@ -246,8 +246,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(filePaths != null, "filePaths must not be null");
 
             _pendingMigrationFilePaths = filePaths;
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            _view.ShowMigrationTargetsState(filePaths, projectRoot, _isMigrating);
+            _view.ShowMigrationTargetsState(filePaths, _isMigrating);
             _scheduleResize();
         }
 

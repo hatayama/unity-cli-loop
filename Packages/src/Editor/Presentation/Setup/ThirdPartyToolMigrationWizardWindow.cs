@@ -229,9 +229,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 maxHeight);
         }
 
-        internal static string GetMigrationStatusText(string[] filePaths, string projectRoot)
+        internal static string GetMigrationStatusText(int fileCount)
         {
-            return ThirdPartyToolMigrationWizardText.GetMigrationStatusText(filePaths, projectRoot);
+            return ThirdPartyToolMigrationWizardText.GetMigrationStatusText(fileCount);
         }
 
         internal static bool ConfirmMigrationApply(
