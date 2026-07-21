@@ -164,13 +164,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            if (!TryGetCachedPlanForFingerprintCheck(projectRoot, out MigrationPlan cachedPlan))
+            (bool found, MigrationPlan cachedPlan) = TryGetCachedPlanForFingerprintCheck(projectRoot);
+            if (!found)
             {
                 return CachedMigrationPlanLookup.NotFound;
             }
 
             ProjectFileInventory inventory = ProjectFileInventory.Create(projectRoot);
-            return ResolveCachedPlanAgainstInventory(cachedPlan, inventory);
+            return ResolveCachedPlanAgainstInventory(cachedPlan, inventory, wasCanceled: false);
         }
 
         private async Task<CachedMigrationPlanLookup> GetCurrentCachedPlanAsync(
@@ -181,35 +182,42 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(progress != null, "progress must not be null");
 
-            if (!TryGetCachedPlanForFingerprintCheck(projectRoot, out MigrationPlan cachedPlan))
+            (bool found, MigrationPlan cachedPlan) = TryGetCachedPlanForFingerprintCheck(projectRoot);
+            if (!found)
             {
                 return CachedMigrationPlanLookup.NotFound;
             }
 
             ProjectFileInventory inventory = await ProjectFileInventory.CreateAsync(projectRoot, progress, ct);
-            return ResolveCachedPlanAgainstInventory(cachedPlan, inventory);
+            // A canceled walk returns a partial inventory that would never match the cached fingerprint;
+            // treat that as "unknown" instead of invalidating a cache that may still be valid.
+            return ResolveCachedPlanAgainstInventory(cachedPlan, inventory, ct.IsCancellationRequested);
         }
 
-        private bool TryGetCachedPlanForFingerprintCheck(string projectRoot, out MigrationPlan cachedPlan)
+        private (bool Found, MigrationPlan Plan) TryGetCachedPlanForFingerprintCheck(string projectRoot)
         {
             lock (_migrationCacheLock)
             {
                 if (!_hasCachedPlan ||
                     !string.Equals(_cachedPlanProjectRoot, projectRoot, StringComparison.Ordinal))
                 {
-                    cachedPlan = default;
-                    return false;
+                    return (false, default);
                 }
 
-                cachedPlan = _cachedPlan;
-                return true;
+                return (true, _cachedPlan);
             }
         }
 
         private CachedMigrationPlanLookup ResolveCachedPlanAgainstInventory(
             MigrationPlan cachedPlan,
-            ProjectFileInventory inventory)
+            ProjectFileInventory inventory,
+            bool wasCanceled)
         {
+            if (wasCanceled)
+            {
+                return CachedMigrationPlanLookup.NotFound;
+            }
+
             if (!cachedPlan.ProjectFingerprint.Matches(inventory))
             {
                 InvalidateMigrationCaches();
