@@ -151,7 +151,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
             Debug.Assert(progress != null, "progress must not be null");
 
-            CachedMigrationPlanLookup cachedPlan = GetCurrentCachedPlan(projectRoot);
+            CachedMigrationPlanLookup cachedPlan = await GetCurrentCachedPlanAsync(projectRoot, progress, ct);
             if (cachedPlan.Found)
             {
                 return cachedPlan.Plan;
@@ -164,19 +164,52 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
-            MigrationPlan cachedPlan;
+            if (!TryGetCachedPlanForFingerprintCheck(projectRoot, out MigrationPlan cachedPlan))
+            {
+                return CachedMigrationPlanLookup.NotFound;
+            }
+
+            ProjectFileInventory inventory = ProjectFileInventory.Create(projectRoot);
+            return ResolveCachedPlanAgainstInventory(cachedPlan, inventory);
+        }
+
+        private async Task<CachedMigrationPlanLookup> GetCurrentCachedPlanAsync(
+            string projectRoot,
+            IProgress<ThirdPartyToolMigrationProgress> progress,
+            CancellationToken ct)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(progress != null, "progress must not be null");
+
+            if (!TryGetCachedPlanForFingerprintCheck(projectRoot, out MigrationPlan cachedPlan))
+            {
+                return CachedMigrationPlanLookup.NotFound;
+            }
+
+            ProjectFileInventory inventory = await ProjectFileInventory.CreateAsync(projectRoot, progress, ct);
+            return ResolveCachedPlanAgainstInventory(cachedPlan, inventory);
+        }
+
+        private bool TryGetCachedPlanForFingerprintCheck(string projectRoot, out MigrationPlan cachedPlan)
+        {
             lock (_migrationCacheLock)
             {
                 if (!_hasCachedPlan ||
                     !string.Equals(_cachedPlanProjectRoot, projectRoot, StringComparison.Ordinal))
                 {
-                    return CachedMigrationPlanLookup.NotFound;
+                    cachedPlan = default;
+                    return false;
                 }
 
                 cachedPlan = _cachedPlan;
+                return true;
             }
+        }
 
-            ProjectFileInventory inventory = ProjectFileInventory.Create(projectRoot);
+        private CachedMigrationPlanLookup ResolveCachedPlanAgainstInventory(
+            MigrationPlan cachedPlan,
+            ProjectFileInventory inventory)
+        {
             if (!cachedPlan.ProjectFingerprint.Matches(inventory))
             {
                 InvalidateMigrationCaches();
