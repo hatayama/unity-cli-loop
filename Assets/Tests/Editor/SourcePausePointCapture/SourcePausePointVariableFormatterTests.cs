@@ -346,6 +346,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Format_WithMultidimensionalArray_AnnotatesPreviewWithShape()
+        {
+            // Verifies a T[,] preview reports its rank/dimensions and total element count instead of
+            // a flat array that looks like an empty or truncated board to a reader.
+            int[,] board = new int[2, 3] { { 1, 2, 3 }, { 4, 5, 6 } };
+            object[] locals = { "board", board };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            string value = variables.Single().Value;
+            Assert.That(value, Does.Contain("\"Shape\":\"Int32[2,3]\""));
+            Assert.That(value, Does.Contain("\"TotalElements\":6"));
+            Assert.That(value, Does.Contain("\"Elements\":[1,2,3,4,5,6]"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithSingleDimensionalArray_SerializesAsPlainJsonArrayWithoutShape()
+        {
+            // Verifies a plain T[] preview is unaffected by the T[,] shape annotation: it stays a
+            // bare JSON array, since Array.Rank is 1 for a single-dimensional array.
+            int[] scores = { 1, 2, 3 };
+            object[] locals = { "scores", scores };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Is.EqualTo("[1,2,3]"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithJaggedArray_SerializesAsNestedJsonArraysWithoutShape()
+        {
+            // Verifies a jagged T[][] preview is unaffected: each inner array has Rank 1, so it
+            // never hits the multidimensional-shape branch even though the outer array is Rank 1 too.
+            int[][] rows = { new[] { 1, 2 }, new[] { 3, 4, 5 } };
+            object[] locals = { "rows", rows };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(variables.Single().Value, Is.EqualTo("[[1,2],[3,4,5]]"));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
         public void Format_WithStringDictionary_SerializesCollectionAsJsonObject()
         {
             // Verifies dictionary values preview as JSON objects with string keys.

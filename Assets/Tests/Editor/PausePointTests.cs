@@ -14,6 +14,7 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.Tests.PausePointToolsFixtures;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -598,6 +599,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.SnapshotTiming, Is.Empty);
             Assert.That(response.EditorState.CapturedAt, Is.EqualTo(UloopPausePointEditorStateCapturedAt.Current));
             Assert.That(response.RecommendedNextAction, Is.Empty);
+        }
+
+        [Test]
+        public async Task Enable_WhenMarkerCreated_EmitsPausePointEnableVibeLog()
+        {
+            // Verifies enable-pause-point records a pause_point_enable observability event.
+            VibeLogger.ClearMemoryLogs();
+
+            await EnablePausePointAsync("jump");
+
+            string logs = VibeLogger.GetLogsForAi("pause_point_enable");
+            Assert.That(logs, Does.Contain("pause_point_enable"));
+            Assert.That(logs, Does.Contain("\"Id\": \"jump\""));
+        }
+
+        [Test]
+        public async Task Clear_WhenMarkerCleared_EmitsPausePointClearedVibeLog()
+        {
+            // Verifies clear-pause-point records a pause_point_cleared observability event.
+            await EnablePausePointAsync("jump");
+            VibeLogger.ClearMemoryLogs();
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["id"] = "jump" };
+            await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            string logs = VibeLogger.GetLogsForAi("pause_point_cleared");
+            Assert.That(logs, Does.Contain("pause_point_cleared"));
+            Assert.That(logs, Does.Contain("\"Target\": \"jump\""));
+        }
+
+        [Test]
+        public async Task Clear_WhenMarkerExpired_EmitsPausePointExpiredVibeLog()
+        {
+            // Verifies clear-pause-point on an already-expired marker records a pause_point_expired
+            // observability event alongside pause_point_cleared.
+            await EnablePausePointAsync("jump");
+            _nowUtc = _nowUtc.AddSeconds(31);
+            VibeLogger.ClearMemoryLogs();
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["id"] = "jump" };
+            await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            string logs = VibeLogger.GetLogsForAi("pause_point_expired");
+            Assert.That(logs, Does.Contain("pause_point_expired"));
+            Assert.That(logs, Does.Contain("\"Id\": \"jump\""));
         }
 
         [Test]

@@ -78,6 +78,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Success, Is.True);
             Assert.That(response.Hit, Is.True);
             Assert.That(response.HitGameObjectName, Is.EqualTo("RaycastToolTestsCube"));
+            Assert.That(response.CameraName, Is.EqualTo("RaycastToolTestsCamera"));
+            Assert.That(response.CameraPath, Does.Contain("RaycastToolTestsCamera"));
             Assert.That(response.InputCoordinateSystem, Is.EqualTo(UnityCliLoopConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW));
             Assert.That(response.UnityCoordinateSystem, Is.EqualTo(UnityCliLoopConstants.COORDINATE_SYSTEM_BOTTOM_LEFT_GAME_VIEW));
             Assert.That(response.CoordinateConversionFormula, Is.EqualTo(UnityCliLoopConstants.COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY));
@@ -99,6 +101,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Success, Is.True);
             Assert.That(response.Hit, Is.False);
             Assert.That(response.HitGameObjectName, Is.Null);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenCoordinateMissesCollider_ShouldStillReportResolvedCamera()
+        {
+            // Tests that the resolved Camera.main is reported even on a "No physics hit" response, so an
+            // agent can tell which camera the ray actually came from instead of assuming Camera.main.
+            CreateRaycastScene();
+            Vector2 inputPosition = new Vector2(0f, 0f);
+
+            RaycastResponse response = await ExecuteRaycast(inputPosition);
+
+            Assert.That(response.Hit, Is.False);
+            Assert.That(response.CameraName, Is.EqualTo("RaycastToolTestsCamera"));
+            Assert.That(response.CameraPath, Does.Contain("RaycastToolTestsCamera"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenCoordinateIntersectsCollider_EmitsRaycastExecutedVibeLog()
+        {
+            // Verifies a raycast records a raycast_executed observability event with camera/hit context.
+            CreateRaycastScene();
+            Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
+            Vector2 inputPosition = new Vector2(gameViewSize.x / 2f, gameViewSize.y / 2f);
+            VibeLogger.ClearMemoryLogs();
+
+            await ExecuteRaycast(inputPosition);
+
+            string logs = VibeLogger.GetLogsForAi("raycast_executed");
+            Assert.That(logs, Does.Contain("raycast_executed"));
+            Assert.That(logs, Does.Contain("\"CameraName\": \"RaycastToolTestsCamera\""));
+            Assert.That(logs, Does.Contain("\"Hit\": true"));
+            Assert.That(logs, Does.Contain("\"HitGameObjectName\": \"RaycastToolTestsCube\""));
         }
 
         [Test]
