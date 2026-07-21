@@ -318,6 +318,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (parameters.All)
             {
+                // Snapshot each physics-flagged marker before ClearAll resolves it away, so a
+                // marker that expired without a hit still gets its diagnostics logged. This is
+                // the dominant field path (await timeout -> agent cleans up with --all), so
+                // skipping it here would lose the primary evidence in the common case.
+                foreach (KeyValuePair<string, Type> tracked in PhysicsFlaggedDeclaringTypesById)
+                {
+                    UloopPausePointSnapshot trackedSnapshot = UloopPausePointRegistry.GetStatus(tracked.Key);
+                    if (trackedSnapshot.Status == UloopPausePointStatus.Expired && trackedSnapshot.HitCount == 0)
+                    {
+                        LogPhysicsDispatchDiagnostics("pause_point_expired_without_hit_physics", tracked.Key, tracked.Value);
+                    }
+                }
+
                 // Registry.ClearAll unpatches any source pause points via the hook
                 // SourcePausePointPatcher wires into it; this use case never references the
                 // Patcher directly.
@@ -338,7 +351,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
             {
                 LogExpired(snapshot.Id, snapshot.ElapsedSinceEnabledMilliseconds);
-                if (PhysicsFlaggedDeclaringTypesById.TryGetValue(snapshot.Id, out Type declaringType))
+                if (snapshot.HitCount == 0 && PhysicsFlaggedDeclaringTypesById.TryGetValue(snapshot.Id, out Type declaringType))
                 {
                     LogPhysicsDispatchDiagnostics("pause_point_expired_without_hit_physics", snapshot.Id, declaringType);
                 }
@@ -441,10 +454,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void LogPhysicsDispatchDiagnostics(string operation, string id, Type declaringType)
         {
             bool isMonoBehaviourDerived = typeof(MonoBehaviour).IsAssignableFrom(declaringType);
-            int monoBehaviourInstanceCount = isMonoBehaviourDerived
+            // -1 signals "not applicable": counting instances only means something when the
+            // declaring type is a MonoBehaviour (the physics dispatch miss this diagnostic exists
+            // for is scoped to MonoBehaviour physics message methods).
+            int instanceCount = isMonoBehaviourDerived
                 ? UnityEngine.Object.FindObjectsByType(declaringType, FindObjectsInactive.Include, FindObjectsSortMode.None).Length
-                : 0;
-            int instanceCount = PausePointPhysicsDispatchDiagnostics.ResolveInstanceCount(isMonoBehaviourDerived, monoBehaviourInstanceCount);
+                : -1;
 
             VibeLogger.LogInfo(
                 operation,
