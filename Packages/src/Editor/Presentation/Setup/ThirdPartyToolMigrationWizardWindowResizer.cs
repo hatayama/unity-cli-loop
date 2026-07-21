@@ -11,11 +11,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         internal static readonly Vector2 InitialWindowSize = new Vector2(360f, 220f);
         internal static readonly Vector2 MinimumWindowSize = new Vector2(360f, 120f);
+        private const float MaxHeightRatioOfMainWindow = 0.9f;
 
         private readonly EditorWindow _window;
         private readonly VisualElement _root;
         private readonly ScrollView _mainScrollView;
-        private bool _isApplyingContentSize;
+        private bool _hasFittedToContentOnce;
         private IVisualElementScheduledItem _resizeScheduledItem;
 
         internal ThirdPartyToolMigrationWizardWindowResizer(EditorWindow window, ScrollView mainScrollView)
@@ -34,14 +35,19 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return new Rect(centeredPosition, size);
         }
 
-        internal static Rect WithContentHeight(Rect currentRect, float contentHeight, Vector2 frameSize)
+        internal static Rect WithContentHeight(
+            Rect currentRect,
+            float contentHeight,
+            Vector2 frameSize,
+            float maxHeight)
         {
             Debug.Assert(contentHeight >= 0f, "contentHeight must not be negative");
 
             float measuredHeight = contentHeight + frameSize.y;
+            float clampedMaxHeight = Mathf.Max(maxHeight, MinimumWindowSize.y);
             Vector2 targetSize = new Vector2(
                 MinimumWindowSize.x,
-                Mathf.Max(measuredHeight, MinimumWindowSize.y));
+                Mathf.Clamp(measuredHeight, MinimumWindowSize.y, clampedMaxHeight));
             return CreateCenteredRect(currentRect, targetSize);
         }
 
@@ -50,13 +56,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return IsFinite(size.x) && IsFinite(size.y);
         }
 
-        internal void BindSizeUpdates()
-        {
-            _root.RegisterCallback<GeometryChangedEvent>(HandleGeometryChanged);
-        }
-
         internal void ScheduleResizeToContent()
         {
+            if (_hasFittedToContentOnce)
+            {
+                return;
+            }
+
             _resizeScheduledItem?.Pause();
             _resizeScheduledItem = _root.schedule.Execute(ResizeToContent).StartingIn(0);
         }
@@ -99,12 +105,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return IsFinite(height) ? Mathf.Ceil(height) : 0f;
         }
 
-        private static bool Approximately(Vector2 left, Vector2 right)
-        {
-            const float Tolerance = 0.5f;
-            return Mathf.Abs(left.x - right.x) < Tolerance && Mathf.Abs(left.y - right.y) < Tolerance;
-        }
-
         private static bool HasFiniteRect(Rect rect)
         {
             return IsFinite(rect.xMin)
@@ -116,16 +116,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static bool IsFinite(float value)
         {
             return !float.IsNaN(value) && !float.IsInfinity(value);
-        }
-
-        private void HandleGeometryChanged(GeometryChangedEvent evt)
-        {
-            if (_isApplyingContentSize)
-            {
-                return;
-            }
-
-            ScheduleResizeToContent();
         }
 
         private void ResizeToContent()
@@ -148,24 +138,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            Rect targetRect = WithContentHeight(_window.position, contentHeight, frameSize);
+            float maxHeight = EditorGUIUtility.GetMainWindowPosition().height * MaxHeightRatioOfMainWindow;
+            Rect targetRect = WithContentHeight(_window.position, contentHeight, frameSize, maxHeight);
             if (!HasFiniteSize(targetRect.size))
             {
                 return;
             }
 
-            if (Approximately(_window.position.size, targetRect.size))
-            {
-                _window.minSize = targetRect.size;
-                _window.maxSize = targetRect.size;
-                return;
-            }
-
-            _isApplyingContentSize = true;
-            _window.minSize = targetRect.size;
-            _window.maxSize = targetRect.size;
+            _window.minSize = MinimumWindowSize;
             _window.position = targetRect;
-            _isApplyingContentSize = false;
+            _hasFittedToContentOnce = true;
         }
     }
 }

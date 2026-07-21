@@ -642,7 +642,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 frameSize = new(18f, 28f);
 
             Rect resizedRect =
-                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 180f, frameSize);
+                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 180f, frameSize, 1000f);
 
             Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
             Assert.That(resizedRect.size, Is.EqualTo(new Vector2(360f, 208f)));
@@ -656,7 +656,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 frameSize = new(18f, 28f);
 
             Rect resizedRect =
-                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 12f, frameSize);
+                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 12f, frameSize, 1000f);
 
             Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
             Assert.That(resizedRect.size, Is.EqualTo(new Vector2(360f, 120f)));
@@ -670,10 +670,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 frameSize = new(18f, 28f);
 
             Rect resizedRect =
-                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 120f, frameSize);
+                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 120f, frameSize, 1000f);
 
             Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
             Assert.That(resizedRect.size, Is.EqualTo(new Vector2(360f, 148f)));
+        }
+
+        [Test]
+        public void WithContentHeight_WhenMeasuredHeightExceedsMaxHeight_ClampsToMaxHeight()
+        {
+            // Verifies that content fitting never grows the migration wizard past the supplied maximum height.
+            Rect initialRect = new(123f, 456f, 400f, 220f);
+            Vector2 frameSize = new(18f, 28f);
+
+            Rect resizedRect =
+                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 900f, frameSize, 500f);
+
+            Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
+            Assert.That(resizedRect.size, Is.EqualTo(new Vector2(360f, 500f)));
+        }
+
+        [Test]
+        public void WithContentHeight_WhenMaxHeightIsBelowMinimum_ClampsToMinimumHeight()
+        {
+            // Verifies that an unreasonably small maxHeight cannot shrink the window below the usable minimum.
+            Rect initialRect = new(123f, 456f, 400f, 220f);
+            Vector2 frameSize = new(18f, 28f);
+
+            Rect resizedRect =
+                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 900f, frameSize, 50f);
+
+            Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
+            Assert.That(resizedRect.size, Is.EqualTo(new Vector2(360f, 120f)));
         }
 
         private static int GetVisualElementIndex(VisualElement root, VisualElement target)
