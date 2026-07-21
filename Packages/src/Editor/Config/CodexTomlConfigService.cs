@@ -12,8 +12,9 @@ namespace io.github.hatayama.uLoopMCP
         private static readonly Regex SectionRegex = new Regex(
             @"(?ms)^\[mcp_servers\.uLoopMCP\]\s*.*?(?=^\[|\z)",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
-        // Matches the legacy child table some older uLoopMCP versions wrote in addition to the
-        // inline env line. SectionRegex stops at this table's own "[" so it never removes it.
+        // Matches a table-style env section under [mcp_servers.uLoopMCP], typically introduced by
+        // manual edits or external tools such as `codex mcp add`. uLoopMCP itself always writes
+        // the inline env form. SectionRegex stops at this table's own "[" so it never removes it.
         private static readonly Regex LegacyEnvTableRegex = new Regex(
             @"(?ms)^\[mcp_servers\.uLoopMCP\.env\]\s*.*?(?=^\[|\z)",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -128,10 +129,10 @@ namespace io.github.hatayama.uLoopMCP
             return string.IsNullOrWhiteSpace(content) ? block : content.TrimEnd() + System.Environment.NewLine + System.Environment.NewLine + block;
         }
 
-        // Removes the legacy [mcp_servers.uLoopMCP.env] table some older uLoopMCP versions wrote
-        // alongside the inline env line. Only the table is dropped, not migrated: it only ever
-        // held values (e.g. UNITY_TCP_PORT) that AutoConfigure / UpdateDevelopmentSettings
-        // regenerate from scratch on every write, so there is nothing to carry over.
+        // The table is dropped rather than migrated: a duplicate env definition makes Codex reject
+        // the whole config, and AutoConfigure / UpdateDevelopmentSettings regenerate the env values
+        // uLoopMCP manages. Custom keys that only existed in the table are intentionally discarded,
+        // matching AutoConfigure's existing behavior of rebuilding the section.
         private static string RemoveLegacyEnvTable(string content)
         {
             return LegacyEnvTableRegex.Replace(content, string.Empty);
