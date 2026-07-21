@@ -46,7 +46,7 @@ If a successful `Press` or `KeyDown` leaves `Keyboard.current.<key>.isPressed` t
 
 ### Pause Point Inspection (Standard for E2E)
 
-For standard frame proof when this input drives a state transition, follow the `uloop-pause-point` skill — it covers line placement and interruption semantics. Tool-specific note: if `InterruptedByPausePoint: true`, Unity is paused and input bookkeeping was safely released; `PressEdgeObserved` is still reported on pause-point interruptions. Clear inspection-only pause points (`uloop clear-pause-point --all`) before final validation.
+For standard frame proof when this input drives a state transition, follow the `uloop-pause-point` skill — it covers line placement and interruption semantics. Tool-specific note: if `InterruptedByPausePoint: true`, Unity is paused and input bookkeeping was safely released; `PressEdgeObserved` is still reported on pause-point interruptions. Interruption detection covers the whole press lifetime: a pause landing while `Press` is holding the key (during the duration wait) also returns promptly with `InterruptedByPausePoint: true`, and the pause takes precedence even when the requested duration had already elapsed — treat such a response as the pause reporting in, not as a delivery failure. Clear inspection-only pause points (`uloop clear-pause-point --all`) before final validation.
 
 ### KeyDown/KeyUp Rules
 

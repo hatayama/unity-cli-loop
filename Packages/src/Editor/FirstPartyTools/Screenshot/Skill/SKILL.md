@@ -52,7 +52,7 @@ Returns JSON with:
 
 - `ScreenshotCount`: Number of windows captured
 - `Screenshots`: Array of screenshot info, each containing:
-  - `ImagePath`: Absolute path to the saved PNG file. Empty when `--elements-only` is used because no image file is written.
+  - `ImagePath`: Absolute path to the saved PNG file. Empty when `--elements-only` is used because no image file is written. Always open the file named here — the output directory accumulates every past capture, so guessing the newest file with directory listing (`ls -t` or similar) can silently pick a stale screenshot from an earlier run.
   - `FileSizeBytes`: Size of the saved file in bytes
   - `Width`: Captured image width in pixels
   - `Height`: Captured image height in pixels
