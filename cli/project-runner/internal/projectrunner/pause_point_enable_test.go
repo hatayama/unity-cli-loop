@@ -352,6 +352,72 @@ func TestRunEnablePausePointCommandDoesNotAwaitAfterFailedEnable(t *testing.T) {
 	}
 }
 
+// Verifies enable-pause-point --await's composite wait path mirrors await-pause-point's
+// non-firing-pattern diagnosis hint on a HitCount=0 timeout (Round4 regression: a fix applied
+// only to await-pause-point was missed in this composite path).
+func TestRunEnablePausePointCommandAwaitTimeoutIncludesNonFiringHint(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	originalClear := clearPausePointStatus
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+		clearPausePointStatus = originalClear
+	})
+
+	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:          id,
+			Status:      pausePointStatusEnabled,
+			IsEnabled:   true,
+			HitCount:    0,
+			EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		}, nil
+	}
+	clearPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusCleared}, nil
+	}
+
+	listener := newLoopbackIpcListener(t)
+	enableRequests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(
+		listener,
+		pausePointEnableCommandName,
+		enableRequests,
+		serverErr,
+		`{"Success":true,"Id":"jump","Status":"Enabled","IsEnabled":true,"TimeoutSeconds":1}`,
+	)
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runEnablePausePointCommand(
+		context.Background(),
+		connection,
+		[]string{"--id", "jump", "--await"},
+		t.TempDir(),
+		&stdout,
+		&stderr)
+
+	if code != 1 {
+		t.Fatalf("expected timeout failure, got %d with stdout %s", code, stdout.String())
+	}
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
+	hint, _ := envelope.Error.Details["Hint"].(string)
+	if !strings.Contains(hint, "non-firing patterns") {
+		t.Fatalf("expected non-firing pattern hint in composite await path, got: %q", hint)
+	}
+}
+
 func serveSingleIPCResponse(
 	listener net.Listener,
 	expectedMethod string,
