@@ -40,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RaycastResponse noCameraResponse = CreateBaseResponse(raycastResult.Conversion);
                 noCameraResponse.Success = false;
                 noCameraResponse.Message = "Camera.main was not found. Add an active camera tagged MainCamera before using raycast.";
+                LogRaycastExecuted(inputPosition, noCameraResponse);
                 return Task.FromResult(noCameraResponse);
             }
 
@@ -51,6 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 noHitResponse.Message = $"No physics hit at ({inputPosition.x:F1}, {inputPosition.y:F1}).";
                 noHitResponse.CameraName = raycastResult.Camera.name;
                 noHitResponse.CameraPath = GameObjectPathUtility.GetFullPath(raycastResult.Camera.gameObject);
+                LogRaycastExecuted(inputPosition, noHitResponse);
                 return Task.FromResult(noHitResponse);
             }
 
@@ -72,7 +74,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.HitNormalX = nearestHit.normal.x;
             response.HitNormalY = nearestHit.normal.y;
             response.HitNormalZ = nearestHit.normal.z;
+            LogRaycastExecuted(inputPosition, response);
             return Task.FromResult(response);
+        }
+
+        private static void LogRaycastExecuted(Vector2 inputPosition, RaycastResponse response)
+        {
+            VibeLogger.LogInfo(
+                "raycast_executed",
+                $"Raycast executed at ({inputPosition.x:F1}, {inputPosition.y:F1})",
+                new
+                {
+                    CameraName = response.CameraName,
+                    InputPositionX = inputPosition.x,
+                    InputPositionY = inputPosition.y,
+                    Hit = response.Hit,
+                    HitGameObjectName = response.HitGameObjectName
+                });
         }
 
         private static RaycastResponse CreateBaseResponse(GameViewCoordinateConversion conversion)

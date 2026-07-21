@@ -12,6 +12,7 @@ using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -52,6 +53,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.CapturedVariables.Select(v => v.Name), Is.EquivalentTo(new[] { "speed", "damage" }));
             Assert.That(snapshot.CapturedVariablesTruncated, Is.False);
             Assert.That(_pauseController.PauseCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Capture_WhenPausePointIsEnabled_EmitsPausePointHitVibeLog()
+        {
+            // Verifies a source-capture hit records a pause_point_hit observability event.
+            UloopPausePointRegistry.Enable("jump", 30);
+            VibeLogger.ClearMemoryLogs();
+
+            SourcePausePointCapture.Capture("jump", null, Array.Empty<object>(), Array.Empty<object>());
+
+            string logs = VibeLogger.GetLogsForAi("pause_point_hit");
+            Assert.That(logs, Does.Contain("pause_point_hit"));
+            Assert.That(logs, Does.Contain("\"Id\": \"jump\""));
+            Assert.That(logs, Does.Contain("\"HitCount\": 1"));
         }
 
         [Test]

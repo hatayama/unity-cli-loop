@@ -30,7 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (MainThreadSwitcher.IsMainThread)
             {
-                UloopPausePointRegistry.HitWithCapturedFrame(id, frame, variables, truncated);
+                UloopPausePointSnapshot snapshot = UloopPausePointRegistry.HitWithCapturedFrame(id, frame, variables, truncated);
+                LogHit(snapshot, truncated);
                 return;
             }
 
@@ -38,8 +39,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // touched from the main thread, so an off-thread hit is recorded on the next
             // main-thread tick instead of inline. HitCore re-checks IsEnabled at that point, so a
             // marker that already got disarmed by a faster hit safely no-ops there.
-            MainThreadSwitcher.AddContinuation(
-                () => UloopPausePointRegistry.HitWithCapturedFrame(id, frame, variables, truncated));
+            MainThreadSwitcher.AddContinuation(() =>
+            {
+                UloopPausePointSnapshot snapshot = UloopPausePointRegistry.HitWithCapturedFrame(id, frame, variables, truncated);
+                LogHit(snapshot, truncated);
+            });
+        }
+
+        private static void LogHit(UloopPausePointSnapshot snapshot, bool truncated)
+        {
+            VibeLogger.LogInfo(
+                "pause_point_hit",
+                $"Pause point hit: {snapshot.Id}",
+                new { Id = snapshot.Id, snapshot.HitCount, CapturedVariablesTruncated = truncated });
         }
 
         internal static (UloopPausePointCapturedVariableFrame Frame, List<UloopCapturedVariable> Variables, bool Truncated)
