@@ -117,10 +117,10 @@ namespace io.github.hatayama.uLoopMCP
                 return SectionRegex.Replace(content, block.TrimEnd() + System.Environment.NewLine);
             }
 
-            var matches = AnyMcpServerRegex.Matches(content);
+            MatchCollection matches = AnyMcpServerRegex.Matches(content);
             if (matches.Count > 0)
             {
-                var last = matches[matches.Count - 1];
+                Match last = matches[matches.Count - 1];
                 int insertIndex = last.Index + last.Length;
                 return content.Insert(insertIndex, System.Environment.NewLine + block);
             }
