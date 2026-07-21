@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(progress != null, "progress must not be null");
 
             string normalizedProjectRoot = NormalizeProjectRoot(projectRoot);
-            MigrationPlan plan = await ThirdPartyToolMigrationPlanBuilder.CreateAsync(normalizedProjectRoot, progress, ct);
+            MigrationPlan plan = await GetCurrentMigrationPlanAsync(normalizedProjectRoot, progress, ct);
             if (ct.IsCancellationRequested)
             {
                 return new ThirdPartyToolMigrationPreview(0, 0, Array.Empty<string>());

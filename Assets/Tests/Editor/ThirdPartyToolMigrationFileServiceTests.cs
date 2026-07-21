@@ -4843,6 +4843,58 @@ public sealed class HelloResponse : BaseToolResponse
         }
 
         [Test]
+        public async Task PreviewMigrationAsync_WhenCalledTwiceWithoutProjectChanges_ReusesCachedPlanWithoutRescanning()
+        {
+            // Verifies that a second PreviewMigrationAsync call reuses the cached plan instead of running a full rescan.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string toolDirectory = Path.Combine(projectRoot, "Assets", "VendorTools");
+                Directory.CreateDirectory(toolDirectory);
+                string toolPath = Path.Combine(toolDirectory, "HelloTool.cs");
+                File.WriteAllText(toolPath, @"using io.github.hatayama.uLoopMCP;
+
+[McpTool]
+public sealed class HelloTool : AbstractUnityTool<HelloSchema, HelloResponse>
+{
+}
+
+public sealed class HelloSchema : BaseToolSchema
+{
+}
+
+public sealed class HelloResponse : BaseToolResponse
+{
+}");
+
+                ThirdPartyToolMigrationFileService service = new();
+                List<ThirdPartyToolMigrationProgress> firstReports = new();
+                ThirdPartyToolMigrationPreview firstPreview =
+                    await service.PreviewMigrationAsync(
+                        projectRoot,
+                        new RecordingMigrationProgress(firstReports),
+                        CancellationToken.None);
+
+                List<ThirdPartyToolMigrationProgress> secondReports = new();
+                ThirdPartyToolMigrationPreview secondPreview =
+                    await service.PreviewMigrationAsync(
+                        projectRoot,
+                        new RecordingMigrationProgress(secondReports),
+                        CancellationToken.None);
+
+                Assert.That(firstPreview.HasTargets, Is.True);
+                Assert.That(secondPreview.FileCount, Is.EqualTo(firstPreview.FileCount));
+                Assert.That(secondPreview.FilePaths, Is.EqualTo(firstPreview.FilePaths));
+                Assert.That(firstReports, Is.Not.Empty);
+                Assert.That(secondReports, Is.Empty);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
         public async Task ApplyMigrationAsync_WhenProjectChangesAfterPreview_RebuildsPlan()
         {
             // Verifies that cached preview plans are not applied after project files change.
