@@ -13,7 +13,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int clearedCount,
             DateTime clearedAtUtc,
             UloopPausePointEditorStateSnapshot editorState,
-            string[] clearedIds)
+            string[] clearedIds,
+            bool resumedFromPause)
         {
             Debug.Assert(editorState != null, "editorState must not be null");
             Debug.Assert(clearedIds != null, "clearedIds must not be null");
@@ -22,12 +23,18 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             ClearedAtUtc = clearedAtUtc;
             EditorState = editorState;
             ClearedIds = clearedIds;
+            ResumedFromPause = resumedFromPause;
         }
 
         public int ClearedCount { get; }
         public DateTime ClearedAtUtc { get; }
         public UloopPausePointEditorStateSnapshot EditorState { get; }
         public string[] ClearedIds { get; }
+
+        // True when the bulk clear actually resumed a pause-point-owned Editor pause, so callers
+        // can warn that Play Mode was resumed as a side effect. False when no pause window was
+        // open (e.g. nothing was paused, or only a manual pause the clear intentionally preserved).
+        public bool ResumedFromPause { get; }
     }
 }
 #endif

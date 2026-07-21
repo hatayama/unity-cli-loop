@@ -133,7 +133,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 EditorState = PausePointEditorState.FromSnapshot(result.EditorState),
                 Message = result.ClearedCount == 0
                     ? "No active pause points to clear."
-                    : "Pause points cleared."
+                    : "Pause points cleared.",
+                Warning = result.ResumedFromPause
+                    ? SourcePausePointConstants.ClearResumedPlayModeWarning
+                    : string.Empty
             };
         }
     }
@@ -321,14 +324,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateValidationFailure(idError);
             }
 
-            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear(parameters.Id);
+            (UloopPausePointSnapshot snapshot, bool resumedFromPause) = UloopPausePointRegistry.Clear(parameters.Id);
             LogCleared(snapshot.Id, snapshot.StatusBeforeClear);
             if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
             {
                 LogExpired(snapshot.Id, snapshot.ElapsedSinceEnabledMilliseconds);
             }
 
-            return PausePointResponse.FromSnapshot(snapshot);
+            PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
+            if (resumedFromPause)
+            {
+                response.Warning = SourcePausePointConstants.ClearResumedPlayModeWarning;
+            }
+
+            return response;
         }
 
         // Why: PausePointStatusBridgeCommand duplicates this instead of sharing it, since that

@@ -75,7 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return entry.ToSnapshot(now, _pauseController);
         }
 
-        public static UloopPausePointSnapshot Clear(string id)
+        public static (UloopPausePointSnapshot Snapshot, bool ResumedFromPause) Clear(string id)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
 
@@ -84,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             DateTime now = NowUtc();
             if (!Entries.ContainsKey(id))
             {
-                return UloopPausePointSnapshot.NotEnabled(id, _pauseController);
+                return (UloopPausePointSnapshot.NotEnabled(id, _pauseController), false);
             }
 
             UloopPausePointEntry entry = Entries[id];
@@ -105,9 +105,14 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             };
             entry.MarkCleared(UloopPausePointClearedReason.ExplicitClear, message);
             ClearHitSnapshotAndRawCaptureForId(id);
-            // Why always Resume: Option B does not distinguish manual vs pause-point pause.
-            ResumeEditorPause();
-            return entry.ToSnapshot(now, _pauseController);
+            // Why only when pause-point-owned: a clear must not steal ownership of a manual pause
+            // the user set outside the pause-point workflow (control-play-mode --action Pause or
+            // the Editor pause button). It resumes only while a pause window is open - i.e. while
+            // a pause-point hit is what is holding the Editor paused. Manual pauses leave no open
+            // window, so they are left untouched. (Client disconnect and expiry still resume
+            // unconditionally: those paths must guarantee release even for a manual pause.)
+            bool resumedFromPause = ResumeEditorPauseIfOwnedByPausePoint();
+            return (entry.ToSnapshot(now, _pauseController), resumedFromPause);
         }
 
         public static UloopPausePointClearAllResult ClearAll(
@@ -131,13 +136,17 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
             ClearLatestHitSnapshot();
             UloopPausePointRawCaptureHolder.Clear();
-            // Why always Resume: Option B does not distinguish manual vs pause-point pause.
-            ResumeEditorPause();
+            // Why only when pause-point-owned: like Clear, a bulk clear must not resume a manual
+            // pause the user set outside the pause-point workflow. It resumes only while a pause
+            // window is open (a pause-point hit is holding the Editor paused). Client disconnect
+            // and expiry still resume unconditionally to guarantee release.
+            bool resumedFromPause = ResumeEditorPauseIfOwnedByPausePoint();
 
             UloopPausePointEditorStateSnapshot editorState = UloopPausePointEditorStateSnapshot.FromController(
                 _pauseController,
                 UloopPausePointEditorStateCapturedAt.ClearAll);
-            return new UloopPausePointClearAllResult(clearedIds.Count, now, editorState, clearedIds.ToArray());
+            return new UloopPausePointClearAllResult(
+                clearedIds.Count, now, editorState, clearedIds.ToArray(), resumedFromPause);
         }
 
         public static UloopPausePointSnapshot GetStatus(string id)
@@ -394,6 +403,28 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         {
             CreditPauseWindowAndClose(NowUtc());
             _pauseController.Resume();
+        }
+
+        // Resumes the Editor only when a pause-point hit currently owns the pause (a pause window
+        // is open) and reports whether it did. Clear/ClearAll use this so they never resume a
+        // manual pause that no pause-point hit is responsible for. Disconnect and expiry paths
+        // deliberately call ResumeEditorPause directly instead, because they must release the
+        // Editor even when the pause was manual.
+        private static bool ResumeEditorPauseIfOwnedByPausePoint()
+        {
+            // A manual unpause (Editor pause button / control-play-mode) may not have been observed
+            // yet, because the external-resume sync runs on the Editor update tick. Reconcile first
+            // so a window left open by that unobserved unpause is credited and closed here instead
+            // of being misreported as a resume this clear performed (it would be a no-op resume of
+            // an already-unpaused Editor) and instead of leaving the stale window freezing expiry.
+            ClosePauseWindowIfEditorResumedExternally();
+            if (!_pauseWindowStartUtc.HasValue)
+            {
+                return false;
+            }
+
+            ResumeEditorPause();
+            return true;
         }
 
         /// <summary>
