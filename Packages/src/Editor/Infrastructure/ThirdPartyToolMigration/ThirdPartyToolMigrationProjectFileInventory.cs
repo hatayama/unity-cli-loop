@@ -148,7 +148,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Stack<string> pendingDirectories = new();
             pendingDirectories.Push(assetsDirectory);
             int inspectedEntryCount = 0;
-            progress.Report(new ThirdPartyToolMigrationProgress(0, 0));
+            // Total item count is unknown while the directory tree is still being walked, so only
+            // the processed count is reported here (see ThirdPartyToolMigrationProgress: a total of
+            // 0 means "unknown total" rather than "no work").
+            progress.Report(new ThirdPartyToolMigrationProgress(inspectedEntryCount, 0));
 
             while (pendingDirectories.Count > 0)
             {
@@ -164,7 +167,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     inspectedEntryCount++;
                     if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
                     {
-                        progress.Report(new ThirdPartyToolMigrationProgress(0, 0));
+                        progress.Report(new ThirdPartyToolMigrationProgress(inspectedEntryCount, 0));
                         await Task.Yield();
                     }
                 }
@@ -180,7 +183,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     inspectedEntryCount++;
                     if (inspectedEntryCount % ThirdPartyToolMigrationFileServiceConstants.PreviewYieldBatchSize == 0)
                     {
-                        progress.Report(new ThirdPartyToolMigrationProgress(0, 0));
+                        progress.Report(new ThirdPartyToolMigrationProgress(inspectedEntryCount, 0));
                         await Task.Yield();
                     }
                 }
