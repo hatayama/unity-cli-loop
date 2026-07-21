@@ -453,6 +453,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // scenes.
         private static void LogPhysicsDispatchDiagnostics(string operation, string id, Type declaringType)
         {
+            // Only reachable via PhysicsFlaggedDeclaringTypesById, which is populated solely from
+            // a successful patch's method.DeclaringType -- a C#-sourced method always has one.
+            Debug.Assert(declaringType != null, "declaringType must not be null");
+
             bool isMonoBehaviourDerived = typeof(MonoBehaviour).IsAssignableFrom(declaringType);
             // -1 signals "not applicable": counting instances only means something when the
             // declaring type is a MonoBehaviour (the physics dispatch miss this diagnostic exists
