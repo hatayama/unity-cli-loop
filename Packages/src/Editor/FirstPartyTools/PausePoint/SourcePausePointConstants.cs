@@ -65,19 +65,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // trigger condition is environment-dependent and has not been reproduced deterministically
         // (fresh sessions, fresh Editor processes, primed JIT, runtime-created instances, and
         // one-hop indirect callees all patched correctly in controlled experiments; see
-        // docs/regression-harness.md). This is informational only.
+        // docs/regression-harness.md). A lighter enabled-toggle workaround was investigated and
+        // rejected: every local "miss" that seemed to support it was a false positive where no new
+        // callback ran during the check window, so only the mechanism-sound workarounds (recreate
+        // the GameObject, or a manual marker) are recommended. This is informational only.
         public const string PhysicalCallbackMayMissExistingInstanceWarning =
             "This resolves to a Unity physics message method (OnCollision*/OnTrigger*/OnParticleCollision). "
             + "If the target GameObject already existed before this pause point was enabled, Unity's "
             + "cached message dispatch may not route through the patch and the pause point may never "
-            + "hit even though the method body runs. Lightest workaround: after this pause point is "
-            + "enabled (the patch must already be applied), toggle any one instance's enabled off and "
-            + "on once. This re-resolves Unity's message dispatch for the whole component type, fixing "
-            + "every instance, not just the toggled one; once re-resolved, the miss has not been "
-            + "observed to recur. Note the toggle fires OnDisable/OnEnable, so watch for side effects "
-            + "on components with game logic there. Heavier workarounds: destroy and recreate the "
-            + "GameObject after enabling this pause point, or embed UloopPausePoint.Pause(\"id\") "
-            + "directly in the method body and arm it with enable-pause-point --id instead.";
+            + "hit even though the method body runs. If that happens, work around it by destroying and "
+            + "recreating the GameObject after enabling this pause point, or embed "
+            + "UloopPausePoint.Pause(\"id\") directly in the method body and arm it with "
+            + "enable-pause-point --id instead.";
 
         // The same cached-dispatch risk as PhysicalCallbackMayMissExistingInstanceWarning, but for a
         // method that is not itself named after a physics message method and is instead called (one
@@ -88,12 +87,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "This method is called from a Unity physics message method (OnCollision*/OnTrigger*/OnParticleCollision) "
             + "elsewhere in the same compiled assembly. If the target GameObject already existed before this pause "
             + "point was enabled, Unity's cached message dispatch may not route through the patch and the pause "
-            + "point may never hit even though the method body runs. Lightest workaround: after this pause point "
-            + "is enabled (the patch must already be applied), toggle any one instance's enabled off and on once. "
-            + "This re-resolves Unity's message dispatch for the whole component type, fixing every instance, not "
-            + "just the toggled one; once re-resolved, the miss has not been observed to recur. Note the "
-            + "toggle fires OnDisable/OnEnable, so watch for side effects on components with game logic there. "
-            + "Heavier workarounds: destroy and recreate the GameObject after enabling this pause point, or embed "
+            + "point may never hit even though the method body runs. If that happens, work around it by destroying "
+            + "and recreating the GameObject after enabling this pause point, or embed "
             + "UloopPausePoint.Pause(\"id\") directly in the method body and arm it with enable-pause-point --id "
             + "instead.";
 
