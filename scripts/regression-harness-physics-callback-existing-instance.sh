@@ -8,13 +8,15 @@ set -e
 #   toggling one instance's `enabled` off then on (after the pause point is enabled) is enough to
 #   make Unity re-resolve dispatch and route the next contact on that instance through the patch.
 #
-# The harness attempts a best-effort fresh domain reload via EditorUtility.RequestScriptReload()
-# before arming, since the enabled-toggle workaround re-resolves dispatch for the whole component
-# type for the rest of the Editor session -- without a reload, a type "fixed" by an earlier local
-# run of this harness (or by any other pause point on the same type) would no longer reproduce the
-# baseline miss. In practice this reload's timing relative to Unity's IPC recovery is not fully
-# reliable, so the baseline-miss check is informational only (always logged, never asserted); the
-# only strict assertion is that the workaround produces a hit.
+# The harness forces a fresh domain reload via EditorUtility.RequestScriptReload() before arming,
+# since the enabled-toggle workaround re-resolves dispatch for the whole component type for the
+# rest of the Editor session -- without a reload, a type "fixed" by an earlier local run of this
+# harness (or by any other pause point on the same type) would not reproduce the baseline miss.
+# RequestScriptReload queues the reload for a later editor update rather than running it inline,
+# so polling for bare IPC responsiveness is not sufficient -- a still-loading-the-reload domain
+# and the still-alive pre-reload domain both answer "list" successfully. Reload completion is
+# instead detected via HarnessDomainMarker.Id, a static readonly value that is re-initialized only
+# when the AppDomain actually reloads; the harness waits until this value changes.
 # See docs/regression-harness.md and
 # SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning.
 #
@@ -59,11 +61,29 @@ cleanup() {
 }
 trap cleanup EXIT
 
+read_domain_marker() {
+    cat > "$DYNAMIC_CODE_FILE" <<'EOF'
+using io.github.hatayama.UnityCliLoop.RegressionHarness;
+
+return HarnessDomainMarker.Id;
+EOF
+    run_uloop execute-dynamic-code --code-file "$DYNAMIC_CODE_FILE" 2>/dev/null | jq -r '.Result // empty'
+}
+
 # Forces a fresh domain reload without touching any file, so the component type carries no
 # leftover "fixed by a previous toggle" state into this run's baseline-miss check. Unity
 # disconnects the IPC bridge for the duration of the reload -- that failure is expected and
-# swallowed here; recovery is confirmed by polling a lightweight command with a hard retry cap.
+# swallowed here. RequestScriptReload queues the reload for a later editor update rather than
+# running it inline, so bare IPC responsiveness is not proof the reload happened -- completion is
+# instead detected by HarnessDomainMarker.Id (a static readonly value) changing from its
+# pre-reload reading, with a hard retry cap.
 force_clean_domain() {
+    BEFORE_MARKER="$(read_domain_marker)"
+    if [ -z "$BEFORE_MARKER" ]; then
+        log "FAIL: could not read HarnessDomainMarker.Id before requesting a script reload."
+        exit 1
+    fi
+
     cat > "$DYNAMIC_CODE_FILE" <<'EOF'
 using UnityEditor;
 
@@ -72,18 +92,19 @@ return "Requested script reload";
 EOF
     run_uloop execute-dynamic-code --code-file "$DYNAMIC_CODE_FILE" > /dev/null 2>&1 || true
 
-    log "Waiting for Unity to recover from the domain reload..."
+    log "Waiting for the domain marker to change (proves the reload actually completed)..."
     ATTEMPT=1
     while [ "$ATTEMPT" -le "$RELOAD_RECOVERY_RETRIES" ]; do
-        if run_uloop list > /dev/null 2>&1; then
-            log "Unity recovered after ${ATTEMPT} attempt(s)."
+        sleep "$RELOAD_RECOVERY_INTERVAL_SECONDS"
+        AFTER_MARKER="$(read_domain_marker)"
+        if [ -n "$AFTER_MARKER" ] && [ "$AFTER_MARKER" != "$BEFORE_MARKER" ]; then
+            log "Domain reload confirmed after ${ATTEMPT} attempt(s) (marker changed)."
             return 0
         fi
         ATTEMPT=$((ATTEMPT + 1))
-        sleep "$RELOAD_RECOVERY_INTERVAL_SECONDS"
     done
 
-    log "FAIL: Unity did not recover within $((RELOAD_RECOVERY_RETRIES * RELOAD_RECOVERY_INTERVAL_SECONDS))s of requesting a script reload."
+    log "FAIL: HarnessDomainMarker.Id did not change within $((RELOAD_RECOVERY_RETRIES * RELOAD_RECOVERY_INTERVAL_SECONDS))s of requesting a script reload."
     exit 1
 }
 
@@ -134,15 +155,12 @@ verify_existing_instance_gap_and_workaround() {
     run_uloop pause-point-status --id "$MARKER_ID" > "$RESULT_FILE"
     BASELINE_IS_HIT="$(jq -r '.IsHit' "$RESULT_FILE")"
 
-    # Informational only: the enabled-toggle workaround re-resolves dispatch for the whole
-    # component type for the rest of the Editor session, so whether the pre-existing instance
-    # still misses here depends on whether an earlier run (or any other armed pause point) already
-    # fixed this type since the last real domain reload. Not asserted -- see the file header.
-    if [ "$BASELINE_IS_HIT" = "false" ]; then
-        log "[$LABEL] Baseline miss reproduced (IsHit=false) as documented."
-    else
-        log "[$LABEL] INFO: baseline miss did not reproduce this run (the component type was likely already re-resolved earlier in this Editor session; this is expected after a prior run without a domain reload) -- proceeding to workaround assertion."
+    if [ "$BASELINE_IS_HIT" != "false" ]; then
+        log "[$LABEL] FAIL: expected the pre-existing instance to miss the pause point (IsHit=false), got IsHit=$BASELINE_IS_HIT"
+        cat "$RESULT_FILE"
+        exit 1
     fi
+    log "[$LABEL] Baseline miss confirmed (IsHit=false) as documented."
 
     log "[$LABEL] Toggling enabled off/on and re-triggering contact..."
     toggle_enabled "$OBJECT_NAME" "$COMPONENT_TYPE"
