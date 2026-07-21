@@ -192,9 +192,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return InputSimulationWaitOutcome.TimedOut;
             }
 
-            // Must subscribe on the main thread: EditorPauseAwaiter reads EditorApplication.isPaused
-            // and subscribes to EditorApplication.pauseStateChanged, both main-thread-only, and a
-            // caller's prior ConfigureAwait(false) may have left us on a thread-pool thread.
+            // Must subscribe on the main thread: EditorPauseAwaiter subscribes to
+            // EditorApplication.pauseStateChanged, which is main-thread-only, and a caller's
+            // prior ConfigureAwait(false) may have left us on a thread-pool thread.
             await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
 
             using CancellationTokenSource raceCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);

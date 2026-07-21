@@ -66,7 +66,7 @@ START_SECONDS=$(date +%s)
 run_uloop simulate-keyboard --action Press --key Space --duration "$PRESS_DURATION" > "$RESULT_FILE" 2>&1 &
 PRESS_PID=$!
 
-wait "$PRESS_PID"
+wait "$PRESS_PID" || true
 ELAPSED_SECONDS=$(( $(date +%s) - START_SECONDS ))
 
 INTERRUPTED="$(jq -r '.InterruptedByPausePoint' "$RESULT_FILE")"
