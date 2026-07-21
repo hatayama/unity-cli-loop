@@ -203,6 +203,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Patch_HelperMethodCalledFromPhysicalCallback_ReturnsIndirectCachedDispatchWarning()
+        {
+            // Verifies a private helper method invoked (one level deep) from OnCollisionEnter2D on
+            // the same MonoBehaviour reports the indirect cached-dispatch warning, extending the
+            // direct-name check above (Patch_PhysicsMessageMethodOnMonoBehaviour_...) to methods
+            // that are not themselves named after a physics message method.
+            const string id = "patcher-physical-callback-helper-method";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherPhysicalCallbackHelperMethodFixture.cs", 18);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+
+            Assert.That(patchResult.Success, Is.True);
+            Assert.That(patchResult.Warning, Does.Contain(SourcePausePointConstants.PhysicalCallbackIndirectCallMayMissExistingInstanceWarning));
+        }
+
+        [Test]
+        public void Patch_HelperMethodNotCalledFromPhysicalCallback_DoesNotReturnIndirectCachedDispatchWarning()
+        {
+            // Verifies a sibling private method that no physical message method calls does not
+            // trigger the indirect-call warning, proving the call-site scan does not over-match
+            // every method declared on the same type.
+            const string id = "patcher-physical-callback-unrelated-helper-method";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherPhysicalCallbackHelperMethodFixture.cs", 23);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+
+            Assert.That(patchResult.Success, Is.True);
+            Assert.That(patchResult.Warning, Does.Not.Contain(SourcePausePointConstants.PhysicalCallbackIndirectCallMayMissExistingInstanceWarning));
+        }
+
+        [Test]
         public void Patch_PhysicsNamedMethodOnNonMonoBehaviourType_DoesNotReturnCachedDispatchWarning()
         {
             // Verifies the warning requires both a matching method name AND a MonoBehaviour-derived
