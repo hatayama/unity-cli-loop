@@ -150,6 +150,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             public void Report(ThirdPartyToolMigrationProgress value)
             {
+                // TotalItemCount <= 0 means "unknown total" (see ThirdPartyToolMigrationProjectFileInventory);
+                // Progress.Report's totalSteps=0 behavior is undocumented and unverifiable from managed code,
+                // so skip the items overload and leave the task showing as a plain busy indicator instead.
+                if (value.TotalItemCount <= 0)
+                {
+                    return;
+                }
+
                 Progress.Report(_progressId, value.ProcessedItemCount, value.TotalItemCount);
             }
         }
