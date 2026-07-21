@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 
@@ -24,11 +25,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string OffMainThreadValue = "(captured off main thread)";
         private const string DestroyedValue = "(destroyed)";
 
+        // Why: without this converter, Newtonsoft serializes enums by their underlying integer,
+        // diverging from the scalar-capture path (which already renders enum values by name) and
+        // producing an inconsistent preview like [0,null,1] instead of ["Alpha",null,"Beta"].
         private static readonly JsonSerializer PrimitiveSerializer = JsonSerializer.Create(
             new JsonSerializerSettings
             {
                 ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                Error = HandleSerializationError
+                Error = HandleSerializationError,
+                Converters = { new StringEnumConverter() }
             });
 
         public static bool TrySerialize(object rawValue, ref bool truncated, out string preview)
@@ -112,7 +117,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return new JValue("(circular)");
                 }
 
-                if (remainingDepth <= 0)
+                // Why: an array or dictionary whose elements/keys/values are all primitives/enums
+                // costs no further recursion budget once reached (each one resolves via the
+                // IsJsonPrimitive branch above regardless of depth), so gating it on remainingDepth
+                // here would degrade a nested field like "Board._cells" (a PieceType?[,]) to a bare
+                // type-name string purely because two field-access hops already spent the depth
+                // budget, not because previewing it is actually unsafe or unbounded.
+                bool isPrimitiveElementArray =
+                    value is Array primitiveElementArray && IsJsonPrimitiveElementType(primitiveElementArray.GetType().GetElementType());
+                bool isPrimitiveKeyValueDictionary =
+                    value is IDictionary && IsPrimitiveKeyValueDictionaryType(value.GetType());
+
+                if (remainingDepth <= 0 && !isPrimitiveElementArray && !isPrimitiveKeyValueDictionary)
                 {
                     return new JValue(SafeToString(value));
                 }
@@ -302,6 +318,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 or decimal
                 or char
                 or Enum;
+        }
+
+        // Type-level counterpart of IsJsonPrimitive (plus string, which BuildToken also resolves
+        // unconditionally above), used to recognize an array/dictionary whose elements will always
+        // resolve regardless of remaining depth budget.
+        private static bool IsJsonPrimitiveElementType(Type elementType)
+        {
+            Type underlyingType = Nullable.GetUnderlyingType(elementType) ?? elementType;
+            return underlyingType == typeof(bool)
+                || underlyingType == typeof(byte) || underlyingType == typeof(sbyte)
+                || underlyingType == typeof(short) || underlyingType == typeof(ushort)
+                || underlyingType == typeof(int) || underlyingType == typeof(uint)
+                || underlyingType == typeof(long) || underlyingType == typeof(ulong)
+                || underlyingType == typeof(float) || underlyingType == typeof(double)
+                || underlyingType == typeof(decimal)
+                || underlyingType == typeof(char)
+                || underlyingType == typeof(string)
+                || underlyingType.IsEnum;
+        }
+
+        // Dictionary counterpart of IsJsonPrimitiveElementType: recognizes an IDictionary<TKey,
+        // TValue> whose key and value types will both always resolve through the IsJsonPrimitive
+        // branch regardless of remaining depth budget.
+        private static bool IsPrimitiveKeyValueDictionaryType(Type dictionaryType)
+        {
+            Type dictionaryInterface = dictionaryType.GetInterfaces()
+                .FirstOrDefault(candidate => candidate.IsGenericType && candidate.GetGenericTypeDefinition() == typeof(IDictionary<,>));
+            if (dictionaryInterface == null)
+            {
+                return false;
+            }
+
+            Type[] typeArguments = dictionaryInterface.GetGenericArguments();
+            return IsJsonPrimitiveElementType(typeArguments[0]) && IsJsonPrimitiveElementType(typeArguments[1]);
         }
 
         private static string FormatUnityObjectElement(UnityEngine.Object unityObject)
