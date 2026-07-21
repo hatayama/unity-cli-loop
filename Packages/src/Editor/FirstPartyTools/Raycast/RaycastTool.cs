@@ -49,6 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 noHitResponse.Success = true;
                 noHitResponse.Hit = false;
                 noHitResponse.Message = $"No physics hit at ({inputPosition.x:F1}, {inputPosition.y:F1}).";
+                noHitResponse.CameraName = raycastResult.Camera.name;
+                noHitResponse.CameraPath = GameObjectPathUtility.GetFullPath(raycastResult.Camera.gameObject);
                 return Task.FromResult(noHitResponse);
             }
 
@@ -57,6 +59,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.Success = true;
             response.Hit = true;
             response.Message = $"Hit {nearestHit.collider.gameObject.name} at ({inputPosition.x:F1}, {inputPosition.y:F1}).";
+            response.CameraName = raycastResult.Camera.name;
+            response.CameraPath = GameObjectPathUtility.GetFullPath(raycastResult.Camera.gameObject);
             response.HitGameObjectName = nearestHit.collider.gameObject.name;
             response.HitGameObjectPath = GameObjectPathUtility.GetFullPath(nearestHit.collider.gameObject);
             response.HitLayer = nearestHit.collider.gameObject.layer;
