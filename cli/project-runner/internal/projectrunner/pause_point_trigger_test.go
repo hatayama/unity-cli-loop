@@ -326,6 +326,61 @@ func TestWaitForPausePointJoinsTriggerResult(t *testing.T) {
 	})
 }
 
+// Verifies --trigger is never dispatched when the initial status query finds the marker not
+// armed (unknown --id, already expired, etc.): dispatching the trigger's action into the running
+// game would be a side effect with no corresponding wait, since the wait itself is about to fail.
+func TestWaitForPausePointSkipsTriggerWhenNotArmed(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalDispatch := dispatchPausePointTriggerCommand
+	defer func() {
+		queryPausePointStatus = originalQuery
+		dispatchPausePointTriggerCommand = originalDispatch
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusNotEnabled}, nil
+	}
+
+	dispatchCalled := false
+	dispatchPausePointTriggerCommand = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		command string,
+		commandArgs []string,
+		startPath string,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		dispatchCalled = true
+		_, _ = stdout.Write([]byte(`{"Success":true}`))
+		return 0
+	}
+
+	_, state, triggerResult, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "does-not-exist",
+		timeoutSeconds: 1,
+		timeout:        time.Second,
+		triggerCommand: "simulate-keyboard",
+		triggerArgs:    []string{"--action", "Press"},
+	})
+	if err != nil {
+		t.Fatalf("waitForPausePoint failed: %v", err)
+	}
+	if state != pausePointWaitStateNotEnabled {
+		t.Fatalf("expected not_enabled state, got %q", state)
+	}
+	if dispatchCalled {
+		t.Fatal("expected dispatchPausePointTriggerCommand not to be called for a not-armed marker")
+	}
+	if triggerResult != nil {
+		t.Fatalf("expected a nil trigger result, got %#v", triggerResult)
+	}
+}
+
 // Verifies a --trigger result is embedded in the timeout error envelope's Details, so a caller
 // can see what the trigger command did even when the pause-point itself was never hit.
 func TestRunWaitForPausePointEmbedsTriggerResultOnTimeout(t *testing.T) {

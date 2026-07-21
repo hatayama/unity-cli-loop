@@ -414,23 +414,36 @@ func parsePausePointTimeoutSeconds(value string) (int, error) {
 	return timeoutSeconds, nil
 }
 
-// waitForPausePoint starts the --trigger command (if any) right away, since arm is already
-// confirmed by this point (extendPausePointExpiryBeforeWait for await-pause-point; a successful
-// enable response for enable-pause-point --await), then races it against the status poll loop.
-// The trigger is joined once the wait itself settles, not before, so a slow trigger cannot delay
-// reporting a pause-point hit.
+// waitForPausePoint confirms the marker is actually armed with one status query before starting
+// the --trigger command: extendPausePointExpiryBeforeWait (the await-pause-point entry point) is
+// best-effort and does not confirm arm, so a typo'd or already-expired --id must not still get the
+// trigger dispatched into the running game before the wait immediately fails on it. Once confirmed
+// armed (or already hit), the trigger races the status poll loop and is joined once the wait itself
+// settles, so a slow trigger cannot delay reporting a pause-point hit.
 func waitForPausePoint(
 	ctx context.Context,
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
 ) (pausePointStatusResponse, pausePointWaitState, *pausePointTriggerResult, error) {
 	var triggerHandle *pausePointTriggerHandle
-	if options.triggerCommand != "" {
+	if options.triggerCommand != "" && pausePointIsArmed(ctx, connection, options.id) {
 		triggerHandle = startPausePointTrigger(ctx, connection, options.startPath, options.triggerCommand, options.triggerArgs)
 	}
 
 	response, state, err := waitForPausePointStatus(ctx, connection, options)
 	return response, state, triggerHandle.join(), err
+}
+
+// pausePointIsArmed reports whether the marker is enabled or already hit. A query failure is
+// treated as not armed: dispatching a --trigger command against a marker this CLI cannot even
+// confirm exists would inject the trigger's action into the game with no corresponding wait.
+func pausePointIsArmed(ctx context.Context, connection unityipc.Connection, id string) bool {
+	response, err := queryPausePointStatus(ctx, connection, id)
+	if err != nil {
+		return false
+	}
+	state := pausePointWaitStateForStatus(response.Status)
+	return state == "" || state == pausePointWaitStateHit
 }
 
 func waitForPausePointStatus(
