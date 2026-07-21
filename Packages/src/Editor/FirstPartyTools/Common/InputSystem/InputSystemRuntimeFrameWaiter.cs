@@ -50,6 +50,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 if (frameOutcome == InputSimulationWaitOutcome.TimedOut)
                 {
+                    // Why: the wall-clock timeout keeps advancing during a real pause, so a
+                    // timeout that coincided with one must still report Paused — otherwise a
+                    // pause could be silently absorbed into a TimedOut result (same class of bug
+                    // as the Completed-absorption case WaitForPressLifetime guards against).
+                    await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
+                    if (InputSystemUpdateHelper.IsPaused())
+                    {
+                        return InputSimulationWaitOutcome.Paused;
+                    }
+
                     return InputSimulationWaitOutcome.TimedOut;
                 }
 
@@ -205,6 +215,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Task pauseTask = EditorPauseAwaiter.WaitForPauseAsync(raceCancellation.Token);
 
             Task winner = await Task.WhenAny(frameTask, pauseTask).ConfigureAwait(false);
+
+            // Must switch back to the main thread before canceling: EditorPauseAwaiter's
+            // cancellation callback unsubscribes EditorApplication.pauseStateChanged, which is
+            // main-thread-only, and the ConfigureAwait(false) above may have left us off-thread.
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
             raceCancellation.Cancel();
 
             if (winner == pauseTask)
