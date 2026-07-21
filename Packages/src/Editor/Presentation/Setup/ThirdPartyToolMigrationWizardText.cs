@@ -46,24 +46,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const string RemoveMigrationSkillButtonText = "Remove Migration Skill";
         private const string UpdatingMigrationSkillButtonText = "Updating...";
         private const string CopyMigrationSkillPromptButtonText = "Copy AI Prompt";
-        private const string MigrationTargetFilesHeading = "Files:";
 
-        internal static string GetMigrationStatusText(string[] filePaths, string projectRoot)
+        internal static string GetMigrationStatusText(int fileCount)
         {
-            Debug.Assert(filePaths != null, "filePaths must not be null");
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(fileCount >= 0, "fileCount must not be negative");
 
-            int fileCount = filePaths.Length;
             string noun = fileCount == 1 ? "file" : "files";
             string verb = fileCount == 1 ? "needs" : "need";
-            string subject = fileCount == 1 ? "this file still uses" : "these files still use";
-            string objectPronoun = fileCount == 1 ? "it" : "them";
-
-            return $"{fileCount} {noun} {verb} V3 C# source structure migration.\n" +
-                $"The Unity Console is showing errors because {subject} the old custom tool API.\n\n" +
-                $"Click Migrate to update {objectPronoun} automatically. " +
-                "The errors should disappear after migration.\n\n" +
-                FormatMigrationTargetPathsForStatus(filePaths, projectRoot);
+            return $"Found {fileCount} C# {noun} that {verb} V3 migration.";
         }
 
         internal static string GetMigrationConfirmDialogMessage(int fileCount)
@@ -73,38 +63,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string noun = fileCount == 1 ? "file" : "files";
             return $"{fileCount} {noun} will be rewritten in place.\n\n" +
                 "Commit or back up your project first (VCS recommended).";
-        }
-
-        internal static string FormatMigrationTargetPathsForStatus(string[] filePaths, string projectRoot)
-        {
-            Debug.Assert(filePaths != null, "filePaths must not be null");
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            int maxPaths = ThirdPartyToolMigrationWizardStateRules.MaxMigrationTargetPathsInStatus;
-            int overflowCount = ThirdPartyToolMigrationWizardStateRules.GetMigrationTargetPathsOverflowCount(
-                filePaths.Length,
-                maxPaths);
-            int displayCount = filePaths.Length - overflowCount;
-            System.Text.StringBuilder builder = new();
-            builder.Append(MigrationTargetFilesHeading);
-            for (int index = 0; index < displayCount; index++)
-            {
-                builder.Append('\n');
-                builder.Append(
-                    ThirdPartyToolMigrationWizardStateRules.ToProjectRelativeDisplayPath(
-                        filePaths[index],
-                        projectRoot));
-            }
-
-            if (overflowCount > 0)
-            {
-                builder.Append('\n');
-                builder.Append('+');
-                builder.Append(overflowCount);
-                builder.Append(" more files");
-            }
-
-            return builder.ToString();
         }
 
         internal static string GetMigrationProgressText(

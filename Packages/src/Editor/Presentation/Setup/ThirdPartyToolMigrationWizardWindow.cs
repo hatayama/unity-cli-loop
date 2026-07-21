@@ -216,17 +216,22 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return ThirdPartyToolMigrationWizardWindowResizer.CreateCenteredRect(bounds, size);
         }
 
-        internal static Rect WithContentHeight(Rect currentRect, float contentHeight, Vector2 frameSize)
+        internal static Rect WithContentHeight(
+            Rect currentRect,
+            float contentHeight,
+            Vector2 frameSize,
+            float maxHeight)
         {
             return ThirdPartyToolMigrationWizardWindowResizer.WithContentHeight(
                 currentRect,
                 contentHeight,
-                frameSize);
+                frameSize,
+                maxHeight);
         }
 
-        internal static string GetMigrationStatusText(string[] filePaths, string projectRoot)
+        internal static string GetMigrationStatusText(int fileCount)
         {
-            return ThirdPartyToolMigrationWizardText.GetMigrationStatusText(filePaths, projectRoot);
+            return ThirdPartyToolMigrationWizardText.GetMigrationStatusText(fileCount);
         }
 
         internal static bool ConfirmMigrationApply(
@@ -356,7 +361,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 CreateInstance<ThirdPartyToolMigrationWizardWindow>();
             PrepareForOpen(window, WindowTitle, windowPosition, shouldRefreshAfterCreateGui);
             window.ShowUtility();
-            window.ScheduleResizeToContent();
         }
 
         private static ISessionFlagsRepository GetSessionFlagsRepository()
@@ -423,7 +427,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 () => _controller.HandleToggleMigrationSkill().Forget(),
                 Close);
             _resizer = new ThirdPartyToolMigrationWizardWindowResizer(this, _view.MainScrollView);
-            _resizer.BindSizeUpdates();
             _controller = new ThirdPartyToolMigrationWizardWorkflowController(
                 _view,
                 _skillSetupUseCase,
@@ -434,7 +437,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _controller.ShowInitialState(shouldStartInitialRefresh);
             _controller.RefreshMigrationSkillState();
             _controller.ScheduleInitialRefresh(shouldStartInitialRefresh);
-            ScheduleResizeToContent();
         }
 
         private void InitializeApplicationServices()
