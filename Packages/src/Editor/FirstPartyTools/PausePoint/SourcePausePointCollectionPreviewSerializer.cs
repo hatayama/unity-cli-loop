@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 
@@ -121,6 +122,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return BuildDictionaryToken(dictionary, remainingDepth, visited, ref truncated);
                 }
 
+                if (value is Array multidimensionalArray && multidimensionalArray.Rank > 1)
+                {
+                    return BuildMultidimensionalArrayToken(multidimensionalArray, remainingDepth, visited, ref truncated);
+                }
+
                 if (value is ICollection)
                 {
                     return BuildArrayToken(enumerable, remainingDepth, visited, ref truncated);
@@ -209,6 +215,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return toStringMethod != null
                 && toStringMethod.DeclaringType != typeof(object)
                 && toStringMethod.DeclaringType != typeof(ValueType);
+        }
+
+        // Why: Array.GetEnumerator() flattens every rank in row-major order with no dimension
+        // info, so a T[,] preview otherwise reads as a flat (possibly truncated-looking) list
+        // with no way to tell it apart from an empty or 1D collection.
+        private static JObject BuildMultidimensionalArrayToken(
+            Array array, int remainingDepth, HashSet<object> visited, ref bool truncated)
+        {
+            string elementTypeName = array.GetType().GetElementType().Name;
+            IEnumerable<string> dimensions = Enumerable.Range(0, array.Rank).Select(dimension => array.GetLength(dimension).ToString());
+
+            JObject shapeToken = new()
+            {
+                ["Shape"] = $"{elementTypeName}[{string.Join(",", dimensions)}]",
+                ["TotalElements"] = array.Length,
+                ["Elements"] = BuildArrayToken(array, remainingDepth, visited, ref truncated)
+            };
+            return shapeToken;
         }
 
         private static JArray BuildArrayToken(
