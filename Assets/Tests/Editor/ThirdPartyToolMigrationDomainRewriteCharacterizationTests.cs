@@ -227,6 +227,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void RemoveSuccessPropertyHidingDeclarationsInCode_WhenSuccessIsExpressionBodied_DoesNotRewriteButIsDetectable()
+        {
+            // why: an expression-bodied property ("=> _ok;") is a common C# shape that must never be silently skipped.
+            string source =
+                "using io.github.hatayama.UnityCliLoop.ToolContracts;\n" +
+                "\n" +
+                "public sealed class ExpressionBodiedResponse : UnityCliLoopToolResponse\n" +
+                "{\n" +
+                "    private readonly bool _ok;\n" +
+                "\n" +
+                "    public bool Success => _ok;\n" +
+                "}\n";
+
+            (string content, int replacementCount) =
+                ThirdPartyToolMigrationSuccessPropertyRules.RemoveSuccessPropertyHidingDeclarationsInCode(source);
+            bool isDetectableAsNonAutoHiding =
+                ThirdPartyToolMigrationSuccessPropertyRules.ContainsNonAutoPropertySuccessHidingUnityCliLoopToolResponse(
+                    source);
+
+            Assert.That(replacementCount, Is.EqualTo(0));
+            Assert.That(content, Is.EqualTo(source));
+            Assert.That(isDetectableAsNonAutoHiding, Is.True);
+        }
+
+        [Test]
         public void ContainsSuccessPropertyHidingUnityCliLoopToolResponse_WhenAlreadyMigratedFileOnlyHasSuccessHiding_ReturnsTrue()
         {
             // Pins detection extension: a file with no remaining legacy API but a hiding Success auto-property is still a migration target.

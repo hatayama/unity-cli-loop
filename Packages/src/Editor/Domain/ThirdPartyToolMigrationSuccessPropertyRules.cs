@@ -32,8 +32,10 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             @"public\s+bool\s+Success\s*\{\s*get;\s*(?:set;\s*)?\}\s*(?:=\s*[^;]+;)?\s*(?:\r?\n)?",
             RegexOptions.Compiled);
 
+        // Matches both a block-bodied property start ("{ ... }") and an expression-bodied one ("=> ...;");
+        // either shape can hide the base member and must be surfaced even when it cannot be auto-removed.
         private static readonly Regex SuccessPropertyStartRegex = new(
-            @"public\s+bool\s+Success\s*\{",
+            @"public\s+bool\s+Success\s*(?:\{|=>)",
             RegexOptions.Compiled);
 
         public static bool ContainsSuccessPropertyHidingUnityCliLoopToolResponse(string source)
