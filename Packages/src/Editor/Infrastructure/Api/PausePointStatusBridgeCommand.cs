@@ -40,7 +40,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // SourcePausePointPatcher wires into it, so this bridge - which must not reference
             // that Editor-only tool assembly directly - never leaves a Harmony injection attached
             // after the marker itself reports Cleared.
-            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear(id);
+            // The CLI polling bridge only reports marker status; the resumed-from-pause side
+            // effect is surfaced through the clear-pause-point tool response, not this path.
+            (UloopPausePointSnapshot snapshot, bool _) = UloopPausePointRegistry.Clear(id);
             LogCleared(id, snapshot.StatusBeforeClear);
             if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
             {

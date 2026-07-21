@@ -315,7 +315,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies explicit clear prevents later marker hits from pausing Unity.
             UloopPausePointRegistry.Enable("jump", 30);
 
-            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot snapshot, _) = UloopPausePointRegistry.Clear("jump");
             UloopPausePoint.Pause("jump");
 
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
@@ -330,35 +330,88 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePoint.Pause("jump");
 
-            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot snapshot, _) = UloopPausePointRegistry.Clear("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point was already hit (auto-disarmed); nothing to clear."));
             Assert.That(_pauseController.IsPaused, Is.False);
         }
 
         [Test]
-        public void Clear_AfterHit_ShouldResumeEditorPause()
+        public void Clear_AfterHit_ResumesPausePointOwnedPauseAndReportsResumed()
         {
-            // Verifies Option B: Clear resumes even when the pause was left from a pause-point hit.
+            // Verifies Clear resumes and reports ResumedFromPause when a pause-point hit owns the pause.
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePoint.Pause("jump");
             Assert.That(_pauseController.IsPaused, Is.True);
 
-            UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot _, bool resumedFromPause) = UloopPausePointRegistry.Clear("jump");
 
+            Assert.That(resumedFromPause, Is.True);
             Assert.That(_pauseController.IsPaused, Is.False);
         }
 
         [Test]
-        public void ClearAll_AfterHit_ShouldResumeEditorPause()
+        public void Clear_WhenEditorManuallyPaused_LeavesPauseUntouchedAndReportsNotResumed()
         {
-            // Verifies ClearAll also resumes under Option B.
+            // Verifies Clear preserves a manual pause (no open pause window) instead of resuming it.
+            UloopPausePointRegistry.Enable("jump", 30);
+            _pauseController.PauseExternally();
+
+            (UloopPausePointSnapshot _, bool resumedFromPause) = UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(resumedFromPause, Is.False);
+            Assert.That(_pauseController.IsPaused, Is.True);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void ClearAll_AfterHit_ResumesPausePointOwnedPauseAndReportsResumed()
+        {
+            // Verifies ClearAll resumes and reports ResumedFromPause when a hit owns the pause.
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePoint.Pause("jump");
 
-            UloopPausePointRegistry.ClearAll();
+            UloopPausePointClearAllResult result = UloopPausePointRegistry.ClearAll();
 
+            Assert.That(result.ResumedFromPause, Is.True);
             Assert.That(_pauseController.IsPaused, Is.False);
+        }
+
+        [Test]
+        public void ClearAll_WhenEditorManuallyPaused_LeavesPauseUntouchedAndReportsNotResumed()
+        {
+            // Verifies ClearAll preserves a manual pause (no open pause window) instead of resuming it.
+            UloopPausePointRegistry.Enable("jump", 30);
+            _pauseController.PauseExternally();
+
+            UloopPausePointClearAllResult result = UloopPausePointRegistry.ClearAll();
+
+            Assert.That(result.ResumedFromPause, Is.False);
+            Assert.That(_pauseController.IsPaused, Is.True);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Clear_WhenWindowOpenButEditorAlreadyExternallyUnpaused_DoesNotReportResumeAndClosesStaleWindow()
+        {
+            // Verifies the still-open window is reconciled before deciding: a hit opened the
+            // window, then the Editor was unpaused externally before the update tick observed it.
+            // Clear must not claim it resumed Play Mode (Resume is a no-op on an unpaused Editor)
+            // and must close the stale window so it stops freezing expiry. ClearAll shares the same
+            // ResumeEditorPauseIfOwnedByPausePoint path, so this covers both entry points.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            _pauseController.ResumeExternally();
+
+            (UloopPausePointSnapshot _, bool resumedFromPause) = UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(resumedFromPause, Is.False);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
+            // The stale window is closed: an unrelated marker's countdown is no longer frozen.
+            UloopPausePointRegistry.Enable("dash", 1);
+            _nowUtc = _nowUtc.AddSeconds(2);
+            UloopPausePointRegistry.ApplyCaptureWindowExpirations();
+            Assert.That(UloopPausePointRegistry.GetStatus("dash").Status, Is.EqualTo(UloopPausePointStatus.Expired));
         }
 
         [Test]
@@ -549,7 +602,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 1);
             _nowUtc = _nowUtc.AddSeconds(2);
 
-            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot snapshot, _) = UloopPausePointRegistry.Clear("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point had already expired before being hit; nothing to clear."));
         }
@@ -561,7 +614,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePointRegistry.Clear("jump");
 
-            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot snapshot, _) = UloopPausePointRegistry.Clear("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point was already cleared."));
         }
@@ -583,6 +636,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.EditorState.IsPaused, Is.False);
             Assert.That(response.EditorState.CapturedAt, Is.EqualTo(UloopPausePointEditorStateCapturedAt.ClearAll));
             Assert.That(response.Message, Is.EqualTo("No active pause points to clear."));
+        }
+
+        [Test]
+        public async Task Clear_WhenResumingPausePointOwnedPause_SetsResumedPlayModeWarning()
+        {
+            // Verifies the clear-pause-point tool warns when the clear resumed a pause-point-owned pause.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["id"] = "jump" };
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Warning, Is.EqualTo(SourcePausePointConstants.ClearResumedPlayModeWarning));
+        }
+
+        [Test]
+        public async Task Clear_WhenManualPausePreserved_SetsNoWarning()
+        {
+            // Verifies the clear-pause-point tool emits no resume warning when it preserves a manual pause.
+            UloopPausePointRegistry.Enable("jump", 30);
+            _pauseController.PauseExternally();
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["id"] = "jump" };
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Warning, Is.Empty);
+        }
+
+        [Test]
+        public async Task ClearAll_WhenResumingPausePointOwnedPause_SetsResumedPlayModeWarning()
+        {
+            // Verifies clear-pause-point --all warns when the bulk clear resumed a pause-point-owned pause.
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["all"] = true };
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Warning, Is.EqualTo(SourcePausePointConstants.ClearResumedPlayModeWarning));
         }
 
         [Test]
@@ -1267,6 +1362,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void ResumeExternally()
             {
                 IsPaused = false;
+            }
+
+            // Simulates a manual pause set outside the pause-point workflow (control-play-mode
+            // --action Pause, or the Editor's own pause button). It never opens a pause window, so
+            // clear must leave it untouched. PauseCount is not incremented because no pause-point
+            // hit requested it.
+            public void PauseExternally()
+            {
+                IsPaused = true;
             }
         }
     }

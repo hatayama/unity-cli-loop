@@ -66,6 +66,14 @@ func pausePointWaitError(
 const (
 	pausePointHintPlayModeNotRunning  = "PlayMode is not running. Start PlayMode (or trigger the marker code path in Edit Mode), then wait again."
 	pausePointHintEditorAlreadyPaused = "Unity is already paused, so gameplay cannot reach the marker. Resume PlayMode before waiting again."
+
+	// Shared by both pausePointTimeoutHint and pausePointExpiredHint: a marker whose method is a
+	// physics/message callback, or is called from one, can miss a GameObject that already existed
+	// when the patch was installed even though the method body genuinely ran. Kept as a single
+	// constant so the two hints stay in sync instead of drifting copies of the same diagnosis.
+	pausePointNonFiringPatternsHint = "If the target line never hit despite the trigger firing, check the non-firing patterns: " +
+		"(1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; " +
+		"(2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch."
 )
 
 // pausePointTimeoutHint maps the final probed status to a deterministic diagnosis,
@@ -82,7 +90,7 @@ func pausePointTimeoutHint(response pausePointStatusResponse) string {
 			"If the marker targets a Unity message method such as OnCollisionEnter2D/OnTriggerEnter2D, check whether `enable-pause-point`'s response carried a Warning about cached message dispatch: Unity can resolve a GameObject's message dispatch before the marker patch is installed, so a GameObject that already existed at enable time may never reach the marker even though the method body runs. Recreating the GameObject after enabling, or embedding UloopPausePoint.Pause(\"id\") directly in the method body, avoids this. " +
 			"If the target line is inside a very small method, Mono's JIT may have inlined it into callers and the pause point never fires; move the pause point into the calling method. " +
 			"If PlayMode kept progressing on its own while you were arranging state (timers, gravity, spawners), the scenario may have already been consumed before this marker could fire; next time, run `control-play-mode --action Pause` before setup and resume with `control-play-mode --action Play` only after `enable-pause-point` succeeds. " +
-			"If the target line never hit despite the trigger firing, check the non-firing patterns: (1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; (2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch."
+			pausePointNonFiringPatternsHint
 	}
 	return ""
 }
@@ -98,7 +106,8 @@ func pausePointExpiredHint(response pausePointStatusResponse) string {
 		return pausePointHintEditorAlreadyPaused
 	}
 	if response.HitCount == 0 {
-		return "Marker expired before it was hit: the enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out. Re-enable the marker with a longer --timeout-seconds and trigger the code path again."
+		return "Marker expired before it was hit: the enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out. Re-enable the marker with a longer --timeout-seconds and trigger the code path again. " +
+			pausePointNonFiringPatternsHint
 	}
 	return ""
 }

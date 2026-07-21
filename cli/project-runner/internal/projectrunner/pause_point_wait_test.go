@@ -999,7 +999,8 @@ func TestPausePointExpiredErrorIncludesDiagnosisHint(t *testing.T) {
 				EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
 				HitCount:    0,
 			},
-			wantHint: "Marker expired before it was hit: the enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out. Re-enable the marker with a longer --timeout-seconds and trigger the code path again.",
+			wantHint: "Marker expired before it was hit: the enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out. Re-enable the marker with a longer --timeout-seconds and trigger the code path again. " +
+				"If the target line never hit despite the trigger firing, check the non-firing patterns: (1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; (2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch.",
 		},
 	}
 

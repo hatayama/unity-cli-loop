@@ -116,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30, UloopPausePointCaptureMode.Continuous, 20);
             UloopPausePointRegistry.Hit("jump");
 
-            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot snapshot, _) = UloopPausePointRegistry.Clear("jump");
 
             Assert.That(snapshot.IsEnabled, Is.False);
             Assert.That(snapshot.CapturedVariableHistory, Has.Count.EqualTo(1));
