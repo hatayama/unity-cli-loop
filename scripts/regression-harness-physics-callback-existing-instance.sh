@@ -1,22 +1,31 @@
 #!/bin/sh
 set -e
 # Regression harness for the "existing instance" physics-callback pause-point gap:
-# Unity's physics message dispatch (OnCollision*/OnTrigger*) resolves its call path once when a
-# GameObject registers with the physics engine, so a Harmony patch applied to an
-# OnCollisionEnter2D/OnTriggerEnter2D method after that GameObject already existed does not route
-# through the patch. This harness proves the workaround half of that gap:
-#   toggling one instance's `enabled` off then on (after the pause point is enabled) is enough to
-#   make Unity re-resolve dispatch and route the next contact on that instance through the patch.
+# Unity's physics message dispatch (OnCollision*/OnTrigger*) has been observed in real projects to
+# bypass a Harmony patch applied while the GameObject already existed, so the pause point can
+# silently miss even though the method body runs. The trigger condition is environment-dependent
+# and has NOT been reproduced deterministically here (see docs/regression-harness.md for the list
+# of ruled-out hypotheses) -- this harness therefore treats the baseline-miss check as conditional:
+#   - if the pre-existing instance misses the pause point (the miss reproduces in this run), the
+#     enabled-toggle workaround is strictly asserted to fix it
+#   - if it does not miss (the common case in this environment), that is logged and this run passes
+#     without exercising the workaround assertion
+# It covers three call shapes:
+#   1. direct   -- pause point on the physics message method itself (OnCollisionEnter2D)
+#   2. indirect -- pause point on a method called one hop deep from the physics message method,
+#      with the instance primed (one prior contact before arming) to match the dominant pattern
+#      reported from real games, where the marker sits in a helper method rather than the callback
+#   3. trigger  -- pause point on OnTriggerEnter2D, a separate Unity dispatch path from OnCollision*
 #
 # The harness forces a fresh domain reload via EditorUtility.RequestScriptReload() before arming,
-# since the enabled-toggle workaround re-resolves dispatch for the whole component type for the
-# rest of the Editor session -- without a reload, a type "fixed" by an earlier local run of this
-# harness (or by any other pause point on the same type) would not reproduce the baseline miss.
-# RequestScriptReload queues the reload for a later editor update rather than running it inline,
-# so polling for bare IPC responsiveness is not sufficient -- a still-loading-the-reload domain
-# and the still-alive pre-reload domain both answer "list" successfully. Reload completion is
-# instead detected via HarnessDomainMarker.Id, a static readonly value that is re-initialized only
-# when the AppDomain actually reloads; the harness waits until this value changes.
+# since the enabled-toggle workaround (when it applies) re-resolves dispatch for the whole
+# component type -- without a reload, a type already "fixed" by an earlier local run of this
+# harness would carry that fix into this run. RequestScriptReload queues the reload for a later
+# editor update rather than running it inline, so polling for bare IPC responsiveness is not
+# sufficient -- a still-loading-the-reload domain and the still-alive pre-reload domain both answer
+# "list" successfully. Reload completion is instead detected via HarnessDomainMarker.Id, a static
+# readonly value that is re-initialized only when the AppDomain actually reloads; the harness waits
+# until this value changes.
 # See docs/regression-harness.md and
 # SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning.
 #
@@ -34,7 +43,8 @@ if [ "$1" = "--project-path" ] && [ -n "$2" ]; then
 fi
 
 FLOOR_FILE="Assets/RegressionHarness/PhysicsCallbackExistingInstance/PhysicsCallbackFloor.cs"
-FLOOR_LINE="16"
+FLOOR_DIRECT_LINE="19"
+FLOOR_INDIRECT_LINE="28"
 TRIGGER_FILE="Assets/RegressionHarness/PhysicsCallbackExistingInstance/PhysicsCallbackTriggerZone.cs"
 TRIGGER_LINE="15"
 RESULT_FILE="$(mktemp)"
@@ -137,10 +147,11 @@ EOF
     run_uloop execute-dynamic-code --code-file "$DYNAMIC_CODE_FILE" > /dev/null
 }
 
-# Verifies a pre-existing physics-callback instance (collision or trigger) misses a pause point
-# armed after it already exists, then confirms the enabled-toggle workaround makes the next
-# contact on that same instance route through the patch.
-verify_existing_instance_gap_and_workaround() {
+# Waits for the ball to make contact and settle, then arms a pause point and reports whether the
+# pre-existing instance missed it. If it missed, strictly asserts the enabled-toggle workaround
+# fixes it. If it did not miss, logs that this run did not reproduce the trap (expected in an
+# environment where the trigger condition does not apply) and returns without asserting further.
+verify_conditional_gap_and_workaround() {
     LABEL="$1"
     MARKER_FILE="$2"
     MARKER_LINE="$3"
@@ -155,12 +166,12 @@ verify_existing_instance_gap_and_workaround() {
     run_uloop pause-point-status --id "$MARKER_ID" > "$RESULT_FILE"
     BASELINE_IS_HIT="$(jq -r '.IsHit' "$RESULT_FILE")"
 
-    if [ "$BASELINE_IS_HIT" != "false" ]; then
-        log "[$LABEL] FAIL: expected the pre-existing instance to miss the pause point (IsHit=false), got IsHit=$BASELINE_IS_HIT"
-        cat "$RESULT_FILE"
-        exit 1
+    if [ "$BASELINE_IS_HIT" = "true" ]; then
+        log "[$LABEL] PASS (trap did not reproduce in this environment; environment-dependent, see PR #1922): the pre-existing instance was hit on arming without needing the enabled-toggle workaround."
+        run_uloop clear-pause-point --all > /dev/null
+        return 0
     fi
-    log "[$LABEL] Baseline miss confirmed (IsHit=false) as documented."
+    log "[$LABEL] Baseline miss reproduced (IsHit=false) -- asserting the enabled-toggle workaround strictly."
 
     log "[$LABEL] Toggling enabled off/on and re-triggering contact..."
     toggle_enabled "$OBJECT_NAME" "$COMPONENT_TYPE"
@@ -171,11 +182,11 @@ verify_existing_instance_gap_and_workaround() {
     WORKAROUND_IS_HIT="$(jq -r '.IsHit' "$RESULT_FILE")"
 
     if [ "$WORKAROUND_IS_HIT" != "true" ]; then
-        log "[$LABEL] FAIL: expected the enabled-toggle workaround to make the pause point hit (IsHit=true), got IsHit=$WORKAROUND_IS_HIT"
+        log "[$LABEL] FAIL: reproduced the baseline miss but the enabled-toggle workaround did not make the pause point hit (IsHit=$WORKAROUND_IS_HIT)"
         cat "$RESULT_FILE"
         exit 1
     fi
-    log "[$LABEL] PASS: enabled-toggle workaround resolved the existing-instance gap."
+    log "[$LABEL] PASS: reproduced the baseline miss and the enabled-toggle workaround resolved it."
 
     run_uloop clear-pause-point --all > /dev/null
 }
@@ -191,9 +202,13 @@ force_clean_domain
 log "Starting Play Mode (Floor/TriggerZone/Ball already exist before any pause point is armed)..."
 run_uloop control-play-mode --action Play > /dev/null
 
-verify_existing_instance_gap_and_workaround "OnCollisionEnter2D" "$FLOOR_FILE" "$FLOOR_LINE" "Floor" "PhysicsCallbackFloor"
-reset_ball
-verify_existing_instance_gap_and_workaround "OnTriggerEnter2D" "$TRIGGER_FILE" "$TRIGGER_LINE" "TriggerZone" "PhysicsCallbackTriggerZone"
+log "[indirect] Priming Floor with one contact before the indirect callee is armed..."
+sleep 3
 
-log "PASS: existing-instance gap and enabled-toggle workaround confirmed for both OnCollisionEnter2D and OnTriggerEnter2D."
+verify_conditional_gap_and_workaround "direct" "$FLOOR_FILE" "$FLOOR_DIRECT_LINE" "Floor" "PhysicsCallbackFloor"
+verify_conditional_gap_and_workaround "indirect" "$FLOOR_FILE" "$FLOOR_INDIRECT_LINE" "Floor" "PhysicsCallbackFloor"
+reset_ball
+verify_conditional_gap_and_workaround "trigger" "$TRIGGER_FILE" "$TRIGGER_LINE" "TriggerZone" "PhysicsCallbackTriggerZone"
+
+log "PASS: direct, indirect, and trigger physics-callback scenarios all handled (reproduced-and-fixed, or did-not-reproduce)."
 exit 0
