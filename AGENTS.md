@@ -12,6 +12,7 @@ Directory-level responsibilities. Kept deliberately coarse — check the directo
 - `Packages/src/` — the Unity package (C#). Each first-party tool lives in `Editor/FirstPartyTools/<Tool>/` with its implementation and agent skill (`Skill/SKILL.md`, optional `Skill/references/`).
 - `Packages/src/Editor/CliOnlyTools~/<Tool>/Skill/` — skills for CLI-only commands (launch, pause-point, etc.) that have no Unity tool class. Tilde-suffixed folders are ignored by Unity, so files there need no `.meta`; files under `FirstPartyTools` do (run `uloop compile` to let Unity generate them).
 - `Assets/` — the development/test Unity project, including custom-command samples under `Assets/Editor/CustomCommandSamples/`.
+- `Assets/RegressionHarness/<TrapName>/` — permanent manual repro scenes for verification-round "traps" (pause-point, simulate-keyboard, physics callbacks, etc.), paired with a driver script under `scripts/regression-harness-<trap-name>.sh`. See `docs/regression-harness.md`.
 - `cli/dispatcher/` — the globally installed `uloop` entry command (also owns `uloop skills install` and skill syncing).
 - `cli/project-runner/` — the per-project CLI runner that talks to the Unity-side IPC server.
 - `cli/common/` — Go modules shared by dispatcher and project runner. Tool parameter schemas live in `cli/common/tools/default-tools.json`; skill discovery in `cli/common/skillscan/`.
