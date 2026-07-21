@@ -223,7 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static JObject BuildMultidimensionalArrayToken(
             Array array, int remainingDepth, HashSet<object> visited, ref bool truncated)
         {
-            string elementTypeName = array.GetType().GetElementType()?.Name ?? "object";
+            string elementTypeName = array.GetType().GetElementType().Name;
             IEnumerable<string> dimensions = Enumerable.Range(0, array.Rank).Select(dimension => array.GetLength(dimension).ToString());
 
             JObject shapeToken = new()
