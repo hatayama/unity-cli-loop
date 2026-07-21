@@ -123,6 +123,24 @@ dispatcher_release_is_prerelease() {
   [ "$ref_name" = "v3-beta" ]
 }
 
+release_commit_updates_dispatcher_version() {
+  commit_sha=$1
+  version=$2
+  expected_contract_entry="\"dispatcherVersion\": \"$version\""
+  expected_changelog_heading="## [$version]"
+
+  commit_diff=$(git show --format= "$commit_sha" -- "$DISPATCHER_CONTRACT_PATH" cli/dispatcher/CHANGELOG.md 2>/dev/null || true)
+  printf '%s\n' "$commit_diff" \
+    | awk -v contract_entry="$expected_contract_entry" -v changelog_heading="$expected_changelog_heading" '
+      substr($0, 1, 1) == "+" && (index($0, contract_entry) > 0 || index($0, changelog_heading) > 0) {
+        found = 1
+      }
+      END {
+        exit found ? 0 : 1
+      }
+    '
+}
+
 DISPATCHER_CONTRACT_PATH=cli/dispatcher/dispatchercontract/dispatcher-contract.json
 
 VERSION=$(jq -r '.dispatcherVersion' "$DISPATCHER_CONTRACT_PATH")
@@ -163,12 +181,17 @@ if [ "$EVENT_NAME" = "push" ]; then
 fi
 
 TARGET_SHA=$(dispatcher_release_target_sha "$RELEASE_TAG")
+BUILD_SHA=$(git rev-parse HEAD)
 IS_PRERELEASE=false
 if dispatcher_release_is_prerelease "$VERSION" "$EVENT_REF_NAME"; then
   IS_PRERELEASE=true
 fi
 
 if [ "$CAN_EVALUATE_DISPATCHER_RELEASE" != "true" ]; then
+  SHOULD_PUBLISH=false
+  SHOULD_RELEASE=false
+elif [ "$EVENT_NAME" = "push" ] && ! release_commit_updates_dispatcher_version "$BUILD_SHA" "$VERSION"; then
+  echo "HEAD commit $BUILD_SHA does not stamp dispatcher version $VERSION; skipping dispatcher publish. Retry an incomplete release with workflow_dispatch." >&2
   SHOULD_PUBLISH=false
   SHOULD_RELEASE=false
 elif release_is_published_with_dispatcher_assets "$RELEASE_TAG"; then
