@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Camera mainCamera = Camera.main;
             if (mainCamera == null)
             {
-                return new GameViewRaycastResult(false, conversion, new RaycastHit[0]);
+                return new GameViewRaycastResult(false, conversion, new RaycastHit[0], null);
             }
 
             Ray ray = mainCamera.ScreenPointToRay(conversion.InjectedUnityPosition);
@@ -34,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             RaycastHit[] hits = Physics.RaycastAll(ray, maxDistance, visibleLayerMask);
             System.Array.Sort(hits, CompareHitsByDistance);
 
-            return new GameViewRaycastResult(true, conversion, hits);
+            return new GameViewRaycastResult(true, conversion, hits, mainCamera);
         }
 
         private static int CompareHitsByDistance(RaycastHit left, RaycastHit right)
@@ -51,15 +51,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public readonly bool CameraFound;
         public readonly GameViewCoordinateConversion Conversion;
         public readonly RaycastHit[] Hits;
+        public readonly Camera Camera;
 
         public GameViewRaycastResult(
             bool cameraFound,
             GameViewCoordinateConversion conversion,
-            RaycastHit[] hits)
+            RaycastHit[] hits,
+            Camera camera)
         {
             CameraFound = cameraFound;
             Conversion = conversion;
             Hits = hits;
+            Camera = camera;
         }
     }
 }

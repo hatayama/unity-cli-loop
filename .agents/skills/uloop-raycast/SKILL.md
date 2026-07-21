@@ -50,6 +50,7 @@ uloop raycast --x 960 --y 540 --layer-mask 1
 Returns JSON with:
 - `Success`: Whether the command completed
 - `Message`: Status message
+- `CameraName` / `CameraPath`: The camera that `Camera.main` resolved to and that the ray was cast from, reported on both hit and no-hit responses. When a `No physics hit` result looks wrong, check these first — another camera in the scene carrying the `MainCamera` tag can silently win the `Camera.main` resolution, so the ray may not come from the viewpoint you expect
 - `Hit`: Whether physics hit anything
 - `HitGameObjectName` / `HitGameObjectPath`: Hit object identity when `Hit` is true
 - `HitLayer` / `HitLayerName`: Hit object layer when `Hit` is true
