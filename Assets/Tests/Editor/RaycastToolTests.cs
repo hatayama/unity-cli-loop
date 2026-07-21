@@ -119,6 +119,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteAsync_WhenCoordinateIntersectsCollider_EmitsRaycastExecutedVibeLog()
+        {
+            // Verifies a raycast records a raycast_executed observability event with camera/hit context.
+            CreateRaycastScene();
+            Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
+            Vector2 inputPosition = new Vector2(gameViewSize.x / 2f, gameViewSize.y / 2f);
+            VibeLogger.ClearMemoryLogs();
+
+            await ExecuteRaycast(inputPosition);
+
+            string logs = VibeLogger.GetLogsForAi("raycast_executed");
+            Assert.That(logs, Does.Contain("raycast_executed"));
+            Assert.That(logs, Does.Contain("\"CameraName\": \"RaycastToolTestsCamera\""));
+            Assert.That(logs, Does.Contain("\"Hit\": true"));
+            Assert.That(logs, Does.Contain("\"HitGameObjectName\": \"RaycastToolTestsCube\""));
+        }
+
+        [Test]
         public async Task ExecuteAsync_WhenCameraIsMissing_ShouldReturnConversionMetadata()
         {
             // Tests that a missing Camera.main fails the raycast but still returns coordinate conversion metadata.

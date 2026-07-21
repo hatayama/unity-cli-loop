@@ -41,7 +41,35 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // that Editor-only tool assembly directly - never leaves a Harmony injection attached
             // after the marker itself reports Cleared.
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear(id);
+            LogCleared(id, snapshot.StatusBeforeClear);
+            if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
+            {
+                LogExpired(id, snapshot.ElapsedSinceEnabledMilliseconds);
+            }
+
             return PausePointStatusResponse.FromSnapshot(snapshot);
+        }
+
+        // Why: PausePointTools.LogCleared duplicates this instead of sharing it, since this
+        // bridge must not reference that Editor-only tool assembly. Keep both in sync if the
+        // log shape or wording changes.
+        private static void LogCleared(string target, string statusBeforeClear)
+        {
+            VibeLogger.LogInfo(
+                "pause_point_cleared",
+                $"Pause point cleared: {target}",
+                new { Target = target, StatusBeforeClear = statusBeforeClear });
+        }
+
+        // Why: PausePointTools.LogExpired duplicates this instead of sharing it, since this
+        // bridge must not reference that Editor-only tool assembly. Keep both in sync if the
+        // log shape or wording changes.
+        private static void LogExpired(string id, long elapsedSinceEnabledMilliseconds)
+        {
+            VibeLogger.LogInfo(
+                "pause_point_expired",
+                $"Pause point expired before being cleared: {id}",
+                new { Id = id, ElapsedSinceEnabledMilliseconds = elapsedSinceEnabledMilliseconds });
         }
 
         private static string ReadId(JToken paramsToken)

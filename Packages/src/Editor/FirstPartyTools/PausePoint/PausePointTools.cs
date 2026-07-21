@@ -299,6 +299,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxHistory);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.Warning = CreateEnableWarning();
+            LogEnable(response.Id, resolvedMethod: string.Empty, fileLine: string.Empty, response.Mode, response.Warning);
             return response;
         }
 
@@ -310,6 +311,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // SourcePausePointPatcher wires into it; this use case never references the
                 // Patcher directly.
                 UloopPausePointClearAllResult clearAllResult = UloopPausePointRegistry.ClearAll();
+                LogCleared("all", string.Empty);
                 return PausePointResponse.FromClearAll(clearAllResult);
             }
 
@@ -320,7 +322,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Clear(parameters.Id);
+            LogCleared(snapshot.Id, snapshot.StatusBeforeClear);
+            if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
+            {
+                LogExpired(snapshot.Id, snapshot.ElapsedSinceEnabledMilliseconds);
+            }
+
             return PausePointResponse.FromSnapshot(snapshot);
+        }
+
+        // Why: PausePointStatusBridgeCommand duplicates this instead of sharing it, since that
+        // bridge must not reference this Editor-only tool assembly. Keep both in sync if the
+        // log shape or wording changes.
+        private static void LogCleared(string target, string statusBeforeClear)
+        {
+            VibeLogger.LogInfo(
+                "pause_point_cleared",
+                $"Pause point cleared: {target}",
+                new { Target = target, StatusBeforeClear = statusBeforeClear });
+        }
+
+        // Why: PausePointStatusBridgeCommand duplicates this instead of sharing it, since that
+        // bridge must not reference this Editor-only tool assembly. Keep both in sync if the
+        // log shape or wording changes.
+        private static void LogExpired(string id, long elapsedSinceEnabledMilliseconds)
+        {
+            VibeLogger.LogInfo(
+                "pause_point_expired",
+                $"Pause point expired before being cleared: {id}",
+                new { Id = id, ElapsedSinceEnabledMilliseconds = elapsedSinceEnabledMilliseconds });
         }
 
         // Resolves File:Line to a patch location via the Resolver, patches it via Harmony, then
@@ -361,7 +391,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ResolvedMethod = resolveResult.Resolution.MethodDisplayName;
             response.SnapshotTiming = SourcePausePointConstants.PreLineSnapshotTimingNote;
             response.Warning = MergeWarnings(CreateEnableWarning(), patchResult.Warning);
+            LogEnable(response.Id, response.ResolvedMethod, $"{parameters.File}:{response.ResolvedLine}", response.Mode, response.Warning);
             return response;
+        }
+
+        private static void LogEnable(string id, string resolvedMethod, string fileLine, string mode, string warning)
+        {
+            VibeLogger.LogInfo(
+                "pause_point_enable",
+                $"Pause point enabled: {id}",
+                new { Id = id, ResolvedMethod = resolvedMethod, FileLine = fileLine, Mode = mode, HasWarning = !string.IsNullOrEmpty(warning) });
         }
 
         // The resolved line can be rounded forward from the requested line (the Resolver picks
