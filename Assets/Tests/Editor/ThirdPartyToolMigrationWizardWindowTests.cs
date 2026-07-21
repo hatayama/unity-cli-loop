@@ -152,85 +152,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void GetMigrationStatusText_WhenTargetsExist_IncludesRelativeFilePaths()
+        public void GetMigrationStatusText_WhenTargetsExist_ReturnsCountOnlyMessage()
         {
-            // Verifies the migration status lists project-relative target paths after the summary.
-            string projectRoot = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                "UnityCliLoopMigrationStatusRoot",
-                System.Guid.NewGuid().ToString("N"));
-            System.IO.Directory.CreateDirectory(projectRoot);
-            try
-            {
-                string[] filePaths =
-                {
-                    System.IO.Path.Combine(projectRoot, "Assets", "Vendor", "One.cs"),
-                    System.IO.Path.Combine(projectRoot, "Assets", "Vendor", "Two.cs")
-                };
+            // Verifies the migration status is a brief count message with no file paths listed.
+            string text = ThirdPartyToolMigrationWizardWindow.GetMigrationStatusText(12);
 
-                string text = ThirdPartyToolMigrationWizardWindow.GetMigrationStatusText(
-                    filePaths,
-                    projectRoot);
-
-                Assert.That(text, Does.StartWith(
-                    "2 files need V3 C# source structure migration.\n" +
-                    "The Unity Console is showing errors because these files still use the old custom tool API.\n\n" +
-                    "Click Migrate to update them automatically. The errors should disappear after migration.\n\n" +
-                    "Files:\n"));
-                Assert.That(text, Does.Contain("Assets/Vendor/One.cs"));
-                Assert.That(text, Does.Contain("Assets/Vendor/Two.cs"));
-                Assert.That(text, Does.Not.Contain("\\"));
-            }
-            finally
-            {
-                System.IO.Directory.Delete(projectRoot, recursive: true);
-            }
+            Assert.That(text, Is.EqualTo("Found 12 C# files that need V3 migration."));
         }
 
         [Test]
-        public void NormalizeDisplayPathSeparators_WhenPathsUseBackslashes_NormalizesToForwardSlashes()
+        public void GetMigrationStatusText_WhenSingleTargetExists_UsesSingularNoun()
         {
-            // Verifies displayed migration paths always use forward slashes on every platform.
-            string normalized = ThirdPartyToolMigrationWizardStateRules.NormalizeDisplayPathSeparators(
-                "Assets\\Vendor\\Tool.cs");
+            // Verifies the singular file count does not pluralize the noun.
+            string text = ThirdPartyToolMigrationWizardWindow.GetMigrationStatusText(1);
 
-            Assert.That(normalized, Is.EqualTo("Assets/Vendor/Tool.cs"));
-        }
-
-        [Test]
-        public void FormatMigrationTargetPathsForStatus_WhenPathCountExceedsLimit_AppendsOverflowSummary()
-        {
-            // Verifies long target lists truncate with a +N more files suffix.
-            string projectRoot = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                "UnityCliLoopMigrationOverflowRoot",
-                System.Guid.NewGuid().ToString("N"));
-            System.IO.Directory.CreateDirectory(projectRoot);
-            try
-            {
-                int totalCount = ThirdPartyToolMigrationWizardStateRules.MaxMigrationTargetPathsInStatus + 3;
-                string[] filePaths = new string[totalCount];
-                for (int index = 0; index < totalCount; index++)
-                {
-                    filePaths[index] = System.IO.Path.Combine(projectRoot, "Assets", $"File{index:D3}.cs");
-                }
-
-                string text = ThirdPartyToolMigrationWizardText.FormatMigrationTargetPathsForStatus(
-                    filePaths,
-                    projectRoot);
-
-                Assert.That(text, Does.Contain("Assets/File000.cs"));
-                Assert.That(
-                    text,
-                    Does.Contain(
-                        $"Assets/File{(ThirdPartyToolMigrationWizardStateRules.MaxMigrationTargetPathsInStatus - 1):D3}.cs"));
-                Assert.That(text, Does.Contain("+3 more files"));
-                Assert.That(text, Does.Not.Contain($"Assets/File{ThirdPartyToolMigrationWizardStateRules.MaxMigrationTargetPathsInStatus:D3}.cs"));
-            }
-            finally
-            {
-                System.IO.Directory.Delete(projectRoot, recursive: true);
-            }
+            Assert.That(text, Is.EqualTo("Found 1 C# file that needs V3 migration."));
         }
 
         [Test]
@@ -642,7 +578,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 frameSize = new(18f, 28f);
 
             Rect resizedRect =
-                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 180f, frameSize);
+                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 180f, frameSize, 1000f);
 
             Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
             Assert.That(resizedRect.size, Is.EqualTo(new Vector2(360f, 208f)));
@@ -656,7 +592,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 frameSize = new(18f, 28f);
 
             Rect resizedRect =
-                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 12f, frameSize);
+                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 12f, frameSize, 1000f);
 
             Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
             Assert.That(resizedRect.size, Is.EqualTo(new Vector2(360f, 120f)));
@@ -670,10 +606,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 frameSize = new(18f, 28f);
 
             Rect resizedRect =
-                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 120f, frameSize);
+                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 120f, frameSize, 1000f);
 
             Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
             Assert.That(resizedRect.size, Is.EqualTo(new Vector2(360f, 148f)));
+        }
+
+        [Test]
+        public void WithContentHeight_WhenMeasuredHeightExceedsMaxHeight_ClampsToMaxHeight()
+        {
+            // Verifies that content fitting never grows the migration wizard past the supplied maximum height.
+            Rect initialRect = new(123f, 456f, 400f, 220f);
+            Vector2 frameSize = new(18f, 28f);
+
+            Rect resizedRect =
+                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 900f, frameSize, 500f);
+
+            Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
+            Assert.That(resizedRect.size, Is.EqualTo(new Vector2(360f, 500f)));
+        }
+
+        [Test]
+        public void WithContentHeight_WhenMaxHeightIsBelowMinimum_ClampsToMinimumHeight()
+        {
+            // Verifies that an unreasonably small maxHeight cannot shrink the window below the usable minimum.
+            Rect initialRect = new(123f, 456f, 400f, 220f);
+            Vector2 frameSize = new(18f, 28f);
+
+            Rect resizedRect =
+                ThirdPartyToolMigrationWizardWindow.WithContentHeight(initialRect, 900f, frameSize, 50f);
+
+            Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
+            Assert.That(resizedRect.size, Is.EqualTo(new Vector2(360f, 120f)));
         }
 
         private static int GetVisualElementIndex(VisualElement root, VisualElement target)

@@ -246,8 +246,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(filePaths != null, "filePaths must not be null");
 
             _pendingMigrationFilePaths = filePaths;
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            _view.ShowMigrationTargetsState(filePaths, projectRoot, _isMigrating);
+            _view.ShowMigrationTargetsState(filePaths, _isMigrating);
             _scheduleResize();
         }
 
@@ -260,7 +259,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal void ShowCheckingState(ThirdPartyToolMigrationProgress progress)
         {
             _view.ShowCheckingState(progress, _isMigrating);
-            _scheduleResize();
         }
 
         internal void RefreshMigrationSkillState()
@@ -280,7 +278,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _migrationSkillTarget,
                 _migrationSkillInstallState,
                 _isUpdatingMigrationSkill);
-            _scheduleResize();
         }
 
         internal void HandleMigrationSkillTargetChanged(SkillsTarget target)
