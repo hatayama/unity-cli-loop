@@ -31,3 +31,4 @@ scenario covers.
 |------|-------|--------|
 | Key state divergence after a pause-point interruption | `Assets/RegressionHarness/KeyStateAfterPauseInterruption/` | `scripts/regression-harness-key-state-after-pause-interruption.sh` |
 | `await-pause-point --trigger` hits within the marker timeout instead of waiting out the triggered command's full duration | `Assets/RegressionHarness/KeyStateAfterPauseInterruption/` (reused) | `scripts/regression-harness-pause-point-trigger.sh` |
+| A pause point armed on an OnCollisionEnter2D/OnTriggerEnter2D method misses a GameObject that already existed before arming, and toggling the component's `enabled` off/on resolves it | `Assets/RegressionHarness/PhysicsCallbackExistingInstance/` | `scripts/regression-harness-physics-callback-existing-instance.sh` |
