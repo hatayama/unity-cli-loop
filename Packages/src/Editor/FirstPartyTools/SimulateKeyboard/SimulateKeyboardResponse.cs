@@ -26,6 +26,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public int? PressHoldExtendedFrames { get; set; }
 
+        /// <summary>
+        /// Diagnostics set only when PressEdgeObserved is false, to help diagnose the next
+        /// occurrence without changing Press/KeyDown timing, grace, or retry behavior.
+        /// </summary>
+        public string? PressEdgeConsumedByUpdateType { get; set; }
+
+        public bool? PressEdgeAnyDynamicUpdateObserved { get; set; }
+
+        public bool? PressEdgeKeyAlreadyPressedBeforeQueue { get; set; }
+
         public SimulateKeyboardResponse()
         {
         }
