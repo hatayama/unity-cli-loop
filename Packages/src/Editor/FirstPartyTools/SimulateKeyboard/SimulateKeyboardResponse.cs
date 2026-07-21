@@ -26,6 +26,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public int? PressHoldExtendedFrames { get; set; }
 
+        // The following three PressEdge* fields are diagnostics set only when PressEdgeObserved
+        // is false, to help diagnose the next occurrence without changing Press/KeyDown timing,
+        // grace, or retry behavior.
+
+        /// <summary>
+        /// Which Input System update type (if any) consumed the key-down event, or null if it
+        /// was never consumed.
+        /// </summary>
+        public string? PressEdgeConsumedByUpdateType { get; set; }
+
+        /// <summary>
+        /// Whether any Dynamic update ran while waiting for the press edge to be observed.
+        /// </summary>
+        public bool? PressEdgeAnyDynamicUpdateObserved { get; set; }
+
+        /// <summary>
+        /// Whether the key was already pressed before this action was queued, meaning no press
+        /// transition could have occurred.
+        /// </summary>
+        public bool? PressEdgeKeyAlreadyPressedBeforeQueue { get; set; }
+
         public SimulateKeyboardResponse()
         {
         }
