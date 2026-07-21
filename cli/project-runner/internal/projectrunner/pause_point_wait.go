@@ -43,6 +43,14 @@ type waitForPausePointOptions struct {
 	capturedVariablesMode pausePointCapturedVariablesMode
 	capturedVariableNames []string
 	expectations          []pausePointExpectation
+
+	// triggerCommand/triggerArgs come from --trigger. startPath is threaded through so the
+	// trigger, when dispatched via runResolvedProjectCommand, can satisfy that function's
+	// signature; --trigger forbids --project-path, so the nested-project-path branch it would
+	// otherwise feed is unreachable here.
+	triggerCommand string
+	triggerArgs    []string
+	startPath      string
 }
 
 type pausePointStatusOptions struct {
@@ -105,6 +113,7 @@ func runWaitForPausePointCommand(
 	ctx context.Context,
 	connection unityipc.Connection,
 	args []string,
+	startPath string,
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
@@ -116,6 +125,7 @@ func runWaitForPausePointCommand(
 		})
 		return 1
 	}
+	options.startPath = startPath
 
 	extendPausePointExpiryBeforeWait(ctx, connection, options, stderr)
 
@@ -192,7 +202,7 @@ func runWaitForPausePoint(
 ) int {
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, clicore.PausePointAwaitCommandName)
-	response, state, err := waitForPausePoint(ctx, connection, options)
+	response, state, triggerResult, err := waitForPausePoint(ctx, connection, options)
 	spinner.Stop()
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
@@ -208,6 +218,7 @@ func runWaitForPausePoint(
 		// also requested via --captured-variable-names or --captured-variables=names.
 		expectations := evaluatePausePointExpectations(response.CapturedVariables, options.expectations)
 
+		response.TriggerResult = triggerResult
 		response = filterPausePointCapturedVariableHistory(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
@@ -259,6 +270,9 @@ func runWaitForPausePoint(
 	}
 
 	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state)
+	if triggerResult != nil {
+		waitErr.Details["TriggerResult"] = triggerResult
+	}
 	if state == pausePointWaitStateTimeout {
 		// Best-effort: the timeout diagnosis must not depend on a second Unity round trip succeeding.
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
@@ -320,6 +334,13 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 				return waitForPausePointOptions{}, parseErr
 			}
 			options.expectations = append(options.expectations, expectation)
+		case PausePointTriggerFlagName:
+			triggerCommand, triggerArgs, parseErr := parsePausePointTriggerCommand(clicore.PausePointAwaitCommandName, value)
+			if parseErr != nil {
+				return waitForPausePointOptions{}, parseErr
+			}
+			options.triggerCommand = triggerCommand
+			options.triggerArgs = triggerArgs
 		default:
 			return waitForPausePointOptions{}, pausePointUnknownOptionError(clicore.PausePointAwaitCommandName, name)
 		}
@@ -393,7 +414,26 @@ func parsePausePointTimeoutSeconds(value string) (int, error) {
 	return timeoutSeconds, nil
 }
 
+// waitForPausePoint starts the --trigger command (if any) right away, since arm is already
+// confirmed by this point (extendPausePointExpiryBeforeWait for await-pause-point; a successful
+// enable response for enable-pause-point --await), then races it against the status poll loop.
+// The trigger is joined once the wait itself settles, not before, so a slow trigger cannot delay
+// reporting a pause-point hit.
 func waitForPausePoint(
+	ctx context.Context,
+	connection unityipc.Connection,
+	options waitForPausePointOptions,
+) (pausePointStatusResponse, pausePointWaitState, *pausePointTriggerResult, error) {
+	var triggerHandle *pausePointTriggerHandle
+	if options.triggerCommand != "" {
+		triggerHandle = startPausePointTrigger(ctx, connection, options.startPath, options.triggerCommand, options.triggerArgs)
+	}
+
+	response, state, err := waitForPausePointStatus(ctx, connection, options)
+	return response, state, triggerHandle.join(), err
+}
+
+func waitForPausePointStatus(
 	ctx context.Context,
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
