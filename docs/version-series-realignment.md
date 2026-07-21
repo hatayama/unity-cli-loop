@@ -63,10 +63,14 @@ Two automations react differently to the realignment commit:
   attestations at the pushed commit. This is what materializes the realigned
   version as a real release.
 
-If the realignment push doesn't stamp the version yet, or the
-release-please workflow failed before dispatcher-publish finished, retry via
-`workflow_dispatch` (which bypasses the push gate and falls back to the
-state-based evaluation) once the release exists with all assets.
+If the realignment push doesn't stamp the version (so dispatcher-publish
+skips it on push), or the resulting dispatcher-publish run is cancelled or
+fails, retry dispatcher-publish via `workflow_dispatch`, which bypasses the
+push gate and falls back to the state-based evaluation described above.
+
+If instead the release-please workflow failed before dispatcher-publish
+finished, re-run it via `workflow_dispatch` once the release exists with all
+assets.
 
 ## What not to touch
 
