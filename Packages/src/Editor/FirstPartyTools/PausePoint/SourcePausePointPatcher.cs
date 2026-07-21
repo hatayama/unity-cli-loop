@@ -118,8 +118,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            string warning = BuildPatchWarning(method);
-            return SourcePausePointPatchResult.SuccessResult(warning);
+            (string warning, bool hasPhysicsCallbackWarning) = BuildPatchWarning(method);
+            return SourcePausePointPatchResult.SuccessResult(warning, method.DeclaringType, hasPhysicsCallbackWarning);
         }
 
         public static void Unpatch(string id)
@@ -251,9 +251,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static string BuildPatchWarning(MethodBase method)
+        private static (string Warning, bool HasPhysicsCallbackWarning) BuildPatchWarning(MethodBase method)
         {
             List<string> warnings = new();
+            bool hasPhysicsCallbackWarning = false;
 
             if (!method.IsStatic && IsByRefLikeType(method.DeclaringType))
             {
@@ -264,10 +265,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 typeof(MonoBehaviour).IsAssignableFrom(method.DeclaringType))
             {
                 warnings.Add(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning);
+                hasPhysicsCallbackWarning = true;
             }
             else if (SourcePausePointPhysicalCallbackCallSiteScanner.IsCalledFromPhysicalMessageMethod(method))
             {
                 warnings.Add(SourcePausePointConstants.PhysicalCallbackIndirectCallMayMissExistingInstanceWarning);
+                hasPhysicsCallbackWarning = true;
             }
 
             if (IsLikelyJitInlined(method))
@@ -275,7 +278,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings.Add(SourcePausePointConstants.SmallMethodInliningRiskWarning);
             }
 
-            return string.Join(" ", warnings);
+            return (string.Join(" ", warnings), hasPhysicsCallbackWarning);
         }
 
         private static bool IsByRefLikeType(Type type)
