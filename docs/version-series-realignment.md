@@ -51,14 +51,26 @@ Two automations react differently to the realignment commit:
   fail with "no release-please commit found" until the release exists.
 - `.github/workflows/dispatcher-publish.yml`
   (`scripts/resolve-dispatcher-release-target.sh`) ignores commit subjects
-  entirely. On every push it derives the release tag from the
-  `dispatcherVersion` in the contract at HEAD and, when that release is
-  missing or lacks assets, builds the binaries and creates/publishes the
-  release with attestations at the pushed commit. This is what materializes
-  the realigned version as a real release.
+  entirely, but on push it only evaluates when HEAD's diff actually stamps
+  the resolved `dispatcherVersion` — a `+` line matching
+  `"dispatcherVersion": "<version>"` in the contract or a
+  `## [<version>]` heading in `cli/dispatcher/CHANGELOG.md`
+  (`release_commit_updates_dispatcher_version`). A `fix:`-titled realignment
+  commit still stamps both the contract and the CHANGELOG, so it passes this
+  gate even though its subject doesn't look like a release commit. When the
+  gate passes and the resolved release is missing or lacks assets, the
+  workflow builds the binaries and creates/publishes the release with
+  attestations at the pushed commit. This is what materializes the realigned
+  version as a real release.
 
-If the release-please workflow failed before dispatcher-publish finished,
-re-run it via `workflow_dispatch` once the release exists with all assets.
+If the realignment push doesn't stamp the version (so dispatcher-publish
+skips it on push), or the resulting dispatcher-publish run is cancelled or
+fails, retry dispatcher-publish via `workflow_dispatch`, which bypasses the
+push gate and falls back to the state-based evaluation described above.
+
+If instead the release-please workflow failed before dispatcher-publish
+finished, re-run it via `workflow_dispatch` once the release exists with all
+assets.
 
 ## What not to touch
 
