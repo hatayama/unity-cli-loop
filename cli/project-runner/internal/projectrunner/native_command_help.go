@@ -18,6 +18,7 @@ const (
 	PausePointCapturedVariablesFlagName     = "captured-variables"
 	PausePointCapturedVariableNamesFlagName = "captured-variable-names"
 	PausePointExpectFlagName                = "expect"
+	PausePointTriggerFlagName               = "trigger"
 )
 
 // runnerNativeCommandOptions lists the flags accepted by each runner-owned
@@ -32,6 +33,7 @@ var runnerNativeCommandOptions = map[string][]string{
 		"--" + PausePointCapturedVariablesFlagName,
 		"--" + PausePointCapturedVariableNamesFlagName,
 		"--" + PausePointExpectFlagName,
+		"--" + PausePointTriggerFlagName,
 	},
 	clicore.PausePointStatusUserCommandName: {
 		"--" + PausePointIDFlagName,
