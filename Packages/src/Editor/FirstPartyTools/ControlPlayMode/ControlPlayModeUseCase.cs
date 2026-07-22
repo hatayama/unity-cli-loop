@@ -246,7 +246,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(failedChanges.Length > 0, "failedChanges must not be empty");
 
             string message = messagePrefix + " Unsaved changes: " + string.Join(", ", failedChanges);
-            return CreateResponse(message, false, false);
+            ControlPlayModeResponse response = CreateResponse(message, false, false);
+            response.BlockedByUnsavedChanges = true;
+            return response;
         }
 
         private ControlPlayModeResponse CreateCompileErrorBlockedResponse(
