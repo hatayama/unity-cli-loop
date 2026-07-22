@@ -142,6 +142,10 @@ func (client *Client) WithMainThreadStallHandler(handler func(float64)) *Client 
 	return client.withOption(WithMainThreadStallHandler(handler))
 }
 
+func (client *Client) WithSelfInducedMainThreadStallTolerance() *Client {
+	return client.withOption(WithSelfInducedMainThreadStallTolerance())
+}
+
 func (client *Client) withOption(option ClientOption) *Client {
 	clientOptions := client.options
 	option(&clientOptions)
@@ -235,6 +239,7 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 
 	if response.ULoop.Phase == rpcResponsePhaseAccepted {
 		outcome.RequestAccepted = true
+		acceptedAt := time.Now()
 		if progress != nil {
 			progress(cliprogress.Event{Stage: cliprogress.StageAccepted})
 		}
@@ -246,6 +251,7 @@ func (client *Client) SendWithProgressOutcomeAcceptContext(
 			progress,
 			cancelAccept,
 			startedAt,
+			acceptedAt,
 			timing,
 			outcome,
 			response,
@@ -262,6 +268,7 @@ func (client *Client) readAcceptedResponse(
 	progress ProgressFunc,
 	cancelAccept context.CancelFunc,
 	startedAt time.Time,
+	acceptedAt time.Time,
 	timing UnitySendTiming,
 	outcome UnitySendOutcome,
 	response rpcResponse,
@@ -301,6 +308,7 @@ func (client *Client) readAcceptedResponse(
 			progress,
 			heartbeatSilence,
 			absoluteDeadline,
+			acceptedAt,
 		); err != nil {
 			return finishOutcomeWithError(outcome, timing, startedAt, err)
 		}
@@ -341,12 +349,14 @@ func (client *Client) handleHeartbeatResponse(
 	progress ProgressFunc,
 	heartbeatSilence time.Duration,
 	absoluteDeadline time.Time,
+	acceptedAt time.Time,
 ) error {
 	stallSeconds := response.ULoop.MainThreadStallSeconds
+	selfInducedStall := client.isSelfInducedStall(stallSeconds, acceptedAt)
 	if stallSeconds >= mainThreadStallProgressThresholdSeconds {
-		client.reportMainThreadStall(stallSeconds, progress)
+		client.reportMainThreadStall(stallSeconds, selfInducedStall, progress)
 	}
-	if stallSeconds >= client.getMainThreadStallLimit().Seconds() {
+	if stallSeconds >= client.getMainThreadStallLimit().Seconds() && !selfInducedStall {
 		return &EditorUnresponsiveError{StallSeconds: stallSeconds}
 	}
 	if heartbeatSilence > 0 {
@@ -355,18 +365,22 @@ func (client *Client) handleHeartbeatResponse(
 	return nil
 }
 
-func (client *Client) reportMainThreadStall(stallSeconds float64, progress ProgressFunc) {
+func (client *Client) reportMainThreadStall(stallSeconds float64, selfInducedStall bool, progress ProgressFunc) {
 	if client.options.mainThreadStallHandler != nil {
 		client.options.mainThreadStallHandler(stallSeconds)
 	}
-	if progress != nil {
-		progress(cliprogress.Event{
-			Stage: cliprogress.StageMessage,
-			Message: fmt.Sprintf(
-				"Unity main thread stuck %.0fs; check modal/long operation...",
-				stallSeconds),
-		})
+	if progress == nil {
+		return
 	}
+	// Why classify rather than just check the option: a stall that predates this request's
+	// accept is a genuine freeze even on a self-induced-stall-tolerant client (it is about to
+	// fail with EditorUnresponsiveError below), so it must keep the "stuck" wording instead of
+	// wrongly implying the command itself is the cause.
+	message := fmt.Sprintf("Unity main thread stuck %.0fs; check modal/long operation...", stallSeconds)
+	if selfInducedStall {
+		message = fmt.Sprintf("Unity main thread busy executing this command for %.0fs; still waiting...", stallSeconds)
+	}
+	progress(cliprogress.Event{Stage: cliprogress.StageMessage, Message: message})
 }
 
 func finishRPCResponse(
