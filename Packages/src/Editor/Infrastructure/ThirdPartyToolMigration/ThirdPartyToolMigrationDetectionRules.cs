@@ -19,6 +19,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// ThirdPartyToolMigrationRuleCatalog (the single source for legacy/current names) rather than
         /// duplicated here, and limited to names that actually changed between V2 and V3 so unrelated
         /// V3-only compile errors do not false-positive on names that stayed the same (e.g. ServiceResult).
+        /// CustomToolManager is intentionally not included: every V2 file that references it also
+        /// contains a using/qualified reference to the legacy namespace, which already produces a
+        /// "uLoopMCP" token hit in the same file, so omitting it does not create a per-file detection gap.
         /// </summary>
         internal static readonly string[] LegacyApiTokens = BuildLegacyApiTokens();
 
