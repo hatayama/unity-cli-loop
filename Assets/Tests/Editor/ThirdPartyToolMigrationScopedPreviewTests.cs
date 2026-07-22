@@ -165,6 +165,75 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        [Test]
+        public async Task PreviewMigrationForSeedFilesAsync_WhenSeedHasNoAsmdefAncestor_FallsBackToFullProjectScan()
+        {
+            // Verifies that a seed file with no asmdef/asmref ancestor (an implicit-assembly seed)
+            // makes PreviewMigrationForSeedFilesAsync fall back to a full-project scan instead of a
+            // scope-limited one, so the legacy target is still detected.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string legacyToolPath = Path.Combine(projectRoot, "Assets", "LegacyTool.cs");
+                File.WriteAllText(legacyToolPath, LegacyToolSource);
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationPreview preview = await service.PreviewMigrationForSeedFilesAsync(
+                    projectRoot,
+                    new List<string> { legacyToolPath },
+                    new Progress<ThirdPartyToolMigrationProgress>(),
+                    CancellationToken.None);
+
+                Assert.That(preview.HasTargets, Is.True);
+                Assert.That(preview.FilePaths, Does.Contain(legacyToolPath));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        [Test]
+        public async Task PreviewMigrationForSeedFilesAsync_WhenSeedHasAnAsmdefAncestor_ScansOnlyThatAssembly()
+        {
+            // Verifies that a seed file under a real asmdef-defined assembly makes
+            // PreviewMigrationForSeedFilesAsync use the scope-limited path, so a legacy tool in a
+            // sibling assembly (outside the scope) is not reported.
+            string projectRoot = CreateProjectRoot();
+            try
+            {
+                string scopedToolDirectory = Path.Combine(projectRoot, "Assets", "ScopedTool");
+                string outOfScopeToolDirectory = Path.Combine(projectRoot, "Assets", "OutOfScopeTool");
+                Directory.CreateDirectory(scopedToolDirectory);
+                Directory.CreateDirectory(outOfScopeToolDirectory);
+                string legacyToolPath = Path.Combine(scopedToolDirectory, "LegacyTool.cs");
+                File.WriteAllText(legacyToolPath, LegacyToolSource);
+                File.WriteAllText(
+                    Path.Combine(scopedToolDirectory, "ScopedTool.asmdef"),
+                    "{\"name\": \"ScopedTool\"}");
+                File.WriteAllText(
+                    Path.Combine(outOfScopeToolDirectory, "OutOfScopeTool.cs"),
+                    LegacyToolSource);
+
+                ThirdPartyToolMigrationFileService service = new();
+                ThirdPartyToolMigrationPreview preview = await service.PreviewMigrationForSeedFilesAsync(
+                    projectRoot,
+                    new List<string> { legacyToolPath },
+                    new Progress<ThirdPartyToolMigrationProgress>(),
+                    CancellationToken.None);
+
+                Assert.That(preview.HasTargets, Is.True);
+                Assert.That(preview.FilePaths, Does.Contain(legacyToolPath));
+                Assert.That(
+                    preview.FilePaths,
+                    Has.No.Member(Path.Combine(outOfScopeToolDirectory, "OutOfScopeTool.cs")));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
         private const string LegacyToolSource = @"using io.github.hatayama.uLoopMCP;
 
 [McpTool]

@@ -187,7 +187,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 lastSeenVersion);
             MaybeScheduleThirdPartyToolMigrationAutoScan(shouldAutoScanThirdPartyToolMigration);
 
-
             bool versionChanged = !string.Equals(
                 currentVersion,
                 lastSeenVersion,

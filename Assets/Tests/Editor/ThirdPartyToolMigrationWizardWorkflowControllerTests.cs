@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public (bool Found, List<string> TargetFilePaths) TryDetectAutoScanTargetsFromCompileErrors(
                 string projectRoot)
             {
-                return (false, null);
+                return (false, new List<string>());
             }
 
             public Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct)

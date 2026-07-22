@@ -154,7 +154,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (!EditorUtility.scriptCompilationFailed)
             {
-                return (false, null);
+                return (false, new List<string>());
             }
 
             string normalizedProjectRoot = NormalizeProjectRoot(projectRoot);
@@ -170,7 +170,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ThirdPartyToolMigrationCompileErrorLogMatcher.Match(entries);
             if (matchResult.TargetFilePaths.Count == 0)
             {
-                return (false, null);
+                return (false, new List<string>());
             }
 
             return (true, matchResult.TargetFilePaths);

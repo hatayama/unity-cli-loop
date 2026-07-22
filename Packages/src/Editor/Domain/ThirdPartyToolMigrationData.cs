@@ -98,7 +98,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         /// Checks whether the most recent compile failure was caused by V2 legacy custom-tool APIs, by
         /// matching Unity Console error text against known legacy tokens (mirrors Unity's own API
         /// Updater, which performs the same kind of compile-error-driven detection). Returns
-        /// Found == false without inspecting the console when no compile failure is in effect.
+        /// Found == false with an empty TargetFilePaths (never null) without inspecting the console
+        /// when no compile failure is in effect.
         /// </summary>
         (bool Found, List<string> TargetFilePaths) TryDetectAutoScanTargetsFromCompileErrors(string projectRoot);
 
