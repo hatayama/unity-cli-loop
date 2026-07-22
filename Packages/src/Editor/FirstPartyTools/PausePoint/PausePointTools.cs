@@ -31,6 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Mode { get; set; } = UloopPausePointCaptureMode.SingleShot;
 
         public int MaxHistory { get; set; } = UloopPausePointRegistry.DefaultMaxHistory;
+
+        public int MaxPreviewElements { get; set; } = UloopPausePointRegistry.DefaultMaxPreviewElements;
     }
 
     /// <summary>
@@ -60,6 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int TimeoutSeconds { get; set; }
         public string Mode { get; set; } = string.Empty;
         public int MaxHistory { get; set; }
+        public int MaxPreviewElements { get; set; }
         public IReadOnlyList<PausePointCapturedHistoryFrame> CapturedVariableHistory { get; set; } =
             Array.Empty<PausePointCapturedHistoryFrame>();
         public int HistoryDroppedCount { get; set; }
@@ -98,6 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 TimeoutSeconds = snapshot.TimeoutSeconds,
                 Mode = snapshot.Mode,
                 MaxHistory = snapshot.MaxHistory,
+                MaxPreviewElements = snapshot.MaxPreviewElements,
                 CapturedVariableHistory = snapshot.CapturedVariableHistory
                     .Select(PausePointCapturedHistoryFrame.FromSnapshot)
                     .ToList(),
@@ -307,7 +311,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.Id,
                 parameters.TimeoutSeconds,
                 parameters.Mode,
-                parameters.MaxHistory);
+                parameters.MaxHistory,
+                parameters.MaxPreviewElements);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.Warning = CreateEnableWarning();
             LogEnable(response.Id, resolvedMethod: string.Empty, fileLine: string.Empty, response.Mode, response.Warning);
@@ -437,7 +442,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 id,
                 parameters.TimeoutSeconds,
                 parameters.Mode,
-                parameters.MaxHistory);
+                parameters.MaxHistory,
+                parameters.MaxPreviewElements);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.ResolvedLine = resolveResult.Resolution.ResolvedLine;
             response.ResolvedLineText = ReadResolvedLineText(parameters.File, resolveResult.Resolution.ResolvedLine);
@@ -579,6 +585,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (parameters.MaxHistory <= 0 || parameters.MaxHistory > UloopPausePointRegistry.MaxHistoryLimit)
             {
                 return $"MaxHistory must be between 1 and {UloopPausePointRegistry.MaxHistoryLimit}.";
+            }
+
+            if (parameters.MaxPreviewElements <= 0 ||
+                parameters.MaxPreviewElements > UloopPausePointRegistry.MaxPreviewElementsLimit)
+            {
+                return $"MaxPreviewElements must be between 1 and {UloopPausePointRegistry.MaxPreviewElementsLimit}.";
             }
 
             return null;

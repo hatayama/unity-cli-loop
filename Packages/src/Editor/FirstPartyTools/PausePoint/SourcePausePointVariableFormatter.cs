@@ -20,15 +20,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string DestroyedValue = "(destroyed)";
 
         public static (List<UloopCapturedVariable> Variables, bool Truncated) Format(
-            object instance, object[] parameterNamesAndValues, object[] localNamesAndValues)
+            object instance, object[] parameterNamesAndValues, object[] localNamesAndValues,
+            int maxCollectionPreviewElementCount = SourcePausePointConstants.MaxCollectionPreviewElementCount)
         {
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
                 instance, parameterNamesAndValues, localNamesAndValues);
-            return FormatFrame(frame);
+            return FormatFrame(frame, maxCollectionPreviewElementCount);
         }
 
         public static (List<UloopCapturedVariable> Variables, bool Truncated) FormatFrame(
-            UloopPausePointCapturedVariableFrame frame)
+            UloopPausePointCapturedVariableFrame frame,
+            int maxCollectionPreviewElementCount = SourcePausePointConstants.MaxCollectionPreviewElementCount)
         {
             Debug.Assert(frame != null, "frame must not be null");
 
@@ -36,13 +38,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool truncated = frame.Truncated;
             foreach (UloopPausePointCapturedVariableEntry entry in frame.Entries)
             {
-                results.Add(FormatVariable(entry.Name, entry.Scope, entry.Value, ref truncated));
+                results.Add(FormatVariable(entry.Name, entry.Scope, entry.Value, maxCollectionPreviewElementCount, ref truncated));
             }
 
             return (results, truncated);
         }
 
-        private static UloopCapturedVariable FormatVariable(string name, string scope, object rawValue, ref bool truncated)
+        private static UloopCapturedVariable FormatVariable(
+            string name, string scope, object rawValue, int maxCollectionPreviewElementCount, ref bool truncated)
         {
             if (rawValue == null)
             {
@@ -55,7 +58,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return FormatUnityObjectVariable(name, scope, typeName, unityObjectCandidate);
             }
 
-            if (SourcePausePointCollectionPreviewSerializer.TrySerialize(rawValue, ref truncated, out string collectionPreview))
+            if (SourcePausePointCollectionPreviewSerializer.TrySerialize(
+                    rawValue, maxCollectionPreviewElementCount, ref truncated, out string collectionPreview))
             {
                 string cappedPreview = ApplyValueLengthCap(
                     collectionPreview,

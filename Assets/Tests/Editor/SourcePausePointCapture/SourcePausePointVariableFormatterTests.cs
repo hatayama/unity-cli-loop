@@ -568,6 +568,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Format_WithPerMarkerMaxPreviewElementsAtLimit_DoesNotTruncate()
+        {
+            // Verifies a per-marker preview cap override (enable-pause-point --max-preview-elements)
+            // is honored: exactly the override's element count is not truncated.
+            const int maxPreviewElements = 200;
+            List<int> values = Enumerable.Repeat(0, maxPreviewElements).ToList();
+            object[] locals = { "scores", values };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals, maxPreviewElements);
+
+            Assert.That(variables.Single().Value.Split(',').Length, Is.EqualTo(maxPreviewElements));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
+        public void Format_WithPerMarkerMaxPreviewElementsExceededByOne_TruncatesAndSetsFlag()
+        {
+            // Verifies one element past the per-marker preview cap still truncates and reports it.
+            const int maxPreviewElements = 200;
+            List<int> values = Enumerable.Repeat(0, maxPreviewElements + 1).ToList();
+            object[] locals = { "scores", values };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals, maxPreviewElements);
+
+            Assert.That(variables.Single().Value.Split(',').Length, Is.EqualTo(maxPreviewElements));
+            Assert.That(truncated, Is.True);
+        }
+
+        [Test]
         public void Format_WithCompositeCollectionElements_ExpandsElementFieldsAsJson()
         {
             // Verifies composite element types without a ToString override expand their fields as

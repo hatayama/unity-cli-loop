@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -112,6 +114,101 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Is.EqualTo("MaxHistory must be between 1 and 100."));
+        }
+
+        /// <summary>
+        /// Verifies the max-preview-elements JSON parameter reaches the enable response.
+        /// </summary>
+        [Test]
+        public async Task Enable_WhenMaxPreviewElementsIsProvided_MapsParameter()
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["timeoutSeconds"] = 30,
+                ["maxPreviewElements"] = 200
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.MaxPreviewElements, Is.EqualTo(200));
+        }
+
+        /// <summary>
+        /// Verifies max-preview-elements defaults to the registry default when omitted.
+        /// </summary>
+        [Test]
+        public async Task Enable_WhenMaxPreviewElementsIsOmitted_DefaultsToRegistryDefault()
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["timeoutSeconds"] = 30
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.MaxPreviewElements, Is.EqualTo(UloopPausePointRegistry.DefaultMaxPreviewElements));
+        }
+
+        /// <summary>
+        /// Verifies an out-of-range max-preview-elements value returns a user-facing validation failure.
+        /// </summary>
+        [Test]
+        public async Task Enable_WhenMaxPreviewElementsIsOutOfRange_ReturnsValidationFailure()
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["maxPreviewElements"] = UloopPausePointRegistry.MaxPreviewElementsLimit + 1
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("MaxPreviewElements must be between 1 and 1000."));
+        }
+
+        /// <summary>
+        /// Verifies a non-positive max-preview-elements value returns a validation failure.
+        /// </summary>
+        [Test]
+        public async Task Enable_WhenMaxPreviewElementsIsZero_ReturnsValidationFailure()
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["maxPreviewElements"] = 0
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("MaxPreviewElements must be between 1 and 1000."));
+        }
+
+        /// <summary>
+        /// Verifies a source pause point hit serializes its collection preview using the marker's
+        /// own max-preview-elements override instead of the fixed default.
+        /// </summary>
+        [Test]
+        public void Hit_WhenMarkerHasMaxPreviewElementsOverride_UsesOverrideForCollectionPreview()
+        {
+            const int maxPreviewElements = 3;
+            UloopPausePointRegistry.Enable("jump", 30, UloopPausePointCaptureMode.SingleShot, 20, maxPreviewElements);
+            List<int> values = Enumerable.Range(0, maxPreviewElements + 5).ToList();
+
+            (UloopPausePointCapturedVariableFrame _, List<UloopCapturedVariable> variables, bool truncated) =
+                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), new object[] { "scores", values }, maxPreviewElements);
+
+            Assert.That(variables.Single().Value.Split(',').Length, Is.EqualTo(maxPreviewElements));
+            Assert.That(truncated, Is.True);
         }
 
         /// <summary>
