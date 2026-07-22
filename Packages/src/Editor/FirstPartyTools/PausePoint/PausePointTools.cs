@@ -31,6 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Mode { get; set; } = UloopPausePointCaptureMode.SingleShot;
 
         public int MaxHistory { get; set; } = UloopPausePointRegistry.DefaultMaxHistory;
+
+        public int MaxPreviewElements { get; set; } = UloopPausePointRegistry.DefaultMaxPreviewElements;
     }
 
     /// <summary>
@@ -60,6 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int TimeoutSeconds { get; set; }
         public string Mode { get; set; } = string.Empty;
         public int MaxHistory { get; set; }
+        public int MaxPreviewElements { get; set; }
         public IReadOnlyList<PausePointCapturedHistoryFrame> CapturedVariableHistory { get; set; } =
             Array.Empty<PausePointCapturedHistoryFrame>();
         public int HistoryDroppedCount { get; set; }
@@ -98,6 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 TimeoutSeconds = snapshot.TimeoutSeconds,
                 Mode = snapshot.Mode,
                 MaxHistory = snapshot.MaxHistory,
+                MaxPreviewElements = snapshot.MaxPreviewElements,
                 CapturedVariableHistory = snapshot.CapturedVariableHistory
                     .Select(PausePointCapturedHistoryFrame.FromSnapshot)
                     .ToList(),
@@ -279,6 +283,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // survive one, and entries are removed as soon as their pause point is cleared.
         private static readonly Dictionary<string, Type> PhysicsFlaggedDeclaringTypesById = new();
 
+        // Why here rather than at the EnableBySourceLocation call site: PhysicsFlaggedDeclaringTypesById
+        // can only become non-empty after EnableBySourceLocation has populated it at least once, and
+        // by then this type has already been touched (it is the type EnableBySourceLocation is a
+        // member of), so static type initialization has already run this constructor. The
+        // subscription is therefore always wired before any Clear/bridge-Clear that could possibly
+        // find a matching id in the dictionary.
+        static PausePointUseCase()
+        {
+            UloopPausePointRegistry.OnClearResolved = OnRegistryClearResolved;
+        }
+
+        // Shared by both Clear callers (this use case's own --id path below, and the Infrastructure
+        // CLI bridge's PausePointStatusBridgeCommand.Clear, which must not reference this Editor-only
+        // tool assembly directly) via the UloopPausePointRegistry.OnClearResolved hook, so a zero-hit
+        // clear of a physics-flagged marker is diagnosed the same way regardless of which caller
+        // cleared it.
+        private static void OnRegistryClearResolved(string id, int hitCount, string statusBeforeClear)
+        {
+            if (hitCount == 0 && PhysicsFlaggedDeclaringTypesById.TryGetValue(id, out Type declaringType))
+            {
+                LogPhysicsDispatchDiagnostics("pause_point_cleared_without_hit_physics", id, declaringType, statusBeforeClear);
+            }
+            PhysicsFlaggedDeclaringTypesById.Remove(id);
+        }
+
         public PausePointResponse Enable(EnablePausePointSchema parameters)
         {
             string captureSettingsError = ValidateCaptureSettings(parameters);
@@ -307,7 +336,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.Id,
                 parameters.TimeoutSeconds,
                 parameters.Mode,
-                parameters.MaxHistory);
+                parameters.MaxHistory,
+                parameters.MaxPreviewElements);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.Warning = CreateEnableWarning();
             LogEnable(response.Id, resolvedMethod: string.Empty, fileLine: string.Empty, response.Mode, response.Warning);
@@ -319,15 +349,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (parameters.All)
             {
                 // Snapshot each physics-flagged marker before ClearAll resolves it away, so a
-                // marker that expired without a hit still gets its diagnostics logged. This is
+                // marker cleared without ever being hit still gets its diagnostics logged
+                // regardless of whether it had already expired or was still Enabled. This is
                 // the dominant field path (await timeout -> agent cleans up with --all), so
                 // skipping it here would lose the primary evidence in the common case.
+                //
+                // This loop and OnRegistryClearResolved above are the only two places that log
+                // this diagnostic; keep them in sync if the log shape or wording changes. This one
+                // exists because ClearAll has no single-id equivalent to route through
+                // UloopPausePointRegistry.Clear (and therefore OnClearResolved) - Registry.ClearAll
+                // clears every entry in one bulk pass instead. Every id still in this dictionary at
+                // this point is guaranteed to be un-cleared: a single Clear of any tracked id -
+                // whichever caller made it - already removed it via OnRegistryClearResolved, so
+                // there is no stale-Cleared-entry case left to guard against here.
                 foreach (KeyValuePair<string, Type> tracked in PhysicsFlaggedDeclaringTypesById)
                 {
                     UloopPausePointSnapshot trackedSnapshot = UloopPausePointRegistry.GetStatus(tracked.Key);
-                    if (trackedSnapshot.Status == UloopPausePointStatus.Expired && trackedSnapshot.HitCount == 0)
+                    if (trackedSnapshot.HitCount == 0)
                     {
-                        LogPhysicsDispatchDiagnostics("pause_point_expired_without_hit_physics", tracked.Key, tracked.Value);
+                        LogPhysicsDispatchDiagnostics(
+                            "pause_point_cleared_without_hit_physics", tracked.Key, tracked.Value, trackedSnapshot.Status);
                     }
                 }
 
@@ -351,13 +392,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
             {
                 LogExpired(snapshot.Id, snapshot.ElapsedSinceEnabledMilliseconds);
-                if (snapshot.HitCount == 0 && PhysicsFlaggedDeclaringTypesById.TryGetValue(snapshot.Id, out Type declaringType))
-                {
-                    LogPhysicsDispatchDiagnostics("pause_point_expired_without_hit_physics", snapshot.Id, declaringType);
-                }
             }
-            PhysicsFlaggedDeclaringTypesById.Remove(snapshot.Id);
 
+            // The zero-hit physics diagnostic (for any StatusBeforeClear, not just Expired - the
+            // field incident that motivated it, Block.cs:29 2026-07-22, cleared while still
+            // Enabled) and the PhysicsFlaggedDeclaringTypesById removal already happened inside
+            // UloopPausePointRegistry.Clear above, via the OnClearResolved hook subscribed to
+            // OnRegistryClearResolved. This keeps the direct-tool-call path in sync with the
+            // Infrastructure CLI bridge's Clear path without duplicating the check here.
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             if (resumedFromPause)
             {
@@ -420,7 +462,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 id,
                 parameters.TimeoutSeconds,
                 parameters.Mode,
-                parameters.MaxHistory);
+                parameters.MaxHistory,
+                parameters.MaxPreviewElements);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.ResolvedLine = resolveResult.Resolution.ResolvedLine;
             response.ResolvedLineText = ReadResolvedLineText(parameters.File, resolveResult.Resolution.ResolvedLine);
@@ -432,7 +475,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (patchResult.HasPhysicsCallbackWarning)
             {
                 PhysicsFlaggedDeclaringTypesById[id] = patchResult.DeclaringType;
-                LogPhysicsDispatchDiagnostics("pause_point_physics_dispatch_diagnostics", id, patchResult.DeclaringType);
+                LogPhysicsDispatchDiagnostics(
+                    "pause_point_physics_dispatch_diagnostics", id, patchResult.DeclaringType, statusBeforeClear: string.Empty);
             }
 
             return response;
@@ -450,8 +494,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // whether Play Mode is running, how long the current domain has been alive without a
         // reload (a suspected factor -- see docs/regression-harness.md), the declaring type, and
         // (for MonoBehaviour-derived types only) how many instances currently exist in the loaded
-        // scenes.
-        private static void LogPhysicsDispatchDiagnostics(string operation, string id, Type declaringType)
+        // scenes. statusBeforeClear is empty at enable time (no clear has happened yet) and
+        // Enabled/Expired at clear time.
+        private static void LogPhysicsDispatchDiagnostics(string operation, string id, Type declaringType, string statusBeforeClear)
         {
             // Only reachable via PhysicsFlaggedDeclaringTypesById, which is populated solely from
             // a successful patch's method.DeclaringType -- a C#-sourced method always has one.
@@ -481,7 +526,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     IsPaused = EditorApplication.isPaused,
                     SecondsSinceLastDomainReload = PausePointDomainReloadTracker.SecondsSinceLoad(),
                     DeclaringType = declaringType.FullName,
-                    InstanceCount = instanceCount
+                    InstanceCount = instanceCount,
+                    StatusBeforeClear = statusBeforeClear
                 });
         }
 
@@ -559,6 +605,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (parameters.MaxHistory <= 0 || parameters.MaxHistory > UloopPausePointRegistry.MaxHistoryLimit)
             {
                 return $"MaxHistory must be between 1 and {UloopPausePointRegistry.MaxHistoryLimit}.";
+            }
+
+            if (parameters.MaxPreviewElements <= 0 ||
+                parameters.MaxPreviewElements > UloopPausePointRegistry.MaxPreviewElementsLimit)
+            {
+                return $"MaxPreviewElements must be between 1 and {UloopPausePointRegistry.MaxPreviewElementsLimit}.";
             }
 
             return null;

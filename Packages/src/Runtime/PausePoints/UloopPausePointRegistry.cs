@@ -18,6 +18,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public const int DefaultTimeoutSeconds = 30;
         public const int DefaultMaxHistory = 20;
         public const int MaxHistoryLimit = 100;
+        public const int DefaultMaxPreviewElements = 10;
+        public const int MaxPreviewElementsLimit = 1000;
 
         private static readonly ConcurrentDictionary<string, UloopPausePointEntry> Entries = new();
         private static IUloopPausePointPauseController _pauseController = new UnityEditorPausePointPauseController();
@@ -51,22 +53,35 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // assembly - removes the underlying Harmony patch without knowing it exists.
         public static Action<string> OnCleared { get; set; }
         public static Action OnClearedAll { get; set; }
+        // Fires once Clear(id) has fully resolved entry state (after MarkCleared), unlike
+        // OnCleared above which fires first, before TryExpire/MarkCleared run - too early to read
+        // HitCount/StatusBeforeClear. Lets tool-assembly-only diagnostics (physics dispatch
+        // misses) subscribe here instead of duplicating that inline check in both Clear callers
+        // (PausePointUseCase and the Infrastructure CLI bridge), the same way OnCleared/
+        // OnClearedAll already let SourcePausePointPatcher subscribe once instead of every caller
+        // referencing it directly.
+        public static Action<string, int, string> OnClearResolved { get; set; }
 
         public static UloopPausePointSnapshot Enable(
             string id,
             int timeoutSeconds,
             string mode = UloopPausePointCaptureMode.SingleShot,
-            int maxHistory = DefaultMaxHistory)
+            int maxHistory = DefaultMaxHistory,
+            int maxPreviewElements = DefaultMaxPreviewElements)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
             Debug.Assert(timeoutSeconds > 0, "timeoutSeconds must be greater than zero");
             Debug.Assert(IsSupportedMode(mode), "mode must be a supported pause point capture mode");
             Debug.Assert(maxHistory > 0, "maxHistory must be greater than zero");
             Debug.Assert(maxHistory <= MaxHistoryLimit, "maxHistory must not exceed the history limit");
+            Debug.Assert(maxPreviewElements > 0, "maxPreviewElements must be greater than zero");
+            Debug.Assert(
+                maxPreviewElements <= MaxPreviewElementsLimit,
+                "maxPreviewElements must not exceed the preview element limit");
 
             DateTime now = NowUtc();
             int generation = ++_nextGeneration;
-            UloopPausePointEntry entry = new(id, timeoutSeconds, mode, maxHistory, now, generation);
+            UloopPausePointEntry entry = new(id, timeoutSeconds, mode, maxHistory, maxPreviewElements, now, generation);
             Entries[id] = entry;
             // Why not clear the raw capture holder here: a re-enable does not resume Unity, so the
             // paused-window constraint (see UloopPausePointRawCaptureHolder's class comment) is not
@@ -104,6 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 _ => "Pause point cleared."
             };
             entry.MarkCleared(UloopPausePointClearedReason.ExplicitClear, message);
+            OnClearResolved?.Invoke(id, entry.HitCount, entry.StatusBeforeClear);
             ClearHitSnapshotAndRawCaptureForId(id);
             // Why only when pause-point-owned: a clear must not steal ownership of a manual pause
             // the user set outside the pause-point workflow (control-play-mode --action Pause or
@@ -231,6 +247,17 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             return Entries.TryGetValue(id, out UloopPausePointEntry entry) && entry.IsEnabled;
+        }
+
+        // Called from the Harmony Capture entry point right after IsArmed confirms the id is
+        // armed, so the per-marker override set at Enable time can size the collection preview
+        // for this hit. Falls back to the default when the id is unexpectedly missing (e.g. a
+        // race with Clear) rather than asserting, since Capture must never throw off a patched method.
+        public static int GetMaxPreviewElements(string id)
+        {
+            return Entries.TryGetValue(id, out UloopPausePointEntry entry)
+                ? entry.MaxPreviewElements
+                : DefaultMaxPreviewElements;
         }
 
         /// <summary>

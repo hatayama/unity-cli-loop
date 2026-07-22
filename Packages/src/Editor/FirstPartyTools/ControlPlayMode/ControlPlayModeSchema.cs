@@ -10,7 +10,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         Play = 0,
         Stop = 1,
         Pause = 2,
-        Step = 3
+        Step = 3,
+        Status = 4
     }
 
     /// <summary>

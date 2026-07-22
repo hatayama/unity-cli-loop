@@ -108,10 +108,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 case PlayModeAction.Step:
                     return ExecutePlayModeStep(wasPlaying);
 
+                case PlayModeAction.Status:
+                    return CreateStatusActionResult();
+
                 default:
                     message = $"Unknown action: {action}";
                     return ControlPlayModeActionResult.FromState(message, false, false);
             }
+        }
+
+        // Status reports the current compile-error blocker via a read-only check (no new compile
+        // triggered), but never predicts BlockedByUnsavedChanges: that field means a save attempt
+        // during this request failed, and Status makes no save attempt.
+        private ControlPlayModeActionResult CreateStatusActionResult()
+        {
+            if (!_compilationFailureGate.HasScriptCompilationFailed())
+            {
+                return ControlPlayModeActionResult.FromState("Play mode status", false, false);
+            }
+
+            ControlPlayModeCompileError[] compileErrors =
+                _compilationFailureProvider.GetLastFailedErrors() ?? Array.Empty<ControlPlayModeCompileError>();
+            ControlPlayModeResponse response = CreateResponse("Play mode status", false, false);
+            response.BlockedByCompileErrors = true;
+            response.CompileErrors = compileErrors;
+            response.CompileErrorCount = compileErrors.Length;
+            return ControlPlayModeActionResult.FromResponse(response, false);
         }
 
         private bool ShouldBlockPlayForCompileErrors(PlayModeAction action, bool isPlaying)
@@ -246,7 +268,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(failedChanges.Length > 0, "failedChanges must not be empty");
 
             string message = messagePrefix + " Unsaved changes: " + string.Join(", ", failedChanges);
-            return CreateResponse(message, false, false);
+            ControlPlayModeResponse response = CreateResponse(message, false, false);
+            response.BlockedByUnsavedChanges = true;
+            return response;
         }
 
         private ControlPlayModeResponse CreateCompileErrorBlockedResponse(

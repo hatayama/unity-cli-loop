@@ -28,6 +28,7 @@ const (
 	ErrorCodeCompileWaitTimeout              = "COMPILE_WAIT_TIMEOUT"
 	ErrorCodeControlPlayModeWaitTimeout      = "CONTROL_PLAY_MODE_WAIT_TIMEOUT"
 	ErrorCodeControlPlayModeCompileErrors    = "CONTROL_PLAY_MODE_COMPILE_ERRORS"
+	ErrorCodeControlPlayModeUnsavedChanges   = "CONTROL_PLAY_MODE_UNSAVED_CHANGES"
 	ErrorCodePausePointNotEnabled            = "PAUSE_POINT_NOT_ENABLED"
 	ErrorCodePausePointWaitTimeout           = "PAUSE_POINT_WAIT_TIMEOUT"
 	ErrorCodePausePointExpired               = "PAUSE_POINT_EXPIRED"

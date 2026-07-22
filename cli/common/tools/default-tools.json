@@ -320,18 +320,19 @@
     },
     {
       "name": "control-play-mode",
-      "description": "Control Unity Editor play mode (play/stop/pause)",
+      "description": "Control Unity Editor play mode (play/stop/pause/step/status)",
       "inputSchema": {
         "type": "object",
         "properties": {
           "Action": {
             "type": "string",
-            "description": "Action to perform: Play - Start play mode, Stop - Stop play mode, Pause - Pause play mode, Step - advance one frame while paused",
+            "description": "Action to perform: Play - Start play mode, Stop - Stop play mode, Pause - Pause play mode, Step - advance one frame while paused, Status - report current state without changing anything",
             "enum": [
               "Play",
               "Stop",
               "Pause",
-              "Step"
+              "Step",
+              "Status"
             ],
             "default": "Play"
           },
@@ -380,6 +381,11 @@
             "type": "integer",
             "description": "Maximum number of captured hit frames to retain (1-100)",
             "default": 20
+          },
+          "MaxPreviewElements": {
+            "type": "integer",
+            "description": "Maximum number of elements to include in a captured collection's preview (1-1000)",
+            "default": 10
           }
         }
       }

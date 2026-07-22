@@ -210,7 +210,7 @@ func sendWithTransientConnectionRetryWithDeps(
 	retryTicker := time.NewTicker(deps.retryPoll)
 	defer retryTicker.Stop()
 	for {
-		client := newConnectionRetryClient(connection, responseTimeout, func(stallSeconds float64) {
+		client := newConnectionRetryClient(connection, method, responseTimeout, func(stallSeconds float64) {
 			focusController.handleMainThreadStall(ctx, stallSeconds)
 		})
 		// Each attempt keeps the base accept bound: a dispatched request that never gets

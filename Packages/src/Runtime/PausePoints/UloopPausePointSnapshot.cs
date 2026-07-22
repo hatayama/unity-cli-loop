@@ -20,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int timeoutSeconds,
             string mode,
             int maxHistory,
+            int maxPreviewElements,
             IReadOnlyList<UloopPausePointCapturedHistoryFrame> capturedVariableHistory,
             int historyDroppedCount,
             bool expired,
@@ -50,6 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             TimeoutSeconds = timeoutSeconds;
             Mode = mode ?? UloopPausePointCaptureMode.SingleShot;
             MaxHistory = maxHistory;
+            MaxPreviewElements = maxPreviewElements;
             CapturedVariableHistory = capturedVariableHistory ?? Array.Empty<UloopPausePointCapturedHistoryFrame>();
             HistoryDroppedCount = historyDroppedCount;
             Expired = expired;
@@ -79,6 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public int TimeoutSeconds { get; }
         public string Mode { get; }
         public int MaxHistory { get; }
+        public int MaxPreviewElements { get; }
         public IReadOnlyList<UloopPausePointCapturedHistoryFrame> CapturedVariableHistory { get; }
         public int HistoryDroppedCount { get; }
         public bool Expired { get; }
@@ -111,6 +114,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 0,
                 0,
                 UloopPausePointCaptureMode.SingleShot,
+                0,
                 0,
                 Array.Empty<UloopPausePointCapturedHistoryFrame>(),
                 0,

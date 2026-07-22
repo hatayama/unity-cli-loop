@@ -113,6 +113,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         }
 
         /// <summary>
+        /// Verifies the KeyDown "already held" rejection reports the tracker/device key-state
+        /// diagnostics without changing the existing rejection message or Success=false outcome.
+        /// </summary>
+        [TestCase(true)]
+        [TestCase(false)]
+        public void AlreadyHeldRejection_WithDeviceState_MapsRejectionAndKeyStateDiagnostics(
+            bool deviceIsPressed)
+        {
+            SimulateKeyboardResponse response = KeyboardInputSimulationResponseFactory.AlreadyHeldRejection(
+                "W",
+                deviceIsPressed);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Key 'W' is already held down. Call KeyUp first."));
+            Assert.That(response.Action, Is.EqualTo(UnityCliLoopKeyboardAction.KeyDown.ToString()));
+            Assert.That(response.KeyName, Is.EqualTo("W"));
+            Assert.That(response.KeyStateTrackedHeld, Is.True);
+            Assert.That(response.KeyStateDeviceIsPressed, Is.EqualTo(deviceIsPressed));
+        }
+
+        /// <summary>
+        /// Verifies the KeyUp "not currently held" rejection reports the tracker/device key-state
+        /// diagnostics without changing the existing rejection message or Success=false outcome.
+        /// </summary>
+        [TestCase(true)]
+        [TestCase(false)]
+        public void NotHeldRejection_WithDeviceState_MapsRejectionAndKeyStateDiagnostics(
+            bool deviceIsPressed)
+        {
+            SimulateKeyboardResponse response = KeyboardInputSimulationResponseFactory.NotHeldRejection(
+                "W",
+                deviceIsPressed);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Key 'W' is not currently held. Call KeyDown first."));
+            Assert.That(response.Action, Is.EqualTo(UnityCliLoopKeyboardAction.KeyUp.ToString()));
+            Assert.That(response.KeyName, Is.EqualTo("W"));
+            Assert.That(response.KeyStateTrackedHeld, Is.False);
+            Assert.That(response.KeyStateDeviceIsPressed, Is.EqualTo(deviceIsPressed));
+        }
+
+        /// <summary>
         /// Test double that records Pause Point state without pausing the Unity Editor.
         /// </summary>
         private sealed class FakePauseController : IUloopPausePointPauseController

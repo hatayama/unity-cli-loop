@@ -25,8 +25,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            int maxPreviewElements = UloopPausePointRegistry.GetMaxPreviewElements(id);
             (UloopPausePointCapturedVariableFrame frame, List<UloopCapturedVariable> variables, bool truncated) =
-                CaptureFrame(instance, parameterNamesAndValues, localNamesAndValues);
+                CaptureFrame(instance, parameterNamesAndValues, localNamesAndValues, maxPreviewElements);
 
             if (MainThreadSwitcher.IsMainThread)
             {
@@ -55,11 +56,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         internal static (UloopPausePointCapturedVariableFrame Frame, List<UloopCapturedVariable> Variables, bool Truncated)
-            CaptureFrame(object instance, object[] parameterNamesAndValues, object[] localNamesAndValues)
+            CaptureFrame(
+                object instance, object[] parameterNamesAndValues, object[] localNamesAndValues,
+                int maxPreviewElements = SourcePausePointConstants.MaxCollectionPreviewElementCount)
         {
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
                 instance, parameterNamesAndValues, localNamesAndValues);
-            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.FormatFrame(frame);
+            (List<UloopCapturedVariable> variables, bool truncated) =
+                SourcePausePointVariableFormatter.FormatFrame(frame, maxPreviewElements);
             return (frame, variables, truncated);
         }
     }
