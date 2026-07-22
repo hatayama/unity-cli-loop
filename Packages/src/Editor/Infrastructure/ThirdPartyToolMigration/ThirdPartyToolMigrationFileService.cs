@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -65,6 +66,40 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             StoreCachedPlan(normalizedProjectRoot, plan);
             StoreCachedPreview(normalizedProjectRoot, preview);
             return preview;
+        }
+
+        /// <summary>
+        /// Builds a preview scanning only the given assembly directories (e.g. the assemblies containing
+        /// compile-error-matched files), instead of the whole project. Deliberately does not read or
+        /// write the full-scan preview/plan cache above: a scope-limited plan is only a partial view of
+        /// the project and must never be mistaken for (or substituted into) the full plan that
+        /// ApplyMigration relies on.
+        /// </summary>
+        public async Task<ThirdPartyToolMigrationPreview> PreviewMigrationInScopeAsync(
+            string projectRoot,
+            List<string> scopeDirectories,
+            IProgress<ThirdPartyToolMigrationProgress> progress,
+            CancellationToken ct)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(scopeDirectories != null, "scopeDirectories must not be null");
+            Debug.Assert(progress != null, "progress must not be null");
+
+            string normalizedProjectRoot = NormalizeProjectRoot(projectRoot);
+            MigrationPlan plan = await ThirdPartyToolMigrationPlanBuilder.CreateInScopeAsync(
+                normalizedProjectRoot,
+                scopeDirectories,
+                progress,
+                ct);
+            if (ct.IsCancellationRequested)
+            {
+                return new ThirdPartyToolMigrationPreview(0, 0, Array.Empty<string>());
+            }
+
+            return new ThirdPartyToolMigrationPreview(
+                plan.ChangedFilePaths.Count,
+                plan.ReplacementCount,
+                plan.ChangedFilePaths.ToArray());
         }
 
         public async Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct)
