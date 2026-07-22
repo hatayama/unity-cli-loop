@@ -14,11 +14,13 @@ import (
 // pendingApprovalIssueTitle and pendingApprovalIssueLabel identify the single
 // tracking issue this command reconciles: an exact title match (rather than a
 // generated one) keeps repeated runs from creating duplicates.
-const pendingApprovalIssueTitle = "Release approval pending"
-const pendingApprovalIssueLabel = "release-approval-pending"
-const pendingApprovalIssueLabelDescription = "Release environment approvals waiting on manual review"
-const pendingApprovalIssueLabelColor = "5319E7"
-const pendingApprovalResolvedComment = "All pending approvals resolved."
+const (
+	pendingApprovalIssueTitle            = "Release approval pending"
+	pendingApprovalIssueLabel            = "release-approval-pending"
+	pendingApprovalIssueLabelDescription = "Release environment approvals waiting on manual review"
+	pendingApprovalIssueLabelColor       = "5319E7"
+	pendingApprovalResolvedComment       = "All pending approvals resolved."
+)
 
 // pendingApprovalRun is one workflow run currently waiting on a GitHub
 // environment manual approval.
@@ -171,7 +173,7 @@ func buildPendingApprovalIssueBody(runs []pendingApprovalRun) string {
 	builder := strings.Builder{}
 	builder.WriteString("The following release approval(s) are waiting on a manual review:\n\n")
 	for _, run := range runs {
-		builder.WriteString(fmt.Sprintf("- Workflow: %s\n  Branch: %s\n  Environment: %s\n  Run: %s\n\n", run.WorkflowName, run.HeadBranch, run.Environment, run.URL))
+		fmt.Fprintf(&builder, "- Workflow: %s\n  Branch: %s\n  Environment: %s\n  Run: %s\n\n", run.WorkflowName, run.HeadBranch, run.Environment, run.URL)
 	}
 	builder.WriteString("Approve the pending deployment(s) at the run URL(s) above. After approval, the next release-please run publishes the blocked package releases automatically.")
 	return builder.String()
