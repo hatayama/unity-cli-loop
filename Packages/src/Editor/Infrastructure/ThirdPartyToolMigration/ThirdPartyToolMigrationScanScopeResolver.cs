@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -13,7 +14,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal static class ThirdPartyToolMigrationScanScopeResolver
     {
-        internal static List<string> ResolveScopeAssemblyDirectories(
+        /// <summary>
+        /// A seed file with no real asmdef/asmref ancestor resolves to a synthetic implicit-assembly
+        /// marker path (see ThirdPartyToolMigrationFileServiceConstants) that never exists on disk.
+        /// That marker must never be treated as a real scan directory: a scoped file-tree walk skips
+        /// nonexistent directories, so silently including it would make a legitimate implicit-assembly
+        /// migration target vanish from the scoped scan instead of falling back to a full scan.
+        /// HasImplicitAssemblySeeds tells the caller that AssemblyDirectories alone is not a complete,
+        /// safe scope in that case.
+        /// </summary>
+        internal static (List<string> AssemblyDirectories, bool HasImplicitAssemblySeeds) ResolveScopeAssemblyDirectories(
             List<string> seedFilePaths,
             List<string> asmdefDirectories,
             List<AssemblyReferenceDirectory> assemblyReferenceDirectories,
@@ -33,6 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             HashSet<string> seenAssemblyDirectories = new HashSet<string>(StringComparer.Ordinal);
             List<string> scopeAssemblyDirectories = new List<string>();
+            bool hasImplicitAssemblySeeds = false;
             foreach (string seedFilePath in seedFilePaths)
             {
                 string assemblyDirectory = ThirdPartyToolMigrationAssemblyReferenceResolver.FindNearestAssemblyDirectory(
@@ -41,13 +52,42 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     assemblyReferenceDirectories,
                     projectRoot);
 
+                if (IsImplicitAssemblyDirectory(assemblyDirectory))
+                {
+                    hasImplicitAssemblySeeds = true;
+                    continue;
+                }
+
                 if (seenAssemblyDirectories.Add(assemblyDirectory))
                 {
                     scopeAssemblyDirectories.Add(assemblyDirectory);
                 }
             }
 
-            return scopeAssemblyDirectories;
+            return (scopeAssemblyDirectories, hasImplicitAssemblySeeds);
+        }
+
+        private static bool IsImplicitAssemblyDirectory(string assemblyDirectory)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(assemblyDirectory), "assemblyDirectory must not be null or empty");
+
+            string directoryName = Path.GetFileName(assemblyDirectory);
+            return string.Equals(
+                    directoryName,
+                    ThirdPartyToolMigrationFileServiceConstants.ImplicitEditorAssemblyDirectoryName,
+                    StringComparison.Ordinal) ||
+                string.Equals(
+                    directoryName,
+                    ThirdPartyToolMigrationFileServiceConstants.ImplicitRuntimeAssemblyDirectoryName,
+                    StringComparison.Ordinal) ||
+                string.Equals(
+                    directoryName,
+                    ThirdPartyToolMigrationFileServiceConstants.ImplicitFirstPassEditorAssemblyDirectoryName,
+                    StringComparison.Ordinal) ||
+                string.Equals(
+                    directoryName,
+                    ThirdPartyToolMigrationFileServiceConstants.ImplicitFirstPassRuntimeAssemblyDirectoryName,
+                    StringComparison.Ordinal);
         }
     }
 }
