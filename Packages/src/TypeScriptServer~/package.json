@@ -91,8 +91,8 @@
     "typescript-eslint": "8.65.0"
   },
   "overrides": {
-    "@hono/node-server": "1.19.13",
-    "hono": "4.12.25",
+    "@hono/node-server": "2.0.11",
+    "hono": "4.12.31",
     "js-yaml": "5.2.1",
     "minimatch": "10.2.4"
   }
