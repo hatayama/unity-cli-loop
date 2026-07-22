@@ -319,15 +319,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (parameters.All)
             {
                 // Snapshot each physics-flagged marker before ClearAll resolves it away, so a
-                // marker that expired without a hit still gets its diagnostics logged. This is
+                // marker cleared without ever being hit still gets its diagnostics logged
+                // regardless of whether it had already expired or was still Enabled. This is
                 // the dominant field path (await timeout -> agent cleans up with --all), so
                 // skipping it here would lose the primary evidence in the common case.
+                //
+                // The Status check (not just HitCount==0) matters because
+                // PausePointStatusBridgeCommand.Clear (the CLI's own polling clear path) clears a
+                // marker via the registry directly without going through this use case, so it
+                // never removes the id from PhysicsFlaggedDeclaringTypesById. A later clear --all
+                // would otherwise re-log stale diagnostics for an id that was already Cleared
+                // through that other path.
                 foreach (KeyValuePair<string, Type> tracked in PhysicsFlaggedDeclaringTypesById)
                 {
                     UloopPausePointSnapshot trackedSnapshot = UloopPausePointRegistry.GetStatus(tracked.Key);
-                    if (trackedSnapshot.Status == UloopPausePointStatus.Expired && trackedSnapshot.HitCount == 0)
+                    bool wasStillArmed = trackedSnapshot.Status == UloopPausePointStatus.Enabled ||
+                                         trackedSnapshot.Status == UloopPausePointStatus.Expired;
+                    if (trackedSnapshot.HitCount == 0 && wasStillArmed)
                     {
-                        LogPhysicsDispatchDiagnostics("pause_point_expired_without_hit_physics", tracked.Key, tracked.Value);
+                        LogPhysicsDispatchDiagnostics(
+                            "pause_point_cleared_without_hit_physics", tracked.Key, tracked.Value, trackedSnapshot.Status);
                     }
                 }
 
@@ -351,10 +362,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
             {
                 LogExpired(snapshot.Id, snapshot.ElapsedSinceEnabledMilliseconds);
-                if (snapshot.HitCount == 0 && PhysicsFlaggedDeclaringTypesById.TryGetValue(snapshot.Id, out Type declaringType))
-                {
-                    LogPhysicsDispatchDiagnostics("pause_point_expired_without_hit_physics", snapshot.Id, declaringType);
-                }
+            }
+
+            // Fires for any zero-hit clear of a physics-flagged marker, not just an expired one:
+            // the field incident that motivated this diagnostic (Block.cs:29, 2026-07-22) cleared
+            // while still Enabled because the CLI's await timeout is shorter than the marker's own
+            // expiry, so StatusBeforeClear was Enabled rather than Expired.
+            if (snapshot.HitCount == 0 && PhysicsFlaggedDeclaringTypesById.TryGetValue(snapshot.Id, out Type declaringType))
+            {
+                LogPhysicsDispatchDiagnostics(
+                    "pause_point_cleared_without_hit_physics", snapshot.Id, declaringType, snapshot.StatusBeforeClear);
             }
             PhysicsFlaggedDeclaringTypesById.Remove(snapshot.Id);
 
@@ -432,7 +449,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (patchResult.HasPhysicsCallbackWarning)
             {
                 PhysicsFlaggedDeclaringTypesById[id] = patchResult.DeclaringType;
-                LogPhysicsDispatchDiagnostics("pause_point_physics_dispatch_diagnostics", id, patchResult.DeclaringType);
+                LogPhysicsDispatchDiagnostics(
+                    "pause_point_physics_dispatch_diagnostics", id, patchResult.DeclaringType, statusBeforeClear: string.Empty);
             }
 
             return response;
@@ -450,8 +468,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // whether Play Mode is running, how long the current domain has been alive without a
         // reload (a suspected factor -- see docs/regression-harness.md), the declaring type, and
         // (for MonoBehaviour-derived types only) how many instances currently exist in the loaded
-        // scenes.
-        private static void LogPhysicsDispatchDiagnostics(string operation, string id, Type declaringType)
+        // scenes. statusBeforeClear is empty at enable time (no clear has happened yet) and
+        // Enabled/Expired at clear time.
+        private static void LogPhysicsDispatchDiagnostics(string operation, string id, Type declaringType, string statusBeforeClear)
         {
             // Only reachable via PhysicsFlaggedDeclaringTypesById, which is populated solely from
             // a successful patch's method.DeclaringType -- a C#-sourced method always has one.
@@ -481,7 +500,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     IsPaused = EditorApplication.isPaused,
                     SecondsSinceLastDomainReload = PausePointDomainReloadTracker.SecondsSinceLoad(),
                     DeclaringType = declaringType.FullName,
-                    InstanceCount = instanceCount
+                    InstanceCount = instanceCount,
+                    StatusBeforeClear = statusBeforeClear
                 });
         }
 
