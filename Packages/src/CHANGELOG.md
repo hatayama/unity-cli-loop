@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.0.0-beta.60](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.59...v3.0.0-beta.60) (2026-07-22)
+
+
+### Features
+
+* Round-8 pause-point usability improvements ([#1944](https://github.com/hatayama/unity-cli-loop/issues/1944)) ([1940cca](https://github.com/hatayama/unity-cli-loop/commit/1940cca1dea33377300cb06a13cb65ba9be85db9))
+
+
+### Bug Fixes
+
+* Custom-tool migration removes a Success property that hides the base response's Success ([#1932](https://github.com/hatayama/unity-cli-loop/issues/1932)) ([25bf0a8](https://github.com/hatayama/unity-cli-loop/commit/25bf0a8616110b99db6a3cbe46fb48e89649bb72))
+* Show the migration wizard window immediately during auto-scan ([#1931](https://github.com/hatayama/unity-cli-loop/issues/1931)) ([e403509](https://github.com/hatayama/unity-cli-loop/commit/e4035090a43cf8cd79449bc372ae5a4453458112))
+
 ## [3.0.0-beta.59](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.58...v3.0.0-beta.59) (2026-07-21)
 
 
