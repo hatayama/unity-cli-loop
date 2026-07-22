@@ -54,7 +54,7 @@ real projects), but no deterministic reproduction recipe is known, and no lighte
 destroying and recreating the GameObject (or a manual `UloopPausePoint.Pause` marker) has been
 validated -- see `SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning`.
 `PausePointTools` logs a `pause_point_physics_dispatch_diagnostics` VibeLogger entry whenever a
-physics-flagged pause point is enabled (and a `pause_point_expired_without_hit_physics` entry if
-it later expires without ever hitting), capturing Play Mode state, seconds since the last domain
-reload, the declaring type, and its current instance count -- if the miss recurs, this is the
-primary evidence to work from.
+physics-flagged pause point is enabled (and a `pause_point_cleared_without_hit_physics` entry if
+it is later cleared without ever hitting, whether it had expired or was still Enabled at that
+point), capturing Play Mode state, seconds since the last domain reload, the declaring type, and
+its current instance count -- if the miss recurs, this is the primary evidence to work from.
