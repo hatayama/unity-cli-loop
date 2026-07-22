@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         void SetShowReconnectingUI(bool showReconnectingUI);
         void SetShowPostCompileReconnectingUI(bool showPostCompileReconnectingUI);
         void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration);
+        bool GetShouldAutoScanThirdPartyToolMigration();
         bool ConsumeShouldAutoScanThirdPartyToolMigration();
         void MarkServerStarted();
         void MarkServerManuallyStopped();

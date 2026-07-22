@@ -22,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly ThirdPartyToolMigrationWizardView _view;
         private readonly SkillSetupUseCase _skillSetupUseCase;
         private readonly ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
+        private readonly ISessionFlagsRepository _sessionFlagsRepository;
         private readonly Action _scheduleResize;
 
         private bool _isMigrating;
@@ -36,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ThirdPartyToolMigrationWizardView view,
             SkillSetupUseCase skillSetupUseCase,
             ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase,
+            ISessionFlagsRepository sessionFlagsRepository,
             Action scheduleResize)
         {
             Debug.Assert(view != null, "view must not be null");
@@ -43,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(
                 thirdPartyToolMigrationUseCase != null,
                 "thirdPartyToolMigrationUseCase must not be null");
+            Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
             Debug.Assert(scheduleResize != null, "scheduleResize must not be null");
 
             _view = view ?? throw new ArgumentNullException(nameof(view));
@@ -50,6 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new ArgumentNullException(nameof(skillSetupUseCase));
             _thirdPartyToolMigrationUseCase = thirdPartyToolMigrationUseCase
                 ?? throw new ArgumentNullException(nameof(thirdPartyToolMigrationUseCase));
+            _sessionFlagsRepository = sessionFlagsRepository
+                ?? throw new ArgumentNullException(nameof(sessionFlagsRepository));
             _scheduleResize = scheduleResize
                 ?? throw new ArgumentNullException(nameof(scheduleResize));
         }
@@ -245,6 +250,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             Debug.Assert(filePaths != null, "filePaths must not be null");
 
+            // why: reaching a result state is the "scan completed" signal the auto-scan flag
+            // lifecycle waits for (see ThirdPartyToolMigrationWizardWindow.CreateGUI/OnDestroy) —
+            // consuming it here, not at window-open time, lets an interrupted scan resume instead
+            // of silently losing the auto-scan intent.
+            _sessionFlagsRepository.ConsumeShouldAutoScanThirdPartyToolMigration();
             _pendingMigrationFilePaths = filePaths;
             _view.ShowMigrationTargetsState(filePaths, _isMigrating);
             _scheduleResize();
@@ -252,6 +262,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal void ShowNoMigrationTargetsState()
         {
+            _sessionFlagsRepository.ConsumeShouldAutoScanThirdPartyToolMigration();
             _view.ShowNoMigrationTargetsState(_isMigrating);
             _scheduleResize();
         }

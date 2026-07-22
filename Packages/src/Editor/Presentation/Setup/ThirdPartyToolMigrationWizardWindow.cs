@@ -59,13 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static void ShowWindowForAutoScan()
         {
-            ConsumeAutoScanSessionState();
             ShowWindowInternal(true);
-        }
-
-        private static void ConsumeAutoScanSessionState()
-        {
-            GetSessionFlagsRepository().ConsumeShouldAutoScanThirdPartyToolMigration();
         }
 
         internal static void PrepareForOpen(
@@ -303,12 +297,28 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _view,
                 _skillSetupUseCase,
                 _thirdPartyToolMigrationUseCase,
+                GetSessionFlagsRepository(),
                 ScheduleResizeToContent);
 
-            bool shouldStartInitialRefresh = ConsumeShouldStartInitialRefresh();
+            // The serialized flag alone misses a scan interrupted by a domain reload: it is
+            // consumed on the first CreateGUI, so a reload-triggered second CreateGUI would see it
+            // as false even though the scan never reached a result state. The SessionState flag is
+            // only consumed once a result is actually shown (or the window is truly closed, see
+            // OnDestroy), so checking it here as well restarts an interrupted scan.
+            bool shouldStartInitialRefresh = ConsumeShouldStartInitialRefresh() ||
+                GetSessionFlagsRepository().GetShouldAutoScanThirdPartyToolMigration();
             _controller.ShowInitialState(shouldStartInitialRefresh);
             _controller.RefreshMigrationSkillState();
             _controller.ScheduleInitialRefresh(shouldStartInitialRefresh);
+        }
+
+        private void OnDestroy()
+        {
+            // why: OnDisable fires on a domain reload too (the window is serialized and survives),
+            // but OnDestroy only fires when the window is actually closed (custom Close button or
+            // the native title bar close). That makes it the only safe place to treat "closed" as
+            // user intent to dismiss the auto-scan without losing track of an interrupted scan.
+            GetSessionFlagsRepository().ConsumeShouldAutoScanThirdPartyToolMigration();
         }
 
         private void InitializeApplicationServices()

@@ -325,6 +325,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _shouldAutoScanThirdPartyToolMigration = shouldAutoScanThirdPartyToolMigration;
             }
 
+            public bool GetShouldAutoScanThirdPartyToolMigration()
+            {
+                return _shouldAutoScanThirdPartyToolMigration;
+            }
+
             public bool ConsumeShouldAutoScanThirdPartyToolMigration()
             {
                 if (!_shouldAutoScanThirdPartyToolMigration)
