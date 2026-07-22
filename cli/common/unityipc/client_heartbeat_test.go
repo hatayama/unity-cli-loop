@@ -324,6 +324,51 @@ func TestSendFailsWhenMainThreadStallPredatesAcceptDespiteTolerance(t *testing.T
 	}
 }
 
+// Verifies that a self-induced-stall-tolerant client still reports the "stuck" wording
+// (not the "busy executing" wording) for a stall that predates this request's accept: it
+// is a genuine freeze, and the progress message must not imply the command itself caused
+// it right before failing with EditorUnresponsiveError.
+func TestSendReportsStuckMessageForStallPredatingAcceptDespiteTolerance(t *testing.T) {
+	stalledHeartbeat := `{"jsonrpc":"2.0","id":1,"result":{"alive":true},"uloop":{"phase":"heartbeat","mainThreadStallSeconds":40}}`
+	done := make(chan struct{})
+	connection := startHeartbeatTestServer(t, func(conn net.Conn) {
+		writeFrame(t, conn, heartbeatAck)
+		writeFrame(t, conn, stalledHeartbeat)
+		<-done
+	})
+	defer close(done)
+
+	client := NewClient(
+		connection,
+		"9.9.9",
+		WithSelfInducedMainThreadStallTolerance(),
+		withHeartbeatSilenceOverrideForTest(5*time.Second),
+		withMainThreadStallLimitForTest(2*time.Second),
+	)
+
+	progressMessages := []string{}
+	_, err := client.SendWithProgressOutcome(
+		context.Background(),
+		"execute-dynamic-code",
+		map[string]any{},
+		func(event progress.Event) {
+			progressMessages = append(progressMessages, event.Message)
+		},
+	)
+	var unresponsiveErr *EditorUnresponsiveError
+	if !errors.As(err, &unresponsiveErr) {
+		t.Fatalf("expected EditorUnresponsiveError for a stall predating accept, got %v", err)
+	}
+
+	joinedMessages := strings.Join(progressMessages, "\n")
+	if !strings.Contains(joinedMessages, "stuck") {
+		t.Fatalf("progress should still say stuck for a genuine freeze: %#v", progressMessages)
+	}
+	if strings.Contains(joinedMessages, "busy executing") {
+		t.Fatalf("progress must not say busy executing for a stall predating accept: %#v", progressMessages)
+	}
+}
+
 // Verifies that an explicit response timeout stays an absolute deadline: heartbeats
 // are skipped but must not extend it (compile relies on this to fall back to polling).
 func TestSendKeepsExplicitResponseTimeoutDespiteHeartbeats(t *testing.T) {

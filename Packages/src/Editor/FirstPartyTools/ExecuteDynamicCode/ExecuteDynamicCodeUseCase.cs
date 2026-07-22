@@ -32,12 +32,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             using DynamicCodeDomainReloadWaitSignal domainReloadWaitSignal =
                 DynamicCodeDomainReloadWaitSignal.Start(parameters);
+            // Declared outside the try so the catch below can still correlate a cancellation
+            // against this same execute_dynamic_code_start entry, and so it can tell whether the
+            // finalResult path below already logged completion before a later await in that same
+            // path (e.g. ApplyPauseStateAsync) throws OperationCanceledException.
+            string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
+            bool completionLogged = false;
 
             try
             {
                 object[] parametersArray = ConvertParameters(parameters.Parameters);
                 string originalCode = parameters.Code ?? string.Empty;
-                string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
 
                 LogExecutionStart(parameters, correlationId);
 
@@ -68,6 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 LogExecutionComplete(finalResult, correlationId);
+                completionLogged = true;
 
                 if (DynamicCodeExecutionResponseFactory.IsCancelledResult(finalResult))
                 {
@@ -111,6 +117,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             catch (OperationCanceledException)
             {
+                if (!completionLogged)
+                {
+                    LogExecutionCancelledBeforeResult(correlationId);
+                }
                 ExecuteDynamicCodeResponse response = DynamicCodeExecutionResponseFactory.CreateCancelledResponse();
                 response.EmitTimingsInJsonResponse = parameters?.IncludeTimings ?? false;
                 // Why CancellationToken.None: cancellationToken is already cancelled on this path,
@@ -164,16 +174,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // against whether Unity had actually finished the snippet by the time the CLI gave up.
         private static void LogExecutionComplete(ExecutionResult finalResult, string correlationId)
         {
+            LogExecutionCompleteEntry(
+                finalResult.Success,
+                DynamicCodeExecutionResponseFactory.IsCancelledResult(finalResult),
+                DynamicCodeExecutionResponseFactory.IsRuntimeRestartingResult(finalResult),
+                finalResult.ExecutionTime.TotalMilliseconds,
+                correlationId);
+        }
+
+        // Covers cancellation paths that throw before a final ExecutionResult exists (e.g. during
+        // foreground warmup), which LogExecutionComplete above cannot reach.
+        private static void LogExecutionCancelledBeforeResult(string correlationId)
+        {
+            LogExecutionCompleteEntry(success: false, cancelled: true, runtimeRestarting: false, executionTimeMs: 0, correlationId);
+        }
+
+        private static void LogExecutionCompleteEntry(
+            bool success,
+            bool cancelled,
+            bool runtimeRestarting,
+            double executionTimeMs,
+            string correlationId)
+        {
             VibeLogger.LogInfo(
                 "execute_dynamic_code_complete",
                 "Dynamic code execution completed",
                 new
                 {
                     correlationId,
-                    success = finalResult.Success,
-                    cancelled = DynamicCodeExecutionResponseFactory.IsCancelledResult(finalResult),
-                    runtimeRestarting = DynamicCodeExecutionResponseFactory.IsRuntimeRestartingResult(finalResult),
-                    executionTimeMs = finalResult.ExecutionTime.TotalMilliseconds
+                    success,
+                    cancelled,
+                    runtimeRestarting,
+                    executionTimeMs
                 },
                 correlationId,
                 "Dynamic code execution finished; correlate against execute_dynamic_code_start by correlationId",
