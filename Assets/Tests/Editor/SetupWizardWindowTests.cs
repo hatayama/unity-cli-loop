@@ -26,7 +26,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private string _settingsFileContent;
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private UnityCliLoopEditorSettingsRepository _editorSettingsRepository;
-        private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
 
         [SetUp]
@@ -43,7 +42,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             DeleteIfExists(SettingsFilePath);
             _editorSettingsPort =
                 UnityCliLoopEditorSettingsTestFactory.CreatePortWithRepository(out _editorSettingsRepository);
-            _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
             SetupWizardWindow.InitializeEditorServices(
@@ -181,24 +179,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 SetupWizardStartupFlow.ShouldAutoScanThirdPartyToolMigration(currentVersion, lastSeenVersion);
 
             Assert.That(shouldAutoScan, Is.EqualTo(expected));
-        }
-
-        [Test]
-        public void MaybeMarkThirdPartyToolMigrationAutoScan_WhenEnabled_SetsSessionFlag()
-        {
-            // Verifies that the V2-to-V3 upgrade signal is stored only in the current Editor session.
-            SetupWizardStartupFlow.MaybeMarkThirdPartyToolMigrationAutoScan(_sessionFlagsRepository, true);
-
-            Assert.That(_sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.True);
-        }
-
-        [Test]
-        public void MaybeMarkThirdPartyToolMigrationAutoScan_WhenDisabled_KeepsSessionFlagFalse()
-        {
-            // Verifies that non-upgrade version checks do not request migration scans.
-            SetupWizardStartupFlow.MaybeMarkThirdPartyToolMigrationAutoScan(_sessionFlagsRepository, false);
-
-            Assert.That(_sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
         }
 
         [Test]

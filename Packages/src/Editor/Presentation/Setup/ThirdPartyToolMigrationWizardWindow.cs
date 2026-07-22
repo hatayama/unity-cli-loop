@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using UnityEditor;
 using UnityEngine;
@@ -20,12 +21,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static readonly Vector2 MinimumWindowSize =
             ThirdPartyToolMigrationWizardWindowResizer.MinimumWindowSize;
         private static ISessionFlagsRepository RegisteredSessionFlagsRepository;
+        private static IThirdPartyToolMigrationAutoScanSeedRepository RegisteredAutoScanSeedRepository;
         private static SkillSetupUseCase RegisteredSkillSetupUseCase;
         private static ThirdPartyToolMigrationUseCase RegisteredThirdPartyToolMigrationUseCase;
 
         [SerializeField]
         private bool _shouldRefreshAfterCreateGui;
 
+        private List<string> _autoScanSeedFilePaths = new List<string>();
         private SkillSetupUseCase _skillSetupUseCase;
         private ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
         private ThirdPartyToolMigrationWizardView _view;
@@ -34,10 +37,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static void InitializeEditorServices(
             ISessionFlagsRepository sessionFlagsRepository,
+            IThirdPartyToolMigrationAutoScanSeedRepository autoScanSeedRepository,
             SkillSetupUseCase skillSetupUseCase,
             ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase)
         {
             Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
+            Debug.Assert(autoScanSeedRepository != null, "autoScanSeedRepository must not be null");
             Debug.Assert(skillSetupUseCase != null, "skillSetupUseCase must not be null");
             Debug.Assert(
                 thirdPartyToolMigrationUseCase != null,
@@ -45,6 +50,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             RegisteredSessionFlagsRepository = sessionFlagsRepository
                 ?? throw new ArgumentNullException(nameof(sessionFlagsRepository));
+            RegisteredAutoScanSeedRepository = autoScanSeedRepository
+                ?? throw new ArgumentNullException(nameof(autoScanSeedRepository));
             RegisteredSkillSetupUseCase = skillSetupUseCase
                 ?? throw new ArgumentNullException(nameof(skillSetupUseCase));
             RegisteredThirdPartyToolMigrationUseCase = thirdPartyToolMigrationUseCase
@@ -54,12 +61,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         [MenuItem("Window/Unity CLI Loop/Custom Tool Migration", priority = 4)]
         public static void ShowWindow()
         {
-            ShowWindowInternal(false);
+            ShowWindowInternal(false, new List<string>());
         }
 
         internal static void ShowWindowForAutoScan()
         {
-            ShowWindowInternal(true);
+            List<string> seedFilePaths = ConsumeAutoScanSessionState();
+            ShowWindowInternal(true, seedFilePaths);
+        }
+
+        private static List<string> ConsumeAutoScanSessionState()
+        {
+            GetSessionFlagsRepository().ConsumeShouldAutoScanThirdPartyToolMigration();
+            string[] seedFilePaths = GetAutoScanSeedRepository().GetSeedFilePaths();
+            GetAutoScanSeedRepository().ClearSeedFilePaths();
+            return new List<string>(seedFilePaths);
         }
 
         internal static void PrepareForOpen(
@@ -212,7 +228,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 isCancellationRequested);
         }
 
-        private static void ShowWindowInternal(bool shouldRefreshAfterCreateGui)
+        private static void ShowWindowInternal(bool shouldRefreshAfterCreateGui, List<string> seedFilePaths)
         {
             if (HasOpenInstances<ThirdPartyToolMigrationWizardWindow>())
             {
@@ -225,6 +241,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 InitialWindowSize);
             ThirdPartyToolMigrationWizardWindow window =
                 CreateInstance<ThirdPartyToolMigrationWizardWindow>();
+            window._autoScanSeedFilePaths = seedFilePaths;
             PrepareForOpen(window, WindowTitle, windowPosition, shouldRefreshAfterCreateGui);
             window.ShowUtility();
         }
@@ -238,6 +255,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             return RegisteredSessionFlagsRepository;
+        }
+
+        private static IThirdPartyToolMigrationAutoScanSeedRepository GetAutoScanSeedRepository()
+        {
+            if (RegisteredAutoScanSeedRepository == null)
+            {
+                throw new InvalidOperationException(
+                    "Migration Wizard auto-scan seed repository is not initialized.");
+            }
+
+            return RegisteredAutoScanSeedRepository;
         }
 
         private static SkillSetupUseCase GetSkillSetupUseCase()
@@ -297,28 +325,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _view,
                 _skillSetupUseCase,
                 _thirdPartyToolMigrationUseCase,
-                GetSessionFlagsRepository(),
+                _autoScanSeedFilePaths,
                 ScheduleResizeToContent);
 
-            // The serialized flag alone misses a scan interrupted by a domain reload: it is
-            // consumed on the first CreateGUI, so a reload-triggered second CreateGUI would see it
-            // as false even though the scan never reached a result state. The SessionState flag is
-            // only consumed once a result is actually shown (or the window is truly closed, see
-            // OnDestroy), so checking it here as well restarts an interrupted scan.
-            bool shouldStartInitialRefresh = ConsumeShouldStartInitialRefresh() ||
-                GetSessionFlagsRepository().GetShouldAutoScanThirdPartyToolMigration();
+            bool shouldStartInitialRefresh = ConsumeShouldStartInitialRefresh();
             _controller.ShowInitialState(shouldStartInitialRefresh);
             _controller.RefreshMigrationSkillState();
             _controller.ScheduleInitialRefresh(shouldStartInitialRefresh);
-        }
-
-        private void OnDestroy()
-        {
-            // why: OnDisable fires on a domain reload too (the window is serialized and survives),
-            // but OnDestroy only fires when the window is actually closed (custom Close button or
-            // the native title bar close). That makes it the only safe place to treat "closed" as
-            // user intent to dismiss the auto-scan without losing track of an interrupted scan.
-            GetSessionFlagsRepository().ConsumeShouldAutoScanThirdPartyToolMigration();
         }
 
         private void InitializeApplicationServices()

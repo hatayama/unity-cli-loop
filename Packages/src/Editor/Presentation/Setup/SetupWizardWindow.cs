@@ -29,8 +29,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static void InitializeForEditorStartup(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
+            IThirdPartyToolMigrationAutoScanSeedRepository autoScanSeedRepository,
             CliSetupApplicationService cliSetupApplicationService,
-            SkillSetupUseCase skillSetupUseCase)
+            SkillSetupUseCase skillSetupUseCase,
+            ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase)
         {
             InitializeEditorServices(
                 editorSettingsPort,
@@ -43,8 +45,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SetupWizardStartupFlow startupFlow = new(
                 editorSettingsPort,
                 sessionFlagsRepository,
+                autoScanSeedRepository,
                 cliSetupApplicationService,
                 skillSetupUseCase,
+                thirdPartyToolMigrationUseCase,
                 ShowWindowOnVersionChange,
                 ThirdPartyToolMigrationWizardWindow.ShowWindowForAutoScan);
             EditorApplication.delayCall += startupFlow.TryShowOnVersionChange;

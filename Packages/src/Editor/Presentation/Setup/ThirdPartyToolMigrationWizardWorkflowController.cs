@@ -22,8 +22,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly ThirdPartyToolMigrationWizardView _view;
         private readonly SkillSetupUseCase _skillSetupUseCase;
         private readonly ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
-        private readonly ISessionFlagsRepository _sessionFlagsRepository;
         private readonly Action _scheduleResize;
+
+        // Only the first scan after an auto-scan open is scoped to the compile-error-matched seed
+        // files; any later manual re-check (button click) must scan the whole project, since the
+        // seeds may no longer reflect what's actually broken, so this is cleared after first use.
+        private List<string> _autoScanSeedFilePaths;
 
         private bool _isMigrating;
         private bool _isUpdatingMigrationSkill;
@@ -37,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ThirdPartyToolMigrationWizardView view,
             SkillSetupUseCase skillSetupUseCase,
             ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase,
-            ISessionFlagsRepository sessionFlagsRepository,
+            List<string> autoScanSeedFilePaths,
             Action scheduleResize)
         {
             Debug.Assert(view != null, "view must not be null");
@@ -45,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(
                 thirdPartyToolMigrationUseCase != null,
                 "thirdPartyToolMigrationUseCase must not be null");
-            Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
+            Debug.Assert(autoScanSeedFilePaths != null, "autoScanSeedFilePaths must not be null");
             Debug.Assert(scheduleResize != null, "scheduleResize must not be null");
 
             _view = view ?? throw new ArgumentNullException(nameof(view));
@@ -53,8 +57,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new ArgumentNullException(nameof(skillSetupUseCase));
             _thirdPartyToolMigrationUseCase = thirdPartyToolMigrationUseCase
                 ?? throw new ArgumentNullException(nameof(thirdPartyToolMigrationUseCase));
-            _sessionFlagsRepository = sessionFlagsRepository
-                ?? throw new ArgumentNullException(nameof(sessionFlagsRepository));
+            _autoScanSeedFilePaths = autoScanSeedFilePaths
+                ?? throw new ArgumentNullException(nameof(autoScanSeedFilePaths));
             _scheduleResize = scheduleResize
                 ?? throw new ArgumentNullException(nameof(scheduleResize));
         }
@@ -99,11 +103,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             IProgress<ThirdPartyToolMigrationProgress> progress = CreateProgressReporter(ct);
+            List<string> seedFilePaths = _autoScanSeedFilePaths;
+            _autoScanSeedFilePaths = new List<string>();
             ThirdPartyToolMigrationPreview preview;
             try
             {
                 preview = await Task.Run(async () =>
-                    await _thirdPartyToolMigrationUseCase.PreviewMigrationAsync(projectRoot, progress, ct));
+                    await _thirdPartyToolMigrationUseCase.PreviewMigrationForSeedFilesAsync(
+                        projectRoot, seedFilePaths, progress, ct));
                 await MainThreadSwitcher.SwitchToMainThread();
             }
             catch (OperationCanceledException)
@@ -250,11 +257,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             Debug.Assert(filePaths != null, "filePaths must not be null");
 
-            // why: reaching a result state is the "scan completed" signal the auto-scan flag
-            // lifecycle waits for (see ThirdPartyToolMigrationWizardWindow.CreateGUI/OnDestroy) —
-            // consuming it here, not at window-open time, lets an interrupted scan resume instead
-            // of silently losing the auto-scan intent.
-            _sessionFlagsRepository.ConsumeShouldAutoScanThirdPartyToolMigration();
             _pendingMigrationFilePaths = filePaths;
             _view.ShowMigrationTargetsState(filePaths, _isMigrating);
             _scheduleResize();
@@ -262,7 +264,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal void ShowNoMigrationTargetsState()
         {
-            _sessionFlagsRepository.ConsumeShouldAutoScanThirdPartyToolMigration();
             _view.ShowNoMigrationTargetsState(_isMigrating);
             _scheduleResize();
         }

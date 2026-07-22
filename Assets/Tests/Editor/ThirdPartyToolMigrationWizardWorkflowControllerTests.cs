@@ -13,57 +13,46 @@ using io.github.hatayama.UnityCliLoop.Presentation;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Verifies that reaching a migration scan result state consumes the auto-scan SessionState
-    /// flag, instead of the flag being consumed at window-open time (which loses track of a scan
-    /// interrupted by a domain reload).
+    /// Verifies that only the first RefreshUI call after an auto-scan window-open uses the
+    /// compile-error-matched seed file paths for a scoped scan; a later manual re-check falls back
+    /// to a full-project scan (empty seed list) since the seeds are cleared after first use.
     /// </summary>
     public sealed class ThirdPartyToolMigrationWizardWorkflowControllerTests
     {
         [Test]
-        public void ShowMigrationTargetsState_WhenAutoScanFlagIsSet_ConsumesIt()
+        public async Task RefreshUI_WhenCalledFirstTime_PassesAutoScanSeedFilePathsToPreview()
         {
-            // Verifies that reaching the "targets found" result state consumes the auto-scan flag.
-            InMemorySessionFlagsRepository sessionFlagsRepository = new();
-            sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(true);
+            // Verifies that the first RefreshUI call after an auto-scan open scopes the scan to the
+            // seed file paths supplied by the constructor.
+            RecordingThirdPartyToolMigrationPort port = new();
             ThirdPartyToolMigrationWizardWorkflowController controller =
-                CreateController(sessionFlagsRepository);
+                CreateController(port, new List<string> { "/Project/Assets/Tool.cs" });
 
-            controller.ShowMigrationTargetsState(new[] { "/Project/Assets/Tool.cs" });
+            await controller.RefreshUI();
 
-            Assert.That(sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
+            Assert.That(port.SeedFilePathsPerCall, Has.Count.EqualTo(1));
+            Assert.That(port.SeedFilePathsPerCall[0], Is.EqualTo(new[] { "/Project/Assets/Tool.cs" }));
         }
 
         [Test]
-        public void ShowNoMigrationTargetsState_WhenAutoScanFlagIsSet_ConsumesIt()
+        public async Task RefreshUI_WhenCalledASecondTime_PassesEmptySeedFilePaths()
         {
-            // Verifies that reaching the "no targets" result state consumes the auto-scan flag.
-            InMemorySessionFlagsRepository sessionFlagsRepository = new();
-            sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(true);
+            // Verifies that a manual re-check after the initial auto-scoped scan falls back to a
+            // full-project scan, since the seed file paths are cleared after their first use.
+            RecordingThirdPartyToolMigrationPort port = new();
             ThirdPartyToolMigrationWizardWorkflowController controller =
-                CreateController(sessionFlagsRepository);
+                CreateController(port, new List<string> { "/Project/Assets/Tool.cs" });
 
-            controller.ShowNoMigrationTargetsState();
+            await controller.RefreshUI();
+            await controller.RefreshUI();
 
-            Assert.That(sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
-        }
-
-        [Test]
-        public void ShowCheckingState_WhenAutoScanFlagIsSet_DoesNotConsumeIt()
-        {
-            // Verifies that an in-progress scan (not yet a result state) leaves the flag set, so an
-            // interrupted scan can restart on the next CreateGUI.
-            InMemorySessionFlagsRepository sessionFlagsRepository = new();
-            sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(true);
-            ThirdPartyToolMigrationWizardWorkflowController controller =
-                CreateController(sessionFlagsRepository);
-
-            controller.ShowCheckingState(new ThirdPartyToolMigrationProgress(1, 10));
-
-            Assert.That(sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.True);
+            Assert.That(port.SeedFilePathsPerCall, Has.Count.EqualTo(2));
+            Assert.That(port.SeedFilePathsPerCall[1], Is.Empty);
         }
 
         private static ThirdPartyToolMigrationWizardWorkflowController CreateController(
-            ISessionFlagsRepository sessionFlagsRepository)
+            IThirdPartyToolMigrationPort port,
+            List<string> autoScanSeedFilePaths)
         {
             VisualElement root = new();
             ThirdPartyToolMigrationWizardView view = ThirdPartyToolMigrationWizardView.Create(
@@ -74,61 +63,66 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => { },
                 () => { });
             SkillSetupUseCase skillSetupUseCase = new(new NoOpSkillSetupPort());
-            ThirdPartyToolMigrationUseCase migrationUseCase =
-                new(new NoOpThirdPartyToolMigrationPort());
+            ThirdPartyToolMigrationUseCase migrationUseCase = new(port);
 
             return new ThirdPartyToolMigrationWizardWorkflowController(
                 view,
                 skillSetupUseCase,
                 migrationUseCase,
-                sessionFlagsRepository,
+                autoScanSeedFilePaths,
                 () => { });
         }
 
-        private sealed class InMemorySessionFlagsRepository : ISessionFlagsRepository
+        private sealed class RecordingThirdPartyToolMigrationPort : IThirdPartyToolMigrationPort
         {
-            private bool _shouldAutoScanThirdPartyToolMigration;
+            internal readonly List<List<string>> SeedFilePathsPerCall = new();
 
-            public bool GetIsServerRunning() => false;
-            public bool GetIsServerManuallyStopped() => false;
-            public bool GetIsAfterCompile() => false;
-            public bool GetIsDomainReloadInProgress() => false;
-            public bool GetShowReconnectingUI() => false;
-            public void SetIsAfterCompile(bool isAfterCompile) { }
-            public void SetIsDomainReloadInProgress(bool isDomainReloadInProgress) { }
-            public void SetIsReconnecting(bool isReconnecting) { }
-            public void SetShowReconnectingUI(bool showReconnectingUI) { }
-            public void SetShowPostCompileReconnectingUI(bool showPostCompileReconnectingUI) { }
-
-            public void SetShouldAutoScanThirdPartyToolMigration(bool shouldAutoScanThirdPartyToolMigration)
+            public ThirdPartyToolMigrationPreview PreviewMigration(string projectRoot)
             {
-                _shouldAutoScanThirdPartyToolMigration = shouldAutoScanThirdPartyToolMigration;
+                return new ThirdPartyToolMigrationPreview(0, 0, Array.Empty<string>());
             }
 
-            public bool GetShouldAutoScanThirdPartyToolMigration()
+            public Task<ThirdPartyToolMigrationPreview> PreviewMigrationAsync(
+                string projectRoot,
+                IProgress<ThirdPartyToolMigrationProgress> progress,
+                CancellationToken ct)
             {
-                return _shouldAutoScanThirdPartyToolMigration;
+                return Task.FromResult(new ThirdPartyToolMigrationPreview(0, 0, Array.Empty<string>()));
             }
 
-            public bool ConsumeShouldAutoScanThirdPartyToolMigration()
+            public Task<ThirdPartyToolMigrationPreview> PreviewMigrationForSeedFilesAsync(
+                string projectRoot,
+                List<string> seedFilePaths,
+                IProgress<ThirdPartyToolMigrationProgress> progress,
+                CancellationToken ct)
             {
-                if (!_shouldAutoScanThirdPartyToolMigration)
-                {
-                    return false;
-                }
-
-                _shouldAutoScanThirdPartyToolMigration = false;
-                return true;
+                SeedFilePathsPerCall.Add(seedFilePaths);
+                return Task.FromResult(new ThirdPartyToolMigrationPreview(0, 0, Array.Empty<string>()));
             }
 
-            public void MarkServerStarted() { }
-            public void MarkServerManuallyStopped() { }
-            public void ClearServerSession() { }
-            public void ClearAfterCompileFlag() { }
-            public void ClearReconnectingFlags() { }
-            public void ClearPostCompileReconnectingUI() { }
-            public void ClearDomainReloadFlag() { }
-            public void ClearDomainReloadRecoveryFlags() { }
+            public (bool Found, List<string> TargetFilePaths) TryDetectAutoScanTargetsFromCompileErrors(
+                string projectRoot)
+            {
+                return (false, null);
+            }
+
+            public Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct)
+            {
+                return Task.FromResult(false);
+            }
+
+            public ThirdPartyToolMigrationResult ApplyMigration(string projectRoot)
+            {
+                return new ThirdPartyToolMigrationResult(0, 0, Array.Empty<string>());
+            }
+
+            public Task<ThirdPartyToolMigrationResult> ApplyMigrationAsync(
+                string projectRoot,
+                IProgress<ThirdPartyToolMigrationProgress> progress,
+                CancellationToken ct)
+            {
+                return Task.FromResult(new ThirdPartyToolMigrationResult(0, 0, Array.Empty<string>()));
+            }
         }
 
         private sealed class NoOpSkillSetupPort : ISkillSetupPort
@@ -196,40 +190,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CancellationToken ct)
             {
                 return Task.CompletedTask;
-            }
-        }
-
-        private sealed class NoOpThirdPartyToolMigrationPort : IThirdPartyToolMigrationPort
-        {
-            public ThirdPartyToolMigrationPreview PreviewMigration(string projectRoot)
-            {
-                return new ThirdPartyToolMigrationPreview(0, 0, Array.Empty<string>());
-            }
-
-            public Task<ThirdPartyToolMigrationPreview> PreviewMigrationAsync(
-                string projectRoot,
-                IProgress<ThirdPartyToolMigrationProgress> progress,
-                CancellationToken ct)
-            {
-                return Task.FromResult(new ThirdPartyToolMigrationPreview(0, 0, Array.Empty<string>()));
-            }
-
-            public Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct)
-            {
-                return Task.FromResult(false);
-            }
-
-            public ThirdPartyToolMigrationResult ApplyMigration(string projectRoot)
-            {
-                return new ThirdPartyToolMigrationResult(0, 0, Array.Empty<string>());
-            }
-
-            public Task<ThirdPartyToolMigrationResult> ApplyMigrationAsync(
-                string projectRoot,
-                IProgress<ThirdPartyToolMigrationProgress> progress,
-                CancellationToken ct)
-            {
-                return Task.FromResult(new ThirdPartyToolMigrationResult(0, 0, Array.Empty<string>()));
             }
         }
     }
