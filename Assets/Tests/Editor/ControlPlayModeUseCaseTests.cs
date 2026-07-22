@@ -283,6 +283,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(EditorApplication.isPlaying, Is.False);
             Assert.That(response.Changed, Is.False);
             Assert.That(response.IsPlaying, Is.False);
+            Assert.That(response.BlockedByUnsavedChanges, Is.True);
             Assert.That(response.Message, Does.Contain("could not be saved"));
             Assert.That(response.Message, Does.Contain("Scene: Assets/Scenes/Sample.unity"));
         }
@@ -310,6 +311,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(quietSaver.DetectCallCount, Is.EqualTo(1));
             Assert.That(EditorApplication.isPlaying, Is.False);
             Assert.That(response.Changed, Is.False);
+            Assert.That(response.BlockedByUnsavedChanges, Is.True);
             Assert.That(response.Message, Does.Contain("unsaved scene or prefab changes"));
             Assert.That(response.Message, Does.Contain("Prefab Stage: Assets/Prefabs/Hud.prefab"));
         }

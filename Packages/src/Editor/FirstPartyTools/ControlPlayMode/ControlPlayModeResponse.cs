@@ -13,6 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool WasAlreadyStopped { get; set; }
         public bool ResumedFromPause { get; set; }
         public bool BlockedByCompileErrors { get; set; }
+        public bool BlockedByUnsavedChanges { get; set; }
         public int CompileErrorCount { get; set; }
         public ControlPlayModeCompileError[] CompileErrors { get; set; }
         public string Message { get; set; }

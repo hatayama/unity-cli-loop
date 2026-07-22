@@ -441,6 +441,80 @@ func TestRunControlPlayModeWithStateWaitFailsWhenCompileErrorsAppearDuringPollin
 	}
 }
 
+// Verifies that an unsaved-changes save failure on the initial Play response fails immediately
+// instead of falling through to the state-wait poll loop (Round-8: Untitled dirty scenes made
+// this timeout after 180s even though Unity had already given up synchronously).
+func TestRunControlPlayModeWithStateWaitFailsImmediatelyWhenUnsavedChangesBlockPlay(t *testing.T) {
+	originalPoll := controlPlayModeStatePoll
+	controlPlayModeStatePoll = time.Millisecond
+	t.Cleanup(func() {
+		controlPlayModeStatePoll = originalPoll
+	})
+
+	listener := newLoopbackIpcListener(t)
+
+	requests := make(chan map[string]any, 2)
+	serverErr := make(chan error, 1)
+	go serveControlPlayModeResponses(
+		listener,
+		requests,
+		serverErr,
+		[]string{
+			`{"IsPlaying":false,"IsPaused":false,"BlockedByUnsavedChanges":true,"Message":"Play mode could not start because unsaved scene or prefab changes could not be saved. Unsaved changes: Untitled scene"}`,
+		})
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runControlPlayModeWithStateWait(
+		context.Background(),
+		connection,
+		map[string]any{
+			controlPlayModeActionParam:  "Play",
+			controlPlayModeTimeoutParam: 1,
+		},
+		&stdout,
+		&stderr)
+
+	if code != 1 {
+		t.Fatalf("expected unsaved-changes failure, got %d with stdout %s stderr %s", code, stdout.String(), stderr.String())
+	}
+
+	var envelope clierrors.CLIErrorEnvelope
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
+	}
+	if envelope.Error.ErrorCode != clierrors.ErrorCodeControlPlayModeUnsavedChanges {
+		t.Fatalf("error code mismatch: %#v", envelope.Error)
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("Untitled scene")) {
+		t.Fatalf("save-failure message missing from stderr: %s", stderr.String())
+	}
+
+	firstRequest := readControlPlayModeRequest(t, requests)
+	if _, ok := firstRequest[controlPlayModeStatusOnlyParam]; ok {
+		t.Fatalf("initial request should not be status-only: %#v", firstRequest)
+	}
+	select {
+	case secondRequest := <-requests:
+		t.Fatalf("blocked unsaved changes should not trigger status polling: %#v", secondRequest)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
+
 // Verifies that live Unity tool caches using number schemas still drive integer wait budgets.
 func TestControlPlayModeTimeoutSecondsAcceptsFloatSchemaValue(t *testing.T) {
 	params := map[string]any{controlPlayModeTimeoutParam: 12.0}
