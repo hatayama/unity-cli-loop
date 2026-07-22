@@ -37,8 +37,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 object[] parametersArray = ConvertParameters(parameters.Parameters);
                 string originalCode = parameters.Code ?? string.Empty;
+                string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
 
-                LogExecutionStart(parameters, UnityCliLoopConstants.GenerateCorrelationId());
+                LogExecutionStart(parameters, correlationId);
 
                 DynamicCodeExecutionRequest request = CreateExecutionRequest(
                     originalCode,
@@ -65,6 +66,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     DynamicCodeForegroundWarmupState.MarkCompletedBySuccessfulExecution();
                 }
+
+                LogExecutionComplete(finalResult, correlationId);
 
                 if (DynamicCodeExecutionResponseFactory.IsCancelledResult(finalResult))
                 {
@@ -153,6 +156,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 },
                 correlationId,
                 "Dynamic code execution request received (return is optional)",
+                "Monitor execution flow and performance");
+        }
+
+        // Why this exists: execute_dynamic_code_start had no matching completion log, so a
+        // client-side stall diagnosis (e.g. EditorUnresponsiveError) could not be correlated
+        // against whether Unity had actually finished the snippet by the time the CLI gave up.
+        private static void LogExecutionComplete(ExecutionResult finalResult, string correlationId)
+        {
+            VibeLogger.LogInfo(
+                "execute_dynamic_code_complete",
+                "Dynamic code execution completed",
+                new
+                {
+                    correlationId,
+                    success = finalResult.Success,
+                    cancelled = DynamicCodeExecutionResponseFactory.IsCancelledResult(finalResult),
+                    runtimeRestarting = DynamicCodeExecutionResponseFactory.IsRuntimeRestartingResult(finalResult),
+                    executionTimeMs = finalResult.ExecutionTime.TotalMilliseconds
+                },
+                correlationId,
+                "Dynamic code execution finished; correlate against execute_dynamic_code_start by correlationId",
                 "Monitor execution flow and performance");
         }
 
