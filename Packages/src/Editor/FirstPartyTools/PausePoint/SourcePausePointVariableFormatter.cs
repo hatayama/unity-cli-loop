@@ -61,10 +61,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (SourcePausePointCollectionPreviewSerializer.TrySerialize(
                     rawValue, maxCollectionPreviewElementCount, ref truncated, out string collectionPreview))
             {
-                string cappedPreview = ApplyValueLengthCap(
-                    collectionPreview,
-                    SourcePausePointConstants.MaxCollectionPreviewValueLength,
-                    ref truncated);
+                // Why scale: a per-marker element-count override that raises the element cap
+                // without also raising the byte budget would still get clipped by the fixed
+                // default-sized value-length cap before all the requested elements fit (the
+                // motivating Round-8 case: a 200-element bool board needs ~1200 chars, well
+                // past the 1024-char default). Scaling keeps the ~102-chars-per-element budget
+                // the default (10 elements, 1024 chars) already implies.
+                int scaledValueLengthCap = SourcePausePointConstants.MaxCollectionPreviewValueLength
+                    * maxCollectionPreviewElementCount / UloopPausePointRegistry.DefaultMaxPreviewElements;
+                string cappedPreview = ApplyValueLengthCap(collectionPreview, scaledValueLengthCap, ref truncated);
                 return new UloopCapturedVariable(name, scope, typeName, cappedPreview, string.Empty, string.Empty, 0);
             }
 

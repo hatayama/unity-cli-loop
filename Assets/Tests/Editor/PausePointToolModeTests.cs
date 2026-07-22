@@ -200,15 +200,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Hit_WhenMarkerHasMaxPreviewElementsOverride_UsesOverrideForCollectionPreview()
         {
+            // Verifies the Harmony entry point itself (SourcePausePointCapture.Capture) resolves
+            // the marker's override through UloopPausePointRegistry.GetMaxPreviewElements, not
+            // just that CaptureFrame honors a value handed to it directly.
             const int maxPreviewElements = 3;
             UloopPausePointRegistry.Enable("jump", 30, UloopPausePointCaptureMode.SingleShot, 20, maxPreviewElements);
             List<int> values = Enumerable.Range(0, maxPreviewElements + 5).ToList();
 
-            (UloopPausePointCapturedVariableFrame _, List<UloopCapturedVariable> variables, bool truncated) =
-                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), new object[] { "scores", values }, maxPreviewElements);
+            SourcePausePointCapture.Capture(
+                "jump", null, Array.Empty<object>(), new object[] { "scores", values });
 
-            Assert.That(variables.Single().Value.Split(',').Length, Is.EqualTo(maxPreviewElements));
-            Assert.That(truncated, Is.True);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+            Assert.That(snapshot.CapturedVariables.Single().Value.Split(',').Length, Is.EqualTo(maxPreviewElements));
+            Assert.That(snapshot.CapturedVariablesTruncated, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies GetMaxPreviewElements resolves the value stored by Enable for an armed marker.
+        /// </summary>
+        [Test]
+        public void GetMaxPreviewElements_WhenMarkerIsEnabled_ReturnsConfiguredValue()
+        {
+            UloopPausePointRegistry.Enable("jump", 30, UloopPausePointCaptureMode.SingleShot, 20, 200);
+
+            Assert.That(UloopPausePointRegistry.GetMaxPreviewElements("jump"), Is.EqualTo(200));
+        }
+
+        /// <summary>
+        /// Verifies GetMaxPreviewElements falls back to the registry default for an unknown id.
+        /// </summary>
+        [Test]
+        public void GetMaxPreviewElements_WhenMarkerIsUnknown_ReturnsRegistryDefault()
+        {
+            Assert.That(
+                UloopPausePointRegistry.GetMaxPreviewElements("unknown"),
+                Is.EqualTo(UloopPausePointRegistry.DefaultMaxPreviewElements));
         }
 
         /// <summary>

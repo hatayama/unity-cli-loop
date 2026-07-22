@@ -599,6 +599,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Format_WithPerMarkerMaxPreviewElementsAndLongPreview_ScalesValueLengthCapWithOverride()
+        {
+            // Verifies the collection value-length cap scales with the per-marker element-count
+            // override (Round-8 motivating case: a 200-element bool board serializes past the
+            // fixed 1024-char default cap, but must not be clipped once the override raises it).
+            const int maxPreviewElements = 200;
+            List<bool> values = Enumerable.Repeat(false, maxPreviewElements).ToList();
+            object[] locals = { "cells", values };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals, maxPreviewElements);
+
+            string value = variables.Single().Value;
+            Assert.That(value.Length, Is.GreaterThan(SourcePausePointConstants.MaxCollectionPreviewValueLength));
+            Assert.That(value.Split(',').Length, Is.EqualTo(maxPreviewElements));
+            Assert.That(truncated, Is.False);
+        }
+
+        [Test]
         public void Format_WithCompositeCollectionElements_ExpandsElementFieldsAsJson()
         {
             // Verifies composite element types without a ToString override expand their fields as
