@@ -33,6 +33,7 @@ using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationScree
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationScreenshotDeconstructionRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationScreenshotDetectionRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationScreenshotRules;
+using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationSuccessPropertyRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingArgumentRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingCallerRules;
 using static io.github.hatayama.UnityCliLoop.Domain.ThirdPartyToolMigrationTimingCleanupRules;
@@ -307,6 +308,13 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 _assemblyDeclaredTypeNames,
                 ref _replacementCount);
             ApplyCSharpReplacementRules();
+        }
+
+        public void ApplySuccessPropertyHidingRemoval()
+        {
+            (string migratedContent, int replacementCount) =
+                RemoveSuccessPropertyHidingDeclarationsInCode(_migratedContent);
+            ApplyReplacementResult(migratedContent, replacementCount);
         }
 
         public void ApplyRegistrarRenames()

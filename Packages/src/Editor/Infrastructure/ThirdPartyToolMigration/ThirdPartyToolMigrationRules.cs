@@ -242,6 +242,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return ThirdPartyToolMigrationSourceDetectionRules.ContainsLegacyAssemblyScopedApi(source, legacyAssemblyAliases);
         }
 
+        internal static bool ContainsSuccessPropertyHidingUnityCliLoopToolResponse(string source)
+        {
+            return ThirdPartyToolMigrationSuccessPropertyRules.ContainsSuccessPropertyHidingUnityCliLoopToolResponse(source);
+        }
+
+        internal static bool ContainsNonAutoPropertySuccessHidingUnityCliLoopToolResponse(string source)
+        {
+            return ThirdPartyToolMigrationSuccessPropertyRules.ContainsNonAutoPropertySuccessHidingUnityCliLoopToolResponse(source);
+        }
+
         internal static bool ContainsLegacyGlobalUsing(string source)
         {
             return ThirdPartyToolMigrationSourceDetectionRules.ContainsLegacyGlobalUsing(source);
