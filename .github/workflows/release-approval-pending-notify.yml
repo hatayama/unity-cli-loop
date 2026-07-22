@@ -16,13 +16,22 @@ permissions:
   issues: write
   contents: read
 
+concurrency:
+  group: release-approval-pending-notify
+  cancel-in-progress: false
+
 jobs:
   notify:
     runs-on: ubuntu-latest
 
     steps:
+      # schedule/workflow_run only fire from workflow files on the default branch (main), which
+      # has no cli/ directory; the reconcile implementation lives on v3-beta, so this checkout
+      # must pin ref explicitly instead of using the triggering event's ref.
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: v3-beta
 
       - name: Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
