@@ -18,7 +18,7 @@ uloop control-play-mode [options]
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--action` | string | `Play` | Action to perform: `Play`, `Stop`, `Pause`, `Step` |
+| `--action` | string | `Play` | Action to perform: `Play`, `Stop`, `Pause`, `Step`, `Status` |
 | `--timeout-seconds` | integer | `180` | Maximum seconds to wait for the requested play mode state |
 
 ## Output
@@ -40,3 +40,5 @@ Returns JSON with the current play mode state:
 - `Step` advances exactly one frame and leaves PlayMode paused (the Editor's Next Frame button); it is independent of `Time.timeScale` and requires PlayMode to be running
 - The command waits for the requested state before returning. Increase `--timeout-seconds` for projects with slow PlayMode entry.
 - Before relying on PlayMode behavior as verification evidence, check `uloop get-logs --log-type Error` for pre-existing errors. An error already present when PlayMode starts can otherwise be mistaken for one caused by the action under test.
+- `Status` reads the current state without touching anything: no state change (`Changed` is always `false`), no waiting, and none of `Play`'s side effects — it does not save dirty scenes and is not blocked by compile errors. Use it when you only need to know whether Play Mode is running or paused; the other actions report the same state fields, but only as part of performing their action.
+- `Play` fails immediately with a `CONTROL_PLAY_MODE_UNSAVED_CHANGES` error when unsaved changes cannot be saved quietly — most commonly an Untitled scene, which has no path to save to. The error message lists exactly which scenes or prefab stages blocked it; save the Untitled scene to an explicit path (or discard the changes), then retry.
