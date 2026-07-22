@@ -107,6 +107,10 @@ When changing Go source files under any Go module (`cli/common`, `cli/dispatcher
 equivalent of Go CLI CI (format, vet, lint, tests, binary rebuild). Use `scripts/build-go-cli.sh`
 to refresh `dist` binaries; they are git-ignored and must not be committed.
 
+To validate an unreleased project runner from an external Unity project, set the
+`ULOOP_PROJECT_RUNNER_PATH` environment variable to a locally built binary — it overrides the
+pin-based resolution entirely (see `docs/project-runner-pin.md`).
+
 ## Unity Freeze Prevention
 
 Unity EditMode tests can freeze the Editor. Never run multiple `uloop run-tests` commands in
