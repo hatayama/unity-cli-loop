@@ -727,6 +727,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             });
             Assert.IsFalse(lastResponse.Success);
             StringAssert.Contains("already held", lastResponse.Message);
+            Assert.That(lastResponse.KeyStateTrackedHeld, Is.True);
+            Assert.That(lastResponse.KeyStateDeviceIsPressed, Is.Not.Null);
         }
 
         [UnityTest]
@@ -742,6 +744,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
             Assert.IsFalse(lastResponse.Success);
             StringAssert.Contains("not currently held", lastResponse.Message);
+            Assert.That(lastResponse.KeyStateTrackedHeld, Is.False);
+            Assert.That(lastResponse.KeyStateDeviceIsPressed, Is.Not.Null);
         }
 
         [UnityTest]
