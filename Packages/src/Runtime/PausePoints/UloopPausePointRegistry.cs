@@ -53,6 +53,14 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // assembly - removes the underlying Harmony patch without knowing it exists.
         public static Action<string> OnCleared { get; set; }
         public static Action OnClearedAll { get; set; }
+        // Fires once Clear(id) has fully resolved entry state (after MarkCleared), unlike
+        // OnCleared above which fires first, before TryExpire/MarkCleared run - too early to read
+        // HitCount/StatusBeforeClear. Lets tool-assembly-only diagnostics (physics dispatch
+        // misses) subscribe here instead of duplicating that inline check in both Clear callers
+        // (PausePointUseCase and the Infrastructure CLI bridge), the same way OnCleared/
+        // OnClearedAll already let SourcePausePointPatcher subscribe once instead of every caller
+        // referencing it directly.
+        public static Action<string, int, string> OnClearResolved { get; set; }
 
         public static UloopPausePointSnapshot Enable(
             string id,
@@ -111,6 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 _ => "Pause point cleared."
             };
             entry.MarkCleared(UloopPausePointClearedReason.ExplicitClear, message);
+            OnClearResolved?.Invoke(id, entry.HitCount, entry.StatusBeforeClear);
             ClearHitSnapshotAndRawCaptureForId(id);
             // Why only when pause-point-owned: a clear must not steal ownership of a manual pause
             // the user set outside the pause-point workflow (control-play-mode --action Pause or

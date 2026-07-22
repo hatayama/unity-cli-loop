@@ -283,6 +283,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // survive one, and entries are removed as soon as their pause point is cleared.
         private static readonly Dictionary<string, Type> PhysicsFlaggedDeclaringTypesById = new();
 
+        // Why here rather than at the EnableBySourceLocation call site: PhysicsFlaggedDeclaringTypesById
+        // can only become non-empty after EnableBySourceLocation has populated it at least once, and
+        // by then this type has already been touched (it is the type EnableBySourceLocation is a
+        // member of), so static type initialization has already run this constructor. The
+        // subscription is therefore always wired before any Clear/bridge-Clear that could possibly
+        // find a matching id in the dictionary.
+        static PausePointUseCase()
+        {
+            UloopPausePointRegistry.OnClearResolved = OnRegistryClearResolved;
+        }
+
+        // Shared by both Clear callers (this use case's own --id path below, and the Infrastructure
+        // CLI bridge's PausePointStatusBridgeCommand.Clear, which must not reference this Editor-only
+        // tool assembly directly) via the UloopPausePointRegistry.OnClearResolved hook, so a zero-hit
+        // clear of a physics-flagged marker is diagnosed the same way regardless of which caller
+        // cleared it.
+        private static void OnRegistryClearResolved(string id, int hitCount, string statusBeforeClear)
+        {
+            if (hitCount == 0 && PhysicsFlaggedDeclaringTypesById.TryGetValue(id, out Type declaringType))
+            {
+                LogPhysicsDispatchDiagnostics("pause_point_cleared_without_hit_physics", id, declaringType, statusBeforeClear);
+            }
+            PhysicsFlaggedDeclaringTypesById.Remove(id);
+        }
+
         public PausePointResponse Enable(EnablePausePointSchema parameters)
         {
             string captureSettingsError = ValidateCaptureSettings(parameters);
@@ -329,18 +354,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // the dominant field path (await timeout -> agent cleans up with --all), so
                 // skipping it here would lose the primary evidence in the common case.
                 //
-                // The Status check (not just HitCount==0) matters because
-                // PausePointStatusBridgeCommand.Clear (the CLI's own polling clear path) clears a
-                // marker via the registry directly without going through this use case, so it
-                // never removes the id from PhysicsFlaggedDeclaringTypesById. A later clear --all
-                // would otherwise re-log stale diagnostics for an id that was already Cleared
-                // through that other path.
+                // This loop and OnRegistryClearResolved above are the only two places that log
+                // this diagnostic; keep them in sync if the log shape or wording changes. This one
+                // exists because ClearAll has no single-id equivalent to route through
+                // UloopPausePointRegistry.Clear (and therefore OnClearResolved) - Registry.ClearAll
+                // clears every entry in one bulk pass instead. Every id still in this dictionary at
+                // this point is guaranteed to be un-cleared: a single Clear of any tracked id -
+                // whichever caller made it - already removed it via OnRegistryClearResolved, so
+                // there is no stale-Cleared-entry case left to guard against here.
                 foreach (KeyValuePair<string, Type> tracked in PhysicsFlaggedDeclaringTypesById)
                 {
                     UloopPausePointSnapshot trackedSnapshot = UloopPausePointRegistry.GetStatus(tracked.Key);
-                    bool wasStillArmed = trackedSnapshot.Status == UloopPausePointStatus.Enabled ||
-                                         trackedSnapshot.Status == UloopPausePointStatus.Expired;
-                    if (trackedSnapshot.HitCount == 0 && wasStillArmed)
+                    if (trackedSnapshot.HitCount == 0)
                     {
                         LogPhysicsDispatchDiagnostics(
                             "pause_point_cleared_without_hit_physics", tracked.Key, tracked.Value, trackedSnapshot.Status);
@@ -369,17 +394,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 LogExpired(snapshot.Id, snapshot.ElapsedSinceEnabledMilliseconds);
             }
 
-            // Fires for any zero-hit clear of a physics-flagged marker, not just an expired one:
-            // the field incident that motivated this diagnostic (Block.cs:29, 2026-07-22) cleared
-            // while still Enabled because the CLI's await timeout is shorter than the marker's own
-            // expiry, so StatusBeforeClear was Enabled rather than Expired.
-            if (snapshot.HitCount == 0 && PhysicsFlaggedDeclaringTypesById.TryGetValue(snapshot.Id, out Type declaringType))
-            {
-                LogPhysicsDispatchDiagnostics(
-                    "pause_point_cleared_without_hit_physics", snapshot.Id, declaringType, snapshot.StatusBeforeClear);
-            }
-            PhysicsFlaggedDeclaringTypesById.Remove(snapshot.Id);
-
+            // The zero-hit physics diagnostic (for any StatusBeforeClear, not just Expired - the
+            // field incident that motivated it, Block.cs:29 2026-07-22, cleared while still
+            // Enabled) and the PhysicsFlaggedDeclaringTypesById removal already happened inside
+            // UloopPausePointRegistry.Clear above, via the OnClearResolved hook subscribed to
+            // OnRegistryClearResolved. This keeps the direct-tool-call path in sync with the
+            // Infrastructure CLI bridge's Clear path without duplicating the check here.
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             if (resumedFromPause)
             {

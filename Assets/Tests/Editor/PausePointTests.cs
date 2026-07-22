@@ -810,27 +810,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task ClearAll_WhenPhysicsFlaggedMarkerAlreadyClearedViaStatusBridge_DoesNotLogStaleDiagnostics()
+        public async Task Clear_WhenPhysicsFlaggedMarkerClearedViaStatusBridge_EmitsClearedWithoutHitPhysicsDiagnostics()
         {
-            // Verifies ClearAll does not re-log physics diagnostics for a marker that was already
-            // cleared through PausePointStatusBridgeCommand.Clear (the CLI's own polling clear
-            // path). That path clears the registry entry directly without going through
-            // PausePointUseCase, so it cannot remove the id from PhysicsFlaggedDeclaringTypesById;
-            // a later clear --all must not treat the resulting Cleared-status leftover entry as a
-            // fresh zero-hit miss.
+            // Verifies the bridge clear path (PausePointStatusBridgeCommand.Clear, used by
+            // await-pause-point's self-timeout auto-clear) emits the same zero-hit physics
+            // diagnostic as the direct tool clear path. The field incident that motivated this
+            // diagnostic (Block.cs:29, 2026-07-22) is itself cleared through this bridge, not
+            // PausePointUseCase.Clear, so the bridge path must not stay silent.
             PausePointResponse enableResponse = await EnablePausePointByFileLineAsync(PhysicsFixtureFilePath, PhysicsFixtureLine);
             Assert.That(enableResponse.Success, Is.True);
+            VibeLogger.ClearMemoryLogs();
 
             JObject bridgeParameters = new() { ["Id"] = enableResponse.Id };
             PausePointStatusBridgeCommand.Clear(bridgeParameters);
+
+            string logs = VibeLogger.GetLogsForAi("pause_point_cleared_without_hit_physics");
+            Assert.That(logs, Does.Contain("pause_point_cleared_without_hit_physics"));
+            Assert.That(logs, Does.Contain($"\"Id\": \"{enableResponse.Id}\""));
+            Assert.That(logs, Does.Contain("\"StatusBeforeClear\": \"Enabled\""));
+        }
+
+        [Test]
+        public async Task ClearAll_WhenPhysicsFlaggedMarkerAlreadyClearedViaStatusBridge_DoesNotLogStaleDiagnostics()
+        {
+            // Verifies the bridge clear path logs the zero-hit physics diagnostic exactly once
+            // (through the shared OnClearResolved registry hook, which also removes the id from
+            // PhysicsFlaggedDeclaringTypesById), and that a later clear --all does not re-log it
+            // for the same id: the dictionary no longer carries a stale entry once the hook has
+            // fired for it.
+            PausePointResponse enableResponse = await EnablePausePointByFileLineAsync(PhysicsFixtureFilePath, PhysicsFixtureLine);
+            Assert.That(enableResponse.Success, Is.True);
+            VibeLogger.ClearMemoryLogs();
+
+            JObject bridgeParameters = new() { ["Id"] = enableResponse.Id };
+            PausePointStatusBridgeCommand.Clear(bridgeParameters);
+
+            string logsAfterBridgeClear = VibeLogger.GetLogsForAi("pause_point_cleared_without_hit_physics");
+            Assert.That(logsAfterBridgeClear, Does.Contain("pause_point_cleared_without_hit_physics"));
             VibeLogger.ClearMemoryLogs();
 
             ClearPausePointTool tool = new();
             JObject parameters = new() { ["all"] = true };
             await tool.ExecuteAsync(parameters, CancellationToken.None);
 
-            string logs = VibeLogger.GetLogsForAi("pause_point_cleared_without_hit_physics");
-            Assert.That(logs, Does.Not.Contain("pause_point_cleared_without_hit_physics"));
+            string logsAfterClearAll = VibeLogger.GetLogsForAi("pause_point_cleared_without_hit_physics");
+            Assert.That(logsAfterClearAll, Does.Not.Contain("pause_point_cleared_without_hit_physics"));
         }
 
         [Test]
