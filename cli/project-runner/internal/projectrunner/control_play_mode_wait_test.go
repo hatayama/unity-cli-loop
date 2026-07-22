@@ -515,6 +515,16 @@ func TestRunControlPlayModeWithStateWaitFailsImmediatelyWhenUnsavedChangesBlockP
 	}
 }
 
+// Verifies that Status is a pure read: it must never enter the PlayMode state-wait poll loop,
+// unlike Play/Stop/Pause which wait for a state transition to complete.
+func TestShouldWaitForControlPlayModeStateSkipsStatusAction(t *testing.T) {
+	params := map[string]any{controlPlayModeActionParam: "Status"}
+
+	if shouldWaitForControlPlayModeState(controlPlayModeCommandName, params) {
+		t.Fatal("Status action should not enter the state-wait poll loop")
+	}
+}
+
 // Verifies that live Unity tool caches using number schemas still drive integer wait budgets.
 func TestControlPlayModeTimeoutSecondsAcceptsFloatSchemaValue(t *testing.T) {
 	params := map[string]any{controlPlayModeTimeoutParam: 12.0}
