@@ -36,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Converters = { new StringEnumConverter() }
             });
 
-        public static bool TrySerialize(object rawValue, ref bool truncated, out string preview)
+        public static bool TrySerialize(object rawValue, int maxElementCount, ref bool truncated, out string preview)
         {
             preview = string.Empty;
             if (rawValue == null)
@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 HashSet<object> visited = new(ReferenceEqualityComparer.Instance);
                 JToken token = BuildToken(
-                    rawValue, SourcePausePointConstants.MaxCollectionPreviewDepth, visited, ref truncated);
+                    rawValue, SourcePausePointConstants.MaxCollectionPreviewDepth, maxElementCount, visited, ref truncated);
                 preview = token.ToString(Formatting.None);
                 return true;
             }
@@ -88,7 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static JToken BuildToken(
-            object value, int remainingDepth, HashSet<object> visited, ref bool truncated)
+            object value, int remainingDepth, int maxElementCount, HashSet<object> visited, ref bool truncated)
         {
             if (value == null)
             {
@@ -135,17 +135,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 if (value is IDictionary dictionary)
                 {
-                    return BuildDictionaryToken(dictionary, remainingDepth, visited, ref truncated);
+                    return BuildDictionaryToken(dictionary, remainingDepth, maxElementCount, visited, ref truncated);
                 }
 
                 if (value is Array multidimensionalArray && multidimensionalArray.Rank > 1)
                 {
-                    return BuildMultidimensionalArrayToken(multidimensionalArray, remainingDepth, visited, ref truncated);
+                    return BuildMultidimensionalArrayToken(multidimensionalArray, remainingDepth, maxElementCount, visited, ref truncated);
                 }
 
                 if (value is ICollection)
                 {
-                    return BuildArrayToken(enumerable, remainingDepth, visited, ref truncated);
+                    return BuildArrayToken(enumerable, remainingDepth, maxElementCount, visited, ref truncated);
                 }
 
                 return new JValue(SafeToString(value));
@@ -163,14 +163,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return new JValue(SafeToString(value));
                 }
 
-                return BuildObjectFieldsToken(value, remainingDepth, visited, ref truncated);
+                return BuildObjectFieldsToken(value, remainingDepth, maxElementCount, visited, ref truncated);
             }
 
             return new JValue(SafeToString(value));
         }
 
         private static JObject BuildObjectFieldsToken(
-            object value, int remainingDepth, HashSet<object> visited, ref bool truncated)
+            object value, int remainingDepth, int maxElementCount, HashSet<object> visited, ref bool truncated)
         {
             JObject jsonObject = new();
             int fieldCount = 0;
@@ -184,13 +184,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                if (fieldCount >= SourcePausePointConstants.MaxCollectionPreviewElementCount)
+                if (fieldCount >= maxElementCount)
                 {
                     truncated = true;
                     break;
                 }
 
-                jsonObject[name] = BuildToken(field.GetValue(value), remainingDepth - 1, visited, ref truncated);
+                jsonObject[name] = BuildToken(field.GetValue(value), remainingDepth - 1, maxElementCount, visited, ref truncated);
                 fieldCount++;
             }
 
@@ -237,7 +237,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // info, so a T[,] preview otherwise reads as a flat (possibly truncated-looking) list
         // with no way to tell it apart from an empty or 1D collection.
         private static JObject BuildMultidimensionalArrayToken(
-            Array array, int remainingDepth, HashSet<object> visited, ref bool truncated)
+            Array array, int remainingDepth, int maxElementCount, HashSet<object> visited, ref bool truncated)
         {
             string elementTypeName = array.GetType().GetElementType().Name;
             IEnumerable<string> dimensions = Enumerable.Range(0, array.Rank).Select(dimension => array.GetLength(dimension).ToString());
@@ -246,25 +246,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 ["Shape"] = $"{elementTypeName}[{string.Join(",", dimensions)}]",
                 ["TotalElements"] = array.Length,
-                ["Elements"] = BuildArrayToken(array, remainingDepth, visited, ref truncated)
+                ["Elements"] = BuildArrayToken(array, remainingDepth, maxElementCount, visited, ref truncated)
             };
             return shapeToken;
         }
 
         private static JArray BuildArrayToken(
-            IEnumerable enumerable, int remainingDepth, HashSet<object> visited, ref bool truncated)
+            IEnumerable enumerable, int remainingDepth, int maxElementCount, HashSet<object> visited, ref bool truncated)
         {
             JArray array = new();
             int elementCount = 0;
             foreach (object element in enumerable)
             {
-                if (elementCount >= SourcePausePointConstants.MaxCollectionPreviewElementCount)
+                if (elementCount >= maxElementCount)
                 {
                     truncated = true;
                     break;
                 }
 
-                array.Add(BuildToken(element, remainingDepth - 1, visited, ref truncated));
+                array.Add(BuildToken(element, remainingDepth - 1, maxElementCount, visited, ref truncated));
                 elementCount++;
             }
 
@@ -272,20 +272,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static JObject BuildDictionaryToken(
-            IDictionary dictionary, int remainingDepth, HashSet<object> visited, ref bool truncated)
+            IDictionary dictionary, int remainingDepth, int maxElementCount, HashSet<object> visited, ref bool truncated)
         {
             JObject jsonObject = new();
             int elementCount = 0;
             foreach (DictionaryEntry entry in dictionary)
             {
-                if (elementCount >= SourcePausePointConstants.MaxCollectionPreviewElementCount)
+                if (elementCount >= maxElementCount)
                 {
                     truncated = true;
                     break;
                 }
 
                 string key = FormatDictionaryKey(entry.Key);
-                jsonObject[key] = BuildToken(entry.Value, remainingDepth - 1, visited, ref truncated);
+                jsonObject[key] = BuildToken(entry.Value, remainingDepth - 1, maxElementCount, visited, ref truncated);
                 elementCount++;
             }
 

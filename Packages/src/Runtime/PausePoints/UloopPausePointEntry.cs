@@ -15,6 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int timeoutSeconds,
             string mode,
             int maxHistory,
+            int maxPreviewElements,
             DateTime enabledAtUtc,
             int generation)
         {
@@ -22,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             TimeoutSeconds = timeoutSeconds;
             Mode = mode;
             MaxHistory = maxHistory;
+            MaxPreviewElements = maxPreviewElements;
             EnabledAtUtc = enabledAtUtc;
             ExpiresAtUtc = enabledAtUtc.AddSeconds(timeoutSeconds);
             Generation = generation;
@@ -36,6 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public int TimeoutSeconds { get; }
         public string Mode { get; }
         public int MaxHistory { get; }
+        public int MaxPreviewElements { get; }
         public DateTime EnabledAtUtc { get; }
         public DateTime ExpiresAtUtc { get; private set; }
         public int Generation { get; }
@@ -234,6 +237,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 TimeoutSeconds,
                 Mode,
                 MaxHistory,
+                MaxPreviewElements,
                 new List<UloopPausePointCapturedHistoryFrame>(_capturedVariableHistory),
                 HistoryDroppedCount,
                 expired,

@@ -380,6 +380,11 @@
             "type": "integer",
             "description": "Maximum number of captured hit frames to retain (1-100)",
             "default": 20
+          },
+          "MaxPreviewElements": {
+            "type": "integer",
+            "description": "Maximum number of elements to include in a captured collection's preview (1-1000)",
+            "default": 10
           }
         }
       }

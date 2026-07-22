@@ -20,15 +20,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string DestroyedValue = "(destroyed)";
 
         public static (List<UloopCapturedVariable> Variables, bool Truncated) Format(
-            object instance, object[] parameterNamesAndValues, object[] localNamesAndValues)
+            object instance, object[] parameterNamesAndValues, object[] localNamesAndValues,
+            int maxCollectionPreviewElementCount = SourcePausePointConstants.MaxCollectionPreviewElementCount)
         {
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
                 instance, parameterNamesAndValues, localNamesAndValues);
-            return FormatFrame(frame);
+            return FormatFrame(frame, maxCollectionPreviewElementCount);
         }
 
         public static (List<UloopCapturedVariable> Variables, bool Truncated) FormatFrame(
-            UloopPausePointCapturedVariableFrame frame)
+            UloopPausePointCapturedVariableFrame frame,
+            int maxCollectionPreviewElementCount = SourcePausePointConstants.MaxCollectionPreviewElementCount)
         {
             Debug.Assert(frame != null, "frame must not be null");
 
@@ -36,13 +38,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool truncated = frame.Truncated;
             foreach (UloopPausePointCapturedVariableEntry entry in frame.Entries)
             {
-                results.Add(FormatVariable(entry.Name, entry.Scope, entry.Value, ref truncated));
+                results.Add(FormatVariable(entry.Name, entry.Scope, entry.Value, maxCollectionPreviewElementCount, ref truncated));
             }
 
             return (results, truncated);
         }
 
-        private static UloopCapturedVariable FormatVariable(string name, string scope, object rawValue, ref bool truncated)
+        private static UloopCapturedVariable FormatVariable(
+            string name, string scope, object rawValue, int maxCollectionPreviewElementCount, ref bool truncated)
         {
             if (rawValue == null)
             {
@@ -55,12 +58,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return FormatUnityObjectVariable(name, scope, typeName, unityObjectCandidate);
             }
 
-            if (SourcePausePointCollectionPreviewSerializer.TrySerialize(rawValue, ref truncated, out string collectionPreview))
+            if (SourcePausePointCollectionPreviewSerializer.TrySerialize(
+                    rawValue, maxCollectionPreviewElementCount, ref truncated, out string collectionPreview))
             {
-                string cappedPreview = ApplyValueLengthCap(
-                    collectionPreview,
-                    SourcePausePointConstants.MaxCollectionPreviewValueLength,
-                    ref truncated);
+                // Why scale: a per-marker element-count override that raises the element cap
+                // without also raising the byte budget would still get clipped by the fixed
+                // default-sized value-length cap before all the requested elements fit (the
+                // motivating Round-8 case: a 200-element bool board needs ~1200 chars, well
+                // past the 1024-char default). Scaling keeps the ~102-chars-per-element budget
+                // the default (10 elements, 1024 chars) already implies.
+                int scaledValueLengthCap = SourcePausePointConstants.MaxCollectionPreviewValueLength
+                    * maxCollectionPreviewElementCount / UloopPausePointRegistry.DefaultMaxPreviewElements;
+                string cappedPreview = ApplyValueLengthCap(collectionPreview, scaledValueLengthCap, ref truncated);
                 return new UloopCapturedVariable(name, scope, typeName, cappedPreview, string.Empty, string.Empty, 0);
             }
 
