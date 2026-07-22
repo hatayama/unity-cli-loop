@@ -6,9 +6,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PausePointToolsFixtures
 {
     internal sealed class EnableBySourceLocationPhysicsFixture : MonoBehaviour
     {
+        public int HitCount;
+
         private void OnCollisionEnter2D(Collision2D collision)
         {
-            int unused = 1;
+            HitCount++;
         }
     }
 }

@@ -323,10 +323,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // regardless of whether it had already expired or was still Enabled. This is
                 // the dominant field path (await timeout -> agent cleans up with --all), so
                 // skipping it here would lose the primary evidence in the common case.
+                //
+                // The Status check (not just HitCount==0) matters because
+                // PausePointStatusBridgeCommand.Clear (the CLI's own polling clear path) clears a
+                // marker via the registry directly without going through this use case, so it
+                // never removes the id from PhysicsFlaggedDeclaringTypesById. A later clear --all
+                // would otherwise re-log stale diagnostics for an id that was already Cleared
+                // through that other path.
                 foreach (KeyValuePair<string, Type> tracked in PhysicsFlaggedDeclaringTypesById)
                 {
                     UloopPausePointSnapshot trackedSnapshot = UloopPausePointRegistry.GetStatus(tracked.Key);
-                    if (trackedSnapshot.HitCount == 0)
+                    bool wasStillArmed = trackedSnapshot.Status == UloopPausePointStatus.Enabled ||
+                                         trackedSnapshot.Status == UloopPausePointStatus.Expired;
+                    if (trackedSnapshot.HitCount == 0 && wasStillArmed)
                     {
                         LogPhysicsDispatchDiagnostics(
                             "pause_point_cleared_without_hit_physics", tracked.Key, tracked.Value, trackedSnapshot.Status);
