@@ -9,6 +9,7 @@ type ClientOptions struct {
 	heartbeatSilenceOverride time.Duration
 	mainThreadStallLimit     time.Duration
 	mainThreadStallHandler   func(float64)
+	selfInducedStallTolerant bool
 }
 
 // ClientOption applies one optional IPC client setting.
@@ -25,6 +26,18 @@ func WithResponseTimeout(timeout time.Duration) ClientOption {
 func WithMainThreadStallHandler(handler func(float64)) ClientOption {
 	return func(options *ClientOptions) {
 		options.mainThreadStallHandler = handler
+	}
+}
+
+// WithSelfInducedMainThreadStallTolerance exempts a heartbeat's main-thread stall from
+// EditorUnresponsiveError when the stall cannot predate this request's own accept (within a
+// margin): a command that itself blocks the main thread synchronously (e.g. a long
+// execute-dynamic-code snippet) looks identical to a frozen editor on the stall counter alone.
+// A stall that already exceeds the elapsed-since-accept time was running before this request
+// started and still fails as a genuine freeze.
+func WithSelfInducedMainThreadStallTolerance() ClientOption {
+	return func(options *ClientOptions) {
+		options.selfInducedStallTolerant = true
 	}
 }
 
@@ -82,6 +95,19 @@ func (client *Client) getMainThreadStallLimit() time.Duration {
 		return client.options.mainThreadStallLimit
 	}
 	return defaultMainThreadStallLimit
+}
+
+// Why margin: heartbeat delivery and clock skew between accept and the first stall report
+// add slack; a stall a few seconds beyond elapsed-since-accept is still self-induced, not
+// evidence the freeze predates this request.
+const selfInducedStallMargin = 30 * time.Second
+
+func (client *Client) isSelfInducedStall(stallSeconds float64, acceptedAt time.Time) bool {
+	if !client.options.selfInducedStallTolerant {
+		return false
+	}
+	elapsedSinceAccept := time.Since(acceptedAt) + selfInducedStallMargin
+	return stallSeconds <= elapsedSinceAccept.Seconds()
 }
 
 func (client *Client) nextRequestID() int {

@@ -265,6 +265,65 @@ func TestSendFailsWhenMainThreadStallExceedsLimit(t *testing.T) {
 	}
 }
 
+// Verifies that a self-induced-stall-tolerant client keeps waiting through a main-thread
+// stall reported shortly after this request's own accept, instead of failing with
+// EditorUnresponsiveError: a command that itself blocks the main thread synchronously
+// (e.g. a long execute-dynamic-code snippet) must not be treated as a frozen editor.
+func TestSendKeepsWaitingThroughSelfInducedMainThreadStall(t *testing.T) {
+	stalledHeartbeat := `{"jsonrpc":"2.0","id":1,"result":{"alive":true},"uloop":{"phase":"heartbeat","mainThreadStallSeconds":3}}`
+	connection := startHeartbeatTestServer(t, func(conn net.Conn) {
+		writeFrame(t, conn, heartbeatAck)
+		writeFrame(t, conn, stalledHeartbeat)
+		writeFrame(t, conn, `{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`)
+	})
+
+	client := NewClient(
+		connection,
+		"9.9.9",
+		WithSelfInducedMainThreadStallTolerance(),
+		withHeartbeatSilenceOverrideForTest(5*time.Second),
+		withMainThreadStallLimitForTest(2*time.Second),
+	)
+
+	outcome, err := client.SendWithProgressOutcome(context.Background(), "execute-dynamic-code", map[string]any{}, nil)
+	if err != nil {
+		t.Fatalf("expected success through a self-induced stall, got %v", err)
+	}
+	if len(outcome.Result) == 0 {
+		t.Fatal("expected final result")
+	}
+}
+
+// Verifies that self-induced-stall tolerance does not mask a genuine freeze: a stall that
+// already exceeds the time elapsed since this request's own accept (plus margin) predates
+// the request and must still fail with EditorUnresponsiveError.
+func TestSendFailsWhenMainThreadStallPredatesAcceptDespiteTolerance(t *testing.T) {
+	// Why 40s: exceeds the elapsed-since-accept time (a few ms in this test) plus the
+	// self-induced-stall margin (30s), so this stall could not have started after accept.
+	stalledHeartbeat := `{"jsonrpc":"2.0","id":1,"result":{"alive":true},"uloop":{"phase":"heartbeat","mainThreadStallSeconds":40}}`
+	done := make(chan struct{})
+	connection := startHeartbeatTestServer(t, func(conn net.Conn) {
+		writeFrame(t, conn, heartbeatAck)
+		writeFrame(t, conn, stalledHeartbeat)
+		<-done
+	})
+	defer close(done)
+
+	client := NewClient(
+		connection,
+		"9.9.9",
+		WithSelfInducedMainThreadStallTolerance(),
+		withHeartbeatSilenceOverrideForTest(5*time.Second),
+		withMainThreadStallLimitForTest(2*time.Second),
+	)
+
+	_, err := client.SendWithProgressOutcome(context.Background(), "execute-dynamic-code", map[string]any{}, nil)
+	var unresponsiveErr *EditorUnresponsiveError
+	if !errors.As(err, &unresponsiveErr) {
+		t.Fatalf("expected EditorUnresponsiveError for a stall predating accept, got %v", err)
+	}
+}
+
 // Verifies that an explicit response timeout stays an absolute deadline: heartbeats
 // are skipped but must not extend it (compile relies on this to fall back to polling).
 func TestSendKeepsExplicitResponseTimeoutDespiteHeartbeats(t *testing.T) {
