@@ -7,7 +7,10 @@ using System.Threading.Tasks;
 
 using Newtonsoft.Json.Linq;
 
+using UnityEditor;
+
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -16,6 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public sealed class ThirdPartyToolMigrationFileService : IThirdPartyToolMigrationPort
     {
+        private static readonly ConsoleLogRetriever LogRetriever = new();
+
         private readonly object _migrationCacheLock = new();
         private bool _hasCachedPreview;
         private string _cachedPreviewProjectRoot = string.Empty;
@@ -100,6 +105,75 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 plan.ChangedFilePaths.Count,
                 plan.ReplacementCount,
                 plan.ChangedFilePaths.ToArray());
+        }
+
+        /// <summary>
+        /// Resolves seed files (e.g. compile-error-matched migration targets) to the assembly
+        /// directories that contain them via a lightweight .asmdef/.asmref-only walk, then scans only
+        /// those directories. Falls back to a full-project scan when the seeds don't resolve to a
+        /// complete, safe scope (HasImplicitAssemblySeeds; see ThirdPartyToolMigrationScanScopeResolver)
+        /// or when no seed files were supplied at all.
+        /// </summary>
+        public async Task<ThirdPartyToolMigrationPreview> PreviewMigrationForSeedFilesAsync(
+            string projectRoot,
+            List<string> seedFilePaths,
+            IProgress<ThirdPartyToolMigrationProgress> progress,
+            CancellationToken ct)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(seedFilePaths != null, "seedFilePaths must not be null");
+            Debug.Assert(progress != null, "progress must not be null");
+
+            string normalizedProjectRoot = NormalizeProjectRoot(projectRoot);
+            if (seedFilePaths.Count == 0)
+            {
+                return await PreviewMigrationAsync(normalizedProjectRoot, progress, ct);
+            }
+
+            (List<string> asmdefDirectories, List<AssemblyReferenceDirectory> assemblyReferenceDirectories) =
+                ThirdPartyToolMigrationLightweightAssemblyWalker.DiscoverAssemblyStructure(normalizedProjectRoot);
+            (List<string> scopeDirectories, bool hasImplicitAssemblySeeds) =
+                ThirdPartyToolMigrationScanScopeResolver.ResolveScopeAssemblyDirectories(
+                    seedFilePaths,
+                    asmdefDirectories,
+                    assemblyReferenceDirectories,
+                    normalizedProjectRoot);
+
+            if (hasImplicitAssemblySeeds)
+            {
+                return await PreviewMigrationAsync(normalizedProjectRoot, progress, ct);
+            }
+
+            return await PreviewMigrationInScopeAsync(normalizedProjectRoot, scopeDirectories, progress, ct);
+        }
+
+        public (bool Found, List<string> TargetFilePaths) TryDetectAutoScanTargetsFromCompileErrors(
+            string projectRoot)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            if (!EditorUtility.scriptCompilationFailed)
+            {
+                return (false, new List<string>());
+            }
+
+            string normalizedProjectRoot = NormalizeProjectRoot(projectRoot);
+            List<string> rawMessages = new List<string>();
+            foreach (LogEntryDto logEntry in LogRetriever.GetLogsByType(UnityEngine.LogType.Error))
+            {
+                rawMessages.Add(logEntry.Message);
+            }
+
+            List<CompileErrorLogEntry> entries =
+                ThirdPartyToolMigrationConsoleErrorParser.Parse(rawMessages, normalizedProjectRoot);
+            ThirdPartyToolMigrationCompileErrorLogMatchResult matchResult =
+                ThirdPartyToolMigrationCompileErrorLogMatcher.Match(entries);
+            if (matchResult.TargetFilePaths.Count == 0)
+            {
+                return (false, new List<string>());
+            }
+
+            return (true, matchResult.TargetFilePaths);
         }
 
         public async Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct)

@@ -21,23 +21,31 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private readonly IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private readonly ISessionFlagsRepository _sessionFlagsRepository;
+        private readonly IThirdPartyToolMigrationAutoScanSeedRepository _autoScanSeedRepository;
         private readonly CliSetupApplicationService _cliSetupApplicationService;
         private readonly SkillSetupUseCase _skillSetupUseCase;
+        private readonly ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
         private readonly System.Action _showWindowOnVersionChange;
         private readonly System.Action _showThirdPartyMigrationAutoScan;
 
         internal SetupWizardStartupFlow(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
+            IThirdPartyToolMigrationAutoScanSeedRepository autoScanSeedRepository,
             CliSetupApplicationService cliSetupApplicationService,
             SkillSetupUseCase skillSetupUseCase,
+            ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase,
             System.Action showWindowOnVersionChange,
             System.Action showThirdPartyMigrationAutoScan)
         {
             Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
             Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
+            Debug.Assert(autoScanSeedRepository != null, "autoScanSeedRepository must not be null");
             Debug.Assert(cliSetupApplicationService != null, "cliSetupApplicationService must not be null");
             Debug.Assert(skillSetupUseCase != null, "skillSetupUseCase must not be null");
+            Debug.Assert(
+                thirdPartyToolMigrationUseCase != null,
+                "thirdPartyToolMigrationUseCase must not be null");
             Debug.Assert(showWindowOnVersionChange != null, "showWindowOnVersionChange must not be null");
             Debug.Assert(showThirdPartyMigrationAutoScan != null, "showThirdPartyMigrationAutoScan must not be null");
 
@@ -45,9 +53,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new System.ArgumentNullException(nameof(editorSettingsPort));
             _sessionFlagsRepository = sessionFlagsRepository
                 ?? throw new System.ArgumentNullException(nameof(sessionFlagsRepository));
+            _autoScanSeedRepository = autoScanSeedRepository
+                ?? throw new System.ArgumentNullException(nameof(autoScanSeedRepository));
             _cliSetupApplicationService = cliSetupApplicationService
                 ?? throw new System.ArgumentNullException(nameof(cliSetupApplicationService));
             _skillSetupUseCase = skillSetupUseCase ?? throw new System.ArgumentNullException(nameof(skillSetupUseCase));
+            _thirdPartyToolMigrationUseCase = thirdPartyToolMigrationUseCase
+                ?? throw new System.ArgumentNullException(nameof(thirdPartyToolMigrationUseCase));
             _showWindowOnVersionChange = showWindowOnVersionChange
                 ?? throw new System.ArgumentNullException(nameof(showWindowOnVersionChange));
             _showThirdPartyMigrationAutoScan = showThirdPartyMigrationAutoScan
@@ -94,20 +106,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             return lastSeenMajorVersion < 3 && currentMajorVersion == 3;
-        }
-
-        internal static void MaybeMarkThirdPartyToolMigrationAutoScan(
-            ISessionFlagsRepository sessionFlagsRepository,
-            bool shouldAutoScan)
-        {
-            Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
-
-            if (!shouldAutoScan)
-            {
-                return;
-            }
-
-            sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(true);
         }
 
         internal static void MaybeRecordLastSeenSetupWizardState(
@@ -297,14 +295,29 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return HasSkillUpdateForSetupWizard(targets);
         }
 
-        private void MaybeScheduleThirdPartyToolMigrationAutoScan(bool shouldAutoScan)
+        /// <summary>
+        /// The version-gate check alone can no longer trigger the auto-scan window: it must also be
+        /// confirmed against an actual compile-error hit for V2 legacy API tokens (mirroring Unity's own
+        /// API Updater), so a V2-to-V3 upgrade with no legacy custom-tool code present never shows an
+        /// unnecessary window.
+        /// </summary>
+        private void MaybeScheduleThirdPartyToolMigrationAutoScan(bool shouldAutoScanVersionGate)
         {
-            MaybeMarkThirdPartyToolMigrationAutoScan(_sessionFlagsRepository, shouldAutoScan);
-            if (!shouldAutoScan)
+            if (!shouldAutoScanVersionGate)
             {
                 return;
             }
 
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            (bool found, List<string> targetFilePaths) =
+                _thirdPartyToolMigrationUseCase.TryDetectAutoScanTargetsFromCompileErrors(projectRoot);
+            if (!found)
+            {
+                return;
+            }
+
+            _autoScanSeedRepository.StoreSeedFilePaths(targetFilePaths.ToArray());
+            _sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(true);
             EditorApplication.delayCall += () => _showThirdPartyMigrationAutoScan();
         }
     }

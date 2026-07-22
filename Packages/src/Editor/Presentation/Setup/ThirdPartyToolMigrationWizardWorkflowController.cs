@@ -24,6 +24,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
         private readonly Action _scheduleResize;
 
+        // Only the first scan after an auto-scan open is scoped to the compile-error-matched seed
+        // files; any later manual re-check (button click) must scan the whole project, since the
+        // seeds may no longer reflect what's actually broken, so this is cleared after first use.
+        private List<string> _autoScanSeedFilePaths;
+
         private bool _isMigrating;
         private bool _isUpdatingMigrationSkill;
         private SkillsTarget _migrationSkillTarget = SkillsTarget.Claude;
@@ -36,6 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ThirdPartyToolMigrationWizardView view,
             SkillSetupUseCase skillSetupUseCase,
             ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase,
+            List<string> autoScanSeedFilePaths,
             Action scheduleResize)
         {
             Debug.Assert(view != null, "view must not be null");
@@ -43,6 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(
                 thirdPartyToolMigrationUseCase != null,
                 "thirdPartyToolMigrationUseCase must not be null");
+            Debug.Assert(autoScanSeedFilePaths != null, "autoScanSeedFilePaths must not be null");
             Debug.Assert(scheduleResize != null, "scheduleResize must not be null");
 
             _view = view ?? throw new ArgumentNullException(nameof(view));
@@ -50,6 +57,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new ArgumentNullException(nameof(skillSetupUseCase));
             _thirdPartyToolMigrationUseCase = thirdPartyToolMigrationUseCase
                 ?? throw new ArgumentNullException(nameof(thirdPartyToolMigrationUseCase));
+            _autoScanSeedFilePaths = autoScanSeedFilePaths
+                ?? throw new ArgumentNullException(nameof(autoScanSeedFilePaths));
             _scheduleResize = scheduleResize
                 ?? throw new ArgumentNullException(nameof(scheduleResize));
         }
@@ -94,11 +103,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             IProgress<ThirdPartyToolMigrationProgress> progress = CreateProgressReporter(ct);
+            List<string> seedFilePaths = _autoScanSeedFilePaths;
+            _autoScanSeedFilePaths = new List<string>();
             ThirdPartyToolMigrationPreview preview;
             try
             {
                 preview = await Task.Run(async () =>
-                    await _thirdPartyToolMigrationUseCase.PreviewMigrationAsync(projectRoot, progress, ct));
+                    await _thirdPartyToolMigrationUseCase.PreviewMigrationForSeedFilesAsync(
+                        projectRoot, seedFilePaths, progress, ct));
                 await MainThreadSwitcher.SwitchToMainThread();
             }
             catch (OperationCanceledException)
