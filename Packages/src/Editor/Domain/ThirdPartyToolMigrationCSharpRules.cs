@@ -117,6 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             migrationContext.ApplyMainThreadSwitcherReplacements();
             migrationContext.ApplyEditorWindowCaptureAndTypeReplacements();
             migrationContext.ApplyContractRenames();
+            migrationContext.ApplySuccessPropertyHidingRemoval();
             migrationContext.ApplyRegistrarRenames();
             migrationContext.ApplyCurrentPublicContractNamespaceReplacements();
             return migrationContext.CreateResult();

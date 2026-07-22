@@ -20,8 +20,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(source != null, "source must not be null");
 
-            return ThirdPartyToolMigrationRules.ContainsLegacyMigrationCandidateText(source) &&
-                ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source);
+            return (ThirdPartyToolMigrationRules.ContainsLegacyMigrationCandidateText(source) &&
+                ThirdPartyToolMigrationRules.ContainsLegacyCSharpApi(source)) ||
+                ThirdPartyToolMigrationRules.ContainsSuccessPropertyHidingUnityCliLoopToolResponse(source);
         }
 
         internal static async Task<bool> ContainsFastCSharpSourceMigrationTargetAsync(
