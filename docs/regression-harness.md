@@ -58,3 +58,31 @@ physics-flagged pause point is enabled (and a `pause_point_cleared_without_hit_p
 it is later cleared without ever hitting, whether it had expired or was still Enabled at that
 point), capturing Play Mode state, seconds since the last domain reload, the declaring type, and
 its current instance count -- if the miss recurs, this is the primary evidence to work from.
+
+#### 2026-07-22 field capture: direct-marker miss, and clear-then-re-enable recovers it
+
+A Round-8 verification round captured the miss in full for the first time on a marker placed
+directly on the callback body (not one hop away), which rules out the Mono JIT-inlining
+hypothesis for this particular case -- there is no indirection for the JIT to inline through.
+
+- `Block.cs:29` (`OnCollisionEnter2D`), `InstanceCount=39`: the marker missed 29 seconds of
+  continued fresh contacts (score kept climbing on each collision, proving the callback itself
+  kept running normally; only the pause-point marker failed to fire). Clearing the marker
+  (`StatusBeforeClear=Enabled`, i.e. it had not expired) and re-enabling it on the same instance
+  hit immediately on the very next fresh contact -- clear-then-re-enable ("re-arm") recovered the
+  marker without any other change.
+- `Ball.cs:70`, `InstanceCount=1`, for contrast: hit normally on the first fresh contact, no
+  domain reload involved, same domain age (252s) as the miss above -- so domain age alone does
+  not predict the miss.
+- `pause_point_expired_without_hit_physics` did not fire for the `Block.cs:29` miss because the
+  CLI-side `await-pause-point` timeout (25s) was shorter than the marker's own capture timeout
+  (30s); the CLI gave up and cleared the marker while its status was still `Enabled`, not
+  `Expired`. This gap -- a marker that is still live from Unity's perspective being cleared by an
+  impatient CLI caller before it ever reaches its own expiry -- is exactly what the round's
+  `pause_point_expired_without_hit_physics` diagnostic (added in PR-1 of this round) closes: it
+  now fires on genuine marker-side expiry regardless of how long the CLI waited.
+
+Re-arming (clear the marker, then `enable-pause-point` it again on the same instance) is now a
+reasonable first thing to try when a physics-flagged marker times out despite continued fresh
+contact, on top of the existing options above -- but treat it the same as those: environment-
+dependent, observed once in the field so far (2026-07-22), and not a guaranteed fix.
