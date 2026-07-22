@@ -74,13 +74,13 @@ hypothesis for this particular case -- there is no indirection for the JIT to in
 - `Ball.cs:70`, `InstanceCount=1`, for contrast: hit normally on the first fresh contact, no
   domain reload involved, same domain age (252s) as the miss above -- so domain age alone does
   not predict the miss.
-- `pause_point_expired_without_hit_physics` did not fire for the `Block.cs:29` miss because the
-  CLI-side `await-pause-point` timeout (25s) was shorter than the marker's own capture timeout
-  (30s); the CLI gave up and cleared the marker while its status was still `Enabled`, not
-  `Expired`. This gap -- a marker that is still live from Unity's perspective being cleared by an
-  impatient CLI caller before it ever reaches its own expiry -- is exactly what the round's
-  `pause_point_expired_without_hit_physics` diagnostic (added in PR-1 of this round) closes: it
-  now fires on genuine marker-side expiry regardless of how long the CLI waited.
+- The expiry-only diagnostic of the time (`pause_point_expired_without_hit_physics`) did not
+  fire for the `Block.cs:29` miss because the CLI-side `await-pause-point` timeout (25s) was
+  shorter than the marker's own capture timeout (30s); the CLI gave up and cleared the marker
+  while its status was still `Enabled`, not `Expired`. That observability gap is what this
+  round's PR-1 closes: the diagnostic is now `pause_point_cleared_without_hit_physics` and fires
+  on any zero-hit clear of a physics-flagged marker -- whether it had already expired or was
+  still `Enabled` when cleared -- with `StatusBeforeClear` in the context to tell the two apart.
 
 Re-arming (clear the marker, then `enable-pause-point` it again on the same instance) is now a
 reasonable first thing to try when a physics-flagged marker times out despite continued fresh
