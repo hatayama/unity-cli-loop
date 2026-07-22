@@ -97,6 +97,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteAsync_WhenStatusAction_ReturnsCurrentStateWithoutSideEffects()
+        {
+            // Verifies the Status action is a pure read: it reports current state without
+            // saving dirty editor changes, entering PlayMode, or reporting Changed=true.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(true),
+                quietSaver,
+                editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Status,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode status"));
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.IsPlaying, Is.True);
+            Assert.That(response.IsPaused, Is.False);
+            Assert.That(response.BlockedByCompileErrors, Is.False);
+            Assert.That(response.BlockedByUnsavedChanges, Is.False);
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
+            Assert.That(editorState.IsPlayingSetCount, Is.EqualTo(0));
+            Assert.That(editorState.IsPausedSetCount, Is.EqualTo(0));
+        }
+
+        [Test]
         public async Task ExecuteAsync_WhenStepOutsidePlayMode_ReturnsNoOpWithGuidance()
         {
             // Verifies Step refuses to run outside PlayMode instead of silently queuing a frame step.

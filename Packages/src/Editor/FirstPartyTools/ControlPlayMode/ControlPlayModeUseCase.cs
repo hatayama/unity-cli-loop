@@ -108,6 +108,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 case PlayModeAction.Step:
                     return ExecutePlayModeStep(wasPlaying);
 
+                case PlayModeAction.Status:
+                    return ControlPlayModeActionResult.FromState("Play mode status", false, false);
+
                 default:
                     message = $"Unknown action: {action}";
                     return ControlPlayModeActionResult.FromState(message, false, false);
