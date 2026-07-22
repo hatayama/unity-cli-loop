@@ -113,6 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public int TimeoutSeconds { get; set; }
         public string Mode { get; set; } = string.Empty;
         public int MaxHistory { get; set; }
+        public int MaxPreviewElements { get; set; }
         public IReadOnlyList<PausePointStatusCapturedHistoryFrame> CapturedVariableHistory { get; set; } =
             Array.Empty<PausePointStatusCapturedHistoryFrame>();
         public int HistoryDroppedCount { get; set; }
@@ -152,6 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 TimeoutSeconds = snapshot.TimeoutSeconds,
                 Mode = snapshot.Mode,
                 MaxHistory = snapshot.MaxHistory,
+                MaxPreviewElements = snapshot.MaxPreviewElements,
                 CapturedVariableHistory = snapshot.CapturedVariableHistory
                     .Select(PausePointStatusCapturedHistoryFrame.FromSnapshot)
                     .ToList(),

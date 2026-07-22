@@ -8,6 +8,7 @@
   "TimeoutSeconds": 30,
   "Mode": "continuous",
   "MaxHistory": 20,
+  "MaxPreviewElements": 15,
   "CapturedVariableHistory": [
     {
       "HitSequence": 1,
