@@ -109,12 +109,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return ExecutePlayModeStep(wasPlaying);
 
                 case PlayModeAction.Status:
-                    return ControlPlayModeActionResult.FromState("Play mode status", false, false);
+                    return CreateStatusActionResult();
 
                 default:
                     message = $"Unknown action: {action}";
                     return ControlPlayModeActionResult.FromState(message, false, false);
             }
+        }
+
+        // Status reports the current compile-error blocker via a read-only check (no new compile
+        // triggered), but never predicts BlockedByUnsavedChanges: that field means a save attempt
+        // during this request failed, and Status makes no save attempt.
+        private ControlPlayModeActionResult CreateStatusActionResult()
+        {
+            if (!_compilationFailureGate.HasScriptCompilationFailed())
+            {
+                return ControlPlayModeActionResult.FromState("Play mode status", false, false);
+            }
+
+            ControlPlayModeCompileError[] compileErrors =
+                _compilationFailureProvider.GetLastFailedErrors() ?? Array.Empty<ControlPlayModeCompileError>();
+            ControlPlayModeResponse response = CreateResponse("Play mode status", false, false);
+            response.BlockedByCompileErrors = true;
+            response.CompileErrors = compileErrors;
+            response.CompileErrorCount = compileErrors.Length;
+            return ControlPlayModeActionResult.FromResponse(response, false);
         }
 
         private bool ShouldBlockPlayForCompileErrors(PlayModeAction action, bool isPlaying)

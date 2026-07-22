@@ -320,7 +320,7 @@
     },
     {
       "name": "control-play-mode",
-      "description": "Control Unity Editor play mode (play/stop/pause/status)",
+      "description": "Control Unity Editor play mode (play/stop/pause/step/status)",
       "inputSchema": {
         "type": "object",
         "properties": {
