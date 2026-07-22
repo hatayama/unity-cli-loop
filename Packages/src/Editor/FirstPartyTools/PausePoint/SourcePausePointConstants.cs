@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
 
+using io.github.hatayama.UnityCliLoop.Runtime;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -21,7 +23,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // pause-point evidence to stay skimmable, mirroring the truncation-by-cap pattern MatchingLogs uses.
         public const int MaxCapturedVariableCount = 50;
         public const int MaxCapturedVariableValueLength = 256;
-        public const int MaxCollectionPreviewElementCount = 10;
+        // Mirrors UloopPausePointRegistry.DefaultMaxPreviewElements (the Runtime-owned per-marker
+        // default enforced at Enable time) instead of a second independent literal, so the two
+        // cannot drift apart.
+        public const int MaxCollectionPreviewElementCount = UloopPausePointRegistry.DefaultMaxPreviewElements;
         public const int MaxCollectionPreviewValueLength = 1024;
         public const int MaxCollectionPreviewDepth = 2;
 

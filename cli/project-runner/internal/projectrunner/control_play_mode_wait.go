@@ -28,16 +28,17 @@ const (
 var controlPlayModeStatePoll = 50 * time.Millisecond
 
 type controlPlayModeResponse struct {
-	IsPlaying              bool                          `json:"IsPlaying"`
-	IsPaused               bool                          `json:"IsPaused"`
-	Changed                bool                          `json:"Changed"`
-	WasAlreadyStopped      bool                          `json:"WasAlreadyStopped"`
-	ResumedFromPause       bool                          `json:"ResumedFromPause"`
-	BlockedByCompileErrors bool                          `json:"BlockedByCompileErrors"`
-	CompileErrorCount      int                           `json:"CompileErrorCount"`
-	CompileErrors          []controlPlayModeCompileError `json:"CompileErrors"`
-	Message                string                        `json:"Message"`
-	Warning                string                        `json:"Warning"`
+	IsPlaying               bool                          `json:"IsPlaying"`
+	IsPaused                bool                          `json:"IsPaused"`
+	Changed                 bool                          `json:"Changed"`
+	WasAlreadyStopped       bool                          `json:"WasAlreadyStopped"`
+	ResumedFromPause        bool                          `json:"ResumedFromPause"`
+	BlockedByCompileErrors  bool                          `json:"BlockedByCompileErrors"`
+	BlockedByUnsavedChanges bool                          `json:"BlockedByUnsavedChanges"`
+	CompileErrorCount       int                           `json:"CompileErrorCount"`
+	CompileErrors           []controlPlayModeCompileError `json:"CompileErrors"`
+	Message                 string                        `json:"Message"`
+	Warning                 string                        `json:"Warning"`
 }
 
 type controlPlayModeCompileError struct {
@@ -90,6 +91,12 @@ func runControlPlayModeWithStateWait(
 			spinner.Stop()
 			writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
 			clierrors.WriteErrorEnvelope(stderr, controlPlayModeCompileErrorsError(connection.ProjectRoot, action, initialResponse))
+			return 1
+		}
+		if initialResponse.BlockedByUnsavedChanges {
+			spinner.Stop()
+			writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
+			clierrors.WriteErrorEnvelope(stderr, controlPlayModeUnsavedChangesError(connection.ProjectRoot, action, initialResponse))
 			return 1
 		}
 		if controlPlayModeStateMatches(action, initialResponse) {
@@ -375,6 +382,29 @@ func controlPlayModeCompileErrorsError(
 			"CompileErrorCount": compileErrorCount,
 			"CompileErrors":     response.CompileErrors,
 			"Message":           response.Message,
+		},
+	}
+}
+
+func controlPlayModeUnsavedChangesError(
+	projectRoot string,
+	action string,
+	response controlPlayModeResponse,
+) clierrors.CLIError {
+	return clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeControlPlayModeUnsavedChanges,
+		Phase:       clierrors.ErrorPhaseExecution,
+		Message:     response.Message,
+		Retryable:   true,
+		SafeToRetry: true,
+		ProjectRoot: projectRoot,
+		Command:     controlPlayModeCommandName,
+		NextActions: []string{
+			"Save or discard the unsaved scene or prefab changes listed in the message, then retry.",
+			"If the active scene has no path (an Untitled scene), give it a path by saving it explicitly before retrying `uloop control-play-mode --action Play`.",
+		},
+		Details: map[string]any{
+			"RequestedAction": action,
 		},
 	}
 }

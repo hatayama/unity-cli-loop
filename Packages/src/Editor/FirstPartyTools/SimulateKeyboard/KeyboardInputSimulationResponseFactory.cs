@@ -34,6 +34,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return result;
         }
 
+        internal static SimulateKeyboardResponse AlreadyHeldRejection(string keyName, bool deviceIsPressed)
+        {
+            return new SimulateKeyboardResponse
+            {
+                Success = false,
+                Message = $"Key '{keyName}' is already held down. Call KeyUp first.",
+                Action = UnityCliLoopKeyboardAction.KeyDown.ToString(),
+                KeyName = keyName,
+                KeyStateTrackedHeld = true,
+                KeyStateDeviceIsPressed = deviceIsPressed
+            };
+        }
+
+        internal static SimulateKeyboardResponse NotHeldRejection(string keyName, bool deviceIsPressed)
+        {
+            return new SimulateKeyboardResponse
+            {
+                Success = false,
+                Message = $"Key '{keyName}' is not currently held. Call KeyDown first.",
+                Action = UnityCliLoopKeyboardAction.KeyUp.ToString(),
+                KeyName = keyName,
+                KeyStateTrackedHeld = false,
+                KeyStateDeviceIsPressed = deviceIsPressed
+            };
+        }
+
         internal static SimulateKeyboardResponse TimedOutKeyResult(
             UnityCliLoopKeyboardAction action,
             string keyName)

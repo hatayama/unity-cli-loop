@@ -66,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         // Why: PausePointTools.LogExpired duplicates this instead of sharing it, since this
         // bridge must not reference that Editor-only tool assembly. Keep both in sync if the
         // log shape or wording changes. The physics-callback dispatch diagnostics
-        // (pause_point_physics_dispatch_diagnostics / pause_point_expired_without_hit_physics)
+        // (pause_point_physics_dispatch_diagnostics / pause_point_cleared_without_hit_physics)
         // are NOT duplicated here -- they are tool-side only, since this bridge has no access to
         // the declaring-type/patch state PausePointUseCase tracks for that purpose.
         private static void LogExpired(string id, long elapsedSinceEnabledMilliseconds)
@@ -113,6 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public int TimeoutSeconds { get; set; }
         public string Mode { get; set; } = string.Empty;
         public int MaxHistory { get; set; }
+        public int MaxPreviewElements { get; set; }
         public IReadOnlyList<PausePointStatusCapturedHistoryFrame> CapturedVariableHistory { get; set; } =
             Array.Empty<PausePointStatusCapturedHistoryFrame>();
         public int HistoryDroppedCount { get; set; }
@@ -152,6 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 TimeoutSeconds = snapshot.TimeoutSeconds,
                 Mode = snapshot.Mode,
                 MaxHistory = snapshot.MaxHistory,
+                MaxPreviewElements = snapshot.MaxPreviewElements,
                 CapturedVariableHistory = snapshot.CapturedVariableHistory
                     .Select(PausePointStatusCapturedHistoryFrame.FromSnapshot)
                     .ToList(),

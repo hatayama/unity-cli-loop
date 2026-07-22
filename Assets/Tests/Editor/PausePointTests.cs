@@ -744,6 +744,120 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task Clear_WhenPhysicsFlaggedMarkerClearedWhileEnabled_EmitsClearedWithoutHitPhysicsDiagnostics()
+        {
+            // Verifies a physics-flagged marker cleared with HitCount==0 while still Enabled
+            // (the CLI await timeout expiring before the marker's own longer expiry, the actual
+            // 2026-07-22 Block.cs:29 field incident) still emits the physics dispatch diagnostics,
+            // not just the Expired case.
+            PausePointResponse enableResponse = await EnablePausePointByFileLineAsync(PhysicsFixtureFilePath, PhysicsFixtureLine);
+            Assert.That(enableResponse.Success, Is.True);
+            VibeLogger.ClearMemoryLogs();
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["id"] = enableResponse.Id };
+            await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            string logs = VibeLogger.GetLogsForAi("pause_point_cleared_without_hit_physics");
+            Assert.That(logs, Does.Contain("pause_point_cleared_without_hit_physics"));
+            Assert.That(logs, Does.Contain($"\"Id\": \"{enableResponse.Id}\""));
+            Assert.That(logs, Does.Contain("\"StatusBeforeClear\": \"Enabled\""));
+        }
+
+        [Test]
+        public async Task Clear_WhenPhysicsFlaggedMarkerExpiredWithoutHit_EmitsClearedWithoutHitPhysicsDiagnostics()
+        {
+            // Verifies the pre-existing expired-without-hit case still fires diagnostics under the
+            // unified operation name, with StatusBeforeClear reporting Expired.
+            EnablePausePointTool enableTool = new();
+            JObject enableParameters = new()
+            {
+                ["file"] = PhysicsFixtureFilePath,
+                ["line"] = PhysicsFixtureLine,
+                ["timeoutSeconds"] = 1
+            };
+            PausePointResponse enableResponse = (PausePointResponse)await enableTool.ExecuteAsync(enableParameters, CancellationToken.None);
+            Assert.That(enableResponse.Success, Is.True);
+            _nowUtc = _nowUtc.AddSeconds(2);
+            VibeLogger.ClearMemoryLogs();
+
+            ClearPausePointTool clearTool = new();
+            JObject clearParameters = new() { ["id"] = enableResponse.Id };
+            await clearTool.ExecuteAsync(clearParameters, CancellationToken.None);
+
+            string logs = VibeLogger.GetLogsForAi("pause_point_cleared_without_hit_physics");
+            Assert.That(logs, Does.Contain("pause_point_cleared_without_hit_physics"));
+            Assert.That(logs, Does.Contain($"\"Id\": \"{enableResponse.Id}\""));
+            Assert.That(logs, Does.Contain("\"StatusBeforeClear\": \"Expired\""));
+        }
+
+        [Test]
+        public async Task ClearAll_WhenPhysicsFlaggedMarkerEnabledWithoutHit_EmitsClearedWithoutHitPhysicsDiagnostics()
+        {
+            // Verifies the --all clear path also broadens the diagnostics condition beyond Expired.
+            PausePointResponse enableResponse = await EnablePausePointByFileLineAsync(PhysicsFixtureFilePath, PhysicsFixtureLine);
+            Assert.That(enableResponse.Success, Is.True);
+            VibeLogger.ClearMemoryLogs();
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["all"] = true };
+            await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            string logs = VibeLogger.GetLogsForAi("pause_point_cleared_without_hit_physics");
+            Assert.That(logs, Does.Contain("pause_point_cleared_without_hit_physics"));
+            Assert.That(logs, Does.Contain($"\"Id\": \"{enableResponse.Id}\""));
+            Assert.That(logs, Does.Contain("\"StatusBeforeClear\": \"Enabled\""));
+        }
+
+        [Test]
+        public async Task Clear_WhenPhysicsFlaggedMarkerClearedViaStatusBridge_EmitsClearedWithoutHitPhysicsDiagnostics()
+        {
+            // Verifies the bridge clear path (PausePointStatusBridgeCommand.Clear, used by
+            // await-pause-point's self-timeout auto-clear) emits the same zero-hit physics
+            // diagnostic as the direct tool clear path. The field incident that motivated this
+            // diagnostic (Block.cs:29, 2026-07-22) is itself cleared through this bridge, not
+            // PausePointUseCase.Clear, so the bridge path must not stay silent.
+            PausePointResponse enableResponse = await EnablePausePointByFileLineAsync(PhysicsFixtureFilePath, PhysicsFixtureLine);
+            Assert.That(enableResponse.Success, Is.True);
+            VibeLogger.ClearMemoryLogs();
+
+            JObject bridgeParameters = new() { ["Id"] = enableResponse.Id };
+            PausePointStatusBridgeCommand.Clear(bridgeParameters);
+
+            string logs = VibeLogger.GetLogsForAi("pause_point_cleared_without_hit_physics");
+            Assert.That(logs, Does.Contain("pause_point_cleared_without_hit_physics"));
+            Assert.That(logs, Does.Contain($"\"Id\": \"{enableResponse.Id}\""));
+            Assert.That(logs, Does.Contain("\"StatusBeforeClear\": \"Enabled\""));
+        }
+
+        [Test]
+        public async Task ClearAll_WhenPhysicsFlaggedMarkerAlreadyClearedViaStatusBridge_DoesNotLogStaleDiagnostics()
+        {
+            // Verifies the bridge clear path logs the zero-hit physics diagnostic exactly once
+            // (through the shared OnClearResolved registry hook, which also removes the id from
+            // PhysicsFlaggedDeclaringTypesById), and that a later clear --all does not re-log it
+            // for the same id: the dictionary no longer carries a stale entry once the hook has
+            // fired for it.
+            PausePointResponse enableResponse = await EnablePausePointByFileLineAsync(PhysicsFixtureFilePath, PhysicsFixtureLine);
+            Assert.That(enableResponse.Success, Is.True);
+            VibeLogger.ClearMemoryLogs();
+
+            JObject bridgeParameters = new() { ["Id"] = enableResponse.Id };
+            PausePointStatusBridgeCommand.Clear(bridgeParameters);
+
+            string logsAfterBridgeClear = VibeLogger.GetLogsForAi("pause_point_cleared_without_hit_physics");
+            Assert.That(logsAfterBridgeClear, Does.Contain("pause_point_cleared_without_hit_physics"));
+            VibeLogger.ClearMemoryLogs();
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["all"] = true };
+            await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            string logsAfterClearAll = VibeLogger.GetLogsForAi("pause_point_cleared_without_hit_physics");
+            Assert.That(logsAfterClearAll, Does.Not.Contain("pause_point_cleared_without_hit_physics"));
+        }
+
+        [Test]
         public void PausePointStatusBridge_WhenMarkerExpired_ReturnsRecoveryAction()
         {
             // Verifies pause-point-status exposes enough data to re-arm an expired marker without guesswork.
@@ -1291,6 +1405,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private const string FixtureFilePath = "Assets/Tests/Editor/PausePointToolsFixture.cs";
         private const int FixtureLine = 12;
+        private const string PhysicsFixtureFilePath = "Assets/Tests/Editor/PausePointToolsPhysicsFixture.cs";
+        private const int PhysicsFixtureLine = 11;
 
         private static SourcePausePointResolution WithStaleMvid(SourcePausePointResolution resolution)
         {

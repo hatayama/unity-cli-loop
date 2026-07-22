@@ -7,12 +7,14 @@ import (
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
 func newConnectionRetryClient(
 	connection unityipc.Connection,
+	method string,
 	responseTimeout time.Duration,
 	mainThreadStallHandler func(float64),
 ) *unityipc.Client {
@@ -20,7 +22,18 @@ func newConnectionRetryClient(
 	if responseTimeout > 0 {
 		client = client.WithResponseTimeout(responseTimeout)
 	}
-	return client.WithMainThreadStallHandler(mainThreadStallHandler)
+	client = client.WithMainThreadStallHandler(mainThreadStallHandler)
+	if commandNeedsSelfInducedStallTolerance(method) {
+		client = client.WithSelfInducedMainThreadStallTolerance()
+	}
+	return client
+}
+
+// Why only execute-dynamic-code: a long synchronous snippet blocks Unity's main thread
+// from pumping update ticks by design, which looks identical to a frozen editor on the
+// stall counter alone. Other commands' stalls stay a genuine freeze signal.
+func commandNeedsSelfInducedStallTolerance(method string) bool {
+	return method == clicore.ExecuteDynamicCodeCommandName
 }
 
 func finishBusyRetry(

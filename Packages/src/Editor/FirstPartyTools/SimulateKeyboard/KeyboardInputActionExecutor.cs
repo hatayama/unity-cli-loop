@@ -182,13 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (KeyboardKeyState.IsKeyHeld(key))
             {
-                return new SimulateKeyboardResponse
-                {
-                    Success = false,
-                    Message = $"Key '{keyName}' is already held down. Call KeyUp first.",
-                    Action = UnityCliLoopKeyboardAction.KeyDown.ToString(),
-                    KeyName = keyName
-                };
+                return KeyboardInputSimulationResponseFactory.AlreadyHeldRejection(keyName, keyboard[key].isPressed);
             }
 
             bool keyDownApplied = false;
@@ -296,13 +290,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!KeyboardKeyState.IsKeyHeld(key))
             {
-                return new SimulateKeyboardResponse
-                {
-                    Success = false,
-                    Message = $"Key '{keyName}' is not currently held. Call KeyDown first.",
-                    Action = UnityCliLoopKeyboardAction.KeyUp.ToString(),
-                    KeyName = keyName
-                };
+                return KeyboardInputSimulationResponseFactory.NotHeldRejection(keyName, keyboard[key].isPressed);
             }
 
             InputSimulationWaitOutcome releaseOutcome =
