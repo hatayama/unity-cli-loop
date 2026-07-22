@@ -34,8 +34,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal const string MigrationConfirmDialogTitle = "Migrate C# Sources?";
         internal const string MigrationConfirmDialogOkText = "Migrate";
         internal const string MigrationConfirmDialogCancelText = "Cancel";
-        internal const string AutoScanProgressTitle = "Unity CLI Loop";
-        internal const string AutoScanProgressDescription = "Checking for V3 custom tool migration targets...";
         private const string MigrationCheckingText = "Scanning C# source files for V3 custom tool API migration...";
         private const string MigrationApplyingText = "Migrating C# source files to V3 custom tool APIs...";
         private const string MigrationButtonReadyText = "Migrate";
