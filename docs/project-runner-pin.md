@@ -21,6 +21,27 @@ There is no dispatcher⇄package integer contract generation; the pin's semver
 floor is the only dispatcher gate. The IPC `protocolVersion` pair (see
 `docs/protocol-version.md`) is the only integer generation in the system.
 
+## Local override: `ULOOP_PROJECT_RUNNER_PATH`
+
+The environment variable `ULOOP_PROJECT_RUNNER_PATH` (defined in
+`cli/dispatcher/internal/nativepath/path.go`) makes the dispatcher run the
+project runner binary at that path instead of resolving one from the pin.
+`resolveDispatcherRealCLI` checks it before everything else — pin validation,
+the sibling binary next to the dispatcher, the version cache, and the GitHub
+release download are all skipped. The path must point at an existing executable
+file, or the dispatcher fails with an explicit error rather than falling back.
+
+This override exists for dogfooding checkouts: release-please stamps
+`projectRunnerVersion` ahead of the matching GitHub release, so the normal
+download path 404s until the release is published. Pointing the variable at a
+locally built binary (e.g. `dist/darwin-arm64/uloop-project-runner`, refreshed
+via `scripts/build-go-cli.sh`) lets you exercise unreleased project-runner and
+`cli/common` changes against real Unity projects before merge. Unset the
+variable to return to normal pin-resolved behavior.
+
+Related overrides in the same file: `ULOOP_INSTALL_DIR` (dispatcher install
+directory) and `ULOOP_CACHE_DIR` (project runner download cache).
+
 ## Pin format discipline
 
 The pin evolves additively only — never delete or rename an existing field.
