@@ -384,16 +384,29 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     return;
 
                 case MigrationAutoScanPollAction.RunDetection:
-                    if (TryRunThirdPartyToolMigrationAutoScanDetection())
+                {
+                    // Defaults to stopping so a thrown exception still unsubscribes this callback;
+                    // otherwise a throwing detection would retry every editor update indefinitely.
+                    // Only the still-searching (found == false) outcome keeps polling.
+                    bool shouldStopPolling = true;
+                    try
                     {
-                        StopThirdPartyToolMigrationAutoScanPolling();
+                        shouldStopPolling = TryRunThirdPartyToolMigrationAutoScanDetection();
+                    }
+                    finally
+                    {
+                        if (shouldStopPolling)
+                        {
+                            StopThirdPartyToolMigrationAutoScanPolling();
+                        }
                     }
 
                     return;
+                }
 
                 case MigrationAutoScanPollAction.FallBackToFullScan:
-                    ScheduleThirdPartyToolMigrationFallbackFullScan();
                     StopThirdPartyToolMigrationAutoScanPolling();
+                    ScheduleThirdPartyToolMigrationFallbackFullScan();
                     return;
             }
         }
