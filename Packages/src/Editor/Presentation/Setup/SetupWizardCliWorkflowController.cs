@@ -18,6 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     internal sealed class SetupWizardCliWorkflowController
     {
         private readonly SetupWizardCliStepPresenter _cliStepPresenter;
+        private readonly CliInstallProgressView _installProgressView;
         private readonly CliSetupApplicationService _cliSetupApplicationService;
         private readonly Action<bool> _refreshUi;
 
@@ -28,6 +29,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             VisualElement cliStatusIcon,
             Label cliStatusLabel,
             Button installCliButton,
+            VisualElement installProgressContainer,
+            Label installProgressLabel,
             CliSetupApplicationService cliSetupApplicationService,
             Action<bool> refreshUi)
         {
@@ -38,6 +41,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new ArgumentNullException(nameof(cliSetupApplicationService));
             _refreshUi = refreshUi
                 ?? throw new ArgumentNullException(nameof(refreshUi));
+            _installProgressView = new CliInstallProgressView(
+                installProgressContainer,
+                installCliButton,
+                installProgressLabel);
 
             _cliStepPresenter = new SetupWizardCliStepPresenter(
                 cliStatusIcon,
@@ -110,11 +117,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 requiredCliVersion: GetMinimumRequiredCliVersion(),
                 isInstallingCli: _isInstallingCli,
                 needsCliPathSetup: _needsCliPathSetup);
+            _installProgressView.Show();
+            Progress<string> installProgress = new(_installProgressView.SetDetailLine);
 
             try
             {
                 CliInstallResult result = await _cliSetupApplicationService.InstallGlobalCliAsync(
                     UnityEngine.Application.platform,
+                    installProgress,
                     ct);
 
                 if (!result.Success)
@@ -141,6 +151,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
             finally
             {
+                _installProgressView.Hide();
                 _isInstallingCli = false;
                 _refreshUi(CliInstallRefreshPolicy.ShouldRefreshSkillsAfterCliInstall(
                     wasCliInstalledBeforeInstall));

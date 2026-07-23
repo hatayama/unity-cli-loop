@@ -80,6 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             RuntimePlatform platform,
             string dispatcherReleaseTag,
             string dispatcherArchiveManifest,
+            IProgress<string> installProgress,
             CancellationToken ct);
         Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct);
         Task<CliPathSetupPlan> GetGlobalCliPathSetupPlanAsync(RuntimePlatform platform, CancellationToken ct);
@@ -198,8 +199,12 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return CliVersionComparer.IsVersionEqual(leftVersion, rightVersion);
         }
 
-        public async Task<CliInstallResult> InstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)
+        public async Task<CliInstallResult> InstallGlobalCliAsync(
+            RuntimePlatform platform,
+            IProgress<string> installProgress,
+            CancellationToken ct)
         {
+            Debug.Assert(installProgress != null, "installProgress must not be null");
             ct.ThrowIfCancellationRequested();
 
             DispatcherBootstrapPinLoadResult bootstrapPin = _cliPinReader.LoadDispatcherBootstrapPin();
@@ -212,6 +217,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 platform,
                 bootstrapPin.DispatcherReleaseTag,
                 bootstrapPin.ArchiveManifest,
+                installProgress,
                 ct);
             _cliInstallationDetector.InvalidateCache();
             return result;

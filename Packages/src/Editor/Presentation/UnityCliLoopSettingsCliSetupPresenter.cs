@@ -282,11 +282,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _needsCliPathSetup = false;
             _isInstallingCli = true;
             RefreshSection();
+            _view.ShowCliInstallProgress();
+            // Why Progress<string>: constructed on the main thread it captures the Unity
+            // synchronization context, so Report calls from the installer's background
+            // thread are marshaled back to the main thread before touching UI Toolkit.
+            Progress<string> installProgress = new(line => _view.ReportCliInstallProgressLine(line));
 
             try
             {
                 CliInstallResult result = await _cliSetupApplicationService.InstallGlobalCliAsync(
                     UnityEngine.Application.platform,
+                    installProgress,
                     CancellationToken.None);
 
                 if (!result.Success)
@@ -312,6 +318,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
             finally
             {
+                _view.HideCliInstallProgress();
                 _isInstallingCli = false;
                 _refreshAllSections(
                     CliInstallRefreshPolicy.ShouldRefreshSkillsAfterCliInstall(wasCliInstalledBeforeInstall));

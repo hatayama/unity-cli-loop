@@ -36,6 +36,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             VisualElement cliStatusIcon,
             Label cliStatusLabel,
             Button installCliButton,
+            VisualElement installProgressContainer,
+            Label installProgressLabel,
             VisualElement groupSkillsRow,
             EnumField skillsTargetField,
             Toggle groupSkillsToggle,
@@ -74,6 +76,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliStatusIcon,
                 cliStatusLabel,
                 installCliButton,
+                installProgressContainer,
+                installProgressLabel,
                 cliSetupApplicationService,
                 RefreshUI);
             _skillsWorkflow = new SetupWizardSkillsWorkflowController(

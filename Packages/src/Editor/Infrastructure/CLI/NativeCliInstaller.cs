@@ -36,10 +36,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             RuntimePlatform platform,
             string dispatcherReleaseTag,
             string dispatcherArchiveManifest,
+            IProgress<string> installProgress,
             CancellationToken ct)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(dispatcherReleaseTag), "dispatcherReleaseTag must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(dispatcherArchiveManifest), "dispatcherArchiveManifest must not be null or empty");
+            UnityEngine.Debug.Assert(installProgress != null, "installProgress must not be null");
             ct.ThrowIfCancellationRequested();
 
             string installDirectory = NativeCliInstallPathResolver.GetInstallDirectoryForCurrentUser(platform);
@@ -56,7 +58,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 dispatcherArchiveManifest,
                 true);
             CliInstallResult result = await Task.Run(
-                () => NativeCliSetupCommandRunner.RunInstallCommand(command, ct, INSTALL_PROCESS_TIMEOUT_MS),
+                () => NativeCliSetupCommandRunner.RunInstallCommand(
+                    command,
+                    ct,
+                    INSTALL_PROCESS_TIMEOUT_MS,
+                    line => installProgress.Report(line)),
                 ct);
 
             if (result.Success)
@@ -184,10 +190,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             RuntimePlatform platform,
             string dispatcherReleaseTag,
             string dispatcherArchiveManifest,
+            IProgress<string> installProgress,
             CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
-            return NativeCliInstaller.InstallAsync(platform, dispatcherReleaseTag, dispatcherArchiveManifest, ct);
+            return NativeCliInstaller.InstallAsync(
+                platform,
+                dispatcherReleaseTag,
+                dispatcherArchiveManifest,
+                installProgress,
+                ct);
         }
 
         public Task<CliInstallResult> UninstallGlobalCliAsync(RuntimePlatform platform, CancellationToken ct)

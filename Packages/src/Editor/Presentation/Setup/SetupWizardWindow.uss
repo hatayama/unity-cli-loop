@@ -245,6 +245,18 @@
     margin-bottom: 4px;
 }
 
+.setup-install-progress {
+    margin-top: 4px;
+}
+
+.setup-install-progress__detail {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 11px;
+    margin-top: 2px;
+}
+
 .setup-button--small {
     height: 22px;
     padding-left: 12px;

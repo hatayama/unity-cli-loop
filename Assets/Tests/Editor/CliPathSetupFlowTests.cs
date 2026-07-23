@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -182,6 +183,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 RuntimePlatform platform,
                 string dispatcherReleaseTag,
                 string dispatcherArchiveManifest,
+                IProgress<string> installProgress,
                 CancellationToken ct)
             {
                 return Task.FromResult(new CliInstallResult(true, ""));
