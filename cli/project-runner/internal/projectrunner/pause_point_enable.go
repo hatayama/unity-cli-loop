@@ -25,11 +25,12 @@ const pausePointEnableCommandName = "enable-pause-point"
 const pausePointEnableAwaitFlagName = "await"
 
 // extractPausePointEnableAwaitFlags pulls the CLI-only --await/--captured-variables/
-// --captured-variable-names/--expect/--trigger flags out of enable-pause-point args before
-// generic schema parsing, because none of them are part of the Unity-side EnablePausePointSchema.
+// --captured-variable-names/--expect/--trigger/--resume-play flags out of enable-pause-point args
+// before generic schema parsing, because none of them are part of the Unity-side
+// EnablePausePointSchema.
 func extractPausePointEnableAwaitFlags(
 	args []string,
-) ([]string, bool, pausePointCapturedVariablesMode, []string, []pausePointExpectation, string, []string, error) {
+) ([]string, bool, pausePointCapturedVariablesMode, []string, []pausePointExpectation, string, []string, bool, error) {
 	remaining := make([]string, 0, len(args))
 	await := false
 	mode := pausePointCapturedVariablesModeFull
@@ -40,6 +41,7 @@ func extractPausePointEnableAwaitFlags(
 	var triggerCommand string
 	var triggerArgs []string
 	triggerSet := false
+	resumePlay := false
 
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
@@ -49,10 +51,15 @@ func extractPausePointEnableAwaitFlags(
 			continue
 		}
 
+		if arg == "--"+PausePointResumePlayFlagName {
+			resumePlay = true
+			continue
+		}
+
 		if isPausePointFlag(arg, PausePointTriggerFlagName) {
 			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 			if err != nil {
-				return nil, false, mode, nil, nil, "", nil, err
+				return nil, false, mode, nil, nil, "", nil, false, err
 			}
 			if name != PausePointTriggerFlagName {
 				remaining = append(remaining, arg)
@@ -60,7 +67,7 @@ func extractPausePointEnableAwaitFlags(
 			}
 			parsedCommand, parsedArgs, parseErr := parsePausePointTriggerCommand(pausePointEnableCommandName, value)
 			if parseErr != nil {
-				return nil, false, mode, nil, nil, "", nil, parseErr
+				return nil, false, mode, nil, nil, "", nil, false, parseErr
 			}
 			triggerCommand = parsedCommand
 			triggerArgs = parsedArgs
@@ -74,7 +81,7 @@ func extractPausePointEnableAwaitFlags(
 		if isPausePointFlag(arg, PausePointCapturedVariablesFlagName) {
 			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 			if err != nil {
-				return nil, false, mode, nil, nil, "", nil, err
+				return nil, false, mode, nil, nil, "", nil, false, err
 			}
 			if name != PausePointCapturedVariablesFlagName {
 				remaining = append(remaining, arg)
@@ -82,7 +89,7 @@ func extractPausePointEnableAwaitFlags(
 			}
 			parsedMode, err := parsePausePointCapturedVariablesMode(value)
 			if err != nil {
-				return nil, false, mode, nil, nil, "", nil, err
+				return nil, false, mode, nil, nil, "", nil, false, err
 			}
 			mode = parsedMode
 			modeSet = true
@@ -95,7 +102,7 @@ func extractPausePointEnableAwaitFlags(
 		if isPausePointFlag(arg, PausePointCapturedVariableNamesFlagName) {
 			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 			if err != nil {
-				return nil, false, mode, nil, nil, "", nil, err
+				return nil, false, mode, nil, nil, "", nil, false, err
 			}
 			if name != PausePointCapturedVariableNamesFlagName {
 				remaining = append(remaining, arg)
@@ -112,7 +119,7 @@ func extractPausePointEnableAwaitFlags(
 		if isPausePointFlag(arg, PausePointExpectFlagName) {
 			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 			if err != nil {
-				return nil, false, mode, nil, nil, "", nil, err
+				return nil, false, mode, nil, nil, "", nil, false, err
 			}
 			if name != PausePointExpectFlagName {
 				remaining = append(remaining, arg)
@@ -120,7 +127,7 @@ func extractPausePointEnableAwaitFlags(
 			}
 			expectation, parseErr := parsePausePointExpectFlagValue(value)
 			if parseErr != nil {
-				return nil, false, mode, nil, nil, "", nil, parseErr
+				return nil, false, mode, nil, nil, "", nil, false, parseErr
 			}
 			expectations = append(expectations, expectation)
 			if consumedNext {
@@ -132,9 +139,11 @@ func extractPausePointEnableAwaitFlags(
 		remaining = append(remaining, arg)
 	}
 
-	if !await && (modeSet || namesSet || len(expectations) > 0 || triggerSet) {
+	if !await && (modeSet || namesSet || len(expectations) > 0 || triggerSet || resumePlay) {
 		option := "--" + PausePointCapturedVariablesFlagName
 		switch {
+		case resumePlay:
+			option = "--" + PausePointResumePlayFlagName
 		case triggerSet:
 			option = "--" + PausePointTriggerFlagName
 		case len(expectations) > 0:
@@ -142,8 +151,8 @@ func extractPausePointEnableAwaitFlags(
 		case namesSet:
 			option = "--" + PausePointCapturedVariableNamesFlagName
 		}
-		return nil, false, mode, nil, nil, "", nil, &clierrors.ArgumentError{
-			Message: "--captured-variables, --captured-variable-names, --expect, and --trigger require --await",
+		return nil, false, mode, nil, nil, "", nil, false, &clierrors.ArgumentError{
+			Message: "--captured-variables, --captured-variable-names, --expect, --trigger, and --resume-play require --await",
 			Option:  option,
 			Command: pausePointEnableCommandName,
 			NextActions: []string{
@@ -152,7 +161,7 @@ func extractPausePointEnableAwaitFlags(
 		}
 	}
 
-	return remaining, await, mode, capturedVariableNames, expectations, triggerCommand, triggerArgs, nil
+	return remaining, await, mode, capturedVariableNames, expectations, triggerCommand, triggerArgs, resumePlay, nil
 }
 
 func isPausePointFlag(arg string, flagName string) bool {
@@ -167,7 +176,7 @@ func runEnablePausePointCommand(
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
-	remainingArgs, await, capturedVariablesMode, capturedVariableNames, expectations, triggerCommand, triggerArgs, err := extractPausePointEnableAwaitFlags(args)
+	remainingArgs, await, capturedVariablesMode, capturedVariableNames, expectations, triggerCommand, triggerArgs, resumePlay, err := extractPausePointEnableAwaitFlags(args)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
@@ -220,7 +229,7 @@ func runEnablePausePointCommand(
 
 	return runEnablePausePointAndAwait(
 		ctx, connection, params, capturedVariablesMode, capturedVariableNames, expectations,
-		triggerCommand, triggerArgs, startPath, stdout, stderr)
+		triggerCommand, triggerArgs, resumePlay, startPath, stdout, stderr)
 }
 
 // runEnablePausePointAndAwait sends the same single enable-pause-point IPC request the
@@ -236,6 +245,7 @@ func runEnablePausePointAndAwait(
 	expectations []pausePointExpectation,
 	triggerCommand string,
 	triggerArgs []string,
+	resumePlay bool,
 	startPath string,
 	stdout io.Writer,
 	stderr io.Writer,
@@ -288,6 +298,7 @@ func runEnablePausePointAndAwait(
 		triggerCommand:        triggerCommand,
 		triggerArgs:           triggerArgs,
 		startPath:             startPath,
+		resumePlay:            resumePlay,
 	}
 
 	return runPausePointWaitAfterEnable(ctx, connection, waitOptions, enableResponse.Warning, stdout, stderr)
@@ -306,7 +317,7 @@ func runPausePointWaitAfterEnable(
 	stderr io.Writer,
 ) int {
 	spinner := clicore.NewToolSpinner(stderr, pausePointEnableCommandName)
-	response, state, triggerResult, err := waitForPausePoint(ctx, connection, options)
+	response, state, triggerResult, resumeResult, err := waitForPausePoint(ctx, connection, options)
 	spinner.Stop()
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
@@ -322,6 +333,7 @@ func runPausePointWaitAfterEnable(
 		expectations := evaluatePausePointExpectations(response.CapturedVariables, options.expectations)
 
 		response.TriggerResult = triggerResult
+		response.ResumePlayResult = resumeResult
 		response = filterPausePointCapturedVariableHistory(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
@@ -378,6 +390,9 @@ func runPausePointWaitAfterEnable(
 	}
 	if triggerResult != nil {
 		waitErr.Details["TriggerResult"] = triggerResult
+	}
+	if resumeResult != nil {
+		waitErr.Details["ResumePlayResult"] = resumeResult
 	}
 	if state == pausePointWaitStateTimeout {
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)

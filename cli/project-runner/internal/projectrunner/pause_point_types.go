@@ -45,6 +45,10 @@ type pausePointStatusResponse struct {
 	// TriggerResult is set by the CLI, not Unity, only when --trigger was passed. It is omitted
 	// entirely otherwise, so callers that never use --trigger see no schema change at all.
 	TriggerResult *pausePointTriggerResult `json:"TriggerResult,omitempty"`
+
+	// ResumePlayResult is set by the CLI, not Unity, only when --resume-play was passed. It is
+	// omitted entirely otherwise, matching TriggerResult's omit-when-unused contract.
+	ResumePlayResult *pausePointResumePlayResult `json:"ResumePlayResult,omitempty"`
 }
 
 type pausePointEditorState struct {

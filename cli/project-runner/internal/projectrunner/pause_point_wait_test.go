@@ -172,7 +172,7 @@ func TestWaitForPausePointReturnsHitAfterEnabledStatus(t *testing.T) {
 		return response, nil
 	}
 
-	response, state, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	response, state, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
 		timeout:        time.Second,
@@ -426,7 +426,7 @@ func TestWaitForPausePointReturnsNotEnabledStateImmediately(t *testing.T) {
 		}, nil
 	}
 
-	response, state, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	response, state, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
 		timeout:        time.Second,

@@ -23,38 +23,69 @@ const (
 )
 
 // waitForPausePoint confirms the marker is actually armed with one status query before starting
-// the --trigger command: extendPausePointExpiryBeforeWait (the await-pause-point entry point) is
-// best-effort and does not confirm arm, so a typo'd or already-expired --id must not still get the
-// trigger dispatched into the running game before the wait immediately fails on it. Once confirmed
-// armed (or already hit), the trigger races the status poll loop and is joined once the wait itself
-// settles, so a slow trigger cannot delay reporting a pause-point hit.
+// --resume-play / --trigger: extendPausePointExpiryBeforeWait (the await-pause-point entry point)
+// is best-effort and does not confirm arm, so a typo'd or already-expired --id must not still get
+// Play resumed or the trigger dispatched into the running game before the wait immediately fails
+// on it. Once confirmed armed (or already hit), optional resume runs synchronously, then the
+// trigger races the status poll loop and is joined once the wait itself settles, so a slow trigger
+// cannot delay reporting a pause-point hit.
 func waitForPausePoint(
 	ctx context.Context,
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
-) (pausePointStatusResponse, pausePointWaitState, *pausePointTriggerResult, error) {
+) (pausePointStatusResponse, pausePointWaitState, *pausePointTriggerResult, *pausePointResumePlayResult, error) {
 	var triggerHandle *pausePointTriggerHandle
 	var skippedTriggerResult *pausePointTriggerResult
-	if options.triggerCommand != "" {
+	var resumeResult *pausePointResumePlayResult
+
+	if options.triggerCommand != "" || options.resumePlay {
 		if pausePointIsArmed(ctx, connection, options.id) {
-			triggerHandle = startPausePointTrigger(ctx, connection, options.startPath, options.triggerCommand, options.triggerArgs)
+			if options.resumePlay {
+				result := resumePlayModeForPausePoint(ctx, connection)
+				resumeResult = &result
+				if result.Error != "" {
+					if options.triggerCommand != "" {
+						skippedTriggerResult = &pausePointTriggerResult{
+							Command: pausePointTriggerCommandString(options.triggerCommand, options.triggerArgs),
+							Error:   "trigger was not dispatched: --resume-play failed to resume play mode",
+						}
+					}
+				} else if options.triggerCommand != "" {
+					triggerHandle = startPausePointTrigger(ctx, connection, options.startPath, options.triggerCommand, options.triggerArgs)
+				}
+			} else if options.triggerCommand != "" {
+				triggerHandle = startPausePointTrigger(ctx, connection, options.startPath, options.triggerCommand, options.triggerArgs)
+			}
 		} else {
-			// --trigger always yields a TriggerResult when given, even when skipped: a silently
-			// omitted TriggerResult would be indistinguishable from "the trigger ran but this CLI
-			// exited before it reported anything," hiding the real reason (marker not confirmed
-			// armed) behind a plain timeout/not-enabled error with no clue why the trigger never fired.
-			skippedTriggerResult = &pausePointTriggerResult{
-				Command: pausePointTriggerCommandString(options.triggerCommand, options.triggerArgs),
-				Error:   "trigger was not dispatched: the marker could not be confirmed armed at wait start",
+			if options.resumePlay {
+				// --resume-play always yields a ResumePlayResult when given, even when skipped: a
+				// silently omitted result would hide "arm was never confirmed" behind a plain
+				// timeout/not-enabled error with no clue why Play was never resumed.
+				resumeResult = &pausePointResumePlayResult{
+					Error: "resume was not dispatched: the marker could not be confirmed armed at wait start",
+				}
+			}
+			if options.triggerCommand != "" {
+				// --trigger always yields a TriggerResult when given, even when skipped: a silently
+				// omitted TriggerResult would be indistinguishable from "the trigger ran but this CLI
+				// exited before it reported anything," hiding the real reason (marker not confirmed
+				// armed) behind a plain timeout/not-enabled error with no clue why the trigger never fired.
+				skippedTriggerResult = &pausePointTriggerResult{
+					Command: pausePointTriggerCommandString(options.triggerCommand, options.triggerArgs),
+					Error:   "trigger was not dispatched: the marker could not be confirmed armed at wait start",
+				}
 			}
 		}
 	}
 
 	response, state, err := waitForPausePointStatus(ctx, connection, options)
 	if skippedTriggerResult != nil {
-		return response, state, skippedTriggerResult, err
+		return response, state, skippedTriggerResult, resumeResult, err
 	}
-	return response, state, triggerHandle.join(), err
+	if triggerHandle != nil {
+		return response, state, triggerHandle.join(), resumeResult, err
+	}
+	return response, state, nil, resumeResult, err
 }
 
 // pausePointIsArmed reports whether the marker is enabled or already hit. A query failure is
