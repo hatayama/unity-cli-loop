@@ -11,6 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             DomainReloadDisableScopeRecovery.RestoreForEditorStartup();
             ExternalSceneChangeTracker.Initialize();
             ControlPlayModeEditorStartup.Initialize();
+            PausePointEditorStartup.Initialize();
             ExecuteDynamicCodeEditorStartup.Initialize();
             GetLogsEditorStartup.Initialize();
             ScreenshotEditorStartup.Initialize();
