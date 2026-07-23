@@ -33,6 +33,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _container = container;
             _installButton = installButton;
             _detailLabel = detailLabel;
+            // Why disable rich text: installer stdout/stderr is untrusted process output.
+            // Leaving enableRichText on would interpret accidental <...> fragments as markup.
+            _detailLabel.enableRichText = false;
         }
 
         internal void Show()
