@@ -64,6 +64,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public bool? KeyStateDeviceIsPressed { get; set; }
 
+        /// <summary>
+        /// Key names released by the ReleaseAll action (bookkeeping and/or device). Null for other actions.
+        /// </summary>
+        public List<string>? ReleasedKeys { get; set; }
+
         public SimulateKeyboardResponse()
         {
         }

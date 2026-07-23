@@ -19,5 +19,14 @@ namespace io.github.hatayama.UnityCliLoop.RegressionHarness
                 IsSpaceHeld = isHeld;
             }
         }
+
+        /// <summary>
+        /// Clears the sticky IsSpaceHeld latch so a post-resume probe can detect a fresh press edge.
+        /// Kept below Update so the harness pause-point line number (19) stays stable.
+        /// </summary>
+        public void ClearStickyHeld()
+        {
+            IsSpaceHeld = false;
+        }
     }
 }

@@ -93,6 +93,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         key,
                         pressWasApplied);
                 }
+                else if (waitOutcome == InputSimulationWaitOutcome.Paused)
+                {
+                    // Why: ApplyOnNextConfiguredUpdate already disposed any pending press
+                    // subscription when it returned Paused. Release + latch-sync only after
+                    // that dispose — a live queued edge or a stale wasPressedThisFrame latch
+                    // (armed by edge monitoring even when apply never committed) would both
+                    // look like a re-press after resume.
+                    KeyboardInputMainThreadCleanup.ReleaseKeyStateImmediatelyAfterPauseInterruption(
+                        keyboard,
+                        key);
+
+                    KeyboardKeyState.UnregisterTransientKey(key);
+                    SimulateKeyboardOverlayState.ClearPress();
+                }
                 else if (pressWasApplied)
                 {
                     InputSimulationWaitOutcome releaseOutcome =
@@ -104,11 +118,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     {
                         waitOutcome = InputSimulationWaitOutcome.TimedOut;
                         KeyboardInputMainThreadCleanup.ScheduleTimedOutPressCleanup(keyboard, key, false);
-                    }
-                    else if (waitOutcome == InputSimulationWaitOutcome.Paused)
-                    {
-                        KeyboardKeyState.UnregisterTransientKey(key);
-                        SimulateKeyboardOverlayState.ClearPress();
                     }
                     else
                     {
@@ -248,6 +257,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
             {
+                // Apply may never have committed, but edge monitoring can still arm the
+                // wasPressedThisFrame latch; sync it so resume does not report a stale press.
+                if (!keyDownApplied)
+                {
+                    await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+                    KeyboardInputMainThreadCleanup.ReleaseKeyStateImmediatelyAfterPauseInterruption(
+                        keyboard,
+                        key);
+                }
+
                 return KeyboardInputSimulationResponseFactory.InterruptedKeyResult(
                     UnityCliLoopKeyboardAction.KeyDown,
                     keyName,
