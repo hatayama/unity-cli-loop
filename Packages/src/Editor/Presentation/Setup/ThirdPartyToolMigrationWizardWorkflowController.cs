@@ -239,7 +239,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            ShowNoMigrationTargetsState();
+            ShowMigrationCompleteState();
         }
 
         internal IProgress<ThirdPartyToolMigrationProgress> CreateProgressReporter(CancellationToken ct)
@@ -269,6 +269,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal void ShowNoMigrationTargetsState()
         {
             _view.ShowNoMigrationTargetsState(_isMigrating);
+            _scheduleResize();
+        }
+
+        internal void ShowMigrationCompleteState()
+        {
+            _view.ShowMigrationCompleteState(_isMigrating);
             _scheduleResize();
         }
 

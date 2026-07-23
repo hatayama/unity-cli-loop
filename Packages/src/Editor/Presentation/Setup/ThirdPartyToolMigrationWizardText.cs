@@ -31,6 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             "- After editing, summarize changed files, remaining candidates, and any commands I should verify manually.";
         internal const string MigrationNotCheckedText = "C# source migration status has not been checked.";
         internal const string NoMigrationTargetsText = "No C# source structure migration is needed.";
+        internal const string MigrationCompleteText =
+            "Migration complete. No further C# migration is needed.";
         internal const string MigrationConfirmDialogTitle = "Migrate C# Sources?";
         internal const string MigrationConfirmDialogOkText = "Migrate";
         internal const string MigrationConfirmDialogCancelText = "Cancel";

@@ -263,6 +263,14 @@
     background-color: #388e3c;
 }
 
+.setup-button--primary:disabled {
+    background-color: #4a4a4a;
+    border-width: 1px;
+    border-color: rgba(128, 128, 128, 0.5);
+    color: #999999;
+    opacity: 1;
+}
+
 .setup-button--migration-action {
     height: 66px;
 }

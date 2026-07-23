@@ -322,6 +322,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(closeButton.style.display.value, Is.EqualTo(DisplayStyle.None));
         }
 
+        [Test]
+        public void ShowMigrationCompleteState_ShowsDistinctWordingFromNoMigrationTargetsState()
+        {
+            // Verifies that the just-migrated state reads as complete rather than as a generic idle "nothing to migrate", which is ambiguous with the background compile Migrate just triggered.
+            VisualElement root = new();
+            ThirdPartyToolMigrationWizardView view = ThirdPartyToolMigrationWizardView.Create(
+                root,
+                () => { },
+                () => { },
+                _ => { },
+                () => { },
+                () => { });
+
+            view.ShowMigrationCompleteState(isMigrating: false);
+
+            TextField statusTextField = root.Query<TextField>(className: "setup-step__status-label--standalone").First();
+            Button checkButton = root.Query<Button>().ToList()
+                .Find(button => button.text == "Check");
+
+            Assert.That(statusTextField.value, Is.EqualTo(ThirdPartyToolMigrationWizardText.MigrationCompleteText));
+            Assert.That(statusTextField.value, Is.Not.EqualTo(ThirdPartyToolMigrationWizardText.NoMigrationTargetsText));
+            Assert.That(checkButton.enabledSelf, Is.False);
+        }
+
+        [Test]
+        public void ShowAutoScanDetectedState_DisablesCheckButtonWhileMigrateIsAvailable()
+        {
+            // Verifies that only one action is clickable at a time: Migrate enabled implies Check disabled.
+            VisualElement root = new();
+            ThirdPartyToolMigrationWizardView view = ThirdPartyToolMigrationWizardView.Create(
+                root,
+                () => { },
+                () => { },
+                _ => { },
+                () => { },
+                () => { });
+
+            view.ShowAutoScanDetectedState(new[] { "Assets/Foo.cs" }, isMigrating: false);
+
+            Button migrateButton = root.Query<Button>().ToList()
+                .Find(button => button.text == "Migrate");
+            Button checkButton = root.Query<Button>().ToList()
+                .Find(button => button.text == "Check");
+
+            Assert.That(migrateButton.enabledSelf, Is.True);
+            Assert.That(checkButton.enabledSelf, Is.False);
+        }
+
         [TestCase(SkillInstallState.Installed, true)]
         [TestCase(SkillInstallState.Outdated, true)]
         [TestCase(SkillInstallState.Missing, false)]
