@@ -19,7 +19,8 @@ Simulate keyboard input on Unity PlayMode.
 ## Tool Reference
 
 ```bash
-uloop simulate-keyboard --action <action> --key <key> [options]
+uloop simulate-keyboard --action <Press|KeyDown|KeyUp> --key <key> [options]
+uloop simulate-keyboard --action ReleaseAll
 ```
 
 ### Parameters

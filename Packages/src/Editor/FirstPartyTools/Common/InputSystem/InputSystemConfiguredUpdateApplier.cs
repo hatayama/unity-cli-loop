@@ -138,6 +138,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (completedTask == timeoutTask)
                 {
                     await timeoutTask.ConfigureAwait(false);
+                    // Why: cancel before scope-exit dispose so the pause watcher exits instead of polling a disposed token.
+                    timeoutCts.Cancel();
                     if (Interlocked.CompareExchange(
                             ref applyWaitState,
                             ApplyWaitStateFinishedWithoutApply,

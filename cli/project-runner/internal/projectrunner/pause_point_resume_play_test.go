@@ -351,6 +351,78 @@ func TestWaitForPausePointSkipsResumeWhenNotArmed(t *testing.T) {
 	}
 }
 
+// Verifies not-armed markers leave both ResumePlayResult.Error and TriggerResult.Error set when
+// --resume-play and --trigger are requested together, without dispatching either action.
+func TestWaitForPausePointSkipsResumeAndTriggerWhenNotArmed(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalDispatch := dispatchPausePointTriggerCommand
+	originalResume := resumePlayModeForPausePoint
+	defer func() {
+		queryPausePointStatus = originalQuery
+		dispatchPausePointTriggerCommand = originalDispatch
+		resumePlayModeForPausePoint = originalResume
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusNotEnabled}, nil
+	}
+
+	resumeCalled := false
+	resumePlayModeForPausePoint = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+	) pausePointResumePlayResult {
+		resumeCalled = true
+		return pausePointResumePlayResult{WasPaused: true, Resumed: true}
+	}
+
+	dispatchCalled := false
+	dispatchPausePointTriggerCommand = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		command string,
+		commandArgs []string,
+		startPath string,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		dispatchCalled = true
+		_, _ = stdout.Write([]byte(`{"Success":true}`))
+		return 0
+	}
+
+	_, state, triggerResult, resumeResult, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "does-not-exist",
+		timeoutSeconds: 1,
+		timeout:        time.Second,
+		resumePlay:     true,
+		triggerCommand: "simulate-keyboard",
+		triggerArgs:    []string{"--action", "Press"},
+	})
+	if err != nil {
+		t.Fatalf("waitForPausePoint failed: %v", err)
+	}
+	if state != pausePointWaitStateNotEnabled {
+		t.Fatalf("expected not_enabled state, got %q", state)
+	}
+	if resumeCalled {
+		t.Fatal("expected resumePlayModeForPausePoint not to be called for a not-armed marker")
+	}
+	if dispatchCalled {
+		t.Fatal("expected dispatchPausePointTriggerCommand not to be called for a not-armed marker")
+	}
+	if resumeResult == nil || resumeResult.Error == "" {
+		t.Fatalf("expected ResumePlayResult.Error explaining the skip, got %#v", resumeResult)
+	}
+	if triggerResult == nil || triggerResult.Error == "" {
+		t.Fatalf("expected TriggerResult.Error explaining the skip, got %#v", triggerResult)
+	}
+}
+
 // Verifies armed + --resume-play alone (no --trigger) still resumes and leaves TriggerResult nil.
 func TestWaitForPausePointResumesWithoutTriggerWhenArmed(t *testing.T) {
 	originalQuery := queryPausePointStatus
