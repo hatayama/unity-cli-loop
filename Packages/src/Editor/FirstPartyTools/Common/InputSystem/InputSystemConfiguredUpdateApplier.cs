@@ -168,7 +168,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static async Task WatchForPauseDiscardAsync(Action tryDiscardForPause, CancellationToken ct)
         {
-            Debug.Assert(tryDiscardForPause != null, "tryDiscardForPause must not be null");
             while (!ct.IsCancellationRequested)
             {
                 if (InputSystemUpdateHelper.IsPaused())
