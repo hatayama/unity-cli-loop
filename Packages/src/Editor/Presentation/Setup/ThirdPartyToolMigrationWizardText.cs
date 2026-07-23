@@ -66,12 +66,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (fileCount == 0)
             {
-                return "Detected legacy V3 custom tool API usage from a compile error. " +
+                return "Detected legacy V2 custom tool API usage from a compile error. " +
                     "Click Migrate to scan the project and update the affected files.";
             }
 
             string noun = fileCount == 1 ? "file" : "files";
-            return $"Detected {fileCount} C# {noun} using legacy V3 custom tool APIs from a compile error. " +
+            return $"Detected {fileCount} C# {noun} using legacy V2 custom tool APIs from a compile error. " +
                 "Click Migrate to scan the project and update them.";
         }
 
@@ -81,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (fileCount == 0)
             {
-                return "Files with legacy V3 custom tool API usage will be scanned and rewritten in place.\n\n" +
+                return "Files with legacy V2 custom tool API usage will be scanned and rewritten in place.\n\n" +
                     "Commit or back up your project first (VCS recommended).";
             }
 

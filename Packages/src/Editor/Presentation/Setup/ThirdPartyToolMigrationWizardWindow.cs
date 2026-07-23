@@ -228,6 +228,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 isCancellationRequested);
         }
 
+        internal static int GetMigrationConfirmDialogFileCount(
+            bool hasVerifiedPendingFileCount,
+            int pendingFileCount)
+        {
+            return ThirdPartyToolMigrationWizardStateRules.GetMigrationConfirmDialogFileCount(
+                hasVerifiedPendingFileCount,
+                pendingFileCount);
+        }
+
         private static void ShowWindowInternal(bool shouldRefreshAfterCreateGui, List<string> seedFilePaths)
         {
             if (HasOpenInstances<ThirdPartyToolMigrationWizardWindow>())

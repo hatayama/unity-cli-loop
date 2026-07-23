@@ -34,6 +34,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private SkillsTarget _migrationSkillTarget = SkillsTarget.Claude;
         private SkillInstallState _migrationSkillInstallState = SkillInstallState.Missing;
         private string[] _pendingMigrationFilePaths = Array.Empty<string>();
+        // True once _pendingMigrationFilePaths came from a full-project scan (RefreshUI); false right
+        // after an auto-scan detected state, where the count is only a seed estimate that a cascading
+        // compile-skip could undercount. The confirm dialog must not assert an exact count in that case.
+        private bool _hasVerifiedPendingFileCount = true;
         private CancellationTokenSource _migrationOperationCts;
         private CancellationTokenSource _migrationSkillOperationCts;
 
@@ -89,6 +93,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(seedFilePaths != null, "seedFilePaths must not be null");
 
             _pendingMigrationFilePaths = seedFilePaths.ToArray();
+            _hasVerifiedPendingFileCount = false;
             _view.ShowAutoScanDetectedState(_pendingMigrationFilePaths, _isMigrating);
             _scheduleResize();
         }
@@ -144,8 +149,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal async Task HandleMigrateThirdPartyTools()
         {
+            int confirmDialogFileCount = ThirdPartyToolMigrationWizardWindow.GetMigrationConfirmDialogFileCount(
+                _hasVerifiedPendingFileCount,
+                _pendingMigrationFilePaths.Length);
             if (!ThirdPartyToolMigrationWizardWindow.ConfirmMigrationApply(
-                _pendingMigrationFilePaths.Length,
+                confirmDialogFileCount,
                 (title, message, ok, cancel) => EditorUtility.DisplayDialog(title, message, ok, cancel)))
             {
                 return;
@@ -253,6 +261,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(filePaths != null, "filePaths must not be null");
 
             _pendingMigrationFilePaths = filePaths;
+            _hasVerifiedPendingFileCount = true;
             _view.ShowMigrationTargetsState(filePaths, _isMigrating);
             _scheduleResize();
         }

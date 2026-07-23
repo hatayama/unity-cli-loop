@@ -68,6 +68,22 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         }
 
         /// <summary>
+        /// The Migrate confirm dialog must not assert an exact file count that came only from
+        /// compile-error seeds (auto-scan detected state): a cascading compile-skip could make the
+        /// real full-scan write more files than the seed count, so an exact number there would
+        /// understate what the user is about to approve. Only a verified full-scan count (RefreshUI)
+        /// is safe to show as-is.
+        /// </summary>
+        internal static int GetMigrationConfirmDialogFileCount(
+            bool hasVerifiedPendingFileCount,
+            int pendingFileCount)
+        {
+            Debug.Assert(pendingFileCount >= 0, "pendingFileCount must not be negative");
+
+            return hasVerifiedPendingFileCount ? pendingFileCount : 0;
+        }
+
+        /// <summary>
         /// Returns whether the temporary V3 migration skill note should be visible.
         /// </summary>
         internal static bool ShouldShowTemporarySkillNote(SkillInstallState installState)

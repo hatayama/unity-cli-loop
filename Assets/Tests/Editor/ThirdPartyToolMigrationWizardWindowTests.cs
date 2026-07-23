@@ -426,6 +426,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldFinish, Is.EqualTo(expected));
         }
 
+        [TestCase(false, 2, 0)]
+        [TestCase(true, 2, 2)]
+        [TestCase(true, 0, 0)]
+        public void GetMigrationConfirmDialogFileCount_ReturnsExpectedValue(
+            bool hasVerifiedPendingFileCount,
+            int pendingFileCount,
+            int expected)
+        {
+            // Verifies that an unverified seed-derived count never appears in the confirm dialog, since a cascading compile-skip could undercount the real full-scan scope.
+            int confirmDialogFileCount = ThirdPartyToolMigrationWizardWindow.GetMigrationConfirmDialogFileCount(
+                hasVerifiedPendingFileCount,
+                pendingFileCount);
+
+            Assert.That(confirmDialogFileCount, Is.EqualTo(expected));
+        }
+
         [TestCase(true, false, true)]
         [TestCase(true, true, false)]
         [TestCase(false, false, false)]
