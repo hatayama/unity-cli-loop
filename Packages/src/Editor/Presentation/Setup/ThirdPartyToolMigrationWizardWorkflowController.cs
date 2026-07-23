@@ -24,10 +24,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
         private readonly Action _scheduleResize;
 
-        // Only the first scan after an auto-scan open is scoped to the compile-error-matched seed
-        // files; any later manual re-check (button click) must scan the whole project, since the
-        // seeds may no longer reflect what's actually broken, so this is cleared after first use.
-        private List<string> _autoScanSeedFilePaths;
+        // Auto-scan seed files (compile-error-matched migration targets) are only used to render the
+        // initial detected-state list without scanning; RefreshUI (manual Check / re-check) always
+        // does a full, unscoped project scan regardless of these.
+        private readonly List<string> _autoScanSeedFilePaths;
 
         private bool _isMigrating;
         private bool _isUpdatingMigrationSkill;
@@ -63,36 +63,34 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new ArgumentNullException(nameof(scheduleResize));
         }
 
-        internal void ShowInitialState(bool shouldStartInitialRefresh)
+        internal void ShowInitialState(bool shouldShowAutoScanDetectedState)
         {
-            if (shouldStartInitialRefresh)
+            if (shouldShowAutoScanDetectedState)
             {
-                ShowCheckingState(new ThirdPartyToolMigrationProgress(0, 0));
+                ShowAutoScanDetectedState(_autoScanSeedFilePaths);
                 return;
             }
 
             ShowNotCheckedState();
         }
 
-        internal void ScheduleInitialRefresh(bool shouldStartInitialRefresh)
+        internal void TryShowAutoScanDetectedState(bool shouldShowAutoScanDetectedState)
         {
-            if (!shouldStartInitialRefresh)
+            if (!shouldShowAutoScanDetectedState)
             {
                 return;
             }
 
-            _view.MainScrollView.schedule.Execute(() => RefreshUI().Forget()).StartingIn(0);
+            ShowAutoScanDetectedState(_autoScanSeedFilePaths);
         }
 
-        internal void TryStartInitialRefresh(bool shouldStartInitialRefresh)
+        internal void ShowAutoScanDetectedState(List<string> seedFilePaths)
         {
-            if (!shouldStartInitialRefresh)
-            {
-                return;
-            }
+            Debug.Assert(seedFilePaths != null, "seedFilePaths must not be null");
 
-            ShowCheckingState(new ThirdPartyToolMigrationProgress(0, 0));
-            _view.MainScrollView.schedule.Execute(() => RefreshUI().Forget()).StartingIn(0);
+            _pendingMigrationFilePaths = seedFilePaths.ToArray();
+            _view.ShowAutoScanDetectedState(_pendingMigrationFilePaths, _isMigrating);
+            _scheduleResize();
         }
 
         internal async Task RefreshUI()
@@ -103,14 +101,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             IProgress<ThirdPartyToolMigrationProgress> progress = CreateProgressReporter(ct);
-            List<string> seedFilePaths = _autoScanSeedFilePaths;
-            _autoScanSeedFilePaths = new List<string>();
             ThirdPartyToolMigrationPreview preview;
             try
             {
                 preview = await Task.Run(async () =>
-                    await _thirdPartyToolMigrationUseCase.PreviewMigrationForSeedFilesAsync(
-                        projectRoot, seedFilePaths, progress, ct));
+                    await _thirdPartyToolMigrationUseCase.PreviewMigrationAsync(projectRoot, progress, ct));
                 await MainThreadSwitcher.SwitchToMainThread();
             }
             catch (OperationCanceledException)

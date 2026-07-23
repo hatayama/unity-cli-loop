@@ -161,6 +161,29 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _refreshButton.SetEnabled(false);
         }
 
+        /// <summary>
+        /// Shown right after an auto-scan window open: no scan has run yet, so the Check button stays
+        /// enabled (unlike ShowMigrationTargetsState) in case the user wants a verified full-project
+        /// scan before clicking Migrate.
+        /// </summary>
+        internal void ShowAutoScanDetectedState(string[] filePaths, bool isMigrating)
+        {
+            Debug.Assert(filePaths != null, "filePaths must not be null");
+
+            _migrationStatusTextField.SetValueWithoutNotify(
+                ThirdPartyToolMigrationWizardText.GetAutoScanDetectedStatusText(filePaths.Length));
+            ViewDataBinder.SetVisible(_migrationProgressBar, false);
+            ViewDataBinder.SetVisible(_migrationButtonRow, true);
+            _migrateButton.SetEnabled(!isMigrating);
+            _migrateButton.text = ThirdPartyToolMigrationWizardText.GetMigrationButtonText(
+                isMigrating,
+                true,
+                true);
+            ViewDataBinder.SetVisible(_refreshButton, true);
+            ViewDataBinder.SetVisible(_closeButton, false);
+            _refreshButton.SetEnabled(true);
+        }
+
         internal void ShowNoMigrationTargetsState(bool isMigrating)
         {
             _migrationStatusTextField.SetValueWithoutNotify(ThirdPartyToolMigrationWizardText.NoMigrationTargetsText);

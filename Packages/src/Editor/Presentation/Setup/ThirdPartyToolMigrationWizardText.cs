@@ -54,9 +54,36 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return $"Found {fileCount} C# {noun} that {verb} V3 migration.";
         }
 
+        /// <summary>
+        /// Status shown right after an auto-scan window open: this reflects a compile-error log match,
+        /// not a project scan, so the wording says "detected" rather than "found" (Migrate performs the
+        /// actual scan). fileCount is 0 for the timeout-fallback path, where HasMigrationTargetsAsync
+        /// already confirmed migration is needed but no specific file list is known yet.
+        /// </summary>
+        internal static string GetAutoScanDetectedStatusText(int fileCount)
+        {
+            Debug.Assert(fileCount >= 0, "fileCount must not be negative");
+
+            if (fileCount == 0)
+            {
+                return "Detected legacy V3 custom tool API usage from a compile error. " +
+                    "Click Migrate to scan the project and update the affected files.";
+            }
+
+            string noun = fileCount == 1 ? "file" : "files";
+            return $"Detected {fileCount} C# {noun} using legacy V3 custom tool APIs from a compile error. " +
+                "Click Migrate to scan the project and update them.";
+        }
+
         internal static string GetMigrationConfirmDialogMessage(int fileCount)
         {
             Debug.Assert(fileCount >= 0, "fileCount must not be negative");
+
+            if (fileCount == 0)
+            {
+                return "Files with legacy V3 custom tool API usage will be scanned and rewritten in place.\n\n" +
+                    "Commit or back up your project first (VCS recommended).";
+            }
 
             string noun = fileCount == 1 ? "file" : "files";
             return $"{fileCount} {noun} will be rewritten in place.\n\n" +

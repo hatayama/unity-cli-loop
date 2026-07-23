@@ -84,17 +84,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             CancellationToken ct);
 
         /// <summary>
-        /// Builds a preview scoped to the assemblies containing the given seed files (e.g. compile-
-        /// error-matched migration targets), falling back to a full-project scan when the seeds do not
-        /// resolve to a safe, complete scope (see ThirdPartyToolMigrationScanScopeResolver).
-        /// </summary>
-        Task<ThirdPartyToolMigrationPreview> PreviewMigrationForSeedFilesAsync(
-            string projectRoot,
-            List<string> seedFilePaths,
-            IProgress<ThirdPartyToolMigrationProgress> progress,
-            CancellationToken ct);
-
-        /// <summary>
         /// Checks whether the most recent compile failure was caused by V2 legacy custom-tool APIs, by
         /// matching Unity Console error text against known legacy tokens (mirrors Unity's own API
         /// Updater, which performs the same kind of compile-error-driven detection). Returns

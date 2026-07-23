@@ -307,7 +307,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             window._shouldRefreshAfterCreateGui = true;
-            window.TryStartInitialRefresh();
+            window.TryShowAutoScanDetectedState();
         }
 
         private void CreateGUI()
@@ -331,7 +331,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool shouldStartInitialRefresh = ConsumeShouldStartInitialRefresh();
             _controller.ShowInitialState(shouldStartInitialRefresh);
             _controller.RefreshMigrationSkillState();
-            _controller.ScheduleInitialRefresh(shouldStartInitialRefresh);
         }
 
         private void InitializeApplicationServices()
@@ -363,14 +362,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return true;
         }
 
-        private void TryStartInitialRefresh()
+        private void TryShowAutoScanDetectedState()
         {
             if (_controller == null)
             {
                 return;
             }
 
-            _controller.TryStartInitialRefresh(ConsumeShouldStartInitialRefresh());
+            _controller.TryShowAutoScanDetectedState(ConsumeShouldStartInitialRefresh());
         }
     }
 }

@@ -71,59 +71,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     asmdefFilePaths,
                     asmrefFilePaths,
                     progress,
-                    inspectedEntryCount: 0,
-                    ct);
-            }
-
-            csharpFilePaths.Sort(StringComparer.Ordinal);
-            asmdefFilePaths.Sort(StringComparer.Ordinal);
-            asmrefFilePaths.Sort(StringComparer.Ordinal);
-            return new ProjectFileInventory(csharpFilePaths, asmdefFilePaths, asmrefFilePaths);
-        }
-
-        /// <summary>
-        /// Builds an inventory limited to the given assembly directories (e.g. the assemblies containing
-        /// compile-error-matched files), instead of walking the entire Assets tree. Used to speed up
-        /// migration-plan construction once the seed files that need migration are already known.
-        /// </summary>
-        internal static async Task<ProjectFileInventory> CreateFromDirectoriesAsync(
-            List<string> scopeDirectories,
-            string projectRoot,
-            IProgress<ThirdPartyToolMigrationProgress> progress,
-            CancellationToken ct)
-        {
-            Debug.Assert(scopeDirectories != null, "scopeDirectories must not be null");
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-            Debug.Assert(progress != null, "progress must not be null");
-
-            List<string> csharpFilePaths = new();
-            List<string> asmdefFilePaths = new();
-            List<string> asmrefFilePaths = new();
-            int inspectedEntryCount = 0;
-            progress.Report(new ThirdPartyToolMigrationProgress(inspectedEntryCount, 0));
-
-            foreach (string scopeDirectory in scopeDirectories)
-            {
-                if (ct.IsCancellationRequested)
-                {
-                    break;
-                }
-
-                if (!Directory.Exists(scopeDirectory))
-                {
-                    // A resolved scope directory may no longer exist if files moved/deleted between
-                    // detection and scan; skip it rather than failing the whole scoped scan.
-                    continue;
-                }
-
-                inspectedEntryCount = await WalkDirectoryTreeAsync(
-                    projectRoot,
-                    scopeDirectory,
-                    csharpFilePaths,
-                    asmdefFilePaths,
-                    asmrefFilePaths,
-                    progress,
-                    inspectedEntryCount,
                     ct);
             }
 
@@ -185,17 +132,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         /// <summary>
         /// Walks a single directory tree, collecting candidate migration files and reporting progress
-        /// as a running total across possibly-multiple calls (see CreateFromDirectoriesAsync, which walks
-        /// several scope directories one after another and threads the count between calls).
+        /// as a running total of inspected entries.
         /// </summary>
-        private static async Task<int> WalkDirectoryTreeAsync(
+        private static async Task WalkDirectoryTreeAsync(
             string projectRoot,
             string startDirectory,
             List<string> csharpFilePaths,
             List<string> asmdefFilePaths,
             List<string> asmrefFilePaths,
             IProgress<ThirdPartyToolMigrationProgress> progress,
-            int inspectedEntryCount,
             CancellationToken ct)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
@@ -207,12 +152,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             Stack<string> pendingDirectories = new();
             pendingDirectories.Push(startDirectory);
+            int inspectedEntryCount = 0;
 
             while (pendingDirectories.Count > 0)
             {
                 if (ct.IsCancellationRequested)
                 {
-                    return inspectedEntryCount;
+                    return;
                 }
 
                 string directoryPath = pendingDirectories.Pop();
@@ -243,8 +189,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     }
                 }
             }
-
-            return inspectedEntryCount;
         }
 
         private static void AddCandidateFilePath(

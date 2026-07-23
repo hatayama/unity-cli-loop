@@ -40,19 +40,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return _migrationPort.PreviewMigrationAsync(projectRoot, progress, ct);
         }
 
-        public Task<ThirdPartyToolMigrationPreview> PreviewMigrationForSeedFilesAsync(
-            string projectRoot,
-            List<string> seedFilePaths,
-            IProgress<ThirdPartyToolMigrationProgress> progress,
-            CancellationToken ct)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-            Debug.Assert(seedFilePaths != null, "seedFilePaths must not be null");
-            Debug.Assert(progress != null, "progress must not be null");
-
-            return _migrationPort.PreviewMigrationForSeedFilesAsync(projectRoot, seedFilePaths, progress, ct);
-        }
-
         public (bool Found, List<string> TargetFilePaths) TryDetectAutoScanTargetsFromCompileErrors(
             string projectRoot)
         {

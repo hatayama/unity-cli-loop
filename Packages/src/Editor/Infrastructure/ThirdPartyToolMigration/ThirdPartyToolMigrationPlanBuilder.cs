@@ -84,40 +84,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return await BuildPlanFromInventoryAsync(projectRoot, inventory, progress, ct);
         }
 
-        /// <summary>
-        /// Builds a plan limited to the given assembly directories (e.g. the assemblies containing
-        /// compile-error-matched files) instead of scanning the whole project. The full-scan entry
-        /// points above (Create/CreateAsync) are untouched and remain the source of truth for the
-        /// manual "scan whole project" flow.
-        /// </summary>
-        internal static async Task<MigrationPlan> CreateInScopeAsync(
-            string projectRoot,
-            List<string> scopeDirectories,
-            IProgress<ThirdPartyToolMigrationProgress> progress,
-            CancellationToken ct)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-            Debug.Assert(scopeDirectories != null, "scopeDirectories must not be null");
-            Debug.Assert(progress != null, "progress must not be null");
-
-            if (!Directory.Exists(projectRoot))
-            {
-                throw new DirectoryNotFoundException(projectRoot);
-            }
-
-            ProjectFileInventory inventory = await ProjectFileInventory.CreateFromDirectoriesAsync(
-                scopeDirectories,
-                projectRoot,
-                progress,
-                ct);
-            if (ct.IsCancellationRequested)
-            {
-                return MigrationPlan.Empty;
-            }
-
-            return await BuildPlanFromInventoryAsync(projectRoot, inventory, progress, ct);
-        }
-
         private static async Task<MigrationPlan> BuildPlanFromInventoryAsync(
             string projectRoot,
             ProjectFileInventory inventory,

@@ -13,32 +13,31 @@ using io.github.hatayama.UnityCliLoop.Presentation;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Verifies that only the first RefreshUI call after an auto-scan window-open uses the
-    /// compile-error-matched seed file paths for a scoped scan; a later manual re-check falls back
-    /// to a full-project scan (empty seed list) since the seeds are cleared after first use.
+    /// Verifies that an auto-scan window open renders the compile-error-matched seed file paths
+    /// directly, without ever running a scan, and that RefreshUI (the manual Check / re-check path)
+    /// always performs a full, unscoped project scan regardless of any seed state.
     /// </summary>
     public sealed class ThirdPartyToolMigrationWizardWorkflowControllerTests
     {
         [Test]
-        public async Task RefreshUI_WhenCalledFirstTime_PassesAutoScanSeedFilePathsToPreview()
+        public void ShowInitialState_WhenShouldShowAutoScanDetectedState_DoesNotTriggerAnyPreviewCall()
         {
-            // Verifies that the first RefreshUI call after an auto-scan open scopes the scan to the
-            // seed file paths supplied by the constructor.
+            // Verifies that showing the auto-scan detected state on window open never calls into the
+            // migration port (no preview scan runs before Migrate is clicked).
             RecordingThirdPartyToolMigrationPort port = new();
             ThirdPartyToolMigrationWizardWorkflowController controller =
                 CreateController(port, new List<string> { "/Project/Assets/Tool.cs" });
 
-            await controller.RefreshUI();
+            controller.ShowInitialState(shouldShowAutoScanDetectedState: true);
 
-            Assert.That(port.SeedFilePathsPerCall, Has.Count.EqualTo(1));
-            Assert.That(port.SeedFilePathsPerCall[0], Is.EqualTo(new[] { "/Project/Assets/Tool.cs" }));
+            Assert.That(port.PreviewMigrationAsyncCallCount, Is.EqualTo(0));
         }
 
         [Test]
-        public async Task RefreshUI_WhenCalledASecondTime_PassesEmptySeedFilePaths()
+        public async Task RefreshUI_AlwaysPerformsAFullUnscopedProjectScan()
         {
-            // Verifies that a manual re-check after the initial auto-scoped scan falls back to a
-            // full-project scan, since the seed file paths are cleared after their first use.
+            // Verifies that the manual Check / re-check path always calls the full-project preview,
+            // regardless of any auto-scan seed file paths supplied at construction time.
             RecordingThirdPartyToolMigrationPort port = new();
             ThirdPartyToolMigrationWizardWorkflowController controller =
                 CreateController(port, new List<string> { "/Project/Assets/Tool.cs" });
@@ -46,8 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             await controller.RefreshUI();
             await controller.RefreshUI();
 
-            Assert.That(port.SeedFilePathsPerCall, Has.Count.EqualTo(2));
-            Assert.That(port.SeedFilePathsPerCall[1], Is.Empty);
+            Assert.That(port.PreviewMigrationAsyncCallCount, Is.EqualTo(2));
         }
 
         private static ThirdPartyToolMigrationWizardWorkflowController CreateController(
@@ -75,7 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private sealed class RecordingThirdPartyToolMigrationPort : IThirdPartyToolMigrationPort
         {
-            internal readonly List<List<string>> SeedFilePathsPerCall = new();
+            internal int PreviewMigrationAsyncCallCount { get; private set; }
 
             public ThirdPartyToolMigrationPreview PreviewMigration(string projectRoot)
             {
@@ -87,16 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 IProgress<ThirdPartyToolMigrationProgress> progress,
                 CancellationToken ct)
             {
-                return Task.FromResult(new ThirdPartyToolMigrationPreview(0, 0, Array.Empty<string>()));
-            }
-
-            public Task<ThirdPartyToolMigrationPreview> PreviewMigrationForSeedFilesAsync(
-                string projectRoot,
-                List<string> seedFilePaths,
-                IProgress<ThirdPartyToolMigrationProgress> progress,
-                CancellationToken ct)
-            {
-                SeedFilePathsPerCall.Add(seedFilePaths);
+                PreviewMigrationAsyncCallCount++;
                 return Task.FromResult(new ThirdPartyToolMigrationPreview(0, 0, Array.Empty<string>()));
             }
 
