@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.0.0-beta.62](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.61...v3.0.0-beta.62) (2026-07-23)
+
+
+### Features
+
+* keep editor ticking while unfocused via scoped SignalTick pump ([#1963](https://github.com/hatayama/unity-cli-loop/issues/1963)) ([64bef8a](https://github.com/hatayama/unity-cli-loop/commit/64bef8a13aad5a1b23c652df556cf799239d24ef))
+* Show live progress feedback while installing the CLI ([#1959](https://github.com/hatayama/unity-cli-loop/issues/1959)) ([06ae9f3](https://github.com/hatayama/unity-cli-loop/commit/06ae9f3ec8c4a7428c1681cfd8585a34ff4d08d8))
+
+
+### Bug Fixes
+
+* Restore green EditMode suite for schema and startup-hook guards ([#1962](https://github.com/hatayama/unity-cli-loop/issues/1962)) ([3a8817e](https://github.com/hatayama/unity-cli-loop/commit/3a8817ede32b2725b32595e8a88971fbdbf8da07))
+
 ## [3.0.0-beta.61](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.60...v3.0.0-beta.61) (2026-07-23)
 
 
