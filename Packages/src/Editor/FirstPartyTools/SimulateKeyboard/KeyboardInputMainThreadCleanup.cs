@@ -1,10 +1,13 @@
 #if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
+using UnityEngine.InputSystem.LowLevel;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -16,6 +19,69 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class KeyboardInputMainThreadCleanup
     {
+        /// <summary>
+        /// Forces every tracked and device-pressed key up via an explicit update, then clears
+        /// bookkeeping. Safe while PlayMode is paused (ReleaseAll's paused-tolerant path).
+        /// </summary>
+        internal static IReadOnlyList<string> ReleaseAllKeysImmediately(Keyboard keyboard)
+        {
+            HashSet<Key> keysToRelease = new HashSet<Key>();
+            foreach (Key tracked in KeyboardKeyState.ClearTrackedKeys())
+            {
+                keysToRelease.Add(tracked);
+            }
+
+            if (keyboard != null)
+            {
+                foreach (KeyControl control in keyboard.allKeys)
+                {
+                    if (control != null && control.isPressed)
+                    {
+                        keysToRelease.Add(control.keyCode);
+                    }
+                }
+            }
+
+            List<string> releasedNames = new List<string>(keysToRelease.Count);
+            foreach (Key key in keysToRelease)
+            {
+                releasedNames.Add(key.ToString());
+            }
+
+            releasedNames.Sort(System.StringComparer.Ordinal);
+
+            if (keyboard != null && keysToRelease.Count > 0 && CanInjectKeyboardState(keyboard))
+            {
+                using (StateEvent.From(keyboard, out InputEventPtr eventPtr))
+                {
+                    foreach (Key key in keysToRelease)
+                    {
+                        keyboard[key].WriteValueIntoEvent(0f, eventPtr);
+                    }
+
+                    InputUpdateType updateType = InputUpdateTypeResolver.Resolve();
+                    InputState.Change(keyboard, eventPtr, updateType);
+                }
+
+                InputSystemUpdateHelper.RunExplicitUpdate(InputUpdateTypeResolver.Resolve());
+
+                // Why only when still isPressed: ForceSync injects a real press→release edge.
+                // Unconditionally doing that on every ReleaseAll key would spuriously fire
+                // gameplay (e.g. jump) when called outside a pause-interruption recovery.
+                // isPressed=true after a zero write is the stale wasPressedThisFrame latch signature.
+                foreach (Key key in keysToRelease)
+                {
+                    if (keyboard[key].isPressed)
+                    {
+                        ForceSyncButtonPressLatch(keyboard, key);
+                    }
+                }
+            }
+
+            SimulateKeyboardOverlayState.ClearPress();
+            return releasedNames;
+        }
+
         internal static async Task FinalizePressOverlay(CancellationToken ct)
         {
             await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
@@ -66,7 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (EditorApplication.isPaused)
             {
-                ReleaseKeyStateImmediately(keyboard, key);
+                ReleaseKeyStateImmediatelyAfterPauseInterruption(keyboard, key);
                 return InputSimulationWaitOutcome.Completed;
             }
 
@@ -95,7 +161,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ReleaseKeyStateImmediately(keyboard, key);
         }
 
-        private static void ReleaseKeyStateImmediately(Keyboard keyboard, Key key)
+        /// <summary>
+        /// Forces a single key up via an explicit update. Used by pause-interruption cleanup
+        /// after any pending apply subscription has already been disposed.
+        /// </summary>
+        internal static void ReleaseKeyStateImmediately(Keyboard keyboard, Key key)
         {
             Debug.Assert(CanInjectKeyboardState(keyboard), "keyboard state can only be released while PlayMode has a keyboard");
             if (!CanInjectKeyboardState(keyboard))
@@ -103,6 +173,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            KeyboardKeyState.SetKeyState(keyboard, key, false);
+            InputSystemUpdateHelper.RunExplicitUpdate(InputUpdateTypeResolver.Resolve());
+        }
+
+        /// <summary>
+        /// Pause-interruption cleanup: dispose path has already dropped pending applies; release
+        /// the device key and sync Input System button press latches so resume cannot report a
+        /// stale isPressed=true.
+        /// </summary>
+        internal static void ReleaseKeyStateImmediatelyAfterPauseInterruption(Keyboard keyboard, Key key)
+        {
+            ReleaseKeyStateImmediately(keyboard, key);
+            if (!CanInjectKeyboardState(keyboard))
+            {
+                return;
+            }
+
+            ForceSyncButtonPressLatch(keyboard, key);
+        }
+
+        /// <summary>
+        /// Forces a press→release transition so ButtonControl's wasPressedThisFrame latch updates.
+        /// Why: Press edge monitoring calls wasPressedThisFrame, which arms m_LastUpdateWasPress.
+        /// Writing zero into an already-zero state buffer is a no-op for that latch sync, so after
+        /// Editor pause/resume isPressed can stay true forever while ReadValue is 0.
+        /// </summary>
+        private static void ForceSyncButtonPressLatch(Keyboard keyboard, Key key)
+        {
+            Debug.Assert(CanInjectKeyboardState(keyboard), "press latch sync requires an injectable keyboard");
+            if (!CanInjectKeyboardState(keyboard))
+            {
+                return;
+            }
+
+            KeyboardKeyState.SetKeyState(keyboard, key, true);
+            InputSystemUpdateHelper.RunExplicitUpdate(InputUpdateTypeResolver.Resolve());
             KeyboardKeyState.SetKeyState(keyboard, key, false);
             InputSystemUpdateHelper.RunExplicitUpdate(InputUpdateTypeResolver.Resolve());
         }

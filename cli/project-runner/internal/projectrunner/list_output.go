@@ -183,6 +183,16 @@ func appendPausePointEnableAwaitListOptions(tool clicore.ToolDefinition, options
 			Type:        "string",
 			Description: "Requires --await. Same as await-pause-point's --expect (repeatable)",
 		},
+		listOption{
+			Name:        "--" + PausePointTriggerFlagName,
+			Type:        "string",
+			Description: "Requires --await. Same as await-pause-point's --trigger",
+		},
+		listOption{
+			Name:        "--" + PausePointResumePlayFlagName,
+			Type:        "boolean",
+			Description: "Requires --await. After confirming the marker is armed, resume PlayMode if paused (before --trigger), so a paused-arm workflow can fire input in one call",
+		},
 	)
 }
 

@@ -24,7 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SimulateKeyboardResponse result = new()
             {
                 Success = true,
-                Message = $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' was released from Unity CLI Loop bookkeeping.",
+                Message =
+                    $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' was released from Unity CLI Loop bookkeeping; queued input edge was discarded.",
                 Action = action.ToString(),
                 KeyName = keyName,
                 InterruptedByPausePoint = true,
