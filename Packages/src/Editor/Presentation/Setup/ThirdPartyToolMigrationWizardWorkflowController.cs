@@ -78,14 +78,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ShowNotCheckedState();
         }
 
-        internal void TryShowAutoScanDetectedState(bool shouldShowAutoScanDetectedState)
+        // seedFilePaths is passed explicitly (rather than reusing the constructor-captured
+        // _autoScanSeedFilePaths) because this path re-renders an already-open window: a fresh
+        // auto-scan re-detection can find a different file list than the one this controller
+        // was originally constructed with.
+        internal void TryShowAutoScanDetectedState(bool shouldShowAutoScanDetectedState, List<string> seedFilePaths)
         {
+            Debug.Assert(seedFilePaths != null, "seedFilePaths must not be null");
+
             if (!shouldShowAutoScanDetectedState)
             {
                 return;
             }
 
-            ShowAutoScanDetectedState(_autoScanSeedFilePaths);
+            ShowAutoScanDetectedState(seedFilePaths);
         }
 
         internal void ShowAutoScanDetectedState(List<string> seedFilePaths)

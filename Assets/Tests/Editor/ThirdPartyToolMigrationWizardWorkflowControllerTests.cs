@@ -48,11 +48,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(port.PreviewMigrationAsyncCallCount, Is.EqualTo(2));
         }
 
+        [Test]
+        public void TryShowAutoScanDetectedState_RendersFreshlyPassedSeedsInsteadOfConstructorSeeds()
+        {
+            // Verifies that re-showing an already-open window uses the seeds passed to this call
+            // (a fresh re-detection), not the stale seed list captured at construction time.
+            VisualElement root = new();
+            RecordingThirdPartyToolMigrationPort port = new();
+            ThirdPartyToolMigrationWizardWorkflowController controller = CreateControllerWithRoot(
+                root,
+                port,
+                new List<string> { "/Project/Assets/Old.cs" });
+
+            controller.TryShowAutoScanDetectedState(
+                shouldShowAutoScanDetectedState: true,
+                new List<string> { "/Project/Assets/New1.cs", "/Project/Assets/New2.cs" });
+
+            TextField statusTextField = root
+                .Query<TextField>(className: "setup-step__status-label--standalone")
+                .First();
+
+            Assert.That(
+                statusTextField.value,
+                Is.EqualTo(ThirdPartyToolMigrationWizardText.GetAutoScanDetectedStatusText(2)));
+        }
+
         private static ThirdPartyToolMigrationWizardWorkflowController CreateController(
             IThirdPartyToolMigrationPort port,
             List<string> autoScanSeedFilePaths)
         {
-            VisualElement root = new();
+            return CreateControllerWithRoot(new VisualElement(), port, autoScanSeedFilePaths);
+        }
+
+        private static ThirdPartyToolMigrationWizardWorkflowController CreateControllerWithRoot(
+            VisualElement root,
+            IThirdPartyToolMigrationPort port,
+            List<string> autoScanSeedFilePaths)
+        {
             ThirdPartyToolMigrationWizardView view = ThirdPartyToolMigrationWizardView.Create(
                 root,
                 () => { },

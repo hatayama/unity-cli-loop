@@ -250,7 +250,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             if (HasOpenInstances<ThirdPartyToolMigrationWizardWindow>())
             {
-                FocusExistingWindow(shouldRefreshAfterCreateGui);
+                FocusExistingWindow(shouldRefreshAfterCreateGui, seedFilePaths);
                 return;
             }
 
@@ -308,7 +308,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return RegisteredThirdPartyToolMigrationUseCase;
         }
 
-        private static void FocusExistingWindow(bool shouldRefreshAfterCreateGui)
+        private static void FocusExistingWindow(bool shouldRefreshAfterCreateGui, List<string> seedFilePaths)
         {
             ThirdPartyToolMigrationWizardWindow[] windows =
                 Resources.FindObjectsOfTypeAll<ThirdPartyToolMigrationWizardWindow>();
@@ -325,7 +325,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             window._shouldRefreshAfterCreateGui = true;
-            window.TryShowAutoScanDetectedState();
+            window.TryShowAutoScanDetectedState(seedFilePaths);
         }
 
         private void CreateGUI()
@@ -380,14 +380,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return true;
         }
 
-        private void TryShowAutoScanDetectedState()
+        private void TryShowAutoScanDetectedState(List<string> seedFilePaths)
         {
             if (_controller == null)
             {
                 return;
             }
 
-            _controller.TryShowAutoScanDetectedState(ConsumeShouldStartInitialRefresh());
+            _controller.TryShowAutoScanDetectedState(ConsumeShouldStartInitialRefresh(), seedFilePaths);
         }
     }
 }
