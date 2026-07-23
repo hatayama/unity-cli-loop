@@ -132,63 +132,68 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CancellationToken ct,
             JsonRpcEarlyResponseWriter earlyResponseWriter)
         {
-            try
+            // Why: keep an unfocused editor ticking for the request duration plus a trailing window
+            // so compile/test work continues in the background without an OS focus kick.
+            using (AutoTickPumpService.BeginScope())
             {
-                ct.ThrowIfCancellationRequested();
-                if (IsCliProtocolMismatch(request.ClientProtocolVersion))
+                try
                 {
-                    return JsonRpcResponseFactory.CreateCliProtocolMismatchResponse(
-                        request.Id,
-                        request.ClientProjectRunnerVersion,
-                        request.ClientProtocolVersion);
-                }
-
-                if (request.AcceptsDispatchAck && earlyResponseWriter != null)
-                {
-                    int heartbeatIntervalSeconds = request.AcceptsHeartbeat
-                        ? UnityCliLoopServerConfig.HEARTBEAT_INTERVAL_SECONDS
-                        : 0;
-                    Func<string> createHeartbeatJson = request.AcceptsHeartbeat
-                        ? () => JsonRpcResponseFactory.CreateHeartbeatResponse(
+                    ct.ThrowIfCancellationRequested();
+                    if (IsCliProtocolMismatch(request.ClientProtocolVersion))
+                    {
+                        return JsonRpcResponseFactory.CreateCliProtocolMismatchResponse(
                             request.Id,
-                            EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick())
-                        : null;
-                    await earlyResponseWriter(
-                        JsonRpcResponseFactory.CreateDispatchAcceptedResponse(request.Id, heartbeatIntervalSeconds),
-                        ShouldCancelAcceptedRequestOnClientDisconnect(request),
-                        createHeartbeatJson);
+                            request.ClientProjectRunnerVersion,
+                            request.ClientProtocolVersion);
+                    }
+
+                    if (request.AcceptsDispatchAck && earlyResponseWriter != null)
+                    {
+                        int heartbeatIntervalSeconds = request.AcceptsHeartbeat
+                            ? UnityCliLoopServerConfig.HEARTBEAT_INTERVAL_SECONDS
+                            : 0;
+                        Func<string> createHeartbeatJson = request.AcceptsHeartbeat
+                            ? () => JsonRpcResponseFactory.CreateHeartbeatResponse(
+                                request.Id,
+                                EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick())
+                            : null;
+                        await earlyResponseWriter(
+                            JsonRpcResponseFactory.CreateDispatchAcceptedResponse(request.Id, heartbeatIntervalSeconds),
+                            ShouldCancelAcceptedRequestOnClientDisconnect(request),
+                            createHeartbeatJson);
+                    }
+
+                    Stopwatch requestStopwatch = Stopwatch.StartNew();
+
+                    Stopwatch executeMethodStopwatch = Stopwatch.StartNew();
+                    UnityCliLoopToolResponse result = await ExecuteMethod(request.Method, request.Params, ct);
+                    executeMethodStopwatch.Stop();
+
+                    JsonRpcResponseFactory.AppendTimingIfRequested(
+                        result,
+                        $"[Perf] RpcExecuteMethod: {executeMethodStopwatch.Elapsed.TotalMilliseconds:F1}ms");
+                    JsonRpcResponseFactory.AppendTimingIfRequested(
+                        result,
+                        $"[Perf] RpcBeforeSerializeTotal: {requestStopwatch.Elapsed.TotalMilliseconds:F1}ms");
+
+                    string response = JsonRpcResponseFactory.CreateSuccessResponse(request.Id, result);
+                    return response;
                 }
-
-                Stopwatch requestStopwatch = Stopwatch.StartNew();
-
-                Stopwatch executeMethodStopwatch = Stopwatch.StartNew();
-                UnityCliLoopToolResponse result = await ExecuteMethod(request.Method, request.Params, ct);
-                executeMethodStopwatch.Stop();
-
-                JsonRpcResponseFactory.AppendTimingIfRequested(
-                    result,
-                    $"[Perf] RpcExecuteMethod: {executeMethodStopwatch.Elapsed.TotalMilliseconds:F1}ms");
-                JsonRpcResponseFactory.AppendTimingIfRequested(
-                    result,
-                    $"[Perf] RpcBeforeSerializeTotal: {requestStopwatch.Elapsed.TotalMilliseconds:F1}ms");
-
-                string response = JsonRpcResponseFactory.CreateSuccessResponse(request.Id, result);
-                return response;
-            }
-            catch (JsonSerializationException ex)
-            {
-                UnityEngine.Debug.LogError($"[JsonRpcRequestProcessor] JSON serialization error: {ex.Message}\nStack trace: {ex.StackTrace}");
-                return JsonRpcResponseFactory.CreateErrorResponse(request.Id, ex);
-            }
-            catch (UnityCliLoopToolParameterValidationException ex)
-            {
-                LogUnityCliLoopToolParameterValidationException(ex);
-                return JsonRpcResponseFactory.CreateErrorResponse(request.Id, ex);
-            }
-            catch (Exception ex) when (!(ex is OperationCanceledException))
-            {
-                LogRpcExceptionIfNeeded(ex);
-                return JsonRpcResponseFactory.CreateErrorResponse(request.Id, ex);
+                catch (JsonSerializationException ex)
+                {
+                    UnityEngine.Debug.LogError($"[JsonRpcRequestProcessor] JSON serialization error: {ex.Message}\nStack trace: {ex.StackTrace}");
+                    return JsonRpcResponseFactory.CreateErrorResponse(request.Id, ex);
+                }
+                catch (UnityCliLoopToolParameterValidationException ex)
+                {
+                    LogUnityCliLoopToolParameterValidationException(ex);
+                    return JsonRpcResponseFactory.CreateErrorResponse(request.Id, ex);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException))
+                {
+                    LogRpcExceptionIfNeeded(ex);
+                    return JsonRpcResponseFactory.CreateErrorResponse(request.Id, ex);
+                }
             }
         }
 
