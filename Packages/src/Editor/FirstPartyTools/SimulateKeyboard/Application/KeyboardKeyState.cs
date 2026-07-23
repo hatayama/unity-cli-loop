@@ -1,5 +1,6 @@
 #if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
+using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine.InputSystem;
@@ -19,6 +20,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public bool IsKeyHeld(Key key) => _heldKeys.Contains(key);
         public IReadOnlyCollection<Key> HeldKeys => _heldKeys;
+
+        /// <summary>
+        /// Drains held and transient bookkeeping without touching the Input System device.
+        /// Why: ReleaseAll's EditMode tests and the CLI action need a device-free drain so
+        /// bookkeeping can be verified without running real input updates.
+        /// </summary>
+        public IReadOnlyList<Key> ClearTrackedKeys()
+        {
+            List<Key> released = new List<Key>(_heldKeys.Count + _transientKeys.Count);
+            foreach (Key key in _heldKeys)
+            {
+                released.Add(key);
+            }
+
+            foreach (Key key in _transientKeys)
+            {
+                if (!_heldKeys.Contains(key))
+                {
+                    released.Add(key);
+                }
+            }
+
+            _heldKeys.Clear();
+            _transientKeys.Clear();
+            return released;
+        }
 
         public void RegisterPlayModeCallbacks()
         {
@@ -156,6 +183,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static void Clear()
         {
             ServiceValue.Clear();
+        }
+
+        public static IReadOnlyList<Key> ClearTrackedKeys()
+        {
+            return ServiceValue.ClearTrackedKeys();
         }
 
         public static void SetKeyState(Keyboard keyboard, Key key, bool pressed)

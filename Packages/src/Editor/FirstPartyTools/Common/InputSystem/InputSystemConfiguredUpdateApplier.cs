@@ -20,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const int ApplyWaitStateWaiting = 0;
         private const int ApplyWaitStateApplying = 1;
         private const int ApplyWaitStateFinishedWithoutApply = 2;
+        private const int PausePollMilliseconds = 50;
 
         public static async Task<InputSimulationWaitOutcome> ApplyOnNextConfiguredUpdate(
             Action apply,
@@ -44,6 +45,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action? callback = null;
             InputSystemUpdateSubscription? subscription = null;
 
+            void TryDiscardForPause()
+            {
+                if (Interlocked.CompareExchange(
+                        ref applyWaitState,
+                        ApplyWaitStateFinishedWithoutApply,
+                        ApplyWaitStateWaiting) != ApplyWaitStateWaiting)
+                {
+                    return;
+                }
+
+                // Dispose before cleanup release so a queued edge cannot apply after resume.
+                subscription?.Dispose();
+                tcs.TrySetResult(InputSimulationWaitOutcome.Paused);
+            }
+
             callback = () =>
             {
                 Debug.Assert(callback != null, "callback must be assigned before subscription");
@@ -54,6 +70,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ApplyWaitStateWaiting) != ApplyWaitStateWaiting)
                 {
                     subscription?.Dispose();
+                    return;
+                }
+
+                // Why: if PlayMode paused before this update, discard the edge instead of applying
+                // it after resume (that delayed apply is the Repro B / round-8 stale press).
+                if (InputSystemUpdateHelper.IsPaused())
+                {
+                    TryDiscardForPause();
                     return;
                 }
 
@@ -107,6 +131,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Task timeoutTask = TimerDelay.Wait(
                     InputSystemUpdateHelper.ApplyTimeoutMilliseconds,
                     timeoutCts.Token);
+                // Why: onBeforeUpdate may not run while paused, so poll pause separately and
+                // dispose the subscription before any later resume can apply the queued edge.
+                _ = WatchForPauseDiscardAsync(TryDiscardForPause, timeoutCts.Token);
                 Task completedTask = await Task.WhenAny(tcs.Task, timeoutTask).ConfigureAwait(false);
                 if (completedTask == timeoutTask)
                 {
@@ -134,6 +161,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 registration.Dispose();
                 subscription?.Dispose();
+            }
+        }
+
+        private static async Task WatchForPauseDiscardAsync(Action tryDiscardForPause, CancellationToken ct)
+        {
+            Debug.Assert(tryDiscardForPause != null, "tryDiscardForPause must not be null");
+            while (!ct.IsCancellationRequested)
+            {
+                if (InputSystemUpdateHelper.IsPaused())
+                {
+                    tryDiscardForPause();
+                    return;
+                }
+
+                // Why not await TimerDelay with ct directly: cancellation throws
+                // OperationCanceledException, and this path must exit without try/catch.
+                Task delayTask = TimerDelay.Wait(PausePollMilliseconds, CancellationToken.None);
+                Task cancellationTask = Task.Delay(Timeout.Infinite, ct);
+                Task completedTask = await Task.WhenAny(delayTask, cancellationTask).ConfigureAwait(false);
+                if (completedTask == cancellationTask || ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                await delayTask.ConfigureAwait(false);
             }
         }
 

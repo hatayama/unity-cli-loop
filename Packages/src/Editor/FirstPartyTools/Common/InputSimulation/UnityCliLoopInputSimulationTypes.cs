@@ -4,7 +4,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         Press = 0,
         KeyDown = 1,
-        KeyUp = 2
+        KeyUp = 2,
+        ReleaseAll = 3
     }
 
     public enum UnityCliLoopMouseInputAction

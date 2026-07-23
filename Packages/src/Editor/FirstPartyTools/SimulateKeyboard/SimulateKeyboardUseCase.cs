@@ -47,7 +47,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 #else
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
 
-            ValidationResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
+            // ReleaseAll must work while paused so agents can recover stuck device state after a
+            // pause-point interruption without first resuming PlayMode.
+            ValidationResult preflight = parameters.Action == UnityCliLoopKeyboardAction.ReleaseAll
+                ? PlayModeToolPreflightService.RequireActive()
+                : PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!preflight.IsValid)
             {
                 return new SimulateKeyboardResponse
@@ -56,6 +60,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     Message = preflight.ErrorMessage,
                     Action = parameters.Action.ToString()
                 };
+            }
+
+            if (parameters.Action == UnityCliLoopKeyboardAction.ReleaseAll)
+            {
+                return await ExecuteReleaseAllAsync(correlationId, ct).ConfigureAwait(false);
             }
 
             if (string.IsNullOrEmpty(parameters.Key))
@@ -161,6 +170,59 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
 #if ULOOP_HAS_INPUT_SYSTEM
+        private static async Task<SimulateKeyboardResponse> ExecuteReleaseAllAsync(
+            string correlationId,
+            CancellationToken ct)
+        {
+            UloopPausePointRegistry.ClearLatestHitSnapshot();
+
+            VibeLogger.LogInfo(
+                "simulate_keyboard_start",
+                "Keyboard simulation started",
+                new { Action = UnityCliLoopKeyboardAction.ReleaseAll.ToString() },
+                correlationId: correlationId
+            );
+
+            // Why not `using`: SwitchToMainThreadIfNeeded can resume on a thread-pool thread
+            // after ConfigureAwait(false), and Application.runInBackground is main-thread-only.
+            InputSimulationRunInBackgroundScope runInBackgroundScope = InputSimulationRunInBackgroundScope.Enable();
+            try
+            {
+                EnsureOverlayExists();
+                await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
+                Keyboard keyboard = Keyboard.current;
+                IReadOnlyList<string> releasedKeys =
+                    KeyboardInputMainThreadCleanup.ReleaseAllKeysImmediately(keyboard);
+                List<string> releasedKeysList = new List<string>(releasedKeys);
+
+                string message = releasedKeysList.Count == 0
+                    ? "Released all keys (none were held)."
+                    : $"Released {releasedKeysList.Count} key(s): {string.Join(", ", releasedKeysList)}";
+
+                SimulateKeyboardResponse response = new SimulateKeyboardResponse
+                {
+                    Success = true,
+                    Message = message,
+                    Action = UnityCliLoopKeyboardAction.ReleaseAll.ToString(),
+                    ReleasedKeys = releasedKeysList
+                };
+
+                VibeLogger.LogInfo(
+                    "simulate_keyboard_complete",
+                    $"Keyboard simulation completed: {response.Message}",
+                    new { Action = UnityCliLoopKeyboardAction.ReleaseAll.ToString(), Success = true },
+                    correlationId: correlationId
+                );
+
+                return response;
+            }
+            finally
+            {
+                await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+                runInBackgroundScope.Dispose();
+            }
+        }
+
         private static void EnsureOverlayExists()
         {
             OverlayCanvasFactory.EnsureExists();
