@@ -3,10 +3,10 @@ set -e
 # Regression harness for the KeyStateAfterPauseInterruption trap:
 # 1) A pause-point hit during simulate-keyboard Press must report
 #    InterruptedByPausePoint=true (early return).
-# 2) Resuming within 3s must NOT re-apply a discarded queued press edge
-#    (device stays unpressed without a new CLI input).
-# 3) After a >6s pause that leaves device/bookkeeping inconsistent,
-#    ReleaseAll must restore state so a fresh Press succeeds.
+# 2) Resuming within 3s of the interrupt must NOT re-apply a discarded
+#    queued press edge (device stays unpressed without a new CLI input).
+# 3) After a >6s pause, ReleaseAll while still paused must restore key
+#    state without clearing pause-point captures, then a fresh Press succeeds.
 # See docs/regression-harness.md.
 #
 # Contract under test: arm the pause-point on the key-consuming line in
@@ -35,6 +35,9 @@ fi
 MARKER_FILE="Assets/RegressionHarness/KeyStateAfterPauseInterruption/SpaceHoldPoller.cs"
 MARKER_LINE="19"
 PRESS_DURATION="5"
+# EDITOR_FRAME_WAIT_TIMEOUT_MS is 5000ms; the delayed-apply Red only reproduces when
+# resume happens before that timeout from the interrupt moment.
+APPLY_TIMEOUT_SECONDS="5"
 RESULT_FILE="$(mktemp)"
 PROBE_FILE="$(mktemp)"
 
@@ -89,7 +92,10 @@ run_uloop enable-pause-point --file "$MARKER_FILE" --line "$MARKER_LINE" --timeo
 log "Pressing Space for ${PRESS_DURATION}s (the key-down should hit the marker)..."
 START_SECONDS=$(date +%s)
 run_uloop simulate-keyboard --action Press --key Space --duration "$PRESS_DURATION" > "$RESULT_FILE" 2>&1 || true
-ELAPSED_SECONDS=$(( $(date +%s) - START_SECONDS ))
+# Why interrupt clock starts here: delayed-apply Red only fires when resume is within
+# EDITOR_FRAME_WAIT_TIMEOUT_MS of the interrupt, not of the Play CLI call.
+INTERRUPT_AT=$(date +%s)
+ELAPSED_SECONDS=$(( INTERRUPT_AT - START_SECONDS ))
 
 INTERRUPTED="$(jq -r '.InterruptedByPausePoint' "$RESULT_FILE")"
 SUCCESS="$(jq -r '.Success' "$RESULT_FILE")"
@@ -120,8 +126,8 @@ fi
 
 log "PASS scenario 1: Press interrupted after ${ELAPSED_SECONDS}s (< ${PRESS_DURATION}s)."
 
-# --- Scenario 2: resume within 3s must not re-press discarded queued edge ---
-log "Scenario 2: probe device while still paused, clear sticky latch, resume within 3s..."
+# --- Scenario 2: resume within 3s of interrupt must not re-press ---
+log "Scenario 2: probe device while still paused, clear sticky latch, resume within ${APPLY_TIMEOUT_SECONDS}s of interrupt..."
 probe_space_state 1
 PROBE_RESULT="$(jq -r '.Result' "$PROBE_FILE")"
 case "$PROBE_RESULT" in
@@ -133,15 +139,22 @@ case "$PROBE_RESULT" in
         ;;
 esac
 
-RESUME_START=$(date +%s)
-run_uloop control-play-mode --action Play > /dev/null
-# Observe without sending any new keyboard CLI input.
-sleep 2
-RESUME_ELAPSED=$(( $(date +%s) - RESUME_START ))
-if [ "$RESUME_ELAPSED" -ge 3 ]; then
-    log "FAIL scenario 2: resume+observe took ${RESUME_ELAPSED}s (>=3s); tighten the harness timing."
+SECONDS_SINCE_INTERRUPT=$(( $(date +%s) - INTERRUPT_AT ))
+if [ "$SECONDS_SINCE_INTERRUPT" -ge "$APPLY_TIMEOUT_SECONDS" ]; then
+    log "FAIL scenario 2: ${SECONDS_SINCE_INTERRUPT}s already elapsed since interrupt (>=${APPLY_TIMEOUT_SECONDS}s apply timeout); probe was too slow to exercise the delayed-apply path."
     exit 1
 fi
+
+run_uloop control-play-mode --action Play > /dev/null
+RESUME_AT=$(date +%s)
+INTERRUPT_TO_RESUME=$(( RESUME_AT - INTERRUPT_AT ))
+if [ "$INTERRUPT_TO_RESUME" -ge "$APPLY_TIMEOUT_SECONDS" ]; then
+    log "FAIL scenario 2: interrupt→resume took ${INTERRUPT_TO_RESUME}s (>=${APPLY_TIMEOUT_SECONDS}s); delayed-apply Red would not reproduce."
+    exit 1
+fi
+
+# Observe without sending any new keyboard CLI input.
+sleep 2
 
 probe_space_state 0
 PROBE_AFTER="$(jq -r '.Result' "$PROBE_FILE")"
@@ -161,17 +174,18 @@ case "$PROBE_AFTER" in
         ;;
 esac
 
-log "PASS scenario 2: no re-press within ${RESUME_ELAPSED}s after resume ($PROBE_AFTER)."
+log "PASS scenario 2: no re-press after resume ${INTERRUPT_TO_RESUME}s after interrupt ($PROBE_AFTER)."
 
 run_uloop clear-pause-point --all > /dev/null
 run_uloop control-play-mode --action Stop > /dev/null
 
-# --- Scenario 3: >6s pause → ReleaseAll → Press succeeds ---
-log "Scenario 3: interrupt, hold pause >6s, resume, ReleaseAll, then Press must succeed..."
+# --- Scenario 3: >6s pause → ReleaseAll while paused → capture intact → resume → Press succeeds ---
+log "Scenario 3: interrupt, hold pause >6s, ReleaseAll while paused (captures intact), resume, Press must succeed..."
 run_uloop control-play-mode --action Play > /dev/null
 run_uloop enable-pause-point --file "$MARKER_FILE" --line "$MARKER_LINE" --timeout-seconds 60 > /dev/null
 run_uloop simulate-keyboard --action Press --key Space --duration "$PRESS_DURATION" > "$RESULT_FILE" 2>&1 || true
 INTERRUPTED3="$(jq -r '.InterruptedByPausePoint' "$RESULT_FILE")"
+PAUSE_POINT_ID="$(jq -r '.PausePointId // empty' "$RESULT_FILE")"
 if [ "$INTERRUPTED3" != "true" ]; then
     log "FAIL scenario 3 setup: expected InterruptedByPausePoint=true"
     cat "$RESULT_FILE"
@@ -179,16 +193,34 @@ if [ "$INTERRUPTED3" != "true" ]; then
 fi
 
 sleep 7
-run_uloop control-play-mode --action Play > /dev/null
 
+# Why before Play: ReleaseAll must work while paused; that is the recovery path under test.
 run_uloop simulate-keyboard --action ReleaseAll > "$RESULT_FILE" 2>&1 || true
 RELEASE_SUCCESS="$(jq -r '.Success' "$RESULT_FILE")"
 RELEASE_ACTION="$(jq -r '.Action' "$RESULT_FILE")"
 if [ "$RELEASE_SUCCESS" != "true" ] || [ "$RELEASE_ACTION" != "ReleaseAll" ]; then
-    log "FAIL scenario 3: ReleaseAll failed"
+    log "FAIL scenario 3: ReleaseAll while paused failed"
     cat "$RESULT_FILE"
     exit 1
 fi
+
+# Why: ReleaseAll must not clear pause-point capture holders used by TryGetCapturedValue.
+run_uloop execute-dynamic-code --code "
+using io.github.hatayama.UnityCliLoop.Runtime;
+(bool found, object value) = UloopPausePoint.TryGetCapturedValue(\"this\");
+return \"captureFound=\" + found;
+" > "$PROBE_FILE"
+CAPTURE_RESULT="$(jq -r '.Result' "$PROBE_FILE")"
+case "$CAPTURE_RESULT" in
+    *captureFound=True*|*captureFound=true*) ;;
+    *)
+        log "FAIL scenario 3: TryGetCapturedValue lost capture after paused ReleaseAll (got: $CAPTURE_RESULT; pausePointId=$PAUSE_POINT_ID)"
+        cat "$PROBE_FILE"
+        exit 1
+        ;;
+esac
+
+run_uloop control-play-mode --action Play > /dev/null
 
 run_uloop simulate-keyboard --action Press --key Space --duration 0.2 > "$RESULT_FILE" 2>&1 || true
 PRESS_SUCCESS="$(jq -r '.Success' "$RESULT_FILE")"
@@ -205,6 +237,6 @@ if [ "$ALREADY_DOWN" = "true" ]; then
     exit 1
 fi
 
-log "PASS scenario 3: ReleaseAll recovered key state; Press succeeded."
+log "PASS scenario 3: paused ReleaseAll kept captures and recovered key state; Press succeeded."
 log "PASS: all key-state-after-pause-interruption scenarios."
 exit 0

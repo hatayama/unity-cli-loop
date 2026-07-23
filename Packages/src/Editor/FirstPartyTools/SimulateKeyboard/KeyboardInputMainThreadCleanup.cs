@@ -65,10 +65,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 InputSystemUpdateHelper.RunExplicitUpdate(InputUpdateTypeResolver.Resolve());
 
-                // Sync wasPressedThisFrame latches that can survive a zero-state write (see ForceSync).
+                // Why only when still isPressed: ForceSync injects a real press→release edge.
+                // Unconditionally doing that on every ReleaseAll key would spuriously fire
+                // gameplay (e.g. jump) when called outside a pause-interruption recovery.
+                // isPressed=true after a zero write is the stale wasPressedThisFrame latch signature.
                 foreach (Key key in keysToRelease)
                 {
-                    ForceSyncButtonPressLatch(keyboard, key);
+                    if (keyboard[key].isPressed)
+                    {
+                        ForceSyncButtonPressLatch(keyboard, key);
+                    }
                 }
             }
 

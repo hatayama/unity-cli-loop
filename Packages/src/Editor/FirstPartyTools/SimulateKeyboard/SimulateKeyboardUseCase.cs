@@ -174,7 +174,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string correlationId,
             CancellationToken ct)
         {
-            UloopPausePointRegistry.ClearLatestHitSnapshot();
+            // Why not ClearLatestHitSnapshot: ReleaseAll is intended for recovery while a
+            // pause-point inspection is still active; clearing would drop TryGetCapturedValue
+            // live references that agents need during that pause.
 
             VibeLogger.LogInfo(
                 "simulate_keyboard_start",
