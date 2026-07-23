@@ -25,6 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string FirstPartyToolsAssemblyName = "UnityCLILoop.FirstPartyTools.Editor";
         private const string FirstPartyToolsAssemblyNamePrefix = "UnityCLILoop.FirstPartyTools.";
         private const string ClearConsoleAssemblyName = "UnityCLILoop.FirstPartyTools.ClearConsole.Editor";
+        private const string CommonConsoleAssemblyName = "UnityCLILoop.FirstPartyTools.Common.Console.Editor";
         private const string CompileAssemblyName = "UnityCLILoop.FirstPartyTools.Compile.Editor";
         private const string ControlPlayModeAssemblyName = "UnityCLILoop.FirstPartyTools.ControlPlayMode.Editor";
         private const string ExecuteDynamicCodeAssemblyName = "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.Editor";
@@ -507,6 +508,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 InternalApiBridgeAssemblyName,
                 ApplicationAssemblyName,
                 DomainAssemblyName,
+                CommonConsoleAssemblyName,
                 PausePointsRuntimeAssemblyName,
                 ToolContractsAssemblyName
             }));
@@ -881,6 +883,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void SetupWizardStartup_WhenLoaded_SchedulesVersionCheckInsteadOfReadingSettingsSynchronously()
         {
             // Tests that Setup Wizard settings reads run after the synchronous Editor startup hook.
+            //
+            // A cold-start session that hits Unity's native "Scripts have compiler errors" dialog
+            // never flushes EditorApplication.delayCall again for the rest of that process's
+            // lifetime, so this startup check rides on a self-unsubscribing EditorApplication.update
+            // tick instead of delayCall.
             string setupWizardSource = ReadProductionSource(
                 "Packages/src/Editor/Presentation/Setup/SetupWizardWindow.cs");
             string setupWizardStartupFlowSource = ReadProductionSource(
@@ -888,7 +895,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 setupWizardSource,
-                Does.Contain("EditorApplication.delayCall += startupFlow.TryShowOnVersionChange;"));
+                Does.Contain("EditorApplication.update += RunStartupCheckOnFirstUpdateTick;"));
             Assert.That(
                 setupWizardStartupFlowSource,
                 Does.Contain("EditorApplication.delayCall += () => _showWindowOnVersionChange();"));
@@ -896,15 +903,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void SetupWizardStartup_WhenMigrationAutoScanIsRequested_SchedulesAutoScanThroughDelayCall()
+        public void SetupWizardStartup_WhenMigrationAutoScanIsRequested_SchedulesAutoScanThroughEditorUpdatePolling()
         {
-            // Tests that startup migration auto-scan runs through a delayed Editor callback.
+            // Tests that startup migration auto-scan polls via EditorApplication.update instead of
+            // delayCall, since delayCall stops flushing after the native compiler-errors dialog.
             string setupWizardStartupFlowSource = ReadProductionSource(
                 "Packages/src/Editor/Presentation/Setup/SetupWizardStartupFlow.cs");
 
             Assert.That(
                 setupWizardStartupFlowSource,
-                Does.Contain("EditorApplication.delayCall += () => _showThirdPartyMigrationAutoScan();"));
+                Does.Contain("EditorApplication.update += PollThirdPartyToolMigrationAutoScan;"));
         }
 
         [Test]

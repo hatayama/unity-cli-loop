@@ -181,6 +181,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldAutoScan, Is.EqualTo(expected));
         }
 
+        [TestCase(true, false, 0d, 10d, MigrationAutoScanPollAction.ContinueWaiting)]
+        [TestCase(true, true, 0d, 10d, MigrationAutoScanPollAction.ContinueWaiting)]
+        [TestCase(false, false, 0d, 10d, MigrationAutoScanPollAction.Terminate)]
+        [TestCase(false, true, 0d, 10d, MigrationAutoScanPollAction.RunDetection)]
+        [TestCase(false, true, 5d, 10d, MigrationAutoScanPollAction.RunDetection)]
+        [TestCase(false, true, 10d, 10d, MigrationAutoScanPollAction.FallBackToFullScan)]
+        [TestCase(false, true, 15d, 10d, MigrationAutoScanPollAction.FallBackToFullScan)]
+        public void DecideMigrationAutoScanPollAction_ReturnsExpectedAction(
+            bool isCompiling,
+            bool scriptCompilationFailed,
+            double elapsedSeconds,
+            double timeoutSeconds,
+            MigrationAutoScanPollAction expected)
+        {
+            // Verifies the pure poll decision function used to replace the unreliable
+            // delayCall-based migration auto-scan trigger with an EditorApplication.update poll.
+            MigrationAutoScanPollAction action = SetupWizardStartupFlow.DecideMigrationAutoScanPollAction(
+                isCompiling,
+                scriptCompilationFailed,
+                elapsedSeconds,
+                timeoutSeconds);
+
+            Assert.That(action, Is.EqualTo(expected));
+        }
+
         [Test]
         public void MaybeRecordLastSeenSetupWizardState_WhenAutoShow_UpdatesStoredState()
         {

@@ -51,7 +51,22 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 thirdPartyToolMigrationUseCase,
                 ShowWindowOnVersionChange,
                 ThirdPartyToolMigrationWizardWindow.ShowWindowForAutoScan);
-            EditorApplication.delayCall += startupFlow.TryShowOnVersionChange;
+
+            // A session that hits the native "Scripts have compiler errors" dialog at Editor
+            // startup (-ignorecompilererrors does not suppress it) never flushes
+            // EditorApplication.delayCall again for the rest of that process's lifetime, even
+            // for calls registered long after the dialog is dismissed -- confirmed live via
+            // repeated probes where EditorApplication.update kept ticking normally but freshly
+            // registered delayCalls never fired. This scenario (compile errors present at cold
+            // start) is exactly when this startup check must run, so it rides on
+            // EditorApplication.update (self-unsubscribing after its first tick) instead.
+            void RunStartupCheckOnFirstUpdateTick()
+            {
+                EditorApplication.update -= RunStartupCheckOnFirstUpdateTick;
+                startupFlow.TryShowOnVersionChange();
+            }
+
+            EditorApplication.update += RunStartupCheckOnFirstUpdateTick;
         }
 
         internal static void InitializeEditorServices(

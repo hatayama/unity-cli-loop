@@ -19,8 +19,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     public sealed class ThirdPartyToolMigrationFileService : IThirdPartyToolMigrationPort
     {
-        private static readonly ConsoleLogRetriever LogRetriever = new();
-
         private readonly object _migrationCacheLock = new();
         private bool _hasCachedPreview;
         private string _cachedPreviewProjectRoot = string.Empty;
@@ -159,7 +157,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             string normalizedProjectRoot = NormalizeProjectRoot(projectRoot);
             List<string> rawMessages = new List<string>();
-            foreach (LogEntryDto logEntry in LogRetriever.GetLogsByType(UnityEngine.LogType.Error))
+            // Unity tags csc.rsp compiler diagnostics as LogType.Log internally, not LogType.Error,
+            // so LogGetter's message-based Error-family reclassification (matching ": error CSxxxx")
+            // is required here — a bare ConsoleLogRetriever.GetLogsByType(LogType.Error) call misses
+            // every genuine compile error.
+            LogDisplayDto errorLogs = LogGetter.GetConsoleLogsByType(UnityCliLoopLogType.Error);
+            foreach (LogEntryDto logEntry in errorLogs.LogEntries)
             {
                 rawMessages.Add(logEntry.Message);
             }

@@ -13,6 +13,18 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
     /// <summary>
+    /// Decision made on each EditorApplication.update tick while polling for the
+    /// compile-error-driven migration auto-scan trigger.
+    /// </summary>
+    public enum MigrationAutoScanPollAction
+    {
+        ContinueWaiting,
+        RunDetection,
+        FallBackToFullScan,
+        Terminate
+    }
+
+    /// <summary>
     /// Coordinates setup wizard startup auto-show and migration auto-scan decisions.
     /// </summary>
     internal sealed class SetupWizardStartupFlow
@@ -27,6 +39,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
         private readonly System.Action _showWindowOnVersionChange;
         private readonly System.Action _showThirdPartyMigrationAutoScan;
+        private bool _migrationAutoScanPollingActive;
+        private double _migrationAutoScanPollStartTime;
 
         internal SetupWizardStartupFlow(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
@@ -153,6 +167,39 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal void TryShowOnVersionChange()
         {
             EvaluateVersionChange(CancellationToken.None).Forget();
+        }
+
+        /// <summary>
+        /// Pure decision function for the migration auto-scan poll loop. Unity does not reload the
+        /// domain on a failed compile, and EditorApplication.delayCall is not reliably invoked while
+        /// EditorUtility.scriptCompilationFailed/Console state is still settling right after startup,
+        /// so the trigger must poll via EditorApplication.update instead of relying on a single
+        /// one-shot delayCall.
+        /// </summary>
+        internal static MigrationAutoScanPollAction DecideMigrationAutoScanPollAction(
+            bool isCompiling,
+            bool scriptCompilationFailed,
+            double elapsedSeconds,
+            double timeoutSeconds)
+        {
+            Debug.Assert(timeoutSeconds > 0, "timeoutSeconds must be positive");
+
+            if (isCompiling)
+            {
+                return MigrationAutoScanPollAction.ContinueWaiting;
+            }
+
+            if (!scriptCompilationFailed)
+            {
+                return MigrationAutoScanPollAction.Terminate;
+            }
+
+            if (elapsedSeconds >= timeoutSeconds)
+            {
+                return MigrationAutoScanPollAction.FallBackToFullScan;
+            }
+
+            return MigrationAutoScanPollAction.RunDetection;
         }
 
         private static bool TryGetMajorVersion(string version, out int majorVersion)
@@ -308,17 +355,94 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
+            if (_migrationAutoScanPollingActive)
+            {
+                return;
+            }
+
+            _migrationAutoScanPollingActive = true;
+            _migrationAutoScanPollStartTime = EditorApplication.timeSinceStartup;
+            EditorApplication.update += PollThirdPartyToolMigrationAutoScan;
+        }
+
+        private void PollThirdPartyToolMigrationAutoScan()
+        {
+            double elapsedSeconds = EditorApplication.timeSinceStartup - _migrationAutoScanPollStartTime;
+            MigrationAutoScanPollAction action = DecideMigrationAutoScanPollAction(
+                EditorApplication.isCompiling,
+                EditorUtility.scriptCompilationFailed,
+                elapsedSeconds,
+                SetupWizardStartupFlowConstants.MigrationAutoScanPollTimeoutSeconds);
+
+            switch (action)
+            {
+                case MigrationAutoScanPollAction.ContinueWaiting:
+                    return;
+
+                case MigrationAutoScanPollAction.Terminate:
+                    StopThirdPartyToolMigrationAutoScanPolling();
+                    return;
+
+                case MigrationAutoScanPollAction.RunDetection:
+                    if (TryRunThirdPartyToolMigrationAutoScanDetection())
+                    {
+                        StopThirdPartyToolMigrationAutoScanPolling();
+                    }
+
+                    return;
+
+                case MigrationAutoScanPollAction.FallBackToFullScan:
+                    ScheduleThirdPartyToolMigrationFallbackFullScan();
+                    StopThirdPartyToolMigrationAutoScanPolling();
+                    return;
+            }
+        }
+
+        private void StopThirdPartyToolMigrationAutoScanPolling()
+        {
+            EditorApplication.update -= PollThirdPartyToolMigrationAutoScan;
+            _migrationAutoScanPollingActive = false;
+        }
+
+        private bool TryRunThirdPartyToolMigrationAutoScanDetection()
+        {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             (bool found, List<string> targetFilePaths) =
                 _thirdPartyToolMigrationUseCase.TryDetectAutoScanTargetsFromCompileErrors(projectRoot);
             if (!found)
             {
-                return;
+                return false;
             }
 
             _autoScanSeedRepository.StoreSeedFilePaths(targetFilePaths.ToArray());
             _sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(true);
-            EditorApplication.delayCall += () => _showThirdPartyMigrationAutoScan();
+            _showThirdPartyMigrationAutoScan();
+            return true;
+        }
+
+        /// <summary>
+        /// Reached only when scriptCompilationFailed stays true for the whole poll timeout without
+        /// ever yielding parsed compile-error entries (an abnormal state); falls back to the
+        /// pre-existing full-project scan rather than giving up detection entirely.
+        /// </summary>
+        private void ScheduleThirdPartyToolMigrationFallbackFullScan()
+        {
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            RunThirdPartyToolMigrationFallbackFullScanAsync(projectRoot).Forget();
+        }
+
+        private async Task RunThirdPartyToolMigrationFallbackFullScanAsync(string projectRoot)
+        {
+            bool hasTargets = await _thirdPartyToolMigrationUseCase.HasMigrationTargetsAsync(
+                projectRoot,
+                CancellationToken.None);
+            if (!hasTargets)
+            {
+                return;
+            }
+
+            _sessionFlagsRepository.SetShouldAutoScanThirdPartyToolMigration(true);
+            _showThirdPartyMigrationAutoScan();
         }
     }
 }
