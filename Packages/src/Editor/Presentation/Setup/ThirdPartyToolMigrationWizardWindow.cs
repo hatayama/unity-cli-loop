@@ -237,6 +237,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 pendingFileCount);
         }
 
+        internal static (int TotalItemCount, int ProcessedItemCount) GetMigrationProgressBarRange(
+            int totalItemCount,
+            int processedItemCount)
+        {
+            return ThirdPartyToolMigrationWizardStateRules.GetMigrationProgressBarRange(
+                totalItemCount,
+                processedItemCount);
+        }
+
         private static void ShowWindowInternal(bool shouldRefreshAfterCreateGui, List<string> seedFilePaths)
         {
             if (HasOpenInstances<ThirdPartyToolMigrationWizardWindow>())

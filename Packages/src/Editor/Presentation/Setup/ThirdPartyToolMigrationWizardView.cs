@@ -453,8 +453,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void UpdateMigrationProgressBar(ThirdPartyToolMigrationProgress progress)
         {
-            int totalItemCount = Mathf.Max(progress.TotalItemCount, 1);
-            int processedItemCount = Mathf.Clamp(progress.ProcessedItemCount, 0, totalItemCount);
+            (int totalItemCount, int processedItemCount) =
+                ThirdPartyToolMigrationWizardWindow.GetMigrationProgressBarRange(
+                    progress.TotalItemCount,
+                    progress.ProcessedItemCount);
             _migrationProgressBar.lowValue = 0;
             _migrationProgressBar.highValue = totalItemCount;
             _migrationProgressBar.value = processedItemCount;

@@ -442,6 +442,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(confirmDialogFileCount, Is.EqualTo(expected));
         }
 
+        [TestCase(0, 5, 1, 0)]
+        [TestCase(0, 0, 1, 0)]
+        [TestCase(10, 3, 10, 3)]
+        [TestCase(10, 15, 10, 10)]
+        public void GetMigrationProgressBarRange_ReturnsExpectedValue(
+            int totalItemCount,
+            int processedItemCount,
+            int expectedTotal,
+            int expectedProcessed)
+        {
+            // Verifies that a still-unknown total (0) reports empty progress instead of clamping any inspected count up to a false 100%.
+            (int total, int processed) = ThirdPartyToolMigrationWizardWindow.GetMigrationProgressBarRange(
+                totalItemCount,
+                processedItemCount);
+
+            Assert.That(total, Is.EqualTo(expectedTotal));
+            Assert.That(processed, Is.EqualTo(expectedProcessed));
+        }
+
         [TestCase(true, false, true)]
         [TestCase(true, true, false)]
         [TestCase(false, false, false)]
