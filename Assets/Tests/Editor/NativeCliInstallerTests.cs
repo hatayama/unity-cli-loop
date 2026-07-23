@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -301,7 +302,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CliInstallResult result = NativeCliSetupCommandRunner.RunInstallCommand(
                 command,
                 CancellationToken.None,
-                1000);
+                1000,
+                static _ => { });
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorOutput, Does.Contain("Failed to start release CLI installer"));
@@ -316,10 +318,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CliInstallResult result = NativeCliSetupCommandRunner.RunInstallCommand(
                 command,
                 CancellationToken.None,
-                50);
+                50,
+                static _ => { });
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorOutput, Does.Contain("timed out"));
+        }
+
+        [Test]
+        public void RunInstallCommand_StreamsOutputLinesToCallback()
+        {
+            // Verifies that installer stdout lines reach the progress callback so the editor UI can stream them.
+            NativeCliInstallCommand command = BuildEchoInstallCommand();
+            List<string> receivedLines = new();
+
+            CliInstallResult result = NativeCliSetupCommandRunner.RunInstallCommand(
+                command,
+                CancellationToken.None,
+                5000,
+                line =>
+                {
+                    lock (receivedLines)
+                    {
+                        receivedLines.Add(line);
+                    }
+                });
+
+            Assert.That(result.Success, Is.True, result.ErrorOutput);
+            lock (receivedLines)
+            {
+                Assert.That(receivedLines, Does.Contain("line1"));
+                Assert.That(receivedLines, Does.Contain("line2"));
+            }
         }
 
         [Test]
@@ -443,6 +473,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "/bin/sh",
                 "-c \"sleep 5\"",
                 "sleep 5");
+        }
+
+        private static NativeCliInstallCommand BuildEchoInstallCommand()
+        {
+            if (UnityEngine.Application.platform == RuntimePlatform.WindowsEditor)
+            {
+                return new NativeCliInstallCommand(
+                    "powershell",
+                    "-NoProfile -ExecutionPolicy Bypass -Command \"Write-Output 'line1'; Write-Output 'line2'\"",
+                    "Write-Output line1; Write-Output line2");
+            }
+
+            return new NativeCliInstallCommand(
+                "/bin/sh",
+                "-c \"echo line1; echo line2\"",
+                "echo line1; echo line2");
         }
 
         [Test]

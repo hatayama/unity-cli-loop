@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -25,11 +26,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 nativeCliInstaller,
                 new CliPinReaderService());
 
-            await service.InstallGlobalCliAsync(RuntimePlatform.OSXEditor, CancellationToken.None);
+            await service.InstallGlobalCliAsync(
+                RuntimePlatform.OSXEditor,
+                new Progress<string>(),
+                CancellationToken.None);
 
             Assert.That(
                 nativeCliInstaller.InstalledVersion,
-                Is.EqualTo("dispatcher-v3.0.1-beta.6"));
+                Is.EqualTo(ExpectedDispatcherReleaseTag()));
         }
 
         [Test]
@@ -61,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(commandResult.Success, Is.True, commandResult.ErrorOutput);
             Assert.That(
                 commandResult.Command.ManualCommand,
-                Is.EqualTo("install dispatcher-v3.0.1-beta.6"));
+                Is.EqualTo($"install {ExpectedDispatcherReleaseTag()}"));
         }
 
         [Test]
@@ -74,7 +78,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 nativeCliInstaller,
                 new FailingBootstrapPinReader());
 
-            CliInstallResult result = await service.InstallGlobalCliAsync(RuntimePlatform.OSXEditor, CancellationToken.None);
+            CliInstallResult result = await service.InstallGlobalCliAsync(
+                RuntimePlatform.OSXEditor,
+                new Progress<string>(),
+                CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorOutput, Does.Contain("bootstrap pin"));
@@ -86,6 +93,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CliPinLoadResult result = new CliPinReaderService().LoadPackagePin();
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             return result.Pin.MinimumDispatcherVersion;
+        }
+
+        private static string ExpectedDispatcherReleaseTag()
+        {
+            DispatcherBootstrapPinLoadResult result = new CliPinReaderService().LoadDispatcherBootstrapPin();
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            return result.DispatcherReleaseTag;
         }
 
         private sealed class FakeCliInstallationDetector : ICliInstallationDetector
@@ -158,6 +172,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 RuntimePlatform platform,
                 string dispatcherReleaseTag,
                 string dispatcherArchiveManifest,
+                IProgress<string> installProgress,
                 CancellationToken ct)
             {
                 InstalledVersion = dispatcherReleaseTag;
