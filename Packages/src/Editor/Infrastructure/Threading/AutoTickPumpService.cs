@@ -21,7 +21,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             _controller = new AutoTickPumpController(AutoTickPumpConstants.TRAILING_WINDOW_SECONDS);
             _clock = Stopwatch.StartNew();
-            _throttle = Stopwatch.StartNew();
+            // Why: leave unstarted so the first Pump after an external SignalTick is not throttled.
+            // If that first tick were swallowed, an unfocused editor would never start the pump chain.
+            _throttle = new Stopwatch();
 
             // Same dual-registration pattern as EditorMainThreadDispatcher.Initialize:
             // update covers the normal editor loop; tick covers SignalTick-driven wakeups.
@@ -58,7 +60,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return;
             }
 
-            if (_throttle.ElapsedMilliseconds < AutoTickPumpConstants.PUMP_INTERVAL_MS)
+            // Why: !IsRunning covers the first tick after Register/BeginScope wake-ups. Swallowing
+            // that tick under the interval gate would leave an unfocused editor without a follow-up
+            // SignalTick, so the self-sustaining pump chain would never start.
+            if (_throttle.IsRunning &&
+                _throttle.ElapsedMilliseconds < AutoTickPumpConstants.PUMP_INTERVAL_MS)
             {
                 return;
             }
