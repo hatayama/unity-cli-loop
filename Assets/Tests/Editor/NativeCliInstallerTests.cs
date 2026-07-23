@@ -328,7 +328,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void RunInstallCommand_StreamsOutputLinesToCallback()
         {
-            // Verifies that installer stdout lines reach the progress callback so the editor UI can stream them.
+            // Verifies that installer stdout and stderr lines reach the progress callback so the editor UI can stream them.
             NativeCliInstallCommand command = BuildEchoInstallCommand();
             List<string> receivedLines = new();
 
@@ -349,6 +349,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 Assert.That(receivedLines, Does.Contain("line1"));
                 Assert.That(receivedLines, Does.Contain("line2"));
+                Assert.That(receivedLines, Does.Contain("err1"));
             }
         }
 
@@ -481,14 +482,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 return new NativeCliInstallCommand(
                     "powershell",
-                    "-NoProfile -ExecutionPolicy Bypass -Command \"Write-Output 'line1'; Write-Output 'line2'\"",
-                    "Write-Output line1; Write-Output line2");
+                    "-NoProfile -ExecutionPolicy Bypass -Command \"Write-Output 'line1'; Write-Output 'line2'; [Console]::Error.WriteLine('err1')\"",
+                    "Write-Output line1; Write-Output line2; [Console]::Error.WriteLine('err1')");
             }
 
             return new NativeCliInstallCommand(
                 "/bin/sh",
-                "-c \"echo line1; echo line2\"",
-                "echo line1; echo line2");
+                "-c \"echo line1; echo line2; echo err1 1>&2\"",
+                "echo line1; echo line2; echo err1 1>&2");
         }
 
         [Test]

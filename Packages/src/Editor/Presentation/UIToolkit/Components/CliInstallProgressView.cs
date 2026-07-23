@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
@@ -16,9 +17,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly VisualElement _container;
         private readonly Button _installButton;
         private readonly Label _detailLabel;
+        private readonly Stopwatch _stopwatch = new();
 
         private IVisualElementScheduledItem _tick;
-        private DateTime _startedAtUtc;
         private int _tickCount;
 
         internal CliInstallProgressView(
@@ -40,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal void Show()
         {
-            _startedAtUtc = DateTime.UtcNow;
+            _stopwatch.Restart();
             _tickCount = 0;
             _installButton.text = CliInstallProgressFormatting.FormatStatusLine(TimeSpan.Zero, _tickCount);
             _detailLabel.text = string.Empty;
@@ -73,6 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal void Hide()
         {
             _tick?.Pause();
+            _stopwatch.Stop();
             _container.style.display = DisplayStyle.None;
         }
 
@@ -80,7 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             _tickCount++;
             _installButton.text = CliInstallProgressFormatting.FormatStatusLine(
-                DateTime.UtcNow - _startedAtUtc,
+                _stopwatch.Elapsed,
                 _tickCount);
         }
     }
