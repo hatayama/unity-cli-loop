@@ -27,12 +27,15 @@ type controlPlayModeToolResponse struct {
 	Success  bool   `json:"Success"`
 	IsPaused bool   `json:"IsPaused"`
 	Message  string `json:"Message"`
-	Warning  string `json:"Warning"`
 }
 
 // resumePlayModeForPausePoint is overridden in tests so waitForPausePoint can assert resume/
 // trigger ordering without a live Unity connection.
 var resumePlayModeForPausePoint = resumePlayModeForPausePointFromUnity
+
+// sendControlPlayModeForPausePointResume is overridden in tests so
+// resumePlayModeForPausePointFromUnity's Status/Play branches can be exercised without IPC.
+var sendControlPlayModeForPausePointResume = sendControlPlayModeForPausePointResumeFromUnity
 
 // resumePlayModeForPausePointFromUnity asks control-play-mode for Status, then sends Play only when
 // the Editor is currently paused. A Status or Play failure is returned as Error so the wait path
@@ -85,7 +88,7 @@ func resumePlayModeForPausePointFromUnity(
 	return pausePointResumePlayResult{WasPaused: true, Resumed: true}
 }
 
-func sendControlPlayModeForPausePointResume(
+func sendControlPlayModeForPausePointResumeFromUnity(
 	ctx context.Context,
 	connection unityipc.Connection,
 	action string,

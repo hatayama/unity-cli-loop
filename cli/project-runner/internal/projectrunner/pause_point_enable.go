@@ -56,6 +56,28 @@ func extractPausePointEnableAwaitFlags(
 			continue
 		}
 
+		// --resume-play=true|1 must be accepted here too: otherwise the =value form falls through
+		// to Unity schema parsing and becomes a confusing unrelated error.
+		if isPausePointFlag(arg, PausePointResumePlayFlagName) {
+			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
+			if err != nil {
+				return nil, false, mode, nil, nil, "", nil, false, err
+			}
+			if name != PausePointResumePlayFlagName {
+				remaining = append(remaining, arg)
+				continue
+			}
+			if value != "true" && value != "1" {
+				return nil, false, mode, nil, nil, "", nil, false, clierrors.InvalidValueArgumentError(
+					"--"+PausePointResumePlayFlagName, value, "boolean flag (pass with no value, or =true)")
+			}
+			resumePlay = true
+			if consumedNext {
+				index++
+			}
+			continue
+		}
+
 		if isPausePointFlag(arg, PausePointTriggerFlagName) {
 			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 			if err != nil {

@@ -2,6 +2,7 @@ package projectrunner
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -46,6 +47,20 @@ func TestExtractPausePointEnableAwaitFlagsExtractsResumePlay(t *testing.T) {
 	}
 }
 
+// Verifies enable-pause-point accepts --resume-play=true the same way await-pause-point does,
+// so the =value form is not leaked into Unity schema parsing.
+func TestExtractPausePointEnableAwaitFlagsExtractsResumePlayEqualsTrue(t *testing.T) {
+	_, await, _, _, _, _, _, resumePlay, err := extractPausePointEnableAwaitFlags([]string{
+		"--id", "jump", "--await", "--resume-play=true",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !await || !resumePlay {
+		t.Fatalf("expected await and resumePlay true, got await=%v resumePlay=%v", await, resumePlay)
+	}
+}
+
 // Verifies await-pause-point accepts --resume-play as a boolean flag.
 func TestParseWaitForPausePointOptionsParsesResumePlayFlag(t *testing.T) {
 	options, err := parseWaitForPausePointOptions([]string{
@@ -56,6 +71,16 @@ func TestParseWaitForPausePointOptionsParsesResumePlayFlag(t *testing.T) {
 	}
 	if !options.resumePlay {
 		t.Fatalf("expected resumePlay to be true: %#v", options)
+	}
+
+	optionsEquals, err := parseWaitForPausePointOptions([]string{
+		"--id", "jump", "--resume-play=true",
+	})
+	if err != nil {
+		t.Fatalf("parse --resume-play=true failed: %v", err)
+	}
+	if !optionsEquals.resumePlay {
+		t.Fatalf("expected resumePlay to be true for =true form: %#v", optionsEquals)
 	}
 }
 
@@ -155,7 +180,7 @@ func TestWaitForPausePointSkipsPlayWhenAlreadyUnpaused(t *testing.T) {
 		}, nil
 	}
 
-	playRequested := false
+	triggerDispatched := false
 	resumePlayModeForPausePoint = func(
 		ctx context.Context,
 		connection unityipc.Connection,
@@ -173,7 +198,7 @@ func TestWaitForPausePointSkipsPlayWhenAlreadyUnpaused(t *testing.T) {
 		stdout io.Writer,
 		stderr io.Writer,
 	) int {
-		playRequested = true
+		triggerDispatched = true
 		_, _ = stdout.Write([]byte(`{"Success":true}`))
 		return 0
 	}
@@ -192,7 +217,7 @@ func TestWaitForPausePointSkipsPlayWhenAlreadyUnpaused(t *testing.T) {
 	if resumeResult == nil || resumeResult.WasPaused || resumeResult.Resumed {
 		t.Fatalf("expected a no-op ResumePlayResult, got %#v", resumeResult)
 	}
-	if !playRequested {
+	if !triggerDispatched {
 		t.Fatal("expected trigger to still be dispatched after a no-op resume")
 	}
 	if triggerResult == nil || !triggerResult.Completed {
@@ -218,10 +243,10 @@ func TestWaitForPausePointSkipsTriggerWhenResumePlayFails(t *testing.T) {
 		id string,
 	) (pausePointStatusResponse, error) {
 		return pausePointStatusResponse{
-			Id:        id,
-			Status:    pausePointStatusHit,
-			IsHit:     true,
-			HitCount:  1,
+			Id:          id,
+			Status:      pausePointStatusHit,
+			IsHit:       true,
+			HitCount:    1,
 			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
 		}, nil
 	}
@@ -324,4 +349,159 @@ func TestWaitForPausePointSkipsResumeWhenNotArmed(t *testing.T) {
 	if resumeResult == nil || resumeResult.Error == "" {
 		t.Fatalf("expected ResumePlayResult.Error explaining the skip, got %#v", resumeResult)
 	}
+}
+
+// Verifies armed + --resume-play alone (no --trigger) still resumes and leaves TriggerResult nil.
+func TestWaitForPausePointResumesWithoutTriggerWhenArmed(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalDispatch := dispatchPausePointTriggerCommand
+	originalResume := resumePlayModeForPausePoint
+	defer func() {
+		queryPausePointStatus = originalQuery
+		dispatchPausePointTriggerCommand = originalDispatch
+		resumePlayModeForPausePoint = originalResume
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:          id,
+			Status:      pausePointStatusHit,
+			IsHit:       true,
+			HitCount:    1,
+			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
+		}, nil
+	}
+
+	resumeCalled := false
+	resumePlayModeForPausePoint = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+	) pausePointResumePlayResult {
+		resumeCalled = true
+		return pausePointResumePlayResult{WasPaused: true, Resumed: true}
+	}
+	dispatchPausePointTriggerCommand = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		command string,
+		commandArgs []string,
+		startPath string,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		t.Fatal("dispatchPausePointTriggerCommand must not be called without --trigger")
+		return 0
+	}
+
+	_, _, triggerResult, resumeResult, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+		timeout:        time.Second,
+		resumePlay:     true,
+	})
+	if err != nil {
+		t.Fatalf("waitForPausePoint failed: %v", err)
+	}
+	if !resumeCalled {
+		t.Fatal("expected resumePlayModeForPausePoint to be called")
+	}
+	if resumeResult == nil || !resumeResult.WasPaused || !resumeResult.Resumed {
+		t.Fatalf("ResumePlayResult mismatch: %#v", resumeResult)
+	}
+	if triggerResult != nil {
+		t.Fatalf("expected nil TriggerResult when --trigger was not given, got %#v", triggerResult)
+	}
+}
+
+// Verifies resumePlayModeForPausePointFromUnity's Status/Play branches without a live Unity IPC.
+func TestResumePlayModeForPausePointFromUnityBranches(t *testing.T) {
+	originalSend := sendControlPlayModeForPausePointResume
+	defer func() { sendControlPlayModeForPausePointResume = originalSend }()
+
+	t.Run("Status transport failure", func(t *testing.T) {
+		actions := make([]string, 0, 1)
+		sendControlPlayModeForPausePointResume = func(
+			ctx context.Context,
+			connection unityipc.Connection,
+			action string,
+		) (controlPlayModeToolResponse, error) {
+			actions = append(actions, action)
+			return controlPlayModeToolResponse{}, fmt.Errorf("boom")
+		}
+
+		result := resumePlayModeForPausePointFromUnity(context.Background(), unityipc.Connection{})
+		if result.WasPaused || result.Resumed || !strings.Contains(result.Error, "control-play-mode Status failed") {
+			t.Fatalf("result mismatch: %#v", result)
+		}
+		if len(actions) != 1 || actions[0] != "Status" {
+			t.Fatalf("expected only Status, got %#v", actions)
+		}
+	})
+
+	t.Run("Status Success=false", func(t *testing.T) {
+		actions := make([]string, 0, 1)
+		sendControlPlayModeForPausePointResume = func(
+			ctx context.Context,
+			connection unityipc.Connection,
+			action string,
+		) (controlPlayModeToolResponse, error) {
+			actions = append(actions, action)
+			return controlPlayModeToolResponse{Success: false, Message: "status denied"}, nil
+		}
+
+		result := resumePlayModeForPausePointFromUnity(context.Background(), unityipc.Connection{})
+		if result.WasPaused || result.Resumed || result.Error != "status denied" {
+			t.Fatalf("result mismatch: %#v", result)
+		}
+		if len(actions) != 1 || actions[0] != "Status" {
+			t.Fatalf("expected only Status, got %#v", actions)
+		}
+	})
+
+	t.Run("IsPaused=false skips Play", func(t *testing.T) {
+		actions := make([]string, 0, 1)
+		sendControlPlayModeForPausePointResume = func(
+			ctx context.Context,
+			connection unityipc.Connection,
+			action string,
+		) (controlPlayModeToolResponse, error) {
+			actions = append(actions, action)
+			return controlPlayModeToolResponse{Success: true, IsPaused: false}, nil
+		}
+
+		result := resumePlayModeForPausePointFromUnity(context.Background(), unityipc.Connection{})
+		if result.WasPaused || result.Resumed || result.Error != "" {
+			t.Fatalf("result mismatch: %#v", result)
+		}
+		if len(actions) != 1 || actions[0] != "Status" {
+			t.Fatalf("expected only Status, got %#v", actions)
+		}
+	})
+
+	t.Run("Play transport failure", func(t *testing.T) {
+		actions := make([]string, 0, 2)
+		sendControlPlayModeForPausePointResume = func(
+			ctx context.Context,
+			connection unityipc.Connection,
+			action string,
+		) (controlPlayModeToolResponse, error) {
+			actions = append(actions, action)
+			if action == "Status" {
+				return controlPlayModeToolResponse{Success: true, IsPaused: true}, nil
+			}
+			return controlPlayModeToolResponse{}, fmt.Errorf("play boom")
+		}
+
+		result := resumePlayModeForPausePointFromUnity(context.Background(), unityipc.Connection{})
+		if !result.WasPaused || result.Resumed || !strings.Contains(result.Error, "control-play-mode Play failed") {
+			t.Fatalf("result mismatch: %#v", result)
+		}
+		if len(actions) != 2 || actions[0] != "Status" || actions[1] != "Play" {
+			t.Fatalf("expected Status then Play, got %#v", actions)
+		}
+	})
 }
