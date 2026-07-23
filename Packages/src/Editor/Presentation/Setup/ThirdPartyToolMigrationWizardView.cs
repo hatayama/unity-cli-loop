@@ -161,9 +161,52 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _refreshButton.SetEnabled(false);
         }
 
+        /// <summary>
+        /// Shown right after an auto-scan window open. Mirrors ShowMigrationTargetsState's button
+        /// states (Migrate enabled, Check disabled) so only one action is available to click at a time.
+        /// </summary>
+        internal void ShowAutoScanDetectedState(string[] filePaths, bool isMigrating)
+        {
+            Debug.Assert(filePaths != null, "filePaths must not be null");
+
+            _migrationStatusTextField.SetValueWithoutNotify(
+                ThirdPartyToolMigrationWizardText.GetAutoScanDetectedStatusText(filePaths.Length));
+            ViewDataBinder.SetVisible(_migrationProgressBar, false);
+            ViewDataBinder.SetVisible(_migrationButtonRow, true);
+            _migrateButton.SetEnabled(!isMigrating);
+            _migrateButton.text = ThirdPartyToolMigrationWizardText.GetMigrationButtonText(
+                isMigrating,
+                true,
+                true);
+            ViewDataBinder.SetVisible(_refreshButton, true);
+            ViewDataBinder.SetVisible(_closeButton, false);
+            _refreshButton.SetEnabled(false);
+        }
+
         internal void ShowNoMigrationTargetsState(bool isMigrating)
         {
             _migrationStatusTextField.SetValueWithoutNotify(ThirdPartyToolMigrationWizardText.NoMigrationTargetsText);
+            ViewDataBinder.SetVisible(_migrationProgressBar, false);
+            ViewDataBinder.SetVisible(_migrationButtonRow, true);
+            _migrateButton.SetEnabled(false);
+            _migrateButton.text = ThirdPartyToolMigrationWizardText.GetMigrationButtonText(
+                isMigrating,
+                false,
+                true);
+            ViewDataBinder.SetVisible(_refreshButton, true);
+            ViewDataBinder.SetVisible(_closeButton, false);
+            _refreshButton.SetEnabled(false);
+        }
+
+        /// <summary>
+        /// Shown right after a successful Migrate, as distinct wording from ShowNoMigrationTargetsState:
+        /// the latter's generic "no migration needed" text reads as an idle/unchanged state, which is
+        /// ambiguous with the compile that Migrate's AssetDatabase.Refresh() just kicked off in the
+        /// background.
+        /// </summary>
+        internal void ShowMigrationCompleteState(bool isMigrating)
+        {
+            _migrationStatusTextField.SetValueWithoutNotify(ThirdPartyToolMigrationWizardText.MigrationCompleteText);
             ViewDataBinder.SetVisible(_migrationProgressBar, false);
             ViewDataBinder.SetVisible(_migrationButtonRow, true);
             _migrateButton.SetEnabled(false);
@@ -430,8 +473,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void UpdateMigrationProgressBar(ThirdPartyToolMigrationProgress progress)
         {
-            int totalItemCount = Mathf.Max(progress.TotalItemCount, 1);
-            int processedItemCount = Mathf.Clamp(progress.ProcessedItemCount, 0, totalItemCount);
+            (int totalItemCount, int processedItemCount) =
+                ThirdPartyToolMigrationWizardWindow.GetMigrationProgressBarRange(
+                    progress.TotalItemCount,
+                    progress.ProcessedItemCount);
             _migrationProgressBar.lowValue = 0;
             _migrationProgressBar.highValue = totalItemCount;
             _migrationProgressBar.value = processedItemCount;

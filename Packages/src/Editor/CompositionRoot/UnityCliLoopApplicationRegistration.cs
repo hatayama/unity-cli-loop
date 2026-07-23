@@ -52,6 +52,8 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             SkillSetupUseCase skillSetupUseCase = new(skillSetupPort);
             ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase =
                 new(new ThirdPartyToolMigrationFileService());
+            IThirdPartyToolMigrationAutoScanSeedRepository thirdPartyToolMigrationAutoScanSeedRepository =
+                new UnityCliLoopThirdPartyToolMigrationAutoScanSeedRepository();
             CliPinReaderService cliPinReaderService = new();
             CliSetupApplicationService cliSetupApplicationService = new(
                 new CliInstallationDetector(cliPinReaderService),
@@ -102,6 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 domainReloadDetectionService,
                 editorSettingsPort,
                 sessionFlagsRepository,
+                thirdPartyToolMigrationAutoScanSeedRepository,
                 applicationService,
                 cliSetupApplicationService,
                 toolSettingsUseCase,
@@ -116,6 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             IDomainReloadDetectionService domainReloadDetectionService,
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
+            IThirdPartyToolMigrationAutoScanSeedRepository thirdPartyToolMigrationAutoScanSeedRepository,
             UnityCliLoopServerApplicationService serverApplicationService,
             CliSetupApplicationService cliSetupApplicationService,
             ToolSettingsUseCase toolSettingsUseCase,
@@ -125,6 +129,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             DomainReloadDetectionService = domainReloadDetectionService;
             EditorSettingsPort = editorSettingsPort;
             SessionFlagsRepository = sessionFlagsRepository;
+            ThirdPartyToolMigrationAutoScanSeedRepository = thirdPartyToolMigrationAutoScanSeedRepository;
             ServerApplicationService = serverApplicationService;
             CliSetupApplicationService = cliSetupApplicationService;
             ToolSettingsUseCase = toolSettingsUseCase;
@@ -135,6 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
         internal IDomainReloadDetectionService DomainReloadDetectionService { get; }
         internal IUnityCliLoopEditorSettingsPort EditorSettingsPort { get; }
         internal ISessionFlagsRepository SessionFlagsRepository { get; }
+        internal IThirdPartyToolMigrationAutoScanSeedRepository ThirdPartyToolMigrationAutoScanSeedRepository { get; }
         internal UnityCliLoopServerApplicationService ServerApplicationService { get; }
         internal CliSetupApplicationService CliSetupApplicationService { get; }
         internal ToolSettingsUseCase ToolSettingsUseCase { get; }

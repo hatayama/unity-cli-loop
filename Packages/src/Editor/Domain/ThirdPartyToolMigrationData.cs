@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -81,6 +82,16 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             string projectRoot,
             IProgress<ThirdPartyToolMigrationProgress> progress,
             CancellationToken ct);
+
+        /// <summary>
+        /// Checks whether the most recent compile failure was caused by V2 legacy custom-tool APIs, by
+        /// matching Unity Console error text against known legacy tokens (mirrors Unity's own API
+        /// Updater, which performs the same kind of compile-error-driven detection). Returns
+        /// Found == false with an empty TargetFilePaths (never null) without inspecting the console
+        /// when no compile failure is in effect.
+        /// </summary>
+        (bool Found, List<string> TargetFilePaths) TryDetectAutoScanTargetsFromCompileErrors(string projectRoot);
+
         Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct);
         ThirdPartyToolMigrationResult ApplyMigration(string projectRoot);
         Task<ThirdPartyToolMigrationResult> ApplyMigrationAsync(
