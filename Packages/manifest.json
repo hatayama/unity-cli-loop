@@ -9,6 +9,7 @@
     "com.unity.inputsystem": "1.19.0",
     "com.unity.memoryprofiler": "1.1.12",
     "com.unity.multiplayer.center": "1.0.1",
+    "com.unity.pipeline": "0.3.1-exp.1",
     "com.unity.render-pipelines.universal": "17.3.0",
     "com.unity.terrain-tools": "5.3.2",
     "com.unity.test-framework": "1.6.0",
