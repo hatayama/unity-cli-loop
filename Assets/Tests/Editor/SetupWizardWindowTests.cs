@@ -26,7 +26,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private string _settingsFileContent;
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private UnityCliLoopEditorSettingsRepository _editorSettingsRepository;
-        private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
 
         [SetUp]
@@ -43,7 +42,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             DeleteIfExists(SettingsFilePath);
             _editorSettingsPort =
                 UnityCliLoopEditorSettingsTestFactory.CreatePortWithRepository(out _editorSettingsRepository);
-            _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
             SetupWizardWindow.InitializeEditorServices(
@@ -183,22 +181,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldAutoScan, Is.EqualTo(expected));
         }
 
-        [Test]
-        public void MaybeMarkThirdPartyToolMigrationAutoScan_WhenEnabled_SetsSessionFlag()
+        [TestCase(true, false, 0d, 10d, MigrationAutoScanPollAction.ContinueWaiting)]
+        [TestCase(true, true, 0d, 10d, MigrationAutoScanPollAction.ContinueWaiting)]
+        [TestCase(false, false, 0d, 10d, MigrationAutoScanPollAction.Terminate)]
+        [TestCase(false, true, 0d, 10d, MigrationAutoScanPollAction.RunDetection)]
+        [TestCase(false, true, 5d, 10d, MigrationAutoScanPollAction.RunDetection)]
+        [TestCase(false, true, 10d, 10d, MigrationAutoScanPollAction.FallBackToFullScan)]
+        [TestCase(false, true, 15d, 10d, MigrationAutoScanPollAction.FallBackToFullScan)]
+        public void DecideMigrationAutoScanPollAction_ReturnsExpectedAction(
+            bool isCompiling,
+            bool scriptCompilationFailed,
+            double elapsedSeconds,
+            double timeoutSeconds,
+            MigrationAutoScanPollAction expected)
         {
-            // Verifies that the V2-to-V3 upgrade signal is stored only in the current Editor session.
-            SetupWizardStartupFlow.MaybeMarkThirdPartyToolMigrationAutoScan(_sessionFlagsRepository, true);
+            // Verifies the pure poll decision function used to replace the unreliable
+            // delayCall-based migration auto-scan trigger with an EditorApplication.update poll.
+            MigrationAutoScanPollAction action = SetupWizardStartupFlow.DecideMigrationAutoScanPollAction(
+                isCompiling,
+                scriptCompilationFailed,
+                elapsedSeconds,
+                timeoutSeconds);
 
-            Assert.That(_sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.True);
-        }
-
-        [Test]
-        public void MaybeMarkThirdPartyToolMigrationAutoScan_WhenDisabled_KeepsSessionFlagFalse()
-        {
-            // Verifies that non-upgrade version checks do not request migration scans.
-            SetupWizardStartupFlow.MaybeMarkThirdPartyToolMigrationAutoScan(_sessionFlagsRepository, false);
-
-            Assert.That(_sessionFlagsRepository.GetShouldAutoScanThirdPartyToolMigration(), Is.False);
+            Assert.That(action, Is.EqualTo(expected));
         }
 
         [Test]

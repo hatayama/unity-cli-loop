@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -37,6 +38,14 @@ namespace io.github.hatayama.UnityCliLoop.Application
             Debug.Assert(progress != null, "progress must not be null");
 
             return _migrationPort.PreviewMigrationAsync(projectRoot, progress, ct);
+        }
+
+        public (bool Found, List<string> TargetFilePaths) TryDetectAutoScanTargetsFromCompileErrors(
+            string projectRoot)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            return _migrationPort.TryDetectAutoScanTargetsFromCompileErrors(projectRoot);
         }
 
         public Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct)

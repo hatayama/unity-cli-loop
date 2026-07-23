@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -6,7 +7,10 @@ using System.Threading.Tasks;
 
 using Newtonsoft.Json.Linq;
 
+using UnityEditor;
+
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
@@ -65,6 +69,40 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             StoreCachedPlan(normalizedProjectRoot, plan);
             StoreCachedPreview(normalizedProjectRoot, preview);
             return preview;
+        }
+
+        public (bool Found, List<string> TargetFilePaths) TryDetectAutoScanTargetsFromCompileErrors(
+            string projectRoot)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+
+            if (!EditorUtility.scriptCompilationFailed)
+            {
+                return (false, new List<string>());
+            }
+
+            string normalizedProjectRoot = NormalizeProjectRoot(projectRoot);
+            List<string> rawMessages = new List<string>();
+            // Unity tags csc compiler diagnostics as LogType.Log internally, not LogType.Error,
+            // so LogGetter's message-based Error-family reclassification (matching ": error CSxxxx")
+            // is required here — a bare ConsoleLogRetriever.GetLogsByType(LogType.Error) call misses
+            // every genuine compile error.
+            LogDisplayDto errorLogs = LogGetter.GetConsoleLogsByType(UnityCliLoopLogType.Error);
+            foreach (LogEntryDto logEntry in errorLogs.LogEntries)
+            {
+                rawMessages.Add(logEntry.Message);
+            }
+
+            List<CompileErrorLogEntry> entries =
+                ThirdPartyToolMigrationConsoleErrorParser.Parse(rawMessages, normalizedProjectRoot);
+            ThirdPartyToolMigrationCompileErrorLogMatchResult matchResult =
+                ThirdPartyToolMigrationCompileErrorLogMatcher.Match(entries);
+            if (matchResult.TargetFilePaths.Count == 0)
+            {
+                return (false, new List<string>());
+            }
+
+            return (true, matchResult.TargetFilePaths);
         }
 
         public async Task<bool> HasMigrationTargetsAsync(string projectRoot, CancellationToken ct)

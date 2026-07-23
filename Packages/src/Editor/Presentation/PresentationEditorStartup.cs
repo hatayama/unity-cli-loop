@@ -11,6 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static void Initialize(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
+            IThirdPartyToolMigrationAutoScanSeedRepository thirdPartyToolMigrationAutoScanSeedRepository,
             UnityCliLoopServerApplicationService serverApplicationService,
             CliSetupApplicationService cliSetupApplicationService,
             ToolSettingsUseCase toolSettingsUseCase,
@@ -27,13 +28,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ServerEditorWindow.InitializeEditorServices(serverApplicationService);
             ThirdPartyToolMigrationWizardWindow.InitializeEditorServices(
                 sessionFlagsRepository,
+                thirdPartyToolMigrationAutoScanSeedRepository,
                 skillSetupUseCase,
                 thirdPartyToolMigrationUseCase);
             SetupWizardWindow.InitializeForEditorStartup(
                 editorSettingsPort,
                 sessionFlagsRepository,
+                thirdPartyToolMigrationAutoScanSeedRepository,
                 cliSetupApplicationService,
-                skillSetupUseCase);
+                skillSetupUseCase,
+                thirdPartyToolMigrationUseCase);
         }
     }
 }

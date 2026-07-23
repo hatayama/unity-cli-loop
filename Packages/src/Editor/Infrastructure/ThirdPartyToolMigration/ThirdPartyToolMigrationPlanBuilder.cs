@@ -81,6 +81,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return MigrationPlan.Empty;
             }
 
+            return await BuildPlanFromInventoryAsync(projectRoot, inventory, progress, ct);
+        }
+
+        private static async Task<MigrationPlan> BuildPlanFromInventoryAsync(
+            string projectRoot,
+            ProjectFileInventory inventory,
+            IProgress<ThirdPartyToolMigrationProgress> progress,
+            CancellationToken ct)
+        {
             MigrationProjectFingerprint projectFingerprint =
                 MigrationProjectFingerprint.CaptureFromInventory(inventory);
             MigrationProgressCounter progressCounter = new(GetPreviewWorkItemCount(inventory), progress);

@@ -322,6 +322,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(closeButton.style.display.value, Is.EqualTo(DisplayStyle.None));
         }
 
+        [Test]
+        public void ShowMigrationCompleteState_ShowsDistinctWordingFromNoMigrationTargetsState()
+        {
+            // Verifies that the just-migrated state reads as complete rather than as a generic idle "nothing to migrate", which is ambiguous with the background compile Migrate just triggered.
+            VisualElement root = new();
+            ThirdPartyToolMigrationWizardView view = ThirdPartyToolMigrationWizardView.Create(
+                root,
+                () => { },
+                () => { },
+                _ => { },
+                () => { },
+                () => { });
+
+            view.ShowMigrationCompleteState(isMigrating: false);
+
+            TextField statusTextField = root.Query<TextField>(className: "setup-step__status-label--standalone").First();
+            Button checkButton = root.Query<Button>().ToList()
+                .Find(button => button.text == "Check");
+
+            Assert.That(statusTextField.value, Is.EqualTo(ThirdPartyToolMigrationWizardText.MigrationCompleteText));
+            Assert.That(statusTextField.value, Is.Not.EqualTo(ThirdPartyToolMigrationWizardText.NoMigrationTargetsText));
+            Assert.That(checkButton.enabledSelf, Is.False);
+        }
+
+        [Test]
+        public void ShowAutoScanDetectedState_DisablesCheckButtonWhileMigrateIsAvailable()
+        {
+            // Verifies that only one action is clickable at a time: Migrate enabled implies Check disabled.
+            VisualElement root = new();
+            ThirdPartyToolMigrationWizardView view = ThirdPartyToolMigrationWizardView.Create(
+                root,
+                () => { },
+                () => { },
+                _ => { },
+                () => { },
+                () => { });
+
+            view.ShowAutoScanDetectedState(new[] { "Assets/Foo.cs" }, isMigrating: false);
+
+            Button migrateButton = root.Query<Button>().ToList()
+                .Find(button => button.text == "Migrate");
+            Button checkButton = root.Query<Button>().ToList()
+                .Find(button => button.text == "Check");
+
+            Assert.That(migrateButton.enabledSelf, Is.True);
+            Assert.That(checkButton.enabledSelf, Is.False);
+        }
+
         [TestCase(SkillInstallState.Installed, true)]
         [TestCase(SkillInstallState.Outdated, true)]
         [TestCase(SkillInstallState.Missing, false)]
@@ -424,6 +472,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 result);
 
             Assert.That(shouldFinish, Is.EqualTo(expected));
+        }
+
+        [TestCase(false, 2, 0)]
+        [TestCase(true, 2, 2)]
+        [TestCase(true, 0, 0)]
+        public void GetMigrationConfirmDialogFileCount_ReturnsExpectedValue(
+            bool hasVerifiedPendingFileCount,
+            int pendingFileCount,
+            int expected)
+        {
+            // Verifies that an unverified seed-derived count never appears in the confirm dialog, since a cascading compile-skip could undercount the real full-scan scope.
+            int confirmDialogFileCount = ThirdPartyToolMigrationWizardWindow.GetMigrationConfirmDialogFileCount(
+                hasVerifiedPendingFileCount,
+                pendingFileCount);
+
+            Assert.That(confirmDialogFileCount, Is.EqualTo(expected));
+        }
+
+        [TestCase(0, 5, 1, 0)]
+        [TestCase(0, 0, 1, 0)]
+        [TestCase(10, 3, 10, 3)]
+        [TestCase(10, 15, 10, 10)]
+        public void GetMigrationProgressBarRange_ReturnsExpectedValue(
+            int totalItemCount,
+            int processedItemCount,
+            int expectedTotal,
+            int expectedProcessed)
+        {
+            // Verifies that a still-unknown total (0) reports empty progress instead of clamping any inspected count up to a false 100%.
+            (int total, int processed) = ThirdPartyToolMigrationWizardWindow.GetMigrationProgressBarRange(
+                totalItemCount,
+                processedItemCount);
+
+            Assert.That(total, Is.EqualTo(expectedTotal));
+            Assert.That(processed, Is.EqualTo(expectedProcessed));
         }
 
         [TestCase(true, false, true)]

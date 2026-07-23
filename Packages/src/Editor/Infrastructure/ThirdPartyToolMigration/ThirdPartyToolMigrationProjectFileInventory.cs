@@ -61,9 +61,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             List<string> asmdefFilePaths = new();
             List<string> asmrefFilePaths = new();
             string assetsDirectory = Path.Combine(projectRoot, "Assets");
+            progress.Report(new ThirdPartyToolMigrationProgress(0, 0));
             if (Directory.Exists(assetsDirectory))
             {
-                await CollectCandidateFilesAsync(
+                await WalkDirectoryTreeAsync(
                     projectRoot,
                     assetsDirectory,
                     csharpFilePaths,
@@ -129,9 +130,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
         }
 
-        private static async Task CollectCandidateFilesAsync(
+        /// <summary>
+        /// Walks a single directory tree, collecting candidate migration files and reporting progress
+        /// as a running total of inspected entries.
+        /// </summary>
+        private static async Task WalkDirectoryTreeAsync(
             string projectRoot,
-            string assetsDirectory,
+            string startDirectory,
             List<string> csharpFilePaths,
             List<string> asmdefFilePaths,
             List<string> asmrefFilePaths,
@@ -139,19 +144,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CancellationToken ct)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-            Debug.Assert(!string.IsNullOrEmpty(assetsDirectory), "assetsDirectory must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(startDirectory), "startDirectory must not be null or empty");
             Debug.Assert(csharpFilePaths != null, "csharpFilePaths must not be null");
             Debug.Assert(asmdefFilePaths != null, "asmdefFilePaths must not be null");
             Debug.Assert(asmrefFilePaths != null, "asmrefFilePaths must not be null");
             Debug.Assert(progress != null, "progress must not be null");
 
             Stack<string> pendingDirectories = new();
-            pendingDirectories.Push(assetsDirectory);
+            pendingDirectories.Push(startDirectory);
             int inspectedEntryCount = 0;
-            // Total item count is unknown while the directory tree is still being walked, so only
-            // the processed count is reported here (see ThirdPartyToolMigrationProgress: a total of
-            // 0 means "unknown total" rather than "no work").
-            progress.Report(new ThirdPartyToolMigrationProgress(inspectedEntryCount, 0));
 
             while (pendingDirectories.Count > 0)
             {

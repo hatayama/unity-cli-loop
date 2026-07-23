@@ -24,11 +24,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly ThirdPartyToolMigrationUseCase _thirdPartyToolMigrationUseCase;
         private readonly Action _scheduleResize;
 
+        // Auto-scan seed files (compile-error-matched migration targets) are only used to render the
+        // initial detected-state list without scanning; RefreshUI (manual Check / re-check) always
+        // does a full, unscoped project scan regardless of these.
+        private readonly List<string> _autoScanSeedFilePaths;
+
         private bool _isMigrating;
         private bool _isUpdatingMigrationSkill;
         private SkillsTarget _migrationSkillTarget = SkillsTarget.Claude;
         private SkillInstallState _migrationSkillInstallState = SkillInstallState.Missing;
         private string[] _pendingMigrationFilePaths = Array.Empty<string>();
+        // True once _pendingMigrationFilePaths came from a full-project scan (RefreshUI); false right
+        // after an auto-scan detected state, where the count is only a seed estimate that a cascading
+        // compile-skip could undercount. The confirm dialog must not assert an exact count in that case.
+        private bool _hasVerifiedPendingFileCount = true;
         private CancellationTokenSource _migrationOperationCts;
         private CancellationTokenSource _migrationSkillOperationCts;
 
@@ -36,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ThirdPartyToolMigrationWizardView view,
             SkillSetupUseCase skillSetupUseCase,
             ThirdPartyToolMigrationUseCase thirdPartyToolMigrationUseCase,
+            List<string> autoScanSeedFilePaths,
             Action scheduleResize)
         {
             Debug.Assert(view != null, "view must not be null");
@@ -43,6 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(
                 thirdPartyToolMigrationUseCase != null,
                 "thirdPartyToolMigrationUseCase must not be null");
+            Debug.Assert(autoScanSeedFilePaths != null, "autoScanSeedFilePaths must not be null");
             Debug.Assert(scheduleResize != null, "scheduleResize must not be null");
 
             _view = view ?? throw new ArgumentNullException(nameof(view));
@@ -50,40 +61,47 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new ArgumentNullException(nameof(skillSetupUseCase));
             _thirdPartyToolMigrationUseCase = thirdPartyToolMigrationUseCase
                 ?? throw new ArgumentNullException(nameof(thirdPartyToolMigrationUseCase));
+            _autoScanSeedFilePaths = autoScanSeedFilePaths
+                ?? throw new ArgumentNullException(nameof(autoScanSeedFilePaths));
             _scheduleResize = scheduleResize
                 ?? throw new ArgumentNullException(nameof(scheduleResize));
         }
 
-        internal void ShowInitialState(bool shouldStartInitialRefresh)
+        internal void ShowInitialState(bool shouldShowAutoScanDetectedState)
         {
-            if (shouldStartInitialRefresh)
+            if (shouldShowAutoScanDetectedState)
             {
-                ShowCheckingState(new ThirdPartyToolMigrationProgress(0, 0));
+                ShowAutoScanDetectedState(_autoScanSeedFilePaths);
                 return;
             }
 
             ShowNotCheckedState();
         }
 
-        internal void ScheduleInitialRefresh(bool shouldStartInitialRefresh)
+        // seedFilePaths is passed explicitly (rather than reusing the constructor-captured
+        // _autoScanSeedFilePaths) because this path re-renders an already-open window: a fresh
+        // auto-scan re-detection can find a different file list than the one this controller
+        // was originally constructed with.
+        internal void TryShowAutoScanDetectedState(bool shouldShowAutoScanDetectedState, List<string> seedFilePaths)
         {
-            if (!shouldStartInitialRefresh)
+            Debug.Assert(seedFilePaths != null, "seedFilePaths must not be null");
+
+            if (!shouldShowAutoScanDetectedState)
             {
                 return;
             }
 
-            _view.MainScrollView.schedule.Execute(() => RefreshUI().Forget()).StartingIn(0);
+            ShowAutoScanDetectedState(seedFilePaths);
         }
 
-        internal void TryStartInitialRefresh(bool shouldStartInitialRefresh)
+        internal void ShowAutoScanDetectedState(List<string> seedFilePaths)
         {
-            if (!shouldStartInitialRefresh)
-            {
-                return;
-            }
+            Debug.Assert(seedFilePaths != null, "seedFilePaths must not be null");
 
-            ShowCheckingState(new ThirdPartyToolMigrationProgress(0, 0));
-            _view.MainScrollView.schedule.Execute(() => RefreshUI().Forget()).StartingIn(0);
+            _pendingMigrationFilePaths = seedFilePaths.ToArray();
+            _hasVerifiedPendingFileCount = false;
+            _view.ShowAutoScanDetectedState(_pendingMigrationFilePaths, _isMigrating);
+            _scheduleResize();
         }
 
         internal async Task RefreshUI()
@@ -137,8 +155,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal async Task HandleMigrateThirdPartyTools()
         {
+            int confirmDialogFileCount = ThirdPartyToolMigrationWizardWindow.GetMigrationConfirmDialogFileCount(
+                _hasVerifiedPendingFileCount,
+                _pendingMigrationFilePaths.Length);
             if (!ThirdPartyToolMigrationWizardWindow.ConfirmMigrationApply(
-                _pendingMigrationFilePaths.Length,
+                confirmDialogFileCount,
                 (title, message, ok, cancel) => EditorUtility.DisplayDialog(title, message, ok, cancel)))
             {
                 return;
@@ -224,7 +245,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            ShowNoMigrationTargetsState();
+            ShowMigrationCompleteState();
         }
 
         internal IProgress<ThirdPartyToolMigrationProgress> CreateProgressReporter(CancellationToken ct)
@@ -246,6 +267,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(filePaths != null, "filePaths must not be null");
 
             _pendingMigrationFilePaths = filePaths;
+            _hasVerifiedPendingFileCount = true;
             _view.ShowMigrationTargetsState(filePaths, _isMigrating);
             _scheduleResize();
         }
@@ -253,6 +275,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal void ShowNoMigrationTargetsState()
         {
             _view.ShowNoMigrationTargetsState(_isMigrating);
+            _scheduleResize();
+        }
+
+        internal void ShowMigrationCompleteState()
+        {
+            _view.ShowMigrationCompleteState(_isMigrating);
             _scheduleResize();
         }
 

@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             PresentationEditorStartup.Initialize(
                 applicationServices.EditorSettingsPort,
                 applicationServices.SessionFlagsRepository,
+                applicationServices.ThirdPartyToolMigrationAutoScanSeedRepository,
                 applicationServices.ServerApplicationService,
                 applicationServices.CliSetupApplicationService,
                 applicationServices.ToolSettingsUseCase,

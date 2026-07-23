@@ -68,6 +68,44 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         }
 
         /// <summary>
+        /// The Migrate confirm dialog must not assert an exact file count that came only from
+        /// compile-error seeds (auto-scan detected state): a cascading compile-skip could make the
+        /// real full-scan write more files than the seed count, so an exact number there would
+        /// understate what the user is about to approve. Only a verified full-scan count (RefreshUI)
+        /// is safe to show as-is.
+        /// </summary>
+        internal static int GetMigrationConfirmDialogFileCount(
+            bool hasVerifiedPendingFileCount,
+            int pendingFileCount)
+        {
+            Debug.Assert(pendingFileCount >= 0, "pendingFileCount must not be negative");
+
+            return hasVerifiedPendingFileCount ? pendingFileCount : 0;
+        }
+
+        /// <summary>
+        /// While ProjectFileInventory is still counting files, it reports TotalItemCount as 0 because
+        /// the real total is not known yet. Mapping that straight to the progress bar (which falls back
+        /// to a highValue of 1 for an unknown total) would clamp any nonzero ProcessedItemCount to 1,
+        /// rendering the bar as fully filled during the counting phase. Report 0 progress instead until
+        /// a real total is known.
+        /// </summary>
+        internal static (int TotalItemCount, int ProcessedItemCount) GetMigrationProgressBarRange(
+            int totalItemCount,
+            int processedItemCount)
+        {
+            Debug.Assert(totalItemCount >= 0, "totalItemCount must not be negative");
+            Debug.Assert(processedItemCount >= 0, "processedItemCount must not be negative");
+
+            if (totalItemCount <= 0)
+            {
+                return (1, 0);
+            }
+
+            return (totalItemCount, Mathf.Clamp(processedItemCount, 0, totalItemCount));
+        }
+
+        /// <summary>
         /// Returns whether the temporary V3 migration skill note should be visible.
         /// </summary>
         internal static bool ShouldShowTemporarySkillNote(SkillInstallState installState)
