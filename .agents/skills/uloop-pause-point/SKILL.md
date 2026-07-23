@@ -15,7 +15,7 @@ Use this small loop for one representative frame you care about. No source edit 
 uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 30 --await --trigger "simulate-keyboard --action Press --key Space"
 ```
 
-`--trigger` runs a single uloop subcommand in-process only after the marker's arming is confirmed, so there is no arm-vs-input race and nothing needs to run in the background. The hit response additionally carries `TriggerResult` with the triggered command's own response (or, when the trigger was skipped, `Completed: false` and the reason in `Error`). The trigger string cannot name another pause-point wait (`await-pause-point`/`enable-pause-point`) and cannot pass `--project-path` — the enclosing command's project is used. `await-pause-point --id <id> --trigger ...` accepts the same flag for a marker enabled earlier.
+`--trigger` runs a single uloop subcommand in-process only after the marker's arming is confirmed, so there is no arm-vs-input race and nothing needs to run in the background. The hit response additionally carries `TriggerResult` with the triggered command's own response (or, when the trigger was skipped, `Completed: false` and the reason in `Error`). The trigger string cannot name another pause-point wait (`await-pause-point`/`enable-pause-point`) and cannot pass `--project-path` — the enclosing command's project is used. `await-pause-point --id <id> --trigger ...` accepts the same flag for a marker enabled earlier. Both commands also accept `--resume-play` (requires `--await`) to resume a manually paused PlayMode after arm confirmation and before the trigger — see Fast-Progressing Games.
 
 When the game reaches the line on its own, omit `--trigger`. Fall back to split steps only when the triggering action is not a single uloop command (several inputs in sequence, an external event): run `enable-pause-point` without `--await` in the foreground (its response returning is the arm confirmation), then start `uloop await-pause-point --id <id>` in the background, then send the inputs. Do not approximate arm-waiting with a fixed sleep after a backgrounded enable.
 
@@ -29,7 +29,7 @@ The response returns the derived marker `Id` (`Assets/Scripts/Enemy.cs:42`), the
 
 A hit pauses Unity at the next frame boundary — the patched method and the rest of that frame still run to completion. Only `CapturedVariables` is evidence of the values at the patched line; state read after the pause (for example via `execute-dynamic-code`) may already have advanced past it. Treat every post-hit live read as a supplement for follow-up digging — the primary evidence for what a value was at the paused line is always `CapturedVariables`.
 
-If the game progresses on its own (timers, gravity, spawners), run `control-play-mode` `Pause` before setting up scenario state and resume with `control-play-mode --action Play` only after `enable-pause-point` succeeds — otherwise the scenario can be consumed before your input arrives. See Fast-Progressing Games below.
+If the game progresses on its own (timers, gravity, spawners), freeze with `control-play-mode --action Pause` before setting up scenario state, then arm with `enable-pause-point --await --resume-play --trigger "..."` so the resume and the input happen in one call — see Fast-Progressing Games below.
 
 ## Capture Modes and History
 
@@ -63,7 +63,15 @@ Every hit response embeds `CapturedVariables`: the method's in-scope locals, its
 - When the response would be dominated by variables you do not need, pass `--captured-variable-names velocity,this` (comma-separated, exact match on `Name`) to keep only those entries; it composes with `--captured-variables full|names`.
 - Pass `--expect 'name=value'` (repeatable; on `await-pause-point` and `enable-pause-point --await`, not `pause-point-status`) to have the CLI compare captured variables against expected values; the response includes an `Expectations` array and `AllExpectationsPassed`, so you do not need to eyeball the JSON. Matching is string equality against the serialized value.
 - Collection values (arrays, `List<T>`, dictionaries, plain objects) render as a JSON preview capped at 10 elements by default. When the elements you need sit past that cap (a 10x20 grid, a long list), re-enable with `--max-preview-elements <n>` (1–1000): it raises the element cap and scales the preview's character budget proportionally, so each element keeps the same ~100-character share it has at the default — plenty for numeric or boolean cells, but elements that are individually long can still be clipped by the scaled budget (`CapturedVariablesTruncated` tells you when that happened). The enable response echoes the effective `MaxPreviewElements`.
-- While Unity is still paused, `UloopPausePoint.TryGetCapturedValue("name")` (and `"this"`) returns live captured references for `execute-dynamic-code`; the holder clears on resume. (file:line marker hits only — id-only markers store no capture) These are **live objects in their frame-completed state, not snapshots**: the hit's method ran to completion before the pause landed, so anything it changed — or destroyed — afterwards is already applied. A captured object that the method later passed to `Destroy()` reads as destroyed/null through this API even though `CapturedVariables` shows its pre-line field values intact. Never use live reads to reconstruct what a value was at the paused line; that is what the `CapturedVariables` snapshot is for. Use live reads only to dig further into objects that are still alive.
+- While Unity is still paused, `UloopPausePoint.TryGetCapturedValue("name")` (and `"this"`) returns live captured references for `execute-dynamic-code`; the holder clears on resume. (file:line marker hits only — id-only markers store no capture) The return type is the tuple `(bool Found, object Value)`, not the value itself — deconstruct it before use:
+
+  ```csharp
+  (bool found, object value) = UloopPausePoint.TryGetCapturedValue("this");
+  if (!found) { return "capture missing"; }
+  return value;
+  ```
+
+  These are **live objects in their frame-completed state, not snapshots**: the hit's method ran to completion before the pause landed, so anything it changed — or destroyed — afterwards is already applied. A captured object that the method later passed to `Destroy()` reads as destroyed/null through this API even though `CapturedVariables` shows its pre-line field values intact. Never use live reads to reconstruct what a value was at the paused line; that is what the `CapturedVariables` snapshot is for. Use live reads only to dig further into objects that are still alive.
 
 Before interpreting unexpected, missing, or truncated values, nested previews that render as type names, Unity-object `Value` strings, capture-time vs live evidence trade-offs, the hit response's `Warning`/`MatchingLogs` fields, marker freshness (`Generation`, `EnabledAtUtc`), or the raw capture API in detail, read [references/captured-variables.md](references/captured-variables.md).
 
@@ -130,21 +138,29 @@ The `enable-pause-point --timeout-seconds` countdown freezes while a hit holds t
 
 ## Fast-Progressing Games
 
-When the game advances on its own (a ball keeps bouncing, blocks keep falling), the state you are arranging can move past the target line before the input command and the wait are even issued. Pause the Editor and walk frames explicitly instead:
+When the game advances on its own (timers, gravity, spawners, a ball that keeps bouncing, pieces that keep falling), any state you arrange with PlayMode live can be consumed by the game before your next command arrives — each CLI round-trip costs real seconds. Freeze first, build while paused, then resume and fire the input in one call:
 
 ```bash
-# Freeze the whole player loop while arranging the scenario
+# 1) Freeze the whole player loop before arranging anything
 uloop control-play-mode --action Pause
-# ... enable pause points, inspect/arrange state with execute-dynamic-code, get-hierarchy, get-logs ...
-# Advance exactly one frame and stay paused (the Editor's Next Frame button)
-uloop control-play-mode --action Step
-# Resume right before sending the input you are verifying (input simulation needs an unpaused player)
-uloop control-play-mode --action Play
+
+# 2) While paused, build the exact scenario (production methods preferred; see below)
+uloop execute-dynamic-code --code '...'
+
+# 3) One call: confirm the marker armed, resume PlayMode, fire the input, await the hit
+uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 60 \
+  --await --resume-play --trigger "simulate-keyboard --action Press --key Space"
 ```
+
+`--resume-play` (requires `--await`; `await-pause-point` accepts it too) runs after the marker's arming is confirmed and before `--trigger` is dispatched: it resumes PlayMode only when PlayMode is actually paused, and reports what it did in `ResumePlayResult` (`WasPaused` / `Resumed` / `Error`). If the resume fails, the trigger is not dispatched and `TriggerResult.Error` says so. When the game reaches the line on its own after resuming (gravity, physics), omit `--trigger` and keep `--resume-play`.
+
+Size `--timeout-seconds` generously when arming while paused: a manual Pause does **not** freeze the marker lifetime countdown — only a pause owned by a pause-point hit does.
+
+This sequence closes the gap that used to require resuming and sending input as separate commands: post-resume drift from gravity or CharacterController motion no longer accumulates across round-trips, and input triggers no longer fail on a paused player, because the resume happens first.
 
 Do not use `Time.timeScale = 0` for this: projects that read unscaled time keep advancing regardless, and the value silently persists into the next PlayMode session. Editor pause and `Step` freeze the entire player loop independent of `Time.timeScale`.
 
-Pause and Step leave one residual race: input simulation needs an unpaused player, so the game runs freely between the final `--action Play` and your input landing. When a single command round-trip takes longer than the game's natural tick interval (for example a piece that auto-falls every 0.8 seconds), the tick fires before the input arrives no matter how the steps are ordered. Remove the race instead of trying to outrun it: temporarily overwrite the tick-interval field with `execute-dynamic-code` (for example set the fall interval to a very large value), run the verification, then restore the original value and confirm the restore with a re-read.
+One residual race remains: after the resume, the game runs freely for the single in-process round-trip until the trigger input lands. When even that is longer than the game's natural tick interval (for example a piece that auto-falls every 0.8 seconds), remove the race instead of trying to outrun it: temporarily overwrite the tick-interval field with `execute-dynamic-code`, run the verification, then restore the original value and confirm the restore with a re-read.
 
 A pause point hit leaves Unity in this same paused state, so `Step` also works right after a hit: inspect the paused frame, then step forward to watch the following frames commit one at a time.
 
