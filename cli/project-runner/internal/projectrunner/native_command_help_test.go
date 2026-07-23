@@ -20,7 +20,7 @@ func TestRunProjectLocalAwaitPausePointHelpListsExpectedFlags(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("await-pause-point --help failed: code=%d stderr=%s", code, stderr.String())
 	}
-	for _, flag := range []string{"--id", "--timeout-seconds", "--matching-logs-max-count", "--captured-variables", "--expect"} {
+	for _, flag := range []string{"--id", "--timeout-seconds", "--matching-logs-max-count", "--captured-variables", "--expect", "--trigger", "--resume-play"} {
 		if !strings.Contains(stdout.String(), flag) {
 			t.Fatalf("await-pause-point --help must list %s: %s", flag, stdout.String())
 		}

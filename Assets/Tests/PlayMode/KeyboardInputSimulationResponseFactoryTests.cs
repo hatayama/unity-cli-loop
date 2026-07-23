@@ -51,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.That(
                 response.Message,
                 Is.EqualTo(
-                    "Keyboard input stopped because Unity paused during Pause Point inspection. Key 'Space' was released from Unity CLI Loop bookkeeping."));
+                    "Keyboard input stopped because Unity paused during Pause Point inspection. Key 'Space' was released from Unity CLI Loop bookkeeping; queued input edge was discarded."));
             Assert.That(response.Action, Is.EqualTo(UnityCliLoopKeyboardAction.Press.ToString()));
             Assert.That(response.KeyName, Is.EqualTo("Space"));
             Assert.That(response.InterruptedByPausePoint, Is.True);
