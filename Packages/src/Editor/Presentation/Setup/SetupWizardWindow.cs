@@ -287,6 +287,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             VisualElement cliStatusIcon = rootVisualElement.Q<VisualElement>("cli-status-icon");
             Label cliStatusLabel = rootVisualElement.Q<Label>("cli-status-label");
             Button installCliButton = rootVisualElement.Q<Button>("install-cli-button");
+            VisualElement installProgressContainer = rootVisualElement.Q<VisualElement>("cli-install-progress");
+            Label installProgressLabel = rootVisualElement.Q<Label>("cli-install-progress-label");
 
             VisualElement groupSkillsRow = rootVisualElement.Q<VisualElement>("group-skills-row");
             EnumField skillsTargetField = rootVisualElement.Q<EnumField>("skills-target-field");
@@ -313,6 +315,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliStatusIcon,
                 cliStatusLabel,
                 installCliButton,
+                installProgressContainer,
+                installProgressLabel,
                 groupSkillsRow,
                 skillsTargetField,
                 groupSkillsToggle,

@@ -162,6 +162,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _cliSetupSection?.Update(data);
         }
 
+        public void ShowCliInstallProgress()
+        {
+            _cliSetupSection?.ShowInstallProgress();
+        }
+
+        public void ReportCliInstallProgressLine(string line)
+        {
+            _cliSetupSection?.ReportInstallProgressLine(line);
+        }
+
+        public void HideCliInstallProgress()
+        {
+            _cliSetupSection?.HideInstallProgress();
+        }
+
         public void Dispose()
         {
             _cliSetupSection = null;

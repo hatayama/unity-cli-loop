@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly Label _cliStatusLabel;
         private readonly Button _refreshCliVersionButton;
         private readonly Button _installCliButton;
+        private readonly CliInstallProgressView _installProgressView;
         private readonly EnumField _skillsTargetField;
         private readonly Button _refreshSkillsStateButton;
         private readonly VisualElement _groupSkillsRow;
@@ -40,6 +41,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _cliStatusLabel = root.Q<Label>("cli-status-label");
             _refreshCliVersionButton = root.Q<Button>("refresh-cli-version-button");
             _installCliButton = root.Q<Button>("install-cli-button");
+            _installProgressView = new CliInstallProgressView(
+                root.Q<VisualElement>("cli-install-progress"),
+                _installCliButton,
+                root.Q<Label>("cli-install-progress-label"));
             _skillsTargetField = root.Q<EnumField>("skills-target-field");
             _refreshSkillsStateButton = root.Q<Button>("refresh-skills-state-button");
             _groupSkillsRow = root.Q<VisualElement>("group-skills-row");
@@ -62,6 +67,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             });
             _groupSkillsRow.RegisterCallback<ClickEvent>(HandleGroupSkillsRowClicked);
         }
+
+        public void ShowInstallProgress() => _installProgressView.Show();
+
+        public void ReportInstallProgressLine(string line) => _installProgressView.SetDetailLine(line);
+
+        public void HideInstallProgress() => _installProgressView.Hide();
 
         public void Update(CliSetupData data)
         {

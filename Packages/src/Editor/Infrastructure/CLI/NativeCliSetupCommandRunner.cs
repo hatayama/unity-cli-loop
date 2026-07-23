@@ -21,11 +21,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal static CliInstallResult RunInstallCommand(
             NativeCliInstallCommand command,
             CancellationToken ct,
-            int timeoutMs)
+            int timeoutMs,
+            Action<string> onOutputLine)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(command.FileName), "command.FileName must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(command.Arguments), "command.Arguments must not be null or empty");
             UnityEngine.Debug.Assert(timeoutMs > 0, "timeoutMs must be greater than zero");
+            UnityEngine.Debug.Assert(onOutputLine != null, "onOutputLine must not be null");
             ct.ThrowIfCancellationRequested();
 
             return RunCliSetupCommand(
@@ -33,6 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ct,
                 timeoutMs,
                 "release CLI installer",
+                onOutputLine,
                 startInfo => { });
         }
 
@@ -49,6 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ct,
                 timeoutMs,
                 "global CLI uninstall command",
+                static _ => { },
                 startInfo =>
                 {
                     startInfo.EnvironmentVariables[CliConstants.INSTALL_DIR_ENVIRONMENT_VARIABLE] = installDirectory;
@@ -60,12 +64,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CancellationToken ct,
             int timeoutMs,
             string commandDescription,
+            Action<string> onOutputLine,
             Action<ProcessStartInfo> configureStartInfo)
         {
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(command.FileName), "command.FileName must not be null or empty");
             UnityEngine.Debug.Assert(!string.IsNullOrEmpty(command.Arguments), "command.Arguments must not be null or empty");
             UnityEngine.Debug.Assert(timeoutMs > 0, "timeoutMs must be greater than zero");
             UnityEngine.Debug.Assert(!string.IsNullOrWhiteSpace(commandDescription), "commandDescription must not be null or empty");
+            UnityEngine.Debug.Assert(onOutputLine != null, "onOutputLine must not be null");
             UnityEngine.Debug.Assert(configureStartInfo != null, "configureStartInfo must not be null");
             ct.ThrowIfCancellationRequested();
 
@@ -95,6 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (e.Data != null)
                 {
                     standardOutputBuilder.AppendLine(e.Data);
+                    onOutputLine(e.Data);
                 }
             };
             process.ErrorDataReceived += (sender, e) =>
@@ -102,6 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 if (e.Data != null)
                 {
                     errorOutputBuilder.AppendLine(e.Data);
+                    onOutputLine(e.Data);
                 }
             };
             process.BeginOutputReadLine();

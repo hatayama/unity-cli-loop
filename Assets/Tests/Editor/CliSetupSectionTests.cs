@@ -170,6 +170,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             root.Add(new Label { name = "cli-status-label" });
             root.Add(new Button { name = "refresh-cli-version-button" });
             root.Add(new Button { name = "install-cli-button" });
+            VisualElement installProgress = new() { name = "cli-install-progress" };
+            installProgress.Add(new Label { name = "cli-install-progress-label" });
+            root.Add(installProgress);
             root.Add(new EnumField { name = "skills-target-field" });
             root.Add(new Button { name = "refresh-skills-state-button" });
             root.Add(new VisualElement { name = "group-skills-row" });

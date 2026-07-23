@@ -183,6 +183,18 @@
     margin-top: 2px;
 }
 
+.unity-cli-loop-install-progress {
+    margin-top: 4px;
+}
+
+.unity-cli-loop-install-progress__detail {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 11px;
+    margin-top: 2px;
+}
+
 .unity-cli-loop-button--delete {
     margin-top: 12px;
     color: #ff6b6b;
