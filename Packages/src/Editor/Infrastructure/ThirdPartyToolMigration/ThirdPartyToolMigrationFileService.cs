@@ -157,7 +157,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             string normalizedProjectRoot = NormalizeProjectRoot(projectRoot);
             List<string> rawMessages = new List<string>();
-            // Unity tags csc.rsp compiler diagnostics as LogType.Log internally, not LogType.Error,
+            // Unity tags csc compiler diagnostics as LogType.Log internally, not LogType.Error,
             // so LogGetter's message-based Error-family reclassification (matching ": error CSxxxx")
             // is required here — a bare ConsoleLogRetriever.GetLogsByType(LogType.Error) call misses
             // every genuine compile error.
