@@ -16,8 +16,14 @@ set -e
 #   - jq must be installed
 
 PROJECT_PATH=""
-if [ "$1" = "--project-path" ] && [ -n "$2" ]; then
+# Why: reject malformed argv before cleanup can touch the wrong Unity project.
+if [ "$#" -eq 0 ]; then
+    :
+elif [ "$#" -eq 2 ] && [ "$1" = "--project-path" ] && [ -n "$2" ]; then
     PROJECT_PATH="$2"
+else
+    printf '%s\n' "Usage: $0 [--project-path <path>]" >&2
+    exit 2
 fi
 
 MARKER_FILE="Assets/RegressionHarness/KeyStateAfterPauseInterruption/SpaceHoldPoller.cs"
