@@ -5,6 +5,7 @@ using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.InternalAPIBridge;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -364,6 +365,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 _bridgeServer = null;
                 _recoveryTrackingService.ScheduleTrackedRecovery(() => StartRecoveryIfNeededAsync(false, CancellationToken.None));
             };
+
+            // delayCall only runs on the next editor tick, and a backgrounded idle editor may never
+            // tick again on its own — the recovery would then wait forever. Signal one tick so the
+            // scheduled recovery actually executes even while the editor is unfocused.
+            EditorApplicationTickBridge.SignalTick();
         }
 
         /// <summary>

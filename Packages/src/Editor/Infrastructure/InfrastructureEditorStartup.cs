@@ -14,6 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             packageRemovalSettingsResetter.RegisterForEditorStartup();
             UnityCliLoopEditorSettingsRecoveryScheduler.ScheduleForEditorStartup(editorSettingsPort);
             EditorMainThreadLivenessTracker.RegisterForEditorStartup();
+            AutoTickPumpService.RegisterForEditorStartup();
         }
     }
 }
