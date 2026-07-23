@@ -147,6 +147,8 @@ func TestNewListCatalogIncludesEnablePausePointAwaitOptions(t *testing.T) {
 	findListOption(t, enablePausePoint, "--"+PausePointCapturedVariablesFlagName)
 	findListOption(t, enablePausePoint, "--"+PausePointCapturedVariableNamesFlagName)
 	findListOption(t, enablePausePoint, "--"+PausePointExpectFlagName)
+	findListOption(t, enablePausePoint, "--"+PausePointTriggerFlagName)
+	findListOption(t, enablePausePoint, "--"+PausePointResumePlayFlagName)
 }
 
 func decodeListCatalog(t *testing.T, content []byte) listCatalog {

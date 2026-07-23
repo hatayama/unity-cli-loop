@@ -31,6 +31,7 @@ scenario covers.
 |------|-------|--------|
 | Key state divergence after a pause-point interruption | `Assets/RegressionHarness/KeyStateAfterPauseInterruption/` | `scripts/regression-harness-key-state-after-pause-interruption.sh` |
 | `await-pause-point --trigger` hits within the marker timeout instead of waiting out the triggered command's full duration | `Assets/RegressionHarness/KeyStateAfterPauseInterruption/` (reused) | `scripts/regression-harness-pause-point-trigger.sh` |
+| `enable-pause-point --await --resume-play --trigger` resumes a manually paused PlayMode before firing the input trigger and hits within the marker timeout | `Assets/RegressionHarness/KeyStateAfterPauseInterruption/` (reused) | `scripts/regression-harness-resume-play-paused-arm.sh` |
 | A pause point armed on a physics message method (or a method called one hop from one) can miss a GameObject that already existed before arming. The miss itself is environment-dependent and does not reproduce deterministically (see below) -- the harness runs three scenarios (direct/OnCollisionEnter2D, indirect callee with priming, and OnTriggerEnter2D), each triggering a fresh contact after arming and classifying the result from the component's own hit counter plus `IsHit` | `Assets/RegressionHarness/PhysicsCallbackExistingInstance/` | `scripts/regression-harness-physics-callback-existing-instance.sh` |
 
 ### Physics-callback existing-instance miss: environment-dependent, not deterministic

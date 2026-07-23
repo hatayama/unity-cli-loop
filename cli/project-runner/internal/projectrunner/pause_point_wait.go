@@ -49,6 +49,11 @@ type waitForPausePointOptions struct {
 	triggerCommand string
 	triggerArgs    []string
 	startPath      string
+
+	// resumePlay comes from --resume-play: after the marker is confirmed armed, resume PlayMode
+	// (if paused) before dispatching --trigger so a paused-arm workflow can fire input triggers
+	// in one CLI call.
+	resumePlay bool
 }
 
 type pausePointStatusOptions struct {
@@ -190,7 +195,7 @@ func runWaitForPausePoint(
 ) int {
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, clicore.PausePointAwaitCommandName)
-	response, state, triggerResult, err := waitForPausePoint(ctx, connection, options)
+	response, state, triggerResult, resumeResult, err := waitForPausePoint(ctx, connection, options)
 	spinner.Stop()
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
@@ -207,6 +212,7 @@ func runWaitForPausePoint(
 		expectations := evaluatePausePointExpectations(response.CapturedVariables, options.expectations)
 
 		response.TriggerResult = triggerResult
+		response.ResumePlayResult = resumeResult
 		response = filterPausePointCapturedVariableHistory(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
@@ -261,6 +267,9 @@ func runWaitForPausePoint(
 	if triggerResult != nil {
 		waitErr.Details["TriggerResult"] = triggerResult
 	}
+	if resumeResult != nil {
+		waitErr.Details["ResumePlayResult"] = resumeResult
+	}
 	if state == pausePointWaitStateTimeout {
 		// Best-effort: the timeout diagnosis must not depend on a second Unity round trip succeeding.
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
@@ -286,6 +295,13 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
+
+		// --resume-play is a boolean flag (no value). ParseFlagValue would otherwise demand one.
+		if arg == "--"+PausePointResumePlayFlagName {
+			options.resumePlay = true
+			continue
+		}
+
 		name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 		if err != nil {
 			return waitForPausePointOptions{}, err
@@ -329,6 +345,14 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 			}
 			options.triggerCommand = triggerCommand
 			options.triggerArgs = triggerArgs
+		case PausePointResumePlayFlagName:
+			// --resume-play=true style is accepted; any other value is rejected so a typo cannot
+			// silently disable the resume step.
+			if value != "true" && value != "1" {
+				return waitForPausePointOptions{}, clierrors.InvalidValueArgumentError(
+					"--"+PausePointResumePlayFlagName, value, "boolean flag (pass with no value)")
+			}
+			options.resumePlay = true
 		default:
 			return waitForPausePointOptions{}, pausePointUnknownOptionError(clicore.PausePointAwaitCommandName, name)
 		}

@@ -271,7 +271,7 @@ func TestWaitForPausePointJoinsTriggerResult(t *testing.T) {
 			return 0
 		}
 
-		_, _, triggerResult, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		_, _, triggerResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 			id:             "jump",
 			timeoutSeconds: 1,
 			timeout:        time.Second,
@@ -307,7 +307,7 @@ func TestWaitForPausePointJoinsTriggerResult(t *testing.T) {
 			return 0
 		}
 
-		_, _, triggerResult, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		_, _, triggerResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 			id:             "jump",
 			timeoutSeconds: 1,
 			timeout:        time.Second,
@@ -362,7 +362,7 @@ func TestWaitForPausePointSkipsTriggerWhenNotArmed(t *testing.T) {
 		return 0
 	}
 
-	_, state, triggerResult, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	_, state, triggerResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "does-not-exist",
 		timeoutSeconds: 1,
 		timeout:        time.Second,
@@ -497,7 +497,7 @@ func TestParseWaitForPausePointOptionsParsesTriggerFlag(t *testing.T) {
 // Verifies enable-pause-point extracts --trigger alongside --await, and rejects --trigger without
 // --await since it would otherwise have no effect.
 func TestExtractPausePointEnableAwaitFlagsExtractsTrigger(t *testing.T) {
-	remaining, await, _, _, _, triggerCommand, triggerArgs, err := extractPausePointEnableAwaitFlags([]string{
+	remaining, await, _, _, _, triggerCommand, triggerArgs, _, err := extractPausePointEnableAwaitFlags([]string{
 		"--id", "jump", "--await", "--trigger", "simulate-keyboard --action Press --key Space --duration 5",
 	})
 	if err != nil {
@@ -525,7 +525,7 @@ func TestExtractPausePointEnableAwaitFlagsExtractsTrigger(t *testing.T) {
 
 // Verifies --trigger without --await is rejected, since it has no effect otherwise.
 func TestExtractPausePointEnableAwaitFlagsRequiresAwaitForTrigger(t *testing.T) {
-	_, _, _, _, _, _, _, err := extractPausePointEnableAwaitFlags([]string{
+	_, _, _, _, _, _, _, _, err := extractPausePointEnableAwaitFlags([]string{
 		"--id", "jump", "--trigger", "simulate-keyboard --action Press",
 	})
 	if err == nil {
