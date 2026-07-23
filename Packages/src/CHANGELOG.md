@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.61](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.60...v3.0.0-beta.61) (2026-07-23)
+
+
+### Bug Fixes
+
+* Migration wizard now opens reliably right after a compile-error restart ([#1955](https://github.com/hatayama/unity-cli-loop/issues/1955)) ([f3feb18](https://github.com/hatayama/unity-cli-loop/commit/f3feb188e908616afffcb6f2385e49a5cfb3f5af))
+
 ## [3.0.0-beta.60](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.59...v3.0.0-beta.60) (2026-07-22)
 
 
