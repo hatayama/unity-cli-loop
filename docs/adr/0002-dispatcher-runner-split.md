@@ -50,10 +50,29 @@ and the dispatcher fetches that runner per project. Package and runner form a co
 pair, so no compatibility matrix exists anywhere.
 
 Unity's CLI avoids the same problem from the opposite direction — the CLI dictates the
-package version by force-writing latest into the manifest. That is workable for a beta
-experiment but hostile to teams that pin package versions in version control. uloop's model
-is the inverse (the package dictates the runner version), which matches how Unity projects
-are actually operated.
+package version by force-writing latest into the manifest. The manifest rewrite itself is
+not the structural objection: it only happens on `pipeline install`/`upgrade`, and the same
+team discipline that governs every other package ("do not upgrade unilaterally") covers it.
+The structural objection is what remains once the package IS pinned: someone must align the
+CLI to the pinned package generation, per project, and the single-binary model offers no
+mechanism for that:
+
+- No recorded compatibility mapping and no version gate. Nothing states which CLI
+  generation pairs with a given package version, and a mismatched pair is not even
+  detected — there is nothing to consult when trying to align, and no signal when
+  alignment is wrong.
+- One global binary per machine. Projects pinned to different package generations would
+  need per-project CLI switching, which the model does not provide; a developer moving
+  between such projects cannot hold a correct pair for both at once.
+
+(The install channel currently offering only the latest CLI is deliberately not counted
+here: that is read as a beta-stage limitation, and a stable release can be expected to
+allow version-selected installs.)
+
+uloop's model is the inverse — the package dictates the runner version — and the pin plus
+dispatcher is exactly the machinery that makes "align the CLI to the package" automatic:
+the compatibility mapping is the pin (`projectRunnerVersion`), and per-project selection is
+the dispatcher's job. This matches how Unity projects are actually operated.
 
 ### The equality-gated protocol version depends on the split
 
