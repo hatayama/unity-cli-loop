@@ -192,6 +192,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             installProgress.Add(new Label { name = "cli-install-progress-label" });
             root.Add(installProgress);
 
+            root.Add(new Button { name = "refresh-skills-state-button" });
             VisualElement skillsSubsection = new() { name = "skills-subsection" };
             VisualElement skillsSetupPanel = new() { name = "skills-setup-panel" };
             skillsSetupPanel.Add(new VisualElement { name = "skill-target-status-list" });
@@ -206,7 +207,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             specificTargetFoldout.Add(groupSkillsRow);
             VisualElement skillsTargetRow = new() { name = "skills-target-row" };
             skillsTargetRow.Add(new EnumField { name = "skills-target-field" });
-            skillsTargetRow.Add(new Button { name = "refresh-skills-state-button" });
             specificTargetFoldout.Add(skillsTargetRow);
             specificTargetFoldout.Add(new Button { name = "install-selected-skills-button" });
             skillsSetupPanel.Add(specificTargetFoldout);

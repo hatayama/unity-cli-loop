@@ -82,6 +82,12 @@
     margin-bottom: 10px;
 }
 
+.setup-step__title-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
 .setup-step__content {
     padding-left: 4px;
 }

@@ -28,7 +28,10 @@
 
         <!-- Step 2: Install Skills -->
         <ui:VisualElement name="step-2" class="setup-step">
-            <ui:Label text="Step 2: Install Skills (Optional)" class="setup-step__title" />
+            <ui:VisualElement class="setup-step__title-row">
+                <ui:Label text="Step 2: Install Skills (Optional)" class="setup-step__title" />
+                <ui:Button name="refresh-skills-state-button" text="↻" class="skills-setup-panel__refresh-button" />
+            </ui:VisualElement>
             <ui:VisualElement class="setup-step__content">
                 <ui:VisualElement name="skills-setup-panel-placeholder" />
                 <ui:Label name="skills-hint-label" text="Install skills later from&#10;Window &gt; Unity CLI Loop &gt; Settings." class="setup-step__hint-label" />

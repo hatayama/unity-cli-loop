@@ -38,10 +38,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal Label GroupSkillsLabel => _groupSkillsLabel;
         internal VisualElement GroupSkillsRow => _groupSkillsRow;
 
-        internal SkillsSetupPanelView(VisualElement panelRoot)
+        internal SkillsSetupPanelView(VisualElement panelRoot, Button refreshSkillsStateButton)
         {
             Debug.Assert(panelRoot != null, "panelRoot must not be null");
+            Debug.Assert(refreshSkillsStateButton != null, "refreshSkillsStateButton must not be null");
             VisualElement root = panelRoot ?? throw new System.ArgumentNullException(nameof(panelRoot));
+            _refreshSkillsStateButton = refreshSkillsStateButton
+                ?? throw new System.ArgumentNullException(nameof(refreshSkillsStateButton));
 
             _skillTargetStatusList = root.Q<VisualElement>("skill-target-status-list");
             _skillTargetStatusDivider = root.Q<VisualElement>("skill-target-status-divider");
@@ -53,7 +56,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _groupSkillsToggle = root.Q<Toggle>("group-skills-toggle");
             _groupSkillsLabel = root.Q<Label>("group-skills-label");
             _skillsTargetField = root.Q<EnumField>("skills-target-field");
-            _refreshSkillsStateButton = root.Q<Button>("refresh-skills-state-button");
             _installSelectedSkillsButton = root.Q<Button>("install-selected-skills-button");
 
             Debug.Assert(_skillTargetStatusList != null, "skill-target-status-list must not be null");
@@ -66,7 +68,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(_groupSkillsToggle != null, "group-skills-toggle must not be null");
             Debug.Assert(_groupSkillsLabel != null, "group-skills-label must not be null");
             Debug.Assert(_skillsTargetField != null, "skills-target-field must not be null");
-            Debug.Assert(_refreshSkillsStateButton != null, "refresh-skills-state-button must not be null");
             Debug.Assert(_installSelectedSkillsButton != null, "install-selected-skills-button must not be null");
 
             _ = _skillTargetStatusList ?? throw new System.ArgumentNullException(nameof(_skillTargetStatusList));
@@ -80,7 +81,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _ = _groupSkillsToggle ?? throw new System.ArgumentNullException(nameof(_groupSkillsToggle));
             _ = _groupSkillsLabel ?? throw new System.ArgumentNullException(nameof(_groupSkillsLabel));
             _ = _skillsTargetField ?? throw new System.ArgumentNullException(nameof(_skillsTargetField));
-            _ = _refreshSkillsStateButton ?? throw new System.ArgumentNullException(nameof(_refreshSkillsStateButton));
             _ = _installSelectedSkillsButton
                 ?? throw new System.ArgumentNullException(nameof(_installSelectedSkillsButton));
 

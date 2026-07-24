@@ -14,7 +14,6 @@
             <ui:VisualElement name="skills-target-row" class="skills-setup-panel__target-row">
                 <ui:Label text="Target:" class="skills-setup-panel__target-label" />
                 <uie:EnumField name="skills-target-field" class="skills-setup-panel__target-field" />
-                <ui:Button name="refresh-skills-state-button" text="↻" class="skills-setup-panel__refresh-button" />
             </ui:VisualElement>
             <ui:Button name="install-selected-skills-button" text="Install Skills" class="skills-setup-panel__install-button" />
         </ui:Foldout>
