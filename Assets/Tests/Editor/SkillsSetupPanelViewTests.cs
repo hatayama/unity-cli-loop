@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(SkillsTarget.Cursor, "Cursor", ".cursor", "--cursor")]
         [TestCase(SkillsTarget.Gemini, "Gemini CLI", ".gemini", "--gemini")]
         [TestCase(SkillsTarget.Codex, "Codex CLI", ".codex", "--codex")]
-        [TestCase(SkillsTarget.Agents, "Other (.agents)", ".agents", "--agents")]
+        [TestCase(SkillsTarget.Agents, "Other", ".agents", "--agents")]
         public void CreateFirstInstallSkillTarget_ReturnsMappedTarget(
             SkillsTarget targetType,
             string expectedDisplayName,
