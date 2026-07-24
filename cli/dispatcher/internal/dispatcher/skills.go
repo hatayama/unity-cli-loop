@@ -65,6 +65,10 @@ func buildDefaultSkillTargetIDs() []string {
 	return ids
 }
 
+// deprecatedSkillNames lists previously installed skill directory names that
+// skills install/uninstall runs clean up. Keep cleanup names here and in the
+// Unity-side SkillTargetInstaller; agent-facing V2-to-V3 CLI migration
+// guidance lives in Packages/src/TemporarySkills~/v3-cli-invocation-migration.
 var deprecatedSkillNames = []string{
 	"uloop-wait-for-pause-point",
 	"uloop-capture-window",

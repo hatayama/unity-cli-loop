@@ -10,6 +10,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal static class SkillTargetInstaller
     {
+        // Cleanup names for previously installed skill directories. Keep them here
+        // and in the dispatcher's deprecatedSkillNames (cli/dispatcher/internal/
+        // dispatcher/skills.go); agent-facing V2-to-V3 CLI migration guidance lives
+        // in Packages/src/TemporarySkills~/v3-cli-invocation-migration.
         private static readonly string[] DeprecatedSkillNames =
         {
             "uloop-wait-for-pause-point",

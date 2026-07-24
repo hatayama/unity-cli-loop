@@ -1,7 +1,5 @@
 # First-Party V2 to V3 CLI Migration
 
-Agent-facing CLI migration candidates live here. Installed-skill cleanup names stay in `SkillTargetInstaller` / `skills.go` `deprecatedSkillNames`.
-
 Use this reference as the canonical option migration map. Search results are
 only candidates. Edit a match only after the surrounding context proves it is
 a V2 `uloop` invocation.
@@ -23,6 +21,9 @@ Prefer `rg` when available, but any repository search tool is acceptable.
 - Search `uloop` first and inspect command examples, shell scripts, PowerShell scripts, and agent skills.
 - Search boolean-looking CLI syntax: `--` plus nearby `true` or `false`, including `--flag true`, `--flag=false`, and inline Markdown command examples.
 - Search renamed first-party option names: `wait-for-domain-reload`, `reload-external-scene-changes`, `force-recompile`, `save-before-run`, `show-overlay`, `include-components`, `include-inactive`, and `compile-only`.
+- Treat renamed-option hits as command-scoped. `wait-for-domain-reload` and
+  `include-inactive` also exist as valid V3 positive flags on other
+  commands; check Same-Name Options on Other Commands before editing them.
 - Search removed or renamed first-party commands only to report them as
   out-of-scope command migration candidates: `get-project-info`, `get-version`,
   `unity-search`, `execute-menu-item`, `get-menu-items`,
@@ -41,6 +42,11 @@ Prefer `rg` when available, but any repository search tool is acceptable.
 | `--flag=true` | remove the option when the V3 default is already true |
 | `--flag false` | use the V3 negative option when the V3 default is true |
 | `--flag=false` | use the V3 negative option when the V3 default is true |
+
+For first-party boolean options that are not listed in Special First-Party
+Options, run `uloop <command> --help`. Every V3 flag is printed with its
+default: `default: enabled` means the V3 default is true, and
+`default: disabled` means it is false.
 
 For third-party tools, inspect the current tool schema or docs before choosing the replacement. Do not infer third-party negative flags from first-party conventions.
 
@@ -66,6 +72,22 @@ For third-party tools, inspect the current tool schema or docs before choosing t
 | `uloop get-hierarchy` | `--include-inactive false` | `--no-include-inactive` |
 | `uloop execute-dynamic-code` | `--compile-only true` | `--compile-only` |
 | `uloop execute-dynamic-code` | `--compile-only false` | remove |
+
+## Same-Name Options on Other Commands
+
+These option names appear in the table above for one command but are valid
+V3 syntax on another command. Never migrate them by token match alone. On the
+other command, only the already-bare flag is exempt: value-bearing forms such
+as `--flag true` or `--flag=false` still follow the Boolean Argument Rules
+against that command's default.
+
+| Option | Migrate on | Also valid V3 on |
+| --- | --- | --- |
+| `wait-for-domain-reload` | `uloop compile` (see Special First-Party Options) | `uloop execute-dynamic-code`, where bare `--wait-for-domain-reload` is a valid V3 default-false flag |
+| `include-inactive` | `uloop get-hierarchy` (see Special First-Party Options) | `uloop find-game-objects`, where bare `--include-inactive` is a valid V3 default-false flag |
+
+Bare `--force-recompile` on `uloop compile` and bare `--compile-only` on
+`uloop execute-dynamic-code` are already valid V3 syntax and need no edit.
 
 ## Removed First-Party Commands
 
