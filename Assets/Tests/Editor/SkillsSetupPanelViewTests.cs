@@ -292,21 +292,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void ShouldExpandSpecificTargetFoldout_WhenAnyChecking_ReturnsFalse()
-        {
-            // Verifies the foldout does not expand while any target install state is still Checking.
-            List<SkillSetupTargetInfo> targets = new()
-            {
-                CreateTarget("Claude", ".claude", SkillInstallState.Checking),
-                CreateTarget("Cursor", ".cursor", SkillInstallState.Missing)
-            };
-
-            bool shouldExpand = SkillsSetupPanelView.ShouldExpandSpecificTargetFoldout(targets);
-
-            Assert.That(shouldExpand, Is.False);
-        }
-
-        [Test]
         public void ShouldExpandSpecificTargetFoldout_WhenOnlyOutdated_ReturnsFalse()
         {
             // Verifies outdated targets count as installed for foldout expansion and stay collapsed.

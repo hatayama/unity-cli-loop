@@ -27,6 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly Button _installSelectedSkillsButton;
 
         private bool _isTargetFieldInitialized;
+        private bool? _lastAppliedFoldoutDefault;
 
         internal event System.Action OnInstallAllClicked;
         internal event System.Action OnInstallSelectedClicked;
@@ -147,12 +148,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool listVisible = canManageSkills && installableTargets.Count > 0;
             ViewDataBinder.SetVisible(_skillTargetStatusList, listVisible);
 
-            bool shouldExpand = ShouldExpandSpecificTargetFoldout(installableTargets);
-            _installSpecificTargetFoldout.SetValueWithoutNotify(
-                shouldExpand ? true : _installSpecificTargetFoldout.value);
-
             bool isCheckingSkills = installableTargets.Any(
                 target => target.InstallState == SkillInstallState.Checking);
+            if (!isCheckingSkills)
+            {
+                bool foldoutDefault = ShouldExpandSpecificTargetFoldout(installableTargets);
+                if (_lastAppliedFoldoutDefault != foldoutDefault)
+                {
+                    _installSpecificTargetFoldout.SetValueWithoutNotify(foldoutDefault);
+                    _lastAppliedFoldoutDefault = foldoutDefault;
+                }
+            }
+
             ViewDataBinder.SetVisible(_installAllSkillsButton, installableTargets.Count > 0);
             ViewDataBinder.SetVisible(_skillsNoTargetsMessage, !isCheckingSkills && installableTargets.Count == 0);
             if (isCheckingSkills)
@@ -394,23 +401,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             List<SkillSetupTargetInfo> installableTargets)
         {
             Debug.Assert(installableTargets != null, "installableTargets must not be null");
+            Debug.Assert(
+                installableTargets.All(target => target.InstallState != SkillInstallState.Checking),
+                "installableTargets must not include Checking; caller must guard before applying foldout defaults");
 
             if (installableTargets.Count == 0)
             {
                 return true;
             }
 
-            if (installableTargets.Any(target => target.InstallState == SkillInstallState.Checking))
-            {
-                return false;
-            }
-
-            if (installableTargets.Any(target => target.InstallState == SkillInstallState.Missing))
-            {
-                return true;
-            }
-
-            return false;
+            return installableTargets.Any(target => target.InstallState == SkillInstallState.Missing);
         }
 
         private void InitializeTargetFieldIfNeeded(SkillsTarget currentTarget)
