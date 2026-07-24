@@ -75,7 +75,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 skills.InstallSkillsFlat,
                 skills.SelectedTargetInstallState,
                 skills.SkillsTarget,
-                skills.IsInstallingSkills);
+                skills.IsInstallingSkills,
+                skills.InstallableSkillTargets);
         }
 
         internal void Update(
@@ -87,7 +88,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool installSkillsFlat,
             SkillInstallState selectedTargetInstallState,
             SkillsTarget skillsTarget,
-            bool isInstallingSkills)
+            bool isInstallingSkills,
+            System.Collections.Generic.IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets)
         {
             CliSetupData cliData = CreateCliSetupData(
                 needsCliPathSetup,
@@ -98,7 +100,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 installSkillsFlat,
                 selectedTargetInstallState,
                 skillsTarget,
-                isInstallingSkills);
+                isInstallingSkills,
+                installableSkillTargets);
             _view.UpdateCliSetup(cliData);
         }
 
@@ -423,7 +426,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool installSkillsFlat,
             SkillInstallState selectedTargetInstallState,
             SkillsTarget skillsTarget,
-            bool isInstallingSkills)
+            bool isInstallingSkills,
+            System.Collections.Generic.IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets)
         {
             string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
             bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
@@ -465,7 +469,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 displayedTargetInstallState,
                 skillsTarget,
                 groupSkillsUnderUnityCliLoop,
-                isInstallingSkills);
+                isInstallingSkills,
+                installableSkillTargets);
         }
     }
 }

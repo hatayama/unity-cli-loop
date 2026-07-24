@@ -18,6 +18,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         private const string UXML_RELATIVE_PATH = "Editor/Presentation/UIToolkit/UnityCliLoopSettingsWindow.uxml";
         private const string USS_RELATIVE_PATH = "Editor/Presentation/UIToolkit/UnityCliLoopSettingsWindow.uss";
+        private const string SKILLS_PANEL_UXML_RELATIVE_PATH = "Editor/Presentation/Shared/SkillsSetupPanel.uxml";
+        private const string SKILLS_PANEL_USS_RELATIVE_PATH = "Editor/Presentation/Shared/SkillsSetupPanel.uss";
         private const string GITHUB_ICON_RELATIVE_PATH = "Editor/Presentation/Setup/GitHub_Invertocat_White.png";
 
         private readonly VisualElement _root;
@@ -34,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         public event Action OnRefreshCliVersion;
         public event Action OnInstallCli;
         public event Action OnInstallSkills;
+        public event Action OnInstallAllSkills;
         public event Action OnRefreshSkillsState;
         public event Action<SkillsTarget> OnSkillsTargetChanged;
         public event Action<bool> OnGroupSkillsChanged;
@@ -79,6 +82,33 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             _root.styleSheets.Add(styleSheet);
+
+            VisualElement skillsPanelPlaceholder = _root.Q<VisualElement>("skills-setup-panel-placeholder");
+            Debug.Assert(skillsPanelPlaceholder != null, "skills-setup-panel-placeholder must not be null");
+
+            string skillsPanelUxmlPath =
+                $"{UnityCliLoopConstants.PackageAssetPath}/{SKILLS_PANEL_UXML_RELATIVE_PATH}";
+            VisualTreeAsset skillsPanelTree =
+                AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(skillsPanelUxmlPath);
+            if (skillsPanelTree == null)
+            {
+                Debug.LogError($"Failed to load UXML from: {skillsPanelUxmlPath}");
+                return;
+            }
+
+            skillsPanelTree.CloneTree(skillsPanelPlaceholder);
+
+            string skillsPanelUssPath =
+                $"{UnityCliLoopConstants.PackageAssetPath}/{SKILLS_PANEL_USS_RELATIVE_PATH}";
+            StyleSheet skillsPanelStyleSheet =
+                AssetDatabase.LoadAssetAtPath<StyleSheet>(skillsPanelUssPath);
+            if (skillsPanelStyleSheet == null)
+            {
+                Debug.LogError($"Failed to load USS from: {skillsPanelUssPath}");
+                return;
+            }
+
+            _root.styleSheets.Add(skillsPanelStyleSheet);
         }
 
         private void InitializeSections()
@@ -92,6 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _cliSetupSection.OnRefreshCliVersion += () => OnRefreshCliVersion?.Invoke();
             _cliSetupSection.OnInstallCli += () => OnInstallCli?.Invoke();
             _cliSetupSection.OnInstallSkills += () => OnInstallSkills?.Invoke();
+            _cliSetupSection.OnInstallAllSkills += () => OnInstallAllSkills?.Invoke();
             _cliSetupSection.OnRefreshSkillsState += () => OnRefreshSkillsState?.Invoke();
             _cliSetupSection.OnSkillsTargetChanged += value => OnSkillsTargetChanged?.Invoke(value);
             _cliSetupSection.OnGroupSkillsChanged += value => OnGroupSkillsChanged?.Invoke(value);

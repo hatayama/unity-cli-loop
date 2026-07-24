@@ -19,19 +19,7 @@
 
                         <ui:VisualElement name="skills-subsection">
                             <ui:Label text="Skills" class="unity-cli-loop-cli-subsection-header" />
-                            <ui:VisualElement name="group-skills-row" class="unity-cli-loop-toggle-row">
-                                <ui:Toggle name="group-skills-toggle" class="unity-cli-loop-toggle-row__toggle" />
-                                <ui:Label
-                                    name="group-skills-label"
-                                    text="Group in subfolder"
-                                    class="unity-cli-loop-toggle-row__label" />
-                            </ui:VisualElement>
-                            <ui:VisualElement class="unity-cli-loop-target-row">
-                                <ui:Label text="Target:" class="unity-cli-loop-target-row__label" />
-                                <uie:EnumField name="skills-target-field" class="unity-cli-loop-target-row__field" />
-                                <ui:Button name="refresh-skills-state-button" text="↻" class="unity-cli-loop-button--refresh" />
-                            </ui:VisualElement>
-                            <ui:Button name="install-skills-button" text="Install Skills" class="unity-cli-loop-button unity-cli-loop-button--configure" />
+                            <ui:VisualElement name="skills-setup-panel-placeholder" />
                         </ui:VisualElement>
                     </ui:VisualElement>
                 </ui:Foldout>
