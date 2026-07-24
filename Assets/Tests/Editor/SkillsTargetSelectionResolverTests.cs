@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(SkillsTarget.Cursor, true, "Cursor", ".cursor", "skills install --cursor")]
         [TestCase(SkillsTarget.Gemini, true, "Gemini CLI", ".gemini", "skills install --gemini")]
         [TestCase(SkillsTarget.Codex, true, "Codex CLI", ".codex", "skills install --codex")]
-        [TestCase(SkillsTarget.Agents, true, "Other", ".agents", "skills install --agents")]
+        [TestCase(SkillsTarget.Agents, true, "Common", ".agents", "skills install --agents")]
         [TestCase(SkillsTarget.Claude, false, "Claude Code", ".claude", "skills install --claude --flat")]
         public void Resolve_ReturnsMappedSelection(
             SkillsTarget target,

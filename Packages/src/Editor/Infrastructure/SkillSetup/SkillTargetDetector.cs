@@ -33,7 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             new(".cursor", "--cursor", "Cursor"),
             new(".gemini", "--gemini", "Gemini CLI"),
             new(".codex", "--codex", "Codex CLI"),
-            new(".agents", "--agents", "Other"),
+            new(".agents", "--agents", "Common"),
             new(".agent", "--antigravity", "Antigravity")
         };
 

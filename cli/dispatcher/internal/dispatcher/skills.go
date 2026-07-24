@@ -32,7 +32,7 @@ var targetConfigs = map[string]skillTarget{
 	"codex":       {id: "codex", displayName: "Codex CLI", projectDir: ".codex"},
 	"cursor":      {id: "cursor", displayName: "Cursor", projectDir: ".cursor"},
 	"gemini":      {id: "gemini", displayName: "Gemini CLI", projectDir: ".gemini"},
-	"agents":      {id: "agents", displayName: "Other (.agents)", projectDir: ".agents"},
+	"agents":      {id: "agents", displayName: "Common", projectDir: ".agents"},
 	"windsurf":    {id: "windsurf", displayName: "Windsurf", projectDir: ".agents"},
 	"antigravity": {id: "antigravity", displayName: "Antigravity", projectDir: ".agent"},
 }

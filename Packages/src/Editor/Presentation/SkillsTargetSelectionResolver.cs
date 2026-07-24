@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 SkillsTarget.Cursor => new("Cursor", ".cursor", "--cursor", groupSkillsUnderUnityCliLoop),
                 SkillsTarget.Gemini => new("Gemini CLI", ".gemini", "--gemini", groupSkillsUnderUnityCliLoop),
                 SkillsTarget.Codex => new("Codex CLI", ".codex", "--codex", groupSkillsUnderUnityCliLoop),
-                SkillsTarget.Agents => new("Other", ".agents", "--agents", groupSkillsUnderUnityCliLoop),
+                SkillsTarget.Agents => new("Common", ".agents", "--agents", groupSkillsUnderUnityCliLoop),
                 _ => throw new ArgumentOutOfRangeException(nameof(target), target, null)
             };
         }

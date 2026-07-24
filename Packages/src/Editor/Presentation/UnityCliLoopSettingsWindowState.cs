@@ -18,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         Codex = 4,
         Cursor = 2,
         Gemini = 3,
-        [InspectorName("Other (.agents)")]
+        [InspectorName("Common (.agents)")]
         Agents = 1
     }
 
