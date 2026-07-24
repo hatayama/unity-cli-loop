@@ -44,7 +44,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _stopwatch.Restart();
             _tickCount = 0;
             _installButton.text = CliInstallProgressFormatting.FormatStatusLine(TimeSpan.Zero, _tickCount);
-            _detailLabel.text = string.Empty;
+            // Why a placeholder instead of clearing: Show() is install-only, and the first
+            // installer stdout line can take seconds; seeding the label gives immediate feedback.
+            _detailLabel.text = CliInstallProgressFormatting.INITIAL_DETAIL_LINE;
             _container.style.display = DisplayStyle.Flex;
 
             if (_tick == null)

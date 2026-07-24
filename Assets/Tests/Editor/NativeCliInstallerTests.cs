@@ -90,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GetInstallCommand_OnWindowsKeepsDispatcherPowerShellInstallerAvailable()
         {
-            // Verifies that editor installs download the dispatcher PowerShell installer script and its checksum from the release, verify SHA-256, and run via -File, not `irm | iex`.
+            // Verifies that editor installs download the dispatcher PowerShell installer script from the release, verify its SHA-256 via module-free .NET APIs (not Get-FileHash, which is a PS 5.1 script function needing module autoloading), emit UTF-8 output, and run via -File, not `irm | iex`.
             NativeCliInstallCommand command = NativeCliCommandBuilder.BuildRemoteInstallCommand(
                 RuntimePlatform.WindowsEditor,
                 TestBetaReleaseTag,
@@ -106,14 +106,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(command.Arguments, Does.Contain("[char]10"));
             Assert.That(command.Arguments, Does.Not.Contain("install.sh\n"));
             Assert.That(command.Arguments, Does.Not.Contain("ULOOP_REMOVE_LEGACY"));
+            Assert.That(command.ManualCommand, Does.StartWith("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "));
             Assert.That(command.ManualCommand, Does.Contain("$ErrorActionPreference = 'Stop'"));
             Assert.That(command.ManualCommand, Does.Contain("Invoke-WebRequest"));
-            Assert.That(command.ManualCommand, Does.Contain("Get-FileHash"));
+            Assert.That(command.ManualCommand, Does.Contain("[System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($script_path))"));
+            Assert.That(command.ManualCommand, Does.Not.Contain("Get-FileHash"));
+            Assert.That(command.ManualCommand, Does.Contain("installer-env PSVersion="));
+            Assert.That(command.ManualCommand, Does.Contain("Write-Output 'Downloading installer script...'"));
+            Assert.That(command.ManualCommand, Does.Contain("Write-Output 'Verifying installer script digest...'"));
+            Assert.That(command.ManualCommand, Does.Contain("Write-Output 'Starting install script...'"));
             Assert.That(command.ManualCommand, Does.Contain("-File $script_path"));
             Assert.That(command.ManualCommand, Does.Not.Contain("irm"));
             Assert.That(command.ManualCommand, Does.Not.Contain("| iex"));
             Assert.That(command.ManualCommand, Does.Not.Contain("raw.githubusercontent.com"));
             Assert.That(command.ManualCommand, Does.Not.Contain("npm"));
+        }
+
+        [Test]
+        public void GetInstallCommand_RemoteBootstrapsEmitProgressLinesInStageOrder()
+        {
+            // Verifies both remote bootstraps print download, verify, and start progress lines in stage order so the install progress label never stays blank until the installer script speaks.
+            NativeCliInstallCommand posixCommand = NativeCliCommandBuilder.BuildRemoteInstallCommand(
+                RuntimePlatform.OSXEditor,
+                TestBetaReleaseTag,
+                TestArchiveManifest,
+                false,
+                "/bin/zsh");
+            NativeCliInstallCommand windowsCommand = NativeCliCommandBuilder.BuildRemoteInstallCommand(
+                RuntimePlatform.WindowsEditor,
+                TestBetaReleaseTag,
+                TestArchiveManifest,
+                false,
+                "/bin/zsh");
+
+            AssertProgressLinesInStageOrder(posixCommand.ManualCommand, "echo");
+            AssertProgressLinesInStageOrder(windowsCommand.ManualCommand, "Write-Output");
+        }
+
+        private static void AssertProgressLinesInStageOrder(string manualCommand, string printCommand)
+        {
+            int downloadIndex = manualCommand.IndexOf($"{printCommand} 'Downloading installer script...'", System.StringComparison.Ordinal);
+            int verifyIndex = manualCommand.IndexOf($"{printCommand} 'Verifying installer script digest...'", System.StringComparison.Ordinal);
+            int startIndex = manualCommand.IndexOf($"{printCommand} 'Starting install script...'", System.StringComparison.Ordinal);
+
+            Assert.That(downloadIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(verifyIndex, Is.GreaterThan(downloadIndex));
+            Assert.That(startIndex, Is.GreaterThan(verifyIndex));
         }
 
         [Test]
@@ -241,6 +279,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     packageResolvedPath);
 
                 Assert.That(command.FileName, Is.EqualTo("powershell"));
+                Assert.That(command.ManualCommand, Does.StartWith("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "));
                 Assert.That(command.ManualCommand, Does.Contain($"& '{scriptPath}'"));
                 Assert.That(command.ManualCommand, Does.Contain($"$env:ULOOP_VERSION='{TestBetaReleaseTag}'"));
                 Assert.That(command.ManualCommand, Does.Contain("$env:ULOOP_ARCHIVE_MANIFEST"));
@@ -350,6 +389,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(receivedLines, Does.Contain("line1"));
                 Assert.That(receivedLines, Does.Contain("line2"));
                 Assert.That(receivedLines, Does.Contain("err1"));
+            }
+        }
+
+        [Test]
+        public void RunInstallCommand_ReportsSyntheticStartingLineBeforeProcessOutput()
+        {
+            // Verifies the install path reports a synthetic first progress line before process spawn so the UI shows activity even while the shell is still starting.
+            NativeCliInstallCommand command = BuildEchoInstallCommand();
+            List<string> receivedLines = new();
+
+            CliInstallResult result = NativeCliSetupCommandRunner.RunInstallCommand(
+                command,
+                CancellationToken.None,
+                5000,
+                line =>
+                {
+                    lock (receivedLines)
+                    {
+                        receivedLines.Add(line);
+                    }
+                });
+
+            Assert.That(result.Success, Is.True, result.ErrorOutput);
+            lock (receivedLines)
+            {
+                Assert.That(receivedLines[0], Is.EqualTo("Launching installer process..."));
             }
         }
 
