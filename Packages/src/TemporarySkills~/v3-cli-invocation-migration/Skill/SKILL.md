@@ -5,8 +5,6 @@ description: Migrate only uloop V2 CLI option syntax in agent skills, Markdown, 
 
 # V3 CLI Invocation Migration
 
-Agent-facing CLI migration candidates live in this skill. Installed-skill cleanup names stay in `SkillTargetInstaller` / `skills.go` `deprecatedSkillNames`.
-
 Use this skill to update V2-era `uloop` CLI option syntax to V3
 syntax in agent-facing docs and automation.
 
@@ -46,6 +44,13 @@ Prefer `rg` for searches when available. If `rg` is unavailable, use the best av
 - For first-party tools, use the reference table. `compile`, `run-tests`,
   `get-hierarchy`, `record-input`, and `replay-input` have special renamed
   negative flags.
+- For first-party boolean options that are not in the reference tables, run
+  `uloop <command> --help` and apply the boolean rules to the printed
+  default: `default: enabled` means the V3 default is true, and
+  `default: disabled` means it is false.
+- Some option names are valid V3 syntax on one command and V2 leftovers on
+  another. Match every hit to its `uloop` command before editing; the
+  reference lists the known same-name collisions.
 - A valid edit is limited to replacing, adding, or removing a `uloop` option
   token and the boolean value attached to that option in the same invocation.
 - Preserve surrounding Markdown, shell, and PowerShell formatting. Do not
