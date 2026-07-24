@@ -99,7 +99,7 @@ Returns JSON with:
 | Diagnostic | Meaning | Next action |
 |---|---|---|
 | `PressEdgeKeyAlreadyPressedBeforeQueue=true` | The key was already held; no press transition could occur | Release with `KeyUp`, then press again |
-| `PressEdgeConsumedByUpdateType` names a non-`Dynamic` update type (e.g. `Editor`) | An editor-side update consumed the edge before gameplay polling saw it | Retry the input |
+| `PressEdgeConsumedByUpdateType` names a non-`Dynamic` update type (e.g. `Editor`) | An editor-side update consumed the edge before gameplay polling saw it | Retry: rerun `Press` directly; for `KeyDown` the key is now held, so `KeyUp` first (a held key rejects a second `KeyDown`) |
 | `PressEdgeAnyDynamicUpdateObserved=false` | No gameplay input update ran during the press window | Check that PlayMode is running and unpaused; do not retry blindly |
 
 ## Prerequisites
