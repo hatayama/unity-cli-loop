@@ -86,6 +86,11 @@
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
+    margin-bottom: 10px;
+}
+
+.setup-step__title-row .setup-step__title {
+    margin-bottom: 0;
 }
 
 .setup-step__content {

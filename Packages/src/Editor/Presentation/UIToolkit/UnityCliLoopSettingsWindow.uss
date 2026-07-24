@@ -479,6 +479,13 @@
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
+    margin-top: 6px;
+    margin-bottom: 4px;
+}
+
+.unity-cli-loop-cli-subsection-header-row .unity-cli-loop-cli-subsection-header {
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
 .unity-cli-loop-cli-separator {
