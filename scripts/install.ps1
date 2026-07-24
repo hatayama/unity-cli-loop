@@ -501,8 +501,10 @@ New-Item -ItemType Directory -Path $TempDir | Out-Null
 try {
     $ArchivePath = Join-Path $TempDir $AssetName
     $ChecksumPath = Join-Path $TempDir "$AssetName.sha256"
+    Write-Host "Downloading uloop dispatcher archive..."
     Invoke-WebRequest -Uri $DownloadUrl -OutFile $ArchivePath
     Invoke-WebRequest -Uri $ChecksumUrl -OutFile $ChecksumPath
+    Write-Host "Verifying uloop dispatcher archive..."
     $ExpectedHash = ((Get-Content -Path $ChecksumPath -Raw) -split "\s+")[0].ToLowerInvariant()
     $ActualHash = Get-UloopSha256Hash -Path $ArchivePath
     if ($ExpectedHash -ne $ActualHash) {
@@ -534,6 +536,7 @@ try {
         throw "Attestation manifest hash mismatch for $AssetName"
     }
 
+    Write-Host "Extracting uloop dispatcher archive..."
     Expand-UloopArchive -ArchivePath $ArchivePath -DestinationPath $TempDir
 
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null

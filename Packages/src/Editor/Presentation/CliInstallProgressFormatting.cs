@@ -8,6 +8,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// </summary>
     internal static class CliInstallProgressFormatting
     {
+        // Why a non-empty placeholder: the installer bootstrap stays silent for seconds
+        // (process start, script download) before its first stdout line arrives, and an
+        // empty detail label during that window reads as a hang.
+        internal const string INITIAL_DETAIL_LINE = "Preparing installer...";
+
         // Why transparent rich-text dots: keep "Installing... (Ns)" word order while
         // reserving three-dot width so the elapsed-time suffix does not shift left/right.
         private const string HIDDEN_DOT_OPEN = "<color=#00000000>";

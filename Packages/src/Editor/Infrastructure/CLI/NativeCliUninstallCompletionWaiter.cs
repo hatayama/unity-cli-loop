@@ -43,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 {
                     return new CliInstallResult(
                         false,
-                        $"Timed out waiting for uLoop CLI uninstall to remove {targetPath}.");
+                        $"Timed out waiting for uloop CLI uninstall to remove {targetPath}.");
                 }
 
                 int delayMs = Math.Min(pollMs, timeoutMs - elapsedMs);

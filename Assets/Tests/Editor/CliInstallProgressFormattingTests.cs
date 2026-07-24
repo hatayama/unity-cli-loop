@@ -90,5 +90,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result, Is.EqualTo("Downloading uloop"));
         }
+
+        [Test]
+        public void InitialDetailLine_IsNonBlankAndSurvivesDetailFormatting()
+        {
+            // Verifies the Show() placeholder is visible immediately and would not be filtered out as a blank detail line.
+            Assert.That(CliInstallProgressFormatting.INITIAL_DETAIL_LINE, Is.EqualTo("Preparing installer..."));
+            Assert.That(
+                CliInstallProgressFormatting.FormatDetailLine(CliInstallProgressFormatting.INITIAL_DETAIL_LINE),
+                Is.EqualTo(CliInstallProgressFormatting.INITIAL_DETAIL_LINE));
+        }
     }
 }
