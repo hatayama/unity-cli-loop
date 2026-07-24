@@ -69,6 +69,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteAsync_WhenStatusOnlyResumeBlockedByCompileErrors_ReturnsSavedDiagnostics()
+        {
+            // Verifies Resume is treated as a Play alias for StatusOnly compile-error blocking.
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            ControlPlayModeCompileError[] compileErrors =
+            {
+                new ControlPlayModeCompileError
+                {
+                    Message = "CS1525: invalid expression",
+                    File = "Assets/Scripts/Sample.cs",
+                    Line = 3
+                }
+            };
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(compileErrors),
+                new StubCompilationFailureGate(true));
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Resume,
+                StatusOnly = true,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.BlockedByCompileErrors, Is.True);
+            Assert.That(response.CompileErrorCount, Is.EqualTo(1));
+            Assert.That(response.Message, Is.EqualTo("Play mode could not start because Unity has compiler errors."));
+        }
+
+        [Test]
         public async Task ExecuteAsync_WhenStatusOnlyStopAndCompileFailed_ReturnsCurrentPlayModeState()
         {
             // Verifies compiler errors are only treated as a status polling blocker for Play requests.

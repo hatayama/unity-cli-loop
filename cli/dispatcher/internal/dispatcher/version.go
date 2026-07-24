@@ -25,11 +25,15 @@ func tryHandleVersionRequest(args []string, stdout io.Writer, stderr io.Writer) 
 		return true, 0
 	}
 
+	unknownOption := args[1]
+	if unknownOption == "--json" && len(args) > 2 {
+		unknownOption = args[2]
+	}
 	clierrors.WriteClassifiedError(stderr, &clierrors.ArgumentError{
-		Message:     "Unknown version option: " + args[1],
-		Option:      args[1],
+		Message:     "Unknown version option: " + unknownOption,
+		Option:      unknownOption,
 		Command:     clicore.VersionCommandName,
-		NextActions: []string{"Run `uloop version` or `uloop version --json`."},
+		NextActions: []string{"Run `uloop version --help` to inspect supported options."},
 	}, clierrors.ErrorContext{Command: clicore.VersionCommandName})
 	return true, 1
 }

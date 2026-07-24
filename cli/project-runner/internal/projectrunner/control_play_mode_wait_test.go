@@ -525,6 +525,162 @@ func TestShouldWaitForControlPlayModeStateSkipsStatusAction(t *testing.T) {
 	}
 }
 
+// Verifies Resume is treated as a waitable Play alias for state polling.
+func TestShouldWaitForControlPlayModeStateIncludesResumeAction(t *testing.T) {
+	params := map[string]any{controlPlayModeActionParam: "Resume"}
+
+	if !shouldWaitForControlPlayModeState(controlPlayModeCommandName, params) {
+		t.Fatal("Resume action should enter the state-wait poll loop like Play")
+	}
+}
+
+// Verifies Resume blocked by compile errors keeps the raw RequestedAction in error details.
+func TestRunControlPlayModeWithStateWaitResumeCompileErrorsPreserveRequestedAction(t *testing.T) {
+	originalPoll := controlPlayModeStatePoll
+	controlPlayModeStatePoll = time.Millisecond
+	t.Cleanup(func() {
+		controlPlayModeStatePoll = originalPoll
+	})
+
+	listener := newLoopbackIpcListener(t)
+
+	requests := make(chan map[string]any, 2)
+	serverErr := make(chan error, 1)
+	go serveControlPlayModeResponses(
+		listener,
+		requests,
+		serverErr,
+		[]string{
+			`{"IsPlaying":false,"IsPaused":false,"BlockedByCompileErrors":true,"CompileErrorCount":1,"CompileErrors":[{"Message":"CS1002: ; expected","File":"Assets/Scripts/Sample.cs","Line":12}],"Message":"Play mode could not start because Unity has compiler errors."}`,
+		})
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runControlPlayModeWithStateWait(
+		context.Background(),
+		connection,
+		map[string]any{
+			controlPlayModeActionParam:  "Resume",
+			controlPlayModeTimeoutParam: 1,
+		},
+		&stdout,
+		&stderr)
+
+	if code != 1 {
+		t.Fatalf("expected compile error failure, got %d with stdout %s stderr %s", code, stdout.String(), stderr.String())
+	}
+
+	var envelope clierrors.CLIErrorEnvelope
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
+	}
+	if envelope.Error.ErrorCode != clierrors.ErrorCodeControlPlayModeCompileErrors {
+		t.Fatalf("error code mismatch: %#v", envelope.Error)
+	}
+	if envelope.Error.Details["RequestedAction"] != "Resume" {
+		t.Fatalf("RequestedAction must remain the raw user action Resume, got %#v", envelope.Error.Details["RequestedAction"])
+	}
+
+	firstRequest := readControlPlayModeRequest(t, requests)
+	if firstRequest[controlPlayModeActionParam] != "Resume" {
+		t.Fatalf("Unity-bound initial request must keep Resume: %#v", firstRequest)
+	}
+	if _, ok := firstRequest[controlPlayModeStatusOnlyParam]; ok {
+		t.Fatalf("initial request should not be status-only: %#v", firstRequest)
+	}
+	select {
+	case secondRequest := <-requests:
+		t.Fatalf("blocked compile errors should not trigger status polling: %#v", secondRequest)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
+
+// Verifies Resume waits for the playing state the same way Play does after a stale initial response.
+func TestRunControlPlayModeWithStateWaitPollsStatusForResumeLikePlay(t *testing.T) {
+	originalPoll := controlPlayModeStatePoll
+	controlPlayModeStatePoll = time.Millisecond
+	t.Cleanup(func() {
+		controlPlayModeStatePoll = originalPoll
+	})
+
+	listener := newLoopbackIpcListener(t)
+
+	requests := make(chan map[string]any, 2)
+	serverErr := make(chan error, 1)
+	go serveControlPlayModeResponses(
+		listener,
+		requests,
+		serverErr,
+		[]string{
+			`{"IsPlaying":false,"IsPaused":false,"Message":"Play mode resumed","ResumedFromPause":true,"Changed":true}`,
+			`{"IsPlaying":true,"IsPaused":false,"Message":"Play mode status"}`,
+		})
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runControlPlayModeWithStateWait(
+		context.Background(),
+		connection,
+		map[string]any{
+			controlPlayModeActionParam:  "Resume",
+			controlPlayModeTimeoutParam: 1,
+		},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("runControlPlayModeWithStateWait failed with %d: %s", code, stderr.String())
+	}
+
+	response := controlPlayModeResponse{}
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode stdout: %v\n%s", err, stdout.String())
+	}
+	if !response.IsPlaying || response.IsPaused {
+		t.Fatalf("response state mismatch: %#v", response)
+	}
+	if !response.ResumedFromPause {
+		t.Fatalf("ResumedFromPause should be preserved from the initial Resume response: %#v", response)
+	}
+
+	firstRequest := readControlPlayModeRequest(t, requests)
+	if firstRequest[controlPlayModeActionParam] != "Resume" {
+		t.Fatalf("Unity-bound initial request must keep Resume: %#v", firstRequest)
+	}
+	secondRequest := readControlPlayModeRequest(t, requests)
+	if secondRequest[controlPlayModeStatusOnlyParam] != true {
+		t.Fatalf("status request mismatch: %#v", secondRequest)
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
+
 // Verifies that live Unity tool caches using number schemas still drive integer wait budgets.
 func TestControlPlayModeTimeoutSecondsAcceptsFloatSchemaValue(t *testing.T) {
 	params := map[string]any{controlPlayModeTimeoutParam: 12.0}
