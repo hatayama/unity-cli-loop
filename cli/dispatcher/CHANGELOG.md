@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.0.0-beta.21](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.20...dispatcher-v3.0.0-beta.21) (2026-07-24)
+
+
+### Features
+
+* pause-point round 10 feedback improvements ([8b66c6a](https://github.com/hatayama/unity-cli-loop/commit/8b66c6a7e7066e82820b144b85a9b2d89ff071ed))
+
+
+### Bug Fixes
+
+* Windows CLI install robustness and uninstall message wording ([#1970](https://github.com/hatayama/unity-cli-loop/issues/1970)) ([40a12ad](https://github.com/hatayama/unity-cli-loop/commit/40a12add4b445293ee7a4820ae26c860068a2dac))
+
 ## [3.0.0-beta.20](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.19...dispatcher-v3.0.0-beta.20) (2026-07-22)
 
 
