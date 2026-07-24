@@ -217,6 +217,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(delaySeconds, Is.EqualTo(expectedDelaySeconds).Within(0.0001));
         }
 
+        [Test]
+        public void IsSkillStateChecking_WhenCliCheckCompletedButSkillScanPending_ReturnsTrue()
+        {
+            // Verifies pending skill-target scan stays in checking after CLI check completes.
+            bool isSkillStateChecking = UnityCliLoopSettingsWindowRefreshPolicy.IsSkillStateChecking(
+                isCliCheckCompleted: true,
+                includeSkillDirectoryChecks: true,
+                hasSkillTargetScanResult: false);
+
+            Assert.That(isSkillStateChecking, Is.True);
+        }
+
+        [TestCase(false, true, true, true)]
+        [TestCase(true, false, true, true)]
+        [TestCase(true, true, false, true)]
+        [TestCase(true, true, true, false)]
+        public void IsSkillStateChecking_ReturnsExpectedValue(
+            bool isCliCheckCompleted,
+            bool includeSkillDirectoryChecks,
+            bool hasSkillTargetScanResult,
+            bool expected)
+        {
+            // Verifies skill-state checking combines CLI completion, include flag, and scan arrival.
+            bool isSkillStateChecking = UnityCliLoopSettingsWindowRefreshPolicy.IsSkillStateChecking(
+                isCliCheckCompleted,
+                includeSkillDirectoryChecks,
+                hasSkillTargetScanResult);
+
+            Assert.That(isSkillStateChecking, Is.EqualTo(expected));
+        }
+
         private static ToolSettingsSectionData CreateToolSettingsData(
             bool showToolSettings,
             bool isRegistryAvailable)
