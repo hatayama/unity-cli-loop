@@ -76,9 +76,12 @@ For third-party tools, inspect the current tool schema or docs before choosing t
 ## Same-Name Options on Other Commands
 
 These option names appear in the table above for one command but are valid
-V3 syntax on another command. Never migrate them by token match alone.
+V3 syntax on another command. Never migrate them by token match alone. On the
+other command, only the already-bare flag is exempt: value-bearing forms such
+as `--flag true` or `--flag=false` still follow the Boolean Argument Rules
+against that command's default.
 
-| Option | Migrate on | Leave unchanged on |
+| Option | Migrate on | Also valid V3 on |
 | --- | --- | --- |
 | `wait-for-domain-reload` | `uloop compile` (see Special First-Party Options) | `uloop execute-dynamic-code`, where bare `--wait-for-domain-reload` is a valid V3 default-false flag |
 | `include-inactive` | `uloop get-hierarchy` (see Special First-Party Options) | `uloop find-game-objects`, where bare `--include-inactive` is a valid V3 default-false flag |
