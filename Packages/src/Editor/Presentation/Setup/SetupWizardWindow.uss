@@ -89,6 +89,11 @@
     margin-bottom: 10px;
 }
 
+.setup-step__title-row .skills-setup-panel__refresh-button {
+    /* why: optically center the refresh glyph on the heading text (wizard only) */
+    translate: 0 1px;
+}
+
 .setup-step__title-row .setup-step__title {
     margin-bottom: 0;
 }
