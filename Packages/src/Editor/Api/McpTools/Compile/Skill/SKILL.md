@@ -17,8 +17,17 @@ uloop compile [--force-recompile <true|false>] [--wait-for-domain-reload <true|f
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--force-recompile` | boolean value | `false` | Force full recompilation (triggers Domain Reload). Pass `true` or `false`; bare flags are not accepted. |
+| `--force-recompile` | boolean value | `false` | Force full recompilation (triggers Domain Reload). Rarely needed — see "When to use --force-recompile" below. Pass `true` or `false`; bare flags are not accepted. |
 | `--wait-for-domain-reload` | boolean value | `false` | Wait until Domain Reload completes before returning. Pass `true` or `false`; bare flags are not accepted. |
+
+## When to use --force-recompile
+
+Almost never. Unity itself detects changed files — even when they were edited outside the
+Editor, a plain `uloop compile` runs every recompilation the changes require. A forced full
+recompile can freeze the Editor for a long time on large projects, and with
+`--wait-for-domain-reload true` the response crosses a Domain Reload so `Success` comes back
+as `null`, making it useless as a verification step. The only legitimate use: surfacing
+warnings hidden by other asmdefs with a full build.
 
 ## Global Options
 
