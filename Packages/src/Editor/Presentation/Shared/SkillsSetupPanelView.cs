@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly VisualElement _skillTargetStatusList;
         private readonly VisualElement _skillTargetStatusDivider;
         private readonly Label _skillTargetStatusSummary;
+        private readonly Label _skillsNoTargetsMessage;
         private readonly Button _installAllSkillsButton;
         private readonly Foldout _installSpecificTargetFoldout;
         private readonly VisualElement _groupSkillsRow;
@@ -45,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _skillTargetStatusList = root.Q<VisualElement>("skill-target-status-list");
             _skillTargetStatusDivider = root.Q<VisualElement>("skill-target-status-divider");
             _skillTargetStatusSummary = root.Q<Label>("skill-target-status-summary");
+            _skillsNoTargetsMessage = root.Q<Label>("skills-no-targets-message");
             _installAllSkillsButton = root.Q<Button>("install-all-skills-button");
             _installSpecificTargetFoldout = root.Q<Foldout>("install-specific-target-foldout");
             _groupSkillsRow = root.Q<VisualElement>("group-skills-row");
@@ -57,6 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(_skillTargetStatusList != null, "skill-target-status-list must not be null");
             Debug.Assert(_skillTargetStatusDivider != null, "skill-target-status-divider must not be null");
             Debug.Assert(_skillTargetStatusSummary != null, "skill-target-status-summary must not be null");
+            Debug.Assert(_skillsNoTargetsMessage != null, "skills-no-targets-message must not be null");
             Debug.Assert(_installAllSkillsButton != null, "install-all-skills-button must not be null");
             Debug.Assert(_installSpecificTargetFoldout != null, "install-specific-target-foldout must not be null");
             Debug.Assert(_groupSkillsRow != null, "group-skills-row must not be null");
@@ -69,6 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _ = _skillTargetStatusList ?? throw new System.ArgumentNullException(nameof(_skillTargetStatusList));
             _ = _skillTargetStatusDivider ?? throw new System.ArgumentNullException(nameof(_skillTargetStatusDivider));
             _ = _skillTargetStatusSummary ?? throw new System.ArgumentNullException(nameof(_skillTargetStatusSummary));
+            _ = _skillsNoTargetsMessage ?? throw new System.ArgumentNullException(nameof(_skillsNoTargetsMessage));
             _ = _installAllSkillsButton ?? throw new System.ArgumentNullException(nameof(_installAllSkillsButton));
             _ = _installSpecificTargetFoldout
                 ?? throw new System.ArgumentNullException(nameof(_installSpecificTargetFoldout));
@@ -82,6 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             _installSpecificTargetFoldout.SetValueWithoutNotify(false);
             ViewDataBinder.SetVisible(_groupSkillsRow, false);
+            ViewDataBinder.SetVisible(_skillsNoTargetsMessage, false);
 
             _installAllSkillsButton.clicked += () => OnInstallAllClicked?.Invoke();
             _installSelectedSkillsButton.clicked += () => OnInstallSelectedClicked?.Invoke();
@@ -98,6 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             _skillTargetStatusList.Clear();
             UpdateSkillsStatusLabel("Checking installed skills...");
+            ViewDataBinder.SetVisible(_skillsNoTargetsMessage, false);
             _installAllSkillsButton.SetEnabled(false);
             _installAllSkillsButton.text = "Checking...";
             _installSelectedSkillsButton.SetEnabled(false);
@@ -147,6 +153,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             bool isCheckingSkills = installableTargets.Any(
                 target => target.InstallState == SkillInstallState.Checking);
+            ViewDataBinder.SetVisible(_installAllSkillsButton, installableTargets.Count > 0);
+            ViewDataBinder.SetVisible(_skillsNoTargetsMessage, !isCheckingSkills && installableTargets.Count == 0);
             if (isCheckingSkills)
             {
                 UpdateSkillsStatusLabel("Checking installed skills...");

@@ -130,6 +130,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(skillsTargetField.enabledSelf, Is.False);
         }
 
+        [Test]
+        public void Update_WhenNoInstallableTargets_HidesBulkInstallAndShowsGuidance()
+        {
+            // Verifies empty detection hides the bulk Install Skills button and shows guidance instead.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Missing,
+                installableSkillTargets: new List<SkillSetupTargetInfo>());
+
+            section.Update(data);
+
+            Button installAllSkillsButton = root.Q<Button>("install-all-skills-button");
+            Label noTargetsMessage = root.Q<Label>("skills-no-targets-message");
+            Assert.That(installAllSkillsButton.style.display.value, Is.EqualTo(DisplayStyle.None));
+            Assert.That(noTargetsMessage.style.display.value, Is.EqualTo(DisplayStyle.Flex));
+        }
+
+        [Test]
+        public void Update_WhenInstallableTargetsExist_ShowsBulkInstallAndHidesGuidance()
+        {
+            // Verifies detected targets keep the bulk Install Skills button and hide empty-state guidance.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                new(
+                    "Claude",
+                    ".claude",
+                    "--claude",
+                    hasSkillsDirectory: true,
+                    hasExistingSkills: false,
+                    hasDifferentLayoutSkills: false,
+                    SkillInstallState.Missing)
+            };
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Missing,
+                installableSkillTargets: targets);
+
+            section.Update(data);
+
+            Button installAllSkillsButton = root.Q<Button>("install-all-skills-button");
+            Label noTargetsMessage = root.Q<Label>("skills-no-targets-message");
+            Assert.That(installAllSkillsButton.style.display.value, Is.EqualTo(DisplayStyle.Flex));
+            Assert.That(noTargetsMessage.style.display.value, Is.EqualTo(DisplayStyle.None));
+        }
+
         private static VisualElement CreateRootElement()
         {
             VisualElement root = new();
@@ -146,6 +197,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             skillsSetupPanel.Add(new VisualElement { name = "skill-target-status-list" });
             skillsSetupPanel.Add(new VisualElement { name = "skill-target-status-divider" });
             skillsSetupPanel.Add(new Label { name = "skill-target-status-summary" });
+            skillsSetupPanel.Add(new Label { name = "skills-no-targets-message" });
             skillsSetupPanel.Add(new Button { name = "install-all-skills-button" });
             Foldout specificTargetFoldout = new() { name = "install-specific-target-foldout" };
             VisualElement groupSkillsRow = new() { name = "group-skills-row" };
@@ -166,7 +218,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static CliSetupData CreateData(
             bool isCliInstalled,
             bool isChecking,
-            SkillInstallState selectedTargetInstallState)
+            SkillInstallState selectedTargetInstallState,
+            IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets = null)
         {
             return new CliSetupData(
                 isCliInstalled,
@@ -187,7 +240,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 SkillsTarget.Claude,
                 groupSkillsUnderUnityCliLoop: false,
                 isInstallingSkills: false,
-                installableSkillTargets: new List<SkillSetupTargetInfo>());
+                installableSkillTargets: installableSkillTargets ?? new List<SkillSetupTargetInfo>());
         }
     }
 }
