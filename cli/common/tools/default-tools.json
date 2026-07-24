@@ -326,7 +326,7 @@
         "properties": {
           "Action": {
             "type": "string",
-            "description": "Action to perform: Play/Stop/Pause/Step/Status/Resume (alias of Play)",
+            "description": "Action to perform: Play - Start play mode, Stop - Stop play mode, Pause - Pause play mode, Step - advance one frame while paused, Status - report current state without changing anything, Resume - alias of Play (resumes the paused session)",
             "enum": [
               "Play",
               "Stop",
