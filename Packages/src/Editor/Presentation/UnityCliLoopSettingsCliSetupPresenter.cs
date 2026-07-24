@@ -440,7 +440,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 UnityEngine.Application.platform);
             bool isChecking = !_cliSetupApplicationService.IsCliCheckCompleted()
                 || isRefreshingVersion
-                || isRefreshingCliPathSetup
+                || isRefreshingCliPathSetup;
+            bool isSkillStateChecking = !_cliSetupApplicationService.IsCliCheckCompleted()
                 || !includeSkillDirectoryChecks;
             CliSetupCompatibilityState state = CliSetupCompatibility.Evaluate(
                 cliVersion,
@@ -460,6 +461,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 needsCliPathSetup,
                 isInstallingCli,
                 isChecking,
+                isSkillStateChecking,
                 isClaudeSkillsInstalled: false,
                 isAgentsSkillsInstalled: false,
                 isCursorSkillsInstalled: false,

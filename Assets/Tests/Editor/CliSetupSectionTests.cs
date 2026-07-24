@@ -85,14 +85,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void Update_WhenCliRefreshIsChecking_ShowsSkillsCheckingState()
+        public void Update_WhenSkillStateIsChecking_ShowsSkillsCheckingState()
         {
-            // Verifies that IsChecking routes the shared skills panel into ShowChecking.
+            // Verifies that IsSkillStateChecking routes the shared skills panel into ShowChecking.
             VisualElement root = CreateRootElement();
             CliSetupSection section = new(root);
             CliSetupData data = CreateData(
                 isCliInstalled: true,
-                isChecking: true,
+                isChecking: false,
+                isSkillStateChecking: true,
                 selectedTargetInstallState: SkillInstallState.Missing);
 
             section.Update(data);
@@ -111,6 +112,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(installSelectedSkillsButton.text, Is.EqualTo("Checking..."));
             Assert.That(skillsTargetField.enabledSelf, Is.False);
             Assert.That(groupSkillsToggle.enabledSelf, Is.False);
+        }
+
+        [Test]
+        public void Update_WhenOnlyCliIsChecking_DoesNotShowSkillsCheckingState()
+        {
+            // Verifies CLI refresh checking does not force the skills panel into Checking... state.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: true,
+                isSkillStateChecking: false,
+                selectedTargetInstallState: SkillInstallState.Missing);
+
+            section.Update(data);
+
+            Button installAllSkillsButton = root.Q<Button>("install-all-skills-button");
+            EnumField skillsTargetField = root.Q<EnumField>("skills-target-field");
+            Button refreshCliVersionButton = root.Q<Button>("refresh-cli-version-button");
+            Assert.That(installAllSkillsButton.text, Is.Not.EqualTo("Checking..."));
+            Assert.That(skillsTargetField.enabledSelf, Is.True);
+            Assert.That(refreshCliVersionButton.enabledSelf, Is.False);
         }
 
         [Test]
@@ -219,7 +242,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool isCliInstalled,
             bool isChecking,
             SkillInstallState selectedTargetInstallState,
-            IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets = null)
+            IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets = null,
+            bool? isSkillStateChecking = null)
         {
             return new CliSetupData(
                 isCliInstalled,
@@ -230,6 +254,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 needsCliPathSetup: false,
                 isInstallingCli: false,
                 isChecking,
+                isSkillStateChecking: isSkillStateChecking ?? isChecking,
                 isClaudeSkillsInstalled: false,
                 isAgentsSkillsInstalled: false,
                 isCursorSkillsInstalled: false,

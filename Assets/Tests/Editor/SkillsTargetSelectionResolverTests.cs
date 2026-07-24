@@ -52,6 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 needsCliPathSetup: false,
                 isInstallingCli: false,
                 isChecking: false,
+                isSkillStateChecking: false,
                 isClaudeSkillsInstalled: true,
                 isAgentsSkillsInstalled: true,
                 isCursorSkillsInstalled: false,

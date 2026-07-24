@@ -153,7 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 data.GroupSkillsUnderUnityCliLoop,
                 data.IsCliInstalled && !data.IsInstallingSkills);
 
-            if (data.IsChecking)
+            if (data.IsSkillStateChecking)
             {
                 _skillsSetupPanelView.ShowChecking();
                 return;

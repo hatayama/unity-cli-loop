@@ -88,6 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         public readonly bool NeedsCliPathSetup;
         public readonly bool IsInstallingCli;
         public readonly bool IsChecking;
+        public readonly bool IsSkillStateChecking;
         public readonly bool IsClaudeSkillsInstalled;
         public readonly bool IsAgentsSkillsInstalled;
         public readonly bool IsCursorSkillsInstalled;
@@ -109,6 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool needsCliPathSetup,
             bool isInstallingCli,
             bool isChecking,
+            bool isSkillStateChecking,
             bool isClaudeSkillsInstalled,
             bool isAgentsSkillsInstalled,
             bool isCursorSkillsInstalled,
@@ -129,6 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             NeedsCliPathSetup = needsCliPathSetup;
             IsInstallingCli = isInstallingCli;
             IsChecking = isChecking;
+            IsSkillStateChecking = isSkillStateChecking;
             IsClaudeSkillsInstalled = isClaudeSkillsInstalled;
             IsAgentsSkillsInstalled = isAgentsSkillsInstalled;
             IsCursorSkillsInstalled = isCursorSkillsInstalled;
