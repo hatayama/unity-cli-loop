@@ -18,13 +18,6 @@ uloop get-project-info
 
 None.
 
-## Examples
-
-```bash
-# Get project info
-uloop get-project-info
-```
-
 ## Output
 
 Returns JSON with project information:
