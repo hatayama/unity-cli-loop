@@ -62,8 +62,6 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 - Origin is **top-left** (0, 0)
 - All positions are in **screen pixels**
 - Get coordinates from `AnnotatedElements` JSON (`SimX`/`SimY`) — do NOT look up GameObject positions
-- Clicking or long-pressing on empty space (no UI element) still succeeds with a message indicating no element was hit
-- Dragging on empty space (no draggable UI element) returns `Success = false`
 - `--bypass-raycast` still uses coordinates for pointer event positions, but chooses the clicked, long-pressed, or dragged GameObject by `--target-path`
 - If `--target-path` or `--drop-target-path` matches multiple active GameObjects, the command fails instead of choosing an arbitrary duplicate
 - Device Simulator play view is supported. Prefer `uloop screenshot --capture-mode rendering --annotate-elements` for coordinates; they use the simulated device resolution (`Handles.GetMainGameViewSize()` / `Screen`), not the Simulator chrome scale.
@@ -80,12 +78,6 @@ uloop simulate-mouse-ui --action Click --x 400 --y 300
 
 # Force-click a button behind a raycast blocker by path
 uloop simulate-mouse-ui --action Click --x 400 --y 300 --bypass-raycast --target-path "Canvas/Panel/Button"
-
-# Force-long-press a button behind a raycast blocker by path
-uloop simulate-mouse-ui --action LongPress --x 400 --y 300 --duration 3.0 --bypass-raycast --target-path "Canvas/Panel/Button"
-
-# Force-drag an item behind a raycast blocker by path
-uloop simulate-mouse-ui --action Drag --from-x 400 --from-y 300 --x 600 --y 300 --bypass-raycast --target-path "Canvas/Item"
 
 # Force-drag and dispatch Drop to a blocked drop zone
 uloop simulate-mouse-ui --action Drag --from-x 400 --from-y 300 --x 600 --y 300 --bypass-raycast --target-path "Canvas/Item" --drop-target-path "Canvas/DropZone"
