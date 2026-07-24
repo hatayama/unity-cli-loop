@@ -4,7 +4,6 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using UnityEditor;
-using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -19,55 +18,33 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// </summary>
     internal sealed class SetupWizardSkillsWorkflowController
     {
-        private readonly VisualElement _groupSkillsRow;
-        private readonly EnumField _skillsTargetField;
-        private readonly Toggle _groupSkillsToggle;
-        private readonly Label _groupSkillsLabel;
-        private readonly SetupWizardSkillsStepPresenter _skillsStepPresenter;
+        private readonly SkillsSetupPanelView _skillsSetupPanelView;
         private readonly SkillSetupUseCase _skillSetupUseCase;
         private readonly IUnityCliLoopEditorSettingsPort _editorSettingsPort;
         private readonly CliSetupApplicationService _cliSetupApplicationService;
         private readonly Action _scheduleResizeToContent;
 
         private bool _isInstallingSkills;
-        private bool _isSkillsTargetFieldInitialized;
-        private bool _shouldUseFirstInstallSkillsUi;
         private bool _installSkillsFlat;
         private CancellationTokenSource _skillInstallStateRefreshCts;
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
+        private List<SkillSetupTargetInfo> _latestTargets = new();
 
         internal SetupWizardSkillsWorkflowController(
-            VisualElement groupSkillsRow,
-            EnumField skillsTargetField,
-            Toggle groupSkillsToggle,
-            Label groupSkillsLabel,
-            VisualElement skillsTargetRow,
-            VisualElement skillsTargetList,
-            VisualElement skillsStatusDivider,
-            Label skillsStatusLabel,
-            Button installSkillsButton,
+            SkillsSetupPanelView skillsSetupPanelView,
             SkillSetupUseCase skillSetupUseCase,
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             CliSetupApplicationService cliSetupApplicationService,
-            Action scheduleResizeToContent,
-            string lastSeenSetupWizardVersionBeforeOpen)
+            Action scheduleResizeToContent)
         {
-            Debug.Assert(groupSkillsRow != null, "groupSkillsRow must not be null");
-            Debug.Assert(skillsTargetField != null, "skillsTargetField must not be null");
-            Debug.Assert(groupSkillsToggle != null, "groupSkillsToggle must not be null");
-            Debug.Assert(groupSkillsLabel != null, "groupSkillsLabel must not be null");
+            Debug.Assert(skillsSetupPanelView != null, "skillsSetupPanelView must not be null");
             Debug.Assert(skillSetupUseCase != null, "skillSetupUseCase must not be null");
             Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
             Debug.Assert(cliSetupApplicationService != null, "cliSetupApplicationService must not be null");
             Debug.Assert(scheduleResizeToContent != null, "scheduleResizeToContent must not be null");
 
-            _groupSkillsRow = groupSkillsRow ?? throw new ArgumentNullException(nameof(groupSkillsRow));
-            _skillsTargetField = skillsTargetField
-                ?? throw new ArgumentNullException(nameof(skillsTargetField));
-            _groupSkillsToggle = groupSkillsToggle
-                ?? throw new ArgumentNullException(nameof(groupSkillsToggle));
-            _groupSkillsLabel = groupSkillsLabel
-                ?? throw new ArgumentNullException(nameof(groupSkillsLabel));
+            _skillsSetupPanelView = skillsSetupPanelView
+                ?? throw new ArgumentNullException(nameof(skillsSetupPanelView));
             _skillSetupUseCase = skillSetupUseCase
                 ?? throw new ArgumentNullException(nameof(skillSetupUseCase));
             _editorSettingsPort = editorSettingsPort
@@ -77,52 +54,27 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _scheduleResizeToContent = scheduleResizeToContent
                 ?? throw new ArgumentNullException(nameof(scheduleResizeToContent));
 
-            _skillsStepPresenter = new SetupWizardSkillsStepPresenter(
-                skillsTargetRow,
-                skillsTargetList,
-                skillsStatusDivider,
-                skillsStatusLabel,
-                installSkillsButton,
-                HandleInstallSkills);
-
-            InitializeFirstInstallSkillsUiState(lastSeenSetupWizardVersionBeforeOpen);
-        }
-
-        internal void InitializeSkillsTargetField()
-        {
-            if (_isSkillsTargetFieldInitialized) return;
-
-            _skillsTargetField.Init(_skillsTarget);
-            _skillsTargetField.RegisterValueChangedCallback(evt =>
-            {
-                if (evt.newValue is SkillsTarget newTarget)
-                {
-                    _skillsTarget = newTarget;
-                    RefreshSkillsSection();
-                }
-            });
-            _isSkillsTargetFieldInitialized = true;
+            _skillsSetupPanelView.OnInstallAllClicked += HandleInstallAllSkills;
+            _skillsSetupPanelView.OnInstallSelectedClicked += HandleInstallSelectedSkills;
+            _skillsSetupPanelView.OnRefreshClicked += RefreshSkillsSection;
+            _skillsSetupPanelView.OnTargetChanged += HandleTargetChanged;
+            _skillsSetupPanelView.OnGroupSkillsChanged += HandleGroupSkillsChanged;
         }
 
         internal void InitializeGroupSkillsToggle()
         {
             ApplyFlatSkillInstallPreference();
-            ViewDataBinder.SetVisible(_groupSkillsRow, false);
-            _groupSkillsToggle.SetValueWithoutNotify(!_installSkillsFlat);
-            _groupSkillsToggle.RegisterValueChangedCallback(evt =>
-            {
-                evt.StopPropagation();
-                ApplyFlatSkillInstallPreference();
-                RefreshSkillsSection();
-            });
-            _groupSkillsLabel.RegisterCallback<ClickEvent>(HandleGroupSkillsRowClicked);
+            _skillsSetupPanelView.UpdateGroupSkillsToggle(
+                groupSkillsUnderUnityCliLoop: !_installSkillsFlat,
+                isEnabled: false);
         }
 
         internal void ShowChecking()
         {
-            ViewDataBinder.SetVisible(_groupSkillsRow, false);
-            _groupSkillsToggle.SetEnabled(false);
-            _skillsStepPresenter.ShowChecking(_shouldUseFirstInstallSkillsUi);
+            _skillsSetupPanelView.UpdateGroupSkillsToggle(
+                groupSkillsUnderUnityCliLoop: !_installSkillsFlat,
+                isEnabled: false);
+            _skillsSetupPanelView.ShowChecking();
         }
 
         internal void RefreshSkillsSection()
@@ -156,12 +108,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _skillInstallStateRefreshCts.Cancel();
             _skillInstallStateRefreshCts.Dispose();
             _skillInstallStateRefreshCts = null;
-        }
-
-        private void InitializeFirstInstallSkillsUiState(string lastSeenSetupWizardVersionBeforeOpen)
-        {
-            _shouldUseFirstInstallSkillsUi = SetupWizardWindow.ShouldUseFirstInstallSkillsUi(
-                lastSeenSetupWizardVersionBeforeOpen);
         }
 
         private List<SkillSetupTargetInfo> DetectDisplayedSkillTargets(string projectRoot)
@@ -205,38 +151,56 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool canManageSkills,
             List<SkillSetupTargetInfo> targets)
         {
+            _latestTargets = targets;
             List<SkillSetupTargetInfo> installableTargets =
-                SetupWizardSkillsStepPresenter.FilterInstallableSkillTargets(targets);
-            _shouldUseFirstInstallSkillsUi = SetupWizardSkillsStepPresenter.ResolveUseFirstInstallSkillsUi(
-                _shouldUseFirstInstallSkillsUi,
-                installableTargets.Count);
-            _groupSkillsToggle.SetEnabled(canManageSkills && !_isInstallingSkills);
-            _skillsStepPresenter.Update(
+                SkillsSetupPanelView.FilterInstallableSkillTargets(targets);
+            bool groupSkillsUnderUnityCliLoop = !_installSkillsFlat;
+            _skillsSetupPanelView.UpdateGroupSkillsToggle(
+                groupSkillsUnderUnityCliLoop,
+                canManageSkills && !_isInstallingSkills);
+            _skillsSetupPanelView.UpdateStatusPanel(
                 canManageSkills,
+                installableTargets,
+                groupSkillsUnderUnityCliLoop,
+                _isInstallingSkills);
+
+            SkillSetupTargetInfo selectedTargetInfo = SkillsSetupPanelView.GetSelectedSkillTargetInfo(
                 targets,
-                _shouldUseFirstInstallSkillsUi,
                 _skillsTarget,
-                !_installSkillsFlat,
+                groupSkillsUnderUnityCliLoop);
+            _skillsSetupPanelView.UpdateSelectedTargetInstall(
+                _skillsTarget,
+                selectedTargetInfo.InstallState,
+                isCliInstalled: canManageSkills,
                 _isInstallingSkills);
         }
 
-        private void HandleInstallSkills()
+        private void HandleInstallAllSkills()
         {
-            HandleInstallSkillsAsync(CancellationToken.None).Forget();
+            HandleInstallSkillsAsync(isBulkInstall: true, CancellationToken.None).Forget();
         }
 
-        private async Task HandleInstallSkillsAsync(CancellationToken ct)
+        private void HandleInstallSelectedSkills()
+        {
+            HandleInstallSkillsAsync(isBulkInstall: false, CancellationToken.None).Forget();
+        }
+
+        private async Task HandleInstallSkillsAsync(bool isBulkInstall, CancellationToken ct)
         {
             CancelSkillInstallStateRefresh();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             List<SkillSetupTargetInfo> targets = DetectDisplayedSkillTargets(projectRoot);
-            List<SkillSetupTargetInfo> installableTargets = _shouldUseFirstInstallSkillsUi
-                ? SetupWizardSkillsStepPresenter.GetFirstInstallableSkillTargets(
+            bool groupSkillsUnderUnityCliLoop = !_installSkillsFlat;
+            List<SkillSetupTargetInfo> installableTargets = isBulkInstall
+                ? SkillsSetupPanelView.FilterInstallableSkillTargets(targets)
+                : SkillsSetupPanelView.BuildSingleTargetInstallList(
                     targets,
                     _skillsTarget,
-                    !_installSkillsFlat)
-                : SetupWizardSkillsStepPresenter.FilterInstallableSkillTargets(targets);
-            if (installableTargets.Count == 0) return;
+                    groupSkillsUnderUnityCliLoop);
+            if (installableTargets.Count == 0)
+            {
+                return;
+            }
 
             bool shouldShowSkillsInstalledDialog =
                 SkillInstallDialogPolicy.ShouldShowForInstallableTargets(installableTargets);
@@ -247,7 +211,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 await _skillSetupUseCase.InstallSkillFilesAsync(
                     installableTargets,
-                    !_installSkillsFlat,
+                    groupSkillsUnderUnityCliLoop,
                     ct);
                 if (shouldShowSkillsInstalledDialog)
                 {
@@ -261,21 +225,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
         }
 
-        private void HandleGroupSkillsRowClicked(ClickEvent evt)
+        private void HandleTargetChanged(SkillsTarget newTarget)
         {
-            evt.StopPropagation();
-            if (!_groupSkillsToggle.enabledSelf)
-            {
-                return;
-            }
+            _skillsTarget = newTarget;
+            string cachedCliVersion = _cliSetupApplicationService.GetCachedCliVersion();
+            bool canManageSkills = SetupWizardWindow.CanManageSkills(IsCliInstalled(cachedCliVersion));
+            UpdateSkillsStep(canManageSkills, _latestTargets);
+            _scheduleResizeToContent();
+        }
 
-            if (evt.target is VisualElement targetElement && _groupSkillsToggle.Contains(targetElement))
-            {
-                return;
-            }
-
-            bool newValue = !_groupSkillsToggle.value;
-            _groupSkillsToggle.SetValueWithoutNotify(newValue);
+        private void HandleGroupSkillsChanged(bool _)
+        {
             ApplyFlatSkillInstallPreference();
             RefreshSkillsSection();
         }

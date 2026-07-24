@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 
 using UnityEditor;
-using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 using RuntimePlatform = UnityEngine.RuntimePlatform;
@@ -20,6 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const string WindowTitle = "Unity CLI Loop Setup";
         private const string UXML_RELATIVE_PATH = "Editor/Presentation/Setup/SetupWizardWindow.uxml";
         private const string USS_RELATIVE_PATH = "Editor/Presentation/Setup/SetupWizardWindow.uss";
+        private const string SKILLS_PANEL_UXML_RELATIVE_PATH = "Editor/Presentation/Shared/SkillsSetupPanel.uxml";
+        private const string SKILLS_PANEL_USS_RELATIVE_PATH = "Editor/Presentation/Shared/SkillsSetupPanel.uss";
         private const string GITHUB_ICON_RELATIVE_PATH = "Editor/Presentation/Setup/GitHub_Invertocat_White.png";
         internal const bool ForceFlatSkillInstall = true;
         private static IUnityCliLoopEditorSettingsPort RegisteredEditorSettingsPort;
@@ -111,8 +112,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            string lastSeenSetupWizardVersionBeforeOpen =
-                GetEditorSettingsPort().GetLastSeenSetupWizardVersion();
             Rect windowPosition = SetupWizardWindowResizer.CreateCenteredRect(
                 EditorGUIUtility.GetMainWindowPosition(),
                 SetupWizardWindowResizer.MinimumWindowSize);
@@ -121,7 +120,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 window,
                 WindowTitle,
                 windowPosition,
-                lastSeenSetupWizardVersionBeforeOpen,
                 shouldRecordVersion);
             window.ShowUtility();
             window.ScheduleResizeToContent();
@@ -159,7 +157,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SetupWizardWindow window,
             string title,
             Rect position,
-            string lastSeenSetupWizardVersionBeforeOpen,
             bool shouldRecordVersionAfterCreateGui)
         {
             Debug.Assert(window != null, "window must not be null");
@@ -167,8 +164,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             window.titleContent = new GUIContent(title);
             window.position = position;
-            window._lastSeenSetupWizardVersionBeforeOpen =
-                lastSeenSetupWizardVersionBeforeOpen ?? string.Empty;
             window._shouldRecordLastSeenVersionAfterCreateGui = shouldRecordVersionAfterCreateGui;
         }
 
@@ -218,8 +213,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private ScrollView _mainScrollView;
         private SetupWizardWorkflowController _controller;
 
-        [SerializeField]
-        private string _lastSeenSetupWizardVersionBeforeOpen = string.Empty;
         [SerializeField]
         private bool _shouldRecordLastSeenVersionAfterCreateGui;
         private SkillSetupUseCase _skillSetupUseCase;
@@ -276,6 +269,24 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             StyleSheet styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(ussPath);
             Debug.Assert(styleSheet != null, $"USS not found at {ussPath}");
             rootVisualElement.styleSheets.Add(styleSheet);
+
+            VisualElement skillsPanelPlaceholder =
+                rootVisualElement.Q<VisualElement>("skills-setup-panel-placeholder");
+            Debug.Assert(skillsPanelPlaceholder != null, "skills-setup-panel-placeholder must not be null");
+
+            string skillsPanelUxmlPath =
+                $"{UnityCliLoopConstants.PackageAssetPath}/{SKILLS_PANEL_UXML_RELATIVE_PATH}";
+            VisualTreeAsset skillsPanelTree =
+                AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(skillsPanelUxmlPath);
+            Debug.Assert(skillsPanelTree != null, $"UXML not found at {skillsPanelUxmlPath}");
+            skillsPanelTree.CloneTree(skillsPanelPlaceholder);
+
+            string skillsPanelUssPath =
+                $"{UnityCliLoopConstants.PackageAssetPath}/{SKILLS_PANEL_USS_RELATIVE_PATH}";
+            StyleSheet skillsPanelStyleSheet =
+                AssetDatabase.LoadAssetAtPath<StyleSheet>(skillsPanelUssPath);
+            Debug.Assert(skillsPanelStyleSheet != null, $"USS not found at {skillsPanelUssPath}");
+            rootVisualElement.styleSheets.Add(skillsPanelStyleSheet);
         }
 
         private void BindElements()
@@ -290,15 +301,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             VisualElement installProgressContainer = rootVisualElement.Q<VisualElement>("cli-install-progress");
             Label installProgressLabel = rootVisualElement.Q<Label>("cli-install-progress-label");
 
-            VisualElement groupSkillsRow = rootVisualElement.Q<VisualElement>("group-skills-row");
-            EnumField skillsTargetField = rootVisualElement.Q<EnumField>("skills-target-field");
-            Toggle groupSkillsToggle = rootVisualElement.Q<Toggle>("group-skills-toggle");
-            Label groupSkillsLabel = rootVisualElement.Q<Label>("group-skills-label");
-            VisualElement skillsTargetRow = rootVisualElement.Q<VisualElement>("skills-target-row");
-            VisualElement skillsTargetList = rootVisualElement.Q<VisualElement>("skills-target-list");
-            VisualElement skillsStatusDivider = rootVisualElement.Q<VisualElement>("skills-status-divider");
-            Label skillsStatusLabel = rootVisualElement.Q<Label>("skills-status-label");
-            Button installSkillsButton = rootVisualElement.Q<Button>("install-skills-button");
+            VisualElement skillsSetupPanel = rootVisualElement.Q<VisualElement>("skills-setup-panel");
+            Debug.Assert(skillsSetupPanel != null, "skills-setup-panel must not be null");
+            SkillsSetupPanelView skillsSetupPanelView = new(skillsSetupPanel);
 
             _suppressAutoShowToggle = rootVisualElement.Q<Toggle>("suppress-auto-show-toggle");
             _openSettingsButton = rootVisualElement.Q<Button>("open-settings-button");
@@ -317,27 +322,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 installCliButton,
                 installProgressContainer,
                 installProgressLabel,
-                groupSkillsRow,
-                skillsTargetField,
-                groupSkillsToggle,
-                groupSkillsLabel,
-                skillsTargetRow,
-                skillsTargetList,
-                skillsStatusDivider,
-                skillsStatusLabel,
-                installSkillsButton,
+                skillsSetupPanelView,
                 _suppressAutoShowToggle,
                 _skillSetupUseCase,
                 _editorSettingsPort,
                 _cliSetupApplicationService,
-                ScheduleResizeToContent,
-                _lastSeenSetupWizardVersionBeforeOpen);
+                ScheduleResizeToContent);
         }
 
         private void BindEvents()
         {
             _refreshButton.clicked += () => _controller.RefreshUI();
-            _controller.InitializeSkillsTargetField();
             _controller.InitializeGroupSkillsToggle();
             _suppressAutoShowToggle.RegisterValueChangedCallback(evt => HandleSuppressAutoShowChanged(evt.newValue));
             _openSettingsButton.clicked += HandleOpenSettings;
@@ -373,11 +368,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             IEnumerable<SkillSetupTargetInfo> targets)
         {
             return SkillInstallDialogPolicy.ShouldShowForInstallableTargets(targets);
-        }
-
-        internal static bool ShouldUseFirstInstallSkillsUi(string lastSeenSetupWizardVersion)
-        {
-            return string.IsNullOrEmpty(lastSeenSetupWizardVersion);
         }
 
         internal static bool CanManageSkills(bool cliInstalled)
