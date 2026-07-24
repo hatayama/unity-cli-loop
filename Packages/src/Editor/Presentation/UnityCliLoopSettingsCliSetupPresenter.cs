@@ -76,7 +76,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 skills.SelectedTargetInstallState,
                 skills.SkillsTarget,
                 skills.IsInstallingSkills,
-                skills.InstallableSkillTargets);
+                skills.InstallableSkillTargets,
+                skills.HasSkillTargetScanResult);
         }
 
         internal void Update(
@@ -89,7 +90,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SkillInstallState selectedTargetInstallState,
             SkillsTarget skillsTarget,
             bool isInstallingSkills,
-            System.Collections.Generic.IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets)
+            System.Collections.Generic.IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets,
+            bool hasSkillTargetScanResult)
         {
             CliSetupData cliData = CreateCliSetupData(
                 needsCliPathSetup,
@@ -101,7 +103,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 selectedTargetInstallState,
                 skillsTarget,
                 isInstallingSkills,
-                installableSkillTargets);
+                installableSkillTargets,
+                hasSkillTargetScanResult);
             _view.UpdateCliSetup(cliData);
         }
 
@@ -427,7 +430,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SkillInstallState selectedTargetInstallState,
             SkillsTarget skillsTarget,
             bool isInstallingSkills,
-            System.Collections.Generic.IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets)
+            System.Collections.Generic.IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets,
+            bool hasSkillTargetScanResult)
         {
             string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
             bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
@@ -440,8 +444,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 UnityEngine.Application.platform);
             bool isChecking = !_cliSetupApplicationService.IsCliCheckCompleted()
                 || isRefreshingVersion
-                || isRefreshingCliPathSetup
-                || !includeSkillDirectoryChecks;
+                || isRefreshingCliPathSetup;
+            bool isSkillStateChecking = UnityCliLoopSettingsWindowRefreshPolicy.IsSkillStateChecking(
+                _cliSetupApplicationService.IsCliCheckCompleted(),
+                includeSkillDirectoryChecks,
+                hasSkillTargetScanResult);
             CliSetupCompatibilityState state = CliSetupCompatibility.Evaluate(
                 cliVersion,
                 cliIsDispatcher,
@@ -460,10 +467,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 needsCliPathSetup,
                 isInstallingCli,
                 isChecking,
+                isSkillStateChecking,
                 isClaudeSkillsInstalled: false,
                 isAgentsSkillsInstalled: false,
-                isCursorSkillsInstalled: false,
-                isGeminiSkillsInstalled: false,
                 isCodexSkillsInstalled: false,
                 isAntigravitySkillsInstalled: false,
                 displayedTargetInstallState,

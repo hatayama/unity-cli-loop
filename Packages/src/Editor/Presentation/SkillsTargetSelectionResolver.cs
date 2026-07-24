@@ -39,10 +39,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return target switch
             {
                 SkillsTarget.Claude => new("Claude Code", ".claude", "--claude", groupSkillsUnderUnityCliLoop),
-                SkillsTarget.Cursor => new("Cursor", ".cursor", "--cursor", groupSkillsUnderUnityCliLoop),
-                SkillsTarget.Gemini => new("Gemini CLI", ".gemini", "--gemini", groupSkillsUnderUnityCliLoop),
                 SkillsTarget.Codex => new("Codex CLI", ".codex", "--codex", groupSkillsUnderUnityCliLoop),
-                SkillsTarget.Agents => new("Other (.agents)", ".agents", "--agents", groupSkillsUnderUnityCliLoop),
+                SkillsTarget.Agents => new("Common", ".agents", "--agents", groupSkillsUnderUnityCliLoop),
                 _ => throw new ArgumentOutOfRangeException(nameof(target), target, null)
             };
         }
@@ -52,8 +50,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return target switch
             {
                 SkillsTarget.Claude => data.IsClaudeSkillsInstalled,
-                SkillsTarget.Cursor => data.IsCursorSkillsInstalled,
-                SkillsTarget.Gemini => data.IsGeminiSkillsInstalled,
                 SkillsTarget.Codex => data.IsCodexSkillsInstalled,
                 SkillsTarget.Agents => data.IsAgentsSkillsInstalled,
                 _ => false

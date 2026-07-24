@@ -30,9 +30,7 @@ const (
 var targetConfigs = map[string]skillTarget{
 	"claude":      {id: "claude", displayName: "Claude Code", projectDir: ".claude"},
 	"codex":       {id: "codex", displayName: "Codex CLI", projectDir: ".codex"},
-	"cursor":      {id: "cursor", displayName: "Cursor", projectDir: ".cursor"},
-	"gemini":      {id: "gemini", displayName: "Gemini CLI", projectDir: ".gemini"},
-	"agents":      {id: "agents", displayName: "Other (.agents)", projectDir: ".agents"},
+	"agents":      {id: "agents", displayName: "Common", projectDir: ".agents"},
 	"windsurf":    {id: "windsurf", displayName: "Windsurf", projectDir: ".agents"},
 	"antigravity": {id: "antigravity", displayName: "Antigravity", projectDir: ".agent"},
 }
@@ -42,7 +40,7 @@ var targetConfigs = map[string]skillTarget{
 // slice is the single source of truth for iteration order and for the set of
 // accepted --<id> flags; help lines and parseSkillsOptions must both derive
 // from it to avoid drift.
-var allSkillTargetIDs = []string{"claude", "codex", "cursor", "gemini", "agents", "windsurf", "antigravity"}
+var allSkillTargetIDs = []string{"claude", "codex", "agents", "windsurf", "antigravity"}
 
 // nonDefaultSkillTargetIDs lists targets that are excluded from the default
 // target set and are only installed when explicitly requested via their

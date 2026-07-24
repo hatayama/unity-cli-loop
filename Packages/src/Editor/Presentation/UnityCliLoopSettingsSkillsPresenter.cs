@@ -22,13 +22,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SkillInstallState selectedTargetInstallState,
             SkillsTarget skillsTarget,
             bool isInstallingSkills,
-            IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets)
+            IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets,
+            bool hasSkillTargetScanResult)
         {
             InstallSkillsFlat = installSkillsFlat;
             SelectedTargetInstallState = selectedTargetInstallState;
             SkillsTarget = skillsTarget;
             IsInstallingSkills = isInstallingSkills;
             InstallableSkillTargets = installableSkillTargets;
+            HasSkillTargetScanResult = hasSkillTargetScanResult;
         }
 
         internal bool InstallSkillsFlat { get; }
@@ -36,6 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal SkillsTarget SkillsTarget { get; }
         internal bool IsInstallingSkills { get; }
         internal IReadOnlyList<SkillSetupTargetInfo> InstallableSkillTargets { get; }
+        internal bool HasSkillTargetScanResult { get; }
     }
 
     /// <summary>
@@ -57,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private bool _isInstallingSkills;
         private SkillInstallState _selectedTargetInstallState = SkillInstallState.Missing;
         private List<SkillSetupTargetInfo> _installableTargets = new();
+        private bool _hasSkillTargetScanResult;
         private CancellationTokenSource _skillInstallStateRefreshCts;
 
         internal UnityCliLoopSettingsSkillsPresenter(
@@ -96,7 +100,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _selectedTargetInstallState,
                 _skillsTarget,
                 _isInstallingSkills,
-                _installableTargets);
+                _installableTargets,
+                _hasSkillTargetScanResult);
         }
 
         internal void MarkSelectedTargetInstallStateChecking()
@@ -149,6 +154,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             {
                 _selectedTargetInstallState = SkillInstallState.Missing;
                 _installableTargets = new List<SkillSetupTargetInfo>();
+                _hasSkillTargetScanResult = true;
                 RefreshCliSetupSection();
                 return;
             }
@@ -159,6 +165,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ? SkillInstallState.Missing
                 : selectedTargetInfo.InstallState;
             _installableTargets = SkillsSetupPanelView.FilterInstallableSkillTargets(allTargets);
+            _hasSkillTargetScanResult = true;
             RefreshCliSetupSection();
         }
 
@@ -339,6 +346,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ? SkillInstallState.Missing
                 : selectedTargetInfo.InstallState;
             _installableTargets = SkillsSetupPanelView.FilterInstallableSkillTargets(allTargets);
+            _hasSkillTargetScanResult = true;
             RefreshCliSetupSection();
         }
 

@@ -840,7 +840,7 @@ func TestAllSkillTargetIDsMatchesTargetConfigs(t *testing.T) {
 // nonDefaultSkillTargetIDs cannot silently change which targets install by
 // default.
 func TestDefaultSkillTargetIDsDerivedFromAllSkillTargetIDs(t *testing.T) {
-	expected := []string{"claude", "codex", "cursor", "gemini", "agents", "antigravity"}
+	expected := []string{"claude", "codex", "agents", "antigravity"}
 
 	if !reflect.DeepEqual(defaultSkillTargetIDs, expected) {
 		t.Fatalf("defaultSkillTargetIDs mismatch: got=%v want=%v", defaultSkillTargetIDs, expected)

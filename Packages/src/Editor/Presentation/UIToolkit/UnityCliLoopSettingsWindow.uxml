@@ -18,7 +18,10 @@
                         <ui:VisualElement class="unity-cli-loop-cli-separator" />
 
                         <ui:VisualElement name="skills-subsection">
-                            <ui:Label text="Skills" class="unity-cli-loop-cli-subsection-header" />
+                            <ui:VisualElement class="unity-cli-loop-cli-subsection-header-row">
+                                <ui:Label text="Skills" class="unity-cli-loop-cli-subsection-header" />
+                                <ui:Button name="refresh-skills-state-button" text="↻" class="skills-setup-panel__refresh-button" />
+                            </ui:VisualElement>
                             <ui:VisualElement name="skills-setup-panel-placeholder" />
                         </ui:VisualElement>
                     </ui:VisualElement>

@@ -46,8 +46,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             VisualElement skillsSetupPanel = root.Q<VisualElement>("skills-setup-panel");
             Debug.Assert(skillsSetupPanel != null, "skills-setup-panel must not be null");
+            Button refreshSkillsStateButton = root.Q<Button>("refresh-skills-state-button");
+            Debug.Assert(refreshSkillsStateButton != null, "refresh-skills-state-button must not be null");
             _skillsSetupPanelView = new SkillsSetupPanelView(
-                skillsSetupPanel ?? throw new ArgumentNullException(nameof(skillsSetupPanel)));
+                skillsSetupPanel ?? throw new ArgumentNullException(nameof(skillsSetupPanel)),
+                refreshSkillsStateButton ?? throw new ArgumentNullException(nameof(refreshSkillsStateButton)));
         }
 
         public void SetupBindings()
@@ -150,7 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 data.GroupSkillsUnderUnityCliLoop,
                 data.IsCliInstalled && !data.IsInstallingSkills);
 
-            if (data.IsChecking)
+            if (data.IsSkillStateChecking)
             {
                 _skillsSetupPanelView.ShowChecking();
                 return;

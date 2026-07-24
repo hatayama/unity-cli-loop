@@ -13,10 +13,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class SkillsTargetSelectionResolverTests
     {
         [TestCase(SkillsTarget.Claude, true, "Claude Code", ".claude", "skills install --claude")]
-        [TestCase(SkillsTarget.Cursor, true, "Cursor", ".cursor", "skills install --cursor")]
-        [TestCase(SkillsTarget.Gemini, true, "Gemini CLI", ".gemini", "skills install --gemini")]
         [TestCase(SkillsTarget.Codex, true, "Codex CLI", ".codex", "skills install --codex")]
-        [TestCase(SkillsTarget.Agents, true, "Other (.agents)", ".agents", "skills install --agents")]
+        [TestCase(SkillsTarget.Agents, true, "Common", ".agents", "skills install --agents")]
         [TestCase(SkillsTarget.Claude, false, "Claude Code", ".claude", "skills install --claude --flat")]
         public void Resolve_ReturnsMappedSelection(
             SkillsTarget target,
@@ -34,9 +32,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(selection.InstallArguments, Is.EqualTo(expectedInstallArguments));
         }
 
+        [Test]
+        public void Resolve_DisplayNameDoesNotContainDirectoryName_ForAllTargets()
+        {
+            // Verifies list labels can append ({DirectoryName}/) without duplicating the directory name.
+            foreach (SkillsTarget target in Enum.GetValues(typeof(SkillsTarget)))
+            {
+                SkillsTargetSelection selection = SkillsTargetSelectionResolver.Resolve(target, true);
+
+                Assert.That(
+                    selection.DisplayName,
+                    Does.Not.Contain(selection.DirectoryName),
+                    $"DisplayName '{selection.DisplayName}' must not include DirectoryName '{selection.DirectoryName}' for {target}");
+            }
+        }
+
         [TestCase(SkillsTarget.Claude, true)]
-        [TestCase(SkillsTarget.Cursor, false)]
-        [TestCase(SkillsTarget.Gemini, true)]
         [TestCase(SkillsTarget.Codex, false)]
         [TestCase(SkillsTarget.Agents, true)]
         public void IsInstalled_ReturnsExpectedStateForTarget(
@@ -52,10 +63,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 needsCliPathSetup: false,
                 isInstallingCli: false,
                 isChecking: false,
+                isSkillStateChecking: false,
                 isClaudeSkillsInstalled: true,
                 isAgentsSkillsInstalled: true,
-                isCursorSkillsInstalled: false,
-                isGeminiSkillsInstalled: true,
                 isCodexSkillsInstalled: false,
                 isAntigravitySkillsInstalled: false,
                 selectedTargetInstallState: SkillInstallState.Installed,
