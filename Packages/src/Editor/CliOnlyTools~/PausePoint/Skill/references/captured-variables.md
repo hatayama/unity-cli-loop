@@ -6,6 +6,7 @@ Read this before interpreting unexpected, missing, or truncated captured values,
 
 - The snapshot is taken **before** the resolved line executes, exactly like an IDE breakpoint on that line. To inspect a value after an assignment, place the pause point on the following line.
 - The pause itself only takes effect at the next frame boundary: the frame that hit the pause point still runs to completion first, so any event that fires later in that same frame (a chained collision, a cascading destroy) has already happened by the time Unity actually stops. Trust `CapturedVariables` (the pre-line snapshot) as evidence for what was true up to the patched line; do not assume the paused state still matches it for events later in the same frame.
+- Rigidbody values read inside a physics callback (`OnCollision*`/`OnTrigger*`) can be mid-solver intermediates — `velocity` may capture as `(0.0, 0.0)` at the callback even though the body visibly moves. `CapturedVariables` faithfully records that intermediate value; a later `execute-dynamic-code` read returning something different means the physics solver has since finished the step, not that the capture was wrong.
 - `execute-dynamic-code` during the pause sees the interrupted method's **post-interrupt** state, not this pre-line snapshot. Use `CapturedVariables` for pre-line evidence; use the raw capture API below when you need live references while paused. If you suspect a captured value is stale or wrong, cross-check it against the live scene object with `execute-dynamic-code` (for example reading `transform.position` off the instance found via `UnityObjectPath`) rather than trusting either source alone. `execute-dynamic-code` responses also carry `EditorPaused` and `ActivePausePointId` — these fields appear only while the Editor is paused, so a call made while a pause point still has Unity paused is unambiguous instead of looking like a stale or buggy result.
 
 ## Scopes and the `this` Entry
@@ -19,7 +20,7 @@ Read this before interpreting unexpected, missing, or truncated captured values,
 ## Value Rendering, Previews, and Caps
 
 - Nested previews stop at `MaxCollectionPreviewDepth` (2 levels) below each captured variable: past that, an object or collection renders as type-name-only text instead of expanding — a type name where you expected contents means you hit this cap, not a bug. The budget is counted per captured variable, so reaching a value through `this` costs one extra level compared to reading it as a direct local: `this.CurrentPiece.Origin` bottoms out as a type name, while a `dropped` local holding the same piece expands to `{Kind, RotationState, Origin: {X, Y}}`. When the value you need sits too deep, pick a pause point line where it is a direct local or parameter — as its own top-level entry it starts with a fresh full budget. Primitive leaves (numbers, strings, booleans, and any type that overrides `ToString()`) always render regardless of depth; only nested objects and collections get cut off.
-- A value's `Value` string is not always its plain `ToString()`. A materialized collection (`List<T>`, arrays, dictionaries, ...) previews as a shallow JSON array/object instead of the default type-name text. A custom struct/class whose declared type does not override `ToString()` previews the same way — a shallow JSON object of its fields — so you do not need to add a temporary `ToString()` override just to see its contents. A type that does override `ToString()` keeps using that result unchanged. Either kind of preview is capped by depth, element count, and length like any other captured value; the element-count cap (default 10) and the preview's character budget both scale with `enable-pause-point --max-preview-elements`.
+- A value's `Value` string is not always its plain `ToString()`. A materialized collection (`List<T>`, arrays, dictionaries, ...) previews as a shallow JSON array/object instead of the default type-name text. A custom struct/class whose declared type does not override `ToString()` previews the same way — a shallow JSON object of its fields — so you do not need to add a temporary `ToString()` override just to see its contents. A type that does override `ToString()` keeps using that result unchanged. Either kind of preview is capped by depth, element count, and length like any other captured value; the element-count cap (default 10) and the preview's character budget both scale with `enable-pause-point --max-preview-elements` (1–1000). Raising it scales the character budget proportionally, so each element keeps the same ~100-character share it has at the default — plenty for numeric or boolean cells, but individually long elements can still be clipped by the scaled budget. The enable response echoes the effective `MaxPreviewElements`.
 - A multidimensional array (`int[,]`, `int[,,]`, ...) previews as `{"Shape":"Int32[2,3]","TotalElements":6,"Elements":[...]}` instead of a bare JSON array, since `Elements` alone would flatten every rank in row-major order with no way to tell it apart from an empty or 1D collection; a `T[]` or jagged `T[][]` array is unaffected and still previews as a plain JSON array.
 - `CapturedVariablesTruncated=true` means at least one value was clipped to the length cap or the variable-count cap stopped enumeration; clipped values are still present up to the cap.
 
@@ -36,6 +37,17 @@ Pull only what you need instead of paying for it all up front:
 
 - `--captured-variables names` on `await-pause-point`/`pause-point-status` drops `Value` from every captured variable (including every history frame) and keeps `Name`/`Scope`/`TypeName`. Use it first on a field-heavy class, then fetch specific values afterward.
 - `uloop pause-point-status --id <id>` returns the full response again, including every `Value`, whenever you need it — call it plain (no `--captured-variables`) for the complete picture after a lightweight `names` scan.
+
+## Step Sessions
+
+To inspect value changes one Editor Step at a time, enable a `continuous` pause point on a line inside `Update` or `FixedUpdate`, trigger the first hit, then run:
+
+```bash
+uloop control-play-mode --action Step
+uloop pause-point-status --id "Assets/Scripts/Enemy.cs:42"
+```
+
+Repeat the Step/status pair to inspect the history tail. A new frame is captured only when the patched line executes during that frame; event handlers such as `OnCollisionEnter` update only when the event occurs again. Use a longer `--timeout-seconds` for a Step session because the enable-time timeout does not extend after hits.
 
 ## Choosing the Right Evidence Source
 
@@ -57,9 +69,19 @@ While Unity is paused on a hit, `execute-dynamic-code` can read live captured re
 - `GetCapturedNames()` lists captured variable names from that snapshot.
 - `GetCapturedPausePointId()` returns the pause-point id for the held snapshot.
 
+Deconstruct the tuple before use:
+
+```csharp
+(bool found, object value) = UloopPausePoint.TryGetCapturedValue("this");
+if (!found) { return "capture missing"; }
+return value;
+```
+
+The references are live objects in their frame-completed state: anything the hit's method changed — or destroyed — after the patched line is already applied, so a captured object can read as destroyed/null here even though `CapturedVariables` shows its pre-line field values intact.
+
 The holder clears when Unity resumes (not when you `Step` while still paused), when the matching pause point is cleared, when a new hit replaces the snapshot, or when PlayMode exits. After resume, `TryGetCapturedValue` returns `Found=false`. Re-enabling the same pause point while still paused (for example to refresh its timeout during a step session) keeps the held references, because a re-enable does not resume Unity.
 
-For a self-progressing game (a board that advances on a timer, an opponent that keeps moving), arranging a specific scenario through real input alone is a race you will usually lose: each `simulate-*` call is a separate CLI round trip, and the gap between two calls is often longer than the game's own tick. Instead, while paused on a hit, use `TryGetCapturedValue("this")` to get the live instance and call its production methods directly to build up the exact state you need, then send real simulated input for only the one action you are verifying. The setup becomes deterministic while the observed action still exercises the real input path.
+For a self-progressing game, arranging a scenario through real input alone is a race (each `simulate-*` call is a separate CLI round trip, often longer than the game's own tick). Instead, while paused on a hit, use `TryGetCapturedValue("this")` to get the live instance and call its production methods to build the exact state, then send real simulated input for only the one action you are verifying — the setup stays deterministic while the observed action still exercises the real input path.
 
 ## Warnings and Marker Freshness
 
