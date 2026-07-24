@@ -18,6 +18,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         internal const int INSTALL_PROCESS_WAIT_SLICE_MS = 250;
 
+        // Why a synthetic first line: the installer shell (powershell.exe in particular) can be
+        // slow to start, so a line reported before process spawn guarantees the progress label
+        // shows activity even before the bootstrap emits its first stdout line.
+        internal const string INSTALL_STARTING_LINE = "Launching installer process...";
+
         internal static CliInstallResult RunInstallCommand(
             NativeCliInstallCommand command,
             CancellationToken ct,
@@ -29,6 +34,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityEngine.Debug.Assert(timeoutMs > 0, "timeoutMs must be greater than zero");
             UnityEngine.Debug.Assert(onOutputLine != null, "onOutputLine must not be null");
             ct.ThrowIfCancellationRequested();
+
+            // Why only here and not in RunCliSetupCommand: the shared runner also serves
+            // uninstall, which streams no progress; the synthetic line is install-only.
+            onOutputLine(INSTALL_STARTING_LINE);
 
             return RunCliSetupCommand(
                 command,
@@ -75,6 +84,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityEngine.Debug.Assert(configureStartInfo != null, "configureStartInfo must not be null");
             ct.ThrowIfCancellationRequested();
 
+            // Why: Setup command output is UTF-8 (the Windows bootstrap forces
+            // [Console]::OutputEncoding to UTF-8 and POSIX shells emit UTF-8), so both streams are
+            // decoded as UTF-8 instead of the platform default, which mojibakes non-ASCII output.
             ProcessStartInfo startInfo = new()
             {
                 FileName = command.FileName,
@@ -82,6 +94,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
                 CreateNoWindow = true
             };
             configureStartInfo(startInfo);

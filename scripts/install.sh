@@ -515,10 +515,13 @@ verify_archive_attestation_manifest() {
 }
 
 mkdir -p "$INSTALL_DIR"
+echo "Downloading uloop dispatcher archive..."
 curl -fsSL "$download_url" -o "$tmp_dir/$asset_name"
 curl -fsSL "$checksum_url" -o "$tmp_dir/$asset_name.sha256"
+echo "Verifying uloop dispatcher archive..."
 verify_checksum
 verify_archive_attestation_manifest
+echo "Extracting uloop dispatcher archive..."
 extract_asset
 staged_uloop_path="$INSTALL_DIR/.uloop-install-$$"
 if [ "$installed_command_name" = "uloop.exe" ]; then
