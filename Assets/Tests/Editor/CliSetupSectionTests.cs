@@ -85,14 +85,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void Update_WhenCliRefreshIsChecking_ShowsSkillsCheckingState()
+        public void Update_WhenSkillStateIsChecking_ShowsSkillsCheckingState()
         {
-            // Verifies that IsChecking routes the shared skills panel into ShowChecking.
+            // Verifies that IsSkillStateChecking routes the shared skills panel into ShowChecking.
             VisualElement root = CreateRootElement();
             CliSetupSection section = new(root);
             CliSetupData data = CreateData(
                 isCliInstalled: true,
-                isChecking: true,
+                isChecking: false,
+                isSkillStateChecking: true,
                 selectedTargetInstallState: SkillInstallState.Missing);
 
             section.Update(data);
@@ -114,6 +115,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Update_WhenOnlyCliIsChecking_DoesNotShowSkillsCheckingState()
+        {
+            // Verifies CLI refresh checking does not force the skills panel into Checking... state.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: true,
+                isSkillStateChecking: false,
+                selectedTargetInstallState: SkillInstallState.Missing);
+
+            section.Update(data);
+
+            Button installAllSkillsButton = root.Q<Button>("install-all-skills-button");
+            EnumField skillsTargetField = root.Q<EnumField>("skills-target-field");
+            Button refreshCliVersionButton = root.Q<Button>("refresh-cli-version-button");
+            Assert.That(installAllSkillsButton.text, Is.Not.EqualTo("Checking..."));
+            Assert.That(skillsTargetField.enabledSelf, Is.True);
+            Assert.That(refreshCliVersionButton.enabledSelf, Is.False);
+        }
+
+        [Test]
         public void Update_WhenSkillsStateIsChecking_DisablesSkillsTargetField()
         {
             // Verifies that the Skills target cannot change while the selected target state is being checked.
@@ -130,6 +153,186 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(skillsTargetField.enabledSelf, Is.False);
         }
 
+        [Test]
+        public void Update_WhenNoInstallableTargets_HidesBulkInstallAndShowsGuidance()
+        {
+            // Verifies empty detection hides the bulk Install Skills button and shows guidance instead.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Missing,
+                installableSkillTargets: new List<SkillSetupTargetInfo>());
+
+            section.Update(data);
+
+            Button installAllSkillsButton = root.Q<Button>("install-all-skills-button");
+            Label noTargetsMessage = root.Q<Label>("skills-no-targets-message");
+            Assert.That(installAllSkillsButton.style.display.value, Is.EqualTo(DisplayStyle.None));
+            Assert.That(noTargetsMessage.style.display.value, Is.EqualTo(DisplayStyle.Flex));
+        }
+
+        [Test]
+        public void Update_WhenInstallableTargetsExist_ShowsBulkInstallAndHidesGuidance()
+        {
+            // Verifies detected targets keep the bulk Install Skills button and hide empty-state guidance.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateSkillTarget("Claude", ".claude", SkillInstallState.Missing)
+            };
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Missing,
+                installableSkillTargets: targets);
+
+            section.Update(data);
+
+            Button installAllSkillsButton = root.Q<Button>("install-all-skills-button");
+            Label noTargetsMessage = root.Q<Label>("skills-no-targets-message");
+            Assert.That(installAllSkillsButton.style.display.value, Is.EqualTo(DisplayStyle.Flex));
+            Assert.That(noTargetsMessage.style.display.value, Is.EqualTo(DisplayStyle.None));
+        }
+
+        [Test]
+        public void Update_WhenCheckingTargetsArrive_DoesNotChangeSpecificTargetFoldout()
+        {
+            // Verifies Checking updates leave the foldout value untouched until a resolved state arrives.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            Foldout foldout = root.Q<Foldout>("install-specific-target-foldout");
+            section.Update(CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Missing,
+                installableSkillTargets: new List<SkillSetupTargetInfo>
+                {
+                    CreateSkillTarget("Claude", ".claude", SkillInstallState.Missing)
+                }));
+            Assert.That(foldout.value, Is.True);
+            foldout.SetValueWithoutNotify(false);
+
+            section.Update(CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Checking,
+                installableSkillTargets: new List<SkillSetupTargetInfo>
+                {
+                    CreateSkillTarget("Claude", ".claude", SkillInstallState.Checking),
+                    CreateSkillTarget("Common", ".agents", SkillInstallState.Missing)
+                }));
+
+            Assert.That(foldout.value, Is.False);
+        }
+
+        [Test]
+        public void Update_WhenMissingTargetsBecomeInstalled_ClosesSpecificTargetFoldout()
+        {
+            // Verifies the foldout closes when reload resolves missing targets to installed.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            Foldout foldout = root.Q<Foldout>("install-specific-target-foldout");
+            section.Update(CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Missing,
+                installableSkillTargets: new List<SkillSetupTargetInfo>
+                {
+                    CreateSkillTarget("Claude", ".claude", SkillInstallState.Missing)
+                }));
+            Assert.That(foldout.value, Is.True);
+
+            section.Update(CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Installed,
+                installableSkillTargets: new List<SkillSetupTargetInfo>
+                {
+                    CreateSkillTarget("Claude", ".claude", SkillInstallState.Installed)
+                }));
+
+            Assert.That(foldout.value, Is.False);
+        }
+
+        [Test]
+        public void Update_WhenInstalledDefaultUnchanged_PreservesUserOpenedFoldout()
+        {
+            // Verifies a user-opened foldout stays open across later installed-only updates.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            Foldout foldout = root.Q<Foldout>("install-specific-target-foldout");
+            List<SkillSetupTargetInfo> installedTargets = new()
+            {
+                CreateSkillTarget("Claude", ".claude", SkillInstallState.Installed)
+            };
+            section.Update(CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Installed,
+                installableSkillTargets: installedTargets));
+            Assert.That(foldout.value, Is.False);
+            foldout.SetValueWithoutNotify(true);
+
+            section.Update(CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Installed,
+                installableSkillTargets: new List<SkillSetupTargetInfo>
+                {
+                    CreateSkillTarget("Claude", ".claude", SkillInstallState.Installed)
+                }));
+
+            Assert.That(foldout.value, Is.True);
+        }
+
+        [Test]
+        public void Update_WhenMissingDefaultUnchanged_PreservesUserClosedFoldout()
+        {
+            // Verifies a user-closed foldout is not forced open while targets remain missing.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            Foldout foldout = root.Q<Foldout>("install-specific-target-foldout");
+            section.Update(CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Missing,
+                installableSkillTargets: new List<SkillSetupTargetInfo>
+                {
+                    CreateSkillTarget("Claude", ".claude", SkillInstallState.Missing)
+                }));
+            Assert.That(foldout.value, Is.True);
+            foldout.SetValueWithoutNotify(false);
+
+            section.Update(CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Missing,
+                installableSkillTargets: new List<SkillSetupTargetInfo>
+                {
+                    CreateSkillTarget("Claude", ".claude", SkillInstallState.Missing)
+                }));
+
+            Assert.That(foldout.value, Is.False);
+        }
+
+        private static SkillSetupTargetInfo CreateSkillTarget(
+            string displayName,
+            string dirName,
+            SkillInstallState installState)
+        {
+            return new(
+                displayName,
+                dirName,
+                "--flag",
+                hasSkillsDirectory: true,
+                hasExistingSkills: true,
+                hasDifferentLayoutSkills: false,
+                installState);
+        }
+
         private static VisualElement CreateRootElement()
         {
             VisualElement root = new();
@@ -141,11 +344,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             installProgress.Add(new Label { name = "cli-install-progress-label" });
             root.Add(installProgress);
 
+            root.Add(new Button { name = "refresh-skills-state-button" });
             VisualElement skillsSubsection = new() { name = "skills-subsection" };
             VisualElement skillsSetupPanel = new() { name = "skills-setup-panel" };
             skillsSetupPanel.Add(new VisualElement { name = "skill-target-status-list" });
             skillsSetupPanel.Add(new VisualElement { name = "skill-target-status-divider" });
             skillsSetupPanel.Add(new Label { name = "skill-target-status-summary" });
+            skillsSetupPanel.Add(new Label { name = "skills-no-targets-message" });
             skillsSetupPanel.Add(new Button { name = "install-all-skills-button" });
             Foldout specificTargetFoldout = new() { name = "install-specific-target-foldout" };
             VisualElement groupSkillsRow = new() { name = "group-skills-row" };
@@ -154,7 +359,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             specificTargetFoldout.Add(groupSkillsRow);
             VisualElement skillsTargetRow = new() { name = "skills-target-row" };
             skillsTargetRow.Add(new EnumField { name = "skills-target-field" });
-            skillsTargetRow.Add(new Button { name = "refresh-skills-state-button" });
             specificTargetFoldout.Add(skillsTargetRow);
             specificTargetFoldout.Add(new Button { name = "install-selected-skills-button" });
             skillsSetupPanel.Add(specificTargetFoldout);
@@ -166,7 +370,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static CliSetupData CreateData(
             bool isCliInstalled,
             bool isChecking,
-            SkillInstallState selectedTargetInstallState)
+            SkillInstallState selectedTargetInstallState,
+            IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets = null,
+            bool? isSkillStateChecking = null)
         {
             return new CliSetupData(
                 isCliInstalled,
@@ -177,17 +383,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 needsCliPathSetup: false,
                 isInstallingCli: false,
                 isChecking,
+                isSkillStateChecking: isSkillStateChecking ?? isChecking,
                 isClaudeSkillsInstalled: false,
                 isAgentsSkillsInstalled: false,
-                isCursorSkillsInstalled: false,
-                isGeminiSkillsInstalled: false,
                 isCodexSkillsInstalled: false,
                 isAntigravitySkillsInstalled: false,
                 selectedTargetInstallState,
                 SkillsTarget.Claude,
                 groupSkillsUnderUnityCliLoop: false,
                 isInstallingSkills: false,
-                installableSkillTargets: new List<SkillSetupTargetInfo>());
+                installableSkillTargets: installableSkillTargets ?? new List<SkillSetupTargetInfo>());
         }
     }
 }

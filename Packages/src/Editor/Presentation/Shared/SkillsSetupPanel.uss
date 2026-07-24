@@ -57,6 +57,12 @@
     margin-bottom: 4px;
 }
 
+.skills-no-targets-message {
+    white-space: normal;
+    color: #999999;
+    margin-bottom: 4px;
+}
+
 .skills-setup-panel__install-button {
     margin-top: 4px;
     margin-bottom: 4px;

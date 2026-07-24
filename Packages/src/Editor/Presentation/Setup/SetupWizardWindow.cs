@@ -303,7 +303,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             VisualElement skillsSetupPanel = rootVisualElement.Q<VisualElement>("skills-setup-panel");
             Debug.Assert(skillsSetupPanel != null, "skills-setup-panel must not be null");
-            SkillsSetupPanelView skillsSetupPanelView = new(skillsSetupPanel);
+            Button refreshSkillsStateButton = rootVisualElement.Q<Button>("refresh-skills-state-button");
+            Debug.Assert(refreshSkillsStateButton != null, "refresh-skills-state-button must not be null");
+            SkillsSetupPanelView skillsSetupPanelView = new(
+                skillsSetupPanel,
+                refreshSkillsStateButton);
 
             _suppressAutoShowToggle = rootVisualElement.Q<Toggle>("suppress-auto-show-toggle");
             _openSettingsButton = rootVisualElement.Q<Button>("open-settings-button");

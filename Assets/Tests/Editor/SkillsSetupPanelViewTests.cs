@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             List<SkillSetupTargetInfo> targets = new()
             {
                 new("Claude Code", ".claude", "--claude", true, true),
-                new("Cursor", ".cursor", "--cursor", false, false),
+                new("Common", ".agents", "--agents", false, false),
                 new("Codex CLI", ".codex", "--codex", true, false, hasDifferentLayoutSkills: true)
             };
 
@@ -45,10 +45,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(target.HasExistingSkills, Is.False);
         }
 
-        [TestCase(SkillsTarget.Cursor, "Cursor", ".cursor", "--cursor")]
-        [TestCase(SkillsTarget.Gemini, "Gemini CLI", ".gemini", "--gemini")]
         [TestCase(SkillsTarget.Codex, "Codex CLI", ".codex", "--codex")]
-        [TestCase(SkillsTarget.Agents, "Other (.agents)", ".agents", "--agents")]
+        [TestCase(SkillsTarget.Agents, "Common", ".agents", "--agents")]
         public void CreateFirstInstallSkillTarget_ReturnsMappedTarget(
             SkillsTarget targetType,
             string expectedDisplayName,
@@ -250,18 +248,75 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(summary, Is.EqualTo("Installed for 2 targets"));
         }
 
-        [TestCase(0, true)]
-        [TestCase(1, false)]
-        [TestCase(3, false)]
-        public void ShouldExpandSpecificTargetFoldout_ReturnsExpectedValue(
-            int installableTargetCount,
-            bool expected)
+        [Test]
+        public void ShouldExpandSpecificTargetFoldout_WhenNoTargets_ReturnsTrue()
         {
-            // Verifies the specific-target foldout auto-expands only when no installable targets exist.
-            bool shouldExpand = SkillsSetupPanelView.ShouldExpandSpecificTargetFoldout(
-                installableTargetCount);
+            // Verifies the foldout expands when no installable skill targets were detected.
+            List<SkillSetupTargetInfo> targets = new();
 
-            Assert.That(shouldExpand, Is.EqualTo(expected));
+            bool shouldExpand = SkillsSetupPanelView.ShouldExpandSpecificTargetFoldout(targets);
+
+            Assert.That(shouldExpand, Is.True);
+        }
+
+        [Test]
+        public void ShouldExpandSpecificTargetFoldout_WhenAllInstalled_ReturnsFalse()
+        {
+            // Verifies the foldout stays collapsed when every detected target is already installed.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateTarget("Claude", ".claude", SkillInstallState.Installed),
+                CreateTarget("Agents", ".agents", SkillInstallState.Installed)
+            };
+
+            bool shouldExpand = SkillsSetupPanelView.ShouldExpandSpecificTargetFoldout(targets);
+
+            Assert.That(shouldExpand, Is.False);
+        }
+
+        [Test]
+        public void ShouldExpandSpecificTargetFoldout_WhenAnyMissing_ReturnsTrue()
+        {
+            // Verifies the foldout expands when at least one detected target still needs install.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateTarget("Claude", ".claude", SkillInstallState.Installed),
+                CreateTarget("Common", ".agents", SkillInstallState.Missing)
+            };
+
+            bool shouldExpand = SkillsSetupPanelView.ShouldExpandSpecificTargetFoldout(targets);
+
+            Assert.That(shouldExpand, Is.True);
+        }
+
+        [Test]
+        public void ShouldExpandSpecificTargetFoldout_WhenOnlyOutdated_ReturnsFalse()
+        {
+            // Verifies outdated targets count as installed for foldout expansion and stay collapsed.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateTarget("Claude", ".claude", SkillInstallState.Outdated),
+                CreateTarget("Agents", ".agents", SkillInstallState.Outdated)
+            };
+
+            bool shouldExpand = SkillsSetupPanelView.ShouldExpandSpecificTargetFoldout(targets);
+
+            Assert.That(shouldExpand, Is.False);
+        }
+
+        private static SkillSetupTargetInfo CreateTarget(
+            string displayName,
+            string dirName,
+            SkillInstallState installState)
+        {
+            return new(
+                displayName,
+                dirName,
+                "--flag",
+                hasSkillsDirectory: true,
+                hasExistingSkills: true,
+                hasDifferentLayoutSkills: false,
+                installState);
         }
     }
 }

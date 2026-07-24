@@ -172,6 +172,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return isCliInstalled ? currentState : SkillInstallState.Missing;
         }
 
+        public static bool IsSkillStateChecking(
+            bool isCliCheckCompleted,
+            bool includeSkillDirectoryChecks,
+            bool hasSkillTargetScanResult)
+        {
+            // why: an empty installable-target list before the first scan result must not look resolved
+            return !isCliCheckCompleted
+                || !includeSkillDirectoryChecks
+                || !hasSkillTargetScanResult;
+        }
+
         public static bool ShouldKeepToolSettingsCatalogDirty(ToolSettingsSectionData toolSettingsData)
         {
             Debug.Assert(toolSettingsData != null, "toolSettingsData must not be null");
