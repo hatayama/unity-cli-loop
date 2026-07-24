@@ -50,7 +50,7 @@ func buildToolParams(args []string, tool clicore.ToolDefinition) (map[string]any
 				Message:     "Unknown option for " + tool.Name + ": --" + flag.name,
 				Option:      "--" + flag.name,
 				Command:     tool.Name,
-				NextActions: []string{"Run `uloop --list-options " + tool.Name + "` to inspect supported options."},
+				NextActions: []string{"Run `uloop " + tool.Name + " --help` to inspect supported options."},
 			}
 		}
 

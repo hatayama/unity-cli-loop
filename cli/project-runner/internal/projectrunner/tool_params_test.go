@@ -10,6 +10,38 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
+// Verifies that an unknown option error guides users to `<tool> --help` and never to the non-existent `--list-options`.
+func TestBuildToolParamsUnknownOptionNextActionsGuideToHelp(t *testing.T) {
+	tool := clicore.ToolDefinition{
+		Name: "sample-tool",
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
+				"Enabled": {Type: "boolean"},
+			},
+		},
+	}
+
+	_, _, err := buildToolParams([]string{"--unknown-flag"}, tool)
+	if err == nil {
+		t.Fatal("expected an error for an unknown option")
+	}
+
+	var argumentError *clierrors.ArgumentError
+	if !errors.As(err, &argumentError) {
+		t.Fatalf("expected an *ArgumentError, got %T: %v", err, err)
+	}
+	if len(argumentError.NextActions) != 1 {
+		t.Fatalf("expected exactly one NextAction, got %#v", argumentError.NextActions)
+	}
+	want := "Run `uloop sample-tool --help` to inspect supported options."
+	if argumentError.NextActions[0] != want {
+		t.Fatalf("NextActions mismatch:\nwant: %q\ngot:  %q", want, argumentError.NextActions[0])
+	}
+	if strings.Contains(argumentError.NextActions[0], "--list-options") {
+		t.Fatalf("NextActions must not mention --list-options: %#v", argumentError.NextActions)
+	}
+}
+
 // Verifies that a string property with an enum accepts an exact-case valid value.
 func TestConvertValueAcceptsExactCaseEnumValue(t *testing.T) {
 	property := clicore.ToolProperty{Type: "string", Enum: []string{"Play", "Stop", "Pause"}}
