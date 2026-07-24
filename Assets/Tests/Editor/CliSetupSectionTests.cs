@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 using NUnit.Framework;
 using UnityEditor.UIElements;
 using UnityEngine.UIElements;
@@ -82,51 +84,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.EqualTo(expected));
         }
 
-        [TestCase(false, false, SkillInstallState.Missing, "Install Skills")]
-        [TestCase(true, true, SkillInstallState.Missing, "Installing...")]
-        [TestCase(true, false, SkillInstallState.Checking, "Checking...")]
-        [TestCase(true, false, SkillInstallState.Outdated, "Update Skills")]
-        [TestCase(true, false, SkillInstallState.Missing, "Install Skills")]
-        [TestCase(true, false, SkillInstallState.Installed, "Installed")]
-        public void GetInstallSkillsButtonText_ReturnsExpectedText(
-            bool isCliInstalled,
-            bool isInstallingSkills,
-            SkillInstallState installState,
-            string expectedText)
-        {
-            string text = CliSetupSection.GetInstallSkillsButtonText(
-                isCliInstalled,
-                isInstallingSkills,
-                installState);
-
-            Assert.That(text, Is.EqualTo(expectedText));
-        }
-
-        [TestCase(false, false, SkillInstallState.Missing, false)]
-        [TestCase(true, true, SkillInstallState.Missing, false)]
-        [TestCase(true, false, SkillInstallState.Checking, false)]
-        [TestCase(true, false, SkillInstallState.Installed, false)]
-        [TestCase(true, false, SkillInstallState.Outdated, true)]
-        [TestCase(true, false, SkillInstallState.Missing, true)]
-        public void IsInstallSkillsButtonEnabled_ReturnsExpectedValue(
-            bool isCliInstalled,
-            bool isInstallingSkills,
-            SkillInstallState installState,
-            bool expectedEnabled)
-        {
-            // Verifies that the Skills install button follows only Skills state.
-            bool enabled = CliSetupSection.IsInstallSkillsButtonEnabled(
-                isCliInstalled,
-                isInstallingSkills,
-                installState);
-
-            Assert.That(enabled, Is.EqualTo(expectedEnabled));
-        }
-
         [Test]
-        public void Update_WhenCliRefreshIsChecking_KeepsSkillsControlsEnabled()
+        public void Update_WhenCliRefreshIsChecking_ShowsSkillsCheckingState()
         {
-            // Verifies that a CLI-only refresh does not gray out Skills controls.
+            // Verifies that IsChecking routes the shared skills panel into ShowChecking.
             VisualElement root = CreateRootElement();
             CliSetupSection section = new(root);
             CliSetupData data = CreateData(
@@ -138,12 +99,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Button refreshSkillsButton = root.Q<Button>("refresh-skills-state-button");
             VisualElement skillsSubsection = root.Q<VisualElement>("skills-subsection");
+            Button installAllSkillsButton = root.Q<Button>("install-all-skills-button");
+            Button installSelectedSkillsButton = root.Q<Button>("install-selected-skills-button");
             EnumField skillsTargetField = root.Q<EnumField>("skills-target-field");
-            Button installSkillsButton = root.Q<Button>("install-skills-button");
-            Assert.That(refreshSkillsButton.enabledSelf, Is.True);
+            Toggle groupSkillsToggle = root.Q<Toggle>("group-skills-toggle");
+            Assert.That(refreshSkillsButton.enabledSelf, Is.False);
             Assert.That(skillsSubsection.enabledSelf, Is.True);
-            Assert.That(skillsTargetField.enabledSelf, Is.True);
-            Assert.That(installSkillsButton.enabledSelf, Is.True);
+            Assert.That(installAllSkillsButton.enabledSelf, Is.False);
+            Assert.That(installAllSkillsButton.text, Is.EqualTo("Checking..."));
+            Assert.That(installSelectedSkillsButton.enabledSelf, Is.False);
+            Assert.That(installSelectedSkillsButton.text, Is.EqualTo("Checking..."));
+            Assert.That(skillsTargetField.enabledSelf, Is.False);
+            Assert.That(groupSkillsToggle.enabledSelf, Is.False);
         }
 
         [Test]
@@ -173,13 +140,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             VisualElement installProgress = new() { name = "cli-install-progress" };
             installProgress.Add(new Label { name = "cli-install-progress-label" });
             root.Add(installProgress);
-            root.Add(new EnumField { name = "skills-target-field" });
-            root.Add(new Button { name = "refresh-skills-state-button" });
-            root.Add(new VisualElement { name = "group-skills-row" });
-            root.Add(new Toggle { name = "group-skills-toggle" });
-            root.Add(new Label { name = "group-skills-label" });
-            root.Add(new Button { name = "install-skills-button" });
-            root.Add(new VisualElement { name = "skills-subsection" });
+
+            VisualElement skillsSubsection = new() { name = "skills-subsection" };
+            VisualElement skillsSetupPanel = new() { name = "skills-setup-panel" };
+            skillsSetupPanel.Add(new VisualElement { name = "skill-target-status-list" });
+            skillsSetupPanel.Add(new VisualElement { name = "skill-target-status-divider" });
+            skillsSetupPanel.Add(new Label { name = "skill-target-status-summary" });
+            skillsSetupPanel.Add(new Button { name = "install-all-skills-button" });
+            Foldout specificTargetFoldout = new() { name = "install-specific-target-foldout" };
+            VisualElement groupSkillsRow = new() { name = "group-skills-row" };
+            groupSkillsRow.Add(new Toggle { name = "group-skills-toggle" });
+            groupSkillsRow.Add(new Label { name = "group-skills-label" });
+            specificTargetFoldout.Add(groupSkillsRow);
+            VisualElement skillsTargetRow = new() { name = "skills-target-row" };
+            skillsTargetRow.Add(new EnumField { name = "skills-target-field" });
+            skillsTargetRow.Add(new Button { name = "refresh-skills-state-button" });
+            specificTargetFoldout.Add(skillsTargetRow);
+            specificTargetFoldout.Add(new Button { name = "install-selected-skills-button" });
+            skillsSetupPanel.Add(specificTargetFoldout);
+            skillsSubsection.Add(skillsSetupPanel);
+            root.Add(skillsSubsection);
             return root;
         }
 
@@ -206,7 +186,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 selectedTargetInstallState,
                 SkillsTarget.Claude,
                 groupSkillsUnderUnityCliLoop: false,
-                isInstallingSkills: false);
+                isInstallingSkills: false,
+                installableSkillTargets: new List<SkillSetupTargetInfo>());
         }
     }
 }

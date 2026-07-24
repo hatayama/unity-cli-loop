@@ -98,6 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         public readonly SkillsTarget SelectedTarget;
         public readonly bool GroupSkillsUnderUnityCliLoop;
         public readonly bool IsInstallingSkills;
+        public readonly System.Collections.Generic.IReadOnlyList<SkillSetupTargetInfo> InstallableSkillTargets;
 
         public CliSetupData(
             bool isCliInstalled,
@@ -117,7 +118,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SkillInstallState selectedTargetInstallState,
             SkillsTarget selectedTarget,
             bool groupSkillsUnderUnityCliLoop,
-            bool isInstallingSkills)
+            bool isInstallingSkills,
+            System.Collections.Generic.IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets)
         {
             IsCliInstalled = isCliInstalled;
             CliVersion = cliVersion;
@@ -137,6 +139,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SelectedTarget = selectedTarget;
             GroupSkillsUnderUnityCliLoop = groupSkillsUnderUnityCliLoop;
             IsInstallingSkills = isInstallingSkills;
+            InstallableSkillTargets = installableSkillTargets;
         }
     }
 

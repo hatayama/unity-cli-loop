@@ -157,87 +157,6 @@
 }
 
 /* ===========================================
-   Block: Target
-   =========================================== */
-.setup-target-row {
-    flex-direction: row;
-    align-items: center;
-    margin-bottom: 6px;
-    overflow: hidden;
-}
-
-.setup-target-row__label {
-    width: 50px;
-    flex-shrink: 0;
-    margin-right: 6px;
-}
-
-.setup-target-row__field {
-    flex-grow: 1;
-    flex-shrink: 1;
-    min-width: 0;
-    overflow: hidden;
-}
-
-.setup-target-list {
-    margin-bottom: 6px;
-}
-
-.setup-toggle-row {
-    flex-direction: row;
-    align-items: center;
-    margin-bottom: 6px;
-}
-
-.setup-toggle-row__toggle {
-    width: 20px;
-    margin-right: 4px;
-}
-
-.setup-toggle-row__label {
-    flex-grow: 1;
-    white-space: normal;
-}
-
-.setup-target-item {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 2px;
-    margin-left: 4px;
-}
-
-.setup-target-item__label {
-    flex-grow: 1;
-    margin-right: 8px;
-}
-
-.setup-target-item__status {
-    flex-shrink: 0;
-    -unity-font-style: bold;
-}
-
-.setup-target-item__status--installed {
-    color: var(--setup-color-success);
-}
-
-.setup-target-item__status--checking {
-    color: var(--setup-color-muted);
-}
-
-.setup-target-item__status--outdated {
-    color: var(--setup-color-warning);
-}
-
-.setup-target-item__status--missing {
-    color: var(--setup-color-muted);
-}
-
-.setup-target-item__status--different-layout {
-    color: var(--setup-color-warning);
-}
-
-/* ===========================================
    Block: Button
    =========================================== */
 .setup-button {
@@ -295,13 +214,6 @@
     color: var(--setup-color-muted);
     white-space: normal;
     margin-top: 4px;
-}
-
-.setup-step__divider {
-    border-top-width: 1px;
-    border-top-color: rgba(255, 255, 255, 0.12);
-    margin-top: 6px;
-    margin-bottom: 12px;
 }
 
 /* ===========================================

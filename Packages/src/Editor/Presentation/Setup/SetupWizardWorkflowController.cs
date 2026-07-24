@@ -2,14 +2,12 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
-// Domain: IUnityCliLoopEditorSettingsPort / SkillSetupUseCase live across Application+Domain contracts used below.
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
@@ -38,25 +36,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Button installCliButton,
             VisualElement installProgressContainer,
             Label installProgressLabel,
-            VisualElement groupSkillsRow,
-            EnumField skillsTargetField,
-            Toggle groupSkillsToggle,
-            Label groupSkillsLabel,
-            VisualElement skillsTargetRow,
-            VisualElement skillsTargetList,
-            VisualElement skillsStatusDivider,
-            Label skillsStatusLabel,
-            Button installSkillsButton,
+            SkillsSetupPanelView skillsSetupPanelView,
             Toggle suppressAutoShowToggle,
             SkillSetupUseCase skillSetupUseCase,
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
             CliSetupApplicationService cliSetupApplicationService,
-            Action scheduleResizeToContent,
-            string lastSeenSetupWizardVersionBeforeOpen)
+            Action scheduleResizeToContent)
         {
             Debug.Assert(rootVisualElement != null, "rootVisualElement must not be null");
             Debug.Assert(nodejsWarning != null, "nodejsWarning must not be null");
             Debug.Assert(nodejsOk != null, "nodejsOk must not be null");
+            Debug.Assert(skillsSetupPanelView != null, "skillsSetupPanelView must not be null");
             Debug.Assert(suppressAutoShowToggle != null, "suppressAutoShowToggle must not be null");
             Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
             Debug.Assert(scheduleResizeToContent != null, "scheduleResizeToContent must not be null");
@@ -81,25 +71,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliSetupApplicationService,
                 RefreshUI);
             _skillsWorkflow = new SetupWizardSkillsWorkflowController(
-                groupSkillsRow,
-                skillsTargetField,
-                groupSkillsToggle,
-                groupSkillsLabel,
-                skillsTargetRow,
-                skillsTargetList,
-                skillsStatusDivider,
-                skillsStatusLabel,
-                installSkillsButton,
+                skillsSetupPanelView,
                 skillSetupUseCase,
                 editorSettingsPort,
                 cliSetupApplicationService,
-                scheduleResizeToContent,
-                lastSeenSetupWizardVersionBeforeOpen);
-        }
-
-        internal void InitializeSkillsTargetField()
-        {
-            _skillsWorkflow.InitializeSkillsTargetField();
+                scheduleResizeToContent);
         }
 
         internal void InitializeGroupSkillsToggle()

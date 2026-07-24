@@ -1,5 +1,6 @@
 using UnityEditor;
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 using io.github.hatayama.UnityCliLoop.Application;
@@ -169,6 +170,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _view.OnRefreshCliVersion += () => _cliSetupPresenter.HandleRefreshCliVersion().Forget();
             _view.OnInstallCli += () => _cliSetupPresenter.HandleInstallCli().Forget();
             _view.OnInstallSkills += () => _skillsPresenter.HandleInstallSkills().Forget();
+            _view.OnInstallAllSkills += () => _skillsPresenter.HandleInstallAllSkills(CancellationToken.None).Forget();
             _view.OnRefreshSkillsState += _skillsPresenter.HandleRefreshSkillsState;
             _view.OnSkillsTargetChanged += _skillsPresenter.HandleSkillsTargetChanged;
             _view.OnGroupSkillsChanged += _skillsPresenter.HandleGroupSkillsChanged;
