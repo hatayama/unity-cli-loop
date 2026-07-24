@@ -286,6 +286,59 @@ func TestRunDispatcherVersionUsesDispatcherVersion(t *testing.T) {
 	}
 }
 
+func TestRunDispatcherVersionSubcommandMatchesFlagVersion(t *testing.T) {
+	// Verifies `uloop version` returns the same text as `uloop --version`.
+	t.Chdir(t.TempDir())
+
+	var flagStdout bytes.Buffer
+	var subcommandStdout bytes.Buffer
+	flagCode := RunDispatcher(context.Background(), []string{"--version"}, &flagStdout, io.Discard)
+	subcommandCode := RunDispatcher(context.Background(), []string{clicore.VersionCommandName}, &subcommandStdout, io.Discard)
+
+	if flagCode != 0 || subcommandCode != 0 {
+		t.Fatalf("version exit codes mismatch: flag=%d subcommand=%d", flagCode, subcommandCode)
+	}
+	if flagStdout.String() != subcommandStdout.String() {
+		t.Fatalf("version output mismatch:\nflag:       %q\nsubcommand: %q", flagStdout.String(), subcommandStdout.String())
+	}
+}
+
+func TestRunDispatcherVersionSubcommandJSONMatchesFlagVersionJSON(t *testing.T) {
+	// Verifies `uloop version --json` returns the same JSON as `uloop --version --json`.
+	t.Chdir(t.TempDir())
+
+	var flagStdout bytes.Buffer
+	var subcommandStdout bytes.Buffer
+	flagCode := RunDispatcher(context.Background(), []string{"--version", "--json"}, &flagStdout, io.Discard)
+	subcommandCode := RunDispatcher(context.Background(), []string{clicore.VersionCommandName, "--json"}, &subcommandStdout, io.Discard)
+
+	if flagCode != 0 || subcommandCode != 0 {
+		t.Fatalf("version --json exit codes mismatch: flag=%d subcommand=%d", flagCode, subcommandCode)
+	}
+	if flagStdout.String() != subcommandStdout.String() {
+		t.Fatalf("version --json output mismatch:\nflag:       %q\nsubcommand: %q", flagStdout.String(), subcommandStdout.String())
+	}
+}
+
+func TestRunDispatcherVersionSubcommandReportsTrailingUnknownOption(t *testing.T) {
+	// Verifies `uloop version --json extra` reports the trailing argument, not --json itself.
+	t.Chdir(t.TempDir())
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunDispatcher(context.Background(), []string{clicore.VersionCommandName, "--json", "extra"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected failure, got code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Unknown version option: extra") {
+		t.Fatalf("stderr should report trailing option extra: %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "uloop version --help") {
+		t.Fatalf("stderr should guide users to version --help: %s", stderr.String())
+	}
+}
+
 func TestResolveDispatcherRealCLIRejectsInvalidProjectRunnerVersion(t *testing.T) {
 	// Verifies project pins cannot escape the dispatcher cache through projectRunnerVersion path segments.
 	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())

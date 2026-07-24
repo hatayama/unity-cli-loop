@@ -51,7 +51,8 @@ func shouldWaitForControlPlayModeState(command string, params map[string]any) bo
 	if command != controlPlayModeCommandName {
 		return false
 	}
-	return controlPlayModeActionCanWait(controlPlayModeAction(params))
+	action := normalizeControlPlayModeWaitAction(controlPlayModeAction(params))
+	return controlPlayModeActionCanWait(action)
 }
 
 func runControlPlayModeWithStateWait(
@@ -61,7 +62,9 @@ func runControlPlayModeWithStateWait(
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
-	action := controlPlayModeAction(params)
+	// Keep the user-facing action for error details; normalize only for wait-path decisions.
+	requestedAction := controlPlayModeAction(params)
+	action := normalizeControlPlayModeWaitAction(requestedAction)
 	timeout, timeoutSeconds := controlPlayModeTimeout(params)
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, controlPlayModeCommandName)
@@ -90,13 +93,13 @@ func runControlPlayModeWithStateWait(
 		if initialResponse.BlockedByCompileErrors {
 			spinner.Stop()
 			writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
-			clierrors.WriteErrorEnvelope(stderr, controlPlayModeCompileErrorsError(connection.ProjectRoot, action, initialResponse))
+			clierrors.WriteErrorEnvelope(stderr, controlPlayModeCompileErrorsError(connection.ProjectRoot, requestedAction, initialResponse))
 			return 1
 		}
 		if initialResponse.BlockedByUnsavedChanges {
 			spinner.Stop()
 			writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
-			clierrors.WriteErrorEnvelope(stderr, controlPlayModeUnsavedChangesError(connection.ProjectRoot, action, initialResponse))
+			clierrors.WriteErrorEnvelope(stderr, controlPlayModeUnsavedChangesError(connection.ProjectRoot, requestedAction, initialResponse))
 			return 1
 		}
 		if controlPlayModeStateMatches(action, initialResponse) {
@@ -130,12 +133,12 @@ func runControlPlayModeWithStateWait(
 	if !completed {
 		if response.BlockedByCompileErrors {
 			writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
-			clierrors.WriteErrorEnvelope(stderr, controlPlayModeCompileErrorsError(connection.ProjectRoot, action, response))
+			clierrors.WriteErrorEnvelope(stderr, controlPlayModeCompileErrorsError(connection.ProjectRoot, requestedAction, response))
 			return 1
 		}
 
 		writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
-		clierrors.WriteErrorEnvelope(stderr, controlPlayModeWaitTimeoutError(connection.ProjectRoot, action, timeoutSeconds, response))
+		clierrors.WriteErrorEnvelope(stderr, controlPlayModeWaitTimeoutError(connection.ProjectRoot, requestedAction, timeoutSeconds, response))
 		return 1
 	}
 
@@ -252,6 +255,15 @@ func controlPlayModeAction(params map[string]any) string {
 		return value
 	}
 	return "Play"
+}
+
+// normalizeControlPlayModeWaitAction maps Resume onto Play for wait-path decisions so the alias
+// shares canWait / stateMatches / compile-block behavior without scattering Resume checks.
+func normalizeControlPlayModeWaitAction(action string) string {
+	if strings.EqualFold(action, "Resume") {
+		return "Play"
+	}
+	return action
 }
 
 func controlPlayModeTimeout(params map[string]any) (time.Duration, int) {

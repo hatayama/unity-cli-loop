@@ -96,6 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             switch (action)
             {
                 case PlayModeAction.Play:
+                case PlayModeAction.Resume:
                     return ExecutePlayModeStart(wasPaused, wasPlaying);
 
                 case PlayModeAction.Stop:
@@ -138,7 +139,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private bool ShouldBlockPlayForCompileErrors(PlayModeAction action, bool isPlaying)
         {
-            return action == PlayModeAction.Play &&
+            // Why Resume too: it is a Play alias, including for StatusOnly IPC probes that bypass CLI wait normalization.
+            bool isPlayOrResume = action == PlayModeAction.Play || action == PlayModeAction.Resume;
+            return isPlayOrResume &&
                 !isPlaying &&
                 _compilationFailureGate.HasScriptCompilationFailed();
         }

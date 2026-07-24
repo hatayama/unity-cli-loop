@@ -22,4 +22,5 @@ var nativeCommandOptions = map[string][]string{
 	},
 	clicore.InstallCommandName: {"--" + installDirFlagName},
 	clicore.UpdateCommandName:  {"--" + updateToVersionFlagName},
+	clicore.VersionCommandName: {"--json"},
 }

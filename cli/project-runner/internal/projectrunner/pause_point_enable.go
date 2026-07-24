@@ -323,18 +323,41 @@ func runEnablePausePointAndAwait(
 		resumePlay:            resumePlay,
 	}
 
-	return runPausePointWaitAfterEnable(ctx, connection, waitOptions, enableResponse.Warning, stdout, stderr)
+	return runPausePointWaitAfterEnable(
+		ctx,
+		connection,
+		waitOptions,
+		enablePausePointPropagatedFields{
+			Warning:          enableResponse.Warning,
+			ResolvedLine:     enableResponse.ResolvedLine,
+			ResolvedLineText: enableResponse.ResolvedLineText,
+			ResolvedMethod:   enableResponse.ResolvedMethod,
+			SnapshotTiming:   enableResponse.SnapshotTiming,
+		},
+		stdout,
+		stderr,
+	)
+}
+
+// enablePausePointPropagatedFields carries enable-time fields into the --await hit response,
+// matching how Warning alone used to be forwarded from runEnablePausePointAndAwait.
+type enablePausePointPropagatedFields struct {
+	Warning          string
+	ResolvedLine     int
+	ResolvedLineText string
+	ResolvedMethod   string
+	SnapshotTiming   string
 }
 
 // runPausePointWaitAfterEnable mirrors runWaitForPausePoint's response shaping (the shared
-// helpers it calls are reused as-is) but also folds the enable-time Warning (for example the
-// physics-callback cached-dispatch warning) into the merged response, since --await must not
-// drop evidence the plain enable-pause-point response would have carried.
+// helpers it calls are reused as-is) but also folds enable-time fields (Warning and the
+// file:line resolution details) into the merged response, since --await must not drop evidence
+// the plain enable-pause-point response would have carried.
 func runPausePointWaitAfterEnable(
 	ctx context.Context,
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
-	enableWarning string,
+	enableFields enablePausePointPropagatedFields,
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
@@ -356,6 +379,11 @@ func runPausePointWaitAfterEnable(
 
 		response.TriggerResult = triggerResult
 		response.ResumePlayResult = resumeResult
+		// Status polls never carry these fields today; always prefer the enable-time values.
+		response.ResolvedLine = enableFields.ResolvedLine
+		response.ResolvedLineText = enableFields.ResolvedLineText
+		response.ResolvedMethod = enableFields.ResolvedMethod
+		response.SnapshotTiming = enableFields.SnapshotTiming
 		response = filterPausePointCapturedVariableHistory(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
@@ -367,11 +395,11 @@ func runPausePointWaitAfterEnable(
 			payload = pausePointWaitResult{
 				pausePointStatusResponse: response,
 				MatchingLogs:             logs.Logs,
-				Warning:                  joinPausePointWarnings(enableWarning, buildPausePointWarning(logs, response.HitCount)),
+				Warning:                  joinPausePointWarnings(enableFields.Warning, buildPausePointWarning(logs, response.HitCount)),
 				Expectations:             expectations,
 				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
 			}
-		case enableWarning != "" || len(expectations) > 0:
+		case enableFields.Warning != "" || len(expectations) > 0:
 			// Best-effort like the plain await path: a failed log fetch must not also drop the
 			// enable-time warning or --expect results, since those are the only evidence left in
 			// this branch. Uses an anonymous struct (not pausePointWaitResult) so MatchingLogs is
@@ -384,7 +412,7 @@ func runPausePointWaitAfterEnable(
 				AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
 			}{
 				pausePointStatusResponse: response,
-				Warning:                  enableWarning,
+				Warning:                  enableFields.Warning,
 				Expectations:             expectations,
 				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
 			}
@@ -407,8 +435,8 @@ func runPausePointWaitAfterEnable(
 
 	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state)
 	waitErr.Command = pausePointEnableCommandName
-	if enableWarning != "" {
-		waitErr.Details["EnableWarning"] = enableWarning
+	if enableFields.Warning != "" {
+		waitErr.Details["EnableWarning"] = enableFields.Warning
 	}
 	if triggerResult != nil {
 		waitErr.Details["TriggerResult"] = triggerResult
