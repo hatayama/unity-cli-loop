@@ -418,6 +418,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void PrepareForOpen_PopulatesWindowStateBeforeShowing()
         {
+            // Verifies PrepareForOpen writes title, position, and record-version flag before Show.
             SetupWizardWindow window = ScriptableObject.CreateInstance<SetupWizardWindow>();
             try
             {
@@ -427,19 +428,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     window,
                     "Unity CLI Loop Setup",
                     position,
-                    "1.9.0",
                     true);
 
                 SerializedObject serializedWindow = new(window);
-                SerializedProperty lastSeenVersionProperty =
-                    serializedWindow.FindProperty("_lastSeenSetupWizardVersionBeforeOpen");
                 SerializedProperty recordVersionProperty =
                     serializedWindow.FindProperty("_shouldRecordLastSeenVersionAfterCreateGui");
 
                 Assert.That(window.titleContent.text, Is.EqualTo("Unity CLI Loop Setup"));
                 Assert.That(window.position, Is.EqualTo(position));
-                Assert.That(lastSeenVersionProperty, Is.Not.Null);
-                Assert.That(lastSeenVersionProperty.stringValue, Is.EqualTo("1.9.0"));
                 Assert.That(recordVersionProperty, Is.Not.Null);
                 Assert.That(recordVersionProperty.boolValue, Is.True);
             }
@@ -447,70 +443,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 Object.DestroyImmediate(window);
             }
-        }
-
-        [Test]
-        public void FilterInstallableSkillTargets_ExcludesTargetsWithoutSkillsDirectory()
-        {
-            List<SkillSetupTargetInfo> targets = new()
-            {
-                new("Claude Code", ".claude", "--claude", true, true),
-                new("Cursor", ".cursor", "--cursor", false, false),
-                new("Codex CLI", ".codex", "--codex", true, false, hasDifferentLayoutSkills: true)
-            };
-
-            List<SkillSetupTargetInfo> installableTargets =
-                SetupWizardSkillsStepPresenter.FilterInstallableSkillTargets(targets);
-
-            Assert.That(installableTargets.Count, Is.EqualTo(2));
-            Assert.That(installableTargets[0].DirName, Is.EqualTo(".claude"));
-            Assert.That(installableTargets[1].DirName, Is.EqualTo(".codex"));
-        }
-
-        [TestCase(true, 0, true)]
-        [TestCase(false, 0, true)]
-        [TestCase(false, 1, false)]
-        public void ResolveUseFirstInstallSkillsUi_ReturnsExpectedMode(
-            bool shouldUseFirstInstallSkillsUi,
-            int installableTargetCount,
-            bool expected)
-        {
-            // Verifies that empty installable target results fall back to the first-install skill UI.
-            bool actual = SetupWizardSkillsStepPresenter.ResolveUseFirstInstallSkillsUi(
-                shouldUseFirstInstallSkillsUi,
-                installableTargetCount);
-
-            Assert.That(actual, Is.EqualTo(expected));
-        }
-
-        [Test]
-        public void ResolveUseFirstInstallSkillsUi_WhenLatched_RemainsEnabled()
-        {
-            // Verifies that the first-install UI remains enabled after a target folder is created.
-            bool latchedMode = SetupWizardSkillsStepPresenter.ResolveUseFirstInstallSkillsUi(
-                shouldUseFirstInstallSkillsUi: false,
-                installableTargetCount: 0);
-            bool actual = SetupWizardSkillsStepPresenter.ResolveUseFirstInstallSkillsUi(
-                latchedMode,
-                installableTargetCount: 1);
-
-            Assert.That(actual, Is.True);
-        }
-
-        [Test]
-        public void ShouldUseFirstInstallSkillsUi_WhenVersionWasNeverSeen_ReturnsTrue()
-        {
-            bool shouldUseFirstInstallUi = SetupWizardWindow.ShouldUseFirstInstallSkillsUi("");
-
-            Assert.That(shouldUseFirstInstallUi, Is.True);
-        }
-
-        [Test]
-        public void ShouldUseFirstInstallSkillsUi_WhenVersionWasSeen_ReturnsFalse()
-        {
-            bool shouldUseFirstInstallUi = SetupWizardWindow.ShouldUseFirstInstallSkillsUi("1.9.0");
-
-            Assert.That(shouldUseFirstInstallUi, Is.False);
         }
 
         [Test]
@@ -527,48 +459,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool canManageSkills = SetupWizardWindow.CanManageSkills(cliInstalled: true);
 
             Assert.That(canManageSkills, Is.True);
-        }
-
-        [Test]
-        public void ShouldShowSkillsTargetRow_WhenFirstInstallAndCliMissing_ReturnsTrue()
-        {
-            // Verifies that first-time setup can choose a skill target before CLI installation.
-            bool shouldShow = SetupWizardSkillsStepPresenter.ShouldShowSkillsTargetRowForSetupWizard(
-                shouldUseFirstInstallSkillsUi: true);
-
-            Assert.That(shouldShow, Is.True);
-        }
-
-        [Test]
-        public void ShouldShowSkillsTargetRow_WhenNotFirstInstall_ReturnsFalse()
-        {
-            // Verifies that returning setup keeps the compact target row hidden.
-            bool shouldShow = SetupWizardSkillsStepPresenter.ShouldShowSkillsTargetRowForSetupWizard(
-                shouldUseFirstInstallSkillsUi: false);
-
-            Assert.That(shouldShow, Is.False);
-        }
-
-        [Test]
-        public void ShouldShowSkillsTargetList_WhenCliMissing_ReturnsFalse()
-        {
-            // Verifies that multi-target status rows stay hidden until the CLI can inspect skill state.
-            bool shouldShow = SetupWizardSkillsStepPresenter.ShouldShowSkillsTargetListForSetupWizard(
-                canManageSkills: false,
-                shouldUseFirstInstallSkillsUi: false);
-
-            Assert.That(shouldShow, Is.False);
-        }
-
-        [Test]
-        public void ShouldShowSkillsTargetList_WhenCliInstalledAndNotFirstInstall_ReturnsTrue()
-        {
-            // Verifies that returning users keep the multi-target skill status view.
-            bool shouldShow = SetupWizardSkillsStepPresenter.ShouldShowSkillsTargetListForSetupWizard(
-                canManageSkills: true,
-                shouldUseFirstInstallSkillsUi: false);
-
-            Assert.That(shouldShow, Is.True);
         }
 
         [TestCase(false, false, false, false, false, null, "3.0.0", "Install CLI")]
@@ -681,163 +571,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void CreateFirstInstallSkillTarget_WhenClaudeSelected_ReturnsClaudeProjectTarget()
-        {
-            SkillSetupTargetInfo target =
-                SetupWizardSkillsStepPresenter.CreateFirstInstallSkillTarget(SkillsTarget.Claude, true);
-
-            Assert.That(target.DisplayName, Is.EqualTo("Claude Code"));
-            Assert.That(target.DirName, Is.EqualTo(".claude"));
-            Assert.That(target.InstallFlag, Is.EqualTo("--claude"));
-            Assert.That(target.HasSkillsDirectory, Is.False);
-            Assert.That(target.HasExistingSkills, Is.False);
-        }
-
-        [TestCase(SkillsTarget.Cursor, "Cursor", ".cursor", "--cursor")]
-        [TestCase(SkillsTarget.Gemini, "Gemini CLI", ".gemini", "--gemini")]
-        [TestCase(SkillsTarget.Codex, "Codex CLI", ".codex", "--codex")]
-        [TestCase(SkillsTarget.Agents, "Other (.agents)", ".agents", "--agents")]
-        public void CreateFirstInstallSkillTarget_ReturnsMappedTarget(
-            SkillsTarget targetType,
-            string expectedDisplayName,
-            string expectedDirName,
-            string expectedInstallFlag)
-        {
-            SkillSetupTargetInfo target =
-                SetupWizardSkillsStepPresenter.CreateFirstInstallSkillTarget(targetType, true);
-
-            Assert.That(target.DisplayName, Is.EqualTo(expectedDisplayName));
-            Assert.That(target.DirName, Is.EqualTo(expectedDirName));
-            Assert.That(target.InstallFlag, Is.EqualTo(expectedInstallFlag));
-            Assert.That(target.HasSkillsDirectory, Is.False);
-            Assert.That(target.HasExistingSkills, Is.False);
-        }
-
-        [Test]
-        public void CreateFirstInstallSkillTarget_WhenGroupingDisabled_KeepsTargetMetadata()
-        {
-            SkillSetupTargetInfo target =
-                SetupWizardSkillsStepPresenter.CreateFirstInstallSkillTarget(SkillsTarget.Claude, false);
-
-            Assert.That(target.DisplayName, Is.EqualTo("Claude Code"));
-            Assert.That(target.DirName, Is.EqualTo(".claude"));
-            Assert.That(target.InstallFlag, Is.EqualTo("--claude"));
-        }
-
-        [Test]
-        public void GetSelectedSkillTargetInfo_WhenDetectedTargetExists_ReturnsDetectedState()
-        {
-            List<SkillSetupTargetInfo> targets = new()
-            {
-                new(
-                    "Claude Code",
-                    ".claude",
-                    "--claude",
-                    hasSkillsDirectory: true,
-                    hasExistingSkills: true,
-                    installState: SkillInstallState.Installed)
-            };
-
-            SkillSetupTargetInfo target = SetupWizardSkillsStepPresenter.GetSelectedSkillTargetInfo(
-                targets,
-                SkillsTarget.Claude,
-                groupSkillsUnderUnityCliLoop: true);
-
-            Assert.That(target.DirName, Is.EqualTo(".claude"));
-            Assert.That(target.InstallState, Is.EqualTo(SkillInstallState.Installed));
-        }
-
-        [Test]
-        public void GetFirstInstallableSkillTargets_WhenSelectedTargetIsInstalled_ReturnsEmpty()
-        {
-            List<SkillSetupTargetInfo> targets = new()
-            {
-                new(
-                    "Claude Code",
-                    ".claude",
-                    "--claude",
-                    hasSkillsDirectory: true,
-                    hasExistingSkills: true,
-                    installState: SkillInstallState.Installed)
-            };
-
-            List<SkillSetupTargetInfo> installableTargets =
-                SetupWizardSkillsStepPresenter.GetFirstInstallableSkillTargets(
-                    targets,
-                    SkillsTarget.Claude,
-                    groupSkillsUnderUnityCliLoop: true);
-
-            Assert.That(installableTargets, Is.Empty);
-        }
-
-        [Test]
-        public void GetFirstInstallableSkillTargets_WhenSelectedTargetIsMissing_ReturnsMappedTarget()
-        {
-            List<SkillSetupTargetInfo> installableTargets =
-                SetupWizardSkillsStepPresenter.GetFirstInstallableSkillTargets(
-                    new List<SkillSetupTargetInfo>(),
-                    SkillsTarget.Claude,
-                    groupSkillsUnderUnityCliLoop: true);
-
-            Assert.That(installableTargets.Count, Is.EqualTo(1));
-            Assert.That(installableTargets[0].DirName, Is.EqualTo(".claude"));
-            Assert.That(installableTargets[0].InstallState, Is.EqualTo(SkillInstallState.Missing));
-        }
-
-        [TestCase(SkillInstallState.Installed, false, true, "Installed")]
-        [TestCase(SkillInstallState.Checking, false, true, "Checking...")]
-        [TestCase(SkillInstallState.Outdated, false, true, "Outdated")]
-        [TestCase(SkillInstallState.Missing, false, true, "Missing")]
-        [TestCase(SkillInstallState.Missing, true, true, "Not grouped")]
-        [TestCase(SkillInstallState.Missing, true, false, "Grouped")]
-        public void GetSkillInstallStatusText_ReturnsExpectedLabel(
-            SkillInstallState installState,
-            bool hasDifferentLayoutSkills,
-            bool groupSkillsUnderUnityCliLoop,
-            string expectedLabel)
-        {
-            string label = SetupWizardSkillsStepPresenter.GetSkillInstallStatusText(
-                installState,
-                hasDifferentLayoutSkills,
-                groupSkillsUnderUnityCliLoop);
-
-            Assert.That(label, Is.EqualTo(expectedLabel));
-        }
-
-        [TestCase(true, false, "Installing...")]
-        [TestCase(false, true, "Update Skills")]
-        [TestCase(false, false, "Install Skills")]
-        public void GetInstallSkillsButtonText_ReturnsExpectedLabel(
-            bool isInstallingSkills,
-            bool hasOutdatedSkills,
-            string expectedLabel)
-        {
-            string label = SetupWizardSkillsStepPresenter.GetInstallSkillsButtonText(
-                isInstallingSkills,
-                hasOutdatedSkills);
-
-            Assert.That(label, Is.EqualTo(expectedLabel));
-        }
-
-        [TestCase(false, false, false, "Install Skills")]
-        [TestCase(true, true, false, "Installing...")]
-        [TestCase(true, false, true, "Update Skills")]
-        [TestCase(true, false, false, "Install Skills")]
-        public void GetSkillsButtonTextForSetupWizard_ReturnsExpectedLabel(
-            bool cliInstalled,
-            bool isInstallingSkills,
-            bool hasOutdatedSkills,
-            string expectedLabel)
-        {
-            string label = SetupWizardSkillsStepPresenter.GetSkillsButtonTextForSetupWizard(
-                cliInstalled,
-                isInstallingSkills,
-                hasOutdatedSkills);
-
-            Assert.That(label, Is.EqualTo(expectedLabel));
-        }
-
-        [Test]
         public void ShouldShowSkillsInstalledDialog_WhenTargetsAreMissing_ReturnsTrue()
         {
             // Verifies that Setup Wizard keeps the success dialog for first install.
@@ -887,24 +620,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool shouldShowDialog = SetupWizardWindow.ShouldShowSkillsInstalledDialog(targets);
 
             Assert.That(shouldShowDialog, Is.False);
-        }
-
-        [TestCase(SkillInstallState.Installed, false, "setup-target-item__status--installed")]
-        [TestCase(SkillInstallState.Checking, false, "setup-target-item__status--checking")]
-        [TestCase(SkillInstallState.Outdated, false, "setup-target-item__status--outdated")]
-        [TestCase(SkillInstallState.Missing, false, "setup-target-item__status--missing")]
-        [TestCase(SkillInstallState.Missing, true, "setup-target-item__status--different-layout")]
-        public void GetSkillInstallStatusClass_ReturnsExpectedClass(
-            SkillInstallState installState,
-            bool hasDifferentLayoutSkills,
-            string expectedClass)
-        {
-            // Verifies that each skill install state maps to the expected status style class.
-            string className = SetupWizardSkillsStepPresenter.GetSkillInstallStatusClass(
-                installState,
-                hasDifferentLayoutSkills);
-
-            Assert.That(className, Is.EqualTo(expectedClass));
         }
 
         [Test]
