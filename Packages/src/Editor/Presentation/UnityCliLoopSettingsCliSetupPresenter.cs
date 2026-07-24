@@ -395,7 +395,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 {
                     EditorUtility.DisplayDialog(
                         "Uninstallation Failed",
-                        $"Failed to uninstall uLoop CLI.\n\n{result.ErrorOutput}",
+                        $"Failed to uninstall uloop CLI.\n\n{result.ErrorOutput}",
                         "OK");
                     return;
                 }
