@@ -10,6 +10,15 @@ import (
 
 var dispatcherVersion = dispatchercontract.DispatcherCurrent.DispatcherVersion
 
+// writeDispatcherVersionOutput writes the same payload as --version / --version --json.
+func writeDispatcherVersionOutput(stdout io.Writer, asJSON bool) {
+	if asJSON {
+		writeDispatcherVersionJSON(stdout)
+		return
+	}
+	clicore.WriteLine(stdout, dispatcherVersion)
+}
+
 func writeDispatcherVersionJSON(stdout io.Writer) {
 	content, err := json.Marshal(map[string]any{
 		"DispatcherVersion": dispatcherVersion,

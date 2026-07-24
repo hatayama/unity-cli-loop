@@ -17,6 +17,7 @@ func TestRunProjectLocalRejectsDispatcherOwnedCommands(t *testing.T) {
 		"install",
 		"update",
 		"uninstall",
+		"version",
 		"skills",
 		"completion",
 	} {

@@ -26,11 +26,11 @@ func tryHandleDispatcherInfoRequest(args []string, stdout io.Writer) (bool, int)
 		return true, 0
 	}
 	if clicore.IsVersionJSONRequest(args) {
-		writeDispatcherVersionJSON(stdout)
+		writeDispatcherVersionOutput(stdout, true)
 		return true, 0
 	}
 	if clicore.IsVersionRequest(args) {
-		clicore.WriteLine(stdout, dispatcherVersion)
+		writeDispatcherVersionOutput(stdout, false)
 		return true, 0
 	}
 	return false, 0
@@ -71,6 +71,9 @@ func tryHandlePreConnectionRequestWithDeps(
 		return true, code
 	}
 	if handled, code := tryHandleSkillsRequest(remainingArgs, startPath, projectPath, stdout, stderr); handled {
+		return true, code
+	}
+	if handled, code := tryHandleVersionRequest(remainingArgs, stdout, stderr); handled {
 		return true, code
 	}
 	if clicore.ContainsHelpRequest(commandArgs) {

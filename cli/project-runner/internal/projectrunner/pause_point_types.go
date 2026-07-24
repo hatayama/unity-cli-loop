@@ -36,6 +36,15 @@ type pausePointStatusResponse struct {
 	// which only the enable-pause-point --await path (pause_point_enable.go) currently reads.
 	Warning string `json:"Warning,omitempty"`
 
+	// ResolvedLine / ResolvedLineText / ResolvedMethod / SnapshotTiming are copied from the
+	// enable-pause-point response on the --await hit path so a single await payload records
+	// both which source line was armed and what was captured. Method-name arms leave them empty
+	// on the Unity side, so omitempty keeps the historical await schema unchanged for those cases.
+	ResolvedLine     int    `json:"ResolvedLine,omitempty"`
+	ResolvedLineText string `json:"ResolvedLineText,omitempty"`
+	ResolvedMethod   string `json:"ResolvedMethod,omitempty"`
+	SnapshotTiming   string `json:"SnapshotTiming,omitempty"`
+
 	// CapturedVariableNameFilterNoMatch is set by the CLI, not Unity, when
 	// --captured-variable-names was passed but none of the requested names matched any
 	// captured variable (current or history), so an agent doesn't mistake an empty

@@ -211,6 +211,165 @@ func TestRunEnablePausePointCommandAwaitsAfterSuccessfulEnable(t *testing.T) {
 	}
 }
 
+// Verifies file:line enable --await copies ResolvedLine / ResolvedLineText / ResolvedMethod /
+// SnapshotTiming from the enable response into the await hit payload.
+func TestRunEnablePausePointCommandAwaitPropagatesFileLineResolvedFields(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	originalFetch := fetchMatchingLogs
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+		fetchMatchingLogs = originalFetch
+	})
+
+	statusResponses := []pausePointStatusResponse{
+		{Id: "Assets/Foo.cs:42", Status: pausePointStatusEnabled, IsEnabled: true},
+		{Id: "Assets/Foo.cs:42", Status: pausePointStatusHit, IsHit: true, HitCount: 1},
+	}
+	statusCallCount := 0
+	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		response := statusResponses[statusCallCount]
+		statusCallCount++
+		return response, nil
+	}
+	fetchMatchingLogs = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		searchText string,
+		maxCount int,
+	) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{SearchText: searchText, Logs: []pausePointMatchingLog{}}, nil
+	}
+
+	listener := newLoopbackIpcListener(t)
+	enableRequests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(
+		listener,
+		pausePointEnableCommandName,
+		enableRequests,
+		serverErr,
+		`{"Success":true,"Id":"Assets/Foo.cs:42","Status":"Enabled","IsEnabled":true,"TimeoutSeconds":30,"ResolvedLine":42,"ResolvedLineText":"    DoJump();","ResolvedMethod":"Player.Update","SnapshotTiming":"OnEnter"}`,
+	)
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runEnablePausePointCommand(
+		context.Background(),
+		connection,
+		[]string{"--file", "Assets/Foo.cs", "--line", "42", "--await"},
+		t.TempDir(),
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	var response pausePointWaitResult
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode stdout: %v\n%s", err, stdout.String())
+	}
+	if response.ResolvedLine != 42 {
+		t.Fatalf("ResolvedLine mismatch: %#v", response)
+	}
+	if response.ResolvedLineText != "    DoJump();" {
+		t.Fatalf("ResolvedLineText mismatch: %#v", response)
+	}
+	if response.ResolvedMethod != "Player.Update" {
+		t.Fatalf("ResolvedMethod mismatch: %#v", response)
+	}
+	if response.SnapshotTiming != "OnEnter" {
+		t.Fatalf("SnapshotTiming mismatch: %#v", response)
+	}
+}
+
+// Verifies method-name enable --await omits ResolvedLine / ResolvedLineText / ResolvedMethod /
+// SnapshotTiming when the enable response did not set them.
+func TestRunEnablePausePointCommandAwaitOmitsResolvedFieldsForMethodArm(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	originalFetch := fetchMatchingLogs
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+		fetchMatchingLogs = originalFetch
+	})
+
+	statusResponses := []pausePointStatusResponse{
+		{Id: "jump", Status: pausePointStatusEnabled, IsEnabled: true},
+		{Id: "jump", Status: pausePointStatusHit, IsHit: true, HitCount: 1},
+	}
+	statusCallCount := 0
+	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		response := statusResponses[statusCallCount]
+		statusCallCount++
+		return response, nil
+	}
+	fetchMatchingLogs = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		searchText string,
+		maxCount int,
+	) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{SearchText: searchText, Logs: []pausePointMatchingLog{}}, nil
+	}
+
+	listener := newLoopbackIpcListener(t)
+	enableRequests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(
+		listener,
+		pausePointEnableCommandName,
+		enableRequests,
+		serverErr,
+		`{"Success":true,"Id":"jump","Status":"Enabled","IsEnabled":true,"TimeoutSeconds":30}`,
+	)
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runEnablePausePointCommand(
+		context.Background(),
+		connection,
+		[]string{"--id", "jump", "--await"},
+		t.TempDir(),
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &raw); err != nil {
+		t.Fatalf("failed to decode stdout: %v\n%s", err, stdout.String())
+	}
+	for _, field := range []string{"ResolvedLine", "ResolvedLineText", "ResolvedMethod", "SnapshotTiming"} {
+		if _, present := raw[field]; present {
+			t.Fatalf("method-name await hit must omit %s, got %#v", field, raw)
+		}
+	}
+}
+
 // Verifies a log fetch failure after --await never turns a successful hit into an error, and
 // omits MatchingLogs entirely (like the plain await-pause-point path) rather than emitting an
 // empty array, so "empty array" keeps meaning "fetch succeeded with no matches" for both commands.

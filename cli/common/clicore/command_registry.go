@@ -5,6 +5,7 @@ const (
 	InstallCommandName              = "install"
 	UpdateCommandName               = "update"
 	UninstallCommandName            = "uninstall"
+	VersionCommandName              = "version"
 	SkillsCommandName               = "skills"
 	CompileCommandName              = "compile"
 	ExecuteDynamicCodeCommandName   = "execute-dynamic-code"
@@ -39,6 +40,7 @@ var NativeCommands = []NativeCommandEntry{
 	{Name: InstallCommandName, Description: "Configure the global uloop launcher binary", Owner: DispatcherOwned},
 	{Name: UpdateCommandName, Description: "Update the global uloop launcher binary", Owner: DispatcherOwned},
 	{Name: UninstallCommandName, Description: "Remove the global uloop launcher binary", Owner: DispatcherOwned},
+	{Name: VersionCommandName, Description: "Show the installed uloop version", Owner: DispatcherOwned},
 }
 
 // IsDispatcherOwnedCommandName reports whether a native command belongs to the

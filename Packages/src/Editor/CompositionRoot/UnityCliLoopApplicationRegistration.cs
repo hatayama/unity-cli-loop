@@ -99,6 +99,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 firstPartyServerLifecycle);
             UnityCliLoopServerApplicationService applicationService = new(controllerService);
             controllerService.InitializeForEditorStartup();
+            ToolCatalogCachePublisher.Publish(toolRegistrarService);
 
             return new UnityCliLoopApplicationServices(
                 domainReloadDetectionService,
