@@ -326,13 +326,14 @@
         "properties": {
           "Action": {
             "type": "string",
-            "description": "Action to perform: Play - Start play mode, Stop - Stop play mode, Pause - Pause play mode, Step - advance one frame while paused, Status - report current state without changing anything",
+            "description": "Action to perform: Play/Stop/Pause/Step/Status/Resume (alias of Play)",
             "enum": [
               "Play",
               "Stop",
               "Pause",
               "Step",
-              "Status"
+              "Status",
+              "Resume"
             ],
             "default": "Play"
           },

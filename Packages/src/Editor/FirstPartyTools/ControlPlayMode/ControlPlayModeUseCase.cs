@@ -96,6 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             switch (action)
             {
                 case PlayModeAction.Play:
+                case PlayModeAction.Resume:
                     return ExecutePlayModeStart(wasPaused, wasPlaying);
 
                 case PlayModeAction.Stop:

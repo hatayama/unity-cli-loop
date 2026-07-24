@@ -11,7 +11,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         Stop = 1,
         Pause = 2,
         Step = 3,
-        Status = 4
+        Status = 4,
+        Resume = 5
     }
 
     /// <summary>
