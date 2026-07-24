@@ -470,8 +470,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 isSkillStateChecking,
                 isClaudeSkillsInstalled: false,
                 isAgentsSkillsInstalled: false,
-                isCursorSkillsInstalled: false,
-                isGeminiSkillsInstalled: false,
                 isCodexSkillsInstalled: false,
                 isAntigravitySkillsInstalled: false,
                 displayedTargetInstallState,

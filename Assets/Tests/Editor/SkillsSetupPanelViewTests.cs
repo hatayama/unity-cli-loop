@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             List<SkillSetupTargetInfo> targets = new()
             {
                 new("Claude Code", ".claude", "--claude", true, true),
-                new("Cursor", ".cursor", "--cursor", false, false),
+                new("Common", ".agents", "--agents", false, false),
                 new("Codex CLI", ".codex", "--codex", true, false, hasDifferentLayoutSkills: true)
             };
 
@@ -45,8 +45,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(target.HasExistingSkills, Is.False);
         }
 
-        [TestCase(SkillsTarget.Cursor, "Cursor", ".cursor", "--cursor")]
-        [TestCase(SkillsTarget.Gemini, "Gemini CLI", ".gemini", "--gemini")]
         [TestCase(SkillsTarget.Codex, "Codex CLI", ".codex", "--codex")]
         [TestCase(SkillsTarget.Agents, "Common", ".agents", "--agents")]
         public void CreateFirstInstallSkillTarget_ReturnsMappedTarget(
@@ -283,7 +281,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             List<SkillSetupTargetInfo> targets = new()
             {
                 CreateTarget("Claude", ".claude", SkillInstallState.Installed),
-                CreateTarget("Cursor", ".cursor", SkillInstallState.Missing)
+                CreateTarget("Common", ".agents", SkillInstallState.Missing)
             };
 
             bool shouldExpand = SkillsSetupPanelView.ShouldExpandSpecificTargetFoldout(targets);

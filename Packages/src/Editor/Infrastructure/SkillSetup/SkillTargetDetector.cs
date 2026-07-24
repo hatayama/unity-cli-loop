@@ -30,8 +30,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static readonly SkillTargetDefinition[] SkillTargets =
         {
             new(".claude", "--claude", "Claude Code"),
-            new(".cursor", "--cursor", "Cursor"),
-            new(".gemini", "--gemini", "Gemini CLI"),
             new(".codex", "--codex", "Codex CLI"),
             new(".agents", "--agents", "Common"),
             new(".agent", "--antigravity", "Antigravity")

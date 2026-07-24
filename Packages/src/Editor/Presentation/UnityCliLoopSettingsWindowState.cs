@@ -16,8 +16,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         Claude = 0,
         Codex = 4,
-        Cursor = 2,
-        Gemini = 3,
         [InspectorName("Common (.agents)")]
         Agents = 1
     }

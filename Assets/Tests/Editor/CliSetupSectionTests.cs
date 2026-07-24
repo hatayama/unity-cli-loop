@@ -222,7 +222,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 installableSkillTargets: new List<SkillSetupTargetInfo>
                 {
                     CreateSkillTarget("Claude", ".claude", SkillInstallState.Checking),
-                    CreateSkillTarget("Cursor", ".cursor", SkillInstallState.Missing)
+                    CreateSkillTarget("Common", ".agents", SkillInstallState.Missing)
                 }));
 
             Assert.That(foldout.value, Is.False);
@@ -386,8 +386,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isSkillStateChecking: isSkillStateChecking ?? isChecking,
                 isClaudeSkillsInstalled: false,
                 isAgentsSkillsInstalled: false,
-                isCursorSkillsInstalled: false,
-                isGeminiSkillsInstalled: false,
                 isCodexSkillsInstalled: false,
                 isAntigravitySkillsInstalled: false,
                 selectedTargetInstallState,

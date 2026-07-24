@@ -91,8 +91,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         public readonly bool IsSkillStateChecking;
         public readonly bool IsClaudeSkillsInstalled;
         public readonly bool IsAgentsSkillsInstalled;
-        public readonly bool IsCursorSkillsInstalled;
-        public readonly bool IsGeminiSkillsInstalled;
         public readonly bool IsCodexSkillsInstalled;
         public readonly bool IsAntigravitySkillsInstalled;
         public readonly SkillInstallState SelectedTargetInstallState;
@@ -113,8 +111,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isSkillStateChecking,
             bool isClaudeSkillsInstalled,
             bool isAgentsSkillsInstalled,
-            bool isCursorSkillsInstalled,
-            bool isGeminiSkillsInstalled,
             bool isCodexSkillsInstalled,
             bool isAntigravitySkillsInstalled,
             SkillInstallState selectedTargetInstallState,
@@ -134,8 +130,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             IsSkillStateChecking = isSkillStateChecking;
             IsClaudeSkillsInstalled = isClaudeSkillsInstalled;
             IsAgentsSkillsInstalled = isAgentsSkillsInstalled;
-            IsCursorSkillsInstalled = isCursorSkillsInstalled;
-            IsGeminiSkillsInstalled = isGeminiSkillsInstalled;
             IsCodexSkillsInstalled = isCodexSkillsInstalled;
             IsAntigravitySkillsInstalled = isAntigravitySkillsInstalled;
             SelectedTargetInstallState = selectedTargetInstallState;
