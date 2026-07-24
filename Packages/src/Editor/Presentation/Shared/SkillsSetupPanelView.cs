@@ -103,6 +103,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _installSelectedSkillsButton.SetEnabled(false);
             _installSelectedSkillsButton.text = "Checking...";
             _refreshSkillsStateButton.SetEnabled(false);
+            _skillsTargetField.SetEnabled(false);
+            _groupSkillsToggle.SetEnabled(false);
         }
 
         internal void UpdateStatusPanel(

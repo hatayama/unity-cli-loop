@@ -187,28 +187,42 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private async Task HandleInstallSkillsAsync(bool isBulkInstall, CancellationToken ct)
         {
-            CancelSkillInstallStateRefresh();
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            List<SkillSetupTargetInfo> targets = DetectDisplayedSkillTargets(projectRoot);
-            bool groupSkillsUnderUnityCliLoop = !_installSkillsFlat;
-            List<SkillSetupTargetInfo> installableTargets = isBulkInstall
-                ? SkillsSetupPanelView.FilterInstallableSkillTargets(targets)
-                : SkillsSetupPanelView.BuildSingleTargetInstallList(
-                    targets,
-                    _skillsTarget,
-                    groupSkillsUnderUnityCliLoop);
-            if (installableTargets.Count == 0)
+            if (_isInstallingSkills)
             {
                 return;
             }
 
-            bool shouldShowSkillsInstalledDialog =
-                SkillInstallDialogPolicy.ShouldShowForInstallableTargets(installableTargets);
+            // Latch before the first await so a second Install click cannot start a parallel install.
             _isInstallingSkills = true;
-            UpdateSkillsStep(true, targets);
+            CancelSkillInstallStateRefresh();
+            UpdateSkillsStep(true, _latestTargets);
 
             try
             {
+                string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+                List<SkillSetupTargetInfo> targets =
+                    await Task.Run(() => DetectDisplayedSkillTargets(projectRoot));
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                bool groupSkillsUnderUnityCliLoop = !_installSkillsFlat;
+                List<SkillSetupTargetInfo> installableTargets = isBulkInstall
+                    ? SkillsSetupPanelView.FilterInstallableSkillTargets(targets)
+                    : SkillsSetupPanelView.BuildSingleTargetInstallList(
+                        targets,
+                        _skillsTarget,
+                        groupSkillsUnderUnityCliLoop);
+                if (installableTargets.Count == 0)
+                {
+                    return;
+                }
+
+                bool shouldShowSkillsInstalledDialog =
+                    SkillInstallDialogPolicy.ShouldShowForInstallableTargets(installableTargets);
+                UpdateSkillsStep(true, targets);
+
                 await _skillSetupUseCase.InstallSkillFilesAsync(
                     installableTargets,
                     groupSkillsUnderUnityCliLoop,

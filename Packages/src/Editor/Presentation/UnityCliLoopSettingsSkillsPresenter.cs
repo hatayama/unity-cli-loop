@@ -242,6 +242,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal async Task HandleInstallAllSkills(CancellationToken ct)
         {
+            if (_isInstallingSkills)
+            {
+                return;
+            }
+
             if (!_cliSetupApplicationService.IsCliInstalled())
             {
                 EditorUtility.DisplayDialog(
@@ -251,24 +256,33 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            List<SkillSetupTargetInfo> targets =
-                _skillSetupUseCase.DetectSkillTargetsForLayoutAtProjectRoot(projectRoot, !_installSkillsFlat);
-            List<SkillSetupTargetInfo> installable =
-                SkillsSetupPanelView.FilterInstallableSkillTargets(targets);
-            if (installable.Count == 0)
-            {
-                return;
-            }
-
-            bool shouldShowSkillsInstalledDialog =
-                SkillInstallDialogPolicy.ShouldShowForInstallableTargets(installable);
-            CancelSkillInstallStateRefresh();
+            // Latch before the first await so a second Install click cannot start a parallel install.
             _isInstallingSkills = true;
+            CancelSkillInstallStateRefresh();
             RefreshCliSetupSection();
 
             try
             {
+                string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+                List<SkillSetupTargetInfo> targets = await Task.Run(
+                    () => _skillSetupUseCase.DetectSkillTargetsForLayoutAtProjectRoot(
+                        projectRoot,
+                        !_installSkillsFlat));
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                List<SkillSetupTargetInfo> installable =
+                    SkillsSetupPanelView.FilterInstallableSkillTargets(targets);
+                if (installable.Count == 0)
+                {
+                    return;
+                }
+
+                bool shouldShowSkillsInstalledDialog =
+                    SkillInstallDialogPolicy.ShouldShowForInstallableTargets(installable);
+
                 await _skillSetupUseCase.InstallSkillFilesAsync(
                     installable,
                     !_installSkillsFlat,

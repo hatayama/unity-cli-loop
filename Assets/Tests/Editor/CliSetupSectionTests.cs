@@ -101,12 +101,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             VisualElement skillsSubsection = root.Q<VisualElement>("skills-subsection");
             Button installAllSkillsButton = root.Q<Button>("install-all-skills-button");
             Button installSelectedSkillsButton = root.Q<Button>("install-selected-skills-button");
+            EnumField skillsTargetField = root.Q<EnumField>("skills-target-field");
+            Toggle groupSkillsToggle = root.Q<Toggle>("group-skills-toggle");
             Assert.That(refreshSkillsButton.enabledSelf, Is.False);
             Assert.That(skillsSubsection.enabledSelf, Is.True);
             Assert.That(installAllSkillsButton.enabledSelf, Is.False);
             Assert.That(installAllSkillsButton.text, Is.EqualTo("Checking..."));
             Assert.That(installSelectedSkillsButton.enabledSelf, Is.False);
             Assert.That(installSelectedSkillsButton.text, Is.EqualTo("Checking..."));
+            Assert.That(skillsTargetField.enabledSelf, Is.False);
+            Assert.That(groupSkillsToggle.enabledSelf, Is.False);
         }
 
         [Test]
