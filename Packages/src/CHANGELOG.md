@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.0.0-beta.63](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.62...v3.0.0-beta.63) (2026-07-24)
+
+
+### Features
+
+* pause-point round 10 feedback improvements ([8b66c6a](https://github.com/hatayama/unity-cli-loop/commit/8b66c6a7e7066e82820b144b85a9b2d89ff071ed))
+* pause-point round 9 feedback improvements ([#1967](https://github.com/hatayama/unity-cli-loop/issues/1967)) ([1ea3696](https://github.com/hatayama/unity-cli-loop/commit/1ea369605c05836485ba95c690029af74914dec7))
+
+
+### Bug Fixes
+
+* Windows CLI install robustness and uninstall message wording ([#1970](https://github.com/hatayama/unity-cli-loop/issues/1970)) ([40a12ad](https://github.com/hatayama/unity-cli-loop/commit/40a12add4b445293ee7a4820ae26c860068a2dac))
+
 ## [3.0.0-beta.62](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.61...v3.0.0-beta.62) (2026-07-23)
 
 
