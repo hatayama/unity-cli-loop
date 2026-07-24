@@ -81,7 +81,7 @@ The references are live objects in their frame-completed state: anything the hit
 
 The holder clears when Unity resumes (not when you `Step` while still paused), when the matching pause point is cleared, when a new hit replaces the snapshot, or when PlayMode exits. After resume, `TryGetCapturedValue` returns `Found=false`. Re-enabling the same pause point while still paused (for example to refresh its timeout during a step session) keeps the held references, because a re-enable does not resume Unity.
 
-For a self-progressing game, arranging a scenario through real input alone is a race (each `simulate-*` call is a separate CLI round trip, often longer than the game's own tick). Instead, while paused on a hit, use `TryGetCapturedValue("this")` to get the live instance and call its production methods to build the exact state, then send real simulated input for only the one action you are verifying — the setup stays deterministic while the observed action still exercises the real input path.
+For a self-progressing game, arranging a scenario through real input alone is a race (each `simulate-*` call is a separate CLI round trip, often longer than the game's own tick). Instead, while paused on a hit, use `TryGetCapturedValue("this")` to get the live instance and call its production methods to build the exact state, then resume and send real simulated input for only the one action you are verifying — arm the next marker with `--resume-play`, or run `control-play-mode --action Play` first, since `simulate-*` input requires an unpaused PlayMode. The setup stays deterministic while the observed action still exercises the real input path.
 
 ## Warnings and Marker Freshness
 
