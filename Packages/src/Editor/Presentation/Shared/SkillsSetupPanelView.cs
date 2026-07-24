@@ -147,7 +147,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool listVisible = canManageSkills && installableTargets.Count > 0;
             ViewDataBinder.SetVisible(_skillTargetStatusList, listVisible);
 
-            bool shouldExpand = ShouldExpandSpecificTargetFoldout(installableTargets.Count);
+            bool shouldExpand = ShouldExpandSpecificTargetFoldout(installableTargets);
             _installSpecificTargetFoldout.SetValueWithoutNotify(
                 shouldExpand ? true : _installSpecificTargetFoldout.value);
 
@@ -390,10 +390,27 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return $"Installed for {installedTargetCount} targets";
         }
 
-        internal static bool ShouldExpandSpecificTargetFoldout(int installableTargetCount)
+        internal static bool ShouldExpandSpecificTargetFoldout(
+            List<SkillSetupTargetInfo> installableTargets)
         {
-            Debug.Assert(installableTargetCount >= 0, "installableTargetCount must not be negative");
-            return installableTargetCount == 0;
+            Debug.Assert(installableTargets != null, "installableTargets must not be null");
+
+            if (installableTargets.Count == 0)
+            {
+                return true;
+            }
+
+            if (installableTargets.Any(target => target.InstallState == SkillInstallState.Checking))
+            {
+                return false;
+            }
+
+            if (installableTargets.Any(target => target.InstallState == SkillInstallState.Missing))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         private void InitializeTargetFieldIfNeeded(SkillsTarget currentTarget)

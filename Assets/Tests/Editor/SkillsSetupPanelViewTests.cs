@@ -250,18 +250,90 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(summary, Is.EqualTo("Installed for 2 targets"));
         }
 
-        [TestCase(0, true)]
-        [TestCase(1, false)]
-        [TestCase(3, false)]
-        public void ShouldExpandSpecificTargetFoldout_ReturnsExpectedValue(
-            int installableTargetCount,
-            bool expected)
+        [Test]
+        public void ShouldExpandSpecificTargetFoldout_WhenNoTargets_ReturnsTrue()
         {
-            // Verifies the specific-target foldout auto-expands only when no installable targets exist.
-            bool shouldExpand = SkillsSetupPanelView.ShouldExpandSpecificTargetFoldout(
-                installableTargetCount);
+            // Verifies the foldout expands when no installable skill targets were detected.
+            List<SkillSetupTargetInfo> targets = new();
 
-            Assert.That(shouldExpand, Is.EqualTo(expected));
+            bool shouldExpand = SkillsSetupPanelView.ShouldExpandSpecificTargetFoldout(targets);
+
+            Assert.That(shouldExpand, Is.True);
+        }
+
+        [Test]
+        public void ShouldExpandSpecificTargetFoldout_WhenAllInstalled_ReturnsFalse()
+        {
+            // Verifies the foldout stays collapsed when every detected target is already installed.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateTarget("Claude", ".claude", SkillInstallState.Installed),
+                CreateTarget("Agents", ".agents", SkillInstallState.Installed)
+            };
+
+            bool shouldExpand = SkillsSetupPanelView.ShouldExpandSpecificTargetFoldout(targets);
+
+            Assert.That(shouldExpand, Is.False);
+        }
+
+        [Test]
+        public void ShouldExpandSpecificTargetFoldout_WhenAnyMissing_ReturnsTrue()
+        {
+            // Verifies the foldout expands when at least one detected target still needs install.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateTarget("Claude", ".claude", SkillInstallState.Installed),
+                CreateTarget("Cursor", ".cursor", SkillInstallState.Missing)
+            };
+
+            bool shouldExpand = SkillsSetupPanelView.ShouldExpandSpecificTargetFoldout(targets);
+
+            Assert.That(shouldExpand, Is.True);
+        }
+
+        [Test]
+        public void ShouldExpandSpecificTargetFoldout_WhenAnyChecking_ReturnsFalse()
+        {
+            // Verifies the foldout does not expand while any target install state is still Checking.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateTarget("Claude", ".claude", SkillInstallState.Checking),
+                CreateTarget("Cursor", ".cursor", SkillInstallState.Missing)
+            };
+
+            bool shouldExpand = SkillsSetupPanelView.ShouldExpandSpecificTargetFoldout(targets);
+
+            Assert.That(shouldExpand, Is.False);
+        }
+
+        [Test]
+        public void ShouldExpandSpecificTargetFoldout_WhenOnlyOutdated_ReturnsFalse()
+        {
+            // Verifies outdated targets count as installed for foldout expansion and stay collapsed.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateTarget("Claude", ".claude", SkillInstallState.Outdated),
+                CreateTarget("Agents", ".agents", SkillInstallState.Outdated)
+            };
+
+            bool shouldExpand = SkillsSetupPanelView.ShouldExpandSpecificTargetFoldout(targets);
+
+            Assert.That(shouldExpand, Is.False);
+        }
+
+        private static SkillSetupTargetInfo CreateTarget(
+            string displayName,
+            string dirName,
+            SkillInstallState installState)
+        {
+            return new(
+                displayName,
+                dirName,
+                "--flag",
+                hasSkillsDirectory: true,
+                hasExistingSkills: true,
+                hasDifferentLayoutSkills: false,
+                installState);
         }
     }
 }
