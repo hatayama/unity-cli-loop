@@ -1,6 +1,7 @@
 #!/bin/sh
 set -u
 # Endurance (soak) harness for the uloop CLI against a real Unity project.
+# Full guide (expected failures, safety, reading results): docs/soak-testing.md
 #
 # Each iteration rewrites a scratch editor script inside the target project to
 # force a genuine script compilation + domain reload, then exercises the
