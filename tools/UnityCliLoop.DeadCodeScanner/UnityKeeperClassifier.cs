@@ -191,11 +191,6 @@ namespace UnityCliLoop.DeadCodeScanner
 
             // Why: Newtonsoft only invokes ShouldSerialize{PropertyName} when that member exists.
             // Keeping every ShouldSerialize* name would let dead methods silence the scanner.
-            if (methodSymbol.ContainingType == null)
-            {
-                return false;
-            }
-
             string propertyName = methodSymbol.Name.Substring(Prefix.Length);
             return methodSymbol.ContainingType.GetMembers(propertyName)
                 .Any(member => member is IPropertySymbol || member is IFieldSymbol);
