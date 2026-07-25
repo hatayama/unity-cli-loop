@@ -109,8 +109,23 @@ now_ms() {
     perl -MTime::HiRes=time -e 'printf "%d\n", time * 1000'
 }
 
+# Every uloop call runs under a sleep+kill watchdog (POSIX, no GNU coreutils
+# dependency): a hung IPC call — e.g. a frozen editor that accepted the
+# connection but never answers — must surface as one failed, finite sample so
+# the consecutive-failure recovery can fire, instead of blocking the
+# unattended soak forever. The bound sits well above the slowest legitimate
+# command observed under parallel load (forced recompile / run-tests, ~4 min).
+CMD_TIMEOUT_SECONDS=600
 run_uloop() {
-    "$ULOOP_BIN" "$@" --project-path "$PROJECT_PATH"
+    "$ULOOP_BIN" "$@" --project-path "$PROJECT_PATH" &
+    _cmd_pid=$!
+    ( sleep "$CMD_TIMEOUT_SECONDS"; kill "$_cmd_pid" 2>/dev/null ) &
+    _watchdog_pid=$!
+    wait "$_cmd_pid"
+    _cmd_exit=$?
+    kill "$_watchdog_pid" 2>/dev/null
+    wait "$_watchdog_pid" 2>/dev/null
+    return "$_cmd_exit"
 }
 
 # Runs one uloop command, appends a CSV row, and returns the command's exit code.
