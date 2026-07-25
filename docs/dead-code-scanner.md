@@ -36,3 +36,19 @@ Interpret scanner output conservatively:
 - `KeptByUnityOrReflection` usually means the symbol is intentionally reachable through Unity callbacks, attributes, serialization, or reflection-style discovery. Do not add explanatory comments for every such symbol when the attribute/base type already makes the reason obvious.
 - `PublicCandidate` means Roslyn found no direct references. Check non-C# references such as `release-please-config.json`, checked-in JSON contracts, Unity assets, generated files, and documented public APIs before removing or commenting the symbol.
 - If a symbol is referenced only by non-C# tooling, verify that the tool reads it for runtime or release behavior. If the tool only rewrites the symbol and no code reads it, remove the marker instead of documenting it.
+
+## Intentionally retained PublicCandidates
+
+These symbols stay `PublicCandidate` on purpose. Do not delete them during routine triage,
+and do not add scanner-silencing machinery that changes the public API surface.
+
+| Symbol | Why it stays |
+|---|---|
+| `UnityCliLoopToolRegistrar.RegisterCustomTool` | Public extension API for external packages that register custom tools. Missing in-repo callers is expected. |
+| `UnityCliLoopToolRegistrar.UnregisterCustomTool` | Same public extension API. |
+| `UnityCliLoopToolRegistrar.GetRegisteredCustomTools` | Same public extension API. |
+| `UnityCliLoopToolRegistrar.IsCustomToolRegistered` | Same public extension API. |
+| `UnityCliLoopToolRegistrar.GetDebugInfo` | Same public extension API. |
+| `UnityCliLoopToolRegistrar.NotifyToolChanges` | Same public extension API. |
+| `ToolContracts.EditorWindowCaptureUtility.CaptureGameRenderingAsync` | Migration target: `ThirdPartyToolMigrationRuleCatalog` rewrites third-party tool code to call this façade, so user code outside this repository is the caller. |
+| `ExecuteDynamicCodeResponse.Error` | Documented tool response field (`ExecuteDynamicCode` Skill). Outbound JSON shape, not an in-repo read. |
