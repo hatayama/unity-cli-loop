@@ -18,14 +18,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return context.Raycast(screenPosition);
         }
 
-        // Bypass EventSystem's Screen-bounds clipping by directly testing Graphic rects in Canvas space.
-        // Only supports ScreenSpaceOverlay canvases where world positions equal Canvas-space positions.
-        public static RaycastResult? RaycastCanvasSpace(Vector2 canvasPosition)
-        {
-            List<CanvasRaycastSource> canvasRaycastSources = CollectCanvasRaycastSources();
-            return RaycastCanvasSpaceFromSources(canvasPosition, canvasRaycastSources);
-        }
-
         private static List<CanvasRaycastSource> CollectCanvasRaycastSources()
         {
 #if UNITY_6000_4_OR_NEWER

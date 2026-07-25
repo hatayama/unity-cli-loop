@@ -19,13 +19,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Message = message;
             StackTrace = stackTrace;
         }
-
-        /// <summary>
-        /// Parameterless constructor for JSON deserialization
-        /// </summary>
-        public LogEntry()
-        {
-        }
     }
 
     /// <summary>
@@ -82,16 +75,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SearchText = searchText;
             IncludeStackTrace = includeStackTrace;
             Logs = logs ?? Array.Empty<LogEntry>();
-        }
-
-        /// <summary>
-        /// Parameterless constructor for JSON deserialization
-        /// </summary>
-        public GetLogsResponse()
-        {
-            LogType = string.Empty;
-            SearchText = string.Empty;
-            Logs = Array.Empty<LogEntry>();
         }
     }
 } 
