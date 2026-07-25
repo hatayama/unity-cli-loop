@@ -158,14 +158,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return false;
         }
 
-        public static bool ContainsCurrentDomainHelperApi(string source)
-        {
-            Debug.Assert(source != null, "source must not be null");
-
-            bool hasCurrentDomainNamespaceUsage = RegexMatchesCode(source, CurrentDomainNamespaceRegex);
-            return ContainsCurrentDomainHelperApiForAssembly(source, hasCurrentDomainNamespaceUsage);
-        }
-
         public static bool ContainsCurrentDomainHelperApiForAssembly(
             string source,
             bool canUseBareCurrentDomainType)

@@ -121,14 +121,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return GetSettings().lastSeenSetupWizardVersion ?? string.Empty;
         }
 
-        public void SetLastSeenSetupWizardVersion(string version)
-        {
-            string normalizedVersion = version ?? string.Empty;
-            UnityCliLoopEditorSettingsData settings = GetSettings();
-            UnityCliLoopEditorSettingsData updatedSettings = settings with { lastSeenSetupWizardVersion = normalizedVersion };
-            SaveSettings(updatedSettings);
-        }
-
         public bool GetSuppressSetupWizardAutoShow()
         {
             return GetSettings().suppressSetupWizardAutoShow;
@@ -139,13 +131,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopEditorSettingsData settings = GetSettings();
             UnityCliLoopEditorSettingsData updatedSettings = settings with { suppressSetupWizardAutoShow = suppressAutoShow };
             SaveSettings(updatedSettings);
-        }
-
-        public void SetShowUnityCliLoopSecuritySetting(bool showUnityCliLoopSecuritySetting)
-        {
-            UnityCliLoopEditorSettingsData settings = GetSettings();
-            UnityCliLoopEditorSettingsData newSettings = settings with { showUnityCliLoopSecuritySetting = showUnityCliLoopSecuritySetting };
-            SaveSettings(newSettings);
         }
 
         public void SetShowToolSettings(bool showToolSettings)

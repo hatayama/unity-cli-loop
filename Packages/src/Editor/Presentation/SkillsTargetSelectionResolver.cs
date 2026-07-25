@@ -1,10 +1,9 @@
+using System;
+
 using io.github.hatayama.UnityCliLoop.Application;
-using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
-    using System;
-
     public readonly struct SkillsTargetSelection
     {
         public readonly string DisplayName;
@@ -45,6 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             };
         }
 
+        // Why keep: EditMode tests assert this mapping; production UI currently uses Resolve only.
         public static bool IsInstalled(CliSetupData data, SkillsTarget target)
         {
             return target switch
@@ -54,11 +54,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 SkillsTarget.Agents => data.IsAgentsSkillsInstalled,
                 _ => false
             };
-        }
-
-        public static SkillInstallState GetInstallState(CliSetupData data, SkillsTarget target)
-        {
-            return data.SelectedTarget == target ? data.SelectedTargetInstallState : SkillInstallState.Missing;
         }
     }
 }

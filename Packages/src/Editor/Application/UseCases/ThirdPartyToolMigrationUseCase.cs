@@ -22,13 +22,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
             _migrationPort = migrationPort ?? throw new ArgumentNullException(nameof(migrationPort));
         }
 
-        public ThirdPartyToolMigrationPreview PreviewMigration(string projectRoot)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            return _migrationPort.PreviewMigration(projectRoot);
-        }
-
         public Task<ThirdPartyToolMigrationPreview> PreviewMigrationAsync(
             string projectRoot,
             IProgress<ThirdPartyToolMigrationProgress> progress,
@@ -53,13 +46,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
             return _migrationPort.HasMigrationTargetsAsync(projectRoot, ct);
-        }
-
-        public ThirdPartyToolMigrationResult ApplyMigration(string projectRoot)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            return _migrationPort.ApplyMigration(projectRoot);
         }
 
         public Task<ThirdPartyToolMigrationResult> ApplyMigrationAsync(
