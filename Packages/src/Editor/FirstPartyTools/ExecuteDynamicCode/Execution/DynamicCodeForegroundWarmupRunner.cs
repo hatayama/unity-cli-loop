@@ -32,30 +32,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        internal static async Task<bool> TryRunBackgroundSequenceAsync(
-            IDynamicCodeExecutionRuntime runtime,
-            bool yieldToForegroundRequests,
-            CancellationToken ct)
-        {
-            System.Diagnostics.Debug.Assert(runtime != null, "runtime must not be null");
-
-            // Why: background probes must match the foreground sequence so whichever path succeeds
-            // first marks the same execution shape as ready.
-            foreach (string warmupCode in ExecuteDynamicCodeReadinessProbe.CreateReturnStringProbeCodes())
-            {
-                DynamicCodeExecutionRequest request = CreateRequest(
-                    warmupCode,
-                    yieldToForegroundRequests);
-                (bool entered, ExecutionResult result) = await runtime.TryExecuteIfIdleAsync(request, ct).ConfigureAwait(false);
-                if (!entered || !result.Success)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
         private static DynamicCodeExecutionRequest CreateRequest(
             string code,
             bool yieldToForegroundRequests)
