@@ -9,7 +9,8 @@ description: "Pauses Unity playback at any source file:line without editing code
 
 Use this small loop for one representative frame you care about. No source edit and no recompile: the pause point is patched into the already-compiled code and can be enabled mid-PlayMode.
 
-1. Enter PlayMode, then run one foreground command that arms the pause point, fires the input, and waits for the hit:
+1. Enter PlayMode, then decide before anything else: does the game progress on its own (timers, gravity, spawners)? If yes, pause it right away with `control-play-mode --action Pause`, arrange any scenario state while paused, and add `--resume-play` to the command in step 2 — see Fast-Progressing Games below.
+2. Run one foreground command that arms the pause point, fires the input, and waits for the hit:
 
 ```bash
 uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 30 --await --trigger "simulate-keyboard --action Press --key Space"
@@ -23,13 +24,11 @@ When the game reaches the line on its own, omit `--trigger`. Fall back to split 
 
 The response returns the derived marker `Id` (`Assets/Scripts/Enemy.cs:42`), the `ResolvedLine` that was actually patched, the `ResolvedMethod`, and `ResolvedLineText` — the actual source text at `ResolvedLine`. When the requested line has no executable statement, the pause point rounds forward to the next executable line — check `ResolvedLine`/`ResolvedLineText` when precision matters, and re-check them after every code edit — a rewritten file shifts line numbers. Use the returned `Id` for every follow-up command. On a hit, this same response already carries `CapturedVariables` and every other field `await-pause-point` would have returned — no separate `await-pause-point` call is needed.
 
-2. Read `CapturedVariables` in the hit response first: the locals, parameters, and `this` instance fields at the paused line are already there (see Reading CapturedVariables).
-3. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
-4. A `single-shot` marker (the default) disarms itself after the hit, so no clear call is required before moving on. Clearing is still what removes the underlying code patch (a disarmed marker leaves the patch installed), so for `continuous`/`trace` markers, or when the method must run fully untouched again, clear it with `uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"` (or `--all` to clear every active marker at once) or stop PlayMode. Clearing resumes Play Mode only when the current pause is owned by a pause-point hit — the clear response then carries a `Warning` saying it resumed Play Mode. A manual pause (`control-play-mode --action Pause` or the Editor pause button) is left untouched by clear.
+3. Read `CapturedVariables` in the hit response first: the locals, parameters, and `this` instance fields at the paused line are already there (see Reading CapturedVariables).
+4. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
+5. A `single-shot` marker (the default) disarms itself after the hit, so no clear call is required before moving on. Clearing is still what removes the underlying code patch (a disarmed marker leaves the patch installed), so for `continuous`/`trace` markers, or when the method must run fully untouched again, clear it with `uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"` (or `--all` to clear every active marker at once) or stop PlayMode. Clearing resumes Play Mode only when the current pause is owned by a pause-point hit — the clear response then carries a `Warning` saying it resumed Play Mode. A manual pause (`control-play-mode --action Pause` or the Editor pause button) is left untouched by clear.
 
 A hit pauses Unity at the next frame boundary — the patched method and the rest of that frame still run to completion. Only `CapturedVariables` is evidence of the values at the patched line; state read after the pause (for example via `execute-dynamic-code`) may already have advanced past it.
-
-If the game progresses on its own (timers, gravity, spawners), freeze first and arm while paused — see Fast-Progressing Games below.
 
 ## Capture Modes and History
 

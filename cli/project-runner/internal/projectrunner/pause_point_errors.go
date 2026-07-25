@@ -67,13 +67,15 @@ const (
 	pausePointHintPlayModeNotRunning  = "PlayMode is not running. Start PlayMode (or trigger the marker code path in Edit Mode), then wait again."
 	pausePointHintEditorAlreadyPaused = "Unity is already paused, so gameplay cannot reach the marker. Resume PlayMode before waiting again."
 
-	// Shared by both pausePointTimeoutHint and pausePointExpiredHint: a marker whose method is a
-	// physics/message callback, or is called from one, can miss a GameObject that already existed
-	// when the patch was installed even though the method body genuinely ran. Kept as a single
-	// constant so the two hints stay in sync instead of drifting copies of the same diagnosis.
+	// Shared by both pausePointTimeoutHint and pausePointExpiredHint: patterns where the method
+	// body genuinely ran (or was invoked) yet the marker never fired — a physics/message callback
+	// missing a pre-existing GameObject, a pre-bound delegate bypassing the patch, or control flow
+	// exiting on an earlier branch before the target line. Kept as a single constant so the two
+	// hints stay in sync instead of drifting copies of the same diagnosis.
 	pausePointNonFiringPatternsHint = "If the target line never hit despite the trigger firing, check the non-firing patterns: " +
 		"(1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; " +
-		"(2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch."
+		"(2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; " +
+		"(3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran."
 )
 
 // pausePointTimeoutHint maps the final probed status to a deterministic diagnosis,

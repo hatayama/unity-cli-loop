@@ -159,16 +159,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(patchResult.Success, Is.True);
             Assert.That(patchResult.Warning, Does.Contain(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning));
+            Assert.That(patchResult.Warning, Does.Contain(SourcePausePointConstants.PhysicalCallbackMidSolverValuesWarning));
         }
 
         [Test]
         public void Patch_PhysicsMessageMethodOnMonoBehaviour_AlsoTriggersInliningWarning()
         {
-            // Verifies that when both the physical-callback warning and the small-body
-            // inlining-risk warning apply to the same method (OnCollisionEnter2D's body is only
-            // 16 IL bytes, well under SmallMethodInliningRiskThresholdBytes), BuildPatchWarning
-            // joins them in the same order as the checks appear in its source (physical-callback
-            // first, then inlining-risk), space-separated.
+            // Verifies that when the physical-callback warnings and the small-body inlining-risk
+            // warning all apply to the same method (OnCollisionEnter2D's body is only 16 IL bytes,
+            // well under SmallMethodInliningRiskThresholdBytes), BuildPatchWarning joins them in
+            // the same order as the checks appear in its source (cached-dispatch first, then
+            // mid-solver values, then inlining-risk), space-separated.
             const string id = "patcher-physical-callback-method-dual-warning";
             SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
                 FixturesDirectory + "PatcherPhysicalCallbackMethodFixture.cs", 13);
@@ -180,6 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(patchResult.Success, Is.True);
             Assert.That(patchResult.Warning, Is.EqualTo(
                 SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning + " "
+                + SourcePausePointConstants.PhysicalCallbackMidSolverValuesWarning + " "
                 + SourcePausePointConstants.SmallMethodInliningRiskWarning));
         }
 
@@ -200,6 +202,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(patchResult.Success, Is.True);
             Assert.That(patchResult.Warning, Does.Not.Contain(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning));
+            Assert.That(patchResult.Warning, Does.Not.Contain(SourcePausePointConstants.PhysicalCallbackMidSolverValuesWarning));
         }
 
         [Test]
@@ -219,6 +222,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(patchResult.Success, Is.True);
             Assert.That(patchResult.Warning, Does.Contain(SourcePausePointConstants.PhysicalCallbackIndirectCallMayMissExistingInstanceWarning));
+            Assert.That(patchResult.Warning, Does.Contain(SourcePausePointConstants.PhysicalCallbackMidSolverValuesWarning));
         }
 
         [Test]
@@ -237,6 +241,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(patchResult.Success, Is.True);
             Assert.That(patchResult.Warning, Does.Not.Contain(SourcePausePointConstants.PhysicalCallbackIndirectCallMayMissExistingInstanceWarning));
+            Assert.That(patchResult.Warning, Does.Not.Contain(SourcePausePointConstants.PhysicalCallbackMidSolverValuesWarning));
         }
 
         [Test]
