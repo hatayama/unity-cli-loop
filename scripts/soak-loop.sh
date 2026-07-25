@@ -186,6 +186,13 @@ return "created";
 EOF
 }
 
+# Runs before every pause cycle, not just at setup: an editor restart mid-soak
+# reopens the project's own last scene, which would silently leave the ticker
+# out of PlayMode and expire every subsequent pause-point.
+ensure_soak_scene() {
+    timed "$1" scene-ensure execute-dynamic-code --code-file "$OUT_DIR/setup-scene.cs"
+}
+
 sample_metrics() {
     _rss="$(ps ax -o rss=,args= | grep -F "$PROJECT_PATH" | grep -F "Unity.app" | grep -v grep | awk '{print $1; exit}')"
     _runners="$(pgrep -f "uloop-project-runner" 2>/dev/null | wc -l | tr -d ' ')"
@@ -259,7 +266,7 @@ if [ "$PAUSE_EVERY" -gt 0 ]; then
         exit 1
     fi
     write_scene_setup_snippet
-    if ! timed 0 setup-scene execute-dynamic-code --code-file "$OUT_DIR/setup-scene.cs"; then
+    if ! ensure_soak_scene 0; then
         log "Pause-point scene setup failed — aborting."
         exit 1
     fi
@@ -294,7 +301,16 @@ while [ "$i" -le "$ITERATIONS" ]; do
     timed "$i" dynamic-code execute-dynamic-code --code "int iteration = $i; return iteration + UnityEngine.SceneManagement.SceneManager.sceneCount;" || ITER_FAILED=1
 
     if [ "$PAUSE_EVERY" -gt 0 ] && [ $((i % PAUSE_EVERY)) -eq 0 ]; then
-        if timed "$i" play-start control-play-mode --action Play; then
+        SCENE_OK=1
+        if ! ensure_soak_scene "$i"; then
+            SCENE_OK=0
+        elif grep -q "DIRTY_SCENE" "$CAPTURE_FILE"; then
+            SCENE_OK=0
+        fi
+        if [ "$SCENE_OK" -ne 1 ]; then
+            log "iter=$i could not open the soak scene (unsaved changes?) — pause cycle failed"
+            ITER_FAILED=1
+        elif timed "$i" play-start control-play-mode --action Play; then
             timed "$i" pause-arm enable-pause-point --file "$TICKER_REL" --line "$TICKER_LINE" --timeout-seconds 60 || ITER_FAILED=1
             if timed "$i" pause-await await-pause-point --id "$TICKER_REL:$TICKER_LINE" --timeout-seconds 60; then
                 grep -q '"Hit"' "$CAPTURE_FILE" || { log "iter=$i pause-point await returned without a Hit"; ITER_FAILED=1; }
