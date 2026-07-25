@@ -71,20 +71,20 @@ func writeOptionalDispatcherUpdateCompletion(stderr io.Writer, fromVersion strin
 	}
 	clicore.WriteFormat(
 		stderr,
-		"uloop: dispatcher updated from %s to %s. Future uloop commands will use the updated launcher.\n",
+		"uloop: dispatcher updated from %s to %s. Future uloop commands will use the updated dispatcher.\n",
 		normalizedFromVersion,
 		normalizedToVersion)
 }
 
 func writeManualDispatcherUpdateCompletion(stdout io.Writer, fromVersion string, toVersion string) {
 	if toVersion == "" {
-		clicore.WriteLine(stdout, "uloop launcher update completed.")
+		clicore.WriteLine(stdout, "uloop dispatcher update completed.")
 		return
 	}
 	normalizedFromVersion, normalizedToVersion, changed := normalizedDispatcherUpdateVersions(fromVersion, toVersion)
 	if !changed {
-		clicore.WriteLine(stdout, "uloop launcher is already up to date at "+normalizedToVersion+".")
+		clicore.WriteLine(stdout, "uloop dispatcher is already up to date at "+normalizedToVersion+".")
 		return
 	}
-	clicore.WriteLine(stdout, "uloop launcher updated from "+normalizedFromVersion+" to "+normalizedToVersion+".")
+	clicore.WriteLine(stdout, "uloop dispatcher updated from "+normalizedFromVersion+" to "+normalizedToVersion+".")
 }

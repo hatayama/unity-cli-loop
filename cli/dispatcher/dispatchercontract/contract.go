@@ -19,7 +19,7 @@ var contractFiles embed.FS
 var DispatcherCurrent = mustLoadDispatcherContract()
 
 type DispatcherContract struct {
-	// DispatcherVersion is the launcher release version. It moves only when the dispatcher
+	// DispatcherVersion is the dispatcher release version. It moves only when the dispatcher
 	// itself is released, not when project-local CLI releases move.
 	DispatcherVersion string `json:"dispatcherVersion"`
 }

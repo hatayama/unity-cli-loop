@@ -7,7 +7,7 @@ import (
 )
 
 func TestDispatcherContractProvidesRuntimeVersion(t *testing.T) {
-	// Verifies that the launcher owns a release version independent from project-local CLI releases.
+	// Verifies that the dispatcher owns a release version independent from project-local CLI releases.
 	clitest.RequireValidContractVersion(t, "dispatcherVersion", DispatcherCurrent.DispatcherVersion)
 }
 

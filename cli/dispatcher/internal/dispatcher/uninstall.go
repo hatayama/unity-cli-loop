@@ -51,7 +51,7 @@ func tryHandleUninstallRequest(ctx context.Context, args []string, stdout io.Wri
 		return true, 1
 	}
 
-	clicore.WriteLine(stdout, "Uninstalling global uloop launcher...")
+	clicore.WriteLine(stdout, "Uninstalling global uloop dispatcher...")
 	command := exec.CommandContext(ctx, uninstallCommand.Name, uninstallCommand.Args...)
 	command.Stdout = stdout
 	command.Stderr = stderr
@@ -72,9 +72,9 @@ func tryHandleUninstallRequest(ctx context.Context, args []string, stdout io.Wri
 	}
 
 	if uninstallCommand.Deferred {
-		clicore.WriteFormat(stdout, "Scheduled uloop launcher removal: %s\n", uninstallCommand.TargetPath)
+		clicore.WriteFormat(stdout, "Scheduled uloop dispatcher removal: %s\n", uninstallCommand.TargetPath)
 	} else {
-		clicore.WriteFormat(stdout, "Removed uloop launcher: %s\n", uninstallCommand.TargetPath)
+		clicore.WriteFormat(stdout, "Removed uloop dispatcher: %s\n", uninstallCommand.TargetPath)
 	}
 	writeUninstallPathCompletion(stdout, runtime.GOOS)
 	return true, 0
@@ -93,7 +93,7 @@ func printUninstallHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "Usage:")
 	clicore.WriteLine(stdout, "  uloop uninstall")
 	clicore.WriteLine(stdout, "")
-	clicore.WriteLine(stdout, "Removes the global uloop launcher binary from the install directory.")
+	clicore.WriteLine(stdout, "Removes the global uloop dispatcher binary from the install directory.")
 	clicore.WriteLine(stdout, "Set ULOOP_INSTALL_DIR to uninstall from a custom install directory.")
 	clicore.WriteLine(stdout, "On Windows, also removes the package-owned install directory from User PATH.")
 	clicore.WriteLine(stdout, "On macOS, PATH settings are not changed automatically.")
