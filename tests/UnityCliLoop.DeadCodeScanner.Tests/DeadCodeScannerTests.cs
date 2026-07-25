@@ -69,7 +69,8 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 includeTestOnly: true,
                 includeKept: false,
                 ReportFormat.Table,
-                failOnHighConfidence: false);
+                failOnHighConfidence: false,
+                maxPublicCandidates: -1);
 
             System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
                 await scanner.ScanAsync(options, CancellationToken.None);
@@ -97,7 +98,8 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 includeTestOnly: true,
                 includeKept: false,
                 ReportFormat.Table,
-                failOnHighConfidence: false);
+                failOnHighConfidence: false,
+                maxPublicCandidates: -1);
 
             System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
                 await scanner.ScanAsync(options, CancellationToken.None);
@@ -134,7 +136,8 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 includeTestOnly: true,
                 includeKept: true,
                 ReportFormat.Table,
-                failOnHighConfidence: false);
+                failOnHighConfidence: false,
+                maxPublicCandidates: -1);
 
             System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
                 await scanner.ScanAsync(options, CancellationToken.None);
@@ -269,6 +272,27 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 && issue.FullName.Contains("IsExternalInit", StringComparison.Ordinal)), Is.False);
         }
 
+        /// <summary>
+        /// Verifies that Newtonsoft ShouldSerialize{Property} methods are kept as
+        /// KeptByUnityOrReflection and are not reported as PublicCandidate.
+        /// </summary>
+        [Test]
+        public async Task ScanAsync_WhenShouldSerializeMethodHasNoDirectReferences_ShouldReportKeptAndNotPublicCandidate()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: true);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.KeptByUnityOrReflection
+                && issue.FullName.Contains("ShouldSerializeOptionalNote", StringComparison.Ordinal)), Is.True);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("ShouldSerializeOptionalNote", StringComparison.Ordinal)), Is.False);
+        }
+
         private static ScanOptions CreatePublicScopeOptions(string rootPath, bool includeKept)
         {
             return new ScanOptions(
@@ -280,7 +304,8 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 includeTestOnly: true,
                 includeKept,
                 ReportFormat.Table,
-                failOnHighConfidence: false);
+                failOnHighConfidence: false,
+                maxPublicCandidates: -1);
         }
 
         private static void CreateSampleRepository(string rootPath)
@@ -362,6 +387,16 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
 
                     public sealed class UnreferencedPublicApi
                     {
+                    }
+
+                    public sealed class JsonOptionalPayload
+                    {
+                        public string OptionalNote { get; set; } = string.Empty;
+
+                        public bool ShouldSerializeOptionalNote()
+                        {
+                            return !string.IsNullOrEmpty(OptionalNote);
+                        }
                     }
 
                     public sealed class TestOnlyFactory

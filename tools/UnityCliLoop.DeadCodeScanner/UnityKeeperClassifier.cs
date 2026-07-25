@@ -91,6 +91,14 @@ namespace UnityCliLoop.DeadCodeScanner
                     "Member is part of the compiler-bound awaiter pattern.");
             }
 
+            // Why: Newtonsoft.Json discovers ShouldSerialize{Property} by name convention and
+            // invokes it via reflection, so reference search never sees call sites.
+            if (IsNewtonsoftShouldSerializeMethod(symbol))
+            {
+                return KeeperDecision.Keep(
+                    "Method matches the Newtonsoft.Json ShouldSerialize{Property} naming convention.");
+            }
+
             if (symbol is INamedTypeSymbol namedType && HasKeptBaseType(namedType))
             {
                 return KeeperDecision.Keep("Type derives from a Unity entry-point base class.");
@@ -155,6 +163,28 @@ namespace UnityCliLoop.DeadCodeScanner
             }
 
             return IsAwaiterType(symbol.ContainingType);
+        }
+
+        private static bool IsNewtonsoftShouldSerializeMethod(ISymbol symbol)
+        {
+            if (symbol is not IMethodSymbol methodSymbol)
+            {
+                return false;
+            }
+
+            if (methodSymbol.IsStatic || methodSymbol.Parameters.Length != 0)
+            {
+                return false;
+            }
+
+            if (methodSymbol.ReturnType.SpecialType != SpecialType.System_Boolean)
+            {
+                return false;
+            }
+
+            const string Prefix = "ShouldSerialize";
+            return methodSymbol.Name.StartsWith(Prefix, StringComparison.Ordinal)
+                && methodSymbol.Name.Length > Prefix.Length;
         }
 
         private static bool IsAwaiterType(ITypeSymbol typeSymbol)

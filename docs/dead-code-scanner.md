@@ -23,17 +23,28 @@ dotnet run --project tools/UnityCliLoop.DeadCodeScanner -- --scope public --incl
 target `main` or `v3-beta` and touch `Packages/src/**/*.cs`, the scanner
 itself, its tests, `scripts/check-dead-code.sh`, or the workflow file.
 
-The gate uses `--fail-on high-confidence`, so CI fails only for
-`Unused`, `UnusedPrivateMember`, and `UnusedLocal`.
+The workflow combines two independent failure conditions (either one exits 1):
 
-`PublicCandidate` and `TestOnly` do not fail CI. Those findings need
-manual review of non-C# references and cannot be decided mechanically.
+- `--fail-on high-confidence` fails immediately on `Unused`,
+  `UnusedPrivateMember`, and `UnusedLocal`. These are delete-ready findings.
+- `--max-public-candidates <n>` fails when the `PublicCandidate` count exceeds
+  `n`. This is a ceiling monitor for symbols that still need human review; it
+  does not auto-delete them. `TestOnly` findings are outside this limit.
+
+Set `<n>` to the measured `PublicCandidate` count after triage, with no slack.
+PRs that raise the count should be rejected unless they also raise the gate
+value for a documented reason. When triage lowers the count, lower `<n>` in
+the same change.
+
+Negative `--max-public-candidates` values, or omitting the option, disable the
+ceiling check.
 
 ## Interpreting the output
 
 Interpret scanner output conservatively:
 
 - `KeptByUnityOrReflection` usually means the symbol is intentionally reachable through Unity callbacks, attributes, serialization, or reflection-style discovery. Do not add explanatory comments for every such symbol when the attribute/base type already makes the reason obvious.
+- Framework conventions that the compiler or serializer resolve by name are classified as `KeptByUnityOrReflection` by the scanner (`await` pattern members, the `IsExternalInit` polyfill, and Newtonsoft `ShouldSerialize{Property}` methods). Do not treat those as `PublicCandidate` triage items.
 - `PublicCandidate` means Roslyn found no direct references. Check non-C# references such as `release-please-config.json`, checked-in JSON contracts, Unity assets, generated files, and documented public APIs before removing or commenting the symbol.
 - If a symbol is referenced only by non-C# tooling, verify that the tool reads it for runtime or release behavior. If the tool only rewrites the symbol and no code reads it, remove the marker instead of documenting it.
 
