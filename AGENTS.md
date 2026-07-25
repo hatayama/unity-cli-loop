@@ -18,11 +18,18 @@ Directory-level responsibilities. Kept deliberately coarse — check the directo
 - `cli/common/` — Go modules shared by dispatcher and project runner. Tool parameter schemas live in `cli/common/tools/default-tools.json`; skill discovery in `cli/common/skillscan/`.
 - `cli/release-automation/` — Go logic backing GitHub Actions release/CI workflows.
 - `tools/UnityCliLoop.DeadCodeScanner/` — the C# dead-code scanner described below.
+- `docs/` — reference docs for the rules in this file. `docs/adr/` holds architecture decision records: read the relevant one before reopening a settled design question, and note its stated reversal condition rather than relitigating from scratch.
 - `dist/` — locally built development binaries (`dist/darwin-arm64/uloop`, etc.); never committed.
 - `.claude/`, `.agents/` — generated skill copies; never edit directly (see Generated Skill Files).
 - `.uloop/` — runtime state and command outputs (screenshots, test results, hierarchy dumps).
 
 Do not rename public package, assembly, or extension API identifiers as part of cleanup-only changes.
+
+Use the terms in `docs/glossary.md` with the meanings defined there — in code identifiers, docs,
+commit messages, and reviews alike. Tool, internal bridge command, server, dispatcher, project
+runner, pin, protocol version, skill, and pause point all have exact meanings there. When an
+internal identifier conflicts with the glossary, rename the identifier; when a public one does,
+keep it and record the mismatch in the glossary instead.
 
 Comments in the code, commit messages, PR titles, and PR descriptions must all be written in English.
 
@@ -62,6 +69,11 @@ These files are generated copies. Update the source skill definitions instead, t
 Write GitHub Actions and release automation logic in Go when it needs JSON parsing, workflow polling, state transitions, or non-trivial branching.
 Shell scripts are acceptable only as thin wrappers or simple command sequences.
 
+Remote actions in workflow files must be pinned to full 40-character commit SHAs — version tags
+such as `actions/checkout@v6` are rejected by CI. Before adding or updating any `uses:` ref, read
+`docs/github-actions-security.md` (SHA resolution for nested action paths, the `setup-go` cache
+ban on pull-request workflows, and the Unity license guard on cache steps).
+
 ## Shared Release Inputs and Triggers
 
 All three components release through release-please; `dispatcherVersion` and component
@@ -71,6 +83,15 @@ inputs outside the package roots (non-test `cli/common/**` sources, `scripts/ins
 `scripts/install.ps1`) need matching trigger changes and a `scripts/stamp-release-inputs.sh`
 run in the same PR; CI (`check-release-triggers`) fails otherwise. Rules and rationale:
 `docs/shared-release-inputs.md`.
+
+## Broken CLI Releases
+
+When a native CLI release has a tag commit that differs from the `sourceRepositoryDigest` in its
+asset attestations, the dispatcher refuses to download it. Roll forward to the next version —
+never retag, rerun, or otherwise revive the broken one; a new run can only attest its own head
+commit. Diagnosis commands, the narrow conditions under which rerunning *is* valid, and the
+deliberately preserved mismatch specimen (`uloop-project-runner-v3.0.0-beta.48`, which must not
+be deleted): `docs/release-recovery-runbook.md`.
 
 ## Windows Compatibility Guardrails
 
@@ -86,6 +107,14 @@ Before deleting apparently unreferenced C# code, or before adding comments expla
 apparently unreferenced type must stay, run the scanner and interpret its output conservatively
 as described in `docs/dead-code-scanner.md` (commands, and what `KeptByUnityOrReflection` /
 `PublicCandidate` do and do not prove).
+
+## Code Complexity
+
+The repository-wide maximum cyclomatic complexity is 15, enforced by `cyclop` for Go and CA1502
+for C#. The `Code Complexity` workflow reports findings but never fails the build, so a finding
+only does its job if someone acts on it: when you touch a reported function, reduce its
+complexity before adding behavior. Commands and the two places the threshold is declared:
+`docs/code-complexity.md`.
 
 ## Native Go CLI Validation
 
