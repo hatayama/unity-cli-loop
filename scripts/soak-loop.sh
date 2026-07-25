@@ -119,7 +119,11 @@ CMD_TIMEOUT_SECONDS=600
 run_uloop() {
     "$ULOOP_BIN" "$@" --project-path "$PROJECT_PATH" &
     _cmd_pid=$!
-    ( sleep "$CMD_TIMEOUT_SECONDS"; kill "$_cmd_pid" 2>/dev/null ) &
+    # Detached from the caller's stdout: the watchdog (and its sleep child,
+    # which outlives the kill below as an orphan) must not hold a pipe open,
+    # or `run_uloop ... | grep -q` style callers would block on EOF until the
+    # full timeout elapses.
+    ( sleep "$CMD_TIMEOUT_SECONDS"; kill "$_cmd_pid" 2>/dev/null ) > /dev/null 2>&1 &
     _watchdog_pid=$!
     wait "$_cmd_pid"
     _cmd_exit=$?
