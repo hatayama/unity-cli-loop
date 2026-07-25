@@ -1,9 +1,9 @@
-using System;
-
 using io.github.hatayama.UnityCliLoop.Application;
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
+    using System;
+
     public readonly struct SkillsTargetSelection
     {
         public readonly string DisplayName;
@@ -44,7 +44,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             };
         }
 
-        // Why keep: EditMode tests assert this mapping; production UI currently uses Resolve only.
         public static bool IsInstalled(CliSetupData data, SkillsTarget target)
         {
             return target switch
