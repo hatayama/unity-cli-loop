@@ -17,6 +17,18 @@ For a broader member/local-variable pass, run:
 dotnet run --project tools/UnityCliLoop.DeadCodeScanner -- --scope public --include-types true --include-members true --include-locals true --include-test-only true --include-kept false --format table
 ```
 
+## CI gate
+
+`.github/workflows/dead-code.yml` runs automatically on pull requests that
+touch `Packages/src/**/*.cs`, the scanner itself, its tests, or
+`scripts/check-dead-code.sh`.
+
+The gate uses `--fail-on high-confidence`, so CI fails only for
+`Unused`, `UnusedPrivateMember`, and `UnusedLocal`.
+
+`PublicCandidate` and `TestOnly` do not fail CI. Those findings need
+manual review of non-C# references and cannot be decided mechanically.
+
 ## Interpreting the output
 
 Interpret scanner output conservatively:
