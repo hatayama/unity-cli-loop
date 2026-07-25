@@ -13,15 +13,15 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clitest"
 )
 
-// Tests that launcher help lists native commands and live-tool discovery guidance without baked-in tools.
-func TestPrintLauncherHelpListsNativeCommandsAndLiveToolGuidance(t *testing.T) {
+// Tests that dispatcher help lists native commands and live-tool discovery guidance without baked-in tools.
+func TestPrintDispatcherHelpListsNativeCommandsAndLiveToolGuidance(t *testing.T) {
 	var stdout bytes.Buffer
 
-	printLauncherHelp(&stdout)
+	printDispatcherHelp(&stdout)
 
 	output := stdout.String()
 	for _, expected := range []string{
-		"Dispatcher launcher. Finds the Unity project, then dispatches live Unity tool commands.",
+		"Dispatcher. Finds the Unity project, then dispatches live Unity tool commands.",
 		"Native commands:",
 		"  launch",
 		"  focus-window",

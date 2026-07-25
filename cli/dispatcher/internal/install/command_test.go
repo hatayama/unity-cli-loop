@@ -624,7 +624,7 @@ func TestPosixInstallScriptSilencesLegacyFailureWhenLegacyShimRemains(t *testing
 }
 
 func TestPosixInstallScriptSkipsDefaultNpmCleanupForInstallPrefix(t *testing.T) {
-	// Verifies default npm cleanup does not remove the freshly installed native launcher.
+	// Verifies default npm cleanup does not remove the freshly installed native dispatcher.
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell setup is not available on Windows")
 	}

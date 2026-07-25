@@ -52,7 +52,7 @@ func tryHandleInstallRequest(ctx context.Context, args []string, stdout io.Write
 		return true, 1
 	}
 
-	clicore.WriteLine(stdout, "Configuring global uloop launcher...")
+	clicore.WriteLine(stdout, "Configuring global uloop dispatcher...")
 	command := exec.CommandContext(ctx, installCommand.Name, installCommand.Args...)
 	command.Stdout = stdout
 	var installerStderr bytes.Buffer
@@ -153,7 +153,7 @@ func printInstallHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "Usage:")
 	clicore.WriteLine(stdout, "  uloop install [--dir <install-dir>]")
 	clicore.WriteLine(stdout, "")
-	clicore.WriteLine(stdout, "Configures the global uloop launcher after the installer places the binary.")
+	clicore.WriteLine(stdout, "Configures the global uloop dispatcher after the installer places the binary.")
 	clicore.WriteLine(stdout, "Set ULOOP_INSTALL_DIR or pass --dir to choose the install directory.")
 	clicore.WriteLine(stdout, "On Windows, updates User PATH and removes legacy npm uloop-cli launchers.")
 	clicore.WriteLine(stdout, "On macOS, updates shell PATH and removes legacy npm uloop-cli launchers.")
