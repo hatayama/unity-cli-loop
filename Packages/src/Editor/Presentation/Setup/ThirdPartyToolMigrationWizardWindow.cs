@@ -176,11 +176,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 || installState == SkillInstallState.Outdated;
         }
 
-        internal static bool HasFiniteSize(Vector2 size)
-        {
-            return ThirdPartyToolMigrationWizardWindowResizer.HasFiniteSize(size);
-        }
-
         internal static bool ShouldReportMigrationProgress(
             long lastReportTimestamp,
             long currentTimestamp,

@@ -158,43 +158,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return false;
         }
 
-        public static bool ContainsLegacyDomainHelperReference(
-            string source,
-            bool canMigrateBareLegacyDomainHelper,
-            string[] aliases)
-        {
-            Debug.Assert(source != null, "source must not be null");
-            Debug.Assert(aliases != null, "aliases must not be null");
-
-            CodeTextMask codeTextMask = CodeTextMask.Create(source);
-            foreach (TypeReplacementRule rule in DomainTypeReplacementRules)
-            {
-                Regex fullyQualifiedRegex = new(
-                    $@"(?:(?:global::)?{Regex.Escape(LegacyNamespace)}\.){Regex.Escape(rule.LegacyName)}\b",
-                    RegexOptions.Compiled);
-                if (RegexMatchesCode(source, fullyQualifiedRegex))
-                {
-                    return true;
-                }
-
-                foreach (string alias in aliases)
-                {
-                    if (ContainsAliasQualifiedName(source, alias, rule.LegacyName))
-                    {
-                        return true;
-                    }
-                }
-
-                if (canMigrateBareLegacyDomainHelper &&
-                    ContainsLegacyAssemblyScopedTypeName(source, codeTextMask, rule.LegacyName))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         public static bool ContainsCurrentDomainHelperApi(string source)
         {
             Debug.Assert(source != null, "source must not be null");

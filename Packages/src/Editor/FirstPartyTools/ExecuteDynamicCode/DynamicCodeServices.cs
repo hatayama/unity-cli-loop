@@ -214,11 +214,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             get { return GetRegistry().CommandEntryPointResolver; }
         }
 
-        internal static RegistryDynamicCodeExecutorFactory ExecutorFactory
-        {
-            get { return GetRegistry().ExecutorFactory; }
-        }
-
         internal static IExecuteDynamicCodeUseCase GetExecuteDynamicCodeUseCase()
         {
             return GetRegistry().GetExecuteDynamicCodeUseCase();
