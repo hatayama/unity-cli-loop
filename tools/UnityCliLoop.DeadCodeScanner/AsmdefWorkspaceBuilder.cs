@@ -27,9 +27,11 @@ namespace UnityCliLoop.DeadCodeScanner
 
         public WorkspaceBuildResult Build(string rootPath)
         {
-            string editorRoot = Path.Combine(rootPath, "Packages", "src", "Editor");
+            // Why: production code lives under both Editor and Runtime; loading only Editor
+            // drops Runtime asmdefs so IVT/friend references and Runtime finding coverage break.
+            string packageSrcRoot = Path.Combine(rootPath, "Packages", "src");
             string assetsRoot = Path.Combine(rootPath, "Assets");
-            IReadOnlyList<AsmdefProjectInfo> productionAsmdefs = LoadAsmdefs(editorRoot);
+            IReadOnlyList<AsmdefProjectInfo> productionAsmdefs = LoadAsmdefs(packageSrcRoot);
             IReadOnlyList<AsmdefProjectInfo> assetsAsmdefs = Directory.Exists(assetsRoot)
                 ? LoadAsmdefs(assetsRoot)
                 : Array.Empty<AsmdefProjectInfo>();
