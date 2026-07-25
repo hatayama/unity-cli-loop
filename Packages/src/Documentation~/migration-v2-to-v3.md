@@ -164,6 +164,8 @@ For any boolean not listed below, run `uloop <command> --help`: every V3 flag pr
 | `uloop get-provider-details` | Removed. Use `uloop execute-dynamic-code`. |
 | `uloop execute-menu-item` | Removed. Use `uloop execute-dynamic-code` with `EditorApplication.ExecuteMenuItem(...)`. |
 | `uloop get-menu-items` | Removed. Use `uloop execute-dynamic-code`. |
+| `uloop get-version` | Removed as a user command. Use `uloop --version` for the CLI version, or `uloop execute-dynamic-code` for the Unity Editor version. |
+| `uloop get-project-info` | Removed. Use `uloop execute-dynamic-code` to read the project metadata you need. |
 
 The migration skill reports these as candidates rather than rewriting them, because the replacement depends on what your script was doing.
 

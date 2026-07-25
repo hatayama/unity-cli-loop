@@ -164,6 +164,8 @@ V3のbooleanオプションは値を取りません。V2の呼び出しをどう
 | `uloop get-provider-details` | 削除。`uloop execute-dynamic-code` を使う。 |
 | `uloop execute-menu-item` | 削除。`uloop execute-dynamic-code` から `EditorApplication.ExecuteMenuItem(...)` を呼ぶ。 |
 | `uloop get-menu-items` | 削除。`uloop execute-dynamic-code` を使う。 |
+| `uloop get-version` | ユーザー向けコマンドとしては削除。CLIのバージョンは `uloop --version`、Unity Editorのバージョンは `uloop execute-dynamic-code` で取得する。 |
+| `uloop get-project-info` | 削除。必要なプロジェクト情報は `uloop execute-dynamic-code` で取得する。 |
 
 移行スキルはこれらを自動で書き換えず、移行候補として報告するだけです。スクリプトが何をしていたかによって適切な代替手段が変わるためです。
 

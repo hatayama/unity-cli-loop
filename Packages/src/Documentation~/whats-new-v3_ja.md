@@ -64,6 +64,7 @@ uloop raycast --x 960 --y 540 --layer-mask 1
 - **`capture-window`** — `screenshot` を使ってください。役割が統合され、さらにGame Viewのレンダリングキャプチャや要素の注釈機能が追加されています。
 - **`unity-search`, `get-unity-search-providers`, `get-provider-details`** — 削除されました。Unity Search APIが必要な場合は `execute-dynamic-code` から直接呼び出すか、通常のシーン内検索なら `find-game-objects` を使ってください。
 - **`execute-menu-item`, `get-menu-items`** — 削除されました。`execute-dynamic-code` で `EditorApplication.ExecuteMenuItem(...)` を呼び出してください。
+- **`get-version`, `get-project-info`** — ユーザー向けコマンドとしては削除されました。どちらも内部診断用でエージェント向けSkillとしては配布されていませんでしたが、V2ではスクリプトから呼び出せていました。CLIのバージョンは `uloop --version`、Unityやプロジェクトの情報は `execute-dynamic-code` で取得してください。
 
 ## 破壊的変更
 

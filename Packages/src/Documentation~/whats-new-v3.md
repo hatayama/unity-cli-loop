@@ -64,6 +64,7 @@ uloop raycast --x 960 --y 540 --layer-mask 1
 - **`capture-window`** — use `screenshot`, which absorbed its role and adds Game View rendering capture and element annotation.
 - **`unity-search`, `get-unity-search-providers`, `get-provider-details`** — removed. Use `execute-dynamic-code` to call the Unity Search API directly when you need it, or `find-game-objects` for ordinary scene lookups.
 - **`execute-menu-item`, `get-menu-items`** — removed. Use `execute-dynamic-code` with `EditorApplication.ExecuteMenuItem(...)`.
+- **`get-version`, `get-project-info`** — removed as user commands. They were internal diagnostics and were never installed as agent skills, but V2 scripts could still invoke them. Use `uloop --version` for the CLI version, or `execute-dynamic-code` for Unity and project metadata.
 
 ## Breaking Changes
 
