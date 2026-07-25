@@ -59,12 +59,36 @@ namespace UnityCliLoop.DeadCodeScanner
             "OnValidate"
         };
 
+        private static readonly HashSet<string> AwaiterMemberNames = new(StringComparer.Ordinal)
+        {
+            "IsCompleted",
+            "GetResult",
+            "OnCompleted",
+            "UnsafeOnCompleted"
+        };
+
         public static KeeperDecision Classify(ISymbol symbol)
         {
             string attributeReason = FindKeptAttributeReason(symbol);
             if (!string.IsNullOrEmpty(attributeReason))
             {
                 return KeeperDecision.Keep(attributeReason);
+            }
+
+            // Why: the C# compiler resolves init accessors by this exact type name, so Roslyn
+            // reference search never sees call sites even though deleting the polyfill breaks builds.
+            if (IsCompilerRequiredIsExternalInit(symbol))
+            {
+                return KeeperDecision.Keep(
+                    "Type is the compiler-required IsExternalInit polyfill for init accessors.");
+            }
+
+            // Why: await expressions bind GetAwaiter/IsCompleted/GetResult/OnCompleted by name;
+            // SymbolFinder therefore reports zero references for these members.
+            if (IsCompilerRequiredAwaitPatternMember(symbol))
+            {
+                return KeeperDecision.Keep(
+                    "Member is part of the compiler-bound awaiter pattern.");
             }
 
             if (symbol is INamedTypeSymbol namedType && HasKeptBaseType(namedType))
@@ -96,6 +120,71 @@ namespace UnityCliLoop.DeadCodeScanner
             }
 
             return KeeperDecision.Scan();
+        }
+
+        private static bool IsCompilerRequiredIsExternalInit(ISymbol symbol)
+        {
+            if (symbol is not INamedTypeSymbol typeSymbol)
+            {
+                return false;
+            }
+
+            if (!string.Equals(typeSymbol.Name, "IsExternalInit", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            string containingNamespace = typeSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+            return string.Equals(
+                containingNamespace,
+                "System.Runtime.CompilerServices",
+                StringComparison.Ordinal);
+        }
+
+        private static bool IsCompilerRequiredAwaitPatternMember(ISymbol symbol)
+        {
+            if (symbol is IMethodSymbol getAwaiterMethod
+                && string.Equals(getAwaiterMethod.Name, "GetAwaiter", StringComparison.Ordinal))
+            {
+                return IsAwaiterType(getAwaiterMethod.ReturnType);
+            }
+
+            if (!AwaiterMemberNames.Contains(symbol.Name) || symbol.ContainingType == null)
+            {
+                return false;
+            }
+
+            return IsAwaiterType(symbol.ContainingType);
+        }
+
+        private static bool IsAwaiterType(ITypeSymbol typeSymbol)
+        {
+            foreach (INamedTypeSymbol interfaceType in typeSymbol.AllInterfaces)
+            {
+                if (!IsCompilerServicesAwaiterInterface(interfaceType))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsCompilerServicesAwaiterInterface(INamedTypeSymbol interfaceType)
+        {
+            if (!string.Equals(interfaceType.Name, "INotifyCompletion", StringComparison.Ordinal)
+                && !string.Equals(interfaceType.Name, "ICriticalNotifyCompletion", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            string containingNamespace = interfaceType.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+            return string.Equals(
+                containingNamespace,
+                "System.Runtime.CompilerServices",
+                StringComparison.Ordinal);
         }
 
         private static string FindKeptAttributeReason(ISymbol symbol)

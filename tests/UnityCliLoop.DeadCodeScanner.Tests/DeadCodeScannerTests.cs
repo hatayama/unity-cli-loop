@@ -151,12 +151,89 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 && issue.FullName.Contains("UsedProductionApi", StringComparison.Ordinal)), Is.True);
         }
 
+        /// <summary>
+        /// Verifies that an internal production member referenced through InternalsVisibleTo from an
+        /// Assets asmdef is classified as TestOnly instead of PublicCandidate.
+        /// </summary>
+        [Test]
+        public async Task ScanAsync_WhenInternalMemberIsReferencedViaAssetsAsmdefInternalsVisibleTo_ShouldReportTestOnly()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: false);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.TestOnly
+                && issue.FullName.Contains("CreateForTesting", StringComparison.Ordinal)), Is.True);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("CreateForTesting", StringComparison.Ordinal)), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that compiler-bound awaiter members are not reported as PublicCandidate.
+        /// </summary>
+        [Test]
+        public async Task ScanAsync_WhenAwaitPatternMembersHaveNoDirectReferences_ShouldNotReportPublicCandidate()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: false);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("SampleAwaitable.Awaiter.IsCompleted", StringComparison.Ordinal)), Is.False);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("SampleAwaitable.Awaiter.GetResult", StringComparison.Ordinal)), Is.False);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("SampleAwaitable.GetAwaiter", StringComparison.Ordinal)), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that the IsExternalInit polyfill type is not reported as PublicCandidate.
+        /// </summary>
+        [Test]
+        public async Task ScanAsync_WhenIsExternalInitPolyfillHasNoDirectReferences_ShouldNotReportPublicCandidate()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: false);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("IsExternalInit", StringComparison.Ordinal)), Is.False);
+        }
+
+        private static ScanOptions CreatePublicScopeOptions(string rootPath, bool includeKept)
+        {
+            return new ScanOptions(
+                rootPath,
+                ScanScope.Public,
+                includeTypes: true,
+                includeMembers: true,
+                includeLocals: false,
+                includeTestOnly: true,
+                includeKept,
+                ReportFormat.Table,
+                failOnHighConfidence: false);
+        }
+
         private static void CreateSampleRepository(string rootPath)
         {
             string packageDirectory = Path.Combine(rootPath, "Packages", "src", "Editor", "Sample");
             string assetsDirectory = Path.Combine(rootPath, "Assets", "Tests");
+            string assetsTestAsmdefDirectory = Path.Combine(assetsDirectory, "Editor");
             Directory.CreateDirectory(packageDirectory);
             Directory.CreateDirectory(assetsDirectory);
+            Directory.CreateDirectory(assetsTestAsmdefDirectory);
 
             WriteFile(
                 Path.Combine(packageDirectory, "Sample.asmdef"),
@@ -178,6 +255,9 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 Path.Combine(packageDirectory, "SampleCode.cs"),
                 """
                 using System;
+                using System.Runtime.CompilerServices;
+
+                [assembly: InternalsVisibleTo("Sample.Tests")]
 
                 namespace Sample
                 {
@@ -227,6 +307,40 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                     public sealed class TestOnlyFactory
                     {
                     }
+
+                    public sealed class InternalVisibleApi
+                    {
+                        internal static int CreateForTesting()
+                        {
+                            return 1;
+                        }
+                    }
+
+                    public struct SampleAwaitable
+                    {
+                        public Awaiter GetAwaiter() => new();
+
+                        public struct Awaiter : INotifyCompletion
+                        {
+                            public bool IsCompleted => true;
+
+                            public void GetResult()
+                            {
+                            }
+
+                            public void OnCompleted(Action continuation)
+                            {
+                                continuation();
+                            }
+                        }
+                    }
+                }
+
+                namespace System.Runtime.CompilerServices
+                {
+                    public sealed class IsExternalInit
+                    {
+                    }
                 }
                 """);
             WriteFile(
@@ -239,6 +353,36 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                         public object Create()
                         {
                             return new Sample.TestOnlyFactory();
+                        }
+                    }
+                }
+                """);
+            WriteFile(
+                Path.Combine(assetsTestAsmdefDirectory, "Sample.Tests.asmdef"),
+                """
+                {
+                  "name": "Sample.Tests",
+                  "references": ["Sample.Editor"],
+                  "includePlatforms": ["Editor"],
+                  "versionDefines": []
+                }
+                """);
+            WriteFile(
+                Path.Combine(assetsTestAsmdefDirectory, "Sample.Tests.asmdef.meta"),
+                """
+                fileFormatVersion: 2
+                guid: 22222222222222222222222222222222
+                """);
+            WriteFile(
+                Path.Combine(assetsTestAsmdefDirectory, "SampleInternalUsage.cs"),
+                """
+                namespace SampleConsumer
+                {
+                    public sealed class SampleInternalUsage
+                    {
+                        public int Create()
+                        {
+                            return Sample.InternalVisibleApi.CreateForTesting();
                         }
                     }
                 }
