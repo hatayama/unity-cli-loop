@@ -82,11 +82,20 @@ scratch before every cycle. Because `EditorSceneManager.NewScene`/`OpenScene`
 silently discard unsaved changes (the save dialog is a courtesy of Unity's UI
 entry points, not the script API), the harness guards itself: if the active
 scene is a USER scene with unsaved changes, the cycle is skipped and logged
-instead of destroying work. The one exception is right after a
-harness-initiated restart, where any dirt in the reopened startup scene was
-produced by project tooling and is discarded unconditionally.
+instead of destroying work.
 
-Still: save your own scene changes before running.
+The one exception is right after a harness-initiated restart. The bypass is
+safe not because the harness can attribute the changes, but because of what a
+restart implies: quitting the editor already destroys any unsaved user edits,
+so a scene that is dirty immediately after the editor comes back up can only
+have been modified by project tooling during startup — there has been no
+opportunity for user work to exist yet. Only at that moment is the dirt
+discarded to restore the soak scene; every regular cycle goes through the
+guard.
+
+Still: save your own scene changes before running, and do not edit scenes in
+the target project while a soak is in progress — edits made between a restart
+and the harness's scene restore are not protected.
 
 ## Reading the results
 
