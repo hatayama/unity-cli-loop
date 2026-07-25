@@ -40,7 +40,7 @@ Interpret scanner output conservatively:
 ## Intentionally retained PublicCandidates
 
 These symbols stay `PublicCandidate` on purpose. Do not delete them during routine triage,
-and do not introduce a `[UnityCliLoopKeep]` attribute just to silence the scanner.
+and do not add scanner-silencing machinery that changes the public API surface.
 
 | Symbol | Why it stays |
 |---|---|
@@ -50,4 +50,5 @@ and do not introduce a `[UnityCliLoopKeep]` attribute just to silence the scanne
 | `UnityCliLoopToolRegistrar.IsCustomToolRegistered` | Same public extension API. |
 | `UnityCliLoopToolRegistrar.GetDebugInfo` | Same public extension API. |
 | `UnityCliLoopToolRegistrar.NotifyToolChanges` | Same public extension API. |
+| `EditorWindowCaptureUtility.CaptureGameRenderingAsync` | Migration target: `ThirdPartyToolMigrationRuleCatalog` rewrites third-party tool code to call this façade, so user code outside this repository is the caller. |
 | `ExecuteDynamicCodeResponse.Error` | Documented tool response field (`ExecuteDynamicCode` Skill). Outbound JSON shape, not an in-repo read. |
