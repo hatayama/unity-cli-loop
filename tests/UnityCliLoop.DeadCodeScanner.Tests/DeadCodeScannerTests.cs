@@ -193,6 +193,29 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
         }
 
         /// <summary>
+        /// Verifies that a Runtime internal member referenced from an Editor assembly through
+        /// InternalsVisibleTo is not reported as any finding.
+        /// </summary>
+        [Test]
+        public async Task ScanAsync_WhenRuntimeInternalMemberIsReferencedFromEditorViaInternalsVisibleTo_ShouldNotReportFinding()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: false);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.FullName.Contains("RuntimeInternalUsedByEditor", StringComparison.Ordinal)), Is.False);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("RuntimeInternalUsedByEditor", StringComparison.Ordinal)), Is.False);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.TestOnly
+                && issue.FullName.Contains("RuntimeInternalUsedByEditor", StringComparison.Ordinal)), Is.False);
+        }
+
+        /// <summary>
         /// Verifies that compiler-bound awaiter members are kept as KeptByUnityOrReflection
         /// and are not reported as PublicCandidate.
         /// </summary>
@@ -276,7 +299,7 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 """
                 {
                   "name": "Sample.Editor",
-                  "references": [],
+                  "references": ["GUID:33333333333333333333333333333333"],
                   "includePlatforms": ["Editor"],
                   "versionDefines": []
                 }
@@ -320,6 +343,7 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                             usedField++;
                             int unusedLocal = 1;
                             UsedPrivateMethod();
+                            usedField += Sample.Runtime.RuntimeInternalApi.RuntimeInternalUsedByEditor();
                         }
 
                         private void UsedPrivateMethod()
@@ -380,7 +404,7 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 }
                 """);
             WriteFile(
-                Path.Combine(runtimeDirectory, "SampleRuntime.asmdef"),
+                Path.Combine(runtimeDirectory, "Sample.Runtime.asmdef"),
                 """
                 {
                   "name": "Sample.Runtime",
@@ -390,7 +414,7 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 }
                 """);
             WriteFile(
-                Path.Combine(runtimeDirectory, "SampleRuntime.asmdef.meta"),
+                Path.Combine(runtimeDirectory, "Sample.Runtime.asmdef.meta"),
                 """
                 fileFormatVersion: 2
                 guid: 33333333333333333333333333333333
@@ -398,10 +422,22 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
             WriteFile(
                 Path.Combine(runtimeDirectory, "RuntimeCode.cs"),
                 """
+                using System.Runtime.CompilerServices;
+
+                [assembly: InternalsVisibleTo("Sample.Editor")]
+
                 namespace Sample.Runtime
                 {
                     public sealed class UnreferencedRuntimeApi
                     {
+                    }
+
+                    public static class RuntimeInternalApi
+                    {
+                        internal static int RuntimeInternalUsedByEditor()
+                        {
+                            return 1;
+                        }
                     }
                 }
                 """);
