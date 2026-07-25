@@ -16,17 +16,6 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         private readonly List<EditorFrameWaitRequest> _requests = new List<EditorFrameWaitRequest>();
         private int _currentFrameCount;
 
-        public int CurrentFrameCount
-        {
-            get
-            {
-                lock (_lockObject)
-                {
-                    return _currentFrameCount;
-                }
-            }
-        }
-
         public int PendingWaitCount
         {
             get
@@ -117,14 +106,6 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             for (int i = 0; i < requestsToCancel.Count; i++)
             {
                 requestsToCancel[i].CancelFromTest();
-            }
-        }
-
-        public void ResetFrameCountForTests()
-        {
-            lock (_lockObject)
-            {
-                _currentFrameCount = 0;
             }
         }
 
@@ -260,7 +241,6 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     {
         private static readonly EditorFrameWaiterService ServiceValue = new EditorFrameWaiterService();
 
-        public static int CurrentFrameCount => ServiceValue.CurrentFrameCount;
         public static int PendingWaitCount => ServiceValue.PendingWaitCount;
 
         public static void InitializeForEditorStartup()
@@ -279,11 +259,6 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public static void ClearAllForTests()
         {
             ServiceValue.ClearAllForTests();
-        }
-
-        public static void ResetFrameCountForTests()
-        {
-            ServiceValue.ResetFrameCountForTests();
         }
     }
 }
