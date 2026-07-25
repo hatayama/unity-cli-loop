@@ -204,11 +204,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return RegistryValue;
         }
 
-        internal static IDynamicCodeSourcePreparationService SourcePreparationService
-        {
-            get { return GetRegistry().SourcePreparationService; }
-        }
-
         internal static CompiledCommandEntryPointResolver CommandEntryPointResolver
         {
             get { return GetRegistry().CommandEntryPointResolver; }

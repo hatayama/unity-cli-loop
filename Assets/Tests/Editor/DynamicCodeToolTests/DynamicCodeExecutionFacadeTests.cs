@@ -183,11 +183,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 };
             }
 
-            public ExecutionStatistics GetStatistics()
-            {
-                return new ExecutionStatistics();
-            }
-
             public void Dispose()
             {
                 DisposeCallCount++;

@@ -39,11 +39,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        public void Cancel()
-        {
-            _cancellationTokenSource?.Cancel();
-        }
-
         /// <summary>
         /// Ends the execution slot even when undo collapse throws.
         /// Why nested finally: collapse can throw on a torn-down editor; the running flag must clear.

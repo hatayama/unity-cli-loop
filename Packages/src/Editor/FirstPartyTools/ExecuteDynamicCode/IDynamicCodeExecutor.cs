@@ -17,28 +17,5 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken cancellationToken = default,
             bool compileOnly = false
         );
-
-
-
-        ExecutionStatistics GetStatistics();
-    }
-
-    /// <summary>Execution statistics</summary>
-    public class ExecutionStatistics
-    {
-        /// <summary>Total execution count</summary>
-        public int TotalExecutions { get; set; }
-
-        /// <summary>Successful execution count</summary>
-        public int SuccessfulExecutions { get; set; }
-
-        /// <summary>Failed execution count</summary>
-        public int FailedExecutions { get; set; }
-
-        /// <summary>Average execution time</summary>
-        public TimeSpan AverageExecutionTime { get; set; }
-
-        /// <summary>Compilation error count</summary>
-        public int CompilationErrors { get; set; }
     }
 }
