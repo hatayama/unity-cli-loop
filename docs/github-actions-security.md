@@ -19,3 +19,10 @@ Use `cache: false` for `actions/setup-go` in workflows triggered by
 
 Unity `actions/cache` steps in pull request workflows must stay behind the Unity
 license secret guard so forked pull requests cannot use those cache entries.
+
+`actions/checkout` steps in workflows triggered by `pull_request` or
+`pull_request_target` must set `persist-credentials: false`. By default checkout
+writes `GITHUB_TOKEN` into the local Git config, so any repository script or test
+that the workflow runs from the pull request branch can read it. Release
+workflows that genuinely push back to the repository are the only place where
+credential persistence is appropriate.
