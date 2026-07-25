@@ -44,15 +44,17 @@ internal bridge command.
 
 ### Server
 
-The TCP IPC endpoint hosted inside the Unity Editor by the package
-(`UnityCliLoopBridgeServer`). It accepts short-lived sessions from the CLI, dispatches
-JSON-RPC requests to tools and internal bridge commands, and reports editor readiness.
+The local IPC endpoint hosted inside the Unity Editor by the package
+(`UnityCliLoopBridgeServer`) — a Unix domain socket on macOS/Linux, a named pipe on
+Windows, never TCP (`BridgeTransportEndpoint`). It accepts short-lived sessions from the
+CLI, dispatches JSON-RPC requests to tools and internal bridge commands, and reports
+editor readiness.
 
 ### CLI
 
 The `uloop` command-line interface as a whole — the user-facing entry point that talks to
-the server over TCP. Physically it consists of two Go binaries: the dispatcher and the
-project runner.
+the server over local IPC. Physically it consists of two Go binaries: the dispatcher and
+the project runner.
 
 ### Dispatcher
 
