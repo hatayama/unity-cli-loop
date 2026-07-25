@@ -2,27 +2,37 @@
 
 This document describes the rebuilt `execute-dynamic-code` pipeline after the layering refactor.
 
+The whole pipeline lives under `Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/` in the
+`UnityCLILoop.FirstPartyTools.Editor` assembly. The `Entry` / `UseCase` / `Infrastructure` layers
+below are the layering inside that tool plugin, not the onion assemblies around it.
+
 ## Layered overview
 
 ```mermaid
 flowchart TD
     subgraph Entry["Entry layer"]
         Tool["ExecuteDynamicCodeTool"]
-        Server["UnityCliLoopServerController"]
     end
 
     subgraph UseCase["UseCase layer"]
         ExecuteUseCase["IExecuteDynamicCodeUseCase / ExecuteDynamicCodeUseCase"]
-        PrewarmUseCase["IPrewarmDynamicCodeUseCase / PrewarmDynamicCodeUseCase"]
     end
 
     subgraph Infrastructure["Infrastructure layer"]
         subgraph RuntimeAccess["Runtime access module"]
             RuntimeContract["IDynamicCodeExecutionRuntime"]
             RuntimeFacade["DynamicCodeExecutionFacade"]
+            Scheduler["DynamicCodeExecutionScheduler"]
             ExecutorPoolContract["IDynamicCodeExecutorPool"]
             ExecutorPool["DynamicCodeExecutorPool"]
             Provider["RegistryDynamicCodeExecutorFactory"]
+        end
+
+        subgraph Warmup["Warm-up module"]
+            WarmupRunner["DynamicCodeForegroundWarmupRunner"]
+            WarmupState["DynamicCodeForegroundWarmupState"]
+            Probe["ExecuteDynamicCodeReadinessProbe"]
+            Snippets["DynamicCodeForegroundWarmupSnippets"]
         end
 
         subgraph Invocation["Invocation module"]
@@ -71,14 +81,17 @@ flowchart TD
     end
 
     Tool --> ExecuteUseCase
-    Server --> PrewarmUseCase
 
     ExecuteUseCase --> RuntimeContract
-    PrewarmUseCase --> RuntimeContract
+    ExecuteUseCase --> WarmupRunner
+    ExecuteUseCase --> WarmupState
+    WarmupRunner --> RuntimeContract
+    WarmupRunner --> Probe
+    Probe --> Snippets
     RuntimeContract --> RuntimeFacade
 
     RuntimeFacade --> ExecutorPoolContract
-    RuntimeFacade --> BuilderContract
+    RuntimeFacade --> Scheduler
     ExecutorPoolContract --> ExecutorPool
     ExecutorPool --> Provider
     Provider --> ExecutorContract
@@ -115,56 +128,60 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Services["DynamicCodeServices"]
+    Static["DynamicCodeServices (static facade)"]
+    Services["DynamicCodeServicesRegistry"]
     SourcePrepSvc["DynamicCodeSourcePreparationService"]
-    PathSvc["ExternalCompilerPathResolutionService"]
-    Planner["IDynamicCompilationPlanner / DynamicCompilationPlanner"]
-    Builder["ICompiledAssemblyBuilder / CompiledAssemblyBuilder"]
-    LoadSvc["ICompiledAssemblyLoader / CompiledAssemblyLoadService"]
-    Backend["DynamicCompilationBackend"]
     EntryResolver["CompiledCommandEntryPointResolver"]
+    CompilerFactory["DynamicCodeCompilationServiceFactory"]
     Provider["RegistryDynamicCodeExecutorFactory"]
     ExecutorPool["IDynamicCodeExecutorPool / DynamicCodeExecutorPool"]
     RuntimeFacade["DynamicCodeExecutionFacade"]
+    Scheduler["DynamicCodeExecutionScheduler"]
     ExecuteUseCase["ExecuteDynamicCodeUseCase"]
-    PrewarmUseCase["PrewarmDynamicCodeUseCase"]
 
+    Static --> Services
     Services --> SourcePrepSvc
-    Services --> PathSvc
-    Services --> Planner
-    Services --> Builder
-    Services --> LoadSvc
-    Services --> Backend
     Services --> EntryResolver
     Services --> Provider
     Services --> ExecutorPool
     Services --> RuntimeFacade
     Services --> ExecuteUseCase
-    Services --> PrewarmUseCase
 
+    Provider --> CompilerFactory
     Provider --> SourcePrepSvc
     Provider --> EntryResolver
     ExecutorPool --> Provider
     RuntimeFacade --> ExecutorPool
-    RuntimeFacade --> Builder
+    RuntimeFacade --> Scheduler
     ExecuteUseCase --> RuntimeFacade
-    PrewarmUseCase --> RuntimeFacade
 ```
+
+The registry only knows the runtime-access collaborators above. `DynamicCodeCompilationServiceFactory`
+just returns a `DynamicCodeCompiler`, whose default constructor is what builds the planning,
+backend build, and safety/load collaborators (`DynamicCompilationPlanner`,
+`CompiledAssemblyBuilder` with its path/reference/backend services, and
+`CompiledAssemblyLoadService`). None of those are visible to the registry.
 
 ## Reading guide
 
 1. Start with `Entry layer`.
    - `ExecuteDynamicCodeTool` only delegates the tool workflow.
-   - `UnityCliLoopServerController` only requests warm-up after server start and recovery.
 2. Move to `UseCase layer`.
-   - `ExecuteDynamicCodeUseCase` owns the user-facing workflow for execute-dynamic-code.
-   - `PrewarmDynamicCodeUseCase` owns the warm-up workflow.
+   - `ExecuteDynamicCodeUseCase` owns the user-facing workflow for execute-dynamic-code, including the
+     foreground warm-up fallback that protects the first real execution after startup or reload.
 3. Only then read `Infrastructure layer`.
    - `Runtime access module` is the only runtime-facing gateway.
+   - `Warm-up module` keeps every warm-up entrypoint on the same snippets and request shape.
    - `Planning`, `Backend build`, `Safety + load`, and `Invocation` split the heavy mechanics into named modules.
 4. Read `Composition graph` last.
-   - `DynamicCodeServices` is the only place that is expected to know many concrete classes at once.
+   - `DynamicCodeServicesRegistry` is the only place that is expected to know many concrete classes at once.
    - If a concrete-to-concrete edge only appears there, it is a wiring edge rather than a runtime dependency.
+
+Server startup and recovery do not enter this pipeline. `UnityCliLoopFirstPartyServerLifecycleBinding`
+in `UnityCLILoop.CompositionRoot.Editor` is the readiness probe: it resets server-scoped services and
+warms the project IPC transport with the internal `get-version` bridge command, so a user-disabled tool
+cannot block startup. Dynamic-code warm-up is owned entirely by this pipeline — the use case's
+foreground fallback, and the background prewarm inside `DynamicCodeExecutionScheduler`.
 
 ## Layer responsibilities
 
@@ -188,7 +205,13 @@ flowchart TD
 - `Runtime access module`
   - Exposes `IDynamicCodeExecutionRuntime` to the use-case layer.
   - Reuses a single executor through `IDynamicCodeExecutorPool`.
-  - Queries warm-up capability through the build facade instead of reaching into path resolution directly.
+  - Arbitrates foreground and idle-only execution through `DynamicCodeExecutionScheduler`.
+
+- `Warm-up module`
+  - Owns the snippet shapes every warm-up path compiles.
+  - Keeps foreground fallback and background prewarm on the same sequence, so whichever runs first
+    marks the same execution shape as ready.
+  - Holds the "already warmed" state outside the use case.
 
 - `Planning module`
   - Turns `CompilationRequest` into `DynamicCompilationPlan`.
@@ -219,20 +242,25 @@ flowchart TD
 - `ExecuteDynamicCodeUseCase`
   - Converts parameters into the runtime request.
   - Performs the missing-`return` retry.
+  - Runs the foreground warm-up sequence before the first real foreground execution, and skips it for
+    compile-only and yield-to-foreground requests.
   - Shapes `ExecutionResult` into `ExecuteDynamicCodeResponse`.
-
-- `PrewarmDynamicCodeUseCase`
-  - Owns the single-flight warm-up flow.
-  - Reuses the same runtime contract as the real execution path.
 
 - `IDynamicCodeExecutionRuntime`
   - Contract between use cases and runtime infrastructure.
+  - Exposes `ExecuteAsync` for foreground work and `TryExecuteIfIdleAsync` for work that must not
+    displace a foreground request.
   - Keeps use cases from depending on factory and executor wiring directly.
 
 - `DynamicCodeExecutionFacade`
   - Reuses executors through `IDynamicCodeExecutorPool`.
-  - Checks warm-up capability through `ICompiledAssemblyBuilder`.
-  - Hides provider, pool, and build-capability wiring from use cases.
+  - Routes both entrypoints through `DynamicCodeExecutionScheduler` so foreground work can preempt
+    background work.
+  - Hides provider, pool, and scheduling wiring from use cases.
+
+- `DynamicCodeForegroundWarmupRunner`
+  - Compiles the shared warm-up snippets in sequence, either as foreground work or as idle-only work.
+  - Exists so no warm-up path can report warm while a shape the user hits first is still cold.
 
 - `DynamicCodeExecutorPool`
   - Owns executor reuse and disposal for the runtime access path.
