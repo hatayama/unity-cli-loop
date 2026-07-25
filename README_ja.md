@@ -20,16 +20,21 @@ CLIを通じて、AIエージェントがUnityプロジェクトのコンパイ�
 
 AI駆動の開発ループを既存のUnityプロジェクト内で自律的に回し続けるために設計されています。
 
+> [!IMPORTANT]
+> - **[V3の新機能](Packages/src/Documentation~/whats-new-v3_ja.md)** — ネイティブGo CLIへの移行、ポート管理の廃止、`pause-point` の追加など、V2からの変更点
+> - **[カスタムツール／スキルのV3移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md)** — C#カスタムツールや、`uloop` を呼び出す自作スキル／スクリプトを持っている人向け。それ以外の人は、パッケージとCLIを更新するだけで移行できます
+
 # コンセプト
 Unity CLI Loopは、「AIがUnityプロジェクトの実装をできるだけ人手を介さずに進められる」ことを目指して作られた Unity連携ツールです。
 人間が手で行っていたコンパイル、Test Runner の実行、ログ確認、シーン編集、画面キャプチャによるUIレイアウト確認などの作業を、LLM ツールからまとめて操作できるようにします。
 
-Unity CLI Loopのコアとなるコンセプトは次の4つです。
+Unity CLI Loopのコアとなるコンセプトは次の5つです。
 
 1. **AIが自律的にビルド・テスト・ログ解析・修正を回し続ける「自律開発ループ」** — `compile`, `run-tests`, `get-logs`, `clear-console`
 2. **シーン構築、オブジェクト操作、メニュー実行、スクリーンショットからのUI改善など、Unity Editorの操作をAIに委任** — `execute-dynamic-code`, `screenshot`
 3. **PlayMode中の自動テスト — ボタンクリック、ドラッグ、キーボード入力、入力の記録・再生、ゲーム動作の検証をAIが実行** — `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `record-input`, `replay-input`, `execute-dynamic-code`, `screenshot`
 4. **上記を最小限のツール数で実現する** → [設計思想](#設計思想)
+5. **コードを書き換えずに任意の行で実行を止め、その瞬間の変数をAIが読み取って原因を特定する** — `pause-point`
 
 https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 
@@ -39,6 +44,8 @@ https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 > 以下のソフトウェアが必須です
 >
 > - **Unity 2022.3以上**
+>
+> CLIはネイティブバイナリで配布されるため、**Node.jsは不要です。**
 
 ## Unity Package Manager経由
 
@@ -76,11 +83,16 @@ Window > Unity CLI Loop > Settingsを選択します。専用ウィンドウが�
 
 installerはグローバルな`uloop` dispatcherをPATH上に配置します。プロジェクト固有の`uloop-project-runner` binaryは、各プロジェクトの`.uloop/project-runner-pin.json`に従ってuser cacheへ自動的にdownloadされます。
 
+<details>
+<summary>V2プロジェクトと併用する場合</summary>
+
 v2とv3のプロジェクトを併用するときも、v3 dispatcherをインストールしたままにしてください。Unityがプロジェクトをv2系の`io.github.hatayama.uloopmcp` packageへ解決している場合、dispatcherは同じバージョンのv2 `uloop-cli` releaseをバージョン別user cacheへ自動的にインストールし、コマンドを委譲します。解決済みpackageのバージョンは、downgrade後に残った古いv3 project-runner pinより優先されます。初回のnpmインストールとv2モードの注記はstderrへ出力されるため、stdoutには委譲先コマンドの出力だけが残ります。v3プロジェクトはpinで選ばれたproject runnerを引き続き使用します。
 
 グローバルな`install`、`update`、`uninstall`、`completion`（シェル補完機能は削除済みで、現在は何もしないスタブ）、`launch`コマンドは、どのプロジェクトでもv3 dispatcherが処理します。検出されたv2プロジェクトでは、それ以外のプロジェクトコマンド、help、プロジェクトスコープのversion表示が委譲されます。
 
 v2への委譲には、初回コマンドでcacheを作成するnpmを含むNode.js 22以降が必要です。v2プロジェクトのSettingsウィンドウでは、**Update CLI**または**Downgrade CLI**を押さないでください。委譲先CLIが同じv2バージョンを返すため通常はボタン自体が表示されませんが、使用するとグローバルnpm版CLIが復活し、PATHの順序によってv3 dispatcherが隠れる可能性があります。
+
+</details>
 
 <details>
 <summary>CLIだけをterminalからinstallする場合はこちら</summary>
@@ -195,10 +207,11 @@ uloop skills install --claude --global
 | 「Game Viewのスクショを撮って、UIレイアウトを調整して」 | `/uloop-screenshot` + `/uloop-execute-dynamic-code` |
 | 「ゲームプレイの入力を記録して」 | `/uloop-record-input` |
 | 「記録した入力を再生して」 | `/uloop-replay-input` |
+| 「バグの原因をこの行で止めて調べて」 | `/uloop-pause-point` |
 
 
 <details>
-<summary>バンドルされている全16個のSkills一覧</summary>
+<summary>バンドルされている全19個のSkills一覧</summary>
 
 - `/uloop-launch` - 正しいバージョンでUnityを起動
 - `/uloop-compile` - コンパイルの実行
@@ -209,6 +222,9 @@ uloop skills install --claude --global
 - `/uloop-get-hierarchy` - シーン階層の取得
 - `/uloop-find-game-objects` - GameObject検索
 - `/uloop-screenshot` - EditorWindowのキャプチャ
+- `/uloop-pause-point` - 任意の行で実行を止めて変数をキャプチャ
+- `/uloop-raycast` - Game View座標の3D物理ヒット判定
+- `/uloop-set-game-view-size` - Game Viewのカスタム解像度の取得・設定
 - `/uloop-simulate-mouse-ui` - PlayMode UI要素のクリック・長押し・ドラッグシミュレーション
 - `/uloop-simulate-mouse-input` - Input System経由のPlayModeマウス入力シミュレーション
 - `/uloop-simulate-keyboard` - Input System経由のPlayModeキーボード入力シミュレーション
@@ -257,7 +273,7 @@ uloop execute-dynamic-code --code 'using UnityEngine; Debug.Log("Hello from CLI!
 
 ## プロジェクトパス指定
 
-`--project-path` を省略した場合は、カレントディレクトリの Unity プロジェクトで設定されたポートが自動選択されます。
+`--project-path` を省略した場合は、カレントディレクトリから Unity プロジェクトを検出して接続します。
 
 一つのLLMツールから複数のUnityインスタンスを操作したい場合、プロジェクトパスを明示的に指定します：
 
@@ -266,6 +282,18 @@ uloop execute-dynamic-code --code 'using UnityEngine; Debug.Log("Hello from CLI!
 uloop compile --project-path /Users/foo/my-unity-project
 uloop compile --project-path ../other-project
 ```
+
+# 仕組み
+
+`uloop` コマンドがUnity Editorに届くまでの流れは次のとおりです。
+
+- **グローバル `uloop` dispatcher** — PATH上に1つだけ置かれる入口。コマンドを解釈し、対象プロジェクト用のrunnerへ委譲します
+- **`uloop-project-runner`** — プロジェクトごとのrunner。使用するバージョンは各プロジェクトの `.uloop/project-runner-pin.json`（pin）で決まり、バージョン別のユーザーキャッシュへ自動的にダウンロードされます。そのため、異なるバージョンの複数プロジェクトを1台のマシンで共存させられます → [project runner pinの詳細](docs/project-runner-pin.md)
+- **Unity Editor内のIPCサーバー** — runnerからの接続を受け取り、Unity APIを実行して結果を返します
+
+接続には**TCPポートを使いません**。macOS/LinuxではUnixドメインソケット、Windowsでは名前付きパイプで接続するため、ポートの設定も、他のEditorインスタンスとのポート衝突もありません。
+
+CLIとUnityパッケージの互換性は、整数の**protocol version**で判定されます。組み合わせが不一致な場合は、実行時に不可解な動作をするのではなく、明確なメッセージで即座に失敗します → [protocol versionの詳細](docs/protocol-version.md)
 
 # 設計思想
 
@@ -317,15 +345,32 @@ Unity Test Runnerを実行し、テスト結果を取得します。FilterType�
 > PlayModeテスト実行の際、Domain Reloadは強制的にOFFにされます。(テスト終了後に元の設定に戻ります)
 > この際、Static変数がリセットされない事に注意して下さい。
 
+### 4. pause-point - コードを書き換えずに任意の行で止めて変数を見る
+ソースを編集することも再コンパイルすることもなく、任意の `file:line` でPlayModeを停止します。コンパイル済みのメソッドを直接パッチするため、PlayMode実行中に仕掛けることもできます。
+
+ヒット時のレスポンスには `CapturedVariables` が含まれます。これは対象行が実行される**直前**に取得した、メソッドのローカル変数・引数・`this` のインスタンスフィールドで、IDEのブレークポイントとまったく同じタイミングです。値はライブ参照ではなくその時点の文字列として記録されるため、Unityが再開した後も証拠として有効です。`Debug.Log` を仕込んでコンパイルし直す往復が不要になります。
+
+3つのキャプチャモードがあります。`single-shot`（デフォルト）は最初のヒットで自動解除、`continuous` はヒットのたびに停止して履歴を保持、`trace` は停止せずヒットだけを記録します。watch式（`enable-watch` / `get-watch-values`）を使うと、停止中のStepごとに値が自動で再評価されるため、フレーム単位の変化を追えます。
+
+> [!NOTE]
+> EditorのCode OptimizationモードはDebugである必要があります（Releaseの場合は対処方法を示して拒否されます）。また、コンパイルやドメインリロードが起きるとパッチは解除されるので、その後は仕掛け直してください。
+
+```text
+→ enable-pause-point (File: "Assets/Scripts/Enemy.cs", Line: 42, Await: true,
+                      Trigger: "simulate-keyboard --action Press --key Space")
+→ CapturedVariablesから、その瞬間のローカル変数・引数・フィールドを読み取る
+→ 原因を特定して修正
+```
+
 ## Unity Editor 自動化・探索ツール
-### 4. clear-console - ログのクリーンアップ
+### 5. clear-console - ログのクリーンアップ
 log検索時、ノイズのとなるlogをクリアする事ができます。
 ```text
 → clear-console
 → 新しいデバッグセッションを開始
 ```
 
-### 5. find-game-objects - シーン内オブジェクト検索
+### 6. find-game-objects - シーン内オブジェクト検索
 オブジェクトを取得し、コンポーネントのパラメータを調べます。また、Unity Editorで選択中のGameObject（複数可）の情報も取得できます。
 ```text
 → find-game-objects (RequiredComponents: ["Camera"])
@@ -335,7 +380,7 @@ log検索時、ノイズのとなるlogをクリアする事ができます。
 → Unity Editorで選択中のGameObjectの詳細情報を取得（複数選択対応）
 ```
 
-### 6. get-hierarchy - シーン構造の解析
+### 7. get-hierarchy - シーン構造の解析
 現在アクティブなHierarchyの情報をネストされたJSON形式で取得します。ランタイムでも動作します。
 **自動ファイル出力**: 取得したHierarchyは常に`{project_root}/.uloop/outputs/HierarchyResults/`ディレクトリにJSONとして保存されます。レスポンスにはファイルパスのみが返るため、大量データでもトークン消費を最小限に抑えられます。
 **選択モード**: `uloop get-hierarchy --use-selection` を指定すると、Unity Editorで選択中のGameObjectから階層を取得できます。複数選択にも対応 - 親子両方が選択されている場合、重複を避けるため親のみがルートとして使用されます。
@@ -346,21 +391,26 @@ log検索時、ノイズのとなるlogをクリアする事ができます。
 → パスを手動で指定せずに、選択中のGameObjectの階層を取得
 ```
 
-### 7. focus-window - Unity Editorウィンドウを前面化（macOS / Windows対応）
+### 8. focus-window - Unity Editorウィンドウを前面化（macOS / Windows対応）
 macOS / Windows Editor上で、Unity Editor ウィンドウを最前面に表示させます。
 他アプリにフォーカスが奪われた後でも、視覚的なフィードバックをすぐ確認できます。（Linuxは未対応）
 
-### 8. screenshot - EditorWindowのスクリーンショット
+### 9. screenshot - EditorWindowのスクリーンショット
 任意のEditorWindowのスクリーンショットをPNGとして保存します。ウィンドウ名（タイトルバーに表示されている文字列）を指定してキャプチャできます。
 同じ種類のウィンドウが複数開いている場合（例：Inspectorを3つ開いている場合）、すべてのウィンドウを連番で保存します。
 3つのマッチングモードをサポート: `exact`（デフォルト）、`prefix`、`contains` - すべて大文字小文字を区別しません。
+
+`CaptureMode: rendering` を指定すると、EditorWindowの見た目ではなくGame Viewのレンダリング結果を直接キャプチャします。PlayMode中のゲーム画面を、Editorのウィンドウ枠やスケーリングの影響を受けずに取得したい場合に使います。
+`AnnotateRaycastGrid: true` を併用すると、キャプチャ画像に座標グリッドが重ねて描画されます。画像を見たAIが `raycast` や `simulate-mouse-input` に渡す座標を決めやすくなります。
+
+`uloop set-game-view-size --width 1920 --height 1080` でGame Viewのカスタム解像度を固定できます。`CaptureMode: rendering` の座標系を実行ごとに安定させたいときに使ってください（引数なしで実行すると現在の解像度を取得できます）。
 ```text
 → screenshot (WindowName: "Console")
 → Console画面の状態をPNGで保存
 → AIに視覚的なフィードバックを提供
 ```
 
-### 9. control-play-mode - Play Modeの制御
+### 10. control-play-mode - Play Modeの制御
 Unity EditorのPlay Modeを制御します。Play（再生開始/一時停止解除）、Stop（停止）、Pause（一時停止）の3つのアクションを実行できます。
 ```
 → control-play-mode (Action: Play)
@@ -369,7 +419,7 @@ Unity EditorのPlay Modeを制御します。Play（再生開始/一時停止解
 → 一時停止して状態を確認
 ```
 
-### 10. execute-dynamic-code - 動的C#コード実行
+### 11. execute-dynamic-code - 動的C#コード実行
 Unity Editor内で動的にC#コードを実行します。
 
 **Async対応**:
@@ -384,7 +434,7 @@ Unity Editor内で動的にC#コードを実行します。
 ```
 
 ### PlayMode 自動テスト系ツール
-### 11. simulate-mouse-ui - PlayMode UI要素のマウス操作シミュレーション
+### 12. simulate-mouse-ui - PlayMode UI要素のマウス操作シミュレーション
 PlayMode中のUI要素に対してマウスクリック・長押し・ドラッグをシミュレーションします。EventSystemとExecuteEventsを使ってポインタイベントを直接ディスパッチするため、旧Input System・新Input Systemの両方に依存せず動作します。ゲームロジックがInput Systemを直接読み取る場合（例：`Mouse.current.leftButton.wasPressedThisFrame`）は、`simulate-mouse-input` を使用してください。
 
 6つのアクションに対応: Click、LongPress、Drag（ワンショット）、DragStart/DragMove/DragEnd（分割ドラッグ）
@@ -401,7 +451,7 @@ PlayMode中のUI要素に対してマウスクリック・長押し・ドラッ�
 ```
 https://github.com/user-attachments/assets/c7ee9103-c282-4f90-8b01-64bb17400f3e
 
-### 12. simulate-mouse-input - Input System経由のPlayModeマウス入力シミュレーション
+### 13. simulate-mouse-input - Input System経由のPlayModeマウス入力シミュレーション
 Input System経由でPlayMode中のマウス入力をシミュレーションします。ボタンクリック、マウスデルタ、スクロールホイールを`Mouse.current`に直接注入します。EventSystemのポインタイベントを発火する`simulate-mouse-ui`と異なり、`Mouse.current`を直接読み取るゲームロジック向けのツールです。このツールは Input System パッケージ導入時のみ利用可能で、Player SettingsのActive Input Handlingを`Input System Package (New)`または`Both`に設定する必要があります。
 
 5つのアクションに対応: Click、LongPress、MoveDelta、SmoothDelta、Scroll
@@ -415,7 +465,20 @@ Input System経由でPlayMode中のマウス入力をシミュレーションし
 → simulate-mouse-input (Action: SmoothDelta, DeltaX: 300, DeltaY: 0, Duration: 0.5)
 ```
 
-### 13. simulate-keyboard - PlayModeでのキーボード入力シミュレーション
+### 14. raycast - Game View座標の3D物理ヒット判定
+`Camera.main` からGame Viewの座標へレイを飛ばし、3D物理で何にヒットするかを返します。スクリーンショットの座標にゲームプレイのクリックを送る前に、狙った3Dオブジェクトに当たるかを確認したいときに使います。
+
+座標系は `simulate-mouse-ui` と同じ左上原点なので、注釈付きスクリーンショットから得た座標をそのまま渡せます（呼び出し側でY座標を反転させる必要はありません）。レスポンスには、ヒットしたGameObjectの名前とパス、レイヤー、距離、ヒット位置、ヒット法線が含まれます。
+
+ヒットしなかった場合も `CameraName` / `CameraPath` が返ります。想定外の結果になったときは、まずここを確認してください。シーン内の別のカメラに `MainCamera` タグが付いていると、そちらが `Camera.main` の解決に勝ってしまい、意図した視点からレイが飛んでいない場合があります。
+
+```text
+→ screenshot (CaptureMode: rendering, AnnotateRaycastGrid: true)
+→ raycast (X: 960, Y: 540)
+→ simulate-mouse-input (Action: Click, X: 960, Y: 540)
+```
+
+### 15. simulate-keyboard - PlayModeでのキーボード入力シミュレーション
 Input System経由でPlayMode中のキーボード入力をシミュレーションします。単発のキータップ、長押し、複数キーの同時押し（例：Shift+Wでスプリント）に対応しています。このツールは Input System パッケージ導入時のみ利用可能で、Player SettingsのActive Input Handlingを `Input System Package (New)` または `Both` に設定する必要があります。ゲームコードがInput System API（例: `Keyboard.current[Key.W].isPressed`）で入力を読み取っている必要があり、レガシーの `Input.GetKey()` には対応していません。
 
 3つのアクションに対応: Press（ワンショットタップまたは時間指定ホールド）、KeyDown（キーを押し続ける）、KeyUp（押下中のキーを解放）。`Keyboard.current.spaceKey.wasPressedThisFrame` のような立ち上がり検出には Press を使います。KeyDown は最初の押下エッジを1回だけ発行し、その後は押下状態を保つだけなので、意図的にキーを保持したい場合だけ KeyDown/KeyUp を使います。
@@ -430,7 +493,7 @@ Input System経由でPlayMode中のキーボード入力をシミュレーショ
 → simulate-keyboard (Action: KeyUp, Key: LeftShift)
 ```
 
-### 14. record-input - PlayMode中の入力記録
+### 16. record-input - PlayMode中の入力記録
 PlayMode中のキーボード・マウス入力をフレーム単位でJSONファイルに記録します。Input Systemのデバイス状態差分によりキー押下、マウス移動、クリック、スクロールイベントをキャプチャします。このツールは Input System パッケージ導入時のみ利用可能です。
 
 ```text
@@ -440,7 +503,7 @@ PlayMode中のキーボード・マウス入力をフレーム単位でJSONフ�
 → JSONファイルが .uloop/outputs/InputRecordings/ に保存される
 ```
 
-### 15. replay-input - 記録された入力のPlayMode再生
+### 17. replay-input - 記録された入力のPlayMode再生
 記録されたキーボード・マウス入力をPlayMode中に再生します。JSON記録を読み込み、Input System経由でフレーム単位で入力を注入します。ループ再生と進捗モニタリングに対応しています。このツールは Input System パッケージ導入時のみ利用可能です。
 
 ```text
@@ -597,6 +660,9 @@ description: "ツールの説明と使用タイミング"
 
 完全な例は [HelloWorld サンプル](/Assets/Editor/CustomCommandSamples/HelloWorld/Skill/SKILL.md) を参照してください。
 
+> [!IMPORTANT]
+> **V2でカスタムツールやカスタムスキルを作っていた場合**、V3に上げると拡張APIの名前空間と型名が変わるため、**必ずコンパイルエラーが発生します**。これは想定内の挙動で、内蔵の移行ウィザードが該当ファイルを自動で書き換えます。手作業で直し始める前に、[カスタムツール／スキルのV3移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md) を参照してください。
+
 ## その他
 
 ### Unity CLI Loop 関連ファイル
@@ -607,6 +673,7 @@ description: "ツールの説明と使用タイミング"
 
 | ファイル | 用途 | git管理 |
 |---------|------|---------|
+| `project-runner-pin.json` | グローバルdispatcherが使うproject runnerのバージョン契約 | Yes |
 | `settings.tools.json` | ツールごとの有効・無効設定 | 任意 |
 | `tools.json` | 自動生成されるCLIツールレジストリ | No |
 | `outputs/` | ランタイム出力（テスト結果、スクリーンショット、ヒエラルキーダンプ） | No |
@@ -616,10 +683,11 @@ description: "ツールの説明と使用タイミング"
 >
 > ```gitignore
 > **/.uloop/*
+> !**/.uloop/project-runner-pin.json
 > !**/.uloop/settings.tools.json
 > ```
 >
-> 自動生成ファイルやランタイム出力を無視しつつ、チーム共有の設定ファイルをgit管理できます。
+> 自動生成ファイルやランタイム出力を無視しつつ、dispatcherのpinとチーム共有の設定ファイルをgit管理できます。
 > ツールの有効・無効設定を共有しない場合は、`!` の行を削除してください。
 
 ## ライセンス
