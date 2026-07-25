@@ -50,6 +50,11 @@ namespace UnityCliLoop.DeadCodeScanner
         public ReportFormat Format { get; }
         public bool FailOnHighConfidence { get; }
 
+        /// <summary>
+        /// Maximum allowed PublicCandidate count. Negative means no limit.
+        /// </summary>
+        public int MaxPublicCandidates { get; }
+
         public ScanOptions(
             string rootPath,
             ScanScope scope,
@@ -59,7 +64,8 @@ namespace UnityCliLoop.DeadCodeScanner
             bool includeTestOnly,
             bool includeKept,
             ReportFormat format,
-            bool failOnHighConfidence)
+            bool failOnHighConfidence,
+            int maxPublicCandidates)
         {
             RootPath = rootPath;
             Scope = scope;
@@ -70,6 +76,7 @@ namespace UnityCliLoop.DeadCodeScanner
             IncludeKept = includeKept;
             Format = format;
             FailOnHighConfidence = failOnHighConfidence;
+            MaxPublicCandidates = maxPublicCandidates;
         }
 
         public static ScanOptions Default(string rootPath)
@@ -83,7 +90,8 @@ namespace UnityCliLoop.DeadCodeScanner
                 includeTestOnly: true,
                 includeKept: false,
                 ReportFormat.Table,
-                failOnHighConfidence: false);
+                failOnHighConfidence: false,
+                maxPublicCandidates: -1);
         }
     }
 
