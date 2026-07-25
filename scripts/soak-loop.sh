@@ -186,16 +186,14 @@ EOF
 # Discards any previous soak scene and rebuilds it from scratch: the
 # pause-point ticker plus a clickable button wired for the UI simulation
 # check. Recreating every time keeps stale generated state from leaking
-# between cycles. Refuses to discard unsaved USER scene changes (returns
-# DIRTY_SCENE); the soak scene itself is always disposable.
+# between cycles. Two variants are written: the guarded one refuses to
+# discard unsaved USER scene changes (returns DIRTY_SCENE), while the force
+# variant skips that guard — it is used only right after a harness-initiated
+# editor restart, when any dirt in the reopened startup scene was produced
+# by project tooling during startup and cannot be user work.
 write_scene_setup_snippet() {
-    cat > "$OUT_DIR/setup-scene.cs" <<EOF
+    cat > "$OUT_DIR/setup-scene-force.cs" <<EOF
 string scenePath = "$SCENE_REL";
-UnityEngine.SceneManagement.Scene active = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
-if (active.path != scenePath && active.isDirty)
-{
-    return "DIRTY_SCENE";
-}
 UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single);
 if (System.IO.File.Exists(scenePath))
 {
@@ -220,6 +218,16 @@ eventSystemGo.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>(
 UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene(), scenePath);
 return "recreated";
 EOF
+    {
+        cat <<EOF
+UnityEngine.SceneManagement.Scene guardActive = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+if (guardActive.path != "$SCENE_REL" && guardActive.isDirty)
+{
+    return "DIRTY_SCENE";
+}
+EOF
+        cat "$OUT_DIR/setup-scene-force.cs"
+    } > "$OUT_DIR/setup-scene.cs"
 }
 
 # Runs before every pause cycle, not just at setup: an editor restart mid-soak
@@ -330,7 +338,18 @@ while [ "$i" -le "$ITERATIONS" ]; do
             grep -q "definitive result" "$CAPTURE_FILE" || ITER_FAILED=1
         fi
     fi
-    timed "$i" compile compile $COMPILE_WAIT_FLAG || ITER_FAILED=1
+    # Right after an editor (re)start, an explicit compile can collide with
+    # Unity's own startup compilation ("Compilation is already in progress",
+    # Retryable: true). That race is expected under load, so a single retry
+    # absorbs it; any other compile failure still fails the iteration.
+    if ! timed "$i" compile compile $COMPILE_WAIT_FLAG; then
+        if grep -q "Compilation is already in progress" "$CAPTURE_FILE"; then
+            sleep 10
+            timed "$i" compile-retry compile $COMPILE_WAIT_FLAG || ITER_FAILED=1
+        else
+            ITER_FAILED=1
+        fi
+    fi
     timed "$i" get-logs get-logs --max-count 200 || ITER_FAILED=1
     timed "$i" get-hierarchy get-hierarchy --max-depth 5 || ITER_FAILED=1
     timed "$i" screenshot screenshot --window-name Game --resolution-scale 0.5 || ITER_FAILED=1
@@ -403,6 +422,13 @@ while [ "$i" -le "$ITERATIONS" ]; do
             log "Editor did not come back within 15 minutes after scheduled restart — aborting."
             exit 1
         fi
+        # The reopened startup scene may be auto-dirtied by project tooling,
+        # which would trip the DIRTY_SCENE guard on the next pause cycle.
+        # Right after our own restart that dirt cannot be user work, so
+        # rebuild the soak scene unconditionally.
+        if [ "$PAUSE_EVERY" -gt 0 ]; then
+            timed "$i" scene-restore execute-dynamic-code --code-file "$OUT_DIR/setup-scene-force.cs" || log "iter=$i post-restart scene restore failed"
+        fi
     fi
 
     sample_metrics "$i"
@@ -418,6 +444,10 @@ while [ "$i" -le "$ITERATIONS" ]; do
         if ! wait_for_editor; then
             log "Recovery restart failed — aborting soak."
             exit 1
+        fi
+        # Same post-restart scene restore as the scheduled restart path.
+        if [ "$PAUSE_EVERY" -gt 0 ]; then
+            timed "$i" scene-restore execute-dynamic-code --code-file "$OUT_DIR/setup-scene-force.cs" || log "iter=$i post-recovery scene restore failed"
         fi
         CONSECUTIVE_FAILS=0
         log "Recovery succeeded, continuing."
