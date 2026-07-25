@@ -83,11 +83,16 @@ Window > Unity CLI Loop > Settingsを選択します。専用ウィンドウが�
 
 installerはグローバルな`uloop` dispatcherをPATH上に配置します。プロジェクト固有の`uloop-project-runner` binaryは、各プロジェクトの`.uloop/project-runner-pin.json`に従ってuser cacheへ自動的にdownloadされます。
 
+<details>
+<summary>V2プロジェクトと併用する場合</summary>
+
 v2とv3のプロジェクトを併用するときも、v3 dispatcherをインストールしたままにしてください。Unityがプロジェクトをv2系の`io.github.hatayama.uloopmcp` packageへ解決している場合、dispatcherは同じバージョンのv2 `uloop-cli` releaseをバージョン別user cacheへ自動的にインストールし、コマンドを委譲します。解決済みpackageのバージョンは、downgrade後に残った古いv3 project-runner pinより優先されます。初回のnpmインストールとv2モードの注記はstderrへ出力されるため、stdoutには委譲先コマンドの出力だけが残ります。v3プロジェクトはpinで選ばれたproject runnerを引き続き使用します。
 
 グローバルな`install`、`update`、`uninstall`、`completion`（シェル補完機能は削除済みで、現在は何もしないスタブ）、`launch`コマンドは、どのプロジェクトでもv3 dispatcherが処理します。検出されたv2プロジェクトでは、それ以外のプロジェクトコマンド、help、プロジェクトスコープのversion表示が委譲されます。
 
 v2への委譲には、初回コマンドでcacheを作成するnpmを含むNode.js 22以降が必要です。v2プロジェクトのSettingsウィンドウでは、**Update CLI**または**Downgrade CLI**を押さないでください。委譲先CLIが同じv2バージョンを返すため通常はボタン自体が表示されませんが、使用するとグローバルnpm版CLIが復活し、PATHの順序によってv3 dispatcherが隠れる可能性があります。
+
+</details>
 
 <details>
 <summary>CLIだけをterminalからinstallする場合はこちら</summary>
@@ -202,10 +207,11 @@ uloop skills install --claude --global
 | 「Game Viewのスクショを撮って、UIレイアウトを調整して」 | `/uloop-screenshot` + `/uloop-execute-dynamic-code` |
 | 「ゲームプレイの入力を記録して」 | `/uloop-record-input` |
 | 「記録した入力を再生して」 | `/uloop-replay-input` |
+| 「バグの原因をこの行で止めて調べて」 | `/uloop-pause-point` |
 
 
 <details>
-<summary>バンドルされている全16個のSkills一覧</summary>
+<summary>バンドルされている全19個のSkills一覧</summary>
 
 - `/uloop-launch` - 正しいバージョンでUnityを起動
 - `/uloop-compile` - コンパイルの実行
@@ -216,6 +222,9 @@ uloop skills install --claude --global
 - `/uloop-get-hierarchy` - シーン階層の取得
 - `/uloop-find-game-objects` - GameObject検索
 - `/uloop-screenshot` - EditorWindowのキャプチャ
+- `/uloop-pause-point` - 任意の行で実行を止めて変数をキャプチャ
+- `/uloop-raycast` - Game View座標の3D物理ヒット判定
+- `/uloop-set-game-view-size` - Game Viewのカスタム解像度の取得・設定
 - `/uloop-simulate-mouse-ui` - PlayMode UI要素のクリック・長押し・ドラッグシミュレーション
 - `/uloop-simulate-mouse-input` - Input System経由のPlayModeマウス入力シミュレーション
 - `/uloop-simulate-keyboard` - Input System経由のPlayModeキーボード入力シミュレーション
