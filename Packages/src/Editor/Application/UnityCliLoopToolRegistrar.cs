@@ -174,20 +174,5 @@ namespace io.github.hatayama.UnityCliLoop.Application
         {
             return Service.IsCustomToolRegistered(toolName);
         }
-
-        public static UnityCliLoopToolRegistry TryGetRegistry()
-        {
-            return Service.TryGetRegistry();
-        }
-
-        public static string GetDebugInfo()
-        {
-            return Service.GetDebugInfo();
-        }
-
-        public static void NotifyToolChanges()
-        {
-            Service.NotifyToolChanges();
-        }
     }
 }

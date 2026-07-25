@@ -13,16 +13,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private const int PROCESS_TIMEOUT_MS = 5000;
 
-        /// <summary>
-        /// Finds an executable path using platform-appropriate resolution.
-        /// On Windows, resolves .cmd shims via 'where' command.
-        /// On Unix, resolves via login shell 'which' command.
-        /// </summary>
-        public static string FindExecutablePath(string executableName)
-        {
-            return FindExecutablePathAtPlatform(executableName, UnityEngine.Application.platform);
-        }
-
         internal static string FindExecutablePathAtPlatform(string executableName, RuntimePlatform platform)
         {
             if (IsWindowsEditor(platform))
