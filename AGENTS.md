@@ -35,6 +35,10 @@ Comments in the code, commit messages, PR titles, and PR descriptions must all b
 
 Every test method must have a short comment that states what behavior the test verifies.
 
+Do not reformat unrelated code. Surgical edits must keep existing wrapping and layout; only
+change lines required by the task. Do not run C# formatters, IDE format-on-save, or rewrite
+scripts that collapse multi-line argument lists or object initializers into one-liners.
+
 ## CLI / Unity Package Compatibility
 
 Runtime compatibility between the Unity package and the native CLI is gated on an integer

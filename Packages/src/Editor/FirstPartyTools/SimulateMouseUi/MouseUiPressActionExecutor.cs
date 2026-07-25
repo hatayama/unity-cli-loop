@@ -16,7 +16,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class MouseUiPressActionExecutor
     {
         internal static async Task<SimulateMouseUiResponse> ExecuteClick(
-            MouseUiSimulationCommand parameters, EventSystem eventSystem, MouseUiMainThreadCleanupScheduler cleanupScheduler, CancellationToken ct)
+            MouseUiSimulationCommand parameters,
+            EventSystem eventSystem,
+            MouseUiMainThreadCleanupScheduler cleanupScheduler,
+            CancellationToken ct)
         {
             Vector2 inputPos = new(parameters.X, parameters.Y);
             Vector2 screenPos = MouseUiCoordinateConverter.InputToScreen(inputPos);
@@ -33,14 +36,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return new SimulateMouseUiResponse
                 {
-                    Success = false, Message = $"TargetPath '{parameters.TargetPath}' has no pointer click or pointer down handler.", Action = MouseAction.Click.ToString(), PositionX = inputPos.x, PositionY = inputPos.y
+                    Success = false,
+                    Message = $"TargetPath '{parameters.TargetPath}' has no pointer click or pointer down handler.",
+                    Action = MouseAction.Click.ToString(),
+                    PositionX = inputPos.x,
+                    PositionY = inputPos.y
                 };
             }
 
             string? targetName = resolvedTargets.Target?.name;
             bool hitTarget = resolvedTargets.Target != null;
             SimulateMouseUiOverlayState.Update(
-                MouseAction.Click, inputPos, null, Handles.GetMainGameViewSize());
+                MouseAction.Click, inputPos, null,
+                Handles.GetMainGameViewSize());
 
             MouseUiFrameWaitOutcome expandOutcome = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
             if (expandOutcome == MouseUiFrameWaitOutcome.TimedOut)
@@ -52,7 +60,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 cleanupScheduler.QueueOverlayClear();
                 return MouseUiSimulationResponseFactory.CreateInterruptedResult(
-                    MouseAction.Click, inputPos, targetName, "Click stopped because Unity paused during Pause Point inspection before the click was dispatched. No pointer event was fired.");
+                    MouseAction.Click, inputPos, targetName,
+                    "Click stopped because Unity paused during Pause Point inspection before the click was dispatched. No pointer event was fired.");
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -69,7 +78,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 cleanupScheduler.QueueOverlayClear();
                 return MouseUiSimulationResponseFactory.CreateInterruptedResult(
-                    MouseAction.Click, inputPos, targetName, "Click was already dispatched. Unity paused during Pause Point inspection while the click overlay animation was still playing; only the animation was interrupted.");
+                    MouseAction.Click, inputPos, targetName,
+                    "Click was already dispatched. Unity paused during Pause Point inspection while the click overlay animation was still playing; only the animation was interrupted.");
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -77,13 +87,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         internal static async Task<SimulateMouseUiResponse> ExecuteLongPress(
-            MouseUiSimulationCommand parameters, EventSystem eventSystem, MouseUiMainThreadCleanupScheduler cleanupScheduler, CancellationToken ct)
+            MouseUiSimulationCommand parameters,
+            EventSystem eventSystem,
+            MouseUiMainThreadCleanupScheduler cleanupScheduler,
+            CancellationToken ct)
         {
             if (parameters.Duration <= 0f || float.IsNaN(parameters.Duration) || float.IsInfinity(parameters.Duration))
             {
                 return new SimulateMouseUiResponse
                 {
-                    Success = false, Message = $"Duration must be positive, got: {parameters.Duration}", Action = MouseAction.LongPress.ToString()
+                    Success = false,
+                    Message = $"Duration must be positive, got: {parameters.Duration}",
+                    Action = MouseAction.LongPress.ToString()
                 };
             }
 
@@ -102,7 +117,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return new SimulateMouseUiResponse
                 {
-                    Success = false, Message = $"TargetPath '{parameters.TargetPath}' has no pointer down or pointer click handler.", Action = MouseAction.LongPress.ToString(), PositionX = inputPos.x, PositionY = inputPos.y
+                    Success = false,
+                    Message = $"TargetPath '{parameters.TargetPath}' has no pointer down or pointer click handler.",
+                    Action = MouseAction.LongPress.ToString(),
+                    PositionX = inputPos.x,
+                    PositionY = inputPos.y
                 };
             }
 
@@ -110,7 +129,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool hitTarget = resolvedTargets.Target != null;
             bool shouldReleasePointer = resolvedTargets.RawTarget != null && resolvedTargets.Target != null;
             SimulateMouseUiOverlayState.Update(
-                MouseAction.LongPress, inputPos, null, Handles.GetMainGameViewSize());
+                MouseAction.LongPress, inputPos, null,
+                Handles.GetMainGameViewSize());
 
             MouseUiFrameWaitOutcome expandOutcome = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
             if (expandOutcome == MouseUiFrameWaitOutcome.TimedOut)
@@ -122,7 +142,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 cleanupScheduler.QueueOverlayClear();
                 return MouseUiSimulationResponseFactory.CreateInterruptedResult(
-                    MouseAction.LongPress, inputPos, targetName, "Long-press stopped because Unity paused during Pause Point inspection before pointerDown was dispatched. No pointer event was fired.");
+                    MouseAction.LongPress, inputPos, targetName,
+                    "Long-press stopped because Unity paused during Pause Point inspection before pointerDown was dispatched. No pointer event was fired.");
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -147,7 +168,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         // Returning here still runs the finally below, which releases pointerUp early.
                         cleanupScheduler.QueueOverlayClear();
                         return MouseUiSimulationResponseFactory.CreateInterruptedResult(
-                            MouseAction.LongPress, inputPos, targetName, "Long-press pointerDown was already dispatched. Unity paused during Pause Point inspection while holding; pointerUp was released early and the press duration was cut short.");
+                            MouseAction.LongPress, inputPos, targetName,
+                            "Long-press pointerDown was already dispatched. Unity paused during Pause Point inspection while holding; pointerUp was released early and the press duration was cut short.");
                     }
                     await MainThreadSwitcher.SwitchToMainThread(ct);
                     elapsed = Time.realtimeSinceStartup - startTime;
@@ -174,7 +196,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 cleanupScheduler.QueueOverlayClear();
                 return MouseUiSimulationResponseFactory.CreateInterruptedResult(
-                    MouseAction.LongPress, inputPos, targetName, "Long-press was already completed (pointerDown and pointerUp both dispatched). Unity paused during Pause Point inspection while the overlay animation was still playing; only the animation was interrupted.");
+                    MouseAction.LongPress, inputPos, targetName,
+                    "Long-press was already completed (pointerDown and pointerUp both dispatched). Unity paused during Pause Point inspection while the overlay animation was still playing; only the animation was interrupted.");
             }
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
@@ -182,7 +205,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static void ExecutePointerClickEvents(
-            ResolvedPointerTargets resolvedTargets, PointerEventData pointerData)
+            ResolvedPointerTargets resolvedTargets,
+            PointerEventData pointerData)
         {
             if (resolvedTargets.RawTarget == null)
             {
@@ -192,24 +216,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (resolvedTargets.PressTarget != null)
             {
                 ExecuteEvents.ExecuteHierarchy(
-                    resolvedTargets.RawTarget, pointerData, ExecuteEvents.pointerDownHandler);
+                    resolvedTargets.RawTarget,
+                    pointerData,
+                    ExecuteEvents.pointerDownHandler);
             }
 
             if (resolvedTargets.Target != null)
             {
                 ExecuteEvents.Execute(
-                    resolvedTargets.Target, pointerData, ExecuteEvents.pointerUpHandler);
+                    resolvedTargets.Target,
+                    pointerData,
+                    ExecuteEvents.pointerUpHandler);
             }
 
             if (resolvedTargets.ClickTarget != null)
             {
                 ExecuteEvents.Execute(
-                    resolvedTargets.ClickTarget, pointerData, ExecuteEvents.pointerClickHandler);
+                    resolvedTargets.ClickTarget,
+                    pointerData,
+                    ExecuteEvents.pointerClickHandler);
             }
         }
 
         private static void ExecuteLongPressPointerDown(
-            ResolvedPointerTargets resolvedTargets, PointerEventData pointerData)
+            ResolvedPointerTargets resolvedTargets,
+            PointerEventData pointerData)
         {
             if (resolvedTargets.RawTarget == null || resolvedTargets.Target == null)
             {
@@ -217,7 +248,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             ExecuteEvents.ExecuteHierarchy(
-                resolvedTargets.RawTarget, pointerData, ExecuteEvents.pointerDownHandler);
+                resolvedTargets.RawTarget,
+                pointerData,
+                ExecuteEvents.pointerDownHandler);
         }
     }
 }
