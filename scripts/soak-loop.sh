@@ -314,6 +314,9 @@ while [ "$i" -le "$ITERATIONS" ]; do
             timed "$i" pause-arm enable-pause-point --file "$TICKER_REL" --line "$TICKER_LINE" --timeout-seconds 60 || ITER_FAILED=1
             if timed "$i" pause-await await-pause-point --id "$TICKER_REL:$TICKER_LINE" --timeout-seconds 60; then
                 grep -q '"Hit"' "$CAPTURE_FILE" || { log "iter=$i pause-point await returned without a Hit"; ITER_FAILED=1; }
+                # A Hit whose CapturedVariables lacks the ticker's field means
+                # the variable-capture pipeline broke even though pausing works.
+                grep -q '"tickCount"' "$CAPTURE_FILE" || { log "iter=$i pause-point hit but tickCount was not captured"; ITER_FAILED=1; }
             else
                 ITER_FAILED=1
             fi
