@@ -345,15 +345,32 @@ Unity Test Runnerを実行し、テスト結果を取得します。FilterType�
 > PlayModeテスト実行の際、Domain Reloadは強制的にOFFにされます。(テスト終了後に元の設定に戻ります)
 > この際、Static変数がリセットされない事に注意して下さい。
 
+### 4. pause-point - コードを書き換えずに任意の行で止めて変数を見る
+ソースを編集することも再コンパイルすることもなく、任意の `file:line` でPlayModeを停止します。コンパイル済みのメソッドを直接パッチするため、PlayMode実行中に仕掛けることもできます。
+
+ヒット時のレスポンスには `CapturedVariables` が含まれます。これは対象行が実行される**直前**に取得した、メソッドのローカル変数・引数・`this` のインスタンスフィールドで、IDEのブレークポイントとまったく同じタイミングです。値はライブ参照ではなくその時点の文字列として記録されるため、Unityが再開した後も証拠として有効です。`Debug.Log` を仕込んでコンパイルし直す往復が不要になります。
+
+3つのキャプチャモードがあります。`single-shot`（デフォルト）は最初のヒットで自動解除、`continuous` はヒットのたびに停止して履歴を保持、`trace` は停止せずヒットだけを記録します。watch式（`enable-watch` / `get-watch-values`）を使うと、停止中のStepごとに値が自動で再評価されるため、フレーム単位の変化を追えます。
+
+> [!NOTE]
+> EditorのCode OptimizationモードはDebugである必要があります（Releaseの場合は対処方法を示して拒否されます）。また、コンパイルやドメインリロードが起きるとパッチは解除されるので、その後は仕掛け直してください。
+
+```text
+→ enable-pause-point (File: "Assets/Scripts/Enemy.cs", Line: 42, Await: true,
+                      Trigger: "simulate-keyboard --action Press --key Space")
+→ CapturedVariablesから、その瞬間のローカル変数・引数・フィールドを読み取る
+→ 原因を特定して修正
+```
+
 ## Unity Editor 自動化・探索ツール
-### 4. clear-console - ログのクリーンアップ
+### 5. clear-console - ログのクリーンアップ
 log検索時、ノイズのとなるlogをクリアする事ができます。
 ```text
 → clear-console
 → 新しいデバッグセッションを開始
 ```
 
-### 5. find-game-objects - シーン内オブジェクト検索
+### 6. find-game-objects - シーン内オブジェクト検索
 オブジェクトを取得し、コンポーネントのパラメータを調べます。また、Unity Editorで選択中のGameObject（複数可）の情報も取得できます。
 ```text
 → find-game-objects (RequiredComponents: ["Camera"])
@@ -363,7 +380,7 @@ log検索時、ノイズのとなるlogをクリアする事ができます。
 → Unity Editorで選択中のGameObjectの詳細情報を取得（複数選択対応）
 ```
 
-### 6. get-hierarchy - シーン構造の解析
+### 7. get-hierarchy - シーン構造の解析
 現在アクティブなHierarchyの情報をネストされたJSON形式で取得します。ランタイムでも動作します。
 **自動ファイル出力**: 取得したHierarchyは常に`{project_root}/.uloop/outputs/HierarchyResults/`ディレクトリにJSONとして保存されます。レスポンスにはファイルパスのみが返るため、大量データでもトークン消費を最小限に抑えられます。
 **選択モード**: `uloop get-hierarchy --use-selection` を指定すると、Unity Editorで選択中のGameObjectから階層を取得できます。複数選択にも対応 - 親子両方が選択されている場合、重複を避けるため親のみがルートとして使用されます。
@@ -374,21 +391,26 @@ log検索時、ノイズのとなるlogをクリアする事ができます。
 → パスを手動で指定せずに、選択中のGameObjectの階層を取得
 ```
 
-### 7. focus-window - Unity Editorウィンドウを前面化（macOS / Windows対応）
+### 8. focus-window - Unity Editorウィンドウを前面化（macOS / Windows対応）
 macOS / Windows Editor上で、Unity Editor ウィンドウを最前面に表示させます。
 他アプリにフォーカスが奪われた後でも、視覚的なフィードバックをすぐ確認できます。（Linuxは未対応）
 
-### 8. screenshot - EditorWindowのスクリーンショット
+### 9. screenshot - EditorWindowのスクリーンショット
 任意のEditorWindowのスクリーンショットをPNGとして保存します。ウィンドウ名（タイトルバーに表示されている文字列）を指定してキャプチャできます。
 同じ種類のウィンドウが複数開いている場合（例：Inspectorを3つ開いている場合）、すべてのウィンドウを連番で保存します。
 3つのマッチングモードをサポート: `exact`（デフォルト）、`prefix`、`contains` - すべて大文字小文字を区別しません。
+
+`CaptureMode: rendering` を指定すると、EditorWindowの見た目ではなくGame Viewのレンダリング結果を直接キャプチャします。PlayMode中のゲーム画面を、Editorのウィンドウ枠やスケーリングの影響を受けずに取得したい場合に使います。
+`AnnotateRaycastGrid: true` を併用すると、キャプチャ画像に座標グリッドが重ねて描画されます。画像を見たAIが `raycast` や `simulate-mouse-input` に渡す座標を決めやすくなります。
+
+`uloop set-game-view-size --width 1920 --height 1080` でGame Viewのカスタム解像度を固定できます。`CaptureMode: rendering` の座標系を実行ごとに安定させたいときに使ってください（引数なしで実行すると現在の解像度を取得できます）。
 ```text
 → screenshot (WindowName: "Console")
 → Console画面の状態をPNGで保存
 → AIに視覚的なフィードバックを提供
 ```
 
-### 9. control-play-mode - Play Modeの制御
+### 10. control-play-mode - Play Modeの制御
 Unity EditorのPlay Modeを制御します。Play（再生開始/一時停止解除）、Stop（停止）、Pause（一時停止）の3つのアクションを実行できます。
 ```
 → control-play-mode (Action: Play)
@@ -397,7 +419,7 @@ Unity EditorのPlay Modeを制御します。Play（再生開始/一時停止解
 → 一時停止して状態を確認
 ```
 
-### 10. execute-dynamic-code - 動的C#コード実行
+### 11. execute-dynamic-code - 動的C#コード実行
 Unity Editor内で動的にC#コードを実行します。
 
 **Async対応**:
@@ -412,7 +434,7 @@ Unity Editor内で動的にC#コードを実行します。
 ```
 
 ### PlayMode 自動テスト系ツール
-### 11. simulate-mouse-ui - PlayMode UI要素のマウス操作シミュレーション
+### 12. simulate-mouse-ui - PlayMode UI要素のマウス操作シミュレーション
 PlayMode中のUI要素に対してマウスクリック・長押し・ドラッグをシミュレーションします。EventSystemとExecuteEventsを使ってポインタイベントを直接ディスパッチするため、旧Input System・新Input Systemの両方に依存せず動作します。ゲームロジックがInput Systemを直接読み取る場合（例：`Mouse.current.leftButton.wasPressedThisFrame`）は、`simulate-mouse-input` を使用してください。
 
 6つのアクションに対応: Click、LongPress、Drag（ワンショット）、DragStart/DragMove/DragEnd（分割ドラッグ）
@@ -429,7 +451,7 @@ PlayMode中のUI要素に対してマウスクリック・長押し・ドラッ�
 ```
 https://github.com/user-attachments/assets/c7ee9103-c282-4f90-8b01-64bb17400f3e
 
-### 12. simulate-mouse-input - Input System経由のPlayModeマウス入力シミュレーション
+### 13. simulate-mouse-input - Input System経由のPlayModeマウス入力シミュレーション
 Input System経由でPlayMode中のマウス入力をシミュレーションします。ボタンクリック、マウスデルタ、スクロールホイールを`Mouse.current`に直接注入します。EventSystemのポインタイベントを発火する`simulate-mouse-ui`と異なり、`Mouse.current`を直接読み取るゲームロジック向けのツールです。このツールは Input System パッケージ導入時のみ利用可能で、Player SettingsのActive Input Handlingを`Input System Package (New)`または`Both`に設定する必要があります。
 
 5つのアクションに対応: Click、LongPress、MoveDelta、SmoothDelta、Scroll
@@ -443,7 +465,20 @@ Input System経由でPlayMode中のマウス入力をシミュレーションし
 → simulate-mouse-input (Action: SmoothDelta, DeltaX: 300, DeltaY: 0, Duration: 0.5)
 ```
 
-### 13. simulate-keyboard - PlayModeでのキーボード入力シミュレーション
+### 14. raycast - Game View座標の3D物理ヒット判定
+`Camera.main` からGame Viewの座標へレイを飛ばし、3D物理で何にヒットするかを返します。スクリーンショットの座標にゲームプレイのクリックを送る前に、狙った3Dオブジェクトに当たるかを確認したいときに使います。
+
+座標系は `simulate-mouse-ui` と同じ左上原点なので、注釈付きスクリーンショットから得た座標をそのまま渡せます（呼び出し側でY座標を反転させる必要はありません）。レスポンスには、ヒットしたGameObjectの名前とパス、レイヤー、距離、ヒット位置、ヒット法線が含まれます。
+
+ヒットしなかった場合も `CameraName` / `CameraPath` が返ります。想定外の結果になったときは、まずここを確認してください。シーン内の別のカメラに `MainCamera` タグが付いていると、そちらが `Camera.main` の解決に勝ってしまい、意図した視点からレイが飛んでいない場合があります。
+
+```text
+→ screenshot (CaptureMode: rendering, AnnotateRaycastGrid: true)
+→ raycast (X: 960, Y: 540)
+→ simulate-mouse-input (Action: Click, X: 960, Y: 540)
+```
+
+### 15. simulate-keyboard - PlayModeでのキーボード入力シミュレーション
 Input System経由でPlayMode中のキーボード入力をシミュレーションします。単発のキータップ、長押し、複数キーの同時押し（例：Shift+Wでスプリント）に対応しています。このツールは Input System パッケージ導入時のみ利用可能で、Player SettingsのActive Input Handlingを `Input System Package (New)` または `Both` に設定する必要があります。ゲームコードがInput System API（例: `Keyboard.current[Key.W].isPressed`）で入力を読み取っている必要があり、レガシーの `Input.GetKey()` には対応していません。
 
 3つのアクションに対応: Press（ワンショットタップまたは時間指定ホールド）、KeyDown（キーを押し続ける）、KeyUp（押下中のキーを解放）。`Keyboard.current.spaceKey.wasPressedThisFrame` のような立ち上がり検出には Press を使います。KeyDown は最初の押下エッジを1回だけ発行し、その後は押下状態を保つだけなので、意図的にキーを保持したい場合だけ KeyDown/KeyUp を使います。
@@ -458,7 +493,7 @@ Input System経由でPlayMode中のキーボード入力をシミュレーショ
 → simulate-keyboard (Action: KeyUp, Key: LeftShift)
 ```
 
-### 14. record-input - PlayMode中の入力記録
+### 16. record-input - PlayMode中の入力記録
 PlayMode中のキーボード・マウス入力をフレーム単位でJSONファイルに記録します。Input Systemのデバイス状態差分によりキー押下、マウス移動、クリック、スクロールイベントをキャプチャします。このツールは Input System パッケージ導入時のみ利用可能です。
 
 ```text
@@ -468,7 +503,7 @@ PlayMode中のキーボード・マウス入力をフレーム単位でJSONフ�
 → JSONファイルが .uloop/outputs/InputRecordings/ に保存される
 ```
 
-### 15. replay-input - 記録された入力のPlayMode再生
+### 17. replay-input - 記録された入力のPlayMode再生
 記録されたキーボード・マウス入力をPlayMode中に再生します。JSON記録を読み込み、Input System経由でフレーム単位で入力を注入します。ループ再生と進捗モニタリングに対応しています。このツールは Input System パッケージ導入時のみ利用可能です。
 
 ```text
