@@ -20,6 +20,7 @@ namespace UnityCliLoop.DeadCodeScanner
             bool includeKept = defaults.IncludeKept;
             ReportFormat format = defaults.Format;
             bool failOnHighConfidence = defaults.FailOnHighConfidence;
+            int maxPublicCandidates = defaults.MaxPublicCandidates;
 
             for (int index = 0; index < args.Length; index++)
             {
@@ -78,6 +79,14 @@ namespace UnityCliLoop.DeadCodeScanner
                     continue;
                 }
 
+                if (argument == "--max-public-candidates")
+                {
+                    maxPublicCandidates = ParseMaxPublicCandidates(
+                        ReadValue(args, ref index, argument),
+                        argument);
+                    continue;
+                }
+
                 if (argument == "--help" || argument == "-h")
                 {
                     throw new ArgumentException(CreateHelpText());
@@ -95,7 +104,8 @@ namespace UnityCliLoop.DeadCodeScanner
                 includeTestOnly,
                 includeKept,
                 format,
-                failOnHighConfidence);
+                failOnHighConfidence,
+                maxPublicCandidates);
         }
 
         public static string CreateHelpText()
@@ -113,7 +123,9 @@ namespace UnityCliLoop.DeadCodeScanner
                 "  --include-test-only true|false   Include test-only findings. Defaults to true.",
                 "  --include-kept true|false        Include Unity/reflection-kept findings. Defaults to false.",
                 "  --format table|json              Output format. Defaults to table.",
-                "  --fail-on none|high-confidence   Exit 1 for high confidence findings.");
+                "  --fail-on none|high-confidence   Exit 1 for high confidence findings.",
+                "  --max-public-candidates <n>      Exit 1 when PublicCandidate count exceeds n.",
+                "                                   Negative or omitted disables the limit.");
         }
 
         private static string ReadValue(string[] args, ref int index, string optionName)
@@ -179,6 +191,16 @@ namespace UnityCliLoop.DeadCodeScanner
             }
 
             throw new ArgumentException($"Unsupported fail-on value '{value}'.");
+        }
+
+        private static int ParseMaxPublicCandidates(string value, string optionName)
+        {
+            if (!int.TryParse(value.Trim(), out int parsed))
+            {
+                throw new ArgumentException($"{optionName} expects an integer.");
+            }
+
+            return parsed;
         }
 
         private static bool ParseBoolean(string value, string optionName)

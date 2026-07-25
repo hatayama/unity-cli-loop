@@ -265,21 +265,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Shutdown();
         }
 
-        internal static Action<Process, string> SwapCompileRequestSenderForTests(Action<Process, string> sender)
-        {
-            return ServiceValue.SwapCompileRequestSenderForTests(sender);
-        }
-
         internal static Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]>
             SwapWorkerAssemblyCompilerForTests(
                 Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]> compiler)
         {
             return ServiceValue.SwapWorkerAssemblyCompilerForTests(compiler);
-        }
-
-        internal static void SetResponseTimeoutMillisecondsForTests(int timeoutMilliseconds)
-        {
-            ServiceValue.SetResponseTimeoutMillisecondsForTests(timeoutMilliseconds);
         }
 
         private static void Shutdown()

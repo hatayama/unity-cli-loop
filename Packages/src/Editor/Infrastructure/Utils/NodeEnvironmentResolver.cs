@@ -13,16 +13,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private const int PROCESS_TIMEOUT_MS = 5000;
 
-        /// <summary>
-        /// Finds an executable path using platform-appropriate resolution.
-        /// On Windows, resolves .cmd shims via 'where' command.
-        /// On Unix, resolves via login shell 'which' command.
-        /// </summary>
-        public static string FindExecutablePath(string executableName)
-        {
-            return FindExecutablePathAtPlatform(executableName, UnityEngine.Application.platform);
-        }
-
         internal static string FindExecutablePathAtPlatform(string executableName, RuntimePlatform platform)
         {
             if (IsWindowsEditor(platform))
@@ -177,8 +167,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return null;
         }
 
-        private const string PATH_START_MARKER = "__PATH_START__";
-        private const string PATH_END_MARKER = "__PATH_END__";
         private const string WHICH_START_MARKER = "__WHICH_START__";
         private const string WHICH_END_MARKER = "__WHICH_END__";
         private const string POSIX_FALLBACK_SHELL_PATH = "/bin/sh";
@@ -186,28 +174,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string DIRECTORY_SERVICE_USERS_PATH_PREFIX = "/Users/";
         private const string DIRECTORY_SERVICE_USER_SHELL_ATTRIBUTE = "UserShell";
         private const string DIRECTORY_SERVICE_USER_SHELL_PREFIX = DIRECTORY_SERVICE_USER_SHELL_ATTRIBUTE + ":";
-
-        // Uses markers to extract PATH value, ignoring any banner/echo output from shell startup files
-        internal static string GetLoginShellPathAtPlatform(RuntimePlatform platform)
-        {
-            if (IsWindowsEditor(platform))
-            {
-                return null;
-            }
-
-            string shell = GetUserShell();
-            ProcessStartInfo startInfo = new()            {
-                FileName = shell,
-                Arguments = "-l -i -c \"echo " + PATH_START_MARKER + "; printenv PATH; echo " + PATH_END_MARKER + "\"",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-
-            string output = ExecuteAndGetOutput(startInfo);
-            return ExtractBetweenMarkers(output, PATH_START_MARKER, PATH_END_MARKER);
-        }
 
         internal static string ExtractBetweenMarkers(string output, string startMarker, string endMarker)
         {

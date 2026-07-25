@@ -8,7 +8,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class GameObjectDetails
     {
         public bool Found { get; set; }
-        public string ErrorMessage { get; set; }
         public GameObject GameObject { get; set; }
         public string Name { get; set; }
         public string Path { get; set; }

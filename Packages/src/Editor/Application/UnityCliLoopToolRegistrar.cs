@@ -142,16 +142,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
             ServiceValue = service ?? throw new ArgumentNullException(nameof(service));
         }
 
-        internal static void AddToolsChangedHandler(Action handler)
-        {
-            Service.OnToolsChanged += handler;
-        }
-
-        internal static void RemoveToolsChangedHandler(Action handler)
-        {
-            Service.OnToolsChanged -= handler;
-        }
-
         public static UnityCliLoopToolRegistrarService Service
         {
             get
@@ -183,21 +173,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public static bool IsCustomToolRegistered(string toolName)
         {
             return Service.IsCustomToolRegistered(toolName);
-        }
-
-        public static UnityCliLoopToolRegistry TryGetRegistry()
-        {
-            return Service.TryGetRegistry();
-        }
-
-        public static string GetDebugInfo()
-        {
-            return Service.GetDebugInfo();
-        }
-
-        public static void NotifyToolChanges()
-        {
-            Service.NotifyToolChanges();
         }
     }
 }

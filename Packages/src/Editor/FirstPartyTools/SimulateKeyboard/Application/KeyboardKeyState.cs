@@ -74,12 +74,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _transientKeys.Remove(key);
         }
 
-        public void Clear()
-        {
-            _heldKeys.Clear();
-            _transientKeys.Clear();
-        }
-
         // Keyboard keys are stored as a bitfield, so StateEvent.From captures
         // the entire keyboard state. To support simultaneous key holds, we write
         // ALL currently held keys into every event — not just the target key.
@@ -178,11 +172,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static void UnregisterTransientKey(Key key)
         {
             ServiceValue.UnregisterTransientKey(key);
-        }
-
-        public static void Clear()
-        {
-            ServiceValue.Clear();
         }
 
         public static IReadOnlyList<Key> ClearTrackedKeys()

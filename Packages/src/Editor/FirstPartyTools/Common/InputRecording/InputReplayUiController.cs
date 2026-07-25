@@ -83,7 +83,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     MouseAction.Click,
                     replayFrame.InputPosition,
                     null,
-                    _currentPressTarget?.name,
                     replayFrame.GameViewSize);
                 SimulateMouseUiOverlayState.RequestExpandAnimation();
                 return;
@@ -104,7 +103,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     MouseAction.Click,
                     replayFrame.InputPosition,
                     null,
-                    null,
                     replayFrame.GameViewSize);
             }
         }
@@ -122,7 +120,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     MouseAction.Drag,
                     replayFrame.InputPosition,
                     pressInputPos,
-                    null,
                     replayFrame.GameViewSize);
                 return;
             }
@@ -137,7 +134,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 MouseAction.LongPress,
                 replayFrame.InputPosition,
                 null,
-                _currentPressTarget?.name,
                 replayFrame.GameViewSize);
             SimulateMouseUiOverlayState.UpdateLongPressElapsed(elapsed);
         }

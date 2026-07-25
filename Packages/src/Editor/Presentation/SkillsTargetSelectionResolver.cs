@@ -1,5 +1,4 @@
 using io.github.hatayama.UnityCliLoop.Application;
-using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
@@ -54,11 +53,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 SkillsTarget.Agents => data.IsAgentsSkillsInstalled,
                 _ => false
             };
-        }
-
-        public static SkillInstallState GetInstallState(CliSetupData data, SkillsTarget target)
-        {
-            return data.SelectedTarget == target ? data.SelectedTargetInstallState : SkillInstallState.Missing;
         }
     }
 }

@@ -61,10 +61,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
         void AddServerStateChangedHandler(Action handler);
 
         void RemoveServerStateChangedHandler(Action handler);
-
-        void AddServerStartedHandler(Action handler);
-
-        void RemoveServerStartedHandler(Action handler);
     }
 
     /// <summary>
@@ -234,16 +230,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public void RemoveServerStateChangedHandler(Action handler)
         {
             _controller.RemoveServerStateChangedHandler(handler);
-        }
-
-        public void AddServerStartedHandler(Action handler)
-        {
-            _controller.AddServerStartedHandler(handler);
-        }
-
-        public void RemoveServerStartedHandler(Action handler)
-        {
-            _controller.RemoveServerStartedHandler(handler);
         }
     }
 }

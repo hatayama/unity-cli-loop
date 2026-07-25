@@ -87,11 +87,6 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             LastActivityTime = Time.realtimeSinceStartup;
         }
 
-        public void ClearScroll()
-        {
-            _scrollActiveUntil = 0f;
-        }
-
         public void SetMoveDelta(Vector2 delta)
         {
             _moveAccumulator += delta;
@@ -157,11 +152,6 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public static void SetScrollDirection(int direction)
         {
             ServiceValue.SetScrollDirection(direction);
-        }
-
-        public static void ClearScroll()
-        {
-            ServiceValue.ClearScroll();
         }
 
         public static void SetMoveDelta(Vector2 delta)

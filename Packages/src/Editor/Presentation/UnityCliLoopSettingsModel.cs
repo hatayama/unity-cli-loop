@@ -71,13 +71,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         }
 
         /// <summary>
-        /// Save current UI state to persistent settings
-        /// </summary>
-        public void SaveToSettings()
-        {
-        }
-
-        /// <summary>
         /// Load state from persistent settings (formerly from SessionState)
         /// </summary>
         public void LoadFromSessionState()
@@ -108,17 +101,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         }
 
         /// <summary>
-        /// Exit post-compile mode
-        /// </summary>
-        public void DisablePostCompileMode()
-        {
-            UpdateRuntimeState(runtime => new RuntimeState(
-                isPostCompileMode: false,
-                needsRepaint: runtime.NeedsRepaint,
-                lastServerRunning: runtime.LastServerRunning));
-        }
-
-        /// <summary>
         /// Mark that UI repaint is needed
         /// </summary>
         public void RequestRepaint()
@@ -141,31 +123,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         }
 
         // UIState-specific update methods with persistence
-
-        /// <summary>
-        /// Update MainScrollPosition setting
-        /// </summary>
-        public void UpdateMainScrollPosition(Vector2 position)
-        {
-            UpdateUIState(ui => new UIState(
-                mainScrollPosition: position,
-                showUnityCliLoopSecuritySetting: ui.ShowUnityCliLoopSecuritySetting,
-                showToolSettings: ui.ShowToolSettings,
-                showConfiguration: ui.ShowConfiguration));
-        }
-
-        /// <summary>
-        /// Update ShowUnityCliLoopSecuritySetting setting with persistence
-        /// </summary>
-        public void UpdateShowUnityCliLoopSecuritySetting(bool show)
-        {
-            UpdateUIState(ui => new UIState(
-                mainScrollPosition: ui.MainScrollPosition,
-                showUnityCliLoopSecuritySetting: show,
-                showToolSettings: ui.ShowToolSettings,
-                showConfiguration: ui.ShowConfiguration));
-            _editorSettingsPort.SetShowUnityCliLoopSecuritySetting(show);
-        }
 
         public void UpdateShowToolSettings(bool show)
         {

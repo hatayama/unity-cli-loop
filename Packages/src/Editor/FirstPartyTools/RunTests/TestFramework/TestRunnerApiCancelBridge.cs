@@ -17,21 +17,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static volatile bool _resolved;
         private static MethodInfo _cancelTestRunMethod;
         private static MethodInfo _isRunActiveMethod;
-        private static string _resolveLog;
-
-        /// <summary>
-        /// Resets cached lookup state for unit tests.
-        /// </summary>
-        internal static void ResetResolvedStateForTests()
-        {
-            lock (ResolveLock)
-            {
-                _resolved = false;
-                _cancelTestRunMethod = null;
-                _isRunActiveMethod = null;
-                _resolveLog = null;
-            }
-        }
 
         /// <summary>
         /// True when CancelTestRun(string) was resolved.
@@ -54,15 +39,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 EnsureResolved();
                 return _isRunActiveMethod != null;
-            }
-        }
-
-        internal static string ResolveLogForTests
-        {
-            get
-            {
-                EnsureResolved();
-                return _resolveLog;
             }
         }
 
@@ -117,7 +93,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     TestRunnerApiCancelMethodLookup.Resolve(typeof(TestRunnerApi));
                 _cancelTestRunMethod = cancel;
                 _isRunActiveMethod = isRunActive;
-                _resolveLog = log;
                 _resolved = true;
 
                 if (!string.IsNullOrEmpty(log))

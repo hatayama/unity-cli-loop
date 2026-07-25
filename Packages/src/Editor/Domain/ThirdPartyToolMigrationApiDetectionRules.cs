@@ -188,32 +188,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return RegexMatchesCode(source, CurrentToolContractsNamespaceRegex);
         }
 
-        public static bool ContainsLegacyDomainMetadataApi(string source)
-        {
-            Debug.Assert(source != null, "source must not be null");
-
-            return RegexMatchesCode(source, LegacyDomainMetadataRegex) ||
-                ContainsLegacyDomainHelperApiForAssembly(
-                    source,
-                    hasLegacyAssemblySource: ContainsLegacyToolMigrationMarker(source),
-                    legacyAssemblyAliases: Array.Empty<string>());
-        }
-
-        public static bool ContainsLegacyDomainHelperApiForAssembly(
-            string source,
-            bool hasLegacyAssemblySource,
-            string[] legacyAssemblyAliases)
-        {
-            Debug.Assert(source != null, "source must not be null");
-            Debug.Assert(legacyAssemblyAliases != null, "legacyAssemblyAliases must not be null");
-
-            string[] legacyNamespaceAliases = GetCombinedLegacyNamespaceAliases(source, legacyAssemblyAliases);
-            return ContainsLegacyDomainHelperReference(
-                source,
-                hasLegacyAssemblySource,
-                legacyNamespaceAliases);
-        }
-
         public static bool ContainsCurrentDomainMetadataApi(string source)
         {
             Debug.Assert(source != null, "source must not be null");
@@ -324,19 +298,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 canMigrateBareLegacyEditorWindowCaptureUtility,
                 assemblyDeclaredTypeNames,
                 requiresTimeoutArgumentMigration: true);
-        }
-
-        public static bool ContainsCurrentFirstPartyScreenshotApi(string source)
-        {
-            Debug.Assert(source != null, "source must not be null");
-
-            bool hasCurrentFirstPartyToolsNamespaceUsage =
-                RegexMatchesCode(source, CurrentFirstPartyToolsNamespaceRegex);
-            return ContainsCurrentFirstPartyScreenshotApiForAssembly(
-                source,
-                hasCurrentFirstPartyToolsNamespaceUsage,
-                Array.Empty<string>(),
-                Array.Empty<string>());
         }
 
         public static bool ContainsCurrentFirstPartyScreenshotApiForAssembly(
