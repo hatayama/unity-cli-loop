@@ -273,7 +273,7 @@ uloop execute-dynamic-code --code 'using UnityEngine; Debug.Log("Hello from CLI!
 
 ## プロジェクトパス指定
 
-`--project-path` を省略した場合は、カレントディレクトリの Unity プロジェクトで設定されたポートが自動選択されます。
+`--project-path` を省略した場合は、カレントディレクトリから Unity プロジェクトを検出して接続します。
 
 一つのLLMツールから複数のUnityインスタンスを操作したい場合、プロジェクトパスを明示的に指定します：
 
@@ -660,6 +660,9 @@ description: "ツールの説明と使用タイミング"
 
 完全な例は [HelloWorld サンプル](/Assets/Editor/CustomCommandSamples/HelloWorld/Skill/SKILL.md) を参照してください。
 
+> [!IMPORTANT]
+> **V2でカスタムツールやカスタムスキルを作っていた場合**、V3に上げると拡張APIの名前空間と型名が変わるため、**必ずコンパイルエラーが発生します**。これは想定内の挙動で、内蔵の移行ウィザードが該当ファイルを自動で書き換えます。手作業で直し始める前に、[カスタムツール／スキルのV3移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md) を参照してください。
+
 ## その他
 
 ### Unity CLI Loop 関連ファイル
@@ -670,6 +673,7 @@ description: "ツールの説明と使用タイミング"
 
 | ファイル | 用途 | git管理 |
 |---------|------|---------|
+| `project-runner-pin.json` | グローバルdispatcherが使うproject runnerのバージョン契約 | Yes |
 | `settings.tools.json` | ツールごとの有効・無効設定 | 任意 |
 | `tools.json` | 自動生成されるCLIツールレジストリ | No |
 | `outputs/` | ランタイム出力（テスト結果、スクリーンショット、ヒエラルキーダンプ） | No |
@@ -679,10 +683,11 @@ description: "ツールの説明と使用タイミング"
 >
 > ```gitignore
 > **/.uloop/*
+> !**/.uloop/project-runner-pin.json
 > !**/.uloop/settings.tools.json
 > ```
 >
-> 自動生成ファイルやランタイム出力を無視しつつ、チーム共有の設定ファイルをgit管理できます。
+> 自動生成ファイルやランタイム出力を無視しつつ、dispatcherのpinとチーム共有の設定ファイルをgit管理できます。
 > ツールの有効・無効設定を共有しない場合は、`!` の行を削除してください。
 
 ## ライセンス
