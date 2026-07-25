@@ -1,0 +1,45 @@
+name: Dead Code
+
+on:
+  pull_request:
+    branches: [ main, v3-beta ]
+    paths:
+      - 'Packages/src/**/*.cs'
+      - 'tools/UnityCliLoop.DeadCodeScanner/**'
+      - 'tests/UnityCliLoop.DeadCodeScanner.Tests/**'
+      - 'scripts/check-dead-code.sh'
+      - '.github/workflows/dead-code.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dead-code:
+    name: Dead Code Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test dead code scanner
+        run: dotnet test tests/UnityCliLoop.DeadCodeScanner.Tests/UnityCliLoop.DeadCodeScanner.Tests.csproj --configuration Release
+
+      - name: Scan for dead code
+        run: >
+          scripts/check-dead-code.sh
+          --root .
+          --scope public
+          --include-types true
+          --include-members true
+          --include-locals true
+          --include-test-only true
+          --include-kept false
+          --format table
+          --fail-on high-confidence
