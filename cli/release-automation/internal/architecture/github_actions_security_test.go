@@ -61,6 +61,32 @@ func TestPullRequestWorkflowsDisableSetupGoCache(t *testing.T) {
 	}
 }
 
+// Tests that checkout does not persist GITHUB_TOKEN in pull request workflows.
+func TestPullRequestWorkflowsDisableCredentialPersistence(t *testing.T) {
+	repositoryRoot := findRepositoryRoot(t)
+	violations := []string{}
+	for _, workflowPath := range workflowFilePaths(t, repositoryRoot) {
+		lines := readWorkflowLines(t, workflowPath)
+		if !workflowRunsOnPullRequest(lines) {
+			continue
+		}
+		for lineIndex, line := range lines {
+			actionRef, ok := parseUsesAction(line)
+			if !ok || actionRepository(actionRef) != "actions/checkout" {
+				continue
+			}
+			if stepContains(lines, lineIndex, "persist-credentials: false") {
+				continue
+			}
+			violations = append(violations, workflowViolation(repositoryRoot, workflowPath, lineIndex, actionRef, "set persist-credentials: false for checkout in pull request workflows"))
+		}
+	}
+	if len(violations) > 0 {
+		sort.Strings(violations)
+		t.Fatalf("pull request checkout credential persistence policy violations:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
 // Tests that pull request workflow cache actions are guarded behind trusted Unity secrets.
 func TestPullRequestWorkflowCacheActionsRequireTrustedUnitySecrets(t *testing.T) {
 	repositoryRoot := findRepositoryRoot(t)
