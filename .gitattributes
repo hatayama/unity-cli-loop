@@ -8,3 +8,6 @@
 *.json text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+
+# Binary assets must never be run through end-of-line conversion.
+*.png -text
