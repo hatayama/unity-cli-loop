@@ -8,7 +8,7 @@ When updating a pinned action:
 
 1. Resolve the intended upstream tag to a commit SHA.
 2. Replace the workflow `uses:` ref with the full 40-character SHA.
-3. Run `go test ./internal/architecture -run 'TestWorkflowActions|TestPullRequestWorkflow' -count=1` from `cli`.
+3. Run `go test ./internal/architecture -run 'TestWorkflowActions|TestPullRequestWorkflow' -count=1` from `cli/release-automation`.
 
 For nested action paths such as `github/codeql-action/upload-sarif`, resolve the
 tag against the action repository, not the nested action path.
