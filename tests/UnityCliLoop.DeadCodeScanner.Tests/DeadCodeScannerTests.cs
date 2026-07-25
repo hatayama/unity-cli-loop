@@ -293,6 +293,26 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 && issue.FullName.Contains("ShouldSerializeOptionalNote", StringComparison.Ordinal)), Is.False);
         }
 
+        /// <summary>
+        /// Verifies that a ShouldSerialize* method without a matching property/field is not kept.
+        /// </summary>
+        [Test]
+        public async Task ScanAsync_WhenShouldSerializeMethodHasNoMatchingMember_ShouldNotReportKept()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: true);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.KeptByUnityOrReflection
+                && issue.FullName.Contains("ShouldSerializeMissingMember", StringComparison.Ordinal)), Is.False);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("ShouldSerializeMissingMember", StringComparison.Ordinal)), Is.True);
+        }
+
         private static ScanOptions CreatePublicScopeOptions(string rootPath, bool includeKept)
         {
             return new ScanOptions(
@@ -396,6 +416,11 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                         public bool ShouldSerializeOptionalNote()
                         {
                             return !string.IsNullOrEmpty(OptionalNote);
+                        }
+
+                        public bool ShouldSerializeMissingMember()
+                        {
+                            return false;
                         }
                     }
 

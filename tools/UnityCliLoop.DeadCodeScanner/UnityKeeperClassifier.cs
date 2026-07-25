@@ -183,8 +183,22 @@ namespace UnityCliLoop.DeadCodeScanner
             }
 
             const string Prefix = "ShouldSerialize";
-            return methodSymbol.Name.StartsWith(Prefix, StringComparison.Ordinal)
-                && methodSymbol.Name.Length > Prefix.Length;
+            if (!methodSymbol.Name.StartsWith(Prefix, StringComparison.Ordinal)
+                || methodSymbol.Name.Length <= Prefix.Length)
+            {
+                return false;
+            }
+
+            // Why: Newtonsoft only invokes ShouldSerialize{PropertyName} when that member exists.
+            // Keeping every ShouldSerialize* name would let dead methods silence the scanner.
+            if (methodSymbol.ContainingType == null)
+            {
+                return false;
+            }
+
+            string propertyName = methodSymbol.Name.Substring(Prefix.Length);
+            return methodSymbol.ContainingType.GetMembers(propertyName)
+                .Any(member => member is IPropertySymbol || member is IFieldSymbol);
         }
 
         private static bool IsAwaiterType(ITypeSymbol typeSymbol)
