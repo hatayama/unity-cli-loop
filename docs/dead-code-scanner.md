@@ -50,5 +50,5 @@ and do not add scanner-silencing machinery that changes the public API surface.
 | `UnityCliLoopToolRegistrar.IsCustomToolRegistered` | Same public extension API. |
 | `UnityCliLoopToolRegistrar.GetDebugInfo` | Same public extension API. |
 | `UnityCliLoopToolRegistrar.NotifyToolChanges` | Same public extension API. |
-| `EditorWindowCaptureUtility.CaptureGameRenderingAsync` | Migration target: `ThirdPartyToolMigrationRuleCatalog` rewrites third-party tool code to call this façade, so user code outside this repository is the caller. |
+| `ToolContracts.EditorWindowCaptureUtility.CaptureGameRenderingAsync` | Migration target: `ThirdPartyToolMigrationRuleCatalog` rewrites third-party tool code to call this façade, so user code outside this repository is the caller. |
 | `ExecuteDynamicCodeResponse.Error` | Documented tool response field (`ExecuteDynamicCode` Skill). Outbound JSON shape, not an in-repo read. |
