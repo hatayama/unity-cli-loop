@@ -159,17 +159,7 @@ namespace UnityCliLoop.DeadCodeScanner
 
         private static bool IsAwaiterType(ITypeSymbol typeSymbol)
         {
-            foreach (INamedTypeSymbol interfaceType in typeSymbol.AllInterfaces)
-            {
-                if (!IsCompilerServicesAwaiterInterface(interfaceType))
-                {
-                    continue;
-                }
-
-                return true;
-            }
-
-            return false;
+            return typeSymbol.AllInterfaces.Any(IsCompilerServicesAwaiterInterface);
         }
 
         private static bool IsCompilerServicesAwaiterInterface(INamedTypeSymbol interfaceType)

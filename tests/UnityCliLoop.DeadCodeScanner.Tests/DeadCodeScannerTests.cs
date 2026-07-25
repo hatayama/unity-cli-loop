@@ -173,17 +173,27 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
         }
 
         /// <summary>
-        /// Verifies that compiler-bound awaiter members are not reported as PublicCandidate.
+        /// Verifies that compiler-bound awaiter members are kept as KeptByUnityOrReflection
+        /// and are not reported as PublicCandidate.
         /// </summary>
         [Test]
-        public async Task ScanAsync_WhenAwaitPatternMembersHaveNoDirectReferences_ShouldNotReportPublicCandidate()
+        public async Task ScanAsync_WhenAwaitPatternMembersHaveNoDirectReferences_ShouldReportKeptAndNotPublicCandidate()
         {
             DeadCodeScanner scanner = new();
-            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: false);
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: true);
 
             System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
                 await scanner.ScanAsync(options, CancellationToken.None);
 
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.KeptByUnityOrReflection
+                && issue.FullName.Contains("SampleAwaitable.Awaiter.IsCompleted", StringComparison.Ordinal)), Is.True);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.KeptByUnityOrReflection
+                && issue.FullName.Contains("SampleAwaitable.Awaiter.GetResult", StringComparison.Ordinal)), Is.True);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.KeptByUnityOrReflection
+                && issue.FullName.Contains("SampleAwaitable.GetAwaiter", StringComparison.Ordinal)), Is.True);
             Assert.That(issues.Any(issue =>
                 issue.Category == DeadCodeCategory.PublicCandidate
                 && issue.FullName.Contains("SampleAwaitable.Awaiter.IsCompleted", StringComparison.Ordinal)), Is.False);
@@ -196,17 +206,21 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
         }
 
         /// <summary>
-        /// Verifies that the IsExternalInit polyfill type is not reported as PublicCandidate.
+        /// Verifies that the IsExternalInit polyfill type is kept as KeptByUnityOrReflection
+        /// and is not reported as PublicCandidate.
         /// </summary>
         [Test]
-        public async Task ScanAsync_WhenIsExternalInitPolyfillHasNoDirectReferences_ShouldNotReportPublicCandidate()
+        public async Task ScanAsync_WhenIsExternalInitPolyfillHasNoDirectReferences_ShouldReportKeptAndNotPublicCandidate()
         {
             DeadCodeScanner scanner = new();
-            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: false);
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: true);
 
             System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
                 await scanner.ScanAsync(options, CancellationToken.None);
 
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.KeptByUnityOrReflection
+                && issue.FullName.Contains("IsExternalInit", StringComparison.Ordinal)), Is.True);
             Assert.That(issues.Any(issue =>
                 issue.Category == DeadCodeCategory.PublicCandidate
                 && issue.FullName.Contains("IsExternalInit", StringComparison.Ordinal)), Is.False);
