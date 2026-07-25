@@ -139,15 +139,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 false,
                 "/bin/zsh");
 
-            AssertProgressLinesInStageOrder(posixCommand.ManualCommand, "echo");
-            AssertProgressLinesInStageOrder(windowsCommand.ManualCommand, "Write-Output");
+            AssertProgressLinesInStageOrder(
+                posixCommand.ManualCommand,
+                message => EscapeInnerPosixSingleQuotes($"echo '{message}'"));
+            AssertProgressLinesInStageOrder(
+                windowsCommand.ManualCommand,
+                message => $"Write-Output '{message}'");
         }
 
-        private static void AssertProgressLinesInStageOrder(string manualCommand, string printCommand)
+        // Why: POSIX ManualCommand is wrapped by BuildLoginShellPosixInstallScriptCommand into
+        // /bin/sh -c '<inner>', which escapes each inner single quote as '"'"'. Expected progress
+        // substrings must apply the same transform or IndexOf will miss the escaped echo lines.
+        private static string EscapeInnerPosixSingleQuotes(string value)
         {
-            int downloadIndex = manualCommand.IndexOf($"{printCommand} 'Downloading installer script...'", System.StringComparison.Ordinal);
-            int verifyIndex = manualCommand.IndexOf($"{printCommand} 'Verifying installer script digest...'", System.StringComparison.Ordinal);
-            int startIndex = manualCommand.IndexOf($"{printCommand} 'Starting install script...'", System.StringComparison.Ordinal);
+            return value.Replace("'", "'\"'\"'");
+        }
+
+        private static void AssertProgressLinesInStageOrder(
+            string manualCommand,
+            System.Func<string, string> buildExpectedProgressLine)
+        {
+            int downloadIndex = manualCommand.IndexOf(
+                buildExpectedProgressLine("Downloading installer script..."),
+                System.StringComparison.Ordinal);
+            int verifyIndex = manualCommand.IndexOf(
+                buildExpectedProgressLine("Verifying installer script digest..."),
+                System.StringComparison.Ordinal);
+            int startIndex = manualCommand.IndexOf(
+                buildExpectedProgressLine("Starting install script..."),
+                System.StringComparison.Ordinal);
 
             Assert.That(downloadIndex, Is.GreaterThanOrEqualTo(0));
             Assert.That(verifyIndex, Is.GreaterThan(downloadIndex));
