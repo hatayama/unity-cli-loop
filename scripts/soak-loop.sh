@@ -30,8 +30,9 @@ set -u
 #              release configuration; point at a dist/ binary to soak unreleased CLI code)
 #
 # Prerequisites:
-#   - Unity Editor already running with the target project open
 #   - uloop package installed in the target project
+#   - Unity Editor may or may not be running: a busy editor is waited on, and
+#     a missing one is launched via `uloop launch`
 #
 # All generated files live under Assets/UloopSoak/ in the target project (the
 # recompile scratch script, the PlayMode ticker script, and the pause-point
@@ -52,7 +53,7 @@ SLEEP_SECONDS=0
 OUT_DIR=""
 
 usage() {
-    sed -n '/^# Usage:/,/^#   - uloop package installed/p' "$0"
+    sed -n '/^# Usage:/,/^#     a missing one is launched/p' "$0"
     exit 1
 }
 
@@ -306,8 +307,20 @@ log "restart-every=$RESTART_EVERY force-every=$FORCE_EVERY pause-every=$PAUSE_EV
 
 # A freshly launched editor can be busy importing/compiling for a long time
 # (especially on large projects), so the preflight polls instead of one-shotting.
+# No response can mean either a busy editor or no editor at all: launching over
+# a busy editor would be wrong, and waiting 15 minutes for an editor that was
+# never started would be wasted, so the two cases are told apart by whether a
+# Unity process has this project open.
 if ! run_uloop get-logs --max-count 1 > /dev/null 2>&1; then
-    log "Editor not answering yet — waiting up to 15 minutes (is Unity running with this project open?)"
+    if ps ax -o args= | grep -F "$PROJECT_PATH" | grep -F "Unity" | grep -v grep > /dev/null; then
+        log "Editor busy — waiting up to 15 minutes for it to answer"
+    else
+        log "Editor not running — launching it with uloop launch"
+        if ! timed 0 launch-start launch; then
+            log "Preflight failed: could not launch the editor."
+            exit 1
+        fi
+    fi
     if ! wait_for_editor; then
         log "Preflight failed: uloop cannot reach the editor."
         exit 1

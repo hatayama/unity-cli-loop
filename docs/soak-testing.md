@@ -11,9 +11,11 @@ point it at a large production project for the most realistic signal.
 
 ## Prerequisites
 
-- Unity Editor already running with the target project open.
 - The uloop package installed in the target project, and a `uloop` dispatcher
   on `PATH` (or set `ULOOP_BIN`, see below).
+- The Unity Editor does not have to be running: if no editor has the target
+  project open, the harness launches one via `uloop launch`; a running but
+  busy editor (importing/compiling) is waited on for up to 15 minutes.
 - `jq`, when the PlayMode cycle is enabled (`--pause-every` > 0).
 - macOS or Linux. The harness is POSIX sh but samples metrics with
   `ps`/`pgrep`/`perl`; it is not expected to run on Windows.
