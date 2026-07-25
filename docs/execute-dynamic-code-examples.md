@@ -50,11 +50,13 @@ GameObject を作って名前を返す。
 uloop execute-dynamic-code --code 'using UnityEngine; GameObject go = new GameObject("SampleCube"); go.AddComponent<BoxCollider>(); return go.name;'
 ```
 
-パラメータ付きで掛け算する。
+パラメータ付きで掛け算する。`--parameters` には JSON オブジェクトを渡し、コード側からは `parameters["param0"]`, `parameters["param1"]` の順で参照する。値は `object` として届くので数値は `System.Convert` を挟む。
 
 ```sh
-uloop execute-dynamic-code --code 'int a = (int)parameters[0]; int b = (int)parameters[1]; return a * b;' --parameters '[6,7]'
+uloop execute-dynamic-code --code 'int a = System.Convert.ToInt32(parameters["param0"]); int b = System.Convert.ToInt32(parameters["param1"]); return a * b;' --parameters '{"param0":6,"param1":7}'
 ```
+
+`--parameters` は上級者向けで、ほとんどのスニペットでは不要。同じスニペットをデータだけ変えて使い回すとき以外は省略する。
 
 ## Medium Examples
 
