@@ -439,7 +439,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public async Task WaitForUninstallCompletionAsync_WhenTargetRemainsReportsTimeout()
         {
-            // Verifies uninstall completion reports the launcher path when deferred self-removal times out.
+            // Verifies uninstall completion reports the dispatcher path when deferred self-removal times out.
             string targetPath = "C:\\Users\\ExampleUser\\Programs\\uloop\\bin\\uloop.exe";
             int delayCount = 0;
 
@@ -463,7 +463,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public async Task WaitForUninstallCompletionAsync_WhenTargetIsRemovedReturnsSuccess()
         {
-            // Verifies uninstall completion succeeds as soon as deferred launcher self-removal finishes.
+            // Verifies uninstall completion succeeds as soon as deferred dispatcher self-removal finishes.
 
             CliInstallResult result = await NativeCliUninstallCompletionWaiter.WaitForUninstallCompletionAsync(
                 "C:\\Users\\ExampleUser\\Programs\\uloop\\bin\\uloop.exe",
@@ -486,7 +486,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void BuildUninstallCommand_OnMacRunsInstalledLauncher()
+        public void BuildUninstallCommand_OnMacRunsInstalledDispatcher()
         {
             // Verifies that editor uninstall delegates removal to the installed uloop command.
             NativeCliInstallCommand command = NativeCliCommandBuilder.BuildUninstallCommand(
@@ -499,7 +499,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void BuildUninstallCommand_OnWindowsRunsInstalledLauncher()
+        public void BuildUninstallCommand_OnWindowsRunsInstalledDispatcher()
         {
             // Verifies that Windows editor uninstall delegates removal to the installed uloop command.
             NativeCliInstallCommand command = NativeCliCommandBuilder.BuildUninstallCommand(

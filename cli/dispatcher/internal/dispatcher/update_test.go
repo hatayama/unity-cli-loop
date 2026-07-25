@@ -324,7 +324,7 @@ func TestUpdateExecutionArgsRunsDownloadedInstallerFile(t *testing.T) {
 }
 
 func TestTryHandleUpdateRequestReportsVersionChange(t *testing.T) {
-	// Verifies manual dispatcher updates tell users which launcher version was installed.
+	// Verifies manual dispatcher updates tell users which dispatcher version was installed.
 	skipWhenNativeUpdateIsUnsupported(t)
 	restoreUpdateHooks := stubManualUpdateHooks(t, "9.9.9")
 	defer restoreUpdateHooks()
@@ -336,7 +336,7 @@ func TestTryHandleUpdateRequestReportsVersionChange(t *testing.T) {
 	if !handled || code != 0 {
 		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
 	}
-	expected := "uloop launcher updated from " + dispatcherVersion + " to 9.9.9."
+	expected := "uloop dispatcher updated from " + dispatcherVersion + " to 9.9.9."
 	if !bytes.Contains(stdout.Bytes(), []byte(expected)) {
 		t.Fatalf("update output mismatch: %s", stdout.String())
 	}
@@ -346,7 +346,7 @@ func TestTryHandleUpdateRequestReportsVersionChange(t *testing.T) {
 }
 
 func TestTryHandleUpdateRequestReportsAlreadyCurrentVersion(t *testing.T) {
-	// Verifies manual dispatcher updates explain when the selected release matches the installed launcher.
+	// Verifies manual dispatcher updates explain when the selected release matches the installed dispatcher.
 	skipWhenNativeUpdateIsUnsupported(t)
 	restoreUpdateHooks := stubManualUpdateHooks(t, dispatcherVersion)
 	defer restoreUpdateHooks()
@@ -358,7 +358,7 @@ func TestTryHandleUpdateRequestReportsAlreadyCurrentVersion(t *testing.T) {
 	if !handled || code != 0 {
 		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
 	}
-	expected := "uloop launcher is already up to date at " + dispatcherVersion + "."
+	expected := "uloop dispatcher is already up to date at " + dispatcherVersion + "."
 	if !bytes.Contains(stdout.Bytes(), []byte(expected)) {
 		t.Fatalf("update output mismatch: %s", stdout.String())
 	}

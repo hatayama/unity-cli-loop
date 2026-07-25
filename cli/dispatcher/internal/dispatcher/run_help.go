@@ -43,11 +43,11 @@ func printHelpForResolvedProject(stdout io.Writer, explicitProjectPath string) {
 	printMainHelp(stdout, clicontract.ProjectRunnerVersion(), nativeCLIDescription, cache, ok)
 }
 
-func printLauncherHelp(stdout io.Writer) {
+func printDispatcherHelp(stdout io.Writer) {
 	printMainHelp(
 		stdout,
 		dispatcherVersion,
-		"Dispatcher launcher. Finds the Unity project, then dispatches live Unity tool commands.",
+		"Dispatcher. Finds the Unity project, then dispatches live Unity tool commands.",
 		clicore.ToolsCache{},
 		false)
 }

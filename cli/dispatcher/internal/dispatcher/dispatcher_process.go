@@ -22,7 +22,7 @@ func tryHandleProjectScopeHelpRequest(args []string, projectPath string, stdout 
 
 func tryHandleDispatcherInfoRequest(args []string, stdout io.Writer) (bool, int) {
 	if len(args) == 0 || clicore.IsHelpRequest(args) {
-		printLauncherHelp(stdout)
+		printDispatcherHelp(stdout)
 		return true, 0
 	}
 	if clicore.IsVersionJSONRequest(args) {

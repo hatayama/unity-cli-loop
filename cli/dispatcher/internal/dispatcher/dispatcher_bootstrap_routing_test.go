@@ -16,7 +16,7 @@ import (
 // project pin, so each test runs from an empty working directory where any
 // accidental forwarding would fail with a pin resolution error.
 
-// Verifies the global launcher reports dispatcher identity fields in JSON version output.
+// Verifies the global dispatcher reports dispatcher identity fields in JSON version output.
 func TestRunDispatcherVersionJSONReportsDispatcherIdentity(t *testing.T) {
 	t.Chdir(t.TempDir())
 
@@ -102,7 +102,7 @@ func TestRunDispatcherUpdateRunsInDispatcherProcess(t *testing.T) {
 	if !updateExecuted {
 		t.Fatal("expected update to run in the dispatcher process")
 	}
-	if !strings.Contains(stdout.String(), "Updating global uloop launcher") {
+	if !strings.Contains(stdout.String(), "Updating global uloop dispatcher") {
 		t.Fatalf("update output mismatch: %s", stdout.String())
 	}
 }

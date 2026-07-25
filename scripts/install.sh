@@ -399,7 +399,7 @@ test_uloop_native_install_supported() {
 invoke_uloop_native_install() {
   uloop_path=$1
 
-  echo "Configuring global uloop launcher..."
+  echo "Configuring global uloop dispatcher..."
   "$uloop_path" install --dir "$INSTALL_DIR"
 }
 
