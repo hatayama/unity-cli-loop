@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.0.0-beta.64](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.63...v3.0.0-beta.64) (2026-07-24)
+
+
+### Features
+
+* Unify skills setup UI into a shared panel for settings and setup wizard ([#1982](https://github.com/hatayama/unity-cli-loop/issues/1982)) ([eeb7aaa](https://github.com/hatayama/unity-cli-loop/commit/eeb7aaac66d881fc8573ff83a1f784926bb20711))
+
+
+### Bug Fixes
+
+* Compress redundant prose in distributed skills ([#1978](https://github.com/hatayama/unity-cli-loop/issues/1978)) ([3b242a3](https://github.com/hatayama/unity-cli-loop/commit/3b242a33f6a3fc929f4a3ec62b1061115e1860f7))
+* Improve skills setup panel empty state and refresh scoping ([#1983](https://github.com/hatayama/unity-cli-loop/issues/1983)) ([caeb079](https://github.com/hatayama/unity-cli-loop/commit/caeb0799d78331162e1cae5c0572c8fc2ed6aa81))
+* Tighten v3 migration skill guidance and align wizard prompt ([#1981](https://github.com/hatayama/unity-cli-loop/issues/1981)) ([7c8a4a2](https://github.com/hatayama/unity-cli-loop/commit/7c8a4a20a7cda853a9ddfdf966fa24c4ccfc5609))
+
 ## [3.0.0-beta.63](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.62...v3.0.0-beta.63) (2026-07-24)
 
 
