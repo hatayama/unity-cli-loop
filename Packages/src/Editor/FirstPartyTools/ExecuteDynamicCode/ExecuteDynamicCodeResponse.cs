@@ -25,6 +25,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string ErrorMessage { get; set; }
 
         /// <summary>
+        /// Error message alias for ErrorMessage.
+        /// Why keep: documented tool-response JSON field (Skill/SKILL.md); agents and CLI read it.
+        /// </summary>
+        public string Error
+        {
+            get => ErrorMessage;
+            set => ErrorMessage = value;
+        }
+
+        /// <summary>
         /// Code formatted for compilation
         /// (After extracting/moving using statements and applying class/method wrapping)
         /// Allows checking the actual compiled code during debugging
