@@ -21,7 +21,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly Foldout _installSpecificTargetFoldout;
         private readonly VisualElement _groupSkillsRow;
         private readonly Toggle _groupSkillsToggle;
-        private readonly Label _groupSkillsLabel;
         private readonly EnumField _skillsTargetField;
         private readonly Button _refreshSkillsStateButton;
         private readonly Button _installSelectedSkillsButton;
@@ -51,7 +50,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _installSpecificTargetFoldout = root.Q<Foldout>("install-specific-target-foldout");
             _groupSkillsRow = root.Q<VisualElement>("group-skills-row");
             _groupSkillsToggle = root.Q<Toggle>("group-skills-toggle");
-            _groupSkillsLabel = root.Q<Label>("group-skills-label");
             _skillsTargetField = root.Q<EnumField>("skills-target-field");
             _installSelectedSkillsButton = root.Q<Button>("install-selected-skills-button");
 
@@ -63,7 +61,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             Debug.Assert(_installSpecificTargetFoldout != null, "install-specific-target-foldout must not be null");
             Debug.Assert(_groupSkillsRow != null, "group-skills-row must not be null");
             Debug.Assert(_groupSkillsToggle != null, "group-skills-toggle must not be null");
-            Debug.Assert(_groupSkillsLabel != null, "group-skills-label must not be null");
             Debug.Assert(_skillsTargetField != null, "skills-target-field must not be null");
             Debug.Assert(_installSelectedSkillsButton != null, "install-selected-skills-button must not be null");
 
@@ -76,7 +73,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new System.ArgumentNullException(nameof(_installSpecificTargetFoldout));
             _ = _groupSkillsRow ?? throw new System.ArgumentNullException(nameof(_groupSkillsRow));
             _ = _groupSkillsToggle ?? throw new System.ArgumentNullException(nameof(_groupSkillsToggle));
-            _ = _groupSkillsLabel ?? throw new System.ArgumentNullException(nameof(_groupSkillsLabel));
             _ = _skillsTargetField ?? throw new System.ArgumentNullException(nameof(_skillsTargetField));
             _ = _installSelectedSkillsButton
                 ?? throw new System.ArgumentNullException(nameof(_installSelectedSkillsButton));

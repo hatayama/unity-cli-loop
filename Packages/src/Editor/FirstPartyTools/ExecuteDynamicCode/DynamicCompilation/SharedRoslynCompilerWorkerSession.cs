@@ -20,7 +20,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private readonly SharedRoslynCompilerWorkerSessionCoordination _coordination = new();
         private Func<ProcessStartInfo, Process> _startProcess = ProcessStartHelper.TryStart;
-        private Action<Process, string> _sendCompileRequest = SendCompileRequestCore;
         private Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]>
             _compileWorkerAssemblyForTests;
         private Process _workerProcess;
@@ -104,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void SendCompileRequestLocked(string requestFilePath)
         {
             AssertStateLockHeld();
-            _sendCompileRequest(_workerProcess, requestFilePath);
+            SendCompileRequestCore(_workerProcess, requestFilePath);
         }
 
         internal StreamReader GetOutputReaderLocked()
