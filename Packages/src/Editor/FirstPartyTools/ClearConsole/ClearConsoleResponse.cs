@@ -41,28 +41,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Message = message ?? string.Empty;
             ErrorMessage = string.Empty;
         }
-
-        /// <summary>
-        /// Create a new ClearConsoleResponse for failed operation
-        /// </summary>
-        public ClearConsoleResponse(string errorMessage)
-        {
-            Success = false;
-            ClearedLogCount = 0;
-            ClearedCounts = new ClearedLogCounts();
-            Message = string.Empty;
-            ErrorMessage = errorMessage ?? string.Empty;
-        }
-
-        /// <summary>
-        /// Parameterless constructor for JSON deserialization
-        /// </summary>
-        public ClearConsoleResponse()
-        {
-            ClearedCounts = new ClearedLogCounts();
-            Message = string.Empty;
-            ErrorMessage = string.Empty;
-        }
     }
 
     /// <summary>

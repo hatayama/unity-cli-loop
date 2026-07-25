@@ -25,8 +25,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private Action? _pendingDeltaReset;
         private Action? _pendingScrollReset;
 
-        public bool IsButtonHeld(RuntimeMouseButton button) => _heldButtons.Contains(button);
-
         public void RegisterPlayModeCallbacks()
         {
             EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
@@ -236,8 +234,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             ServiceValue.RegisterPlayModeCallbacks();
         }
-
-        public static bool IsButtonHeld(RuntimeMouseButton button) => ServiceValue.IsButtonHeld(button);
 
         public static void SetButtonDown(RuntimeMouseButton button)
         {

@@ -14,7 +14,6 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public MouseAction Action { get; private set; }
         public Vector2 CurrentPosition { get; private set; }
         public Vector2? DragStartPosition { get; private set; }
-        public string? HitGameObjectName { get; private set; }
 
         // Screen.width/height at the time positions were recorded (Editor context may differ from Game context)
         public Vector2 SourceScreenSize { get; private set; }
@@ -36,7 +35,6 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             MouseAction action,
             Vector2 currentPosition,
             Vector2? dragStartPosition,
-            string? hitGameObjectName,
             Vector2 sourceScreenSize)
         {
             // PlayDissipateAnimation calls Clear() on normal completion, but a cancelled or stuck drag
@@ -50,7 +48,6 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             Action = action;
             CurrentPosition = currentPosition;
             DragStartPosition = dragStartPosition;
-            HitGameObjectName = hitGameObjectName;
             SourceScreenSize = sourceScreenSize;
         }
 
@@ -113,7 +110,6 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             Action = default;
             CurrentPosition = Vector2.zero;
             DragStartPosition = null;
-            HitGameObjectName = null;
             SourceScreenSize = Vector2.zero;
             LongPressElapsed = 0f;
             _dragWaypoints.Clear();
@@ -132,7 +128,6 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public static MouseAction Action => ServiceValue.Action;
         public static Vector2 CurrentPosition => ServiceValue.CurrentPosition;
         public static Vector2? DragStartPosition => ServiceValue.DragStartPosition;
-        public static string? HitGameObjectName => ServiceValue.HitGameObjectName;
         public static Vector2 SourceScreenSize => ServiceValue.SourceScreenSize;
         public static float LongPressElapsed => ServiceValue.LongPressElapsed;
         public static IReadOnlyList<Vector2> DragWaypoints => ServiceValue.DragWaypoints;
@@ -141,10 +136,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             MouseAction action,
             Vector2 currentPosition,
             Vector2? dragStartPosition,
-            string? hitGameObjectName,
             Vector2 sourceScreenSize)
         {
-            ServiceValue.Update(action, currentPosition, dragStartPosition, hitGameObjectName, sourceScreenSize);
+            ServiceValue.Update(action, currentPosition, dragStartPosition, sourceScreenSize);
         }
 
         public static void UpdateLongPressElapsed(float elapsed)

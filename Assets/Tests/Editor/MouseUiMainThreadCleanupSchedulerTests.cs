@@ -43,7 +43,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 MouseAction.Click,
                 new Vector2(10f, 20f),
                 null,
-                "Target",
                 new Vector2(100f, 200f));
             MouseUiMainThreadCleanupScheduler scheduler = new();
             scheduler.CaptureMainThreadContext();
