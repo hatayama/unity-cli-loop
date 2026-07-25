@@ -16,7 +16,7 @@ import (
 // project pin, so each test runs from an empty working directory where any
 // accidental forwarding would fail with a pin resolution error.
 
-// Verifies the global dispatcher reports dispatcher identity fields in JSON version output.
+// Verifies the global uloop binary reports dispatcher identity fields in JSON version output.
 func TestRunDispatcherVersionJSONReportsDispatcherIdentity(t *testing.T) {
 	t.Chdir(t.TempDir())
 

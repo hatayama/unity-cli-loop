@@ -271,7 +271,7 @@ func TestRunDispatcherLaunchOptionsDoNotRequireProjectPin(t *testing.T) {
 }
 
 func TestRunDispatcherVersionUsesDispatcherVersion(t *testing.T) {
-	// Verifies the global dispatcher reports its own dispatcher release version.
+	// Verifies `uloop --version` reports the dispatcher release version instead of the project runner version.
 	t.Chdir(t.TempDir())
 
 	var stdout bytes.Buffer
