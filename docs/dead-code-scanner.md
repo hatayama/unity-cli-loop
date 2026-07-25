@@ -20,8 +20,8 @@ dotnet run --project tools/UnityCliLoop.DeadCodeScanner -- --scope public --incl
 ## CI gate
 
 `.github/workflows/dead-code.yml` runs automatically on pull requests that
-touch `Packages/src/**/*.cs`, the scanner itself, its tests, or
-`scripts/check-dead-code.sh`.
+target `main` or `v3-beta` and touch `Packages/src/**/*.cs`, the scanner
+itself, its tests, `scripts/check-dead-code.sh`, or the workflow file.
 
 The gate uses `--fail-on high-confidence`, so CI fails only for
 `Unused`, `UnusedPrivateMember`, and `UnusedLocal`.
