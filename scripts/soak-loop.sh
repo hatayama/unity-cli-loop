@@ -15,6 +15,7 @@ set -u
 #   sh scripts/soak-loop.sh --project-path <unity-project> \
 #     [--iterations N]      total iterations (default: 100)
 #     [--restart-every N]   run `uloop launch -r` every N iterations (default: 25, 0 = never)
+#     [--force-every N]     use compile --force-recompile every N iterations (default: 10, 0 = never)
 #     [--tests-every N]     run `uloop run-tests` every N iterations (default: 10, 0 = never)
 #     [--test-assembly A]   test assembly name passed to run-tests --filter-type assembly
 #                           (required when --tests-every > 0; never run the full suite of a large project)
@@ -37,6 +38,7 @@ ULOOP_BIN="${ULOOP_BIN:-uloop}"
 PROJECT_PATH=""
 ITERATIONS=100
 RESTART_EVERY=25
+FORCE_EVERY=10
 TESTS_EVERY=10
 TEST_ASSEMBLY=""
 SLEEP_SECONDS=0
@@ -52,6 +54,7 @@ while [ $# -gt 0 ]; do
         --project-path)  PROJECT_PATH="$2"; shift 2 ;;
         --iterations)    ITERATIONS="$2"; shift 2 ;;
         --restart-every) RESTART_EVERY="$2"; shift 2 ;;
+        --force-every)   FORCE_EVERY="$2"; shift 2 ;;
         --tests-every)   TESTS_EVERY="$2"; shift 2 ;;
         --test-assembly) TEST_ASSEMBLY="$2"; shift 2 ;;
         --sleep-seconds) SLEEP_SECONDS="$2"; shift 2 ;;
@@ -159,7 +162,7 @@ trap summarize EXIT
 trap 'exit 130' INT TERM
 
 log "Soak start: $ITERATIONS iterations against $PROJECT_PATH (uloop: $ULOOP_BIN)"
-log "restart-every=$RESTART_EVERY tests-every=$TESTS_EVERY sleep=${SLEEP_SECONDS}s"
+log "restart-every=$RESTART_EVERY force-every=$FORCE_EVERY tests-every=$TESTS_EVERY sleep=${SLEEP_SECONDS}s"
 
 # A freshly launched editor can be busy importing/compiling for a long time
 # (especially on large projects), so the preflight polls instead of one-shotting.
@@ -186,6 +189,17 @@ while [ "$i" -le "$ITERATIONS" ]; do
     write_scratch "$i"
 
     ITER_FAILED=0
+    # Forced recompiles rebuild every assembly — a heavier reload path worth
+    # soaking, but far too slow to run on every iteration of a large project.
+    # Unity may legitimately report an unknown forced result after the domain
+    # reload (ForceCompileUnknownResult); the tool's own guidance is to follow
+    # up with a plain compile, so only that follow-up counts against the
+    # iteration and any other forced failure still does.
+    if [ "$FORCE_EVERY" -gt 0 ] && [ $((i % FORCE_EVERY)) -eq 0 ]; then
+        if ! timed "$i" compile-forced compile $COMPILE_WAIT_FLAG --force-recompile; then
+            grep -q "definitive result" "$CAPTURE_FILE" || ITER_FAILED=1
+        fi
+    fi
     timed "$i" compile compile $COMPILE_WAIT_FLAG || ITER_FAILED=1
     timed "$i" get-logs get-logs --max-count 200 || ITER_FAILED=1
     timed "$i" get-hierarchy get-hierarchy --max-depth 5 || ITER_FAILED=1
