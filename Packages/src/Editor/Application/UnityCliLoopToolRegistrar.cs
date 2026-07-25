@@ -142,16 +142,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
             ServiceValue = service ?? throw new ArgumentNullException(nameof(service));
         }
 
-        internal static void AddToolsChangedHandler(Action handler)
-        {
-            Service.OnToolsChanged += handler;
-        }
-
-        internal static void RemoveToolsChangedHandler(Action handler)
-        {
-            Service.OnToolsChanged -= handler;
-        }
-
         public static UnityCliLoopToolRegistrarService Service
         {
             get

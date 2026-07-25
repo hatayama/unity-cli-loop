@@ -20,20 +20,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string _resolveLog;
 
         /// <summary>
-        /// Resets cached lookup state for unit tests.
-        /// </summary>
-        internal static void ResetResolvedStateForTests()
-        {
-            lock (ResolveLock)
-            {
-                _resolved = false;
-                _cancelTestRunMethod = null;
-                _isRunActiveMethod = null;
-                _resolveLog = null;
-            }
-        }
-
-        /// <summary>
         /// True when CancelTestRun(string) was resolved.
         /// </summary>
         internal static bool HasCancelTestRun
@@ -54,15 +40,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 EnsureResolved();
                 return _isRunActiveMethod != null;
-            }
-        }
-
-        internal static string ResolveLogForTests
-        {
-            get
-            {
-                EnsureResolved();
-                return _resolveLog;
             }
         }
 

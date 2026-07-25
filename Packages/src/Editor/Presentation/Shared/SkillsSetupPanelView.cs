@@ -35,10 +35,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal event System.Action<SkillsTarget> OnTargetChanged;
         internal event System.Action<bool> OnGroupSkillsChanged;
 
-        internal Toggle GroupSkillsToggle => _groupSkillsToggle;
-        internal Label GroupSkillsLabel => _groupSkillsLabel;
-        internal VisualElement GroupSkillsRow => _groupSkillsRow;
-
         internal SkillsSetupPanelView(VisualElement panelRoot, Button refreshSkillsStateButton)
         {
             Debug.Assert(panelRoot != null, "panelRoot must not be null");

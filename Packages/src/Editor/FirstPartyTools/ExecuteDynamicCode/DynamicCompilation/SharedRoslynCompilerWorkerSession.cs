@@ -70,16 +70,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal void SetResponseTimeoutMillisecondsForTests(int timeoutMilliseconds)
-        {
-            Debug.Assert(timeoutMilliseconds > 0, "timeoutMilliseconds must be positive");
-
-            _coordination.ExecuteWithStateLock(() =>
-            {
-                _responseTimeoutMilliseconds = timeoutMilliseconds;
-            });
-        }
-
         internal bool HasLiveProcessLocked()
         {
             AssertStateLockHeld();
@@ -329,15 +319,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Func<ProcessStartInfo, Process> previous = _startProcess;
             _startProcess = starter;
-            return previous;
-        }
-
-        internal Action<Process, string> SwapCompileRequestSenderForTests(Action<Process, string> sender)
-        {
-            Debug.Assert(sender != null, "sender must not be null");
-
-            Action<Process, string> previous = _sendCompileRequest;
-            _sendCompileRequest = sender;
             return previous;
         }
 

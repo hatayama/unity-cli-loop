@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Threading;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -13,7 +12,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private static readonly object ReportedIssueLock = new();
         private static readonly HashSet<string> ReportedIssues = new(System.StringComparer.Ordinal);
-        private static readonly AsyncLocal<string> ConsoleDiagnosticSource = new();
 
         public static void ReportFastPathUnavailable(
             string editorPath,
@@ -91,11 +89,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string humanNote,
             string aiTodo)
         {
-            string effectiveIssueKey = CreateEffectiveIssueKey(issueKey);
-
             lock (ReportedIssueLock)
             {
-                if (!ReportedIssues.Add(effectiveIssueKey))
+                if (!ReportedIssues.Add(issueKey))
                 {
                     return;
                 }
@@ -116,11 +112,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string message,
             object context)
         {
-            string effectiveIssueKey = CreateEffectiveIssueKey(issueKey);
-
             lock (ReportedIssueLock)
             {
-                if (!ReportedIssues.Add(effectiveIssueKey))
+                if (!ReportedIssues.Add(issueKey))
                 {
                     return;
                 }
@@ -129,75 +123,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             VibeLogger.LogInfo(operation, message, context);
         }
 
-        private static string CreateEffectiveIssueKey(string issueKey)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(issueKey), "issueKey must not be empty");
-
-            if (string.IsNullOrEmpty(ConsoleDiagnosticSource.Value))
-            {
-                return issueKey;
-            }
-
-            return $"{issueKey}::source::{ConsoleDiagnosticSource.Value}";
-        }
-
-        internal static System.IDisposable UseConsoleDiagnosticSource(string source)
-        {
-            if (string.IsNullOrEmpty(source))
-            {
-                return EmptyDisposable.Instance;
-            }
-
-            string previousSource = ConsoleDiagnosticSource.Value;
-            ConsoleDiagnosticSource.Value = source;
-            return new ConsoleDiagnosticSourceScope(previousSource);
-        }
-
         private static string FormatConsoleErrorMessage(string operation, string message, object context)
         {
             Debug.Assert(!string.IsNullOrEmpty(operation), "operation must not be empty");
             Debug.Assert(!string.IsNullOrEmpty(message), "message must not be empty");
 
-            string diagnosticSourceLine = string.IsNullOrEmpty(ConsoleDiagnosticSource.Value)
-                ? string.Empty
-                : $"\ndiagnostic_source: {ConsoleDiagnosticSource.Value}";
-
             if (context == null)
             {
-                return $"[{UnityCliLoopConstants.PROJECT_NAME}] {message}\noperation: {operation}{diagnosticSourceLine}";
+                return $"[{UnityCliLoopConstants.PROJECT_NAME}] {message}\noperation: {operation}";
             }
 
-            return $"[{UnityCliLoopConstants.PROJECT_NAME}] {message}\noperation: {operation}{diagnosticSourceLine}\ncontext: {context}";
-        }
-
-        /// <summary>
-        /// Provides Console Diagnostic Source Scope behavior for Unity CLI Loop.
-        /// </summary>
-        private sealed class ConsoleDiagnosticSourceScope : System.IDisposable
-        {
-            private readonly string _previousSource;
-
-            public ConsoleDiagnosticSourceScope(string previousSource)
-            {
-                _previousSource = previousSource;
-            }
-
-            public void Dispose()
-            {
-                ConsoleDiagnosticSource.Value = _previousSource;
-            }
-        }
-
-        /// <summary>
-        /// Provides Empty Disposable behavior for Unity CLI Loop.
-        /// </summary>
-        private sealed class EmptyDisposable : System.IDisposable
-        {
-            public static readonly EmptyDisposable Instance = new EmptyDisposable();
-
-            public void Dispose()
-            {
-            }
+            return $"[{UnityCliLoopConstants.PROJECT_NAME}] {message}\noperation: {operation}\ncontext: {context}";
         }
 
         internal static void ResetForTests()
@@ -206,8 +142,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 ReportedIssues.Clear();
             }
-
-            ConsoleDiagnosticSource.Value = null;
         }
     }
 }

@@ -140,11 +140,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return Task.Run(() => DetectCliInstallationBlocking(platform, ct), ct);
         }
 
-        internal static string DetectCliVersionBlocking(RuntimePlatform platform, CancellationToken ct)
-        {
-            return DetectCliInstallationBlocking(platform, ct).Version;
-        }
-
         internal static CliInstallationDetection DetectCliInstallationBlocking(RuntimePlatform platform, CancellationToken ct)
         {
             CliInstallationDetection packageOwnedDetection = DetectPackageOwnedCliInstallationBlocking(platform, ct);

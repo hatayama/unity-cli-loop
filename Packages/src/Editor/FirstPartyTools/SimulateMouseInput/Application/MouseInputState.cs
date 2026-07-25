@@ -278,11 +278,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             ServiceValue.ReleaseAllButtons();
         }
-
-        internal static ButtonControl GetButtonControl(Mouse mouse, RuntimeMouseButton button)
-        {
-            return ServiceValue.GetButtonControl(mouse, button);
-        }
     }
 }
 #endif
