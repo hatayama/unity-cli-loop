@@ -23,14 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         
         /// <summary>Error message (on failure)</summary>
         public string ErrorMessage { get; set; }
-        
-        /// <summary>Error message (alias for ErrorMessage)</summary>
-        public string Error 
-        { 
-            get => ErrorMessage; 
-            set => ErrorMessage = value; 
-        }
-        
+
         /// <summary>
         /// Code formatted for compilation
         /// (After extracting/moving using statements and applying class/method wrapping)
