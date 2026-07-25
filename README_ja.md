@@ -283,6 +283,18 @@ uloop compile --project-path /Users/foo/my-unity-project
 uloop compile --project-path ../other-project
 ```
 
+# 仕組み
+
+`uloop` コマンドがUnity Editorに届くまでの流れは次のとおりです。
+
+- **グローバル `uloop` dispatcher** — PATH上に1つだけ置かれる入口。コマンドを解釈し、対象プロジェクト用のrunnerへ委譲します
+- **`uloop-project-runner`** — プロジェクトごとのrunner。使用するバージョンは各プロジェクトの `.uloop/project-runner-pin.json`（pin）で決まり、バージョン別のユーザーキャッシュへ自動的にダウンロードされます。そのため、異なるバージョンの複数プロジェクトを1台のマシンで共存させられます → [project runner pinの詳細](docs/project-runner-pin.md)
+- **Unity Editor内のIPCサーバー** — runnerからの接続を受け取り、Unity APIを実行して結果を返します
+
+接続には**TCPポートを使いません**。macOS/LinuxではUnixドメインソケット、Windowsでは名前付きパイプで接続するため、ポートの設定も、他のEditorインスタンスとのポート衝突もありません。
+
+CLIとUnityパッケージの互換性は、整数の**protocol version**で判定されます。組み合わせが不一致な場合は、実行時に不可解な動作をするのではなく、明確なメッセージで即座に失敗します → [protocol versionの詳細](docs/protocol-version.md)
+
 # 設計思想
 
 Unity CLI Loop はツールの数を追い求めません。C#コードの動的実行（`execute-dynamic-code`）があれば、Unity Editor上のほとんどの操作はそれ一つで実現できます。
