@@ -234,11 +234,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ServiceValue.NotifyRecordingStopped();
         }
 
-        public static void ForceStop()
-        {
-            ServiceValue.ForceStop();
-        }
-
         internal static string FormatVector2(Vector2 v)
         {
             return InputRecordingVectorFormat.FormatVector2(v);

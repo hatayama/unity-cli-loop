@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (target == null)
             {
                 SimulateMouseUiOverlayState.Update(
-                    MouseAction.Drag, inputStart, null, null, Handles.GetMainGameViewSize());
+                    MouseAction.Drag, inputStart, null, Handles.GetMainGameViewSize());
                 MouseUiFrameWaitOutcome noTargetExpandOutcome = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
                 if (noTargetExpandOutcome == MouseUiFrameWaitOutcome.TimedOut)
                 {
@@ -102,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string targetName = target.name;
             SimulateMouseUiOverlayState.Update(
-                MouseAction.Drag, inputStart, inputStart, targetName, Handles.GetMainGameViewSize());
+                MouseAction.Drag, inputStart, inputStart, Handles.GetMainGameViewSize());
 
             // Any Paused exit inside this try still runs FinalizeDrag in the finally below
             // (pointerUp/drop/endDrag), so every branch reports the drag as finalized early
@@ -161,7 +161,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             SimulateMouseUiOverlayState.Update(
-                MouseAction.Drag, inputEnd, inputStart, targetName, Handles.GetMainGameViewSize());
+                MouseAction.Drag, inputEnd, inputStart, Handles.GetMainGameViewSize());
 
             MouseUiFrameWaitOutcome dissipateOutcome = await MouseUiOverlayAnimator.PlayDissipateAnimation(ct).ConfigureAwait(false);
             if (dissipateOutcome == MouseUiFrameWaitOutcome.TimedOut)

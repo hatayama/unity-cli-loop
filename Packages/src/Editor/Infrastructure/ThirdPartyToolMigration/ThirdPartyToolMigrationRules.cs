@@ -138,19 +138,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return ThirdPartyToolMigrationApiDetectionRules.ContainsCurrentToolContractsApi(source);
         }
 
-        internal static bool ContainsLegacyDomainMetadataApi(string source)
-        {
-            return ThirdPartyToolMigrationApiDetectionRules.ContainsLegacyDomainMetadataApi(source);
-        }
-
-        internal static bool ContainsLegacyDomainHelperApiForAssembly(
-            string source,
-            bool hasLegacyAssemblySource,
-            string[] legacyAssemblyAliases)
-        {
-            return ThirdPartyToolMigrationApiDetectionRules.ContainsLegacyDomainHelperApiForAssembly(source, hasLegacyAssemblySource, legacyAssemblyAliases);
-        }
-
         internal static bool ContainsCurrentDomainMetadataApi(string source)
         {
             return ThirdPartyToolMigrationApiDetectionRules.ContainsCurrentDomainMetadataApi(source);
@@ -203,11 +190,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string[] assemblyDeclaredTypeNames)
         {
             return ThirdPartyToolMigrationApiDetectionRules.ContainsLegacyEditorWindowCaptureUtilityTimeoutMigrationForAssembly(source, hasLegacyAssemblySource, hasAssemblyScopedCurrentToolContractsUsing, hasAssemblyScopedCurrentFirstPartyToolsUsing, legacyAssemblyAliases, currentFirstPartyToolsAssemblyAliases, assemblyDeclaredTypeNames);
-        }
-
-        internal static bool ContainsCurrentFirstPartyScreenshotApi(string source)
-        {
-            return ThirdPartyToolMigrationApiDetectionRules.ContainsCurrentFirstPartyScreenshotApi(source);
         }
 
         internal static bool ContainsCurrentFirstPartyScreenshotApiForAssembly(

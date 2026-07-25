@@ -155,11 +155,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return _cliInstallationDetector.IsCliVisibleFromShellAsync(platform, ct);
         }
 
-        public void InvalidateCliCache()
-        {
-            _cliInstallationDetector.InvalidateCache();
-        }
-
         public string GetMinimumRequiredCliVersion()
         {
             // Why: v3 setup installs the global dispatcher and reads the minimum from the package pin JSON
@@ -177,26 +172,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public bool HasPackageOwnedCurrentUserInstall(RuntimePlatform platform)
         {
             return _nativeCliInstaller.HasPackageOwnedCurrentUserInstall(platform);
-        }
-
-        public bool IsCliVersionLessThan(string leftVersion, string rightVersion)
-        {
-            return CliVersionComparer.IsVersionLessThan(leftVersion, rightVersion);
-        }
-
-        public bool IsCliVersionGreaterThan(string leftVersion, string rightVersion)
-        {
-            return CliVersionComparer.IsVersionGreaterThan(leftVersion, rightVersion);
-        }
-
-        public bool IsCliVersionGreaterThanOrEqual(string leftVersion, string rightVersion)
-        {
-            return CliVersionComparer.IsVersionGreaterThanOrEqual(leftVersion, rightVersion);
-        }
-
-        public bool IsCliVersionEqual(string leftVersion, string rightVersion)
-        {
-            return CliVersionComparer.IsVersionEqual(leftVersion, rightVersion);
         }
 
         public async Task<CliInstallResult> InstallGlobalCliAsync(

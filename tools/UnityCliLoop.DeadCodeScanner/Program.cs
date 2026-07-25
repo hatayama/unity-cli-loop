@@ -29,7 +29,13 @@ namespace UnityCliLoop.DeadCodeScanner
             IReadOnlyList<DeadCodeIssue> issues = await scanner.ScanAsync(options, ct);
             DeadCodeReporter.Write(issues, options);
 
-            if (options.FailOnHighConfidence && issues.Any(issue => issue.IsHighConfidenceDeletionCandidate()))
+            bool failedOnHighConfidence = options.FailOnHighConfidence
+                && issues.Any(issue => issue.IsHighConfidenceDeletionCandidate());
+            bool failedOnPublicCandidateLimit = options.MaxPublicCandidates >= 0
+                && issues.Count(issue => issue.Category == DeadCodeCategory.PublicCandidate)
+                    > options.MaxPublicCandidates;
+
+            if (failedOnHighConfidence || failedOnPublicCandidateLimit)
             {
                 return 1;
             }

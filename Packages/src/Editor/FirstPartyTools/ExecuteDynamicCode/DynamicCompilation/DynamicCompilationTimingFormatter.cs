@@ -7,8 +7,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class DynamicCompilationTimingFormatter
     {
-        private const string CacheHitTimingEntry = "[Perf] CacheHit: true";
-
         public static List<string> CreateCompilationTimings(
             double referenceResolutionMilliseconds,
             double buildMilliseconds,
@@ -27,14 +25,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 timings.Add(backendTimingEntry);
             }
 
-            return timings;
-        }
-
-        public static List<string> CreateCachedCompilationTimings(
-            DynamicCompilationBackendKind backendKind = DynamicCompilationBackendKind.Unknown)
-        {
-            List<string> timings = CreateCompilationTimings(0, 0, 0, backendKind);
-            timings.Add(CacheHitTimingEntry);
             return timings;
         }
 

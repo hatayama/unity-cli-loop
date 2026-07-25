@@ -59,12 +59,44 @@ namespace UnityCliLoop.DeadCodeScanner
             "OnValidate"
         };
 
+        private static readonly HashSet<string> AwaiterMemberNames = new(StringComparer.Ordinal)
+        {
+            "IsCompleted",
+            "GetResult",
+            "OnCompleted",
+            "UnsafeOnCompleted"
+        };
+
         public static KeeperDecision Classify(ISymbol symbol)
         {
             string attributeReason = FindKeptAttributeReason(symbol);
             if (!string.IsNullOrEmpty(attributeReason))
             {
                 return KeeperDecision.Keep(attributeReason);
+            }
+
+            // Why: the C# compiler resolves init accessors by this exact type name, so Roslyn
+            // reference search never sees call sites even though deleting the polyfill breaks builds.
+            if (IsCompilerRequiredIsExternalInit(symbol))
+            {
+                return KeeperDecision.Keep(
+                    "Type is the compiler-required IsExternalInit polyfill for init accessors.");
+            }
+
+            // Why: await expressions bind GetAwaiter/IsCompleted/GetResult/OnCompleted by name;
+            // SymbolFinder therefore reports zero references for these members.
+            if (IsCompilerRequiredAwaitPatternMember(symbol))
+            {
+                return KeeperDecision.Keep(
+                    "Member is part of the compiler-bound awaiter pattern.");
+            }
+
+            // Why: Newtonsoft.Json discovers ShouldSerialize{Property} by name convention and
+            // invokes it via reflection, so reference search never sees call sites.
+            if (IsNewtonsoftShouldSerializeMethod(symbol))
+            {
+                return KeeperDecision.Keep(
+                    "Method matches the Newtonsoft.Json ShouldSerialize{Property} naming convention.");
             }
 
             if (symbol is INamedTypeSymbol namedType && HasKeptBaseType(namedType))
@@ -96,6 +128,92 @@ namespace UnityCliLoop.DeadCodeScanner
             }
 
             return KeeperDecision.Scan();
+        }
+
+        private static bool IsCompilerRequiredIsExternalInit(ISymbol symbol)
+        {
+            if (symbol is not INamedTypeSymbol typeSymbol)
+            {
+                return false;
+            }
+
+            if (!string.Equals(typeSymbol.Name, "IsExternalInit", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            string containingNamespace = typeSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+            return string.Equals(
+                containingNamespace,
+                "System.Runtime.CompilerServices",
+                StringComparison.Ordinal);
+        }
+
+        private static bool IsCompilerRequiredAwaitPatternMember(ISymbol symbol)
+        {
+            if (symbol is IMethodSymbol getAwaiterMethod
+                && string.Equals(getAwaiterMethod.Name, "GetAwaiter", StringComparison.Ordinal))
+            {
+                return IsAwaiterType(getAwaiterMethod.ReturnType);
+            }
+
+            if (!AwaiterMemberNames.Contains(symbol.Name) || symbol.ContainingType == null)
+            {
+                return false;
+            }
+
+            return IsAwaiterType(symbol.ContainingType);
+        }
+
+        private static bool IsNewtonsoftShouldSerializeMethod(ISymbol symbol)
+        {
+            if (symbol is not IMethodSymbol methodSymbol)
+            {
+                return false;
+            }
+
+            if (methodSymbol.IsStatic || methodSymbol.Parameters.Length != 0)
+            {
+                return false;
+            }
+
+            if (methodSymbol.ReturnType.SpecialType != SpecialType.System_Boolean)
+            {
+                return false;
+            }
+
+            const string Prefix = "ShouldSerialize";
+            if (!methodSymbol.Name.StartsWith(Prefix, StringComparison.Ordinal)
+                || methodSymbol.Name.Length <= Prefix.Length)
+            {
+                return false;
+            }
+
+            // Why: Newtonsoft only invokes ShouldSerialize{PropertyName} when that member exists.
+            // Keeping every ShouldSerialize* name would let dead methods silence the scanner.
+            string propertyName = methodSymbol.Name.Substring(Prefix.Length);
+            return methodSymbol.ContainingType.GetMembers(propertyName)
+                .Any(member => member is IPropertySymbol || member is IFieldSymbol);
+        }
+
+        private static bool IsAwaiterType(ITypeSymbol typeSymbol)
+        {
+            return typeSymbol.AllInterfaces.Any(IsCompilerServicesAwaiterInterface);
+        }
+
+        private static bool IsCompilerServicesAwaiterInterface(INamedTypeSymbol interfaceType)
+        {
+            if (!string.Equals(interfaceType.Name, "INotifyCompletion", StringComparison.Ordinal)
+                && !string.Equals(interfaceType.Name, "ICriticalNotifyCompletion", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            string containingNamespace = interfaceType.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+            return string.Equals(
+                containingNamespace,
+                "System.Runtime.CompilerServices",
+                StringComparison.Ordinal);
         }
 
         private static string FindKeptAttributeReason(ISymbol symbol)

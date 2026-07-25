@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool hitTarget = resolvedTargets.Target != null;
             SimulateMouseUiOverlayState.Update(
                 MouseAction.Click, inputPos, null,
-                targetName, Handles.GetMainGameViewSize());
+                Handles.GetMainGameViewSize());
 
             MouseUiFrameWaitOutcome expandOutcome = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
             if (expandOutcome == MouseUiFrameWaitOutcome.TimedOut)
@@ -130,7 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool shouldReleasePointer = resolvedTargets.RawTarget != null && resolvedTargets.Target != null;
             SimulateMouseUiOverlayState.Update(
                 MouseAction.LongPress, inputPos, null,
-                targetName, Handles.GetMainGameViewSize());
+                Handles.GetMainGameViewSize());
 
             MouseUiFrameWaitOutcome expandOutcome = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
             if (expandOutcome == MouseUiFrameWaitOutcome.TimedOut)

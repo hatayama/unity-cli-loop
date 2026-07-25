@@ -33,7 +33,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string DescriptionAttributeArgumentName = "Description";
         public const string DisplayDevelopmentOnlyAttributeArgumentName = "DisplayDevelopmentOnly";
         public const string RequiredSecuritySettingAttributeArgumentName = "RequiredSecuritySetting";
-        public const string LegacySecuritySettingsTypeName = "SecuritySettings";
         public const string CurrentSecuritySettingTypeName = "UnityCliLoopSecuritySetting";
         public const string LegacyEditorDelayTypeName = "EditorDelay";
         public const string LegacyEditorDelayMethodName = "DelayFrame";

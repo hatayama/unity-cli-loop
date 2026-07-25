@@ -27,8 +27,15 @@ namespace UnityCliLoop.DeadCodeScanner
 
         public WorkspaceBuildResult Build(string rootPath)
         {
-            string editorRoot = Path.Combine(rootPath, "Packages", "src", "Editor");
-            IReadOnlyList<AsmdefProjectInfo> asmdefs = LoadAsmdefs(editorRoot);
+            // Why: production code lives under both Editor and Runtime; loading only Editor
+            // drops Runtime asmdefs so IVT/friend references and Runtime finding coverage break.
+            string packageSrcRoot = Path.Combine(rootPath, "Packages", "src");
+            string assetsRoot = Path.Combine(rootPath, "Assets");
+            IReadOnlyList<AsmdefProjectInfo> productionAsmdefs = LoadAsmdefs(packageSrcRoot);
+            IReadOnlyList<AsmdefProjectInfo> assetsAsmdefs = Directory.Exists(assetsRoot)
+                ? LoadAsmdefs(assetsRoot)
+                : Array.Empty<AsmdefProjectInfo>();
+
             Dictionary<string, ProjectId> projectIdsByName = new(StringComparer.Ordinal);
             Dictionary<string, ProjectId> projectIdsByGuid = new(StringComparer.OrdinalIgnoreCase);
             Dictionary<ProjectId, ProjectAnalysisInfo> projectInfoById = new();
@@ -36,8 +43,56 @@ namespace UnityCliLoop.DeadCodeScanner
             Solution solution = workspace.CurrentSolution;
             ImmutableArray<MetadataReference> metadataReferences = CreateMetadataReferences();
 
+            solution = AddAsmdefProjects(
+                solution,
+                productionAsmdefs,
+                isProduction: true,
+                projectIdsByName,
+                projectIdsByGuid,
+                projectInfoById,
+                metadataReferences);
+            ProjectId[] productionProjectIds = projectInfoById
+                .Where(pair => pair.Value.IsProduction)
+                .Select(pair => pair.Key)
+                .ToArray();
+
+            solution = AddAsmdefProjects(
+                solution,
+                assetsAsmdefs,
+                isProduction: false,
+                projectIdsByName,
+                projectIdsByGuid,
+                projectInfoById,
+                metadataReferences);
+
+            AsmdefProjectInfo[] allAsmdefs = productionAsmdefs.Concat(assetsAsmdefs).ToArray();
+            solution = AddAsmdefProjectReferences(solution, allAsmdefs, projectIdsByName, projectIdsByGuid);
+            solution = AddOrphanAssetsProject(
+                assetsRoot,
+                assetsAsmdefs,
+                solution,
+                productionProjectIds,
+                projectInfoById,
+                metadataReferences);
+            return new WorkspaceBuildResult(solution, projectInfoById);
+        }
+
+        private static Solution AddAsmdefProjects(
+            Solution solution,
+            IReadOnlyList<AsmdefProjectInfo> asmdefs,
+            bool isProduction,
+            Dictionary<string, ProjectId> projectIdsByName,
+            Dictionary<string, ProjectId> projectIdsByGuid,
+            Dictionary<ProjectId, ProjectAnalysisInfo> projectInfoById,
+            ImmutableArray<MetadataReference> metadataReferences)
+        {
             foreach (AsmdefProjectInfo asmdef in asmdefs)
             {
+                if (projectIdsByName.ContainsKey(asmdef.Name))
+                {
+                    throw new InvalidOperationException($"Duplicate asmdef assembly name: {asmdef.Name}");
+                }
+
                 ProjectId projectId = ProjectId.CreateNewId(asmdef.Name);
                 projectIdsByName[asmdef.Name] = projectId;
                 string guid = ReadAsmdefGuid(asmdef.DirectoryPath, asmdef.Name);
@@ -57,7 +112,7 @@ namespace UnityCliLoop.DeadCodeScanner
                     metadataReferences: metadataReferences);
 
                 solution = solution.AddProject(projectInfo);
-                projectInfoById[projectId] = new ProjectAnalysisInfo(projectId, isProduction: true);
+                projectInfoById[projectId] = new ProjectAnalysisInfo(projectId, isProduction);
 
                 foreach (string sourceFile in asmdef.SourceFiles)
                 {
@@ -67,14 +122,17 @@ namespace UnityCliLoop.DeadCodeScanner
                 }
             }
 
-            solution = AddAsmdefProjectReferences(solution, asmdefs, projectIdsByName, projectIdsByGuid);
-            solution = AddAssetsProject(rootPath, solution, projectIdsByName.Values.ToArray(), projectInfoById, metadataReferences);
-            return new WorkspaceBuildResult(solution, projectInfoById);
+            return solution;
         }
 
-        private static IReadOnlyList<AsmdefProjectInfo> LoadAsmdefs(string editorRoot)
+        private static IReadOnlyList<AsmdefProjectInfo> LoadAsmdefs(string rootDirectory)
         {
-            string[] asmdefPaths = Directory.GetFiles(editorRoot, "*.asmdef", SearchOption.AllDirectories)
+            if (!Directory.Exists(rootDirectory))
+            {
+                return Array.Empty<AsmdefProjectInfo>();
+            }
+
+            string[] asmdefPaths = Directory.GetFiles(rootDirectory, "*.asmdef", SearchOption.AllDirectories)
                 .OrderBy(path => path, StringComparer.Ordinal)
                 .ToArray();
             List<AsmdefProjectInfo> projects = new();
@@ -85,7 +143,7 @@ namespace UnityCliLoop.DeadCodeScanner
             foreach (string asmdefPath in asmdefPaths)
             {
                 AsmdefJson json = ReadAsmdefJson(asmdefPath);
-                string directoryPath = Path.GetDirectoryName(asmdefPath) ?? editorRoot;
+                string directoryPath = Path.GetDirectoryName(asmdefPath) ?? rootDirectory;
                 string[] sourceFiles = Directory.GetFiles(directoryPath, "*.cs", SearchOption.AllDirectories)
                     .Where(path => IsOwnedByAsmdefDirectory(path, directoryPath, asmdefDirectories))
                     .OrderBy(path => path, StringComparer.Ordinal)
@@ -191,23 +249,29 @@ namespace UnityCliLoop.DeadCodeScanner
             return projectIdsByName.TryGetValue(reference, out ProjectId? namedProjectId) ? namedProjectId : null;
         }
 
-        private static Solution AddAssetsProject(
-            string rootPath,
+        // Why: Unity puts leftover Assets scripts into Assembly-CSharp(-Editor); keep that fallback so
+        // files outside any Assets asmdef still contribute non-production references.
+        private static Solution AddOrphanAssetsProject(
+            string assetsRoot,
+            IReadOnlyList<AsmdefProjectInfo> assetsAsmdefs,
             Solution solution,
             ProjectId[] productionProjectIds,
             Dictionary<ProjectId, ProjectAnalysisInfo> projectInfoById,
             ImmutableArray<MetadataReference> metadataReferences)
         {
-            string assetsRoot = Path.Combine(rootPath, "Assets");
             if (!Directory.Exists(assetsRoot))
             {
                 return solution;
             }
 
-            string[] sourceFiles = Directory.GetFiles(assetsRoot, "*.cs", SearchOption.AllDirectories)
+            HashSet<string> ownedSourceFiles = assetsAsmdefs
+                .SelectMany(asmdef => asmdef.SourceFiles)
+                .ToHashSet(StringComparer.Ordinal);
+            string[] orphanSourceFiles = Directory.GetFiles(assetsRoot, "*.cs", SearchOption.AllDirectories)
+                .Where(path => !ownedSourceFiles.Contains(path))
                 .OrderBy(path => path, StringComparer.Ordinal)
                 .ToArray();
-            if (sourceFiles.Length == 0)
+            if (orphanSourceFiles.Length == 0)
             {
                 return solution;
             }
@@ -230,7 +294,7 @@ namespace UnityCliLoop.DeadCodeScanner
                 solution = solution.AddProjectReference(projectId, new ProjectReference(productionProjectId));
             }
 
-            foreach (string sourceFile in sourceFiles)
+            foreach (string sourceFile in orphanSourceFiles)
             {
                 DocumentId documentId = DocumentId.CreateNewId(projectId, sourceFile);
                 SourceText sourceText = SourceText.From(File.ReadAllText(sourceFile));

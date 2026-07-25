@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (target == null)
             {
                 SimulateMouseUiOverlayState.Update(
-                    MouseAction.DragStart, inputPos, null, null, Handles.GetMainGameViewSize());
+                    MouseAction.DragStart, inputPos, null, Handles.GetMainGameViewSize());
                 MouseUiFrameWaitOutcome noTargetExpandOutcome = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
                 if (noTargetExpandOutcome == MouseUiFrameWaitOutcome.TimedOut)
                 {
@@ -102,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string targetName = target.name;
             SimulateMouseUiOverlayState.Update(
-                MouseAction.DragStart, inputPos, inputPos, targetName, Handles.GetMainGameViewSize());
+                MouseAction.DragStart, inputPos, inputPos, Handles.GetMainGameViewSize());
 
             bool animationCompleted = false;
             try
@@ -183,7 +183,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 MouseAction.DragMove,
                 MouseUiCoordinateConverter.ScreenToInput(pointerData.position),
                 SimulateMouseUiOverlayState.DragStartPosition,
-                targetName, Handles.GetMainGameViewSize());
+                Handles.GetMainGameViewSize());
 
             // Cancellation leaves drag state intact so the user can continue with DragMove/DragEnd
             MouseUiFrameWaitOutcome dragOutcome = await MouseUiDragEventExecutor.InterpolateDragPosition(
@@ -261,7 +261,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 MouseAction.DragEnd,
                 MouseUiCoordinateConverter.ScreenToInput(pointerData.position),
                 SimulateMouseUiOverlayState.DragStartPosition,
-                targetName, Handles.GetMainGameViewSize());
+                Handles.GetMainGameViewSize());
 
             // Any Paused exit inside this try still runs FinalizeDrag + MouseDragState.Clear()
             // in the finally below, so every in-try branch reports the drag as finalized early.
@@ -310,7 +310,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             SimulateMouseUiOverlayState.Update(
-                MouseAction.DragEnd, inputEnd, null, targetName, Handles.GetMainGameViewSize());
+                MouseAction.DragEnd, inputEnd, null, Handles.GetMainGameViewSize());
 
             MouseUiFrameWaitOutcome dissipateOutcome = await MouseUiOverlayAnimator.PlayDissipateAnimation(ct).ConfigureAwait(false);
             if (dissipateOutcome == MouseUiFrameWaitOutcome.TimedOut)

@@ -12,10 +12,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         void SaveSettings(UnityCliLoopEditorSettingsData settings);
         void UpdateSettings(Func<UnityCliLoopEditorSettingsData, UnityCliLoopEditorSettingsData> transform);
         string GetLastSeenSetupWizardVersion();
-        void SetLastSeenSetupWizardVersion(string version);
         bool GetSuppressSetupWizardAutoShow();
         void SetSuppressSetupWizardAutoShow(bool suppressAutoShow);
-        void SetShowUnityCliLoopSecuritySetting(bool showUnityCliLoopSecuritySetting);
         void SetShowToolSettings(bool showToolSettings);
         void SetInstallSkillsFlat(bool installSkillsFlat);
     }

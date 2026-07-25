@@ -20,7 +20,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private readonly SharedRoslynCompilerWorkerSessionCoordination _coordination = new();
         private Func<ProcessStartInfo, Process> _startProcess = ProcessStartHelper.TryStart;
-        private Action<Process, string> _sendCompileRequest = SendCompileRequestCore;
         private Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]>
             _compileWorkerAssemblyForTests;
         private Process _workerProcess;
@@ -70,16 +69,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal void SetResponseTimeoutMillisecondsForTests(int timeoutMilliseconds)
-        {
-            Debug.Assert(timeoutMilliseconds > 0, "timeoutMilliseconds must be positive");
-
-            _coordination.ExecuteWithStateLock(() =>
-            {
-                _responseTimeoutMilliseconds = timeoutMilliseconds;
-            });
-        }
-
         internal bool HasLiveProcessLocked()
         {
             AssertStateLockHeld();
@@ -114,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void SendCompileRequestLocked(string requestFilePath)
         {
             AssertStateLockHeld();
-            _sendCompileRequest(_workerProcess, requestFilePath);
+            SendCompileRequestCore(_workerProcess, requestFilePath);
         }
 
         internal StreamReader GetOutputReaderLocked()
@@ -329,15 +318,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Func<ProcessStartInfo, Process> previous = _startProcess;
             _startProcess = starter;
-            return previous;
-        }
-
-        internal Action<Process, string> SwapCompileRequestSenderForTests(Action<Process, string> sender)
-        {
-            Debug.Assert(sender != null, "sender must not be null");
-
-            Action<Process, string> previous = _sendCompileRequest;
-            _sendCompileRequest = sender;
             return previous;
         }
 

@@ -28,9 +28,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>Logs</summary>
         public List<string> Logs { get; set; } = new();
 
-        /// <summary>Execution Statistics</summary>
-        public ExecutionStatistics Statistics { get; set; }
-
         /// <summary>
         /// Structured compilation errors when compilation failed.
         /// Preserved to enable rich diagnostics formatting at the tool layer.

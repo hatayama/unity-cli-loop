@@ -63,12 +63,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         None,
 
         /// <summary>Compilation Error</summary>
-        CompilationError,
-
-        /// <summary>Dynamic Assembly Addition Failed</summary>
-        DynamicAssemblyFailed,
-
-        /// <summary>Using Statement Addition Failed</summary>
-        UsingStatementFailed
+        CompilationError
     }
 }
