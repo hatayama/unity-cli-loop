@@ -97,6 +97,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "UloopPausePoint.Pause(\"id\") directly in the method body and arm it with enable-pause-point --id "
             + "instead.";
 
+        // Values captured inside a physics callback can be mid-solver intermediates (a Rigidbody
+        // velocity may capture as zero even though the body visibly moves). Verification feedback
+        // showed the existing cached-dispatch warnings say nothing about value reliability, so a
+        // captured zero gets misread as a physics bug; the response itself must state the
+        // discrimination rule instead of leaving it documented only in the skill references.
+        public const string PhysicalCallbackMidSolverValuesWarning =
+            "Rigidbody velocity values captured inside a physics callback can be mid-solver "
+            + "intermediates; a captured (0, 0) is not proof the body is stationary. To tell them "
+            + "apart, re-read the velocity live (execute-dynamic-code) after resuming: if it is "
+            + "still zero outside the callback, suspect the game's own physics setup rather than "
+            + "the capture.";
+
         // Surfaces the same JIT-inlining risk documented under Requirements & Safety in the skill,
         // but at enable time instead of only after a confusing HitCount=0 timeout.
         public const string SmallMethodInliningRiskWarning =

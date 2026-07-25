@@ -273,6 +273,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hasPhysicsCallbackWarning = true;
             }
 
+            if (hasPhysicsCallbackWarning)
+            {
+                warnings.Add(SourcePausePointConstants.PhysicalCallbackMidSolverValuesWarning);
+            }
+
             if (IsLikelyJitInlined(method))
             {
                 warnings.Add(SourcePausePointConstants.SmallMethodInliningRiskWarning);
