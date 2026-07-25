@@ -107,6 +107,19 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 && issue.FullName.Contains("TestOnlyFactory", StringComparison.Ordinal)), Is.True);
         }
 
+        // Verifies that default-scope unused private findings are treated as high-confidence deletion candidates for the CI gate.
+        [Test]
+        public async Task ScanAsync_WhenUsingDefaultPrivateScope_ShouldReportHighConfidenceDeletionCandidates()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = ScanOptions.Default(_rootPath);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue => issue.IsHighConfidenceDeletionCandidate()), Is.True);
+        }
+
         // Verifies that Unity or reflection entry points can be reported separately when requested.
         [Test]
         public async Task ScanAsync_WhenIncludingKeptSymbols_ShouldReportUnityToolAsKept()
