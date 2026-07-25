@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.22](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.21...dispatcher-v3.0.0-beta.22) (2026-07-24)
+
+
+### Bug Fixes
+
+* Improve skills setup panel empty state and refresh scoping ([#1983](https://github.com/hatayama/unity-cli-loop/issues/1983)) ([caeb079](https://github.com/hatayama/unity-cli-loop/commit/caeb0799d78331162e1cae5c0572c8fc2ed6aa81))
+* Tighten v3 migration skill guidance and align wizard prompt ([#1981](https://github.com/hatayama/unity-cli-loop/issues/1981)) ([7c8a4a2](https://github.com/hatayama/unity-cli-loop/commit/7c8a4a20a7cda853a9ddfdf966fa24c4ccfc5609))
+
 ## [3.0.0-beta.21](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.20...dispatcher-v3.0.0-beta.21) (2026-07-24)
 
 
