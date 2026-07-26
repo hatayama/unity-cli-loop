@@ -2,7 +2,6 @@
 using UnityEngine.EventSystems;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
-using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
