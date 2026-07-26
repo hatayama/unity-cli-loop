@@ -101,36 +101,10 @@ func listOptionDefault(property clicore.ToolProperty) any {
 		return false
 	}
 	defaultValue := property.EffectiveDefault()
-	if enumValue, ok := enumValueForNumericDefault(defaultValue, property.Enum); ok {
+	if enumValue, ok := tooldocs.EnumValueForNumericDefault(defaultValue, property.Enum); ok {
 		return enumValue
 	}
 	return defaultValue
-}
-
-func enumValueForNumericDefault(defaultValue any, values []string) (string, bool) {
-	if len(values) == 0 || defaultValue == nil {
-		return "", false
-	}
-
-	switch value := defaultValue.(type) {
-	case int:
-		return enumValueAtIndex(value, values)
-	case float64:
-		index := int(value)
-		if value != float64(index) {
-			return "", false
-		}
-		return enumValueAtIndex(index, values)
-	default:
-		return "", false
-	}
-}
-
-func enumValueAtIndex(index int, values []string) (string, bool) {
-	if index < 0 || index >= len(values) {
-		return "", false
-	}
-	return values[index], true
 }
 
 func appendDynamicCodeFileListOption(tool clicore.ToolDefinition, options []listOption) []listOption {

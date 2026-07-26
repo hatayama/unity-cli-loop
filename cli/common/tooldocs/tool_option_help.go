@@ -94,7 +94,7 @@ func optionDescription(toolName string, propertyName string, property tools.Tool
 		parts = append(parts, description)
 	}
 	if propertyDefault := property.EffectiveDefault(); propertyDefault != nil {
-		parts = append(parts, "default: "+defaultValueText(propertyDefault))
+		parts = append(parts, "default: "+defaultValueText(propertyDefault, property.Enum))
 	}
 	if len(property.Enum) > 0 {
 		parts = append(parts, "values: "+strings.Join(property.Enum, optionValuesSeparator))
@@ -102,12 +102,15 @@ func optionDescription(toolName string, propertyName string, property tools.Tool
 	return strings.Join(parts, "; ")
 }
 
-func defaultValueText(value any) string {
+func defaultValueText(value any, enumValues []string) string {
 	if boolValue, ok := value.(bool); ok {
 		if boolValue {
 			return "enabled"
 		}
 		return "disabled"
+	}
+	if enumValue, ok := EnumValueForNumericDefault(value, enumValues); ok {
+		return enumValue
 	}
 	return fmt.Sprint(value)
 }
