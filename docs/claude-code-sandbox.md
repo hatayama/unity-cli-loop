@@ -8,9 +8,10 @@ all along" — this document exists so nobody walks that path again.
 ## Symptom
 
 - Any `uloop` command that talks to the Unity Editor (`compile`, `run-tests`, `get-logs`,
-  `simulate-*`, ...) fails, while Unity itself is demonstrably healthy and the server-side log
-  shows a successful bind and then silence.
-- Commands that never touch the Editor (`uloop --version`, `--help` rendering) work normally.
+  `simulate-*`, ...) fails, while Unity itself is demonstrably healthy and the server side never
+  sees the connection attempt (server-side logs are VibeLogger-based and exist only when the
+  `ULOOP_DEBUG` scripting define is set — do not read missing log lines as evidence either way).
+- Commands that never touch the Editor (`uloop --version`, `uloop --help`) work normally.
 - The reported error is misleading: the CLI retries for 60 seconds and then reports
   `dial unix ...: i/o timeout`, while the underlying per-attempt error is
   `connect: operation not permitted` (EPERM). Fixing that misdiagnosis is tracked as its own
@@ -20,13 +21,16 @@ all along" — this document exists so nobody walks that path again.
 
 Claude Code runs shell commands inside a sandbox whose network policy is expressed as a list of
 allowed **hostnames**. A Unix domain socket has no hostname, so there is no way to allowlist the
-project socket (`/tmp/uloop-<uid>/<project>.sock`) through that policy — `connect()` and
+project socket (`/tmp/uloop-<euid>/UnityCliLoop-<hash>.sock`, where `<hash>` is the first 16 hex
+digits of the SHA-256 of the canonical project root) through that policy — `connect()` and
 `bind()` on Unix sockets are denied with EPERM regardless of filesystem permissions. Write
 access to the socket's directory does not help; this was verified empirically: a directory the
 sandbox allowed file writes into still refused a socket `bind()`.
 
 This is specific to the sandboxed shell. The same command in a normal terminal, or in a session
-without sandboxing, is unaffected.
+without sandboxing, is unaffected. Windows uses a named pipe instead of a Unix socket; whether
+the sandbox blocks named-pipe connects the same way has not been verified — treat an
+EPERM-shaped failure there with the same suspicion before blaming the Editor.
 
 ## Why this repository gets hit harder than game projects
 
@@ -36,22 +40,22 @@ consequences (2026-07-26, all measured in a live sandboxed session):
 
 | Invocation | Matches `uloop *` | Result |
 |---|---|---|
-| `uloop get-logs ...` (dispatcher from PATH) | yes — runs excluded from the sandbox | works |
+| `uloop get-logs ...` (dispatcher from PATH) | yes — runs outside the sandbox | works |
 | `SOME_VAR=... uloop ...` (env-var prefix) | yes (verified empirically) | works |
 | `ULOOP_PROJECT_RUNNER_PATH=<dist runner> uloop ...` (or `export` first, then plain `uloop ...`) | yes — the command text still starts with `uloop` | works |
-| `dist/darwin-arm64/uloop compile ...` | **no** (verified even in the plain form with no `$(...)` substitution) | EPERM |
+| `dist/darwin-arm64/uloop compile ...` | **no** (verified with the plain literal path) | EPERM |
 | raw `socket.connect()` from a script | no | EPERM |
 
 The exclusion is decided on the **typed command text**, not on which binary ultimately does the
 work: the `ULOOP_PROJECT_RUNNER_PATH` row runs a locally built dev runner yet stays excluded,
-while the `dist/...` row is the same dispatcher code yet gets sandboxed. Game projects invoke
-plain `uloop ...` (optionally with the env override) and never notice the sandbox. This
-repository's development rule (see `CLAUDE.md` — always validate with the built
+while the `dist/...` row runs the same kind of dispatcher binary yet gets sandboxed. Game
+projects invoke plain `uloop ...` (optionally with the env override) and never notice the
+sandbox. This repository's development rule (see `CLAUDE.md` — always validate with the built
 `dist/<platform>/uloop` binary) produces exactly the command shape the exclusion does
 **not** match.
 
-Note the corollary: a success for `uloop ...` in a sandboxed session does not mean the sandbox
-permits Unity IPC — it means the command was excluded from sandboxing entirely.
+Note the corollary: a successful `uloop ...` command in a sandboxed session does not mean the
+sandbox permits Unity IPC — it means the command was excluded from sandboxing entirely.
 
 ## Remedies
 
@@ -60,7 +64,13 @@ Pick one:
 1. Run dev-binary commands with the sandbox disabled for that command (Claude Code:
    `dangerouslyDisableSandbox`; users can manage restrictions via `/sandbox`).
 2. Add the dev-binary shape to `excludedCommands` in the personal Claude Code settings, e.g.
-   `"dist/*/uloop *"`, alongside the existing `"uloop *"`.
+   `"dist/*/uloop *"`, alongside the existing `"uloop *"` (this exact glob is a suggestion, not
+   a measured entry — confirm it matches after adding it).
+3. When the change under review lives in the project runner, keep the sandbox on and run
+   `ULOOP_PROJECT_RUNNER_PATH=<absolute path to the dist runner> uloop ...` — the plain-`uloop`
+   command text stays excluded while the dev runner does the work (the override is documented in
+   `docs/project-runner-pin.md`). This does not exercise dispatcher-side changes; for those, use
+   remedy 1 or 2.
 
-Do not burn time re-investigating the Editor side while the error is EPERM: the Editor never
+Do not burn time re-investigating the Editor side when the error is EPERM: the Editor never
 saw the connection attempt.
