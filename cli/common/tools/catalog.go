@@ -21,13 +21,8 @@ func Load(projectRoot string, internalToolNames map[string]bool) (ToolCatalog, e
 		return cache, nil
 	}
 
-	content, err := embeddedTools.ReadFile(defaultToolsFile)
+	cache, err := decodeEmbeddedCatalog()
 	if err != nil {
-		return ToolCatalog{}, err
-	}
-
-	var cache ToolCatalog
-	if err := json.Unmarshal(content, &cache); err != nil {
 		return ToolCatalog{}, err
 	}
 	return FilterInternalTools(cache, internalToolNames), nil
@@ -50,16 +45,34 @@ func LoadProjectCache(projectRoot string, internalToolNames map[string]bool) (To
 }
 
 func LoadDefault() ToolCatalog {
-	content, err := embeddedTools.ReadFile(defaultToolsFile)
+	cache, err := decodeEmbeddedCatalog()
 	if err != nil {
 		return ToolCatalog{}
 	}
-
-	var cache ToolCatalog
-	if json.Unmarshal(content, &cache) != nil {
-		return ToolCatalog{}
-	}
 	return cache
+}
+
+// decodeEmbeddedCatalog reads the catalog compiled into this binary. Its description text is
+// generated from the package's skill parameter tables, so every property it carries is marked as
+// skill-sourced and renders verbatim.
+func decodeEmbeddedCatalog() (ToolCatalog, error) {
+	content, err := embeddedTools.ReadFile(defaultToolsFile)
+	if err != nil {
+		return ToolCatalog{}, err
+	}
+
+	cache := ToolCatalog{}
+	if err := json.Unmarshal(content, &cache); err != nil {
+		return ToolCatalog{}, err
+	}
+	for _, tool := range cache.Tools {
+		schema := tool.EffectiveInputSchema()
+		for propertyName, property := range schema.Properties {
+			property.SkillSourcedDescription = true
+			schema.Properties[propertyName] = property
+		}
+	}
+	return cache, nil
 }
 
 func Find(cache ToolCatalog, name string) (ToolDefinition, bool) {

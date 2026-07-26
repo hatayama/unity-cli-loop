@@ -50,6 +50,7 @@ func applyToolDocs(tool tools.ToolDefinition, docs map[string]ToolDocs) tools.To
 			continue
 		}
 		property.Description = description
+		property.SkillSourcedDescription = true
 		schema.Properties[propertyName] = property
 	}
 	return tool

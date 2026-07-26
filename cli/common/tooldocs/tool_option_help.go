@@ -117,19 +117,16 @@ func defaultValueText(value any, enumValues []string) string {
 	return fmt.Sprint(value)
 }
 
+// OptionSummary is the help text for one option. A description that came from a skill parameter table
+// is printed verbatim, including for a negated boolean flag: those rows are already written from the
+// flag's point of view ("Exclude component information" for --no-include-components).
+//
+// Only a description with no skill behind it - a project-local custom command - is synthesized. Its
+// author wrote the property in the positive sense, so printing it against a --no-<name> flag would
+// read as the opposite of what the flag does. The branch is on where the text came from, never on how
+// the text is worded.
 func OptionSummary(toolName string, propertyName string, property tools.ToolProperty) string {
-	if IsNegatedBooleanProperty(property) {
-		if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
-			return "Fail before execution if unsaved editor changes remain instead of auto-saving them"
-		}
-		if isCompileReloadExternalSceneChangesOption(toolName, propertyName, property) {
-			return "Stop before execution if open Scene files changed externally instead of auto-reloading them"
-		}
-		summary := FirstHelpLine(property.Description)
-		normalizedSummary := strings.ToLower(summary)
-		if strings.HasPrefix(normalizedSummary, "disable ") || strings.HasPrefix(normalizedSummary, "do not ") {
-			return summary
-		}
+	if IsNegatedBooleanProperty(property) && !property.SkillSourcedDescription {
 		return "Disable " + pascalToWords(propertyName)
 	}
 	return FirstHelpLine(property.Description)
