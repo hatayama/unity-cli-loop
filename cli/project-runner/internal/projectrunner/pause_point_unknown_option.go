@@ -40,7 +40,10 @@ var pausePointCarriedOverEnableFlagNames = []string{
 func pausePointUnknownOptionError(command string, name string) *clierrors.ArgumentError {
 	message := fmt.Sprintf("Unknown option %q for %s.", "--"+name, command)
 	if owner, ok := pausePointFlagOwnerCommand(name); ok && owner != command {
-		message = fmt.Sprintf("--%s is an %s option, not a %s one.", name, owner, command)
+		message = fmt.Sprintf("--%s is %s %s option, not %s %s one.",
+			name,
+			indefiniteArticleFor(owner), owner,
+			indefiniteArticleFor(command), command)
 		if owner == pausePointEnableCommandName && isPausePointCarriedOverEnableFlag(name) {
 			message += " The value passed to " + pausePointEnableCommandName +
 				" is already applied to the response of this command, so it does not need to be passed again here."
@@ -53,6 +56,20 @@ func pausePointUnknownOptionError(command string, name string) *clierrors.Argume
 		Command:     command,
 		NextActions: []string{fmt.Sprintf("Run `uloop %s --help` to list the accepted options.", command)},
 	}
+}
+
+// indefiniteArticleFor picks the article for a command name interpolated into a message. Command
+// names are lower-case ASCII identifiers, so the initial letter decides it — "an await-pause-point
+// option" rather than "a await-pause-point option". Both slots of the owner sentence go through
+// this, so neither reads as broken English for a vowel-initial command.
+func indefiniteArticleFor(commandName string) string {
+	if commandName == "" {
+		return "a"
+	}
+	if strings.ContainsRune("aeiou", rune(commandName[0])) {
+		return "an"
+	}
+	return "a"
 }
 
 // pausePointFlagOwnerCommand reports which pause-point command accepts the flag, searching in a

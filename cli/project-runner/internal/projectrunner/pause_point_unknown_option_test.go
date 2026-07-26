@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
 // Verifies a flag that belongs to enable-pause-point names its real owner and states that the value
@@ -60,6 +62,26 @@ func TestParsePausePointStatusUnknownOptionNamesAwaitAsTheOwner(t *testing.T) {
 		err.Error(),
 		"--"+PausePointLogsMaxCountFlagName+" is an await-pause-point option, not a pause-point-status one.") {
 		t.Errorf("owner sentence missing: %s", err.Error())
+	}
+}
+
+// Verifies the article agrees with the command name in both slots of the owner sentence, so a
+// vowel-initial command such as await-pause-point does not produce "a await-pause-point one".
+func TestPausePointUnknownOptionArticleAgreesWithTheCommandName(t *testing.T) {
+	_, err := parseWaitForPausePointOptions(
+		[]string{"--id", "jump", "--max-preview-elements", "5"})
+
+	if err == nil {
+		t.Fatal("expected error for an enable-pause-point flag passed to await-pause-point")
+	}
+	if !strings.Contains(
+		err.Error(),
+		"--max-preview-elements is an enable-pause-point option, not an await-pause-point one.") {
+		t.Errorf("article mismatch in the owner sentence: %s", err.Error())
+	}
+
+	if article := indefiniteArticleFor(clicore.PausePointStatusUserCommandName); article != "a" {
+		t.Errorf("a consonant-initial command takes \"a\", got %q", article)
 	}
 }
 
