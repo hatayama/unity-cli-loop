@@ -180,6 +180,22 @@ func TestFormatToolListResultFillsPlaceholderDescriptions(t *testing.T) {
 	}
 }
 
+// Tests that an unset string parameter reports no default at all, matching --help. Unity reports an
+// empty string for these, which would otherwise claim the option defaults to "".
+func TestNewListCatalogOmitsEmptyStringDefaults(t *testing.T) {
+	catalog := newListCatalog(clicore.ToolsCache{Tools: []clicore.ToolDefinition{{
+		Name: "screenshot",
+		ParameterSchema: clicore.InputSchema{Properties: map[string]clicore.ToolProperty{
+			"OutputPath": {Type: "string", Description: "Where to write the file", DefaultValue: ""},
+		}},
+	}}})
+
+	option := findListOption(t, findListTool(t, catalog, "screenshot"), "--output-path")
+	if option.Default != nil {
+		t.Errorf("empty-string default was reported: %#v", option.Default)
+	}
+}
+
 func decodeListCatalog(t *testing.T, content []byte) listCatalog {
 	t.Helper()
 

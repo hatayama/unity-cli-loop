@@ -109,6 +109,12 @@ func listOptionDefault(property clicore.ToolProperty) any {
 	if enumValue, ok := tooldocs.EnumValueForNumericDefault(defaultValue, property.Enum); ok {
 		return enumValue
 	}
+	// Unity reports an empty string as the default of every unset string parameter. Reporting it
+	// would claim the option has a default of "", and omitempty cannot drop it on its own because the
+	// field is an interface. Nil keeps list symmetric with --help, which omits the same value.
+	if defaultValue == "" {
+		return nil
+	}
 	return defaultValue
 }
 
