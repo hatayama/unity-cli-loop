@@ -51,6 +51,13 @@ type pausePointStatusResponse struct {
 	// CapturedVariables array for "nothing was captured at this hit".
 	CapturedVariableNameFilterNoMatch bool `json:"CapturedVariableNameFilterNoMatch,omitempty"`
 
+	// CapturedVariableNamesNotFound is set by the CLI, not Unity: the requested
+	// --captured-variable-names that matched no captured variable, in the order they were
+	// requested. Without it a partial match is indistinguishable from a full one, since the
+	// response only carries the names that did match and CapturedVariableNameFilterNoMatch covers
+	// the all-or-nothing case. Both are emitted when nothing matched at all.
+	CapturedVariableNamesNotFound []string `json:"CapturedVariableNamesNotFound,omitempty"`
+
 	// TriggerResult is set by the CLI, not Unity, only when --trigger was passed. It is omitted
 	// entirely otherwise, so callers that never use --trigger see no schema change at all.
 	TriggerResult *pausePointTriggerResult `json:"TriggerResult,omitempty"`

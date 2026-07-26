@@ -38,13 +38,17 @@ func filterPausePointCapturedVariablesByName(
 		nameSet[name] = struct{}{}
 	}
 
+	matchedNames := map[string]struct{}{}
+
 	filteredCurrent, currentMatchCount := filterCapturedVariablesByNameSet(response.CapturedVariables, nameSet)
+	collectCapturedVariableNames(filteredCurrent, matchedNames)
 	response.CapturedVariables = filteredCurrent
 	totalMatchCount := currentMatchCount
 
 	history := make([]pausePointCapturedHistoryFrame, len(response.CapturedVariableHistory))
 	for index, frame := range response.CapturedVariableHistory {
 		filteredFrame, frameMatchCount := filterCapturedVariablesByNameSet(frame.CapturedVariables, nameSet)
+		collectCapturedVariableNames(filteredFrame, matchedNames)
 		frame.CapturedVariables = filteredFrame
 		totalMatchCount += frameMatchCount
 		history[index] = frame
@@ -52,7 +56,30 @@ func filterPausePointCapturedVariablesByName(
 	response.CapturedVariableHistory = history
 
 	response.CapturedVariableNameFilterNoMatch = totalMatchCount == 0
+	response.CapturedVariableNamesNotFound = unmatchedCapturedVariableNames(names, matchedNames)
 	return response
+}
+
+// unmatchedCapturedVariableNames lists the requested names that matched nothing, keeping the order
+// they were requested in so the report reads back against the flag value the caller wrote. A name
+// matched anywhere — current variables or any history frame — counts as found.
+func unmatchedCapturedVariableNames(names []string, matchedNames map[string]struct{}) []string {
+	notFound := make([]string, 0, len(names))
+	for _, name := range names {
+		if _, ok := matchedNames[name]; !ok {
+			notFound = append(notFound, name)
+		}
+	}
+	if len(notFound) == 0 {
+		return nil
+	}
+	return notFound
+}
+
+func collectCapturedVariableNames(variables []pausePointCapturedVariable, names map[string]struct{}) {
+	for _, variable := range variables {
+		names[variable.Name] = struct{}{}
+	}
 }
 
 func filterCapturedVariablesByNameSet(

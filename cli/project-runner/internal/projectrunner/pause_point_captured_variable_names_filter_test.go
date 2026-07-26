@@ -72,6 +72,45 @@ func TestFilterPausePointCapturedVariablesByName(t *testing.T) {
 		}
 	})
 
+	t.Run("reports which requested names matched nothing, in the requested order", func(t *testing.T) {
+		result := filterPausePointCapturedVariablesByName(
+			baseResponse(), []string{"shield", "velocity", "armor"})
+		if len(result.CapturedVariableNamesNotFound) != 2 ||
+			result.CapturedVariableNamesNotFound[0] != "shield" ||
+			result.CapturedVariableNamesNotFound[1] != "armor" {
+			t.Fatalf("expected the unmatched names in request order: %#v", result.CapturedVariableNamesNotFound)
+		}
+		if result.CapturedVariableNameFilterNoMatch {
+			t.Fatal("a partial match must not set CapturedVariableNameFilterNoMatch")
+		}
+	})
+
+	t.Run("a name matched only in history is not reported as missing", func(t *testing.T) {
+		response := baseResponse()
+		response.CapturedVariables = nil
+		result := filterPausePointCapturedVariablesByName(response, []string{"health"})
+		if len(result.CapturedVariableNamesNotFound) != 0 {
+			t.Fatalf("a history-only match must count as found: %#v", result.CapturedVariableNamesNotFound)
+		}
+	})
+
+	t.Run("all names missing sets both the list and the no-match flag", func(t *testing.T) {
+		result := filterPausePointCapturedVariablesByName(baseResponse(), []string{"shield", "armor"})
+		if len(result.CapturedVariableNamesNotFound) != 2 {
+			t.Fatalf("expected both names reported missing: %#v", result.CapturedVariableNamesNotFound)
+		}
+		if !result.CapturedVariableNameFilterNoMatch {
+			t.Fatal("expected CapturedVariableNameFilterNoMatch to stay true when nothing matches")
+		}
+	})
+
+	t.Run("every name matching leaves the missing list empty", func(t *testing.T) {
+		result := filterPausePointCapturedVariablesByName(baseResponse(), []string{"velocity", "health"})
+		if result.CapturedVariableNamesNotFound != nil {
+			t.Fatalf("expected no missing names: %#v", result.CapturedVariableNamesNotFound)
+		}
+	})
+
 	t.Run("empty names list leaves the response unchanged", func(t *testing.T) {
 		original := baseResponse()
 		result := filterPausePointCapturedVariablesByName(original, nil)
