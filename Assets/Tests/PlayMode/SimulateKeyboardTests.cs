@@ -652,6 +652,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.IsFalse(lastResponse.Success, "A bare digit must not be accepted as a Key enum ordinal");
             StringAssert.Contains("Digit3", lastResponse.Message);
             StringAssert.Contains("Numpad3", lastResponse.Message);
+            StringAssert.Contains("Digits are not key names", lastResponse.Message);
+            StringAssert.Contains("re-check any earlier results", lastResponse.Message);
         }
 
         /// <summary>
@@ -669,6 +671,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             });
 
             Assert.IsFalse(lastResponse.Success, "A signed numeric key must not be accepted as a Key enum ordinal");
+            StringAssert.Contains("Digits are not key names", lastResponse.Message);
+            StringAssert.Contains("re-check any earlier results", lastResponse.Message);
         }
 
         /// <summary>
@@ -704,6 +708,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             });
 
             Assert.IsFalse(lastResponse.Success, "An undefined numeric key must fail validation rather than throw");
+            StringAssert.Contains("Digits are not key names", lastResponse.Message);
+            StringAssert.Contains("re-check any earlier results", lastResponse.Message);
         }
 
         /// <summary>
