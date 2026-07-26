@@ -43,6 +43,61 @@ func TestPausePointEnableHelpOptionsAreAcceptedByTheEnableParser(t *testing.T) {
 	}
 }
 
+// Verifies the documented flag set and the parsed flag set are exactly the same. The one-directional
+// subset checks below cannot see the original defect from the other side: a flag the parser accepts
+// but no listing documents is undiscoverable, which is how all six of these flags came to be missing
+// from --help in the first place.
+func TestPausePointEnableDocumentedAndParsedFlagsMatch(t *testing.T) {
+	documented := map[string]bool{}
+	for _, option := range tooldocs.PausePointEnableCLIOnlyOptions() {
+		documented[option.FlagName] = true
+	}
+
+	for flagName := range pausePointEnableFlagHandlers {
+		if !documented[flagName] {
+			t.Errorf("the enable-pause-point parser accepts --%s but no option listing documents it", flagName)
+		}
+	}
+	for flagName := range documented {
+		if _, ok := pausePointEnableFlagHandlers[flagName]; !ok {
+			t.Errorf("--%s is documented but the enable-pause-point parser does not accept it", flagName)
+		}
+	}
+}
+
+// Verifies --await has no =value form: it is passed through to Unity schema parsing, which is the
+// behavior the parser had before the handler table replaced its open-coded branches.
+func TestPausePointEnableAwaitRejectsValueForm(t *testing.T) {
+	remaining, await, _, _, _, _, _, _, err := extractPausePointEnableAwaitFlags([]string{"--await=true"})
+	if err != nil {
+		t.Fatalf("--await=true should be passed through, not rejected here: %v", err)
+	}
+	if await {
+		t.Error("--await=true must not enable the wait")
+	}
+	if len(remaining) != 1 || remaining[0] != "--await=true" {
+		t.Errorf("--await=true was not passed through: %v", remaining)
+	}
+}
+
+// Verifies an unrelated argument is passed through untouched for the schema pipeline.
+func TestPausePointEnableLeavesSchemaArgumentsAlone(t *testing.T) {
+	remaining, _, _, _, _, _, _, _, err := extractPausePointEnableAwaitFlags(
+		[]string{"--id", "marker", "--await", "--line", "42"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := []string{"--id", "marker", "--line", "42"}
+	if len(remaining) != len(expected) {
+		t.Fatalf("remaining = %v, want %v", remaining, expected)
+	}
+	for index, argument := range expected {
+		if remaining[index] != argument {
+			t.Fatalf("remaining = %v, want %v", remaining, expected)
+		}
+	}
+}
+
 // Verifies the CLI-only flags shared with await-pause-point are accepted by the wait parser as
 // well, since enable-pause-point --help documents them as "same as await-pause-point's --x".
 func TestPausePointSharedHelpOptionsAreAcceptedByTheWaitParser(t *testing.T) {
