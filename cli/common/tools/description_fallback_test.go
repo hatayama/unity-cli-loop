@@ -179,8 +179,11 @@ func TestEmbeddedSimulateKeyboardKeyDescriptionDocumentsDigitKeys(t *testing.T) 
 		t.Fatal("embedded catalog has no simulate-keyboard tool")
 	}
 
+	// The text is generated from the skill's parameter table, which states the rule as the accepted
+	// ranges rather than one example digit; the guarantee this pins - a caller learns bare digits are
+	// rejected - is unchanged.
 	description := tool.EffectiveInputSchema().Properties["Key"].Description
-	for _, expected := range []string{"Digit3", "Numpad0"} {
+	for _, expected := range []string{"Digit0-Digit9", "Numpad0-Numpad9", "not bare 0-9"} {
 		if !strings.Contains(description, expected) {
 			t.Errorf("--key description does not mention %q: %q", expected, description)
 		}

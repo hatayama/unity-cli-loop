@@ -204,7 +204,7 @@ func TestRunDispatcherCompileHelpDoesNotRequireUnityProject(t *testing.T) {
 		"--force-recompile",
 		"--no-wait-for-domain-reload",
 		"--stop-on-external-scene-changes",
-		"Stop before execution if open Scene files changed externally instead of auto-reloading them",
+		"Stop before compilation if open Scene files changed externally instead of auto-reloading them",
 		"default: auto-reload enabled",
 	} {
 		if !strings.Contains(output, expected) {
@@ -442,7 +442,7 @@ func TestRunDispatcherRunTestsHelpDoesNotRequireUnityProject(t *testing.T) {
 		"--filter-type",
 		"--filter-value",
 		"--fail-on-unsaved-changes",
-		"Fail before execution if unsaved editor changes remain instead of auto-saving them",
+		"Fail before test execution if unsaved editor changes remain instead of auto-saving them",
 		"default: auto-save enabled",
 	} {
 		if !strings.Contains(output, expected) {
