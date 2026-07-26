@@ -86,7 +86,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Key key = Key.None;
             if (isKnownKeyName)
             {
-                Enum.TryParse(normalizedKey, ignoreCase: true, out key);
+                bool parsed = Enum.TryParse(normalizedKey, ignoreCase: true, out key);
+                UnityEngine.Debug.Assert(parsed, $"A whitelisted Key name must parse: {normalizedKey}");
             }
 
             if (!isKnownKeyName || key == Key.None)
@@ -270,7 +271,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             for (int index = 0; index < trimmed.Length; index++)
             {
-                if (!char.IsDigit(trimmed[index]))
+                // Why not char.IsDigit: it is true for non-ASCII digits, which Enum.TryParse never
+                // accepted as ordinals. Claiming they used to press another key would be false.
+                if (trimmed[index] < '0' || trimmed[index] > '9')
                 {
                     return false;
                 }

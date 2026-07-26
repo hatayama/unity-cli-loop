@@ -690,6 +690,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             });
 
             Assert.IsFalse(lastResponse.Success, "A comma-separated key list must not be OR-ed into a single key");
+            StringAssert.Contains("Invalid key name", lastResponse.Message);
+            // The digit guidance is scoped to numeric input, so it must not appear here.
+            StringAssert.DoesNotContain("Digits are not key names", lastResponse.Message);
+        }
+
+        /// <summary>
+        /// Verifies that a whitespace-padded digit is rejected, closing the Enum.TryParse path that
+        /// trimmed the input before reading it as an enum ordinal.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithPaddedDigitKey_Should_ReturnFailure()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = " 3 "
+            });
+
+            Assert.IsFalse(lastResponse.Success, "A whitespace-padded digit must not be accepted as a Key enum ordinal");
+            StringAssert.Contains("Digits are not key names", lastResponse.Message);
         }
 
         /// <summary>
