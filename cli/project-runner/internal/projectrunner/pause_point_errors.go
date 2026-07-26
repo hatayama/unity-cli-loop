@@ -39,6 +39,22 @@ func pausePointWaitError(
 			expiredError.Details["Hint"] = hint
 		}
 		return expiredError
+	case pausePointWaitStateTriggerFailed:
+		triggerFailedError := pausePointStateError(
+			clierrors.ErrorCodePausePointTriggerFailed,
+			"The --trigger command was rejected by its own argument parsing, so it never ran and the "+
+				"wait was abandoned instead of waiting out the remaining timeout. The marker is still "+
+				"armed: see Details.TriggerResult for the rejection and Details.RemainingMilliseconds "+
+				"for how long it stays armed.",
+			projectRoot,
+			options,
+			response,
+			// Retrying the identical command reproduces the same rejection: the trigger value has to
+			// change first. Reporting this as retryable is what made the original incident waste a
+			// full timeout window on a permanent failure.
+			false)
+		triggerFailedError.NextActions = pausePointTriggerFailedNextActions(options.id)
+		return triggerFailedError
 	case pausePointWaitStateCleared:
 		return pausePointStateError(
 			clierrors.ErrorCodePausePointCleared,
@@ -60,6 +76,31 @@ func pausePointWaitError(
 			timeoutError.Details["Hint"] = hint
 		}
 		return timeoutError
+	}
+}
+
+// pausePointTriggerFailedNextActions replaces the generic enable/id-mismatch guidance, which does
+// not apply here: the marker was confirmed armed and only the --trigger value is wrong.
+//
+// Why re-running the same command comes first: this response answers the command the caller just
+// ran, so "fix the --trigger value in that command and run it again" asks them to change one value
+// they already typed, with no argument they have to guess. Re-enabling is also the cleaner reset —
+// it starts a fresh marker entry (HitCount and IsHit back to zero, the --timeout-seconds countdown
+// restarted) while re-patching an id that is already patched is a no-op.
+//
+// Why the await form carries the real id: it is the one recovery command this function can spell
+// out completely, and naming a command without its arguments is exactly the failure this guidance
+// exists to prevent.
+func pausePointTriggerFailedNextActions(id string) []string {
+	return []string{
+		"Fix the --trigger value in the command you just ran and run that command again. Re-running " +
+			"`enable-pause-point --await` is safe and is the cleanest reset: it restarts the marker's " +
+			"HitCount and --timeout-seconds countdown, and re-patching an already patched id is a no-op.",
+		fmt.Sprintf(
+			"The marker is still armed, so you can also wait on it directly: "+
+				"uloop await-pause-point --id %q --trigger \"<corrected trigger command>\"", id),
+		"Check the rejected value against the triggered command's own `--help` before retrying, so the " +
+			"same value is not retried twice.",
 	}
 }
 

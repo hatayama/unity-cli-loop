@@ -39,6 +39,46 @@ type pausePointTriggerResult struct {
 	Error string `json:"Error,omitempty"`
 }
 
+// pausePointTriggerFailedWithArgumentError reports whether the trigger command was rejected by
+// argument parsing, the one failure that makes waiting out the marker's remaining lifetime
+// pointless: the trigger performed no action, so the marker can never be hit by it.
+//
+// Deliberately narrow. A connection drop, a disabled tool, or unparseable output must not abort the
+// wait — the marker may still be hit by the game itself, and abandoning that wait would turn a
+// recoverable situation into a lost hit. Anything this function cannot positively identify as an
+// argument rejection keeps the wait running.
+func pausePointTriggerFailedWithArgumentError(result *pausePointTriggerResult) bool {
+	if result == nil {
+		return false
+	}
+
+	// Error carries what the dispatched command wrote to stderr, which is where a CLI-side argument
+	// rejection lands; Response carries its stdout, which is where a Unity-side argument rejection
+	// arrives with the same code.
+	return isPausePointInvalidArgumentPayload([]byte(result.Error)) ||
+		isPausePointInvalidArgumentPayload(result.Response)
+}
+
+func isPausePointInvalidArgumentPayload(payload []byte) bool {
+	trimmed := bytes.TrimSpace(payload)
+	if len(trimmed) == 0 {
+		return false
+	}
+
+	envelope := struct {
+		ErrorCode string `json:"ErrorCode"`
+		Error     struct {
+			ErrorCode string `json:"ErrorCode"`
+		} `json:"Error"`
+	}{}
+	if err := json.Unmarshal(trimmed, &envelope); err != nil {
+		return false
+	}
+
+	return envelope.Error.ErrorCode == clierrors.ErrorCodeInvalidArgument ||
+		envelope.ErrorCode == clierrors.ErrorCodeInvalidArgument
+}
+
 // parsePausePointTriggerCommand splits a --trigger value into a command name and its arguments,
 // and rejects shapes that cannot behave sensibly when dispatched from inside this CLI process.
 func parsePausePointTriggerCommand(command string, value string) (string, []string, error) {
@@ -185,6 +225,16 @@ func startPausePointTrigger(
 	}()
 
 	return handle
+}
+
+// doneChannel exposes the completion channel for the pause-point poll loop's select, so a trigger
+// that fails on its own arguments can be observed the moment it reports instead of only at join
+// time. Nil-safe: a nil handle yields a nil channel, which a select case never selects.
+func (h *pausePointTriggerHandle) doneChannel() <-chan *pausePointTriggerResult {
+	if h == nil {
+		return nil
+	}
+	return h.done
 }
 
 // join waits briefly for the trigger goroutine started by startPausePointTrigger, once the

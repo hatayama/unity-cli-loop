@@ -33,6 +33,7 @@ const (
 	ErrorCodePausePointWaitTimeout           = "PAUSE_POINT_WAIT_TIMEOUT"
 	ErrorCodePausePointExpired               = "PAUSE_POINT_EXPIRED"
 	ErrorCodePausePointCleared               = "PAUSE_POINT_CLEARED"
+	ErrorCodePausePointTriggerFailed         = "PAUSE_POINT_TRIGGER_FAILED"
 	ErrorCodeInternalError                   = "INTERNAL_ERROR"
 
 	ErrorPhaseArgumentParsing = "argument_parsing"
