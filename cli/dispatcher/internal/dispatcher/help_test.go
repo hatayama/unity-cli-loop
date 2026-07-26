@@ -269,6 +269,59 @@ func TestCommandHelpPointsAtTheToolSkill(t *testing.T) {
 	}
 }
 
+// Verifies the watch commands point at the pause-point skill, which is where watch expressions are
+// documented, rather than at a per-command skill that does not exist.
+func TestCommandHelpPointsWatchCommandsAtThePausePointSkill(t *testing.T) {
+	for _, command := range []string{"enable-watch", "clear-watch", "get-watch-values"} {
+		t.Run(command, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+
+			handled, code := tryHandleCommandHelp(command, "", "", &stdout, &stderr)
+
+			if !handled || code != 0 {
+				t.Fatalf("%s help was not handled: handled=%v code=%d stderr=%s", command, handled, code, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), "Load the uloop-pause-point skill") {
+				t.Fatalf("%s help does not point at the pause-point skill:\n%s", command, stdout.String())
+			}
+		})
+	}
+}
+
+// Verifies dispatcher-owned native commands get the guidance line too: launch renders its own help,
+// so it would otherwise be the only command with a skill that never mentions it.
+func TestLaunchHelpPointsAtTheLaunchSkill(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunDispatcher(context.Background(), []string{clicore.LaunchCommandName, "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("launch help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Load the uloop-launch skill") {
+		t.Fatalf("launch help does not point at its skill:\n%s", stdout.String())
+	}
+}
+
+// Verifies a native command whose skill is internal-only (or absent) gets no guidance line.
+func TestVersionHelpOmitsSkillLine(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunDispatcher(context.Background(), []string{clicore.VersionCommandName, "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("version help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "skill") {
+		t.Fatalf("version help mentions a skill:\n%s", stdout.String())
+	}
+}
+
 // Verifies a command with no matching skill gets no guidance line, so a custom command is never
 // told to load a skill nobody installed.
 func TestCommandHelpOmitsSkillLineForCustomCommands(t *testing.T) {

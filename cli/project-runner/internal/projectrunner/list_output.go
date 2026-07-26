@@ -8,7 +8,6 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
-	"github.com/hatayama/unity-cli-loop/common/tools"
 )
 
 type listCatalog struct {
@@ -41,7 +40,7 @@ func formatToolListResult(result json.RawMessage) json.RawMessage {
 	// list formats get-tool-details' raw response and never goes through the project-cache loader,
 	// so the placeholder fallback has to be applied here too. Without it `--help` would show real
 	// descriptions while `list` kept reporting "Parameter: <Name>".
-	cache = tools.ApplyEmbeddedDescriptionFallback(cache)
+	cache = clicore.ApplyEmbeddedDescriptionFallback(cache)
 
 	content, err := json.Marshal(newListCatalog(cache))
 	if err != nil {

@@ -24,11 +24,17 @@ var commandSkillNames = map[string]string{
 	"simulate-mouse-input": "uloop-simulate-mouse-input",
 	"simulate-mouse-ui":    "uloop-simulate-mouse-ui",
 
-	// One skill, four commands.
+	"launch": "uloop-launch",
+
+	// One skill covers the four pause-point commands and the three watch commands: watch
+	// expressions are documented by the pause-point skill's references/watch-expressions.md.
 	"enable-pause-point": "uloop-pause-point",
 	"clear-pause-point":  "uloop-pause-point",
 	"await-pause-point":  "uloop-pause-point",
 	"pause-point-status": "uloop-pause-point",
+	"enable-watch":       "uloop-pause-point",
+	"clear-watch":        "uloop-pause-point",
+	"get-watch-values":   "uloop-pause-point",
 }
 
 // SkillGuidanceLine returns the closing line of a command's --help output: an instruction to load
@@ -37,11 +43,13 @@ var commandSkillNames = map[string]string{
 // agent that found the command through --help has no way to learn the skill exists.
 //
 // Phrased as an instruction rather than a cross-reference, because a line that merely mentions a
-// document is easy to read past.
+// document is easy to read past. It names what the skill adds rather than referring to the options
+// above, because commands such as focus-window have no options for that phrasing to point at.
 func SkillGuidanceLine(command string) (string, bool) {
 	skillName, ok := commandSkillNames[command]
 	if !ok {
 		return "", false
 	}
-	return "Load the " + skillName + " skill before using options not listed above.", true
+	return "Load the " + skillName +
+		" skill for workflow rules and response fields that --help does not cover.", true
 }

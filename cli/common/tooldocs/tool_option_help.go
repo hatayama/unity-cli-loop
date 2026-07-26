@@ -93,7 +93,9 @@ func optionDescription(toolName string, propertyName string, property tools.Tool
 	if description := OptionSummary(toolName, propertyName, property); description != "" {
 		parts = append(parts, description)
 	}
-	if propertyDefault := property.EffectiveDefault(); propertyDefault != nil {
+	// An empty-string default is what Unity reports for any unset string parameter, so rendering it
+	// would print a bare "default: " with nothing after it.
+	if propertyDefault := property.EffectiveDefault(); propertyDefault != nil && propertyDefault != "" {
 		parts = append(parts, "default: "+defaultValueText(propertyDefault, property.Enum))
 	}
 	if len(property.Enum) > 0 {

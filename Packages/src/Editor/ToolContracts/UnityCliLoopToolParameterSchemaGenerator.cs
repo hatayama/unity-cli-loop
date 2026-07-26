@@ -132,8 +132,11 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             if (descAttr != null)
                 return descAttr.Description;
 
-            // Generate default description
-            return $"Parameter: {property.Name}";
+            // Generate default description. Built from the JSON property name, not the C# one,
+            // because the CLI recognizes this placeholder by comparing it against the JSON name it
+            // received: a [JsonProperty] rename would otherwise make the placeholder unrecognizable
+            // and leave it in --help output as if it were a real description.
+            return $"Parameter: {GetJsonPropertyName(property)}";
         }
 
         /// <summary>

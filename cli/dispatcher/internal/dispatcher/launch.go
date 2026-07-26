@@ -473,4 +473,7 @@ func printLaunchHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "Compiler errors are ignored by default during Unity startup.")
 	clicore.WriteLine(stdout, "")
 	printGlobalOptionsHelp(stdout)
+	// launch renders its own help instead of going through printNativeSingleCommandHelp, so the
+	// closing skill line has to be printed here as well.
+	printSkillGuidanceHelp(clicore.LaunchCommandName, stdout)
 }
