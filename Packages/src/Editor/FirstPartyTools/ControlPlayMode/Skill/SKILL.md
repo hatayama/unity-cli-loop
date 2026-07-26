@@ -1,7 +1,7 @@
 ---
 name: uloop-control-play-mode
 toolName: control-play-mode
-description: "Control Unity Editor Play Mode. Use to Play, Stop, Pause, or Step Play Mode, or query Status without side effects, for runtime behavior checks and frame inspection."
+description: "Control Unity Editor Play Mode. Use to Play (or Resume, its alias), Stop, Pause, or Step Play Mode, or query Status without side effects, for runtime behavior checks and frame inspection."
 ---
 
 # uloop control-play-mode
