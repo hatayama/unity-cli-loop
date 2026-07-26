@@ -634,6 +634,95 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             StringAssert.Contains("Invalid key name", lastResponse.Message);
         }
 
+        /// <summary>
+        /// Verifies that a bare digit key is rejected instead of being parsed as an enum ordinal,
+        /// and that the failure message offers both the Digit and Numpad candidates.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithBareDigitKey_Should_ReturnFailureSuggestingDigitAndNumpad()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "3"
+            });
+
+            Assert.IsFalse(lastResponse.Success, "A bare digit must not be accepted as a Key enum ordinal");
+            StringAssert.Contains("Digit3", lastResponse.Message);
+            StringAssert.Contains("Numpad3", lastResponse.Message);
+        }
+
+        /// <summary>
+        /// Verifies that a signed numeric key is rejected, closing the Enum.TryParse signed-ordinal path.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithSignedNumericKey_Should_ReturnFailure()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "+3"
+            });
+
+            Assert.IsFalse(lastResponse.Success, "A signed numeric key must not be accepted as a Key enum ordinal");
+        }
+
+        /// <summary>
+        /// Verifies that a comma-separated key list is rejected, closing the Enum.TryParse flag-OR path.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithCommaSeparatedKeyNames_Should_ReturnFailure()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Space,Enter"
+            });
+
+            Assert.IsFalse(lastResponse.Success, "A comma-separated key list must not be OR-ed into a single key");
+        }
+
+        /// <summary>
+        /// Verifies that an out-of-range numeric key fails as a validation error instead of throwing
+        /// ArgumentOutOfRangeException from the keyboard indexer.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithUndefinedNumericKey_Should_ReturnFailure()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "300"
+            });
+
+            Assert.IsFalse(lastResponse.Success, "An undefined numeric key must fail validation rather than throw");
+        }
+
+        /// <summary>
+        /// Verifies that the existing Return-to-Enter alias still resolves after key names are whitelisted.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithReturnAlias_Should_Succeed()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Return"
+            });
+
+            Assert.IsTrue(lastResponse.Success, lastResponse.Message);
+        }
+
         [UnityTest]
         public IEnumerator Press_WithEmptyKey_Should_ReturnFailure()
         {

@@ -72,23 +72,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new SimulateKeyboardResponse
                 {
                     Success = false,
-                    Message = "Key parameter is required. Examples: \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\".",
+                    Message = "Key parameter is required. Examples: \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\", \"Digit3\".",
                     Action = parameters.Action.ToString()
                 };
             }
 
+            // Why not Enum.TryParse alone: it also accepts ordinals ("3"), signed ordinals ("+3"),
+            // whitespace-padded input, comma-separated names OR-ed together ("Space,Enter"), and
+            // undefined ordinals ("300") that later throw from the keyboard indexer. Only a name
+            // that is defined on the Key enum may resolve to a key.
             string normalizedKey = NormalizeKeyName(parameters.Key);
-            if (!Enum.TryParse<Key>(normalizedKey, ignoreCase: true, out Key key) || key == Key.None)
+            bool isKnownKeyName = DefinedKeyNames.Contains(normalizedKey);
+            Key key = Key.None;
+            if (isKnownKeyName)
+            {
+                Enum.TryParse(normalizedKey, ignoreCase: true, out key);
+            }
+
+            if (!isKnownKeyName || key == Key.None)
             {
                 IReadOnlyList<string> suggestions = KeyboardKeyNameSuggester.Suggest(parameters.Key);
                 string suggestionText = suggestions.Count == 0
                     ? string.Empty
                     : $" Did you mean: {string.Join(", ", suggestions)}?";
+                // Why: digits used to resolve silently to unrelated keys, so earlier runs that
+                // reported success may have pressed something else and need to be re-checked.
+                string ordinalHistoryText = LooksLikeNumericKeyInput(parameters.Key)
+                    ? " Digits are not key names: bare digits were previously parsed as enum ordinals (e.g. \"3\" pressed Tab), so re-check any earlier results or scripts that passed digits."
+                    : string.Empty;
                 return new SimulateKeyboardResponse
                 {
                     Success = false,
                     Message =
-                        $"Invalid key name: \"{parameters.Key}\". Use Input System Key enum names (e.g. \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\").{suggestionText}",
+                        $"Invalid key name: \"{parameters.Key}\". Use Input System Key enum names (e.g. \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\", \"Digit3\").{suggestionText}{ordinalHistoryText}",
                     Action = parameters.Action.ToString()
                 };
             }
@@ -228,6 +244,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void EnsureOverlayExists()
         {
             OverlayCanvasFactory.EnsureExists();
+        }
+
+        // Immutable whitelist of the names defined on the Input System Key enum, so key resolution
+        // never falls back to Enum.TryParse's ordinal and flag-combination behavior.
+        private static readonly HashSet<string> DefinedKeyNames =
+            new(Enum.GetNames(typeof(Key)), StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Reports whether the raw key input is the numeric form that Enum.TryParse used to accept
+        /// as an enum ordinal, so the rejection can explain what earlier runs actually pressed.
+        /// </summary>
+        private static bool LooksLikeNumericKeyInput(string keyName)
+        {
+            string trimmed = keyName.Trim();
+            if (trimmed.Length > 0 && (trimmed[0] == '+' || trimmed[0] == '-'))
+            {
+                trimmed = trimmed.Substring(1);
+            }
+
+            if (trimmed.Length == 0)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < trimmed.Length; index++)
+            {
+                if (!char.IsDigit(trimmed[index]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static string NormalizeKeyName(string keyName)
