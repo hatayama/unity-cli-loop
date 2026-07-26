@@ -8,6 +8,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/tools"
 )
 
 type listCatalog struct {
@@ -37,6 +38,11 @@ func formatToolListResult(result json.RawMessage) json.RawMessage {
 		return result
 	}
 
+	// list formats get-tool-details' raw response and never goes through the project-cache loader,
+	// so the placeholder fallback has to be applied here too. Without it `--help` would show real
+	// descriptions while `list` kept reporting "Parameter: <Name>".
+	cache = tools.ApplyEmbeddedDescriptionFallback(cache)
+
 	content, err := json.Marshal(newListCatalog(cache))
 	if err != nil {
 		panic(err)
@@ -45,9 +51,9 @@ func formatToolListResult(result json.RawMessage) json.RawMessage {
 }
 
 func newListCatalog(cache clicore.ToolsCache) listCatalog {
-	tools := make([]listTool, 0, len(cache.Tools))
+	listTools := make([]listTool, 0, len(cache.Tools))
 	for _, tool := range cache.Tools {
-		tools = append(tools, newListTool(tool))
+		listTools = append(listTools, newListTool(tool))
 	}
 
 	// Sourced from the embedded CLI contract because the tool catalog no longer
@@ -56,7 +62,7 @@ func newListCatalog(cache clicore.ToolsCache) listCatalog {
 		Version:       clicontract.ProjectRunnerVersion(),
 		ServerVersion: cache.ServerVersion,
 		UpdatedAt:     cache.UpdatedAt,
-		Tools:         tools,
+		Tools:         listTools,
 	}
 }
 

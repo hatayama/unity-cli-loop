@@ -151,6 +151,35 @@ func TestNewListCatalogIncludesEnablePausePointAwaitOptions(t *testing.T) {
 	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointResumePlayFlagName)
 }
 
+// Tests that list replaces Unity's generated placeholder descriptions with the embedded catalog's
+// real text. list formats the raw get-tool-details response, so it does not inherit the fallback the
+// project-cache loader applies for `--help`.
+func TestFormatToolListResultFillsPlaceholderDescriptions(t *testing.T) {
+	content := formatToolListResult([]byte(`{
+  "tools": [
+    {
+      "name": "simulate-keyboard",
+      "parameterSchema": {
+        "Properties": {
+          "Duration": {"Type": "number", "Description": "Parameter: Duration"}
+        }
+      }
+    }
+  ]
+}`))
+
+	catalog := decodeListCatalog(t, content)
+	simulateKeyboard := findListTool(t, catalog, "simulate-keyboard")
+
+	if simulateKeyboard.Description == "" {
+		t.Error("tool description was not filled from the embedded catalog")
+	}
+	option := findListOption(t, simulateKeyboard, "--duration")
+	if option.Description == "Parameter: Duration" || option.Description == "" {
+		t.Errorf("option placeholder description was not replaced: %q", option.Description)
+	}
+}
+
 func decodeListCatalog(t *testing.T, content []byte) listCatalog {
 	t.Helper()
 
