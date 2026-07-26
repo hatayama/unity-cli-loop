@@ -65,6 +65,13 @@ type pausePointStatusResponse struct {
 	// ResumePlayResult is set by the CLI, not Unity, only when --resume-play was passed. It is
 	// omitted entirely otherwise, matching TriggerResult's omit-when-unused contract.
 	ResumePlayResult *pausePointResumePlayResult `json:"ResumePlayResult,omitempty"`
+
+	// TriggerFailed is set by the CLI, not Unity, only when --trigger was passed and the trigger is
+	// known to have failed. It repeats at the top level what TriggerResult already carries three
+	// levels down, because the loss it guards against is a caller reading Success:true / Status:Hit
+	// and never opening TriggerResult at all. A pointer so the field is absent — rather than a
+	// misleading false — when no trigger ran or its outcome is unknown.
+	TriggerFailed *bool `json:"TriggerFailed,omitempty"`
 }
 
 // pausePointStatusResult wraps a status response with the CLI-evaluated --expect verdicts.

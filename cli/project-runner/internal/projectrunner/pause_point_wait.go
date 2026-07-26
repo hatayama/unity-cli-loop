@@ -226,6 +226,7 @@ func runWaitForPausePoint(
 
 		response.TriggerResult = triggerResult
 		response.ResumePlayResult = resumeResult
+		response.TriggerFailed = pausePointTriggerFailedPointer(triggerResult)
 		response = filterPausePointCapturedVariableHistory(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
@@ -240,7 +241,8 @@ func runWaitForPausePoint(
 				MatchingLogs:             logs.Logs,
 				Warning: joinPausePointWarnings(
 					response.Warning,
-					buildPausePointWarning(logs, response.HitCount)),
+					buildPausePointWarning(logs, response.HitCount),
+					pausePointTriggerRefusalWarning(triggerResult, options.id)),
 				Expectations:          expectations,
 				AllExpectationsPassed: pausePointAllExpectationsPassedPointer(expectations),
 			}
@@ -257,9 +259,11 @@ func runWaitForPausePoint(
 				AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
 			}{
 				pausePointStatusResponse: response,
-				Warning:                  response.Warning,
-				Expectations:             expectations,
-				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
+				Warning: joinPausePointWarnings(
+					response.Warning,
+					pausePointTriggerRefusalWarning(triggerResult, options.id)),
+				Expectations:          expectations,
+				AllExpectationsPassed: pausePointAllExpectationsPassedPointer(expectations),
 			}
 		}
 		result, marshalErr := json.Marshal(payload)
