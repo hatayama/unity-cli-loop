@@ -171,6 +171,35 @@ func TestRunPausePointStatusOmitsExpectationFieldsWithoutExpectFlag(t *testing.T
 	}
 }
 
+// Verifies a marker that is armed but not yet hit reports its expectations as not found rather than
+// omitting them, and that Status stays the field distinguishing "not hit yet" from "hit and wrong".
+func TestRunPausePointStatusReportsExpectationsAsNotFoundBeforeAHit(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+	})
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Success: true, Id: id, Status: pausePointStatusEnabled, IsEnabled: true}, nil
+	}
+
+	code, output := runPausePointStatusForExpect(t, []string{"--id", "jump", "--expect", "speed=5"})
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d: %s", code, output)
+	}
+	payload := decodePausePointStatusExpectPayload(t, output)
+	if payload.Status != pausePointStatusEnabled {
+		t.Fatalf("Status must still report the marker is only armed: %q", payload.Status)
+	}
+	if len(payload.Expectations) != 1 || payload.Expectations[0].Found || payload.Expectations[0].Passed {
+		t.Fatalf("an unhit marker captured nothing, so the expectation is not found: %#v", payload.Expectations)
+	}
+}
+
 // Verifies an invalid --expect value is rejected by pause-point-status the same way
 // await-pause-point rejects it, instead of being reported as an unknown option.
 func TestRunPausePointStatusRejectsInvalidExpectValue(t *testing.T) {

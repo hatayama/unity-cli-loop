@@ -1,6 +1,9 @@
 package projectrunner
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // parsePausePointCapturedVariableNames splits the comma-separated --captured-variable-names
 // value into individual names, trimming surrounding whitespace and dropping empty entries.
@@ -62,13 +65,19 @@ func filterPausePointCapturedVariablesByName(
 
 // unmatchedCapturedVariableNames lists the requested names that matched nothing, keeping the order
 // they were requested in so the report reads back against the flag value the caller wrote. A name
-// matched anywhere — current variables or any history frame — counts as found.
+// matched anywhere — current variables or any history frame — counts as found. A name requested
+// twice is reported once: the list answers "which names have no value", not "how many times each
+// was asked for".
 func unmatchedCapturedVariableNames(names []string, matchedNames map[string]struct{}) []string {
 	notFound := make([]string, 0, len(names))
 	for _, name := range names {
-		if _, ok := matchedNames[name]; !ok {
-			notFound = append(notFound, name)
+		if _, ok := matchedNames[name]; ok {
+			continue
 		}
+		if slices.Contains(notFound, name) {
+			continue
+		}
+		notFound = append(notFound, name)
 	}
 	if len(notFound) == 0 {
 		return nil

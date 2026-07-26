@@ -104,6 +104,14 @@ func TestFilterPausePointCapturedVariablesByName(t *testing.T) {
 		}
 	})
 
+	t.Run("a name requested twice is reported missing once", func(t *testing.T) {
+		result := filterPausePointCapturedVariablesByName(
+			baseResponse(), []string{"shield", "shield"})
+		if len(result.CapturedVariableNamesNotFound) != 1 {
+			t.Fatalf("expected the repeated name once: %#v", result.CapturedVariableNamesNotFound)
+		}
+	})
+
 	t.Run("every name matching leaves the missing list empty", func(t *testing.T) {
 		result := filterPausePointCapturedVariablesByName(baseResponse(), []string{"velocity", "health"})
 		if result.CapturedVariableNamesNotFound != nil {
