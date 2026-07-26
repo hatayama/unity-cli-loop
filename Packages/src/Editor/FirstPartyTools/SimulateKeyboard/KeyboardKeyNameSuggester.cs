@@ -26,7 +26,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string trimmed = invalidKeyName.Trim();
             List<string> suggestions = new();
 
-            if (trimmed.Length == 1 && char.IsDigit(trimmed[0]))
+            // Why not char.IsDigit: it is true for non-ASCII digits such as "３", which have no
+            // Digit/Numpad enum name, so suggesting them would point at keys that do not exist.
+            if (trimmed.Length == 1 && trimmed[0] >= '0' && trimmed[0] <= '9')
             {
                 string digit = trimmed;
                 AddUnique(suggestions, $"Digit{digit}");

@@ -72,23 +72,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new SimulateKeyboardResponse
                 {
                     Success = false,
-                    Message = "Key parameter is required. Examples: \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\".",
+                    Message = "Key parameter is required. Examples: \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\", \"Digit3\".",
                     Action = parameters.Action.ToString()
                 };
             }
 
+            // Why not Enum.TryParse alone: it also accepts ordinals ("3"), signed ordinals ("+3"),
+            // whitespace-padded input, comma-separated names OR-ed together ("Space,Enter"), and
+            // undefined ordinals ("300") that later throw from the keyboard indexer. Only a name
+            // that is defined on the Key enum may resolve to a key.
             string normalizedKey = NormalizeKeyName(parameters.Key);
-            if (!Enum.TryParse<Key>(normalizedKey, ignoreCase: true, out Key key) || key == Key.None)
+            if (!DefinedKeysByName.TryGetValue(normalizedKey, out Key key) || key == Key.None)
             {
-                IReadOnlyList<string> suggestions = KeyboardKeyNameSuggester.Suggest(parameters.Key);
+                // Suggest from the normalized form so padding does not degrade the candidates,
+                // while the message below still reports the raw input verbatim.
+                IReadOnlyList<string> suggestions = KeyboardKeyNameSuggester.Suggest(normalizedKey);
                 string suggestionText = suggestions.Count == 0
                     ? string.Empty
                     : $" Did you mean: {string.Join(", ", suggestions)}?";
+                // Why: digits used to resolve silently to unrelated keys, so earlier runs that
+                // reported success may have pressed something else and need to be re-checked.
+                string ordinalHistoryText = LooksLikeNumericKeyInput(parameters.Key)
+                    ? " Digits are not key names: bare digits were previously parsed as enum ordinals (e.g. \"3\" pressed Tab), so re-check any earlier results or scripts that passed digits."
+                    : string.Empty;
                 return new SimulateKeyboardResponse
                 {
                     Success = false,
                     Message =
-                        $"Invalid key name: \"{parameters.Key}\". Use Input System Key enum names (e.g. \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\").{suggestionText}",
+                        $"Invalid key name: \"{parameters.Key}\". Use Input System Key enum names (e.g. \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\", \"Digit3\").{suggestionText}{ordinalHistoryText}",
                     Action = parameters.Action.ToString()
                 };
             }
@@ -230,13 +241,64 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             OverlayCanvasFactory.EnsureExists();
         }
 
+        // Immutable name-to-value map of the Input System Key enum, so key resolution never falls
+        // back to Enum.TryParse's ordinal and flag-combination behavior.
+        private static readonly IReadOnlyDictionary<string, Key> DefinedKeysByName = BuildDefinedKeysByName();
+
+        private static IReadOnlyDictionary<string, Key> BuildDefinedKeysByName()
+        {
+            string[] names = Enum.GetNames(typeof(Key));
+            Array values = Enum.GetValues(typeof(Key));
+            Dictionary<string, Key> keysByName = new(names.Length, StringComparer.OrdinalIgnoreCase);
+            for (int index = 0; index < names.Length; index++)
+            {
+                keysByName[names[index]] = (Key)values.GetValue(index);
+            }
+
+            return keysByName;
+        }
+
+        /// <summary>
+        /// Reports whether the raw key input is the numeric form that Enum.TryParse used to accept
+        /// as an enum ordinal, so the rejection can explain what earlier runs actually pressed.
+        /// </summary>
+        private static bool LooksLikeNumericKeyInput(string keyName)
+        {
+            string trimmed = keyName.Trim();
+            if (trimmed.Length > 0 && (trimmed[0] == '+' || trimmed[0] == '-'))
+            {
+                trimmed = trimmed.Substring(1);
+            }
+
+            if (trimmed.Length == 0)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < trimmed.Length; index++)
+            {
+                // Why not char.IsDigit: it is true for non-ASCII digits, which Enum.TryParse never
+                // accepted as ordinals. Claiming they used to press another key would be false.
+                if (trimmed[index] < '0' || trimmed[index] > '9')
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         private static string NormalizeKeyName(string keyName)
         {
-            if (string.Equals(keyName, "Return", StringComparison.OrdinalIgnoreCase))
+            // Why trim here rather than at the whitelist comparison: Enum.TryParse used to accept
+            // whitespace-padded names, so padded correct input already worked. Blocking ambiguous
+            // input must not narrow correct input, and the alias has to see the padded form too.
+            string trimmed = keyName.Trim();
+            if (string.Equals(trimmed, "Return", StringComparison.OrdinalIgnoreCase))
             {
                 return Key.Enter.ToString();
             }
-            return keyName;
+            return trimmed;
         }
 
 #endif
