@@ -60,6 +60,19 @@ type pausePointStatusResponse struct {
 	ResumePlayResult *pausePointResumePlayResult `json:"ResumePlayResult,omitempty"`
 }
 
+// pausePointStatusResult wraps a status response with the CLI-evaluated --expect verdicts.
+// pause-point-status marshals the Unity response directly, so it needs this wrapper to carry the
+// two extra fields; the names match pausePointWaitResult's so one query shape reads both commands.
+type pausePointStatusResult struct {
+	pausePointStatusResponse
+
+	// Both fields are omitted unless --expect was passed, and AllExpectationsPassed is a pointer
+	// for the same reason as on pausePointWaitResult: to distinguish "no --expect given" from
+	// "the given expectations failed".
+	Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
+	AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
+}
+
 type pausePointEditorState struct {
 	IsPlaying  bool   `json:"IsPlaying"`
 	IsPaused   bool   `json:"IsPaused"`

@@ -61,6 +61,7 @@ type pausePointStatusOptions struct {
 	id                    string
 	capturedVariablesMode pausePointCapturedVariablesMode
 	capturedVariableNames []string
+	expectations          []pausePointExpectation
 }
 
 func normalizePausePointStatusResponse(response pausePointStatusResponse) pausePointStatusResponse {
@@ -171,10 +172,21 @@ func runPausePointStatusCommand(
 	}
 	response = normalizePausePointStatusResponse(response)
 	response = filterPausePointCapturedVariableHistory(response)
+	// Evaluated against the raw CapturedVariables, before the filters below can narrow or strip
+	// values, for the same reason as on the await path (runWaitForPausePoint): otherwise an --expect
+	// target not also requested via --captured-variable-names, or whose value names mode stripped,
+	// would be reported as missing or failing.
+	expectations := evaluatePausePointExpectations(response.CapturedVariables, options.expectations)
 	response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 	response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 
-	result, err := json.Marshal(response)
+	// Expectation verdicts never change the exit code: whether the query succeeded and whether the
+	// captured state matched are separate questions, as on await-pause-point.
+	result, err := json.Marshal(pausePointStatusResult{
+		pausePointStatusResponse: response,
+		Expectations:             expectations,
+		AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
+	})
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
@@ -397,6 +409,12 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 			options.capturedVariablesMode = mode
 		case tooldocs.PausePointCapturedVariableNamesFlagName:
 			options.capturedVariableNames = parsePausePointCapturedVariableNames(value)
+		case tooldocs.PausePointExpectFlagName:
+			expectation, parseErr := parsePausePointExpectFlagValue(value)
+			if parseErr != nil {
+				return pausePointStatusOptions{}, parseErr
+			}
+			options.expectations = append(options.expectations, expectation)
 		default:
 			return pausePointStatusOptions{}, pausePointUnknownOptionError(clicore.PausePointStatusUserCommandName, name)
 		}

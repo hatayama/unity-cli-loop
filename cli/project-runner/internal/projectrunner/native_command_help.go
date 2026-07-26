@@ -39,6 +39,7 @@ var runnerNativeCommandOptions = map[string][]string{
 		"--" + PausePointIDFlagName,
 		"--" + tooldocs.PausePointCapturedVariablesFlagName,
 		"--" + tooldocs.PausePointCapturedVariableNamesFlagName,
+		"--" + tooldocs.PausePointExpectFlagName,
 	},
 }
 
