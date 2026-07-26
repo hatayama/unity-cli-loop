@@ -1,7 +1,7 @@
 ---
 name: uloop-simulate-mouse-input
 toolName: simulate-mouse-input
-description: "Simulate Mouse.current input in PlayMode through Unity Input System. Use for gameplay mouse clicks, held button input, movement delta, or scroll. Use simulate-mouse-ui for UI."
+description: "Simulate Mouse.current input in PlayMode through Unity Input System. Use for gameplay mouse clicks, long-press (LongPress), movement delta (MoveDelta/SmoothDelta), or scroll. Use simulate-mouse-ui for UI."
 ---
 
 # Task
@@ -16,6 +16,11 @@ Simulate mouse input via Input System in Unity PlayMode.
 4. Inspect the result with the lightest useful evidence: runtime state, logs, or a screenshot
 5. When this input verifies a state transition, use Pause Point inspection from the section below as the standard frame proof
 6. Report what happened and which evidence was used
+
+Two rules while verifying:
+
+- Do not touch the physical mouse or keyboard, and keep the OS pointer off the Unity window — real device input mixes into the same `Mouse.current` state this tool injects.
+- Read the starting values you will assert against immediately before firing the input; a value measured earlier in the session may have changed.
 
 ## Tool Reference
 
