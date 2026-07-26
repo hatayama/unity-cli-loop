@@ -1,7 +1,6 @@
 package tooldocs
 
 import (
-	"bufio"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,21 +87,15 @@ func installedSkillNames(t *testing.T) map[string]bool {
 func skillFrontmatterName(t *testing.T, path string) string {
 	t.Helper()
 
-	file, err := os.Open(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("failed to open %s: %v", path, err)
+		t.Fatalf("failed to read %s: %v", path, err)
 	}
-	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range strings.Split(string(content), "\n") {
 		if strings.HasPrefix(line, "name:") {
 			return strings.TrimSpace(strings.TrimPrefix(line, "name:"))
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		t.Fatalf("failed to read %s: %v", path, err)
 	}
 
 	t.Fatalf("%s has no frontmatter name", path)
