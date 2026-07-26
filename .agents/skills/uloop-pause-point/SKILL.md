@@ -16,7 +16,9 @@ Use this small loop for one representative frame you care about. No source edit 
 uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 30 --await --trigger "simulate-keyboard --action Press --key Space"
 ```
 
-`--trigger` runs a single uloop subcommand in-process only after the marker's arming is confirmed, so there is no arm-vs-input race and nothing needs to run in the background. The hit response additionally carries `TriggerResult` with the triggered command's own response (or, when the trigger was skipped, `Completed: false` and the reason in `Error`). The trigger string cannot name another pause-point wait (`await-pause-point`/`enable-pause-point`) and cannot pass `--project-path` — the enclosing command's project is used. `await-pause-point --id <id> --trigger ...` accepts the same flag for a marker enabled earlier. Both commands also accept `--resume-play` — see Fast-Progressing Games.
+Digit keys are `Digit0`-`Digit9` or `Numpad0`-`Numpad9` — bare `0`-`9` is rejected.
+
+Before writing a `--trigger` command that differs from the example, load the skill of the tool you are about to trigger. `--trigger` runs a single uloop subcommand in-process only after the marker's arming is confirmed, so the input cannot land before arming and nothing needs to run in the background. One race does remain: the marker itself can hit before the trigger executes (for example on a line that runs every frame), in which case the trigger is rejected because PlayMode is already paused and runs nothing — check `TriggerResult` before treating such a hit as input-driven. The hit response additionally carries `TriggerResult` with the triggered command's own response (or, when the trigger was skipped, `Completed: false` and the reason in `Error`). The trigger string cannot name another pause-point wait (`await-pause-point`/`enable-pause-point`) and cannot pass `--project-path` — the enclosing command's project is used. `await-pause-point --id <id> --trigger ...` accepts the same flag for a marker enabled earlier. Both commands also accept `--resume-play` — see Fast-Progressing Games.
 
 When the game reaches the line on its own, omit `--trigger`. Fall back to split steps only when the triggering action is not a single uloop command (several inputs in sequence, an external event): run `enable-pause-point` without `--await` in the foreground (its response returning is the arm confirmation), then start `uloop await-pause-point --id <id>` in the background, then send the inputs. Do not approximate arm-waiting with a fixed sleep after a backgrounded enable.
 
@@ -51,9 +53,9 @@ Every hit response embeds `CapturedVariables`: the method's in-scope locals, its
 - The snapshot is taken **before** the resolved line executes, exactly like an IDE breakpoint on that line. To inspect a value after an assignment, place the pause point on the following line.
 - `Scope` is `Local`, `Parameter`, `InstanceField`, or `This`. The synthetic `this` entry identifies which instance or GameObject was hit via `UnityObjectPath` and `UnityObjectInstanceId`; `UnityEngine.Object` values carry the same handle fields for follow-up digs with `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code`.
 - `--captured-variables names` on `await-pause-point`/`pause-point-status` drops every `Value` and keeps `Name`/`Scope`/`TypeName` — use it first on field-heavy classes, then fetch full values with a plain `pause-point-status` call.
-- When the response would be dominated by variables you do not need, pass `--captured-variable-names velocity,this` (comma-separated, exact match on `Name`) to keep only those entries; it composes with `--captured-variables full|names`.
+- When the response would be dominated by variables you do not need, pass `--captured-variable-names velocity,this` (comma-separated, exact match on `Name`) to keep only those entries; it composes with `--captured-variables full|names`. `CapturedVariablesTruncated` in the response reports truncation at Unity-side capture time and is unrelated to this name filter — it can be `true` even when every requested name was found.
 - Pass `--expect 'name=value'` (repeatable; on `await-pause-point` and `enable-pause-point --await`, not `pause-point-status`) to have the CLI compare captured variables against expected values; the response includes an `Expectations` array and `AllExpectationsPassed`, so you do not need to eyeball the JSON. Matching is string equality against the serialized value.
-- Collection values (arrays, `List<T>`, dictionaries, plain objects) render as a JSON preview capped at 10 elements by default. When the elements you need sit past that cap (a 10x20 grid, a long list), re-enable with `--max-preview-elements <n>` (1–1000).
+- Collection values (arrays, `List<T>`, dictionaries, plain objects) render as a JSON preview capped at 10 elements by default. When the elements you need sit past that cap (a 10x20 grid, a long list), re-enable with `--max-preview-elements <n>` (1–1000). The value set at enable time also caps the previews in every later `pause-point-status` response for that marker — status has no flag to change it.
 - While Unity is still paused, `UloopPausePoint.TryGetCapturedValue("name")` (and `"this"`) returns live captured references for `execute-dynamic-code`; the return is a `(bool Found, object Value)` tuple, and the holder clears on resume. (file:line marker hits only — id-only markers store no capture) These are **live objects in their frame-completed state, not snapshots** — use them only to dig further into objects that are still alive, never to reconstruct what a value was at the paused line.
 
 For snapshot timing, preview/truncation caps, Unity-object `Value` semantics, capture-time vs live evidence, `Warning`/`MatchingLogs`, marker freshness, and the raw capture API, read [references/captured-variables.md](references/captured-variables.md).
@@ -116,8 +118,10 @@ When the game advances on its own (timers, gravity, spawners), any state you arr
 
 ```bash
 uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 60 \
-  --await --resume-play --trigger "simulate-keyboard --action Press --key Space"
+  --await --resume-play --trigger "simulate-keyboard --action Press --key Digit3"
 ```
+
+Digit keys are `Digit0`-`Digit9` or `Numpad0`-`Numpad9` — bare `0`-`9` is rejected.
 
 `--resume-play` (requires `--await`; `await-pause-point` accepts it too) resumes a paused PlayMode after the marker's arming is confirmed and before `--trigger` is dispatched. Size `--timeout-seconds` generously when arming while paused: a manual Pause does not freeze the marker countdown (see Timeout Checks).
 

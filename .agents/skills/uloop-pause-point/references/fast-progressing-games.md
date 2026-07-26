@@ -15,8 +15,10 @@ uloop execute-dynamic-code --code '...'
 
 # 3) One call: confirm the marker armed, resume PlayMode, fire the input, await the hit
 uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 60 \
-  --await --resume-play --trigger "simulate-keyboard --action Press --key Space"
+  --await --resume-play --trigger "simulate-keyboard --action Press --key Digit3"
 ```
+
+Digit keys are `Digit0`-`Digit9` or `Numpad0`-`Numpad9` — bare `0`-`9` is rejected.
 
 ## --resume-play Semantics
 
