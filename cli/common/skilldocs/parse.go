@@ -195,7 +195,7 @@ func parseParameterTable(lines []string, headerIndex int) map[string]string {
 			continue
 		}
 		optionName := optionNameFromCell(cells[0])
-		description := cells[len(standardParameterTableCells)-1]
+		description := NormalizeCellText(cells[len(standardParameterTableCells)-1])
 		if optionName == "" || description == "" {
 			continue
 		}
@@ -215,16 +215,34 @@ func isTableSeparatorRow(line string) bool {
 // optionNameFromCell turns a first-column cell such as "`--max-history`" into "max-history", the
 // form tooldocs.OptionNameForProperty produces for a schema property.
 func optionNameFromCell(cell string) string {
-	name := strings.TrimSpace(strings.ReplaceAll(cell, "`", ""))
+	name := NormalizeCellText(cell)
 	if fields := strings.Fields(name); len(fields) > 0 {
 		name = fields[0]
 	}
 	return strings.TrimPrefix(name, "--")
 }
 
-// splitTableRow splits a Markdown table row on unescaped pipes. Descriptions legitimately contain
-// "|" (enum alternations such as "Press|KeyDown"), which the table escapes as "\|"; splitting
-// naively would truncate those cells and shift every later column.
+// NormalizeCellText turns one raw table cell into the plain text CLI surfaces print. It is the only
+// Markdown-to-text step in this package, and every consumer of a skill table - this renderer, the
+// catalog generator, and the CI drift check - must run cells through it so all three compare and
+// emit exactly the same string.
+//
+// Two conversions happen, and deliberately no more:
+//   - "\|" becomes "|", the escape a table needs for enum alternations such as "Press|KeyDown".
+//   - code-span backticks are dropped, because "`Press`, `KeyDown`" reads as noise in terminal help
+//     and in list JSON alike.
+//
+// No other Markdown is interpreted. If bold or a link ever appears in a cell it shows up verbatim in
+// help, which is a visible signal to fix the table rather than a reason to grow a Markdown renderer.
+func NormalizeCellText(cell string) string {
+	text := strings.ReplaceAll(cell, `\|`, "|")
+	return strings.TrimSpace(strings.ReplaceAll(text, "`", ""))
+}
+
+// splitTableRow splits a Markdown table row on unescaped pipes, leaving each cell's text otherwise
+// untouched for NormalizeCellText to convert. Descriptions legitimately contain "|" (enum
+// alternations such as "Press|KeyDown"), which the table escapes as "\|"; splitting naively would
+// truncate those cells and shift every later column.
 func splitTableRow(line string) []string {
 	trimmed := strings.TrimSpace(line)
 	trimmed = strings.TrimPrefix(trimmed, "|")
@@ -235,11 +253,9 @@ func splitTableRow(line string) []string {
 	escaped := false
 	for _, char := range trimmed {
 		if escaped {
-			// A backslash only escapes the separator. Anything else keeps its backslash so prose
-			// such as "\n" survives verbatim.
-			if char != '|' {
-				current.WriteRune('\\')
-			}
+			// The escape sequence is kept intact; only NormalizeCellText resolves it, so the split
+			// stays a purely structural step.
+			current.WriteRune('\\')
 			current.WriteRune(char)
 			escaped = false
 			continue

@@ -105,6 +105,17 @@ func TestParseSkillUnescapesPipesInDescriptions(t *testing.T) {
 	}
 }
 
+// Verifies the single normalization step resolves an escaped pipe and drops code-span backticks in
+// one pass, and leaves other Markdown alone. Every consumer of a skill table goes through this
+// function, so a change here would silently move help, list and the generated catalog apart.
+func TestNormalizeCellTextResolvesEscapesAndCodeSpans(t *testing.T) {
+	got := NormalizeCellText("  `Press` " + `\|` + " `KeyDown`, see **Actions**  ")
+
+	if got != "Press | KeyDown, see **Actions**" {
+		t.Errorf("unexpected normalization: %q", got)
+	}
+}
+
 // Verifies a skill covering several commands documents each one from its own subsection, and that a
 // parameter table outside the Parameters section is ignored.
 func TestParseSkillReadsAMultiToolSkill(t *testing.T) {
