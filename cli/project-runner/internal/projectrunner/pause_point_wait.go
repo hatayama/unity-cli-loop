@@ -226,46 +226,20 @@ func runWaitForPausePoint(
 
 		response.TriggerResult = triggerResult
 		response.ResumePlayResult = resumeResult
-		response.TriggerFailed = pausePointTriggerFailedPointer(triggerResult)
 		response = filterPausePointCapturedVariableHistory(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 		// Best-effort: a hit must stay a success even if Unity is busy while paused.
-		// On fetch failure MatchingLogs is omitted entirely, so an empty array always
-		// means "the fetch succeeded and no matching log exists".
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
-		var payload any
-		if logsErr == nil {
-			payload = pausePointWaitResult{
-				pausePointStatusResponse: response,
-				MatchingLogs:             logs.Logs,
-				Warning: joinPausePointWarnings(
-					response.Warning,
-					buildPausePointWarning(logs, response.HitCount),
-					pausePointTriggerRefusalWarning(triggerResult, options.id)),
-				Expectations:          expectations,
-				AllExpectationsPassed: pausePointAllExpectationsPassedPointer(expectations),
-			}
-		} else {
-			// Best-effort: a failed log fetch must not also drop the CLI-side evidence — the
-			// --expect results a caller asked for by name, or a warning about the hit itself. Uses
-			// an anonymous struct (not pausePointWaitResult) so MatchingLogs is omitted entirely
-			// rather than serialized as an empty array, preserving "empty array only means a
-			// successful fetch with no matches".
-			payload = struct {
-				pausePointStatusResponse
-				Warning               string                        `json:"Warning,omitempty"`
-				Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
-				AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
-			}{
-				pausePointStatusResponse: response,
-				Warning: joinPausePointWarnings(
-					response.Warning,
-					pausePointTriggerRefusalWarning(triggerResult, options.id)),
-				Expectations:          expectations,
-				AllExpectationsPassed: pausePointAllExpectationsPassedPointer(expectations),
-			}
-		}
+		payload := buildPausePointHitPayload(pausePointHitPayloadInputs{
+			response:            response,
+			logs:                logs,
+			logsErr:             logsErr,
+			unityWarning:        response.Warning,
+			triggerResult:       triggerResult,
+			awaitedPausePointID: options.id,
+			expectations:        expectations,
+		})
 		result, marshalErr := json.Marshal(payload)
 		if marshalErr != nil {
 			clierrors.WriteClassifiedError(stderr, marshalErr, clierrors.ErrorContext{
