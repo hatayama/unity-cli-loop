@@ -92,7 +92,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!isKnownKeyName || key == Key.None)
             {
-                IReadOnlyList<string> suggestions = KeyboardKeyNameSuggester.Suggest(parameters.Key);
+                // Suggest from the normalized form so padding does not degrade the candidates,
+                // while the message below still reports the raw input verbatim.
+                IReadOnlyList<string> suggestions = KeyboardKeyNameSuggester.Suggest(normalizedKey);
                 string suggestionText = suggestions.Count == 0
                     ? string.Empty
                     : $" Did you mean: {string.Join(", ", suggestions)}?";
@@ -284,11 +286,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static string NormalizeKeyName(string keyName)
         {
-            if (string.Equals(keyName, "Return", StringComparison.OrdinalIgnoreCase))
+            // Why trim here rather than at the whitelist comparison: Enum.TryParse used to accept
+            // whitespace-padded names, so padded correct input already worked. Blocking ambiguous
+            // input must not narrow correct input, and the alias has to see the padded form too.
+            string trimmed = keyName.Trim();
+            if (string.Equals(trimmed, "Return", StringComparison.OrdinalIgnoreCase))
             {
                 return Key.Enter.ToString();
             }
-            return keyName;
+            return trimmed;
         }
 
 #endif

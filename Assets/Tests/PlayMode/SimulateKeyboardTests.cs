@@ -751,6 +751,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.IsTrue(lastResponse.Success, lastResponse.Message);
         }
 
+        /// <summary>
+        /// Verifies that a whitespace-padded valid key name keeps resolving, since padded correct
+        /// input was already accepted before key names were whitelisted.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithPaddedKeyName_Should_Succeed()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = " Space "
+            });
+
+            Assert.IsTrue(lastResponse.Success, lastResponse.Message);
+        }
+
+        /// <summary>
+        /// Verifies that the Return-to-Enter alias still applies when the name is whitespace-padded.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithPaddedReturnAlias_Should_Succeed()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = " Return "
+            });
+
+            Assert.IsTrue(lastResponse.Success, lastResponse.Message);
+        }
+
         [UnityTest]
         public IEnumerator Press_WithEmptyKey_Should_ReturnFailure()
         {
