@@ -16,11 +16,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             EventSystem? eventSystem,
             string pausedActionDescription)
         {
-            ValidationResult playModeResult =
+            PlayModeToolPreflightResult playModeResult =
                 PlayModeToolPreflightService.RequireActiveAndNotPaused(pausedActionDescription);
             if (!playModeResult.IsValid)
             {
-                return MouseUiSimulationResponseFactory.CreateFailure(parameters, playModeResult.ErrorMessage);
+                return MouseUiSimulationResponseFactory.CreatePreflightFailure(parameters, playModeResult);
             }
 
             if (eventSystem == null)

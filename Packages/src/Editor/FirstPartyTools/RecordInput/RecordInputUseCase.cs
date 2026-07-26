@@ -98,14 +98,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             RecordInputSchema request,
             CancellationToken ct)
         {
-            ValidationResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
+            PlayModeToolPreflightResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!preflight.IsValid)
             {
                 return new RecordInputResponse
                 {
                     Success = false,
                     Message = preflight.ErrorMessage,
-                    Action = RecordInputAction.Start.ToString()
+                    Action = RecordInputAction.Start.ToString(),
+                    RejectedByActivePausePointId = preflight.RejectedByActivePausePointId
                 };
             }
 

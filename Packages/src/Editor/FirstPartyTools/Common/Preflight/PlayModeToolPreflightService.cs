@@ -19,39 +19,60 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Fails when PlayMode is not active. Use for tools that tolerate paused PlayMode.
         /// </summary>
-        public static ValidationResult RequireActive()
+        public static PlayModeToolPreflightResult RequireActive()
         {
             if (!EditorApplication.isPlaying)
             {
-                return ValidationResult.Failure(PlayModeNotActiveMessage);
+                return PlayModeToolPreflightResult.Failure(PlayModeNotActiveMessage);
             }
 
-            return ValidationResult.Success();
+            return PlayModeToolPreflightResult.Success();
         }
 
         /// <summary>
         /// Fails when PlayMode is not active, or is active but paused. The paused-message suffix
         /// describes the blocked action in the caller's vocabulary (for example "recording input").
         /// </summary>
-        public static ValidationResult RequireActiveAndNotPaused(string pausedActionDescription)
+        public static PlayModeToolPreflightResult RequireActiveAndNotPaused(string pausedActionDescription)
+        {
+            return Evaluate(
+                EditorApplication.isPlaying,
+                EditorApplication.isPaused,
+                UloopPausePointRegistry.GetActivePausePointId(),
+                pausedActionDescription);
+        }
+
+        /// <summary>
+        /// Decides a paused-aware preflight outcome from already-read editor state. Separated from
+        /// RequireActiveAndNotPaused so the paused branches — the only ones that produce a pause
+        /// point id — are reachable from EditMode tests, where PlayMode is never actually running.
+        /// </summary>
+        public static PlayModeToolPreflightResult Evaluate(
+            bool isPlaying,
+            bool isPaused,
+            string activePausePointId,
+            string pausedActionDescription)
         {
             Debug.Assert(!string.IsNullOrEmpty(pausedActionDescription), "pausedActionDescription must not be null or empty");
 
-            if (!EditorApplication.isPlaying)
+            if (!isPlaying)
             {
-                return ValidationResult.Failure(PlayModeNotActiveMessage);
+                return PlayModeToolPreflightResult.Failure(PlayModeNotActiveMessage);
             }
 
-            if (EditorApplication.isPaused)
+            if (!isPaused)
             {
-                string activePausePointId = UloopPausePointRegistry.GetActivePausePointId();
-                string message = string.IsNullOrEmpty(activePausePointId)
-                    ? FormatPausedMessage(pausedActionDescription)
-                    : FormatPausePointPausedMessage(activePausePointId, pausedActionDescription);
-                return ValidationResult.Failure(message);
+                return PlayModeToolPreflightResult.Success();
             }
 
-            return ValidationResult.Success();
+            if (string.IsNullOrEmpty(activePausePointId))
+            {
+                return PlayModeToolPreflightResult.Failure(FormatPausedMessage(pausedActionDescription));
+            }
+
+            return PlayModeToolPreflightResult.FailureRejectedByPausePoint(
+                FormatPausePointPausedMessage(activePausePointId, pausedActionDescription),
+                activePausePointId);
         }
 
         /// <summary>
