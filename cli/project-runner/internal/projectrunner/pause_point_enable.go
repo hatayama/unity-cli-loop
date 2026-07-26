@@ -11,6 +11,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/ui"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -21,8 +22,6 @@ import (
 // the same generic schema pipeline every other tool call uses, mirroring how
 // extractDynamicCodeFileFlag intercepts --code-file for execute-dynamic-code.
 const pausePointEnableCommandName = "enable-pause-point"
-
-const pausePointEnableAwaitFlagName = "await"
 
 // extractPausePointEnableAwaitFlags pulls the CLI-only --await/--captured-variables/
 // --captured-variable-names/--expect/--trigger/--resume-play flags out of enable-pause-point args
@@ -46,30 +45,30 @@ func extractPausePointEnableAwaitFlags(
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
 
-		if arg == "--"+pausePointEnableAwaitFlagName {
+		if arg == "--"+tooldocs.PausePointEnableAwaitFlagName {
 			await = true
 			continue
 		}
 
-		if arg == "--"+PausePointResumePlayFlagName {
+		if arg == "--"+tooldocs.PausePointResumePlayFlagName {
 			resumePlay = true
 			continue
 		}
 
 		// --resume-play=true|1 must be accepted here too: otherwise the =value form falls through
 		// to Unity schema parsing and becomes a confusing unrelated error.
-		if isPausePointFlag(arg, PausePointResumePlayFlagName) {
+		if isPausePointFlag(arg, tooldocs.PausePointResumePlayFlagName) {
 			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 			if err != nil {
 				return nil, false, mode, nil, nil, "", nil, false, err
 			}
-			if name != PausePointResumePlayFlagName {
+			if name != tooldocs.PausePointResumePlayFlagName {
 				remaining = append(remaining, arg)
 				continue
 			}
 			if value != "true" && value != "1" {
 				return nil, false, mode, nil, nil, "", nil, false, clierrors.InvalidValueArgumentError(
-					"--"+PausePointResumePlayFlagName, value, "boolean flag (pass with no value, or =true)")
+					"--"+tooldocs.PausePointResumePlayFlagName, value, "boolean flag (pass with no value, or =true)")
 			}
 			resumePlay = true
 			if consumedNext {
@@ -78,12 +77,12 @@ func extractPausePointEnableAwaitFlags(
 			continue
 		}
 
-		if isPausePointFlag(arg, PausePointTriggerFlagName) {
+		if isPausePointFlag(arg, tooldocs.PausePointTriggerFlagName) {
 			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 			if err != nil {
 				return nil, false, mode, nil, nil, "", nil, false, err
 			}
-			if name != PausePointTriggerFlagName {
+			if name != tooldocs.PausePointTriggerFlagName {
 				remaining = append(remaining, arg)
 				continue
 			}
@@ -100,12 +99,12 @@ func extractPausePointEnableAwaitFlags(
 			continue
 		}
 
-		if isPausePointFlag(arg, PausePointCapturedVariablesFlagName) {
+		if isPausePointFlag(arg, tooldocs.PausePointCapturedVariablesFlagName) {
 			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 			if err != nil {
 				return nil, false, mode, nil, nil, "", nil, false, err
 			}
-			if name != PausePointCapturedVariablesFlagName {
+			if name != tooldocs.PausePointCapturedVariablesFlagName {
 				remaining = append(remaining, arg)
 				continue
 			}
@@ -121,12 +120,12 @@ func extractPausePointEnableAwaitFlags(
 			continue
 		}
 
-		if isPausePointFlag(arg, PausePointCapturedVariableNamesFlagName) {
+		if isPausePointFlag(arg, tooldocs.PausePointCapturedVariableNamesFlagName) {
 			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 			if err != nil {
 				return nil, false, mode, nil, nil, "", nil, false, err
 			}
-			if name != PausePointCapturedVariableNamesFlagName {
+			if name != tooldocs.PausePointCapturedVariableNamesFlagName {
 				remaining = append(remaining, arg)
 				continue
 			}
@@ -138,12 +137,12 @@ func extractPausePointEnableAwaitFlags(
 			continue
 		}
 
-		if isPausePointFlag(arg, PausePointExpectFlagName) {
+		if isPausePointFlag(arg, tooldocs.PausePointExpectFlagName) {
 			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
 			if err != nil {
 				return nil, false, mode, nil, nil, "", nil, false, err
 			}
-			if name != PausePointExpectFlagName {
+			if name != tooldocs.PausePointExpectFlagName {
 				remaining = append(remaining, arg)
 				continue
 			}
@@ -162,16 +161,16 @@ func extractPausePointEnableAwaitFlags(
 	}
 
 	if !await && (modeSet || namesSet || len(expectations) > 0 || triggerSet || resumePlay) {
-		option := "--" + PausePointCapturedVariablesFlagName
+		option := "--" + tooldocs.PausePointCapturedVariablesFlagName
 		switch {
 		case resumePlay:
-			option = "--" + PausePointResumePlayFlagName
+			option = "--" + tooldocs.PausePointResumePlayFlagName
 		case triggerSet:
-			option = "--" + PausePointTriggerFlagName
+			option = "--" + tooldocs.PausePointTriggerFlagName
 		case len(expectations) > 0:
-			option = "--" + PausePointExpectFlagName
+			option = "--" + tooldocs.PausePointExpectFlagName
 		case namesSet:
-			option = "--" + PausePointCapturedVariableNamesFlagName
+			option = "--" + tooldocs.PausePointCapturedVariableNamesFlagName
 		}
 		return nil, false, mode, nil, nil, "", nil, false, &clierrors.ArgumentError{
 			Message: "--captured-variables, --captured-variable-names, --expect, --trigger, and --resume-play require --await",

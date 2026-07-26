@@ -149,51 +149,29 @@ func appendDynamicCodeFileListOption(tool clicore.ToolDefinition, options []list
 	})
 }
 
-// appendPausePointEnableAwaitListOptions documents --await/--captured-variables/
-// --captured-variable-names on enable-pause-point's catalog entry, mirroring
-// appendDynamicCodeFileListOption: these are CLI-only orchestration flags (pause_point_enable.go)
-// that are not part of the Unity-side EnablePausePointSchema, so they never appear in
-// listOptionsForTool's schema-driven loop above.
+// appendPausePointEnableAwaitListOptions documents enable-pause-point's CLI-only orchestration
+// flags on its catalog entry, mirroring appendDynamicCodeFileListOption: they are not part of the
+// Unity-side EnablePausePointSchema, so they never appear in listOptionsForTool's schema-driven
+// loop above. The flag table itself is shared with the dispatcher's `--help` renderer
+// (tooldocs.PausePointEnableCLIOnlyOptions) so the two listings cannot drift apart.
 func appendPausePointEnableAwaitListOptions(tool clicore.ToolDefinition, options []listOption) []listOption {
 	if tool.Name != pausePointEnableCommandName {
 		return options
 	}
-	if hasListOption(options, "--"+pausePointEnableAwaitFlagName) {
-		return options
+
+	for _, option := range tooldocs.PausePointEnableCLIOnlyOptions() {
+		optionName := "--" + option.FlagName
+		if hasListOption(options, optionName) {
+			continue
+		}
+		options = append(options, listOption{
+			Name:        optionName,
+			Type:        option.Type,
+			Description: option.Description,
+			Values:      option.Values,
+		})
 	}
-	return append(options,
-		listOption{
-			Name:        "--" + pausePointEnableAwaitFlagName,
-			Type:        "boolean",
-			Description: "Wait for the marker to be hit (or time out) after enabling, in a single call, instead of a separate await-pause-point call",
-		},
-		listOption{
-			Name:        "--" + PausePointCapturedVariablesFlagName,
-			Type:        "string",
-			Description: "Requires --await. Same as await-pause-point's --captured-variables",
-			Values:      []string{string(pausePointCapturedVariablesModeFull), string(pausePointCapturedVariablesModeNames)},
-		},
-		listOption{
-			Name:        "--" + PausePointCapturedVariableNamesFlagName,
-			Type:        "string",
-			Description: "Requires --await. Same as await-pause-point's --captured-variable-names",
-		},
-		listOption{
-			Name:        "--" + PausePointExpectFlagName,
-			Type:        "string",
-			Description: "Requires --await. Same as await-pause-point's --expect (repeatable)",
-		},
-		listOption{
-			Name:        "--" + PausePointTriggerFlagName,
-			Type:        "string",
-			Description: "Requires --await. Same as await-pause-point's --trigger",
-		},
-		listOption{
-			Name:        "--" + PausePointResumePlayFlagName,
-			Type:        "boolean",
-			Description: "Requires --await. After confirming the marker is armed, resume PlayMode if paused (before --trigger), so a paused-arm workflow can fire input in one call",
-		},
-	)
+	return options
 }
 
 func hasListOption(options []listOption, name string) bool {

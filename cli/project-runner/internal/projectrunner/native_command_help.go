@@ -11,15 +11,13 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 )
 
+// Runner-specific pause-point flags: --id and --timeout-seconds mirror the Unity-side schema, and
+// --matching-logs-max-count only exists on the wait commands. The CLI-only flags shared with
+// enable-pause-point's --help listing live in tooldocs instead (pause_point_cli_options.go).
 const (
-	PausePointIDFlagName                    = "id"
-	PausePointTimeoutFlagName               = "timeout-seconds"
-	PausePointLogsMaxCountFlagName          = "matching-logs-max-count"
-	PausePointCapturedVariablesFlagName     = "captured-variables"
-	PausePointCapturedVariableNamesFlagName = "captured-variable-names"
-	PausePointExpectFlagName                = "expect"
-	PausePointTriggerFlagName               = "trigger"
-	PausePointResumePlayFlagName            = "resume-play"
+	PausePointIDFlagName           = "id"
+	PausePointTimeoutFlagName      = "timeout-seconds"
+	PausePointLogsMaxCountFlagName = "matching-logs-max-count"
 )
 
 // runnerNativeCommandOptions lists the flags accepted by each runner-owned
@@ -31,16 +29,16 @@ var runnerNativeCommandOptions = map[string][]string{
 		"--" + PausePointIDFlagName,
 		"--" + PausePointTimeoutFlagName,
 		"--" + PausePointLogsMaxCountFlagName,
-		"--" + PausePointCapturedVariablesFlagName,
-		"--" + PausePointCapturedVariableNamesFlagName,
-		"--" + PausePointExpectFlagName,
-		"--" + PausePointTriggerFlagName,
-		"--" + PausePointResumePlayFlagName,
+		"--" + tooldocs.PausePointCapturedVariablesFlagName,
+		"--" + tooldocs.PausePointCapturedVariableNamesFlagName,
+		"--" + tooldocs.PausePointExpectFlagName,
+		"--" + tooldocs.PausePointTriggerFlagName,
+		"--" + tooldocs.PausePointResumePlayFlagName,
 	},
 	clicore.PausePointStatusUserCommandName: {
 		"--" + PausePointIDFlagName,
-		"--" + PausePointCapturedVariablesFlagName,
-		"--" + PausePointCapturedVariableNamesFlagName,
+		"--" + tooldocs.PausePointCapturedVariablesFlagName,
+		"--" + tooldocs.PausePointCapturedVariableNamesFlagName,
 	},
 }
 

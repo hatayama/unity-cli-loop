@@ -19,6 +19,9 @@ const (
 
 const DynamicCodeFileOptionDescription = "Read C# code from a file instead of --code when shell quoting would alter multiline code"
 
+// optionValuesSeparator joins the accepted values of an option in help output.
+const optionValuesSeparator = "|"
+
 const (
 	compileCommandName            = "compile"
 	executeDynamicCodeCommandName = "execute-dynamic-code"
@@ -49,6 +52,7 @@ func VisibleOptionHelpEntriesForTool(tool tools.ToolDefinition) []OptionHelpEntr
 	}
 
 	entries = appendDynamicCodeFileOptionHelpEntry(tool, entries)
+	entries = appendPausePointEnableCLIOnlyOptionHelpEntries(tool.Name, entries)
 	sort.Slice(entries, func(i int, j int) bool {
 		return entries[i].Name < entries[j].Name
 	})
@@ -93,7 +97,7 @@ func optionDescription(toolName string, propertyName string, property tools.Tool
 		parts = append(parts, "default: "+defaultValueText(propertyDefault))
 	}
 	if len(property.Enum) > 0 {
-		parts = append(parts, "values: "+strings.Join(property.Enum, "|"))
+		parts = append(parts, "values: "+strings.Join(property.Enum, optionValuesSeparator))
 	}
 	return strings.Join(parts, "; ")
 }
@@ -142,10 +146,8 @@ func appendDynamicCodeFileOptionHelpEntry(tool tools.ToolDefinition, entries []O
 	if tool.Name != executeDynamicCodeCommandName {
 		return entries
 	}
-	for _, entry := range entries {
-		if entry.Name == DynamicCodeFileOptionName {
-			return entries
-		}
+	if hasOptionHelpEntry(entries, DynamicCodeFileOptionName) {
+		return entries
 	}
 	return append(entries, OptionHelpEntry{
 		Name:        DynamicCodeFileOptionName,

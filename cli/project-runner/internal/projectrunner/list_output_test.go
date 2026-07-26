@@ -143,12 +143,12 @@ func TestNewListCatalogIncludesEnablePausePointAwaitOptions(t *testing.T) {
 	catalog := newListCatalog(clicore.ToolsCache{Tools: []clicore.ToolDefinition{tool}})
 	enablePausePoint := findListTool(t, catalog, pausePointEnableCommandName)
 
-	findListOption(t, enablePausePoint, "--"+pausePointEnableAwaitFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointCapturedVariablesFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointCapturedVariableNamesFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointExpectFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointTriggerFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointResumePlayFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointEnableAwaitFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointCapturedVariablesFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointCapturedVariableNamesFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointExpectFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointTriggerFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointResumePlayFlagName)
 }
 
 func decodeListCatalog(t *testing.T, content []byte) listCatalog {

@@ -82,7 +82,7 @@ func parsePausePointTriggerCommand(command string, value string) (string, []stri
 	if err != nil {
 		return "", nil, &clierrors.ArgumentError{
 			Message: err.Error(),
-			Option:  "--" + PausePointTriggerFlagName,
+			Option:  "--" + tooldocs.PausePointTriggerFlagName,
 			Command: command,
 			NextActions: []string{
 				"Quote the trigger command consistently, e.g. --trigger \"simulate-keyboard --action Press --key Space --duration 5\".",
@@ -90,7 +90,7 @@ func parsePausePointTriggerCommand(command string, value string) (string, []stri
 		}
 	}
 	if len(tokens) == 0 {
-		return "", nil, clierrors.MissingValueArgumentError("--" + PausePointTriggerFlagName)
+		return "", nil, clierrors.MissingValueArgumentError("--" + tooldocs.PausePointTriggerFlagName)
 	}
 
 	triggerCommand := tokens[0]
@@ -103,7 +103,7 @@ func parsePausePointTriggerCommand(command string, value string) (string, []stri
 			Message: fmt.Sprintf(
 				"--trigger cannot target %q: waiting for a pause point from inside another pause-point wait cannot make progress.",
 				triggerCommand),
-			Option:  "--" + PausePointTriggerFlagName,
+			Option:  "--" + tooldocs.PausePointTriggerFlagName,
 			Command: command,
 			NextActions: []string{
 				"Pass a command that performs an action (for example simulate-keyboard), not another pause-point wait.",
@@ -116,7 +116,7 @@ func parsePausePointTriggerCommand(command string, value string) (string, []stri
 			return "", nil, &clierrors.ArgumentError{
 				Message: "--trigger cannot include --project-path: the triggered command always runs " +
 					"against the same project as the parent command.",
-				Option:  "--" + PausePointTriggerFlagName,
+				Option:  "--" + tooldocs.PausePointTriggerFlagName,
 				Command: command,
 				NextActions: []string{
 					"Remove --project-path from the trigger command string.",
