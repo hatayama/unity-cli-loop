@@ -143,12 +143,57 @@ func TestNewListCatalogIncludesEnablePausePointAwaitOptions(t *testing.T) {
 	catalog := newListCatalog(clicore.ToolsCache{Tools: []clicore.ToolDefinition{tool}})
 	enablePausePoint := findListTool(t, catalog, pausePointEnableCommandName)
 
-	findListOption(t, enablePausePoint, "--"+pausePointEnableAwaitFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointCapturedVariablesFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointCapturedVariableNamesFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointExpectFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointTriggerFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointResumePlayFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointEnableAwaitFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointCapturedVariablesFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointCapturedVariableNamesFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointExpectFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointTriggerFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointResumePlayFlagName)
+}
+
+// Tests that list replaces Unity's generated placeholder descriptions with the embedded catalog's
+// real text. list formats the raw get-tool-details response, so it does not inherit the fallback the
+// project-cache loader applies for `--help`.
+func TestFormatToolListResultFillsPlaceholderDescriptions(t *testing.T) {
+	content := formatToolListResult([]byte(`{
+  "tools": [
+    {
+      "name": "simulate-keyboard",
+      "parameterSchema": {
+        "Properties": {
+          "Duration": {"Type": "number", "Description": "Parameter: Duration"}
+        }
+      }
+    }
+  ]
+}`))
+
+	catalog := decodeListCatalog(t, content)
+	simulateKeyboard := findListTool(t, catalog, "simulate-keyboard")
+
+	if simulateKeyboard.Description == "" {
+		t.Error("tool description was not filled from the embedded catalog")
+	}
+	option := findListOption(t, simulateKeyboard, "--duration")
+	if option.Description == "Parameter: Duration" || option.Description == "" {
+		t.Errorf("option placeholder description was not replaced: %q", option.Description)
+	}
+}
+
+// Tests that an unset string parameter reports no default at all, matching --help. Unity reports an
+// empty string for these, which would otherwise claim the option defaults to "".
+func TestNewListCatalogOmitsEmptyStringDefaults(t *testing.T) {
+	catalog := newListCatalog(clicore.ToolsCache{Tools: []clicore.ToolDefinition{{
+		Name: "screenshot",
+		ParameterSchema: clicore.InputSchema{Properties: map[string]clicore.ToolProperty{
+			"OutputPath": {Type: "string", Description: "Where to write the file", DefaultValue: ""},
+		}},
+	}}})
+
+	option := findListOption(t, findListTool(t, catalog, "screenshot"), "--output-path")
+	if option.Default != nil {
+		t.Errorf("empty-string default was reported: %#v", option.Default)
+	}
 }
 
 func decodeListCatalog(t *testing.T, content []byte) listCatalog {

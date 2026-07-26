@@ -11,6 +11,7 @@ import (
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -297,7 +298,7 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 		arg := args[index]
 
 		// --resume-play is a boolean flag (no value). ParseFlagValue would otherwise demand one.
-		if arg == "--"+PausePointResumePlayFlagName {
+		if arg == "--"+tooldocs.PausePointResumePlayFlagName {
 			options.resumePlay = true
 			continue
 		}
@@ -324,33 +325,33 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 					"--"+PausePointLogsMaxCountFlagName, value, "positive integer")
 			}
 			options.matchingLogsMaxCount = maxCount
-		case PausePointCapturedVariablesFlagName:
+		case tooldocs.PausePointCapturedVariablesFlagName:
 			mode, parseErr := parsePausePointCapturedVariablesMode(value)
 			if parseErr != nil {
 				return waitForPausePointOptions{}, parseErr
 			}
 			options.capturedVariablesMode = mode
-		case PausePointCapturedVariableNamesFlagName:
+		case tooldocs.PausePointCapturedVariableNamesFlagName:
 			options.capturedVariableNames = parsePausePointCapturedVariableNames(value)
-		case PausePointExpectFlagName:
+		case tooldocs.PausePointExpectFlagName:
 			expectation, parseErr := parsePausePointExpectFlagValue(value)
 			if parseErr != nil {
 				return waitForPausePointOptions{}, parseErr
 			}
 			options.expectations = append(options.expectations, expectation)
-		case PausePointTriggerFlagName:
+		case tooldocs.PausePointTriggerFlagName:
 			triggerCommand, triggerArgs, parseErr := parsePausePointTriggerCommand(clicore.PausePointAwaitCommandName, value)
 			if parseErr != nil {
 				return waitForPausePointOptions{}, parseErr
 			}
 			options.triggerCommand = triggerCommand
 			options.triggerArgs = triggerArgs
-		case PausePointResumePlayFlagName:
+		case tooldocs.PausePointResumePlayFlagName:
 			// --resume-play=true style is accepted; any other value is rejected so a typo cannot
 			// silently disable the resume step.
 			if value != "true" && value != "1" {
 				return waitForPausePointOptions{}, clierrors.InvalidValueArgumentError(
-					"--"+PausePointResumePlayFlagName, value, "boolean flag (pass with no value)")
+					"--"+tooldocs.PausePointResumePlayFlagName, value, "boolean flag (pass with no value)")
 			}
 			options.resumePlay = true
 		default:
@@ -388,13 +389,13 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 		switch name {
 		case PausePointIDFlagName:
 			options.id = value
-		case PausePointCapturedVariablesFlagName:
+		case tooldocs.PausePointCapturedVariablesFlagName:
 			mode, parseErr := parsePausePointCapturedVariablesMode(value)
 			if parseErr != nil {
 				return pausePointStatusOptions{}, parseErr
 			}
 			options.capturedVariablesMode = mode
-		case PausePointCapturedVariableNamesFlagName:
+		case tooldocs.PausePointCapturedVariableNamesFlagName:
 			options.capturedVariableNames = parsePausePointCapturedVariableNames(value)
 		default:
 			return pausePointStatusOptions{}, pausePointUnknownOptionError(clicore.PausePointStatusUserCommandName, name)

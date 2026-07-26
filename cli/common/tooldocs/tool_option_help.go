@@ -19,6 +19,9 @@ const (
 
 const DynamicCodeFileOptionDescription = "Read C# code from a file instead of --code when shell quoting would alter multiline code"
 
+// optionValuesSeparator joins the accepted values of an option in help output.
+const optionValuesSeparator = "|"
+
 const (
 	compileCommandName            = "compile"
 	executeDynamicCodeCommandName = "execute-dynamic-code"
@@ -49,6 +52,7 @@ func VisibleOptionHelpEntriesForTool(tool tools.ToolDefinition) []OptionHelpEntr
 	}
 
 	entries = appendDynamicCodeFileOptionHelpEntry(tool, entries)
+	entries = appendPausePointEnableCLIOnlyOptionHelpEntries(tool.Name, entries)
 	sort.Slice(entries, func(i int, j int) bool {
 		return entries[i].Name < entries[j].Name
 	})
@@ -89,21 +93,26 @@ func optionDescription(toolName string, propertyName string, property tools.Tool
 	if description := OptionSummary(toolName, propertyName, property); description != "" {
 		parts = append(parts, description)
 	}
-	if propertyDefault := property.EffectiveDefault(); propertyDefault != nil {
-		parts = append(parts, "default: "+defaultValueText(propertyDefault))
+	// An empty-string default is what Unity reports for any unset string parameter, so rendering it
+	// would print a bare "default: " with nothing after it.
+	if propertyDefault := property.EffectiveDefault(); propertyDefault != nil && propertyDefault != "" {
+		parts = append(parts, "default: "+defaultValueText(propertyDefault, property.Enum))
 	}
 	if len(property.Enum) > 0 {
-		parts = append(parts, "values: "+strings.Join(property.Enum, "|"))
+		parts = append(parts, "values: "+strings.Join(property.Enum, optionValuesSeparator))
 	}
 	return strings.Join(parts, "; ")
 }
 
-func defaultValueText(value any) string {
+func defaultValueText(value any, enumValues []string) string {
 	if boolValue, ok := value.(bool); ok {
 		if boolValue {
 			return "enabled"
 		}
 		return "disabled"
+	}
+	if enumValue, ok := EnumValueForNumericDefault(value, enumValues); ok {
+		return enumValue
 	}
 	return fmt.Sprint(value)
 }
@@ -142,10 +151,8 @@ func appendDynamicCodeFileOptionHelpEntry(tool tools.ToolDefinition, entries []O
 	if tool.Name != executeDynamicCodeCommandName {
 		return entries
 	}
-	for _, entry := range entries {
-		if entry.Name == DynamicCodeFileOptionName {
-			return entries
-		}
+	if hasOptionHelpEntry(entries, DynamicCodeFileOptionName) {
+		return entries
 	}
 	return append(entries, OptionHelpEntry{
 		Name:        DynamicCodeFileOptionName,

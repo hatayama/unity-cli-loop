@@ -44,7 +44,9 @@ func LoadProjectCache(projectRoot string, internalToolNames map[string]bool) (To
 	if json.Unmarshal(content, &cache) != nil {
 		return ToolCatalog{}, false
 	}
-	return FilterInternalTools(cache, internalToolNames), true
+	// Unity's generator produces placeholder descriptions, so a synced cache alone would strip every
+	// option's help text; the embedded catalog fills those gaps in.
+	return ApplyEmbeddedDescriptionFallback(FilterInternalTools(cache, internalToolNames)), true
 }
 
 func LoadDefault() ToolCatalog {

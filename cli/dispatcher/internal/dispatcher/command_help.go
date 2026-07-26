@@ -67,6 +67,7 @@ func printNativeSingleCommandHelp(command string, stdout io.Writer) {
 			clicore.WriteLine(stdout, "")
 			printGlobalOptionsHelp(stdout)
 		}
+		printSkillGuidanceHelp(command, stdout)
 		return
 	}
 
@@ -79,6 +80,7 @@ func printNativeSingleCommandHelp(command string, stdout io.Writer) {
 		clicore.WriteLine(stdout, "")
 		printGlobalOptionsHelp(stdout)
 	}
+	printSkillGuidanceHelp(command, stdout)
 }
 
 func printToolHelp(tool clicore.ToolDefinition, stdout io.Writer) {
@@ -100,12 +102,27 @@ func printToolHelp(tool clicore.ToolDefinition, stdout io.Writer) {
 		clicore.WriteLine(stdout, "")
 		clicore.WriteLine(stdout, "Options:")
 		for _, entry := range entries {
-			clicore.WriteFormat(stdout, "  %-32s %s\n", entry.Usage, entry.Description)
+			// Wide enough for the longest usage string (--captured-variable-names <value>), so no
+			// single row pushes its description out of the column.
+			clicore.WriteFormat(stdout, "  %-34s %s\n", entry.Usage, entry.Description)
 		}
 	}
 
 	clicore.WriteLine(stdout, "")
 	printGlobalOptionsHelp(stdout)
+	printSkillGuidanceHelp(tool.Name, stdout)
+}
+
+// printSkillGuidanceHelp closes a command's help with the instruction to load its skill. Nothing is
+// printed for a command with no skill (custom commands), so the output never names a skill that
+// cannot be loaded.
+func printSkillGuidanceHelp(command string, stdout io.Writer) {
+	guidance, ok := tooldocs.SkillGuidanceLine(command)
+	if !ok {
+		return
+	}
+	clicore.WriteLine(stdout, "")
+	clicore.WriteLine(stdout, guidance)
 }
 
 func nativeCommandDescription(command string) (string, bool) {

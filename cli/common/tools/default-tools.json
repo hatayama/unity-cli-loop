@@ -385,7 +385,7 @@
           },
           "MaxPreviewElements": {
             "type": "integer",
-            "description": "Maximum number of elements to include in a captured collection's preview (1-1000)",
+            "description": "Maximum number of elements to include in a captured collection's preview (1-1000). The value set at enable time also caps the previews in every later pause-point-status response for that marker; status has no flag to change it.",
             "default": 10
           }
         }
@@ -622,7 +622,7 @@
           },
           "Key": {
             "type": "string",
-            "description": "Key name matching Input System Key enum (e.g. \"W\", \"Space\", \"LeftShift\", \"A\", \"Return\"). Case-insensitive. Not required for ReleaseAll."
+            "description": "Key name matching Input System Key enum (e.g. \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\", \"Digit3\"). Case-insensitive. Digit keys use Digit0-Digit9 or Numpad0-Numpad9, not bare 0-9. Not required for ReleaseAll."
           },
           "Duration": {
             "type": "number",

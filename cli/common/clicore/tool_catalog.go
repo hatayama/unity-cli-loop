@@ -29,6 +29,10 @@ func LoadDefaultTools() ToolsCache {
 	return tools.LoadDefault()
 }
 
+func ApplyEmbeddedDescriptionFallback(cache ToolsCache) ToolsCache {
+	return tools.ApplyEmbeddedDescriptionFallback(cache)
+}
+
 func FindTool(cache ToolsCache, name string) (ToolDefinition, bool) {
 	return tools.Find(cache, name)
 }
