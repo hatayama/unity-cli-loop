@@ -232,29 +232,32 @@ func runWaitForPausePoint(
 		// Best-effort: a hit must stay a success even if Unity is busy while paused.
 		// On fetch failure MatchingLogs is omitted entirely, so an empty array always
 		// means "the fetch succeeded and no matching log exists".
-		var payload any = response
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
-		switch {
-		case logsErr == nil:
+		var payload any
+		if logsErr == nil {
 			payload = pausePointWaitResult{
 				pausePointStatusResponse: response,
 				MatchingLogs:             logs.Logs,
-				Warning:                  buildPausePointWarning(logs, response.HitCount),
-				Expectations:             expectations,
-				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
+				Warning: joinPausePointWarnings(
+					response.Warning,
+					buildPausePointWarning(logs, response.HitCount)),
+				Expectations:          expectations,
+				AllExpectationsPassed: pausePointAllExpectationsPassedPointer(expectations),
 			}
-		case len(expectations) > 0:
-			// Best-effort: a failed log fetch must not also drop --expect results, since that is
-			// the only evidence a caller asked for by name in this branch. Uses an anonymous
-			// struct (not pausePointWaitResult) so MatchingLogs is omitted entirely rather than
-			// serialized as an empty array, preserving "empty array only means a successful
-			// fetch with no matches".
+		} else {
+			// Best-effort: a failed log fetch must not also drop the CLI-side evidence — the
+			// --expect results a caller asked for by name, or a warning about the hit itself. Uses
+			// an anonymous struct (not pausePointWaitResult) so MatchingLogs is omitted entirely
+			// rather than serialized as an empty array, preserving "empty array only means a
+			// successful fetch with no matches".
 			payload = struct {
 				pausePointStatusResponse
+				Warning               string                        `json:"Warning,omitempty"`
 				Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
 				AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
 			}{
 				pausePointStatusResponse: response,
+				Warning:                  response.Warning,
 				Expectations:             expectations,
 				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
 			}
