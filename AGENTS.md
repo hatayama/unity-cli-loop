@@ -128,6 +128,11 @@ dist/darwin-arm64/uloop compile --project-path "$(git rev-parse --show-toplevel)
 
 Substitute the binary for your platform (e.g. `dist/windows-amd64/uloop.exe` on Windows).
 
+When an AI agent runs these dev-binary commands through a sandboxed shell, Unity IPC over the
+Unix socket is blocked with EPERM (misreported as an i/o timeout) even though plain `uloop ...`
+may appear to work. Before investigating any "Unity not reachable" symptom in that setting,
+read `docs/claude-code-sandbox.md`.
+
 Before running a command with `--project-path`, confirm the path is the intended Unity project
 for the current task — do not copy a sibling checkout path from another repository or session.
 
