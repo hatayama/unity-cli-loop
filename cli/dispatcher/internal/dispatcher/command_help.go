@@ -106,6 +106,19 @@ func printToolHelp(tool clicore.ToolDefinition, stdout io.Writer) {
 
 	clicore.WriteLine(stdout, "")
 	printGlobalOptionsHelp(stdout)
+	printSkillGuidanceHelp(tool.Name, stdout)
+}
+
+// printSkillGuidanceHelp closes a command's help with the instruction to load its skill. Nothing is
+// printed for a command with no skill (custom commands), so the output never names a skill that
+// cannot be loaded.
+func printSkillGuidanceHelp(command string, stdout io.Writer) {
+	guidance, ok := tooldocs.SkillGuidanceLine(command)
+	if !ok {
+		return
+	}
+	clicore.WriteLine(stdout, "")
+	clicore.WriteLine(stdout, guidance)
 }
 
 func nativeCommandDescription(command string) (string, bool) {

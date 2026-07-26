@@ -253,6 +253,53 @@ func TestCommandHelpPrefersProjectCacheForDefaultToolNames(t *testing.T) {
 	}
 }
 
+// Verifies a tool's help closes with the instruction to load its skill, which is the only pointer
+// from --help to the workflow rules and response shapes that --help itself cannot carry.
+func TestCommandHelpPointsAtTheToolSkill(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	handled, code := tryHandleCommandHelp("simulate-keyboard", "", "", &stdout, &stderr)
+
+	if !handled || code != 0 {
+		t.Fatalf("simulate-keyboard help was not handled: handled=%v code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Load the uloop-simulate-keyboard skill") {
+		t.Fatalf("simulate-keyboard help does not point at its skill:\n%s", stdout.String())
+	}
+}
+
+// Verifies a command with no matching skill gets no guidance line, so a custom command is never
+// told to load a skill nobody installed.
+func TestCommandHelpOmitsSkillLineForCustomCommands(t *testing.T) {
+	projectRoot := createLaunchTestProject(t)
+	writeToolCache(t, projectRoot, `{
+  "tools": [
+    {
+      "name": "my-custom-command",
+      "description": "A project-local custom command",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Value": {"type": "string", "description": "Some value"}
+        }
+      }
+    }
+  ]
+}`)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	handled, code := tryHandleCommandHelp("my-custom-command", projectRoot, projectRoot, &stdout, &stderr)
+
+	if !handled || code != 0 {
+		t.Fatalf("custom command help was not handled: handled=%v code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "skill") {
+		t.Fatalf("custom command help mentions a skill:\n%s", stdout.String())
+	}
+}
+
 // Verifies enable-watch stays a plain default tool and still exposes schema-driven option help.
 func TestCommandHelpUsesWatchToolSchemaForDefaultWatchCommands(t *testing.T) {
 	var stdout bytes.Buffer

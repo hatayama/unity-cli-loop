@@ -51,6 +51,28 @@ func TestRunProjectLocalPausePointStatusHelpListsExpectedFlags(t *testing.T) {
 	}
 }
 
+// Verifies runner-owned pause-point commands close their help with the instruction to load the
+// pause-point skill. The dispatcher never renders these commands' help, so its own closing line
+// cannot reach them.
+func TestRunProjectLocalPausePointHelpPointsAtTheSkill(t *testing.T) {
+	for _, command := range []string{"await-pause-point", "pause-point-status"} {
+		t.Run(command, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			code := RunProjectLocal(context.Background(), []string{command, "--help"}, &stdout, &stderr)
+
+			if code != 0 {
+				t.Fatalf("%s --help failed: code=%d stderr=%s", command, code, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), "uloop-pause-point skill") {
+				t.Fatalf("%s --help must point at the pause-point skill: %s", command, stdout.String())
+			}
+		})
+	}
+}
+
 // Verifies list/sync/focus-window --help print only the global --project-path
 // option, since these commands take no command-specific flags.
 func TestRunProjectLocalNoOptionCommandsHelpListsOnlyGlobalOption(t *testing.T) {

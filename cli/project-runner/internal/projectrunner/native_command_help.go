@@ -78,6 +78,13 @@ func printNativeCommandHelp(command string, stdout io.Writer) {
 	clicore.WriteLine(stdout, "")
 	clicore.WriteLine(stdout, "Global options:")
 	clicore.WriteFormat(stdout, "  --%s <path>   Run against a Unity project outside the current directory\n", tooldocs.ProjectPathFlagName)
+
+	// Runner-owned commands print their own help, so the dispatcher's closing skill line never
+	// reaches them: await-pause-point and pause-point-status need it added here.
+	if guidance, ok := tooldocs.SkillGuidanceLine(command); ok {
+		clicore.WriteLine(stdout, "")
+		clicore.WriteLine(stdout, guidance)
+	}
 }
 
 // pausePointUnknownOptionError reports an unrecognized flag for a runner-owned native
