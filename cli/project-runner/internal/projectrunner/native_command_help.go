@@ -1,11 +1,8 @@
 package projectrunner
 
 import (
-	"fmt"
 	"io"
 	"sort"
-
-	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
@@ -39,6 +36,7 @@ var runnerNativeCommandOptions = map[string][]string{
 		"--" + PausePointIDFlagName,
 		"--" + tooldocs.PausePointCapturedVariablesFlagName,
 		"--" + tooldocs.PausePointCapturedVariableNamesFlagName,
+		"--" + tooldocs.PausePointExpectFlagName,
 	},
 }
 
@@ -84,22 +82,6 @@ func printNativeCommandHelp(command string, stdout io.Writer) {
 	if guidance, ok := tooldocs.SkillGuidanceLine(command); ok {
 		clicore.WriteLine(stdout, "")
 		clicore.WriteLine(stdout, guidance)
-	}
-}
-
-// pausePointUnknownOptionError reports an unrecognized flag for a runner-owned native
-// command. The hint calls out an outdated installed project runner as the likely cause when
-// the flag is documented in the skill but this runner build predates it, rather than leaving
-// the caller to guess between a typo and a stale binary.
-func pausePointUnknownOptionError(command string, name string) *clierrors.ArgumentError {
-	return &clierrors.ArgumentError{
-		Message: fmt.Sprintf(
-			"Unknown option %q for %s. If the skill documentation mentions this option, the installed "+
-				"project runner may be older than the docs — check 'uloop --version' and update the CLI.",
-			"--"+name, command),
-		Option:      "--" + name,
-		Command:     command,
-		NextActions: []string{fmt.Sprintf("Run `uloop %s --help` to inspect supported options.", command)},
 	}
 }
 

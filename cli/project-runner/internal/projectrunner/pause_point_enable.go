@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -407,35 +408,18 @@ func runPausePointWaitAfterEnable(
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 
-		var payload any = response
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
-		switch {
-		case logsErr == nil:
-			payload = pausePointWaitResult{
-				pausePointStatusResponse: response,
-				MatchingLogs:             logs.Logs,
-				Warning:                  joinPausePointWarnings(enableFields.Warning, buildPausePointWarning(logs, response.HitCount)),
-				Expectations:             expectations,
-				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
-			}
-		case enableFields.Warning != "" || len(expectations) > 0:
-			// Best-effort like the plain await path: a failed log fetch must not also drop the
-			// enable-time warning or --expect results, since those are the only evidence left in
-			// this branch. Uses an anonymous struct (not pausePointWaitResult) so MatchingLogs is
-			// omitted entirely rather than serialized as an empty array, preserving "empty array
-			// only means a successful fetch with no matches".
-			payload = struct {
-				pausePointStatusResponse
-				Warning               string                        `json:"Warning,omitempty"`
-				Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
-				AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
-			}{
-				pausePointStatusResponse: response,
-				Warning:                  enableFields.Warning,
-				Expectations:             expectations,
-				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
-			}
-		}
+		// Unity's warning can come from either the enable response or the status poll that observed
+		// the hit, so both are passed; the join drops the repeat when they carry the same text.
+		payload := buildPausePointHitPayload(pausePointHitPayloadInputs{
+			response:            response,
+			logs:                logs,
+			logsErr:             logsErr,
+			unityWarning:        joinPausePointWarnings(enableFields.Warning, response.Warning),
+			triggerResult:       triggerResult,
+			awaitedPausePointID: options.id,
+			expectations:        expectations,
+		})
 		result, marshalErr := json.Marshal(payload)
 		if marshalErr != nil {
 			clierrors.WriteClassifiedError(stderr, marshalErr, clierrors.ErrorContext{
@@ -477,12 +461,17 @@ func runPausePointWaitAfterEnable(
 	return 1
 }
 
+// joinPausePointWarnings concatenates the warnings that apply to one response, dropping empty ones
+// and repeats. Repeats are possible because the same text can reach a hit payload from two sources —
+// the enable response and the status poll that observed the hit — and printing it twice reads as two
+// separate problems.
 func joinPausePointWarnings(warnings ...string) string {
-	nonEmpty := make([]string, 0, len(warnings))
+	unique := make([]string, 0, len(warnings))
 	for _, warning := range warnings {
-		if warning != "" {
-			nonEmpty = append(nonEmpty, warning)
+		if warning == "" || slices.Contains(unique, warning) {
+			continue
 		}
+		unique = append(unique, warning)
 	}
-	return strings.Join(nonEmpty, " ")
+	return strings.Join(unique, " ")
 }

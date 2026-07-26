@@ -61,6 +61,7 @@ type pausePointStatusOptions struct {
 	id                    string
 	capturedVariablesMode pausePointCapturedVariablesMode
 	capturedVariableNames []string
+	expectations          []pausePointExpectation
 }
 
 func normalizePausePointStatusResponse(response pausePointStatusResponse) pausePointStatusResponse {
@@ -171,10 +172,21 @@ func runPausePointStatusCommand(
 	}
 	response = normalizePausePointStatusResponse(response)
 	response = filterPausePointCapturedVariableHistory(response)
+	// Evaluated against the raw CapturedVariables, before the filters below can narrow or strip
+	// values, for the same reason as on the await path (runWaitForPausePoint): otherwise an --expect
+	// target not also requested via --captured-variable-names, or whose value names mode stripped,
+	// would be reported as missing or failing.
+	expectations := evaluatePausePointExpectations(response.CapturedVariables, options.expectations)
 	response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 	response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 
-	result, err := json.Marshal(response)
+	// Expectation verdicts never change the exit code: whether the query succeeded and whether the
+	// captured state matched are separate questions, as on await-pause-point.
+	result, err := json.Marshal(pausePointStatusResult{
+		pausePointStatusResponse: response,
+		Expectations:             expectations,
+		AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
+	})
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
@@ -218,35 +230,16 @@ func runWaitForPausePoint(
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 		// Best-effort: a hit must stay a success even if Unity is busy while paused.
-		// On fetch failure MatchingLogs is omitted entirely, so an empty array always
-		// means "the fetch succeeded and no matching log exists".
-		var payload any = response
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
-		switch {
-		case logsErr == nil:
-			payload = pausePointWaitResult{
-				pausePointStatusResponse: response,
-				MatchingLogs:             logs.Logs,
-				Warning:                  buildPausePointWarning(logs, response.HitCount),
-				Expectations:             expectations,
-				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
-			}
-		case len(expectations) > 0:
-			// Best-effort: a failed log fetch must not also drop --expect results, since that is
-			// the only evidence a caller asked for by name in this branch. Uses an anonymous
-			// struct (not pausePointWaitResult) so MatchingLogs is omitted entirely rather than
-			// serialized as an empty array, preserving "empty array only means a successful
-			// fetch with no matches".
-			payload = struct {
-				pausePointStatusResponse
-				Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
-				AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
-			}{
-				pausePointStatusResponse: response,
-				Expectations:             expectations,
-				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
-			}
-		}
+		payload := buildPausePointHitPayload(pausePointHitPayloadInputs{
+			response:            response,
+			logs:                logs,
+			logsErr:             logsErr,
+			unityWarning:        response.Warning,
+			triggerResult:       triggerResult,
+			awaitedPausePointID: options.id,
+			expectations:        expectations,
+		})
 		result, marshalErr := json.Marshal(payload)
 		if marshalErr != nil {
 			clierrors.WriteClassifiedError(stderr, marshalErr, clierrors.ErrorContext{
@@ -397,6 +390,12 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 			options.capturedVariablesMode = mode
 		case tooldocs.PausePointCapturedVariableNamesFlagName:
 			options.capturedVariableNames = parsePausePointCapturedVariableNames(value)
+		case tooldocs.PausePointExpectFlagName:
+			expectation, parseErr := parsePausePointExpectFlagValue(value)
+			if parseErr != nil {
+				return pausePointStatusOptions{}, parseErr
+			}
+			options.expectations = append(options.expectations, expectation)
 		default:
 			return pausePointStatusOptions{}, pausePointUnknownOptionError(clicore.PausePointStatusUserCommandName, name)
 		}

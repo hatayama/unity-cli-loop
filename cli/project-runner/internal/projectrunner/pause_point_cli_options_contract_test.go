@@ -3,6 +3,7 @@ package projectrunner
 import (
 	"testing"
 
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 )
 
@@ -115,6 +116,52 @@ func TestPausePointSharedHelpOptionsAreAcceptedByTheWaitParser(t *testing.T) {
 		waitArgs := append([]string{"--id", "marker"}, args...)
 		if _, err := parseWaitForPausePointOptions(waitArgs); err != nil {
 			t.Errorf("await-pause-point parser rejected shared option --%s: %v", option.FlagName, err)
+		}
+	}
+}
+
+// runnerNativeCommandSampleArgs supplies one accepted argv form per flag advertised by a
+// runner-owned native command's --help. A flag added to runnerNativeCommandOptions without an entry
+// here fails the contract test below rather than silently going unchecked.
+var runnerNativeCommandSampleArgs = map[string][]string{
+	"--" + PausePointIDFlagName:                             {"--id", "marker"},
+	"--" + PausePointTimeoutFlagName:                        {"--timeout-seconds", "5"},
+	"--" + PausePointLogsMaxCountFlagName:                   {"--matching-logs-max-count", "3"},
+	"--" + tooldocs.PausePointCapturedVariablesFlagName:     {"--captured-variables", "names"},
+	"--" + tooldocs.PausePointCapturedVariableNamesFlagName: {"--captured-variable-names", "score"},
+	"--" + tooldocs.PausePointExpectFlagName:                {"--expect", "score=1"},
+	"--" + tooldocs.PausePointTriggerFlagName:               {"--trigger", "focus-window"},
+	"--" + tooldocs.PausePointResumePlayFlagName:            {"--resume-play"},
+}
+
+// Verifies every flag pause-point-status advertises in its --help output is actually accepted by its
+// own parser. The status parser is a separate switch from the await one, so a flag added to the help
+// table alone would be advertised and then rejected as unknown on use.
+func TestPausePointStatusHelpOptionsAreAcceptedByTheStatusParser(t *testing.T) {
+	for _, option := range runnerNativeCommandOptions[clicore.PausePointStatusUserCommandName] {
+		args, ok := runnerNativeCommandSampleArgs[option]
+		if !ok {
+			t.Fatalf("no sample argv for %s: add one to runnerNativeCommandSampleArgs", option)
+		}
+
+		statusArgs := append([]string{"--" + PausePointIDFlagName, "marker"}, args...)
+		if _, err := parsePausePointStatusOptions(statusArgs); err != nil {
+			t.Errorf("pause-point-status parser rejected advertised option %s: %v", option, err)
+		}
+	}
+}
+
+// Verifies the same for await-pause-point, whose help table is the larger of the two.
+func TestPausePointAwaitHelpOptionsAreAcceptedByTheWaitParser(t *testing.T) {
+	for _, option := range runnerNativeCommandOptions[clicore.PausePointAwaitCommandName] {
+		args, ok := runnerNativeCommandSampleArgs[option]
+		if !ok {
+			t.Fatalf("no sample argv for %s: add one to runnerNativeCommandSampleArgs", option)
+		}
+
+		waitArgs := append([]string{"--" + PausePointIDFlagName, "marker"}, args...)
+		if _, err := parseWaitForPausePointOptions(waitArgs); err != nil {
+			t.Errorf("await-pause-point parser rejected advertised option %s: %v", option, err)
 		}
 	}
 }

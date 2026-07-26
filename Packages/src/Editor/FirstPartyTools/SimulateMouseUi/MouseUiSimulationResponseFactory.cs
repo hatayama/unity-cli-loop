@@ -24,6 +24,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
+        /// <summary>
+        /// Creates the failure response for a rejected PlayMode preflight, carrying the rejecting
+        /// pause point's id through to the wire. Separate from CreateFailure (rather than an optional
+        /// argument on it) so the other failure sites cannot accidentally claim a pause-point cause.
+        /// </summary>
+        internal static SimulateMouseUiResponse CreatePreflightFailure(
+            MouseUiSimulationCommand parameters,
+            PlayModeToolPreflightResult preflight)
+        {
+            Debug.Assert(!preflight.IsValid, "CreatePreflightFailure must only be called for a rejected preflight");
+            return new SimulateMouseUiResponse
+            {
+                Success = false,
+                Message = preflight.ErrorMessage,
+                Action = parameters.Action.ToString(),
+                RejectedByActivePausePointId = preflight.RejectedByActivePausePointId
+            };
+        }
+
         internal static SimulateMouseUiResponse CreateFrameTimeoutResult(
             MouseAction action,
             Vector2 position,

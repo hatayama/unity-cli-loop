@@ -1,7 +1,6 @@
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
-using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -17,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void RequireActive_WhenEditModeIsNotPlaying_ReturnsNotActiveFailure()
         {
             // Verifies the active-only preflight fails with the exact wire-visible not-active message.
-            ValidationResult result = PlayModeToolPreflightService.RequireActive();
+            PlayModeToolPreflightResult result = PlayModeToolPreflightService.RequireActive();
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo(ExpectedNotActiveMessage));
@@ -27,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void RequireActiveAndNotPaused_WhenEditModeIsNotPlaying_ReturnsNotActiveFailure()
         {
             // Verifies the paused-aware preflight also fails with the exact not-active message when PlayMode is inactive.
-            ValidationResult result = PlayModeToolPreflightService.RequireActiveAndNotPaused(RecordInputUseCase.PausedActionDescription);
+            PlayModeToolPreflightResult result = PlayModeToolPreflightService.RequireActiveAndNotPaused(RecordInputUseCase.PausedActionDescription);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo(ExpectedNotActiveMessage));

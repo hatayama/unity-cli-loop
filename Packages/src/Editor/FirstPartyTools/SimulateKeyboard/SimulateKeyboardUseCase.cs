@@ -49,7 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // ReleaseAll must work while paused so agents can recover stuck device state after a
             // pause-point interruption without first resuming PlayMode.
-            ValidationResult preflight = parameters.Action == UnityCliLoopKeyboardAction.ReleaseAll
+            PlayModeToolPreflightResult preflight = parameters.Action == UnityCliLoopKeyboardAction.ReleaseAll
                 ? PlayModeToolPreflightService.RequireActive()
                 : PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!preflight.IsValid)
@@ -58,7 +58,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Success = false,
                     Message = preflight.ErrorMessage,
-                    Action = parameters.Action.ToString()
+                    Action = parameters.Action.ToString(),
+                    RejectedByActivePausePointId = preflight.RejectedByActivePausePointId
                 };
             }
 
