@@ -140,6 +140,11 @@ func TestRunWaitForPausePointWarnsWhenTheTriggerWasRefusedByThisMarker(t *testin
 	if code != 0 {
 		t.Fatalf("expected the hit to stay a success, got %d: %s", code, output)
 	}
+	// Asserted on the raw stdout, not only through the decoded struct: callers read this by its wire
+	// name, so a renamed json tag must fail here rather than pass a struct round trip.
+	if !strings.Contains(output, `"TriggerFailed": true`) {
+		t.Errorf("TriggerFailed must appear at the top level under that exact name: %s", output)
+	}
 	result := decodePausePointWaitResult(t, output)
 	if !strings.Contains(result.Warning, "refused") {
 		t.Errorf("expected a refusal warning: %q", result.Warning)

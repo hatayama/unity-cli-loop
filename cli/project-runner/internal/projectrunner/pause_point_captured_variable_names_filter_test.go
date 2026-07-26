@@ -2,28 +2,32 @@ package projectrunner
 
 import "testing"
 
+// capturedVariableNamesFilterResponse is the fixture both --captured-variable-names test functions
+// filter: three current variables, two of which also appear in one history frame.
+func capturedVariableNamesFilterResponse() pausePointStatusResponse {
+	return pausePointStatusResponse{
+		CapturedVariables: []pausePointCapturedVariable{
+			{Name: "velocity", Scope: "Local", TypeName: "Vector3", Value: pausePointVariableValue("(1,0,0)")},
+			{Name: "this", Scope: "This", TypeName: "PlayerController", Value: pausePointVariableValue("PlayerController")},
+			{Name: "health", Scope: "Local", TypeName: "Int32", Value: pausePointVariableValue("100")},
+		},
+		CapturedVariableHistory: []pausePointCapturedHistoryFrame{
+			{
+				HitSequence: 1,
+				CapturedVariables: []pausePointCapturedVariable{
+					{Name: "velocity", Scope: "Local", TypeName: "Vector3", Value: pausePointVariableValue("(0,0,0)")},
+					{Name: "health", Scope: "Local", TypeName: "Int32", Value: pausePointVariableValue("100")},
+				},
+			},
+		},
+	}
+}
+
 // TestFilterPausePointCapturedVariablesByName verifies the --captured-variable-names filter:
 // single-name selection, multi-name selection, a name with no match, and that it composes with
 // the --captured-variables mode (filter narrows first, then mode strips values).
 func TestFilterPausePointCapturedVariablesByName(t *testing.T) {
-	baseResponse := func() pausePointStatusResponse {
-		return pausePointStatusResponse{
-			CapturedVariables: []pausePointCapturedVariable{
-				{Name: "velocity", Scope: "Local", TypeName: "Vector3", Value: pausePointVariableValue("(1,0,0)")},
-				{Name: "this", Scope: "This", TypeName: "PlayerController", Value: pausePointVariableValue("PlayerController")},
-				{Name: "health", Scope: "Local", TypeName: "Int32", Value: pausePointVariableValue("100")},
-			},
-			CapturedVariableHistory: []pausePointCapturedHistoryFrame{
-				{
-					HitSequence: 1,
-					CapturedVariables: []pausePointCapturedVariable{
-						{Name: "velocity", Scope: "Local", TypeName: "Vector3", Value: pausePointVariableValue("(0,0,0)")},
-						{Name: "health", Scope: "Local", TypeName: "Int32", Value: pausePointVariableValue("100")},
-					},
-				},
-			},
-		}
-	}
+	baseResponse := capturedVariableNamesFilterResponse
 
 	t.Run("single name keeps only the matching variable", func(t *testing.T) {
 		result := filterPausePointCapturedVariablesByName(baseResponse(), []string{"velocity"})
@@ -72,6 +76,45 @@ func TestFilterPausePointCapturedVariablesByName(t *testing.T) {
 		}
 	})
 
+	t.Run("empty names list leaves the response unchanged", func(t *testing.T) {
+		original := baseResponse()
+		result := filterPausePointCapturedVariablesByName(original, nil)
+		if len(result.CapturedVariables) != len(original.CapturedVariables) {
+			t.Fatalf("expected response unchanged with no names filter: %#v", result.CapturedVariables)
+		}
+	})
+}
+
+// TestParsePausePointCapturedVariableNames verifies comma-splitting, whitespace trimming, and
+// that empty entries are dropped.
+func TestParsePausePointCapturedVariableNames(t *testing.T) {
+	cases := map[string][]string{
+		"":                        nil,
+		"velocity":                {"velocity"},
+		"velocity,this":           {"velocity", "this"},
+		"velocity, this , health": {"velocity", "this", "health"},
+		"velocity,,this":          {"velocity", "this"},
+	}
+
+	for input, expected := range cases {
+		names := parsePausePointCapturedVariableNames(input)
+		if len(names) != len(expected) {
+			t.Fatalf("input %q: length mismatch: got %#v, want %#v", input, names, expected)
+		}
+		for index, name := range names {
+			if name != expected[index] {
+				t.Fatalf("input %q: name[%d] mismatch: got %q, want %q", input, index, name, expected[index])
+			}
+		}
+	}
+}
+
+// TestFilterPausePointCapturedVariablesByNameReportsNotFound verifies which requested names are
+// reported as matching nothing: request order is preserved, a history-only match counts as found, a
+// repeat is reported once, and the all-or-nothing flag stays consistent with the list.
+func TestFilterPausePointCapturedVariablesByNameReportsNotFound(t *testing.T) {
+	baseResponse := capturedVariableNamesFilterResponse
+
 	t.Run("reports which requested names matched nothing, in the requested order", func(t *testing.T) {
 		result := filterPausePointCapturedVariablesByName(
 			baseResponse(), []string{"shield", "velocity", "armor"})
@@ -118,36 +161,4 @@ func TestFilterPausePointCapturedVariablesByName(t *testing.T) {
 			t.Fatalf("expected no missing names: %#v", result.CapturedVariableNamesNotFound)
 		}
 	})
-
-	t.Run("empty names list leaves the response unchanged", func(t *testing.T) {
-		original := baseResponse()
-		result := filterPausePointCapturedVariablesByName(original, nil)
-		if len(result.CapturedVariables) != len(original.CapturedVariables) {
-			t.Fatalf("expected response unchanged with no names filter: %#v", result.CapturedVariables)
-		}
-	})
-}
-
-// TestParsePausePointCapturedVariableNames verifies comma-splitting, whitespace trimming, and
-// that empty entries are dropped.
-func TestParsePausePointCapturedVariableNames(t *testing.T) {
-	cases := map[string][]string{
-		"":                        nil,
-		"velocity":                {"velocity"},
-		"velocity,this":           {"velocity", "this"},
-		"velocity, this , health": {"velocity", "this", "health"},
-		"velocity,,this":          {"velocity", "this"},
-	}
-
-	for input, expected := range cases {
-		names := parsePausePointCapturedVariableNames(input)
-		if len(names) != len(expected) {
-			t.Fatalf("input %q: length mismatch: got %#v, want %#v", input, names, expected)
-		}
-		for index, name := range names {
-			if name != expected[index] {
-				t.Fatalf("input %q: name[%d] mismatch: got %q, want %q", input, index, name, expected[index])
-			}
-		}
-	}
 }
