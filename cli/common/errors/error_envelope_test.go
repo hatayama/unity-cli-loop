@@ -444,7 +444,7 @@ func TestUnknownCommandErrorIncludesAvailableCommands(t *testing.T) {
 		ErrorContext{ProjectRoot: "/tmp/MyProject"},
 	)
 
-	if cliErr.ErrorCode != errorCodeUnknownCommand {
+	if cliErr.ErrorCode != ErrorCodeUnknownCommand {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
 	available, ok := cliErr.Details["AvailableCommands"].([]string)

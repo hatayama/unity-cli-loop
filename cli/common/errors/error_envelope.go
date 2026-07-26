@@ -11,7 +11,7 @@ import (
 
 const (
 	ErrorCodeInvalidArgument                 = "INVALID_ARGUMENT"
-	errorCodeUnknownCommand                  = "UNKNOWN_COMMAND"
+	ErrorCodeUnknownCommand                  = "UNKNOWN_COMMAND"
 	errorCodeProjectNotFound                 = "PROJECT_NOT_FOUND"
 	ErrorCodeUnityNotReachable               = "UNITY_NOT_REACHABLE"
 	ErrorCodeUnityStartupTimeout             = "UNITY_STARTUP_TIMEOUT"
@@ -260,7 +260,7 @@ func unityServerNotRespondingAfterDispatchError(err UnityServerNotRespondingErro
 
 func UnknownCommandError(command string, availableCommands []string, context ErrorContext) CLIError {
 	return CLIError{
-		ErrorCode:   errorCodeUnknownCommand,
+		ErrorCode:   ErrorCodeUnknownCommand,
 		Phase:       ErrorPhaseDispatch,
 		Message:     "Unknown command: " + command,
 		Retryable:   false,

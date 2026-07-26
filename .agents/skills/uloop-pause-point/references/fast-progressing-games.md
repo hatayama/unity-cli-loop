@@ -22,7 +22,7 @@ Digit keys are `Digit0`-`Digit9` or `Numpad0`-`Numpad9` — bare `0`-`9` is reje
 
 ## --resume-play Semantics
 
-`--resume-play` runs after the marker's arming is confirmed and before `--trigger` is dispatched: it resumes PlayMode only when PlayMode is actually paused, and reports what it did in `ResumePlayResult` (`WasPaused` / `Resumed` / `Error`). If the resume fails, the trigger is not dispatched and `TriggerResult.Error` says so. When the game reaches the line on its own after resuming (gravity, physics), omit `--trigger` and keep `--resume-play`.
+`--resume-play` runs after the marker's arming is confirmed and before `--trigger` is dispatched: it resumes PlayMode only when PlayMode is actually paused, and reports what it did in `ResumePlayResult` (`WasPaused` / `Resumed` / `Error`; an abandoned wait adds `Repaused` / `RepauseError`). If the resume fails, the trigger is not dispatched and `TriggerResult.Error` says so. If the trigger itself is rejected before it runs, the wait is abandoned and the resume is undone: `Repaused: true` (or `RepauseError`) reports PlayMode being paused again, so gameplay cannot consume the preserved marker while the trigger value is being fixed. When the game reaches the line on its own after resuming (gravity, physics), omit `--trigger` and keep `--resume-play`.
 
 ## Do Not Use Time.timeScale = 0
 

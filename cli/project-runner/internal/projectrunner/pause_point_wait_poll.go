@@ -21,8 +21,8 @@ const (
 	pausePointWaitStateExpired    pausePointWaitState = "expired"
 	pausePointWaitStateCleared    pausePointWaitState = "cleared"
 
-	// pausePointWaitStateTriggerFailed means the wait was abandoned because the --trigger command
-	// was rejected by argument parsing, so it never performed the action the marker was waiting for.
+	// pausePointWaitStateTriggerFailed means the wait was abandoned because the --trigger command was
+	// rejected before it executed anything, so it never performed the action the marker was waiting for.
 	// Why not reuse the timeout state: the timeout path unconditionally clears the marker, which
 	// would force a re-enable just to retry a corrected trigger, and it reports a "not hit within
 	// %ds" message with a PlayMode diagnosis that describes neither what happened nor what to fix.
@@ -192,7 +192,7 @@ func waitForPausePointStatus(
 			// buffered value, and the caller reuses the result received here instead of joining.
 			triggerResult = result
 			triggerDone = nil
-			if pausePointTriggerFailedWithArgumentError(result) {
+			if pausePointTriggerRejectedBeforeExecution(result) {
 				abortResponse, abortState := abortPausePointWaitAfterTriggerRejection(
 					ctx, connection, options.id, lastResponse)
 				return abortResponse, abortState, triggerResult, nil

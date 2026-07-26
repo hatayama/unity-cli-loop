@@ -39,35 +39,31 @@ type pausePointTriggerResult struct {
 	Error string `json:"Error,omitempty"`
 }
 
-// pausePointTriggerFailedWithArgumentError reports whether the trigger command was rejected by
-// argument parsing, the one failure that makes waiting out the marker's remaining lifetime
-// pointless: the trigger performed no action, so the marker can never be hit by it.
+// pausePointTriggerRejectedBeforeExecution reports whether the trigger command was permanently
+// rejected before it executed anything: its arguments did not parse, or its command name does not
+// exist. Either way the trigger performed no action, so the marker can never be hit by it and
+// waiting out the marker's remaining lifetime cannot change the outcome. Retrying the identical
+// command reproduces the same rejection, so the value has to change first.
 //
 // Deliberately narrow. A connection drop, a disabled tool, or unparseable output must not abort the
 // wait — the marker may still be hit by the game itself, and abandoning that wait would turn a
-// recoverable situation into a lost hit. Anything this function cannot positively identify as an
-// argument rejection keeps the wait running.
-func pausePointTriggerFailedWithArgumentError(result *pausePointTriggerResult) bool {
+// recoverable situation into a lost hit. Anything this function cannot positively identify as a
+// pre-execution rejection keeps the wait running.
+//
+// Only the dispatched command's stderr is inspected, because that is where every error envelope is
+// written; a Unity-side rejection arriving on stdout has no error code to match on.
+func pausePointTriggerRejectedBeforeExecution(result *pausePointTriggerResult) bool {
 	if result == nil {
 		return false
 	}
 
-	// Error carries what the dispatched command wrote to stderr, which is where a CLI-side argument
-	// rejection lands; Response carries its stdout, which is where a Unity-side argument rejection
-	// arrives with the same code.
-	return isPausePointInvalidArgumentPayload([]byte(result.Error)) ||
-		isPausePointInvalidArgumentPayload(result.Response)
-}
-
-func isPausePointInvalidArgumentPayload(payload []byte) bool {
-	trimmed := bytes.TrimSpace(payload)
+	trimmed := bytes.TrimSpace([]byte(result.Error))
 	if len(trimmed) == 0 {
 		return false
 	}
 
 	envelope := struct {
-		ErrorCode string `json:"ErrorCode"`
-		Error     struct {
+		Error struct {
 			ErrorCode string `json:"ErrorCode"`
 		} `json:"Error"`
 	}{}
@@ -76,7 +72,7 @@ func isPausePointInvalidArgumentPayload(payload []byte) bool {
 	}
 
 	return envelope.Error.ErrorCode == clierrors.ErrorCodeInvalidArgument ||
-		envelope.ErrorCode == clierrors.ErrorCodeInvalidArgument
+		envelope.Error.ErrorCode == clierrors.ErrorCodeUnknownCommand
 }
 
 // parsePausePointTriggerCommand splits a --trigger value into a command name and its arguments,

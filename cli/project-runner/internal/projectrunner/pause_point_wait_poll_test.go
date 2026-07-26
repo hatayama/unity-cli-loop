@@ -20,6 +20,12 @@ const argumentErrorTriggerStderr = `{"Success":false,"Error":{"ErrorCode":"INVAL
 	`"Phase":"argument_parsing","Message":"Invalid value for --action: \"Hold\"","Retryable":false,` +
 	`"SafeToRetry":false,"NextActions":["Pass one of: Press, KeyDown, KeyUp, ReleaseAll."]}}`
 
+// unknownCommandTriggerStderr is the error envelope a mistyped trigger command name produces. It
+// never reaches Unity at all, so it is as permanent a rejection as a bad argument value.
+const unknownCommandTriggerStderr = `{"Success":false,"Error":{"ErrorCode":"UNKNOWN_COMMAND",` +
+	`"Phase":"dispatch","Message":"Unknown command: simulate-keybord","Retryable":false,` +
+	`"SafeToRetry":false,"NextActions":["Run ` + "`uloop list`" + ` to see the available commands."]}}`
+
 // pausePointArmedStatusResponse is an armed-but-never-hit marker with a lifetime long enough that
 // RemainingMilliseconds stays positive, so the abort response can be asserted to carry it.
 func pausePointArmedStatusResponse(id string) pausePointStatusResponse {
@@ -189,6 +195,83 @@ func TestRunWaitForPausePointKeepsMarkerWhenTriggerRejectsArguments(t *testing.T
 	}
 	if !strings.Contains(nextActions, `uloop await-pause-point --id "jump"`) {
 		t.Fatalf("expected a copy-pasteable await command carrying the real id: %#v", envelope.Error.NextActions)
+	}
+}
+
+// Verifies a mistyped trigger command name aborts the wait and keeps the marker armed, the same as
+// a rejected argument value: the command never reached Unity, so the marker cannot be hit by it.
+func TestRunWaitForPausePointKeepsMarkerWhenTriggerCommandIsUnknown(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalClear := clearPausePointStatus
+	originalDispatch := dispatchPausePointTriggerCommand
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	defer func() {
+		queryPausePointStatus = originalQuery
+		clearPausePointStatus = originalClear
+		dispatchPausePointTriggerCommand = originalDispatch
+		pausePointStatusPoll = originalPoll
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointArmedStatusResponse(id), nil
+	}
+	clearPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		t.Fatal("clearPausePointStatus must not be called when the trigger command name was unknown")
+		return pausePointStatusResponse{}, nil
+	}
+	dispatchPausePointTriggerCommand = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		command string,
+		commandArgs []string,
+		startPath string,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		_, _ = stderr.Write([]byte(unknownCommandTriggerStderr))
+		return 1
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	startedAt := time.Now()
+	code := runWaitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 60,
+		timeout:        10 * time.Second,
+		triggerCommand: "simulate-keybord",
+		triggerArgs:    []string{"--action", "Press", "--key", "Space"},
+	}, &stdout, &stderr)
+	elapsed := time.Since(startedAt)
+
+	if code != 1 {
+		t.Fatalf("expected failure exit code, got %d with stdout %s", code, stdout.String())
+	}
+	if elapsed >= 5*time.Second {
+		t.Fatalf("expected an early abort, waited %v of a 10s timeout", elapsed)
+	}
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
+	if envelope.Error.ErrorCode != clierrors.ErrorCodePausePointTriggerFailed {
+		t.Fatalf("error code mismatch: %#v", envelope.Error)
+	}
+	if envelope.Error.Retryable || envelope.Error.SafeToRetry {
+		t.Fatalf("a mistyped command name is not fixed by retrying the same command: %#v", envelope.Error)
+	}
+	triggerResult, ok := envelope.Error.Details["TriggerResult"].(map[string]any)
+	if !ok {
+		t.Fatalf("TriggerResult detail missing or wrong shape: %#v", envelope.Error.Details)
+	}
+	if errorText, _ := triggerResult["Error"].(string); !strings.Contains(errorText, "UNKNOWN_COMMAND") {
+		t.Fatalf("TriggerResult must carry the trigger's own rejection: %#v", triggerResult)
 	}
 }
 
@@ -487,6 +570,80 @@ func TestRunWaitForPausePointReportsRepauseFailure(t *testing.T) {
 	}
 }
 
+// Verifies --resume-play that found PlayMode already unpaused sends no Pause on abort: this command
+// resumed nothing, so pausing a game the caller was running would be an unrequested side effect.
+func TestWaitForPausePointDoesNotRepauseWhenResumeWasANoOp(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalDispatch := dispatchPausePointTriggerCommand
+	originalResume := resumePlayModeForPausePoint
+	originalSend := sendControlPlayModeForPausePoint
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	defer func() {
+		queryPausePointStatus = originalQuery
+		dispatchPausePointTriggerCommand = originalDispatch
+		resumePlayModeForPausePoint = originalResume
+		sendControlPlayModeForPausePoint = originalSend
+		pausePointStatusPoll = originalPoll
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointArmedStatusResponse(id), nil
+	}
+	resumePlayModeForPausePoint = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+	) pausePointResumePlayResult {
+		// Mirrors the real contract: Play is only sent when Status reports IsPaused=true.
+		return pausePointResumePlayResult{WasPaused: false, Resumed: false}
+	}
+	sendControlPlayModeForPausePoint = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		action string,
+	) (controlPlayModeToolResponse, error) {
+		t.Fatalf("unexpected control-play-mode %q request after a no-op resume", action)
+		return controlPlayModeToolResponse{}, nil
+	}
+	dispatchPausePointTriggerCommand = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		command string,
+		commandArgs []string,
+		startPath string,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		_, _ = stderr.Write([]byte(argumentErrorTriggerStderr))
+		return 1
+	}
+
+	_, state, _, resumeResult, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 60,
+		timeout:        10 * time.Second,
+		triggerCommand: "simulate-keyboard",
+		triggerArgs:    []string{"--action", "Hold"},
+		resumePlay:     true,
+	})
+	if err != nil {
+		t.Fatalf("waitForPausePoint failed: %v", err)
+	}
+	if state != pausePointWaitStateTriggerFailed {
+		t.Fatalf("expected trigger_failed state, got %q", state)
+	}
+	if resumeResult == nil || resumeResult.Resumed {
+		t.Fatalf("expected a no-op ResumePlayResult, got %#v", resumeResult)
+	}
+	if resumeResult.Repaused || resumeResult.RepauseError != "" {
+		t.Fatalf("expected no re-pause to be reported, got %#v", resumeResult)
+	}
+}
+
 // Verifies a wait that did not resume PlayMode itself never sends Pause on abort: pausing a game
 // this command did not resume would be an unrequested side effect.
 func TestWaitForPausePointDoesNotRepauseWhenItDidNotResume(t *testing.T) {
@@ -548,9 +705,10 @@ func TestWaitForPausePointDoesNotRepauseWhenItDidNotResume(t *testing.T) {
 	}
 }
 
-// Verifies only an argument-parsing rejection aborts the wait: any other trigger failure (a
-// connection drop, a disabled tool, unparseable output) must leave the hit wait running.
-func TestPausePointTriggerFailedWithArgumentError(t *testing.T) {
+// Verifies only a pre-execution rejection (bad arguments or an unknown command name) aborts the
+// wait: any other trigger failure (a connection drop, a disabled tool, unparseable output) must
+// leave the hit wait running.
+func TestPausePointTriggerRejectedBeforeExecution(t *testing.T) {
 	cases := []struct {
 		name   string
 		result *pausePointTriggerResult
@@ -562,17 +720,14 @@ func TestPausePointTriggerFailedWithArgumentError(t *testing.T) {
 			want:   false,
 		},
 		{
-			name:   "argument rejection on stderr",
+			name:   "argument rejection",
 			result: &pausePointTriggerResult{Completed: true, Error: argumentErrorTriggerStderr},
 			want:   true,
 		},
 		{
-			name: "argument rejection carried in the response",
-			result: &pausePointTriggerResult{
-				Completed: true,
-				Response:  []byte(argumentErrorTriggerStderr),
-			},
-			want: true,
+			name:   "unknown command name rejection",
+			result: &pausePointTriggerResult{Completed: true, Error: unknownCommandTriggerStderr},
+			want:   true,
 		},
 		{
 			name: "another error code does not abort",
@@ -596,8 +751,8 @@ func TestPausePointTriggerFailedWithArgumentError(t *testing.T) {
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			if got := pausePointTriggerFailedWithArgumentError(testCase.result); got != testCase.want {
-				t.Fatalf("pausePointTriggerFailedWithArgumentError mismatch: got %v, want %v", got, testCase.want)
+			if got := pausePointTriggerRejectedBeforeExecution(testCase.result); got != testCase.want {
+				t.Fatalf("pausePointTriggerRejectedBeforeExecution mismatch: got %v, want %v", got, testCase.want)
 			}
 		})
 	}

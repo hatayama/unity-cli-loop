@@ -42,16 +42,18 @@ func pausePointWaitError(
 	case pausePointWaitStateTriggerFailed:
 		triggerFailedError := pausePointStateError(
 			clierrors.ErrorCodePausePointTriggerFailed,
-			"The --trigger command was rejected by its own argument parsing, so it never ran and the "+
-				"wait was abandoned instead of waiting out the remaining timeout. The marker is still "+
-				"armed: see Details.TriggerResult for the rejection and Details.RemainingMilliseconds "+
-				"for how long it stays armed.",
+			"The --trigger command was rejected before it ran (argument parsing or an unknown command "+
+				"name), so the wait was abandoned instead of waiting out the remaining timeout. This "+
+				"command did not clear the marker: see Details.TriggerResult for the rejection and "+
+				"Details.RemainingMilliseconds for how long the marker stays armed. A zero "+
+				"RemainingMilliseconds with an empty Details.Status means the final status re-read "+
+				"failed — run pause-point-status to confirm the marker.",
 			projectRoot,
 			options,
 			response,
 			// Retrying the identical command reproduces the same rejection: the trigger value has to
-			// change first. Reporting this as retryable is what made the original incident waste a
-			// full timeout window on a permanent failure.
+			// change first. Reporting a permanent failure as retryable is what made the original
+			// incident waste a full timeout window on it.
 			false)
 		triggerFailedError.NextActions = pausePointTriggerFailedNextActions(options.id)
 		return triggerFailedError
