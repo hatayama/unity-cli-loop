@@ -23,6 +23,7 @@ list_shared_common_inputs() {
     'cli/common/ipcendpoint/' \
     'cli/common/progress/' \
     'cli/common/project/' \
+    'cli/common/skilldocs/' \
     'cli/common/skillscan/' \
     'cli/common/tooldocs/' \
     'cli/common/tools/' \

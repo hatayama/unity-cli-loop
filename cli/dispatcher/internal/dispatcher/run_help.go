@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/hatayama/unity-cli-loop/common/skilldocs"
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
@@ -40,6 +41,9 @@ func printHelpForResolvedProject(stdout io.Writer, explicitProjectPath string) {
 	}
 
 	cache, ok := clicore.LoadProjectToolCache(connection.ProjectRoot)
+	// The command list prints one description per tool, so it reads the installed package's skills
+	// for the same reason single-command help does.
+	cache = skilldocs.ApplyToCatalog(cache, connection.ProjectRoot)
 	printMainHelp(stdout, clicontract.ProjectRunnerVersion(), nativeCLIDescription, cache, ok)
 }
 
