@@ -1,7 +1,7 @@
 ---
 name: uloop-simulate-keyboard
 toolName: simulate-keyboard
-description: "Simulate keyboard input in PlayMode through Unity Input System. Use for key presses, holds (via Press --duration or KeyDown/KeyUp), releases, and game controls such as WASD or Space."
+description: "Simulate keyboard input in PlayMode through Unity Input System. Use for key presses, holds (via Press --duration or KeyDown/KeyUp), releases, and game controls such as WASD or Space. Requires the Input System package (com.unity.inputsystem)."
 ---
 
 # Task
