@@ -82,15 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // undefined ordinals ("300") that later throw from the keyboard indexer. Only a name
             // that is defined on the Key enum may resolve to a key.
             string normalizedKey = NormalizeKeyName(parameters.Key);
-            bool isKnownKeyName = DefinedKeyNames.Contains(normalizedKey);
-            Key key = Key.None;
-            if (isKnownKeyName)
-            {
-                bool parsed = Enum.TryParse(normalizedKey, ignoreCase: true, out key);
-                UnityEngine.Debug.Assert(parsed, $"A whitelisted Key name must parse: {normalizedKey}");
-            }
-
-            if (!isKnownKeyName || key == Key.None)
+            if (!DefinedKeysByName.TryGetValue(normalizedKey, out Key key) || key == Key.None)
             {
                 // Suggest from the normalized form so padding does not degrade the candidates,
                 // while the message below still reports the raw input verbatim.
@@ -249,10 +241,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             OverlayCanvasFactory.EnsureExists();
         }
 
-        // Immutable whitelist of the names defined on the Input System Key enum, so key resolution
-        // never falls back to Enum.TryParse's ordinal and flag-combination behavior.
-        private static readonly HashSet<string> DefinedKeyNames =
-            new(Enum.GetNames(typeof(Key)), StringComparer.OrdinalIgnoreCase);
+        // Immutable name-to-value map of the Input System Key enum, so key resolution never falls
+        // back to Enum.TryParse's ordinal and flag-combination behavior.
+        private static readonly IReadOnlyDictionary<string, Key> DefinedKeysByName = BuildDefinedKeysByName();
+
+        private static IReadOnlyDictionary<string, Key> BuildDefinedKeysByName()
+        {
+            string[] names = Enum.GetNames(typeof(Key));
+            Array values = Enum.GetValues(typeof(Key));
+            Dictionary<string, Key> keysByName = new(names.Length, StringComparer.OrdinalIgnoreCase);
+            for (int index = 0; index < names.Length; index++)
+            {
+                keysByName[names[index]] = (Key)values.GetValue(index);
+            }
+
+            return keysByName;
+        }
 
         /// <summary>
         /// Reports whether the raw key input is the numeric form that Enum.TryParse used to accept

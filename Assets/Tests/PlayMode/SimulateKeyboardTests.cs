@@ -752,6 +752,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         }
 
         /// <summary>
+        /// Verifies that key names resolve case-insensitively, which the whitelist must preserve
+        /// because Enum.TryParse was previously called with ignoreCase.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithLowercaseKeyName_Should_Succeed()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "space"
+            });
+
+            Assert.IsTrue(lastResponse.Success, lastResponse.Message);
+        }
+
+        /// <summary>
+        /// Verifies that Digit3, the name the rejection message advertises for bare digits, is
+        /// actually accepted.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithDigitKeyName_Should_Succeed()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Digit3"
+            });
+
+            Assert.IsTrue(lastResponse.Success, lastResponse.Message);
+        }
+
+        /// <summary>
         /// Verifies that a whitespace-padded valid key name keeps resolving, since padded correct
         /// input was already accepted before key names were whitelisted.
         /// </summary>
