@@ -94,6 +94,43 @@ func TestIsTransportDisconnectErrorMatchesWrappedNoResponseError(t *testing.T) {
 	}
 }
 
+// Verifies a connect() refused by the operating system is classified as permanent, so the
+// dial-retry loops abort instead of spending their window on an error that cannot clear.
+func TestIsPermanentConnectErrorMatchesRefusedSyscalls(t *testing.T) {
+	refusedSyscalls := []syscall.Errno{syscall.EPERM, syscall.EACCES}
+
+	for _, errno := range refusedSyscalls {
+		dialError := &net.OpError{
+			Op:   "dial",
+			Net:  "unix",
+			Addr: &net.UnixAddr{Name: "/tmp/uloop-501/UnityCliLoop-sample.sock", Net: "unix"},
+			Err:  os.NewSyscallError("connect", errno),
+		}
+		wrapped := &unityipc.ConnectionAttemptError{Cause: dialError}
+		if !IsPermanentConnectError(wrapped) {
+			t.Fatalf("refused connect was not classified as permanent: %v", wrapped)
+		}
+	}
+}
+
+// Verifies the errors a retry is meant to absorb — the socket not existing yet, nobody
+// listening yet, a deadline expiry — stay retryable.
+func TestIsPermanentConnectErrorRejectsTransientFailures(t *testing.T) {
+	transientErrors := []error{
+		nil,
+		&unityipc.ConnectionAttemptError{Cause: os.NewSyscallError("connect", syscall.ENOENT)},
+		&unityipc.ConnectionAttemptError{Cause: os.NewSyscallError("connect", syscall.ECONNREFUSED)},
+		&unityipc.ConnectionAttemptError{Cause: timeoutOnlyError{}},
+		fmt.Errorf("dial unix /tmp/uloop-501/UnityCliLoop-sample.sock: i/o timeout"),
+	}
+
+	for _, err := range transientErrors {
+		if IsPermanentConnectError(err) {
+			t.Fatalf("transient error was classified as permanent: %v", err)
+		}
+	}
+}
+
 // Verifies that final-response timeout classification matches typed deadline errors
 // and Timeout()-reporting errors instead of relying on the "i/o timeout" message.
 func TestIsFinalResponseTimeoutErrorMatchesTypedCauses(t *testing.T) {

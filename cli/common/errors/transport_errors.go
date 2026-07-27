@@ -42,6 +42,15 @@ func IsTransportDisconnectError(err error) bool {
 		strings.Contains(message, "use of closed network connection")
 }
 
+// Reports whether a dial failed for a reason that cannot clear while the caller waits: the
+// kernel refused the socket outright (a sandbox policy that denies Unix socket connects,
+// permissions on the socket path) instead of reporting that nobody is listening yet. Retrying
+// such an error wastes the whole dial-retry window and then reports the window's own deadline
+// expiry, so the syscall error the first attempt already had never reaches the caller.
+func IsPermanentConnectError(err error) bool {
+	return errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EACCES)
+}
+
 // Reports whether the error is a connection deadline expiry. The Timeout() probe
 // runs through the unwrap chain because go-winio's named pipe deadline error is not
 // os.ErrDeadlineExceeded and os.IsTimeout does not unwrap fmt.Errorf("%w") wrapping.

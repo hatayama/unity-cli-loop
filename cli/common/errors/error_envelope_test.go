@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"net"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
@@ -62,6 +65,35 @@ func TestClassifyConnectionAttemptError(t *testing.T) {
 	}
 	if cliErr.ProjectRoot != "/tmp/MyProject" {
 		t.Fatalf("project root mismatch: %#v", cliErr)
+	}
+}
+
+// Verifies a connect() the operating system refused outright is reported as a permanent
+// failure carrying the syscall text verbatim: the retry guidance sent the agent into a
+// 60-second wait for a condition (sandbox policy, socket permissions) that never clears.
+func TestClassifyConnectionAttemptErrorForRefusedConnect(t *testing.T) {
+	err := &unityipc.ConnectionAttemptError{
+		ProjectRoot: "/tmp/MyProject",
+		Endpoint:    "/tmp/uloop-501/UnityCliLoop-sample.sock",
+		Cause: &net.OpError{
+			Op:   "dial",
+			Net:  "unix",
+			Addr: &net.UnixAddr{Name: "/tmp/uloop-501/UnityCliLoop-sample.sock", Net: "unix"},
+			Err:  os.NewSyscallError("connect", syscall.EPERM),
+		},
+	}
+
+	cliErr := ClassifyError(err, ErrorContext{Command: "compile"})
+	if cliErr.Retryable || cliErr.SafeToRetry {
+		t.Fatalf("a permanently refused connect must not be advertised as retryable: %#v", cliErr)
+	}
+	if cliErr.Details["Cause"] != err.Cause.Error() {
+		t.Fatalf("the syscall error must be reported verbatim: %#v", cliErr.Details)
+	}
+	for _, action := range cliErr.NextActions {
+		if strings.Contains(strings.ToLower(action), "wait and retry") {
+			t.Fatalf("next actions must not advise waiting: %#v", cliErr.NextActions)
+		}
 	}
 }
 

@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
+	"os"
+	"syscall"
 	"testing"
 	"time"
 
@@ -50,6 +53,37 @@ func TestWaitForToolReadinessReturnsCliUpdateRequiredImmediately(t *testing.T) {
 
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected cli update error, got %v", err)
+	}
+}
+
+// Verifies a connect() the operating system refused permanently ends the readiness wait at the
+// first probe and reports that error, instead of polling out the whole timeout and replacing it
+// with server-not-responding guidance the caller cannot act on.
+func TestWaitForToolReadinessReturnsPermanentlyRefusedConnectImmediately(t *testing.T) {
+	expectedErr := &unityipc.ConnectionAttemptError{
+		Endpoint: "/tmp/uloop-501/UnityCliLoop-sample.sock",
+		Cause: &net.OpError{
+			Op:   "dial",
+			Net:  "unix",
+			Addr: &net.UnixAddr{Name: "/tmp/uloop-501/UnityCliLoop-sample.sock", Net: "unix"},
+			Err:  os.NewSyscallError("connect", syscall.EPERM),
+		},
+	}
+	probeCount := 0
+	deps := toolReadinessDeps{
+		probeToolReadinessSequence: func(context.Context, string) error {
+			probeCount++
+			return expectedErr
+		},
+	}
+
+	err := waitForToolReadinessWithDeps(context.Background(), t.TempDir(), time.Hour, deps)
+
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected the refused connect error, got %v", err)
+	}
+	if probeCount != 1 {
+		t.Fatalf("expected the wait to stop after the first probe, got %d probes", probeCount)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -387,6 +388,114 @@ func TestConnectionRetryFocusControllerRetriesAfterProcessDiscoveryMiss(t *testi
 	}
 	if focusCallCount != 1 {
 		t.Fatalf("expected later focus attempt to run once, got %d calls", focusCallCount)
+	}
+}
+
+// Verifies a connect() the operating system refused permanently is not retried. Retrying it
+// burned the whole 60-second window and then reported the window's own deadline error, hiding
+// the real syscall error the first attempt already had.
+func TestShouldNotRetryPermanentlyRefusedConnection(t *testing.T) {
+	err := &unityipc.ConnectionAttemptError{
+		Endpoint: "/tmp/uloop-501/UnityCliLoop-sample.sock",
+		Cause: &net.OpError{
+			Op:   "dial",
+			Net:  "unix",
+			Addr: &net.UnixAddr{Name: "/tmp/uloop-501/UnityCliLoop-sample.sock", Net: "unix"},
+			Err:  os.NewSyscallError("connect", syscall.EPERM),
+		},
+	}
+
+	if shouldRetryUndispatchedConnection(err, unityipc.UnitySendOutcome{}) {
+		t.Fatal("a permanently refused connect must not enter the retry loop")
+	}
+}
+
+// Verifies the whole send path fails at the first attempt when the operating system refuses the
+// connect, and reports that syscall error itself. Retrying it consumed the extended
+// unity-alive window and then reported the window's own deadline as `i/o timeout`.
+func TestSendWithTransientConnectionRetryAbortsOnRefusedConnect(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix socket file permissions do not apply to named pipes")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses socket file permissions")
+	}
+
+	// Why a real listening socket with mode 000: the refusal has to come from the kernel's
+	// connect, which is the only thing that produces the errno this path classifies. The
+	// directory comes from MkdirTemp rather than t.TempDir because a socket path built from this
+	// test's name exceeds the sockaddr_un limit.
+	endpointDirectory, err := os.MkdirTemp("", "uloop-refused")
+	if err != nil {
+		t.Fatalf("failed to create the endpoint directory: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.RemoveAll(endpointDirectory)
+	})
+	socketPath := filepath.Join(endpointDirectory, "refused.sock")
+	listener, listenErr := net.Listen("unix", socketPath)
+	if listenErr != nil {
+		t.Fatalf("failed to listen on the endpoint: %v", listenErr)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+	if err := os.Chmod(socketPath, 0o000); err != nil {
+		t.Fatalf("failed to remove socket permissions: %v", err)
+	}
+
+	deps := defaultConnectionRetryDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 123}, nil
+	}
+	connection := unityipc.Connection{
+		Endpoint:    unityipc.Endpoint{Network: "unix", Address: socketPath},
+		ProjectRoot: t.TempDir(),
+	}
+
+	startedAt := time.Now()
+	_, sendErr := sendWithTransientConnectionRetryWithDeps(
+		context.Background(),
+		connection,
+		"get-logs",
+		map[string]any{},
+		nil,
+		0,
+		deps)
+	elapsed := time.Since(startedAt)
+
+	var connectionErr *unityipc.ConnectionAttemptError
+	if !errors.As(sendErr, &connectionErr) {
+		t.Fatalf("expected the connection attempt error, got %v", sendErr)
+	}
+	var notRespondingErr clierrors.UnityServerNotRespondingError
+	if errors.As(sendErr, &notRespondingErr) {
+		t.Fatalf("a refused connect must not be reported as a non-responding server: %v", sendErr)
+	}
+	if !clierrors.IsPermanentConnectError(sendErr) {
+		t.Fatalf("the syscall error was replaced on the way out: %v", sendErr)
+	}
+	if elapsed >= deps.retryPoll {
+		t.Fatalf("expected the send to abort before the first retry wait, took %s", elapsed)
+	}
+}
+
+// Verifies the dial failures the retry window exists for — the socket not created yet, nobody
+// listening yet — keep being retried.
+func TestShouldRetryTransientlyFailedConnection(t *testing.T) {
+	transientCauses := []error{
+		os.NewSyscallError("connect", syscall.ENOENT),
+		os.NewSyscallError("connect", syscall.ECONNREFUSED),
+	}
+
+	for _, cause := range transientCauses {
+		err := &unityipc.ConnectionAttemptError{
+			Endpoint: "/tmp/uloop-501/UnityCliLoop-sample.sock",
+			Cause:    cause,
+		}
+		if !shouldRetryUndispatchedConnection(err, unityipc.UnitySendOutcome{}) {
+			t.Fatalf("a transient dial failure must stay retryable: %v", cause)
+		}
 	}
 }
 
