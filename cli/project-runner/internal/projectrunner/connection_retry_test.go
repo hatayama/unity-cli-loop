@@ -3,6 +3,7 @@ package projectrunner
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -201,6 +202,227 @@ func TestSendWithTransientConnectionRetryWritesFocusFailureVibeLog(t *testing.T)
 			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
 		}
 	}
+}
+
+// Verifies a successful focus restore writes a restore-success vibe log joined to the focus
+// attempt through the same correlation ID.
+func TestConnectionRetryFocusControllerLogsRestoreSuccessWithAttemptCorrelation(t *testing.T) {
+	enableCliVibeLog(t)
+
+	deps := defaultConnectionRetryDeps()
+	restoreCallCount := 0
+	deps.focusUnityProcess = func(context.Context, int) (unityprocess.RestoreFocusFunc, error) {
+		return func(context.Context) error {
+			restoreCallCount++
+			return nil
+		}, nil
+	}
+	projectRoot := t.TempDir()
+	controller := newConnectionRetryFocusController(
+		unityipc.Connection{
+			Endpoint:    unityipc.Endpoint{Network: "unix", Address: "/tmp/uloop-test/test.sock"},
+			ProjectRoot: projectRoot,
+		},
+		"get-logs",
+		deps,
+	)
+
+	controller.tryFocusProcess(context.Background(), 123, focusReasonBusyStall, errors.New("busy"))
+	controller.restore(context.Background())
+
+	if restoreCallCount != 1 {
+		t.Fatalf("expected one restore call, got %d", restoreCallCount)
+	}
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	attemptEntries := cliVibeEntriesForOperation(t, logContent, "cli_connection_retry_focus_attempt")
+	restoreEntries := cliVibeEntriesForOperation(t, logContent, "cli_connection_retry_focus_restore_success")
+	if len(attemptEntries) != 1 || len(restoreEntries) != 1 {
+		t.Fatalf("expected one attempt and one restore-success entry:\n%s", logContent)
+	}
+	if restoreEntries[0]["level"] != "INFO" {
+		t.Fatalf("restore-success entry must be INFO: %#v", restoreEntries[0])
+	}
+	if restoreEntries[0]["correlation_id"] != attemptEntries[0]["correlation_id"] {
+		t.Fatalf(
+			"restore-success correlation must match the attempt: %v vs %v",
+			restoreEntries[0]["correlation_id"],
+			attemptEntries[0]["correlation_id"],
+		)
+	}
+	for _, expected := range []string{
+		`"command":"get-logs"`,
+		`"pid":123`,
+		`"reason":"busy_stall"`,
+	} {
+		if !strings.Contains(logContent, expected) {
+			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
+		}
+	}
+}
+
+// Verifies a failed focus restore writes a WARNING restore-failure vibe log including the
+// restore error, joined to the focus attempt through the same correlation ID.
+func TestConnectionRetryFocusControllerLogsRestoreFailure(t *testing.T) {
+	enableCliVibeLog(t)
+
+	deps := defaultConnectionRetryDeps()
+	deps.focusUnityProcess = func(context.Context, int) (unityprocess.RestoreFocusFunc, error) {
+		return func(context.Context) error {
+			return fmt.Errorf("previous app is gone")
+		}, nil
+	}
+	projectRoot := t.TempDir()
+	controller := newConnectionRetryFocusController(
+		unityipc.Connection{ProjectRoot: projectRoot},
+		"compile",
+		deps,
+	)
+
+	controller.tryFocusProcess(context.Background(), 456, focusReasonMainThreadStall, errors.New("stall"))
+	controller.restore(context.Background())
+
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	attemptEntries := cliVibeEntriesForOperation(t, logContent, "cli_connection_retry_focus_attempt")
+	failureEntries := cliVibeEntriesForOperation(t, logContent, "cli_connection_retry_focus_restore_failed")
+	if len(attemptEntries) != 1 || len(failureEntries) != 1 {
+		t.Fatalf("expected one attempt and one restore-failure entry:\n%s", logContent)
+	}
+	if failureEntries[0]["level"] != "WARNING" {
+		t.Fatalf("restore-failure entry must be WARNING: %#v", failureEntries[0])
+	}
+	if failureEntries[0]["correlation_id"] != attemptEntries[0]["correlation_id"] {
+		t.Fatalf("restore-failure correlation must match the attempt:\n%s", logContent)
+	}
+	if !strings.Contains(logContent, `"restoreError":"previous app is gone"`) {
+		t.Fatalf("CLI Vibe log missing the restore error:\n%s", logContent)
+	}
+}
+
+// Verifies keepUnityFocusedAfterReturn logs the intentional restore skip with the triggering
+// focus reason, and that the restorer never runs afterward.
+func TestConnectionRetryFocusControllerLogsRestoreSkippedWhenKeptFocused(t *testing.T) {
+	enableCliVibeLog(t)
+
+	deps := defaultConnectionRetryDeps()
+	restoreCallCount := 0
+	deps.focusUnityProcess = func(context.Context, int) (unityprocess.RestoreFocusFunc, error) {
+		return func(context.Context) error {
+			restoreCallCount++
+			return nil
+		}, nil
+	}
+	projectRoot := t.TempDir()
+	controller := newConnectionRetryFocusController(
+		unityipc.Connection{ProjectRoot: projectRoot},
+		"get-logs",
+		deps,
+	)
+
+	controller.tryFocusProcess(context.Background(), 123, focusReasonPreAcceptTimeout, errors.New("timeout"))
+	controller.keepUnityFocusedAfterReturn()
+	controller.restore(context.Background())
+
+	if restoreCallCount != 0 {
+		t.Fatalf("kept focus must not run the restorer, got %d calls", restoreCallCount)
+	}
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	attemptEntries := cliVibeEntriesForOperation(t, logContent, "cli_connection_retry_focus_attempt")
+	skippedEntries := cliVibeEntriesForOperation(t, logContent, "cli_connection_retry_focus_restore_skipped")
+	if len(attemptEntries) != 1 || len(skippedEntries) != 1 {
+		t.Fatalf("expected one attempt and one restore-skipped entry:\n%s", logContent)
+	}
+	if skippedEntries[0]["correlation_id"] != attemptEntries[0]["correlation_id"] {
+		t.Fatalf("restore-skipped correlation must match the attempt:\n%s", logContent)
+	}
+	if !strings.Contains(logContent, `"reason":"pre_accept_timeout"`) {
+		t.Fatalf("restore-skipped entry must carry the triggering focus reason:\n%s", logContent)
+	}
+	if len(cliVibeEntriesForOperation(t, logContent, "cli_connection_retry_focus_restore_success")) != 0 {
+		t.Fatalf("a skipped restore must not also log a restore success:\n%s", logContent)
+	}
+}
+
+// Verifies a focus that could not capture the previous frontmost PID logs the missing restorer
+// once at focus time, and the later restore call stays silent.
+func TestConnectionRetryFocusControllerLogsMissingRestorerAtFocusTime(t *testing.T) {
+	enableCliVibeLog(t)
+
+	deps := defaultConnectionRetryDeps()
+	deps.focusUnityProcess = func(context.Context, int) (unityprocess.RestoreFocusFunc, error) {
+		// A nil restorer with a nil error means the previous frontmost PID could not be read.
+		return nil, nil
+	}
+	projectRoot := t.TempDir()
+	controller := newConnectionRetryFocusController(
+		unityipc.Connection{ProjectRoot: projectRoot},
+		"get-logs",
+		deps,
+	)
+
+	controller.tryFocusProcess(context.Background(), 123, focusReasonBusyStall, errors.New("busy"))
+	controller.restore(context.Background())
+
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	attemptEntries := cliVibeEntriesForOperation(t, logContent, "cli_connection_retry_focus_attempt")
+	unavailableEntries := cliVibeEntriesForOperation(t, logContent, "cli_connection_retry_focus_restore_unavailable")
+	if len(attemptEntries) != 1 || len(unavailableEntries) != 1 {
+		t.Fatalf("expected one attempt and one restore-unavailable entry:\n%s", logContent)
+	}
+	if unavailableEntries[0]["correlation_id"] != attemptEntries[0]["correlation_id"] {
+		t.Fatalf("restore-unavailable correlation must match the attempt:\n%s", logContent)
+	}
+	for _, unexpected := range []string{
+		"cli_connection_retry_focus_restore_success",
+		"cli_connection_retry_focus_restore_failed",
+		"cli_connection_retry_focus_restore_skipped",
+	} {
+		if len(cliVibeEntriesForOperation(t, logContent, unexpected)) != 0 {
+			t.Fatalf("a missing restorer must only log at focus time, found %s:\n%s", unexpected, logContent)
+		}
+	}
+}
+
+// Verifies restore and keepUnityFocusedAfterReturn stay silent when no focus ever happened,
+// so every ordinary command does not write a restore log line.
+func TestConnectionRetryFocusControllerStaysSilentWithoutFocus(t *testing.T) {
+	enableCliVibeLog(t)
+
+	projectRoot := t.TempDir()
+	controller := newConnectionRetryFocusController(
+		unityipc.Connection{ProjectRoot: projectRoot},
+		"get-logs",
+		defaultConnectionRetryDeps(),
+	)
+
+	controller.keepUnityFocusedAfterReturn()
+	controller.restore(context.Background())
+
+	logFiles, err := filepath.Glob(filepath.Join(projectRoot, vibelog.CLIVibeLogDirectory, "*.json"))
+	if err != nil {
+		t.Fatalf("failed to glob CLI Vibe logs: %v", err)
+	}
+	if len(logFiles) != 0 {
+		t.Fatalf("no-op restore must not write any vibe log, found %#v", logFiles)
+	}
+}
+
+// Parses the JSON-lines vibe log and returns the entries whose operation matches.
+func cliVibeEntriesForOperation(t *testing.T, logContent string, operation string) []map[string]any {
+	t.Helper()
+	entries := []map[string]any{}
+	for _, line := range strings.Split(strings.TrimSpace(logContent), "\n") {
+		if line == "" {
+			continue
+		}
+		entry := map[string]any{}
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("failed to parse vibe log line %q: %v", line, err)
+		}
+		if entry["operation"] == operation {
+			entries = append(entries, entry)
+		}
+	}
+	return entries
 }
 
 // Verifies a process probe that timed out reports the dial error instead of the
