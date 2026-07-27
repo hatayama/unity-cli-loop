@@ -271,6 +271,22 @@ uloop execute-dynamic-code --code 'using UnityEngine; Debug.Log("Hello from CLI!
 
 </details>
 
+## Claude Codeを使う場合の設定
+
+Claude Codeはシェルコマンドをサンドボックス内で実行します。サンドボックスのネットワークポリシーは**ホスト名**の許可リストで表現されますが、`uloop` がUnityと通信するUnixドメインソケット（Windowsでは名前付きパイプ）にはホスト名がないため、許可リストに載せる手段がありません。そのためUnityが正常に動いていても、`uloop` がUnityに接続しようとした時点で `UNITY_NOT_REACHABLE`（`connect: operation not permitted`）で失敗します。
+
+`~/.claude/settings.json` の `sandbox.excludedCommands` に `uloop *` を追加して、`uloop` コマンドをサンドボックスの対象外にしてください。
+
+```json
+{
+  "sandbox": {
+    "excludedCommands": ["uloop *"]
+  }
+}
+```
+
+このパターンは**入力されたコマンド文字列**に対して照合されるため、`uloop` で始まる呼び出しが対象外になります。詳細と検証結果は [docs/claude-code-sandbox.md](/docs/claude-code-sandbox.md) を参照してください。
+
 ## プロジェクトパス指定
 
 `--project-path` を省略した場合は、カレントディレクトリから Unity プロジェクトを検出して接続します。
