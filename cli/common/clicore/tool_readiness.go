@@ -61,6 +61,12 @@ func waitForToolReadinessWithDeps(ctx context.Context, projectRoot string, timeo
 			if IsReadinessCLIUpdateRequiredError(err) {
 				return err
 			}
+			// Why abort: polling cannot outlast a connect the kernel refused permanently, and
+			// waiting out the timeout replaces that syscall error with server-not-responding
+			// guidance the caller cannot act on.
+			if clierrors.IsPermanentConnectError(err) {
+				return err
+			}
 			lastErr = err
 		}
 

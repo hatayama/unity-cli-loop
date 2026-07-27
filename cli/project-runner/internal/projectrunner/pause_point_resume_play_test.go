@@ -491,12 +491,12 @@ func TestWaitForPausePointResumesWithoutTriggerWhenArmed(t *testing.T) {
 
 // Verifies resumePlayModeForPausePointFromUnity's Status/Play branches without a live Unity IPC.
 func TestResumePlayModeForPausePointFromUnityBranches(t *testing.T) {
-	originalSend := sendControlPlayModeForPausePointResume
-	defer func() { sendControlPlayModeForPausePointResume = originalSend }()
+	originalSend := sendControlPlayModeForPausePoint
+	defer func() { sendControlPlayModeForPausePoint = originalSend }()
 
 	t.Run("Status transport failure", func(t *testing.T) {
 		actions := make([]string, 0, 1)
-		sendControlPlayModeForPausePointResume = func(
+		sendControlPlayModeForPausePoint = func(
 			ctx context.Context,
 			connection unityipc.Connection,
 			action string,
@@ -516,7 +516,7 @@ func TestResumePlayModeForPausePointFromUnityBranches(t *testing.T) {
 
 	t.Run("Status Success=false", func(t *testing.T) {
 		actions := make([]string, 0, 1)
-		sendControlPlayModeForPausePointResume = func(
+		sendControlPlayModeForPausePoint = func(
 			ctx context.Context,
 			connection unityipc.Connection,
 			action string,
@@ -536,7 +536,7 @@ func TestResumePlayModeForPausePointFromUnityBranches(t *testing.T) {
 
 	t.Run("IsPaused=false skips Play", func(t *testing.T) {
 		actions := make([]string, 0, 1)
-		sendControlPlayModeForPausePointResume = func(
+		sendControlPlayModeForPausePoint = func(
 			ctx context.Context,
 			connection unityipc.Connection,
 			action string,
@@ -556,7 +556,7 @@ func TestResumePlayModeForPausePointFromUnityBranches(t *testing.T) {
 
 	t.Run("Play transport failure", func(t *testing.T) {
 		actions := make([]string, 0, 2)
-		sendControlPlayModeForPausePointResume = func(
+		sendControlPlayModeForPausePoint = func(
 			ctx context.Context,
 			connection unityipc.Connection,
 			action string,

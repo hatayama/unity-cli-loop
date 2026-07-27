@@ -231,29 +231,5 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             return comparableSchema;
         }
-
-        /// <summary>
-        /// Test-only settings port that exposes every discovered tool.
-        /// </summary>
-        private sealed class AlwaysEnabledToolSettingsPort : IToolSettingsPort
-        {
-            public bool IsToolEnabled(string toolName)
-            {
-                return true;
-            }
-
-            public void SetToolEnabled(string toolName, bool enabled)
-            {
-            }
-
-            public string[] GetDisabledTools()
-            {
-                return Array.Empty<string>();
-            }
-
-            public void InvalidateCache()
-            {
-            }
-        }
     }
 }

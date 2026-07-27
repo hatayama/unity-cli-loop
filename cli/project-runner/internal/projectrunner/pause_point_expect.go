@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 )
 
 // pausePointExpectation is one --expect 'Name=value' assertion parsed from the CLI args.
@@ -30,7 +32,7 @@ func parsePausePointExpectFlagValue(value string) (pausePointExpectation, error)
 	if !found || name == "" {
 		return pausePointExpectation{}, &clierrors.ArgumentError{
 			Message:      "Invalid --expect value: " + value,
-			Option:       "--" + PausePointExpectFlagName,
+			Option:       "--" + tooldocs.PausePointExpectFlagName,
 			ExpectedType: "Name=value",
 			NextActions:  []string{"Pass `--expect 'Name=value'`, for example `--expect 'Health=100'`."},
 		}

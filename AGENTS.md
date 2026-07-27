@@ -64,6 +64,22 @@ These files are generated copies. Update the source skill definitions instead, t
 - Sources: `Packages/src/Editor/FirstPartyTools/<Tool>/Skill/SKILL.md` and `Packages/src/Editor/CliOnlyTools~/<Tool>/Skill/SKILL.md` (plus each skill's `references/` files, which are copied along with it).
 - Regenerate: `dist/darwin-arm64/uloop skills install --claude --agents` from the project root, substituting the binary for your platform (e.g. `dist/windows-amd64/uloop.exe` on Windows). Only `.claude/` and `.agents/` are tracked in git; other targets are local-only.
 
+## Generated Tool Catalog
+
+`cli/common/tools/default-tools.json` is generated from the skill parameter tables — it is what
+`--help` and `uloop list` print when no project cache is available, and its descriptions must never
+be hand-edited. When you change a parameter table or a tool description in
+`Packages/src/Editor/FirstPartyTools/<Tool>/Skill/SKILL.md` or
+`Packages/src/Editor/CliOnlyTools~/<Tool>/Skill/SKILL.md`, run `scripts/sync-tool-docs.sh` and
+include the regenerated catalog in the same commit. `go run ./cmd/sync-tool-docs --check` in
+`cli/release-automation` reports drift without writing, and CI runs it.
+
+Generation fails when a table and the schema disagree: a visible option with no row, or a row
+matching no accepted option. Fix the table or the schema — do not work around the generator.
+
+Enable the repository hooks once per clone with `git config core.hooksPath .husky`; the pre-commit
+hook then regenerates the catalog for you when a skill file is staged.
+
 ## CI Automation Language
 
 Write GitHub Actions and release automation logic in Go when it needs JSON parsing, workflow polling, state transitions, or non-trivial branching.
@@ -128,6 +144,14 @@ dist/darwin-arm64/uloop compile --project-path "$(git rev-parse --show-toplevel)
 
 Substitute the binary for your platform (e.g. `dist/windows-amd64/uloop.exe` on Windows).
 
+When an AI agent runs these dev-binary commands through a sandboxed shell, Unity IPC over the
+Unix socket is denied with EPERM even though plain `uloop ...` may appear to work: the sandbox
+exclusion is matched against the command text, and which command shapes survive that matching
+is not guessable from the outside. Read `docs/claude-code-sandbox.md` *before* running
+dev-binary commands in that setting, not only once a "Unity not reachable" symptom appears. A
+CLI predating the refusal report turns the same denial into an `i/o timeout`, which is what
+made this cost a full investigation.
+
 Before running a command with `--project-path`, confirm the path is the intended Unity project
 for the current task — do not copy a sibling checkout path from another repository or session.
 
@@ -138,7 +162,11 @@ to refresh `dist` binaries; they are git-ignored and must not be committed.
 
 To validate an unreleased project runner from an external Unity project, set the
 `ULOOP_PROJECT_RUNNER_PATH` environment variable to a locally built binary — it overrides the
-pin-based resolution entirely (see `docs/project-runner-pin.md`).
+pin-based resolution entirely (see `docs/project-runner-pin.md`). Inside this checkout the
+variable is not what makes a run use your build: `dist/<platform>/uloop` already takes the
+runner built beside it, and no response field says which runner served a command. Read "Which
+runner actually ran" in that document before concluding that a runner-side change does or does
+not work.
 
 ## Unity Freeze Prevention
 

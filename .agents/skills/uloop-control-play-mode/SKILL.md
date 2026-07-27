@@ -1,7 +1,7 @@
 ---
 name: uloop-control-play-mode
 toolName: control-play-mode
-description: "Control Unity Editor Play Mode. Use to start, stop, pause, or step Play Mode, or query its state without side effects, for runtime behavior checks and frame inspection."
+description: "Control Unity Editor Play Mode. Use to Play (or Resume, its alias), Stop, Pause, or Step Play Mode, or query Status without side effects, for runtime behavior checks and frame inspection."
 ---
 
 # uloop control-play-mode
@@ -18,7 +18,7 @@ uloop control-play-mode [options]
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--action` | string | `Play` | Action to perform: `Play`, `Stop`, `Pause`, `Step`, `Status`, `Resume` (alias of `Play`) |
+| `--action` | string | `Play` | `Play` - start Play Mode, `Stop` - stop Play Mode, `Pause` - pause Play Mode, `Step` - advance one frame while paused, `Status` - report current state without changing anything, `Resume` - alias of Play in every state, including starting Play Mode when stopped |
 | `--timeout-seconds` | integer | `180` | Maximum seconds to wait for the requested play mode state |
 
 ## Output

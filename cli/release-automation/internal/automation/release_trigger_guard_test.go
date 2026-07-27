@@ -101,7 +101,34 @@ func TestReleaseTriggerGuardIgnoresNonBinaryCommonChanges(t *testing.T) {
 		"cli/common/clicore/output_test.go",
 		"cli/common/clitest/clitest.go",
 		"cli/common/clicontract/contract.json",
-		"cli/common/tools/default-tools.json",
+	})
+
+	if len(result.Violations) != 0 {
+		t.Fatalf("expected no violations, got %v", result.Violations)
+	}
+}
+
+// Verifies the embedded tool catalog counts as a shared release input, since it is compiled into both
+// binaries and now changes whenever a skill parameter table does - a description-only change that
+// shipped no new binary would be help text nobody receives.
+func TestReleaseTriggerGuardCoversTheEmbeddedToolCatalog(t *testing.T) {
+	result := AnalyzeReleaseTriggerGuard([]string{CatalogRelativePath})
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected one violation, got %v", result.Violations)
+	}
+	if len(result.Violations[0].MissingTriggerRoots) != 2 {
+		t.Fatalf("expected both release triggers to be required, got %v", result.Violations[0].MissingTriggerRoots)
+	}
+}
+
+// Verifies the catalog passes once both release triggers are stamped, the sequence a skill edit and a
+// regeneration go through together.
+func TestReleaseTriggerGuardAcceptsTheEmbeddedToolCatalogWithBothTriggers(t *testing.T) {
+	result := AnalyzeReleaseTriggerGuard([]string{
+		CatalogRelativePath,
+		"cli/dispatcher/shared-inputs-stamp.json",
+		"cli/project-runner/shared-inputs-stamp.json",
 	})
 
 	if len(result.Violations) != 0 {

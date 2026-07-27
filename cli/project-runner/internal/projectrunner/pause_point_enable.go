@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/ui"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -22,168 +24,186 @@ import (
 // extractDynamicCodeFileFlag intercepts --code-file for execute-dynamic-code.
 const pausePointEnableCommandName = "enable-pause-point"
 
-const pausePointEnableAwaitFlagName = "await"
+// pausePointEnableFlagState accumulates the CLI-only flags pulled out of enable-pause-point's argv.
+type pausePointEnableFlagState struct {
+	await                 bool
+	mode                  pausePointCapturedVariablesMode
+	modeSet               bool
+	capturedVariableNames []string
+	namesSet              bool
+	expectations          []pausePointExpectation
+	triggerCommand        string
+	triggerArgs           []string
+	triggerSet            bool
+	resumePlay            bool
+}
+
+// pausePointEnableFlagHandler consumes one CLI-only flag. applyBare is set for a flag that may be
+// passed with no value, applyValue for a flag that accepts one; --await has no value form at all, so
+// `--await=x` is deliberately left for Unity schema parsing exactly as before.
+type pausePointEnableFlagHandler struct {
+	applyBare  func(state *pausePointEnableFlagState)
+	applyValue func(state *pausePointEnableFlagState, value string) error
+}
+
+// pausePointEnableFlagHandlers is keyed by the same flag names the option listings advertise
+// (tooldocs.PausePointEnableCLIOnlyOptions), so a flag can no longer be documented without being
+// parsed or parsed without being documented — a contract test compares the two key sets.
+var pausePointEnableFlagHandlers = map[string]pausePointEnableFlagHandler{
+	tooldocs.PausePointEnableAwaitFlagName: {
+		applyBare: func(state *pausePointEnableFlagState) { state.await = true },
+	},
+	tooldocs.PausePointResumePlayFlagName: {
+		applyBare: func(state *pausePointEnableFlagState) { state.resumePlay = true },
+		// --resume-play=true|1 must be accepted here too: otherwise the =value form falls through
+		// to Unity schema parsing and becomes a confusing unrelated error.
+		applyValue: func(state *pausePointEnableFlagState, value string) error {
+			if value != "true" && value != "1" {
+				return clierrors.InvalidValueArgumentError(
+					"--"+tooldocs.PausePointResumePlayFlagName, value, "boolean flag (pass with no value, or =true)")
+			}
+			state.resumePlay = true
+			return nil
+		},
+	},
+	tooldocs.PausePointTriggerFlagName: {
+		applyValue: func(state *pausePointEnableFlagState, value string) error {
+			triggerCommand, triggerArgs, err := parsePausePointTriggerCommand(pausePointEnableCommandName, value)
+			if err != nil {
+				return err
+			}
+			state.triggerCommand = triggerCommand
+			state.triggerArgs = triggerArgs
+			state.triggerSet = true
+			return nil
+		},
+	},
+	tooldocs.PausePointCapturedVariablesFlagName: {
+		applyValue: func(state *pausePointEnableFlagState, value string) error {
+			mode, err := parsePausePointCapturedVariablesMode(value)
+			if err != nil {
+				return err
+			}
+			state.mode = mode
+			state.modeSet = true
+			return nil
+		},
+	},
+	tooldocs.PausePointCapturedVariableNamesFlagName: {
+		applyValue: func(state *pausePointEnableFlagState, value string) error {
+			state.capturedVariableNames = parsePausePointCapturedVariableNames(value)
+			state.namesSet = true
+			return nil
+		},
+	},
+	tooldocs.PausePointExpectFlagName: {
+		applyValue: func(state *pausePointEnableFlagState, value string) error {
+			expectation, err := parsePausePointExpectFlagValue(value)
+			if err != nil {
+				return err
+			}
+			state.expectations = append(state.expectations, expectation)
+			return nil
+		},
+	},
+}
 
 // extractPausePointEnableAwaitFlags pulls the CLI-only --await/--captured-variables/
 // --captured-variable-names/--expect/--trigger/--resume-play flags out of enable-pause-point args
 // before generic schema parsing, because none of them are part of the Unity-side
-// EnablePausePointSchema.
+// EnablePausePointSchema. Anything this function does not recognize is passed through untouched for
+// the generic schema pipeline to handle.
 func extractPausePointEnableAwaitFlags(
 	args []string,
 ) ([]string, bool, pausePointCapturedVariablesMode, []string, []pausePointExpectation, string, []string, bool, error) {
 	remaining := make([]string, 0, len(args))
-	await := false
-	mode := pausePointCapturedVariablesModeFull
-	modeSet := false
-	var capturedVariableNames []string
-	namesSet := false
-	var expectations []pausePointExpectation
-	var triggerCommand string
-	var triggerArgs []string
-	triggerSet := false
-	resumePlay := false
+	state := pausePointEnableFlagState{mode: pausePointCapturedVariablesModeFull}
 
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
 
-		if arg == "--"+pausePointEnableAwaitFlagName {
-			await = true
+		flagName, handler, ok := findPausePointEnableFlagHandler(arg)
+		if !ok {
+			remaining = append(remaining, arg)
 			continue
 		}
 
-		if arg == "--"+PausePointResumePlayFlagName {
-			resumePlay = true
+		if arg == "--"+flagName && handler.applyBare != nil {
+			handler.applyBare(&state)
+			continue
+		}
+		if handler.applyValue == nil {
+			remaining = append(remaining, arg)
 			continue
 		}
 
-		// --resume-play=true|1 must be accepted here too: otherwise the =value form falls through
-		// to Unity schema parsing and becomes a confusing unrelated error.
-		if isPausePointFlag(arg, PausePointResumePlayFlagName) {
-			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
-			if err != nil {
-				return nil, false, mode, nil, nil, "", nil, false, err
-			}
-			if name != PausePointResumePlayFlagName {
-				remaining = append(remaining, arg)
-				continue
-			}
-			if value != "true" && value != "1" {
-				return nil, false, mode, nil, nil, "", nil, false, clierrors.InvalidValueArgumentError(
-					"--"+PausePointResumePlayFlagName, value, "boolean flag (pass with no value, or =true)")
-			}
-			resumePlay = true
-			if consumedNext {
-				index++
-			}
+		name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
+		if err != nil {
+			return nil, false, state.mode, nil, nil, "", nil, false, err
+		}
+		if name != flagName {
+			remaining = append(remaining, arg)
 			continue
 		}
-
-		if isPausePointFlag(arg, PausePointTriggerFlagName) {
-			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
-			if err != nil {
-				return nil, false, mode, nil, nil, "", nil, false, err
-			}
-			if name != PausePointTriggerFlagName {
-				remaining = append(remaining, arg)
-				continue
-			}
-			parsedCommand, parsedArgs, parseErr := parsePausePointTriggerCommand(pausePointEnableCommandName, value)
-			if parseErr != nil {
-				return nil, false, mode, nil, nil, "", nil, false, parseErr
-			}
-			triggerCommand = parsedCommand
-			triggerArgs = parsedArgs
-			triggerSet = true
-			if consumedNext {
-				index++
-			}
-			continue
+		if err := handler.applyValue(&state, value); err != nil {
+			return nil, false, state.mode, nil, nil, "", nil, false, err
 		}
-
-		if isPausePointFlag(arg, PausePointCapturedVariablesFlagName) {
-			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
-			if err != nil {
-				return nil, false, mode, nil, nil, "", nil, false, err
-			}
-			if name != PausePointCapturedVariablesFlagName {
-				remaining = append(remaining, arg)
-				continue
-			}
-			parsedMode, err := parsePausePointCapturedVariablesMode(value)
-			if err != nil {
-				return nil, false, mode, nil, nil, "", nil, false, err
-			}
-			mode = parsedMode
-			modeSet = true
-			if consumedNext {
-				index++
-			}
-			continue
-		}
-
-		if isPausePointFlag(arg, PausePointCapturedVariableNamesFlagName) {
-			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
-			if err != nil {
-				return nil, false, mode, nil, nil, "", nil, false, err
-			}
-			if name != PausePointCapturedVariableNamesFlagName {
-				remaining = append(remaining, arg)
-				continue
-			}
-			capturedVariableNames = parsePausePointCapturedVariableNames(value)
-			namesSet = true
-			if consumedNext {
-				index++
-			}
-			continue
-		}
-
-		if isPausePointFlag(arg, PausePointExpectFlagName) {
-			name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
-			if err != nil {
-				return nil, false, mode, nil, nil, "", nil, false, err
-			}
-			if name != PausePointExpectFlagName {
-				remaining = append(remaining, arg)
-				continue
-			}
-			expectation, parseErr := parsePausePointExpectFlagValue(value)
-			if parseErr != nil {
-				return nil, false, mode, nil, nil, "", nil, false, parseErr
-			}
-			expectations = append(expectations, expectation)
-			if consumedNext {
-				index++
-			}
-			continue
-		}
-
-		remaining = append(remaining, arg)
-	}
-
-	if !await && (modeSet || namesSet || len(expectations) > 0 || triggerSet || resumePlay) {
-		option := "--" + PausePointCapturedVariablesFlagName
-		switch {
-		case resumePlay:
-			option = "--" + PausePointResumePlayFlagName
-		case triggerSet:
-			option = "--" + PausePointTriggerFlagName
-		case len(expectations) > 0:
-			option = "--" + PausePointExpectFlagName
-		case namesSet:
-			option = "--" + PausePointCapturedVariableNamesFlagName
-		}
-		return nil, false, mode, nil, nil, "", nil, false, &clierrors.ArgumentError{
-			Message: "--captured-variables, --captured-variable-names, --expect, --trigger, and --resume-play require --await",
-			Option:  option,
-			Command: pausePointEnableCommandName,
-			NextActions: []string{
-				"Pass `--await` to wait for the marker after enabling, or drop these options.",
-			},
+		if consumedNext {
+			index++
 		}
 	}
 
-	return remaining, await, mode, capturedVariableNames, expectations, triggerCommand, triggerArgs, resumePlay, nil
+	if err := pausePointEnableAwaitRequirementError(state); err != nil {
+		return nil, false, state.mode, nil, nil, "", nil, false, err
+	}
+
+	return remaining, state.await, state.mode, state.capturedVariableNames, state.expectations,
+		state.triggerCommand, state.triggerArgs, state.resumePlay, nil
+}
+
+// findPausePointEnableFlagHandler resolves an argv token to the CLI-only flag it names. The match is
+// exact or `--flag=`-prefixed, and the flag names share no such prefix, so at most one handler can
+// match regardless of map iteration order.
+func findPausePointEnableFlagHandler(arg string) (string, pausePointEnableFlagHandler, bool) {
+	for flagName, handler := range pausePointEnableFlagHandlers {
+		if isPausePointFlag(arg, flagName) {
+			return flagName, handler, true
+		}
+	}
+	return "", pausePointEnableFlagHandler{}, false
+}
+
+// pausePointEnableAwaitRequirementError rejects the orchestration flags when --await was not passed:
+// without the wait there is nothing for them to configure. The reported Option follows a fixed
+// priority so the message names one concrete flag instead of whichever the parser saw last.
+func pausePointEnableAwaitRequirementError(state pausePointEnableFlagState) error {
+	if state.await {
+		return nil
+	}
+	if !state.modeSet && !state.namesSet && len(state.expectations) == 0 && !state.triggerSet && !state.resumePlay {
+		return nil
+	}
+
+	option := "--" + tooldocs.PausePointCapturedVariablesFlagName
+	switch {
+	case state.resumePlay:
+		option = "--" + tooldocs.PausePointResumePlayFlagName
+	case state.triggerSet:
+		option = "--" + tooldocs.PausePointTriggerFlagName
+	case len(state.expectations) > 0:
+		option = "--" + tooldocs.PausePointExpectFlagName
+	case state.namesSet:
+		option = "--" + tooldocs.PausePointCapturedVariableNamesFlagName
+	}
+
+	return &clierrors.ArgumentError{
+		Message: "--captured-variables, --captured-variable-names, --expect, --trigger, and --resume-play require --await",
+		Option:  option,
+		Command: pausePointEnableCommandName,
+		NextActions: []string{
+			"Pass `--await` to wait for the marker after enabling, or drop these options.",
+		},
+	}
 }
 
 func isPausePointFlag(arg string, flagName string) bool {
@@ -388,35 +408,18 @@ func runPausePointWaitAfterEnable(
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 
-		var payload any = response
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
-		switch {
-		case logsErr == nil:
-			payload = pausePointWaitResult{
-				pausePointStatusResponse: response,
-				MatchingLogs:             logs.Logs,
-				Warning:                  joinPausePointWarnings(enableFields.Warning, buildPausePointWarning(logs, response.HitCount)),
-				Expectations:             expectations,
-				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
-			}
-		case enableFields.Warning != "" || len(expectations) > 0:
-			// Best-effort like the plain await path: a failed log fetch must not also drop the
-			// enable-time warning or --expect results, since those are the only evidence left in
-			// this branch. Uses an anonymous struct (not pausePointWaitResult) so MatchingLogs is
-			// omitted entirely rather than serialized as an empty array, preserving "empty array
-			// only means a successful fetch with no matches".
-			payload = struct {
-				pausePointStatusResponse
-				Warning               string                        `json:"Warning,omitempty"`
-				Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
-				AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
-			}{
-				pausePointStatusResponse: response,
-				Warning:                  enableFields.Warning,
-				Expectations:             expectations,
-				AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(expectations),
-			}
-		}
+		// Unity's warning can come from either the enable response or the status poll that observed
+		// the hit, so both are passed; the join drops the repeat when they carry the same text.
+		payload := buildPausePointHitPayload(pausePointHitPayloadInputs{
+			response:            response,
+			logs:                logs,
+			logsErr:             logsErr,
+			unityWarning:        joinPausePointWarnings(enableFields.Warning, response.Warning),
+			triggerResult:       triggerResult,
+			awaitedPausePointID: options.id,
+			expectations:        expectations,
+		})
 		result, marshalErr := json.Marshal(payload)
 		if marshalErr != nil {
 			clierrors.WriteClassifiedError(stderr, marshalErr, clierrors.ErrorContext{
@@ -458,12 +461,17 @@ func runPausePointWaitAfterEnable(
 	return 1
 }
 
+// joinPausePointWarnings concatenates the warnings that apply to one response, dropping empty ones
+// and repeats. Repeats are possible because the same text can reach a hit payload from two sources —
+// the enable response and the status poll that observed the hit — and printing it twice reads as two
+// separate problems.
 func joinPausePointWarnings(warnings ...string) string {
-	nonEmpty := make([]string, 0, len(warnings))
+	unique := make([]string, 0, len(warnings))
 	for _, warning := range warnings {
-		if warning != "" {
-			nonEmpty = append(nonEmpty, warning)
+		if warning == "" || slices.Contains(unique, warning) {
+			continue
 		}
+		unique = append(unique, warning)
 	}
-	return strings.Join(nonEmpty, " ")
+	return strings.Join(unique, " ")
 }

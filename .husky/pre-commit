@@ -1,7 +1,51 @@
 #!/usr/bin/env sh
+# Fast layers only. The full check is scripts/check-go-cli.sh, which PR preparation and CI run;
+# hooks stay in the seconds range so committing never waits on lint, tests, or a binary rebuild.
 
 changed_cli_go="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^cli/.*\.go$' || true)"
 
 if [ -n "$changed_cli_go" ]; then
-  scripts/check-go-cli.sh
+  unformatted="$(gofmt -l $changed_cli_go)"
+  if [ -n "$unformatted" ]; then
+    echo "gofmt reports unformatted files:" >&2
+    echo "$unformatted" >&2
+    exit 1
+  fi
+
+  for module in cli/common cli/dispatcher cli/project-runner cli/release-automation; do
+    case "$changed_cli_go" in
+      *"$module/"*)
+        (cd "$module" && go vet ./...) || exit 1
+        ;;
+    esac
+  done
+fi
+
+changed_skill_md="$(git diff --cached --name-only --diff-filter=ACMR \
+  | grep -E '^Packages/src/Editor/(FirstPartyTools|CliOnlyTools~)/[^/]+/Skill/SKILL\.md$' || true)"
+
+if [ -n "$changed_skill_md" ]; then
+  # The generator reads the working tree, so a partially staged skill file would produce a catalog
+  # describing text this commit does not contain. Stop instead of committing that disagreement.
+  for skill_file in $changed_skill_md; do
+    if [ -n "$(git diff --name-only -- "$skill_file")" ]; then
+      echo "$skill_file is only partially staged." >&2
+      echo "The tool catalog is generated from the working tree, so stage the file fully or unstage it." >&2
+      exit 1
+    fi
+  done
+
+  # Regenerating overwrites the catalog, so an unstaged edit to it would be swept into this commit as
+  # if it had been generated. Hand edits to it are discarded by the next run either way; say so now.
+  if [ -n "$(git diff --name-only -- cli/common/tools/default-tools.json)" ]; then
+    echo "cli/common/tools/default-tools.json has unstaged changes." >&2
+    echo "It is generated from the skill parameter tables: stage a regenerated catalog, or discard the" >&2
+    echo "changes with git restore, then commit again." >&2
+    exit 1
+  fi
+
+  # The catalog is generated from these tables, so regenerate it here instead of letting CI reject the
+  # push. A table that disagrees with its schema fails the generator, which blocks the commit.
+  scripts/sync-tool-docs.sh || exit 1
+  git add cli/common/tools/default-tools.json
 fi

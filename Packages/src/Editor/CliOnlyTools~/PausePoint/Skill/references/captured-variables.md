@@ -78,6 +78,7 @@ return value;
 ```
 
 The references are live objects in their frame-completed state: anything the hit's method changed — or destroyed — after the patched line is already applied, so a captured object can read as destroyed/null here even though `CapturedVariables` shows its pre-line field values intact.
+Concrete example: with a marker on the line right before `Destroy(obj)`, `TryGetCapturedValue("obj")` returns the frame-completed object — already destroyed — while the pre-destroy field values are still readable in `CapturedVariables`.
 
 The holder clears when Unity resumes (not when you `Step` while still paused), when the matching pause point is cleared, when a new hit replaces the snapshot, or when PlayMode exits. After resume, `TryGetCapturedValue` returns `Found=false`. Re-enabling the same pause point while still paused (for example to refresh its timeout during a step session) keeps the held references, because a re-enable does not resume Unity.
 
