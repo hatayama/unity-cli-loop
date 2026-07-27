@@ -894,7 +894,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void DetectTargets_WhenGroupedLayoutRequested_DetectsEmptyFlatManagedDirectories()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
-            string targetRoot = Path.Combine(temporaryRoot, ".cursor");
+            string targetRoot = Path.Combine(temporaryRoot, ".claude");
             Directory.CreateDirectory(Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName, "uloop-compile"));
 
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
