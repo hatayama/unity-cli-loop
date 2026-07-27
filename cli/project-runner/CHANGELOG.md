@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.0.0-beta.59](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.58...uloop-project-runner-v3.0.0-beta.59) (2026-07-27)
+
+
+### Features
+
+* Improve uloop CLI discoverability after E2E verification rounds ([#2023](https://github.com/hatayama/unity-cli-loop/issues/2023)) ([fcad6e7](https://github.com/hatayama/unity-cli-loop/commit/fcad6e7e7ff279ea160828caa938f9105d4a6c30))
+
+
+### Bug Fixes
+
+* Apply pause-point round 11 verification feedback ([#1985](https://github.com/hatayama/unity-cli-loop/issues/1985)) ([43c4c67](https://github.com/hatayama/unity-cli-loop/commit/43c4c67e06bc3da93726ed728c9d3a0c4d21e167))
+* Rename the global uloop launcher to dispatcher in user-facing text ([#1994](https://github.com/hatayama/unity-cli-loop/issues/1994)) ([3fdd062](https://github.com/hatayama/unity-cli-loop/commit/3fdd062d5821b746f2db142d7430a29a5a8ba9a0))
+
 ## [3.0.0-beta.58](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.57...uloop-project-runner-v3.0.0-beta.58) (2026-07-24)
 
 
