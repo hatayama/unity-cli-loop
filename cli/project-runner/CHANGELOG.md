@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.60](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.59...uloop-project-runner-v3.0.0-beta.60) (2026-07-27)
+
+
+### Bug Fixes
+
+* Background Unity editors no longer pop over other windows and keep serving commands ([#2029](https://github.com/hatayama/unity-cli-loop/issues/2029)) ([55d7c37](https://github.com/hatayama/unity-cli-loop/commit/55d7c3732b66f6d55a15163cea1916719a1a1459))
+
 ## [3.0.0-beta.59](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.58...uloop-project-runner-v3.0.0-beta.59) (2026-07-27)
 
 
