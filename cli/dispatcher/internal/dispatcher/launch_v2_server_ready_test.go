@@ -43,7 +43,7 @@ func writeV2ServerSettingsRaw(t *testing.T, projectRoot string, fileName string,
 
 func startFakeTCPListener(t *testing.T) (int, net.Listener) {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := net.Listen("tcp", net.JoinHostPort(v2ServerLoopbackHost, "0"))
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
@@ -58,11 +58,24 @@ func startFakeTCPListener(t *testing.T) (int, net.Listener) {
 }
 
 func dialTCPPort(port int) error {
-	connection, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), 200*time.Millisecond)
+	connection, err := net.DialTimeout("tcp", net.JoinHostPort(v2ServerLoopbackHost, strconv.Itoa(port)), 200*time.Millisecond)
 	if err != nil {
 		return err
 	}
 	return connection.Close()
+}
+
+func marshalV2ServerSettings(t *testing.T, settings v2ServerSettings) []byte {
+	t.Helper()
+	payload, err := json.Marshal(settings)
+	if err != nil {
+		t.Fatalf("marshal settings: %v", err)
+	}
+	return payload
+}
+
+func v2ServerSettingsPath(projectRoot string, fileName string) string {
+	return filepath.Join(projectRoot, v2UserSettingsDirectoryName, fileName)
 }
 
 // Verifies missing V2 settings files produce an error (neither .json nor .tmp present).
@@ -194,6 +207,35 @@ func TestWaitForV2ServerReadyWaitsWhileCompilingLockPresent(t *testing.T) {
 	}
 }
 
+// Verifies domainreload.lock keeps readiness false until the lock is removed.
+func TestWaitForV2ServerReadyWaitsWhileDomainReloadLockPresent(t *testing.T) {
+	projectRoot := t.TempDir()
+	port, _ := startFakeTCPListener(t)
+	tempDirectory := filepath.Join(projectRoot, launchTempDirectoryName)
+	if err := os.MkdirAll(tempDirectory, 0o755); err != nil {
+		t.Fatalf("mkdir Temp: %v", err)
+	}
+	domainReloadLockPath := filepath.Join(tempDirectory, v2DomainReloadLockFileName)
+	if err := os.WriteFile(domainReloadLockPath, []byte("busy"), 0o644); err != nil {
+		t.Fatalf("write domainreload.lock: %v", err)
+	}
+	writeV2ServerSettingsJSON(t, projectRoot, v2ServerSettingsFileName, v2ServerSettings{
+		CustomPort:      port,
+		IsServerRunning: true,
+		ServerSessionID: "new-session",
+	})
+
+	go func() {
+		time.Sleep(40 * time.Millisecond)
+		_ = os.Remove(domainReloadLockPath)
+	}()
+
+	err := waitForV2ServerReady(context.Background(), projectRoot, "old-session", dialTCPPort, 5*time.Millisecond, time.Second)
+	if err != nil {
+		t.Fatalf("wait while domain reload: %v", err)
+	}
+}
+
 // Verifies readiness waits until serverSessionId differs from the previous generation.
 func TestWaitForV2ServerReadyWaitsForSessionIdGenerationChange(t *testing.T) {
 	projectRoot := t.TempDir()
@@ -203,17 +245,26 @@ func TestWaitForV2ServerReadyWaitsForSessionIdGenerationChange(t *testing.T) {
 		IsServerRunning: true,
 		ServerSessionID: "same-session",
 	})
+	changedPayload := marshalV2ServerSettings(t, v2ServerSettings{
+		CustomPort:      port,
+		IsServerRunning: true,
+		ServerSessionID: "changed-session",
+	})
+	settingsPath := v2ServerSettingsPath(projectRoot, v2ServerSettingsFileName)
 
+	var writeErr error
+	writeDone := make(chan struct{})
 	go func() {
+		defer close(writeDone)
 		time.Sleep(40 * time.Millisecond)
-		writeV2ServerSettingsJSON(t, projectRoot, v2ServerSettingsFileName, v2ServerSettings{
-			CustomPort:      port,
-			IsServerRunning: true,
-			ServerSessionID: "changed-session",
-		})
+		writeErr = os.WriteFile(settingsPath, changedPayload, 0o644)
 	}()
 
 	err := waitForV2ServerReady(context.Background(), projectRoot, "same-session", dialTCPPort, 5*time.Millisecond, time.Second)
+	<-writeDone
+	if writeErr != nil {
+		t.Fatalf("write changed session settings: %v", writeErr)
+	}
 	if err != nil {
 		t.Fatalf("wait for session generation: %v", err)
 	}
@@ -282,6 +333,12 @@ func TestWaitForV2ServerReadyFollowsCustomPortChange(t *testing.T) {
 		IsServerRunning: true,
 		ServerSessionID: "new-session",
 	})
+	changedPayload := marshalV2ServerSettings(t, v2ServerSettings{
+		CustomPort:      newPort,
+		IsServerRunning: true,
+		ServerSessionID: "new-session",
+	})
+	settingsPath := v2ServerSettingsPath(projectRoot, v2ServerSettingsFileName)
 
 	var dialedPorts []int
 	var dialMutex sync.Mutex
@@ -292,16 +349,19 @@ func TestWaitForV2ServerReadyFollowsCustomPortChange(t *testing.T) {
 		return dialTCPPort(port)
 	}
 
+	var writeErr error
+	writeDone := make(chan struct{})
 	go func() {
+		defer close(writeDone)
 		time.Sleep(30 * time.Millisecond)
-		writeV2ServerSettingsJSON(t, projectRoot, v2ServerSettingsFileName, v2ServerSettings{
-			CustomPort:      newPort,
-			IsServerRunning: true,
-			ServerSessionID: "new-session",
-		})
+		writeErr = os.WriteFile(settingsPath, changedPayload, 0o644)
 	}()
 
 	err := waitForV2ServerReady(context.Background(), projectRoot, "old-session", dial, 5*time.Millisecond, time.Second)
+	<-writeDone
+	if writeErr != nil {
+		t.Fatalf("write port-change settings: %v", writeErr)
+	}
 	if err != nil {
 		t.Fatalf("wait after port change: %v", err)
 	}

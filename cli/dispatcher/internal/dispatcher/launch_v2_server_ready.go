@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -15,6 +17,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/ui"
+	"github.com/hatayama/unity-cli-loop/common/vibelog"
 )
 
 const (
@@ -23,6 +26,7 @@ const (
 	v2ServerSettingsTmpFileName = "UnityMcpSettings.json.tmp"
 	v2CompilingLockFileName     = "compiling.lock"
 	v2DomainReloadLockFileName  = "domainreload.lock"
+	v2ServerLoopbackHost        = "127.0.0.1"
 )
 
 // v2ServerSettings holds the V2 Unity package server state written to UserSettings/UnityMcpSettings.json.
@@ -114,7 +118,7 @@ func isV2ProjectBusy(projectRoot string) bool {
 func defaultV2ServerDial(port int) error {
 	connection, err := net.DialTimeout(
 		"tcp",
-		net.JoinHostPort("127.0.0.1", strconv.Itoa(port)),
+		net.JoinHostPort(v2ServerLoopbackHost, strconv.Itoa(port)),
 		launchV2ServerDialTimeout,
 	)
 	if err != nil {
@@ -186,6 +190,21 @@ func isV2ServerReadyNow(projectRoot string, previousServerSessionID string, dial
 func readPreviousV2ServerSessionID(projectRoot string) string {
 	settings, err := readV2ServerSettings(projectRoot)
 	if err != nil {
+		// Missing settings is normal for a never-launched project; keep silent.
+		// Other read failures still return "" so generation compare degrades safely,
+		// but leave a WARNING so -r session capture failures are diagnosable.
+		if !errors.Is(err, fs.ErrNotExist) && !os.IsNotExist(err) {
+			_ = vibelog.WriteCLIVibeLog(projectRoot, vibelog.CLIVibeLogEntry{
+				Level:     "WARNING",
+				Operation: "cli_launch_v2_previous_session_read_failed",
+				Message:   "Failed to read previous V2 serverSessionId before launch; generation compare will treat it as empty.",
+				Context: map[string]any{
+					"command": "launch",
+					"error":   clicore.ErrorMessage(err),
+				},
+				CorrelationID: vibelog.NewCLIVibeCorrelationID(),
+			})
+		}
 		return ""
 	}
 	return settings.ServerSessionID

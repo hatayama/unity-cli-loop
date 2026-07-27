@@ -87,6 +87,7 @@ func waitForV2ProjectOpened(
 	deps launchDeps,
 ) int {
 	if err := deps.waitForFreshUnityLockfile(ctx, unityLockfilePath(projectRoot), launchStartedAt, launchLockfilePoll, launchReadinessTimeout); err != nil {
+		spinner.Stop()
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
@@ -96,7 +97,7 @@ func waitForV2ProjectOpened(
 	// Packages/src/Editor/Infrastructure/Server/UnityCliLoopServerController.cs:369-372).
 	// V2 has no equivalent workaround, so focus once after the lockfile gate. Focus failure
 	// is non-fatal: log and continue into the readiness probe.
-	logLaunchExistingFocusWithDeps(ctx, projectRoot, currentPid, deps)
+	logLaunchV2FocusWithDeps(ctx, projectRoot, currentPid, deps)
 	writeLaunchReadinessWait(stdout, spinner)
 	if err := deps.waitForV2ServerReady(ctx, projectRoot, previousServerSessionID, launchV2ServerReadyPoll, launchReadinessTimeout); err != nil {
 		spinner.Stop()
