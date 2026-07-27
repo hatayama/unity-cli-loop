@@ -51,6 +51,31 @@ func TestOptionSummaryIgnoresTheWordingOfTheDescription(t *testing.T) {
 	}
 }
 
+// Verifies a description filled in from the embedded catalog is treated as skill-sourced too. The
+// catalog is generated from the same parameter tables, so a cache carrying Unity's placeholder must end
+// up with the table's wording rather than a synthesized summary.
+func TestOptionSummaryKeepsANegatedBooleanDescriptionFilledFromTheEmbeddedCatalog(t *testing.T) {
+	catalog := tools.ApplyEmbeddedDescriptionFallback(tools.ToolCatalog{Tools: []tools.ToolDefinition{{
+		Name: "get-hierarchy",
+		ParameterSchema: tools.ToolInputSchema{Properties: map[string]tools.ToolProperty{
+			"IncludeComponents": {Type: "boolean", Default: true, Description: "Parameter: IncludeComponents"},
+		}},
+	}}})
+
+	property := catalog.Tools[0].EffectiveInputSchema().Properties["IncludeComponents"]
+	if property.Description == "" || property.Description == "Parameter: IncludeComponents" {
+		t.Fatalf("the embedded catalog did not supply a description: %q", property.Description)
+	}
+	summary := OptionSummary("get-hierarchy", "IncludeComponents", property)
+
+	if summary != property.Description {
+		t.Errorf("the filled-in description was not printed as written: %q", summary)
+	}
+	if summary == "Disable include components" {
+		t.Errorf("the synthesized summary replaced the embedded description: %q", summary)
+	}
+}
+
 // Verifies a plain (non-negated) option is unaffected by provenance, since its description already
 // reads correctly against its own flag name.
 func TestOptionSummaryKeepsPlainOptionDescriptions(t *testing.T) {
