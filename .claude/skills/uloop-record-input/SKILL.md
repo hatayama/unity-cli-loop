@@ -30,7 +30,7 @@ uloop record-input --action Stop --output-path scripts/my-play.json
 |-----------|------|---------|-------------|
 | `--action` | enum | `Start` | `Start` - begin recording input, `Stop` - stop recording and save to file |
 | `--output-path` | string | auto | Save path for the recording JSON. When empty, auto-generates under `.uloop/outputs/InputRecordings/` |
-| `--keys` | string | `""` | Comma-separated key filter (for example `W,A,S,D,Space`). Empty records all common game keys |
+| `--keys` | string | `""` | Comma-separated key filter of Input System Key enum names (for example `W,A,S,D,Space`). Case-insensitive. Digit keys use `Digit0`-`Digit9` or `Numpad0`-`Numpad9`, not bare `0`-`9`; a name that matches no key is rejected instead of being dropped from the filter. Empty records all common game keys |
 | `--delay-seconds` | integer | `3` | Countdown delay in seconds before recording starts (0-10). Gives time to switch focus to Game View. |
 | `--no-show-overlay` | flag | - | Hide the recording countdown and REC indicator overlay |
 
