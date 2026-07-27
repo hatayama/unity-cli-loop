@@ -13,15 +13,15 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clitest"
 )
 
-// Tests that launcher help lists native commands and live-tool discovery guidance without baked-in tools.
-func TestPrintLauncherHelpListsNativeCommandsAndLiveToolGuidance(t *testing.T) {
+// Tests that dispatcher help lists native commands and live-tool discovery guidance without baked-in tools.
+func TestPrintDispatcherHelpListsNativeCommandsAndLiveToolGuidance(t *testing.T) {
 	var stdout bytes.Buffer
 
-	printLauncherHelp(&stdout)
+	printDispatcherHelp(&stdout)
 
 	output := stdout.String()
 	for _, expected := range []string{
-		"Dispatcher launcher. Finds the Unity project, then dispatches live Unity tool commands.",
+		"Dispatcher. Finds the Unity project, then dispatches live Unity tool commands.",
 		"Native commands:",
 		"  launch",
 		"  focus-window",
@@ -204,7 +204,7 @@ func TestRunDispatcherCompileHelpDoesNotRequireUnityProject(t *testing.T) {
 		"--force-recompile",
 		"--no-wait-for-domain-reload",
 		"--stop-on-external-scene-changes",
-		"Stop before execution if open Scene files changed externally instead of auto-reloading them",
+		"Stop before compilation if open Scene files changed externally instead of auto-reloading them",
 		"default: auto-reload enabled",
 	} {
 		if !strings.Contains(output, expected) {
@@ -250,6 +250,106 @@ func TestCommandHelpPrefersProjectCacheForDefaultToolNames(t *testing.T) {
 	}
 	if !strings.Contains(output, "--cached-only") {
 		t.Fatalf("cached compile option was not listed:\n%s", output)
+	}
+}
+
+// Verifies a tool's help closes with the instruction to load its skill, which is the only pointer
+// from --help to the workflow rules and response shapes that --help itself cannot carry.
+func TestCommandHelpPointsAtTheToolSkill(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	handled, code := tryHandleCommandHelp("simulate-keyboard", "", "", &stdout, &stderr)
+
+	if !handled || code != 0 {
+		t.Fatalf("simulate-keyboard help was not handled: handled=%v code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Load the uloop-simulate-keyboard skill") {
+		t.Fatalf("simulate-keyboard help does not point at its skill:\n%s", stdout.String())
+	}
+}
+
+// Verifies the watch commands point at the pause-point skill, which is where watch expressions are
+// documented, rather than at a per-command skill that does not exist.
+func TestCommandHelpPointsWatchCommandsAtThePausePointSkill(t *testing.T) {
+	for _, command := range []string{"enable-watch", "clear-watch", "get-watch-values"} {
+		t.Run(command, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+
+			handled, code := tryHandleCommandHelp(command, "", "", &stdout, &stderr)
+
+			if !handled || code != 0 {
+				t.Fatalf("%s help was not handled: handled=%v code=%d stderr=%s", command, handled, code, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), "Load the uloop-pause-point skill") {
+				t.Fatalf("%s help does not point at the pause-point skill:\n%s", command, stdout.String())
+			}
+		})
+	}
+}
+
+// Verifies dispatcher-owned native commands get the guidance line too: launch renders its own help,
+// so it would otherwise be the only command with a skill that never mentions it.
+func TestLaunchHelpPointsAtTheLaunchSkill(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunDispatcher(context.Background(), []string{clicore.LaunchCommandName, "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("launch help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Load the uloop-launch skill") {
+		t.Fatalf("launch help does not point at its skill:\n%s", stdout.String())
+	}
+}
+
+// Verifies a native command whose skill is internal-only (or absent) gets no guidance line.
+func TestVersionHelpOmitsSkillLine(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunDispatcher(context.Background(), []string{clicore.VersionCommandName, "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("version help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "skill") {
+		t.Fatalf("version help mentions a skill:\n%s", stdout.String())
+	}
+}
+
+// Verifies a command with no matching skill gets no guidance line, so a custom command is never
+// told to load a skill nobody installed.
+func TestCommandHelpOmitsSkillLineForCustomCommands(t *testing.T) {
+	projectRoot := createLaunchTestProject(t)
+	writeToolCache(t, projectRoot, `{
+  "tools": [
+    {
+      "name": "my-custom-command",
+      "description": "A project-local custom command",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Value": {"type": "string", "description": "Some value"}
+        }
+      }
+    }
+  ]
+}`)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	handled, code := tryHandleCommandHelp("my-custom-command", projectRoot, projectRoot, &stdout, &stderr)
+
+	if !handled || code != 0 {
+		t.Fatalf("custom command help was not handled: handled=%v code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "skill") {
+		t.Fatalf("custom command help mentions a skill:\n%s", stdout.String())
 	}
 }
 
@@ -342,7 +442,7 @@ func TestRunDispatcherRunTestsHelpDoesNotRequireUnityProject(t *testing.T) {
 		"--filter-type",
 		"--filter-value",
 		"--fail-on-unsaved-changes",
-		"Fail before execution if unsaved editor changes remain instead of auto-saving them",
+		"Fail before test execution if unsaved editor changes remain instead of auto-saving them",
 		"default: auto-save enabled",
 	} {
 		if !strings.Contains(output, expected) {

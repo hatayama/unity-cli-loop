@@ -38,9 +38,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public enum AssemblyLoadingMode
     {
-        /// <summary>Reference only selected assemblies</summary>
-        SelectiveReference,
-        
         /// <summary>Add all assemblies</summary>
         AllAssemblies
     }

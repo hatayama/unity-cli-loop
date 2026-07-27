@@ -4,11 +4,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     // otherwise one path can look ready while the user's first return-string execution is still cold.
     public static class ExecuteDynamicCodeReadinessProbe
     {
-        public static string CreatePrimaryReturnStringProbeCode()
-        {
-            return DynamicCodeForegroundWarmupSnippets.ReturnStringShapes[0];
-        }
-
         public static string[] CreateReturnStringProbeCodes()
         {
             string[] source = DynamicCodeForegroundWarmupSnippets.ReturnStringShapes;

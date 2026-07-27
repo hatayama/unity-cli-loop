@@ -36,12 +36,5 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             ExecuteDynamicCodeEditorStartup.ResetServerScopedServicesBeforeDomainReload();
         }
-
-        public static string CreateExecuteDynamicCodeReadinessProbeCode()
-        {
-            // Why: composition root can only depend on the bundled-tool facade assembly,
-            // so the dynamic-code assembly keeps ownership of the actual probe source shape.
-            return ExecuteDynamicCodeReadinessProbe.CreatePrimaryReturnStringProbeCode();
-        }
     }
 }

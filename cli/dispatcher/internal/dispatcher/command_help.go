@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/skilldocs"
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
@@ -25,7 +26,9 @@ func tryHandleCommandHelp(command string, startPath string, projectPath string, 
 	if err != nil {
 		if projectPath == "" {
 			if tool, ok := clicore.FindDefaultTool(command); ok {
-				printToolHelp(tool, stdout)
+				// No project resolved, so no installed package to read skills from: this path
+				// renders from the catalog embedded in this binary, as it always has.
+				printToolHelp(tool, "", stdout)
 				return true, 0
 			}
 		}
@@ -45,7 +48,7 @@ func tryHandleCommandHelp(command string, startPath string, projectPath string, 
 		return true, 1
 	}
 
-	printToolHelp(tool, stdout)
+	printToolHelp(tool, connection.ProjectRoot, stdout)
 	return true, 0
 }
 
@@ -67,6 +70,7 @@ func printNativeSingleCommandHelp(command string, stdout io.Writer) {
 			clicore.WriteLine(stdout, "")
 			printGlobalOptionsHelp(stdout)
 		}
+		printSkillGuidanceHelp(command, stdout)
 		return
 	}
 
@@ -79,9 +83,15 @@ func printNativeSingleCommandHelp(command string, stdout io.Writer) {
 		clicore.WriteLine(stdout, "")
 		printGlobalOptionsHelp(stdout)
 	}
+	printSkillGuidanceHelp(command, stdout)
 }
 
-func printToolHelp(tool clicore.ToolDefinition, stdout io.Writer) {
+// printToolHelp renders one Unity tool command's help. Descriptions come from the installed
+// package's SKILL.md tables when a project is resolved, so the help and the skill an agent reads
+// cannot disagree; without a project root the embedded catalog is used unchanged.
+func printToolHelp(tool clicore.ToolDefinition, projectRoot string, stdout io.Writer) {
+	tool = skilldocs.ApplyToTool(tool, projectRoot)
+
 	clicore.WriteLine(stdout, "Usage:")
 	clicore.WriteFormat(stdout, "  uloop %s", tool.Name)
 	if len(tooldocs.VisibleOptionHelpEntriesForTool(tool)) > 0 {
@@ -100,12 +110,27 @@ func printToolHelp(tool clicore.ToolDefinition, stdout io.Writer) {
 		clicore.WriteLine(stdout, "")
 		clicore.WriteLine(stdout, "Options:")
 		for _, entry := range entries {
-			clicore.WriteFormat(stdout, "  %-32s %s\n", entry.Usage, entry.Description)
+			// Wide enough for the longest usage string (--captured-variable-names <value>), so no
+			// single row pushes its description out of the column.
+			clicore.WriteFormat(stdout, "  %-34s %s\n", entry.Usage, entry.Description)
 		}
 	}
 
 	clicore.WriteLine(stdout, "")
 	printGlobalOptionsHelp(stdout)
+	printSkillGuidanceHelp(tool.Name, stdout)
+}
+
+// printSkillGuidanceHelp closes a command's help with the instruction to load its skill. Nothing is
+// printed for a command with no skill (custom commands), so the output never names a skill that
+// cannot be loaded.
+func printSkillGuidanceHelp(command string, stdout io.Writer) {
+	guidance, ok := tooldocs.SkillGuidanceLine(command)
+	if !ok {
+		return
+	}
+	clicore.WriteLine(stdout, "")
+	clicore.WriteLine(stdout, guidance)
 }
 
 func nativeCommandDescription(command string) (string, bool) {

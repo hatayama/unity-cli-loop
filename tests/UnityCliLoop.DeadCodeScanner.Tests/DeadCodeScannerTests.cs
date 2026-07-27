@@ -69,7 +69,8 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 includeTestOnly: true,
                 includeKept: false,
                 ReportFormat.Table,
-                failOnHighConfidence: false);
+                failOnHighConfidence: false,
+                maxPublicCandidates: -1);
 
             System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
                 await scanner.ScanAsync(options, CancellationToken.None);
@@ -97,7 +98,8 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 includeTestOnly: true,
                 includeKept: false,
                 ReportFormat.Table,
-                failOnHighConfidence: false);
+                failOnHighConfidence: false,
+                maxPublicCandidates: -1);
 
             System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
                 await scanner.ScanAsync(options, CancellationToken.None);
@@ -105,6 +107,19 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
             Assert.That(issues.Any(issue =>
                 issue.Category == DeadCodeCategory.TestOnly
                 && issue.FullName.Contains("TestOnlyFactory", StringComparison.Ordinal)), Is.True);
+        }
+
+        // Verifies that default-scope unused private findings are treated as high-confidence deletion candidates for the CI gate.
+        [Test]
+        public async Task ScanAsync_WhenUsingDefaultPrivateScope_ShouldReportHighConfidenceDeletionCandidates()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = ScanOptions.Default(_rootPath);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue => issue.IsHighConfidenceDeletionCandidate()), Is.True);
         }
 
         // Verifies that Unity or reflection entry points can be reported separately when requested.
@@ -121,7 +136,8 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 includeTestOnly: true,
                 includeKept: true,
                 ReportFormat.Table,
-                failOnHighConfidence: false);
+                failOnHighConfidence: false,
+                maxPublicCandidates: -1);
 
             System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
                 await scanner.ScanAsync(options, CancellationToken.None);
@@ -138,19 +154,197 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 && issue.FullName.Contains("UsedProductionApi", StringComparison.Ordinal)), Is.True);
         }
 
+        /// <summary>
+        /// Verifies that an internal production member referenced through InternalsVisibleTo from an
+        /// Assets asmdef is classified as TestOnly instead of PublicCandidate.
+        /// </summary>
+        [Test]
+        public async Task ScanAsync_WhenInternalMemberIsReferencedViaAssetsAsmdefInternalsVisibleTo_ShouldReportTestOnly()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: false);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.TestOnly
+                && issue.FullName.Contains("CreateForTesting", StringComparison.Ordinal)), Is.True);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("CreateForTesting", StringComparison.Ordinal)), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that Packages/src/Runtime asmdefs are loaded as production and scanned for
+        /// unreferenced public symbols.
+        /// </summary>
+        [Test]
+        public async Task ScanAsync_WhenRuntimeAsmdefDefinesUnreferencedPublicType_ShouldReportPublicCandidate()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: false);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.SymbolKind == "type"
+                && issue.FullName.Contains("UnreferencedRuntimeApi", StringComparison.Ordinal)
+                && issue.AssemblyName == "Sample.Runtime"), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies that a Runtime internal member referenced from an Editor assembly through
+        /// InternalsVisibleTo is not reported as any finding.
+        /// </summary>
+        [Test]
+        public async Task ScanAsync_WhenRuntimeInternalMemberIsReferencedFromEditorViaInternalsVisibleTo_ShouldNotReportFinding()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: false);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.FullName.Contains("RuntimeInternalUsedByEditor", StringComparison.Ordinal)), Is.False);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("RuntimeInternalUsedByEditor", StringComparison.Ordinal)), Is.False);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.TestOnly
+                && issue.FullName.Contains("RuntimeInternalUsedByEditor", StringComparison.Ordinal)), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that compiler-bound awaiter members are kept as KeptByUnityOrReflection
+        /// and are not reported as PublicCandidate.
+        /// </summary>
+        [Test]
+        public async Task ScanAsync_WhenAwaitPatternMembersHaveNoDirectReferences_ShouldReportKeptAndNotPublicCandidate()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: true);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.KeptByUnityOrReflection
+                && issue.FullName.Contains("SampleAwaitable.Awaiter.IsCompleted", StringComparison.Ordinal)), Is.True);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.KeptByUnityOrReflection
+                && issue.FullName.Contains("SampleAwaitable.Awaiter.GetResult", StringComparison.Ordinal)), Is.True);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.KeptByUnityOrReflection
+                && issue.FullName.Contains("SampleAwaitable.GetAwaiter", StringComparison.Ordinal)), Is.True);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("SampleAwaitable.Awaiter.IsCompleted", StringComparison.Ordinal)), Is.False);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("SampleAwaitable.Awaiter.GetResult", StringComparison.Ordinal)), Is.False);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("SampleAwaitable.GetAwaiter", StringComparison.Ordinal)), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that the IsExternalInit polyfill type is kept as KeptByUnityOrReflection
+        /// and is not reported as PublicCandidate.
+        /// </summary>
+        [Test]
+        public async Task ScanAsync_WhenIsExternalInitPolyfillHasNoDirectReferences_ShouldReportKeptAndNotPublicCandidate()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: true);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.KeptByUnityOrReflection
+                && issue.FullName.Contains("IsExternalInit", StringComparison.Ordinal)), Is.True);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("IsExternalInit", StringComparison.Ordinal)), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that Newtonsoft ShouldSerialize{Property} methods are kept as
+        /// KeptByUnityOrReflection and are not reported as PublicCandidate.
+        /// </summary>
+        [Test]
+        public async Task ScanAsync_WhenShouldSerializeMethodHasNoDirectReferences_ShouldReportKeptAndNotPublicCandidate()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: true);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.KeptByUnityOrReflection
+                && issue.FullName.Contains("ShouldSerializeOptionalNote", StringComparison.Ordinal)), Is.True);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("ShouldSerializeOptionalNote", StringComparison.Ordinal)), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that a ShouldSerialize* method without a matching property/field is not kept.
+        /// </summary>
+        [Test]
+        public async Task ScanAsync_WhenShouldSerializeMethodHasNoMatchingMember_ShouldNotReportKept()
+        {
+            DeadCodeScanner scanner = new();
+            ScanOptions options = CreatePublicScopeOptions(_rootPath, includeKept: true);
+
+            System.Collections.Generic.IReadOnlyList<DeadCodeIssue> issues =
+                await scanner.ScanAsync(options, CancellationToken.None);
+
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.KeptByUnityOrReflection
+                && issue.FullName.Contains("ShouldSerializeMissingMember", StringComparison.Ordinal)), Is.False);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.PublicCandidate
+                && issue.FullName.Contains("ShouldSerializeMissingMember", StringComparison.Ordinal)), Is.True);
+        }
+
+        private static ScanOptions CreatePublicScopeOptions(string rootPath, bool includeKept)
+        {
+            return new ScanOptions(
+                rootPath,
+                ScanScope.Public,
+                includeTypes: true,
+                includeMembers: true,
+                includeLocals: false,
+                includeTestOnly: true,
+                includeKept,
+                ReportFormat.Table,
+                failOnHighConfidence: false,
+                maxPublicCandidates: -1);
+        }
+
         private static void CreateSampleRepository(string rootPath)
         {
             string packageDirectory = Path.Combine(rootPath, "Packages", "src", "Editor", "Sample");
+            string runtimeDirectory = Path.Combine(rootPath, "Packages", "src", "Runtime", "SampleRuntime");
             string assetsDirectory = Path.Combine(rootPath, "Assets", "Tests");
+            string assetsTestAsmdefDirectory = Path.Combine(assetsDirectory, "Editor");
             Directory.CreateDirectory(packageDirectory);
+            Directory.CreateDirectory(runtimeDirectory);
             Directory.CreateDirectory(assetsDirectory);
+            Directory.CreateDirectory(assetsTestAsmdefDirectory);
 
             WriteFile(
                 Path.Combine(packageDirectory, "Sample.asmdef"),
                 """
                 {
                   "name": "Sample.Editor",
-                  "references": [],
+                  "references": ["GUID:33333333333333333333333333333333"],
                   "includePlatforms": ["Editor"],
                   "versionDefines": []
                 }
@@ -165,6 +359,9 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 Path.Combine(packageDirectory, "SampleCode.cs"),
                 """
                 using System;
+                using System.Runtime.CompilerServices;
+
+                [assembly: InternalsVisibleTo("Sample.Tests")]
 
                 namespace Sample
                 {
@@ -191,6 +388,7 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                             usedField++;
                             int unusedLocal = 1;
                             UsedPrivateMethod();
+                            usedField += Sample.Runtime.RuntimeInternalApi.RuntimeInternalUsedByEditor();
                         }
 
                         private void UsedPrivateMethod()
@@ -211,8 +409,95 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                     {
                     }
 
+                    public sealed class JsonOptionalPayload
+                    {
+                        public string OptionalNote { get; set; } = string.Empty;
+
+                        public bool ShouldSerializeOptionalNote()
+                        {
+                            return !string.IsNullOrEmpty(OptionalNote);
+                        }
+
+                        public bool ShouldSerializeMissingMember()
+                        {
+                            return false;
+                        }
+                    }
+
                     public sealed class TestOnlyFactory
                     {
+                    }
+
+                    public sealed class InternalVisibleApi
+                    {
+                        internal static int CreateForTesting()
+                        {
+                            return 1;
+                        }
+                    }
+
+                    public struct SampleAwaitable
+                    {
+                        public Awaiter GetAwaiter() => new();
+
+                        public struct Awaiter : INotifyCompletion
+                        {
+                            public bool IsCompleted => true;
+
+                            public void GetResult()
+                            {
+                            }
+
+                            public void OnCompleted(Action continuation)
+                            {
+                                continuation();
+                            }
+                        }
+                    }
+                }
+
+                namespace System.Runtime.CompilerServices
+                {
+                    public sealed class IsExternalInit
+                    {
+                    }
+                }
+                """);
+            WriteFile(
+                Path.Combine(runtimeDirectory, "Sample.Runtime.asmdef"),
+                """
+                {
+                  "name": "Sample.Runtime",
+                  "references": [],
+                  "includePlatforms": [],
+                  "versionDefines": []
+                }
+                """);
+            WriteFile(
+                Path.Combine(runtimeDirectory, "Sample.Runtime.asmdef.meta"),
+                """
+                fileFormatVersion: 2
+                guid: 33333333333333333333333333333333
+                """);
+            WriteFile(
+                Path.Combine(runtimeDirectory, "RuntimeCode.cs"),
+                """
+                using System.Runtime.CompilerServices;
+
+                [assembly: InternalsVisibleTo("Sample.Editor")]
+
+                namespace Sample.Runtime
+                {
+                    public sealed class UnreferencedRuntimeApi
+                    {
+                    }
+
+                    public static class RuntimeInternalApi
+                    {
+                        internal static int RuntimeInternalUsedByEditor()
+                        {
+                            return 1;
+                        }
                     }
                 }
                 """);
@@ -226,6 +511,36 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                         public object Create()
                         {
                             return new Sample.TestOnlyFactory();
+                        }
+                    }
+                }
+                """);
+            WriteFile(
+                Path.Combine(assetsTestAsmdefDirectory, "Sample.Tests.asmdef"),
+                """
+                {
+                  "name": "Sample.Tests",
+                  "references": ["Sample.Editor"],
+                  "includePlatforms": ["Editor"],
+                  "versionDefines": []
+                }
+                """);
+            WriteFile(
+                Path.Combine(assetsTestAsmdefDirectory, "Sample.Tests.asmdef.meta"),
+                """
+                fileFormatVersion: 2
+                guid: 22222222222222222222222222222222
+                """);
+            WriteFile(
+                Path.Combine(assetsTestAsmdefDirectory, "SampleInternalUsage.cs"),
+                """
+                namespace SampleConsumer
+                {
+                    public sealed class SampleInternalUsage
+                    {
+                        public int Create()
+                        {
+                            return Sample.InternalVisibleApi.CreateForTesting();
                         }
                     }
                 }

@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.0.0-beta.65](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.64...v3.0.0-beta.65) (2026-07-27)
+
+
+### Features
+
+* Improve uloop CLI discoverability after E2E verification rounds ([#2023](https://github.com/hatayama/unity-cli-loop/issues/2023)) ([fcad6e7](https://github.com/hatayama/unity-cli-loop/commit/fcad6e7e7ff279ea160828caa938f9105d4a6c30))
+
+
+### Bug Fixes
+
+* Apply pause-point round 11 verification feedback ([#1985](https://github.com/hatayama/unity-cli-loop/issues/1985)) ([43c4c67](https://github.com/hatayama/unity-cli-loop/commit/43c4c67e06bc3da93726ed728c9d3a0c4d21e167))
+
 ## [3.0.0-beta.64](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.63...v3.0.0-beta.64) (2026-07-24)
 
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.0.0-beta.23](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.22...dispatcher-v3.0.0-beta.23) (2026-07-27)
+
+
+### Features
+
+* Improve uloop CLI discoverability after E2E verification rounds ([#2023](https://github.com/hatayama/unity-cli-loop/issues/2023)) ([fcad6e7](https://github.com/hatayama/unity-cli-loop/commit/fcad6e7e7ff279ea160828caa938f9105d4a6c30))
+
+
+### Bug Fixes
+
+* Rename the global uloop launcher to dispatcher in user-facing text ([#1994](https://github.com/hatayama/unity-cli-loop/issues/1994)) ([3fdd062](https://github.com/hatayama/unity-cli-loop/commit/3fdd062d5821b746f2db142d7430a29a5a8ba9a0))
+* Wait for V2 server readiness in uloop launch ([#2024](https://github.com/hatayama/unity-cli-loop/issues/2024)) ([0f076fc](https://github.com/hatayama/unity-cli-loop/commit/0f076fc20c9ede308cd6a9c3fb22302c58f85ef2))
+
 ## [3.0.0-beta.22](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.21...dispatcher-v3.0.0-beta.22) (2026-07-24)
 
 

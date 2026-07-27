@@ -26,17 +26,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _isStarted = true;
         }
 
-        public void Stop()
-        {
-            if (!_isStarted)
-            {
-                return;
-            }
-
-            EditorApplication.update -= OnEditorUpdate;
-            _isStarted = false;
-        }
-
         private void OnEditorUpdate()
         {
             _registry.EvaluateIfFrameChanged();

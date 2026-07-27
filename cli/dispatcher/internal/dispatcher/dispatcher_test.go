@@ -271,7 +271,7 @@ func TestRunDispatcherLaunchOptionsDoNotRequireProjectPin(t *testing.T) {
 }
 
 func TestRunDispatcherVersionUsesDispatcherVersion(t *testing.T) {
-	// Verifies the global launcher reports its own dispatcher release version.
+	// Verifies `uloop --version` reports the dispatcher release version instead of the project runner version.
 	t.Chdir(t.TempDir())
 
 	var stdout bytes.Buffer
@@ -469,7 +469,7 @@ func TestEnforceDispatcherFreshnessMarksFailedOptionalUpdateChecked(t *testing.T
 }
 
 func TestEnforceDispatcherFreshnessReportsOptionalUpdateVersionChange(t *testing.T) {
-	// Verifies optional dispatcher self-updates tell users which launcher version will run next.
+	// Verifies optional dispatcher self-updates tell users which dispatcher version will run next.
 	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
 	deps, restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, "9.9.9")
 	defer restoreDispatcherUpdateHooks()

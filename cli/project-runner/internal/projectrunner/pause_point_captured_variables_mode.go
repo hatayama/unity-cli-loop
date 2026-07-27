@@ -2,6 +2,8 @@ package projectrunner
 
 import (
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 )
 
 // pausePointCapturedVariablesMode controls how much of each captured variable's data the CLI
@@ -10,9 +12,11 @@ import (
 // (via TryGetCapturedValue or pause-point-status) instead of paying for every value up front.
 type pausePointCapturedVariablesMode string
 
+// Defined from the tooldocs values rather than repeating the literals: the same two strings are
+// rendered as --captured-variables' accepted values in both option listings.
 const (
-	pausePointCapturedVariablesModeFull  pausePointCapturedVariablesMode = "full"
-	pausePointCapturedVariablesModeNames pausePointCapturedVariablesMode = "names"
+	pausePointCapturedVariablesModeFull  pausePointCapturedVariablesMode = tooldocs.PausePointCapturedVariablesModeFull
+	pausePointCapturedVariablesModeNames pausePointCapturedVariablesMode = tooldocs.PausePointCapturedVariablesModeNames
 )
 
 func parsePausePointCapturedVariablesMode(value string) (pausePointCapturedVariablesMode, error) {
@@ -23,7 +27,7 @@ func parsePausePointCapturedVariablesMode(value string) (pausePointCapturedVaria
 		return pausePointCapturedVariablesModeNames, nil
 	default:
 		return "", clierrors.InvalidValueArgumentError(
-			"--"+PausePointCapturedVariablesFlagName, value, "full or names")
+			"--"+tooldocs.PausePointCapturedVariablesFlagName, value, "full or names")
 	}
 }
 

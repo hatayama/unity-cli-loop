@@ -16,7 +16,9 @@ Use this small loop for one representative frame you care about. No source edit 
 uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 30 --await --trigger "simulate-keyboard --action Press --key Space"
 ```
 
-`--trigger` runs a single uloop subcommand in-process only after the marker's arming is confirmed, so there is no arm-vs-input race and nothing needs to run in the background. The hit response additionally carries `TriggerResult` with the triggered command's own response (or, when the trigger was skipped, `Completed: false` and the reason in `Error`). The trigger string cannot name another pause-point wait (`await-pause-point`/`enable-pause-point`) and cannot pass `--project-path` — the enclosing command's project is used. `await-pause-point --id <id> --trigger ...` accepts the same flag for a marker enabled earlier. Both commands also accept `--resume-play` — see Fast-Progressing Games.
+Digit keys are `Digit0`-`Digit9` or `Numpad0`-`Numpad9` — bare `0`-`9` is rejected.
+
+Before writing a `--trigger` command that differs from the example, load the skill of the tool you are about to trigger. `--trigger` runs a single uloop subcommand in-process only after the marker's arming is confirmed, so the input cannot land before arming and nothing needs to run in the background. One race does remain: the marker itself can hit before the trigger executes (for example on a line that runs every frame), in which case the trigger is rejected because PlayMode is already paused and runs nothing — the hit response then carries `TriggerFailed: true` at the top level and a `Warning` explaining that no input reached the game (the triggered command's own response stays in `TriggerResult`), so do not treat such a hit as input-driven. If the trigger command itself is rejected before it runs — its argument parsing fails (`INVALID_ARGUMENT`) or the command name is unknown (`UNKNOWN_COMMAND`) — the wait is abandoned immediately with a `PAUSE_POINT_TRIGGER_FAILED` error instead of waiting out `--timeout-seconds`: the marker stays armed, a PlayMode resumed by `--resume-play` is paused again, and `Error.NextActions` carries the recovery commands — fix the trigger value and re-run the same command. The hit response additionally carries `TriggerResult` with the triggered command's own response (or, when the trigger was skipped, `Completed: false` and the reason in `Error`). The trigger string cannot name another pause-point wait (`await-pause-point`/`enable-pause-point`) and cannot pass `--project-path` — the enclosing command's project is used. `await-pause-point --id <id> --trigger ...` accepts the same flag for a marker enabled earlier. Both commands also accept `--resume-play` — see Fast-Progressing Games.
 
 When the game reaches the line on its own, omit `--trigger`. Fall back to split steps only when the triggering action is not a single uloop command (several inputs in sequence, an external event): run `enable-pause-point` without `--await` in the foreground (its response returning is the arm confirmation), then start `uloop await-pause-point --id <id>` in the background, then send the inputs. Do not approximate arm-waiting with a fixed sleep after a backgrounded enable.
 
@@ -29,6 +31,63 @@ The response returns the derived marker `Id` (`Assets/Scripts/Enemy.cs:42`), the
 5. A `single-shot` marker (the default) disarms itself after the hit, so no clear call is required before moving on. Clearing is still what removes the underlying code patch (a disarmed marker leaves the patch installed), so for `continuous`/`trace` markers, or when the method must run fully untouched again, clear it with `uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"` (or `--all` to clear every active marker at once) or stop PlayMode. Clearing resumes Play Mode only when the current pause is owned by a pause-point hit — the clear response then carries a `Warning` saying it resumed Play Mode. A manual pause (`control-play-mode --action Pause` or the Editor pause button) is left untouched by clear.
 
 A hit pauses Unity at the next frame boundary — the patched method and the rest of that frame still run to completion. Only `CapturedVariables` is evidence of the values at the patched line; state read after the pause (for example via `execute-dynamic-code`) may already have advanced past it.
+
+## Parameters
+
+One skill covers several commands, so each command's schema parameters have their own table below.
+CLI-only flags (`--await`, `--trigger`, `--resume-play`, `--expect`, `--captured-variables`,
+`--captured-variable-names`, `--matching-logs-max-count`) are described in the sections above; only
+parameters Unity itself accepts appear here.
+
+### enable-pause-point
+
+Enable a pause point so Unity pauses when that code path is reached, either by a named UloopPausePoint.Pause marker (Id) or by resolving a source file and line (File+Line)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--id` | string | - | Named pause point id passed to UloopPausePoint.Pause. Mutually exclusive with File/Line |
+| `--file` | string | - | Project-relative source file path to patch a pause point into. Requires Line; mutually exclusive with Id |
+| `--line` | integer | - | 1-based source line to resolve within File. Requires File; mutually exclusive with Id |
+| `--timeout-seconds` | integer | `30` | Seconds before the enable request expires and stops pausing late hits |
+| `--mode` | enum | `single-shot` | Capture mode: single-shot pauses once, continuous pauses on every hit, trace records hits without pausing |
+| `--max-history` | integer | `20` | Maximum number of captured hit frames to retain (1-100) |
+| `--max-preview-elements` | integer | `10` | Maximum number of elements to include in a captured collection's preview (1-1000). The value set at enable time also caps the previews in every later pause-point-status response for that marker; status has no flag to change it. |
+
+### clear-pause-point
+
+Clear one or all named UloopPausePoint.Pause markers
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--id` | string | - | Named pause point id to clear |
+| `--all` | flag | - | Clear every active pause point marker |
+
+### enable-watch
+
+Register a C# expression to evaluate on each paused Play Mode step
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--id` | string | - | Unique watch expression identifier |
+| `--expression` | string | - | C# expression returning an object; UloopPausePoint.TryGetCapturedValue can read the latest raw capture |
+| `--max-history` | integer | `20` | Maximum number of watch evaluations to retain (1-100) |
+
+### get-watch-values
+
+Show registered watch expression values and bounded evaluation history
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--id` | string | - | Optional watch expression identifier; omit to return all watches |
+
+### clear-watch
+
+Clear one or all registered C# watch expressions
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--id` | string | - | Watch expression identifier to clear |
+| `--all` | flag | - | Clear every registered watch expression |
 
 ## Capture Modes and History
 
@@ -51,9 +110,9 @@ Every hit response embeds `CapturedVariables`: the method's in-scope locals, its
 - The snapshot is taken **before** the resolved line executes, exactly like an IDE breakpoint on that line. To inspect a value after an assignment, place the pause point on the following line.
 - `Scope` is `Local`, `Parameter`, `InstanceField`, or `This`. The synthetic `this` entry identifies which instance or GameObject was hit via `UnityObjectPath` and `UnityObjectInstanceId`; `UnityEngine.Object` values carry the same handle fields for follow-up digs with `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code`.
 - `--captured-variables names` on `await-pause-point`/`pause-point-status` drops every `Value` and keeps `Name`/`Scope`/`TypeName` — use it first on field-heavy classes, then fetch full values with a plain `pause-point-status` call.
-- When the response would be dominated by variables you do not need, pass `--captured-variable-names velocity,this` (comma-separated, exact match on `Name`) to keep only those entries; it composes with `--captured-variables full|names`.
-- Pass `--expect 'name=value'` (repeatable; on `await-pause-point` and `enable-pause-point --await`, not `pause-point-status`) to have the CLI compare captured variables against expected values; the response includes an `Expectations` array and `AllExpectationsPassed`, so you do not need to eyeball the JSON. Matching is string equality against the serialized value.
-- Collection values (arrays, `List<T>`, dictionaries, plain objects) render as a JSON preview capped at 10 elements by default. When the elements you need sit past that cap (a 10x20 grid, a long list), re-enable with `--max-preview-elements <n>` (1–1000).
+- When the response would be dominated by variables you do not need, pass `--captured-variable-names velocity,this` (comma-separated, exact match on `Name`) to keep only those entries; it composes with `--captured-variables full|names`. `CapturedVariablesTruncated` in the response reports truncation at Unity-side capture time and is unrelated to this name filter — it can be `true` even when every requested name was found. Requested names that matched nothing are listed in `CapturedVariableNamesNotFound`, so a partial match is visible without comparing the response against the request by hand.
+- Pass `--expect 'name=value'` (repeatable; on `await-pause-point`, `enable-pause-point --await`, and `pause-point-status`) to have the CLI compare captured variables against expected values; the response includes an `Expectations` array and `AllExpectationsPassed`, so you do not need to eyeball the JSON. Matching is string equality against the serialized value. On `pause-point-status` a marker that has not been hit yet reports each expectation as not found, and the verdict never changes the exit code — a polling loop reads `AllExpectationsPassed`, not the exit status.
+- Collection values (arrays, `List<T>`, dictionaries, plain objects) render as a JSON preview capped at 10 elements by default. When the elements you need sit past that cap (a 10x20 grid, a long list), re-enable with `--max-preview-elements <n>` (1–1000). The value set at enable time also caps the previews in every later `pause-point-status` response for that marker — status has no flag to change it.
 - While Unity is still paused, `UloopPausePoint.TryGetCapturedValue("name")` (and `"this"`) returns live captured references for `execute-dynamic-code`; the return is a `(bool Found, object Value)` tuple, and the holder clears on resume. (file:line marker hits only — id-only markers store no capture) These are **live objects in their frame-completed state, not snapshots** — use them only to dig further into objects that are still alive, never to reconstruct what a value was at the paused line.
 
 For snapshot timing, preview/truncation caps, Unity-object `Value` semantics, capture-time vs live evidence, `Warning`/`MatchingLogs`, marker freshness, and the raw capture API, read [references/captured-variables.md](references/captured-variables.md).
@@ -93,7 +152,7 @@ For "N frames after the input" (for example, three frames after a key press), ad
 
 A pause point hits only when control flow reaches the patched line (or the `Pause(id)` call). `simulate-keyboard` returning `PressEdgeObserved=true` means the input edge was observed, not that your target game logic has reached the pause line yet.
 
-If a `simulate-*` command instead returns a failure whose message says PlayMode is paused, suspect a pause point hit rather than an unrelated failure: an active pause point can make PlayMode paused mid-simulation, and the `simulate-*` call surfaces that as a preflight failure. Check `uloop pause-point-status --id <id>` first to confirm the hit before treating it as a bug in the simulated action itself.
+If a `simulate-*` command instead returns a failure whose message says PlayMode is paused, suspect a pause point hit rather than an unrelated failure: an active pause point can make PlayMode paused mid-simulation, and the `simulate-*` call surfaces that as a preflight failure. The failure response names the responsible marker in `RejectedByActivePausePointId`. Check `uloop pause-point-status --id <id>` first to confirm the hit before treating it as a bug in the simulated action itself.
 
 ## When To Use
 
@@ -116,8 +175,10 @@ When the game advances on its own (timers, gravity, spawners), any state you arr
 
 ```bash
 uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 60 \
-  --await --resume-play --trigger "simulate-keyboard --action Press --key Space"
+  --await --resume-play --trigger "simulate-keyboard --action Press --key Digit3"
 ```
+
+Digit keys are `Digit0`-`Digit9` or `Numpad0`-`Numpad9` — bare `0`-`9` is rejected.
 
 `--resume-play` (requires `--await`; `await-pause-point` accepts it too) resumes a paused PlayMode after the marker's arming is confirmed and before `--trigger` is dispatched. Size `--timeout-seconds` generously when arming while paused: a manual Pause does not freeze the marker countdown (see Timeout Checks).
 

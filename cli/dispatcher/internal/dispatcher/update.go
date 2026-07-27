@@ -53,7 +53,7 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 		return true, 1
 	}
 
-	clicore.WriteLine(stdout, "Updating global uloop launcher...")
+	clicore.WriteLine(stdout, "Updating global uloop dispatcher...")
 	if err := updateRunCommand(ctx, updateCommand, stdout, stderr); err != nil {
 		clierrors.WriteErrorEnvelope(stderr, clierrors.CLIError{
 			ErrorCode:   clierrors.ErrorCodeInternalError,

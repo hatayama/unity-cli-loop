@@ -37,14 +37,14 @@ var NativeCommands = []NativeCommandEntry{
 	{Name: PausePointStatusUserCommandName, Description: "Show the state of a named UloopPausePoint.Pause marker", Owner: RunnerOwned},
 	{Name: SkillsCommandName, Description: "List, install, or uninstall agent skills", Owner: DispatcherOwned},
 	{Name: CompletionCommand, Description: "Deprecated: shell completion has been removed; this command is now a no-op", Owner: DispatcherOwned},
-	{Name: InstallCommandName, Description: "Configure the global uloop launcher binary", Owner: DispatcherOwned},
-	{Name: UpdateCommandName, Description: "Update the global uloop launcher binary", Owner: DispatcherOwned},
-	{Name: UninstallCommandName, Description: "Remove the global uloop launcher binary", Owner: DispatcherOwned},
+	{Name: InstallCommandName, Description: "Configure the global uloop dispatcher binary", Owner: DispatcherOwned},
+	{Name: UpdateCommandName, Description: "Update the global uloop dispatcher binary", Owner: DispatcherOwned},
+	{Name: UninstallCommandName, Description: "Remove the global uloop dispatcher binary", Owner: DispatcherOwned},
 	{Name: VersionCommandName, Description: "Show the installed uloop version", Owner: DispatcherOwned},
 }
 
 // IsDispatcherOwnedCommandName reports whether a native command belongs to the
-// global launcher's process. This is the single source of truth for the
+// global dispatcher's process. This is the single source of truth for the
 // dispatcher/runner command split: the dispatcher handles these in-process, and
 // the project runner must reject them instead of executing them.
 func IsDispatcherOwnedCommandName(command string) bool {

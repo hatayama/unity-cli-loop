@@ -483,7 +483,7 @@ function Invoke-CompatibilityWindowsInstall {
         [string]$ExpectedUloopPath
     )
 
-    Write-Host "Configuring global uloop launcher..."
+    Write-Host "Configuring global uloop dispatcher..."
     Set-UserPathWithInstallDirectoryFirst -Directory $Directory
     Invoke-AllLegacyNpmPackageRemoval -ExpectedUloopPath $ExpectedUloopPath | Out-Null
 

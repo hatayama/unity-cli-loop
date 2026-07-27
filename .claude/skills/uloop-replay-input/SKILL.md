@@ -31,8 +31,8 @@ uloop replay-input --action Stop
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--action` | enum | `Start` | `Start`, `Stop`, `Status` |
-| `--input-path` | string | auto | JSON path. Auto-detects latest in `.uloop/outputs/InputRecordings/` |
+| `--action` | enum | `Start` | `Start` - begin replaying, `Stop` - stop mid-way, `Status` - check progress |
+| `--input-path` | string | auto | Path to the recording JSON. When empty, auto-detects the latest recording in `.uloop/outputs/InputRecordings/` |
 | `--no-show-overlay` | flag | - | Hide replay progress overlay |
 | `--loop` | flag | - | Loop continuously |
 

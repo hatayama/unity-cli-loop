@@ -58,11 +58,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             );
         }
 
-        public void Cancel()
-        {
-            _executionSlot.Cancel();
-        }
-
         public async Task<ExecutionResult> ExecuteAsync(ExecutionContext context)
         {
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();

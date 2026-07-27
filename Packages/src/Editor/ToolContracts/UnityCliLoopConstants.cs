@@ -47,12 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string ENV_KEY_ULOOP_DEBUG = "ULOOP_DEBUG";
         // Reconnection settings
         public const int RECONNECTION_TIMEOUT_SECONDS = 10;
-        
-        // Package path constants
-        public const string TEMP_DIR = "Temp";
-        public const string UNITYCLILOOP_DIR = "UnityCliLoop";
-        public const string JSON_FILE_EXTENSION = ".json";
-        
+
         // .uloop directory
         public const string ULOOP_DIR = ".uloop";
         public const string ULOOP_TOOL_SETTINGS_FILE_NAME = "settings.tools.json";

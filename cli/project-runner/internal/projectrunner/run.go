@@ -261,7 +261,7 @@ func runList(ctx context.Context, connection unityipc.Connection, stdout io.Writ
 		})
 		return 1
 	}
-	clicore.WriteJSON(stdout, formatToolListResult(outcome.Result))
+	clicore.WriteJSON(stdout, formatToolListResult(outcome.Result, connection.ProjectRoot))
 	return 0
 }
 

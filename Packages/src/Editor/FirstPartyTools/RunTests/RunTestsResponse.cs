@@ -115,18 +115,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             NoTestsFoundExplanation = noTestsFoundExplanation;
         }
 
-        /// <summary>
-        /// Parameterless constructor for JSON deserialization
-        /// </summary>
-        public RunTestsResponse()
-        {
-            Message = string.Empty;
-            Status = string.Empty;
-            NoTestsFoundExplanation = string.Empty;
-            CompletedAt = string.Empty;
-            XmlPath = string.Empty;
-        }
-
         public static RunTestsResponse CreateTestFrameworkUnavailable()
         {
             return new RunTestsResponse(

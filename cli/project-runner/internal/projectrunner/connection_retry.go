@@ -258,9 +258,15 @@ func sendWithTransientConnectionRetryWithDeps(
 			)
 		}
 
+		// A caller that cancelled the command gets that cancellation back, as everywhere else that
+		// waits on Unity. Why here: the probe below inherits the cancellation and fails, and its
+		// failure would otherwise be reported as an unreachable Unity — telling the user to launch
+		// an editor they never asked about, and recording a probe warning for their own Ctrl-C.
+		if ctx.Err() != nil {
+			return outcome, ctx.Err()
+		}
 		runningProcess, processErr := deps.findRunningUnityProcess(retryContext, connection.ProjectRoot)
 		if finished, finalOutcome, finalErr := finishUndispatchedRetryProbe(
-			ctx,
 			retryContext,
 			connection,
 			sendAttempt{
@@ -358,7 +364,13 @@ func shouldRetryUndispatchedConnection(err error, outcome unityipc.UnitySendOutc
 	}
 
 	var connectionErr *unityipc.ConnectionAttemptError
-	return errors.As(err, &connectionErr)
+	if !errors.As(err, &connectionErr) {
+		return false
+	}
+	// The retry window exists for a server that is not listening yet. A connect the kernel
+	// refused permanently never becomes reachable inside it, and retrying it replaces the
+	// syscall error with the window's own deadline expiry.
+	return !clierrors.IsPermanentConnectError(connectionErr)
 }
 
 func logConnectionRetryFocusAttempt(

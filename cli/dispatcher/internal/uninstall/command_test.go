@@ -12,7 +12,7 @@ import (
 )
 
 func TestCommandForDarwinRemovesUloopFromInstallDirectory(t *testing.T) {
-	// Verifies macOS uninstall removes the launcher binary from the selected install directory.
+	// Verifies macOS uninstall removes the dispatcher binary from the selected install directory.
 	command, err := CommandForOS("darwin", Options{
 		InstallDir: "/Users/ExampleUser/.local/bin",
 		CurrentPID: 1234,
@@ -41,7 +41,7 @@ func TestCommandForDarwinRemovesUloopFromInstallDirectory(t *testing.T) {
 }
 
 func TestCommandForWindowsSchedulesRemovalAfterCurrentProcessExits(t *testing.T) {
-	// Verifies Windows uninstall defers deletion until the running launcher process exits.
+	// Verifies Windows uninstall defers deletion until the running dispatcher process exits.
 	command, err := CommandForOS("windows", Options{
 		InstallDir: `C:\Users\ExampleUser\AppData\Local\Programs\uloop\bin`,
 		CurrentPID: 5678,
@@ -202,8 +202,8 @@ func decodePowerShellCommandForTest(t *testing.T, encodedCommand string) string 
 	return string(utf16.Decode(utf16Values))
 }
 
-func TestCommandForWindowsRemovesUserPathBeforeDeletingLauncher(t *testing.T) {
-	// Verifies Unity does not observe launcher removal before persistent PATH cleanup finishes.
+func TestCommandForWindowsRemovesUserPathBeforeDeletingDispatcher(t *testing.T) {
+	// Verifies Unity does not observe dispatcher removal before persistent PATH cleanup finishes.
 	deletionScript := windowsDeletionScript(
 		`C:\Users\ExampleUser\AppData\Local\Programs\uloop\bin\uloop.exe`,
 		5678)

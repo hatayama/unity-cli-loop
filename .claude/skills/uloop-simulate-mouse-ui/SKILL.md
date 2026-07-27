@@ -28,11 +28,11 @@ uloop simulate-mouse-ui --action <action> --x <x> --y <y> [options]
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--action` | enum | `Click` | `Click`, `Drag`, `DragStart`, `DragMove`, `DragEnd`, `LongPress` |
+| `--action` | enum | `Click` | `Click` - click at position, `Drag` - one-shot drag, `DragStart` - begin drag and hold, `DragMove` - move while holding drag, `DragEnd` - release drag, `LongPress` - press and hold for `--duration` seconds |
 | `--x` | number | `0` | Target X position in screen pixels (origin: top-left). For Drag action, this is the destination. |
 | `--y` | number | `0` | Target Y position in screen pixels (origin: top-left). For Drag action, this is the destination. |
-| `--from-x` | number | `0` | Start X position for Drag action. Drag starts here and moves to x,y. |
-| `--from-y` | number | `0` | Start Y position for Drag action. Drag starts here and moves to x,y. |
+| `--from-x` | number | `0` | Start X position for Drag action (origin: top-left). Drag starts here and moves to `--x`,`--y`. |
+| `--from-y` | number | `0` | Start Y position for Drag action (origin: top-left). Drag starts here and moves to `--x`,`--y`. |
 | `--drag-speed` | number | `2000` | Drag speed in pixels per second (0 for instant). 2000 is fast (default), 200 is slow enough to watch. Applies to Drag, DragMove, and DragEnd actions. |
 | `--duration` | number | `0.5` | Hold duration in seconds for LongPress action. |
 | `--button` | enum | `Left` | Mouse button. `Click` and `LongPress` support `Left`, `Right`, and `Middle`. Drag actions support `Left` only; other buttons return an error. |

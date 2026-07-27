@@ -34,7 +34,7 @@ func DefaultEnvironment() Environment {
 	}
 }
 
-// ResolveInstallDir returns the explicit, environment, or OS default launcher directory.
+// ResolveInstallDir returns the explicit, environment, or OS default dispatcher directory.
 func ResolveInstallDir(goos string, explicitInstallDir string, environment Environment) (string, error) {
 	if explicitInstallDir != "" {
 		return explicitInstallDir, nil
@@ -45,7 +45,7 @@ func ResolveInstallDir(goos string, explicitInstallDir string, environment Envir
 	return DefaultInstallDir(goos, environment)
 }
 
-// DefaultInstallDir returns the OS default package-owned launcher directory.
+// DefaultInstallDir returns the OS default package-owned dispatcher directory.
 func DefaultInstallDir(goos string, environment Environment) (string, error) {
 	switch goos {
 	case "darwin":
@@ -96,7 +96,7 @@ func CacheRoot(goos string, environment Environment) (string, error) {
 	}
 }
 
-// CommandPath joins a launcher command name to an install directory using target OS separators.
+// CommandPath joins a dispatcher command name to an install directory using target OS separators.
 func CommandPath(goos string, installDir string, posixCommandName string, windowsCommandName string) string {
 	trimmedInstallDir := TrimInstallDir(goos, installDir)
 	if goos == "windows" {

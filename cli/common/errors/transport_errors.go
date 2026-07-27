@@ -42,6 +42,24 @@ func IsTransportDisconnectError(err error) bool {
 		strings.Contains(message, "use of closed network connection")
 }
 
+// Reports whether a dial failed for a reason that cannot clear while the caller waits: the
+// kernel refused the socket outright (a sandbox policy that denies Unix socket connects,
+// permissions on the socket path) instead of reporting that nobody is listening yet. Retrying
+// such an error wastes the whole dial-retry window and then reports the window's own deadline
+// expiry, so the syscall error the first attempt already had never reaches the caller.
+// Why os.ErrPermission rather than the POSIX errnos: a Windows named pipe reports access denial
+// as ERROR_ACCESS_DENIED, which maps to os.ErrPermission but matches neither EPERM nor EACCES, so
+// an errno test would leave Windows retrying a refusal that never clears. Why only inside a
+// connection attempt: os.ErrPermission also covers file permission failures that reach the same
+// callers (project resolution, endpoint inspection), and those are not dial outcomes.
+func IsPermanentConnectError(err error) bool {
+	var connectionErr *unityipc.ConnectionAttemptError
+	if !errors.As(err, &connectionErr) {
+		return false
+	}
+	return errors.Is(connectionErr, os.ErrPermission)
+}
+
 // Reports whether the error is a connection deadline expiry. The Timeout() probe
 // runs through the unwrap chain because go-winio's named pipe deadline error is not
 // os.ErrDeadlineExceeded and os.IsTimeout does not unwrap fmt.Errorf("%w") wrapping.

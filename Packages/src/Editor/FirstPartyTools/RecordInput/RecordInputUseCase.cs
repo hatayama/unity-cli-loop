@@ -98,14 +98,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             RecordInputSchema request,
             CancellationToken ct)
         {
-            ValidationResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
+            PlayModeToolPreflightResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!preflight.IsValid)
             {
                 return new RecordInputResponse
                 {
                     Success = false,
                     Message = preflight.ErrorMessage,
-                    Action = RecordInputAction.Start.ToString()
+                    Action = RecordInputAction.Start.ToString(),
+                    RejectedByActivePausePointId = preflight.RejectedByActivePausePointId
                 };
             }
 
@@ -140,7 +141,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             int delaySeconds = Mathf.Clamp(request.DelaySeconds, RecordInputConstants.MIN_DELAY_SECONDS, RecordInputConstants.MAX_DELAY_SECONDS);
-            HashSet<Key>? keyFilter = InputRecordingFileHelper.ParseKeyFilter(request.Keys);
+            KeyFilterParseResult keyFilterResult = InputRecordingFileHelper.ParseKeyFilter(request.Keys);
+            if (keyFilterResult.InvalidKeyNames.Count > 0)
+            {
+                // Why reject instead of recording what did parse: a recording is taken once, and a
+                // filter that quietly lost entries produces a file that looks like the requested
+                // one. Entries that all failed would record every key, the opposite of the request.
+                return new RecordInputResponse
+                {
+                    Success = false,
+                    Message =
+                        $"Invalid key name(s) in the keys filter: {string.Join(", ", keyFilterResult.InvalidKeyNames)}. " +
+                        "Use Input System Key enum names (e.g. \"W\", \"Space\", \"LeftShift\", \"Digit3\").",
+                    Action = RecordInputAction.Start.ToString()
+                };
+            }
+
+            HashSet<Key>? keyFilter = keyFilterResult.Filter;
 
             if (request.ShowOverlay)
             {

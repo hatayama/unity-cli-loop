@@ -14,5 +14,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string? OutputPath { get; set; }
         public int? TotalFrames { get; set; }
         public float? DurationSeconds { get; set; }
+
+        /// <summary>
+        /// Id of the pause point that refused this call before it ran anything, null otherwise. A
+        /// refusal means nothing was started, so a caller reading only Success would miss that the
+        /// action never happened. The CLI's --trigger diagnosis compares this against the marker it
+        /// awaits.
+        /// </summary>
+        public string? RejectedByActivePausePointId { get; set; }
     }
 }

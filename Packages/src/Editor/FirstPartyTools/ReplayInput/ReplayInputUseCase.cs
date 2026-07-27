@@ -94,14 +94,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 #if ULOOP_HAS_INPUT_SYSTEM
         private static ReplayInputResponse ExecuteStart(ReplayInputSchema request)
         {
-            ValidationResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
+            PlayModeToolPreflightResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!preflight.IsValid)
             {
                 return new ReplayInputResponse
                 {
                     Success = false,
                     Message = preflight.ErrorMessage,
-                    Action = ReplayInputAction.Start.ToString()
+                    Action = ReplayInputAction.Start.ToString(),
+                    RejectedByActivePausePointId = preflight.RejectedByActivePausePointId
                 };
             }
 

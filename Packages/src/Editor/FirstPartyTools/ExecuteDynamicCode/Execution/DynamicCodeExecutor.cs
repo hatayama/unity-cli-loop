@@ -16,15 +16,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly IDynamicCompilationService _compiler;
         private readonly ICompiledCommandInvoker _invoker;
         private readonly IDynamicCodeSourcePreparationService _sourcePreparationService;
-        private readonly ExecutionStatistics _statistics;
-        private readonly object _statsLock = new();
-
-        public DynamicCodeExecutor(
-            IDynamicCompilationService compiler,
-            ICompiledCommandInvoker invoker)
-            : this(compiler, invoker, DynamicCodeServices.SourcePreparationService)
-        {
-        }
 
         internal DynamicCodeExecutor(
             IDynamicCompilationService compiler,
@@ -34,7 +25,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
             _invoker = invoker ?? throw new ArgumentNullException(nameof(invoker));
             _sourcePreparationService = sourcePreparationService ?? throw new ArgumentNullException(nameof(sourcePreparationService));
-            _statistics = new ExecutionStatistics();
         }
 
         public async Task<ExecutionResult> ExecuteCodeAsync(
@@ -103,36 +93,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     compileTotalStopwatch.Elapsed.TotalMilliseconds);
                 AppendCompilationAdvisories(executionResult.Logs, compilationResult.AdvisoryLogs);
 
-                UpdateStatistics(executionResult, totalStopwatch.Elapsed);
                 return executionResult;
             }
             catch (OperationCanceledException)
             {
-                ExecutionResult cancelledResult = CreateCancelledResult(totalStopwatch.Elapsed);
-                UpdateStatistics(cancelledResult, totalStopwatch.Elapsed);
-                return cancelledResult;
+                return CreateCancelledResult(totalStopwatch.Elapsed);
             }
             catch (Exception ex)
             {
                 ExecutionResult failureResult = CreateUnexpectedErrorResult(ex, totalStopwatch.Elapsed);
-                UpdateStatistics(failureResult, totalStopwatch.Elapsed);
                 LogUnexpectedExecutionException(ex, correlationId, totalStopwatch.ElapsedMilliseconds);
                 return failureResult;
-            }
-        }
-
-        public ExecutionStatistics GetStatistics()
-        {
-            lock (_statsLock)
-            {
-                return new ExecutionStatistics
-                {
-                    TotalExecutions = _statistics.TotalExecutions,
-                    SuccessfulExecutions = _statistics.SuccessfulExecutions,
-                    FailedExecutions = _statistics.FailedExecutions,
-                    AverageExecutionTime = _statistics.AverageExecutionTime,
-                    CompilationErrors = _statistics.CompilationErrors
-                };
             }
         }
 
@@ -155,16 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Namespace = DynamicCodeConstants.DEFAULT_NAMESPACE
             };
 
-            CompilationResult result = await _compiler.CompileAsync(request, ct).ConfigureAwait(false);
-            if (!result.Success)
-            {
-                lock (_statsLock)
-                {
-                    _statistics.CompilationErrors++;
-                }
-            }
-
-            return result;
+            return await _compiler.CompileAsync(request, ct).ConfigureAwait(false);
         }
 
         private ExecutionResult TryCreateCompilationFailureResult(
@@ -264,28 +226,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             destination.AddRange(advisoryLogs);
-        }
-
-        private void UpdateStatistics(ExecutionResult result, TimeSpan executionTime)
-        {
-            lock (_statsLock)
-            {
-                _statistics.TotalExecutions++;
-                if (result.Success)
-                {
-                    _statistics.SuccessfulExecutions++;
-                }
-                else
-                {
-                    _statistics.FailedExecutions++;
-                }
-
-                double totalMilliseconds =
-                    _statistics.AverageExecutionTime.TotalMilliseconds * (_statistics.TotalExecutions - 1);
-                totalMilliseconds += executionTime.TotalMilliseconds;
-                _statistics.AverageExecutionTime =
-                    TimeSpan.FromMilliseconds(totalMilliseconds / _statistics.TotalExecutions);
-            }
         }
 
         private static Dictionary<string, object> BuildExecutionParameters(

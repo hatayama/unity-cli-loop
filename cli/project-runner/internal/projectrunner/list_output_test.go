@@ -2,6 +2,8 @@ package projectrunner
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
@@ -32,7 +34,7 @@ func TestFormatToolListResultUsesCliOptionNames(t *testing.T) {
       }
     }
   ]
-}`))
+}`), "")
 
 	catalog := decodeListCatalog(t, result)
 	tool := findListTool(t, catalog, "screenshot")
@@ -143,12 +145,137 @@ func TestNewListCatalogIncludesEnablePausePointAwaitOptions(t *testing.T) {
 	catalog := newListCatalog(clicore.ToolsCache{Tools: []clicore.ToolDefinition{tool}})
 	enablePausePoint := findListTool(t, catalog, pausePointEnableCommandName)
 
-	findListOption(t, enablePausePoint, "--"+pausePointEnableAwaitFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointCapturedVariablesFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointCapturedVariableNamesFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointExpectFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointTriggerFlagName)
-	findListOption(t, enablePausePoint, "--"+PausePointResumePlayFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointEnableAwaitFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointCapturedVariablesFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointCapturedVariableNamesFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointExpectFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointTriggerFlagName)
+	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointResumePlayFlagName)
+}
+
+// Tests that list replaces Unity's generated placeholder descriptions with the embedded catalog's
+// real text. list formats the raw get-tool-details response, so it does not inherit the fallback the
+// project-cache loader applies for `--help`.
+func TestFormatToolListResultFillsPlaceholderDescriptions(t *testing.T) {
+	content := formatToolListResult([]byte(`{
+  "tools": [
+    {
+      "name": "simulate-keyboard",
+      "parameterSchema": {
+        "Properties": {
+          "Duration": {"Type": "number", "Description": "Parameter: Duration"}
+        }
+      }
+    }
+  ]
+}`), "")
+
+	catalog := decodeListCatalog(t, content)
+	simulateKeyboard := findListTool(t, catalog, "simulate-keyboard")
+
+	if simulateKeyboard.Description == "" {
+		t.Error("tool description was not filled from the embedded catalog")
+	}
+	option := findListOption(t, simulateKeyboard, "--duration")
+	if option.Description == "Parameter: Duration" || option.Description == "" {
+		t.Errorf("option placeholder description was not replaced: %q", option.Description)
+	}
+}
+
+// Tests that an unset string parameter reports no default at all, matching --help. Unity reports an
+// empty string for these, which would otherwise claim the option defaults to "".
+func TestNewListCatalogOmitsEmptyStringDefaults(t *testing.T) {
+	catalog := newListCatalog(clicore.ToolsCache{Tools: []clicore.ToolDefinition{{
+		Name: "screenshot",
+		ParameterSchema: clicore.InputSchema{Properties: map[string]clicore.ToolProperty{
+			"OutputPath": {Type: "string", Description: "Where to write the file", DefaultValue: ""},
+		}},
+	}}})
+
+	option := findListOption(t, findListTool(t, catalog, "screenshot"), "--output-path")
+	if option.Default != nil {
+		t.Errorf("empty-string default was reported: %#v", option.Default)
+	}
+}
+
+// Tests that list reports the description written in the installed package's SKILL.md table, so the
+// table an agent reads and the list an agent queries cannot disagree.
+func TestFormatToolListResultReadsDescriptionsFromTheInstalledSkill(t *testing.T) {
+	projectRoot := writeSkillFixtureProject(t, "Parsed straight out of the skill table.")
+
+	content := formatToolListResult([]byte(`{
+  "tools": [
+    {
+      "name": "simulate-keyboard",
+      "parameterSchema": {
+        "Properties": {
+          "Duration": {"Type": "number", "Description": "Parameter: Duration"}
+        }
+      }
+    }
+  ]
+}`), projectRoot)
+
+	simulateKeyboard := findListTool(t, decodeListCatalog(t, content), "simulate-keyboard")
+	if simulateKeyboard.Description != "Simulate keyboard input from the fixture skill." {
+		t.Errorf("tool description was not read from the skill: %q", simulateKeyboard.Description)
+	}
+	option := findListOption(t, simulateKeyboard, "--duration")
+	if option.Description != "Parsed straight out of the skill table." {
+		t.Errorf("option description was not read from the skill: %q", option.Description)
+	}
+}
+
+// Tests that a project with no installed package keeps the previous output, since a missing skill
+// must only cost freshness and never the command itself.
+func TestFormatToolListResultKeepsEmbeddedTextWithoutASkill(t *testing.T) {
+	content := formatToolListResult([]byte(`{
+  "tools": [
+    {
+      "name": "simulate-keyboard",
+      "parameterSchema": {
+        "Properties": {
+          "Duration": {"Type": "number", "Description": "Parameter: Duration"}
+        }
+      }
+    }
+  ]
+}`), t.TempDir())
+
+	option := findListOption(t, findListTool(t, decodeListCatalog(t, content), "simulate-keyboard"), "--duration")
+	if option.Description == "" || option.Description == "Parameter: Duration" {
+		t.Errorf("the embedded description was lost: %q", option.Description)
+	}
+}
+
+// writeSkillFixtureProject builds a Unity project holding a uloop package whose simulate-keyboard
+// skill documents --duration with the given text.
+func writeSkillFixtureProject(t *testing.T, durationDescription string) string {
+	t.Helper()
+
+	projectRoot := t.TempDir()
+	packageRoot := filepath.Join(projectRoot, "Packages", "src")
+	skillDirectory := filepath.Join(packageRoot, "Editor", "FirstPartyTools", "SimulateKeyboard", "Skill")
+	if err := os.MkdirAll(skillDirectory, 0o755); err != nil {
+		t.Fatalf("failed to create the skill directory: %v", err)
+	}
+	manifest := []byte(`{"name":"io.github.hatayama.uloopmcp"}`)
+	if err := os.WriteFile(filepath.Join(packageRoot, "package.json"), manifest, 0o644); err != nil {
+		t.Fatalf("failed to write the package manifest: %v", err)
+	}
+
+	skill := "---\n" +
+		"name: uloop-simulate-keyboard\n" +
+		"toolName: simulate-keyboard\n" +
+		"description: \"Simulate keyboard input from the fixture skill.\"\n" +
+		"---\n\n" +
+		"| Parameter | Type | Default | Description |\n" +
+		"|-----------|------|---------|-------------|\n" +
+		"| `--duration` | number | `0` | " + durationDescription + " |\n"
+	if err := os.WriteFile(filepath.Join(skillDirectory, "SKILL.md"), []byte(skill), 0o644); err != nil {
+		t.Fatalf("failed to write the fixture skill: %v", err)
+	}
+	return projectRoot
 }
 
 func decodeListCatalog(t *testing.T, content []byte) listCatalog {

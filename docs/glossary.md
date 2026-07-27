@@ -91,6 +91,12 @@ A generated instruction document that teaches an AI agent how to use a `uloop` c
 Skill sources live in the package; the copies under `.agents/` and `.claude/` are
 generated and must not be edited directly.
 
+A skill is also the single source of truth for the tool and parameter descriptions the CLI
+prints. `--help` and `uloop list` read the parameter table out of the installed package's
+skill at render time, and the embedded catalog (`cli/common/tools/default-tools.json`) is
+generated from those same tables. Descriptions are therefore edited in the skill and nowhere
+else.
+
 ### Skill target
 
 A destination agent environment into which skills are installed (for example Claude Code,

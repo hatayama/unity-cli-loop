@@ -12,7 +12,10 @@ cd "$ROOT_DIR"
 # Input selection mirrors the release trigger guard
 # (cli/release-automation/internal/automation/release_trigger_guard.go):
 # only package roots imported by shipped binaries count; release-please stamp
-# targets such as contract.json and default-tools.json do not.
+# targets such as contract.json do not. The embedded tool catalog is the one
+# JSON that does count - it is compiled into both binaries and is generated
+# from the skill parameter tables, so a tool description change has to reach a
+# release.
 list_shared_common_inputs() {
   git ls-files -- \
     cli/common/go.mod \
@@ -23,6 +26,7 @@ list_shared_common_inputs() {
     'cli/common/ipcendpoint/' \
     'cli/common/progress/' \
     'cli/common/project/' \
+    'cli/common/skilldocs/' \
     'cli/common/skillscan/' \
     'cli/common/tooldocs/' \
     'cli/common/tools/' \
@@ -30,7 +34,7 @@ list_shared_common_inputs() {
     'cli/common/unityipc/' \
     'cli/common/unityprocess/' \
     'cli/common/vibelog/' |
-    grep -E '\.go$|\.ps1$|/go\.mod$|/go\.sum$' |
+    grep -E '\.go$|\.ps1$|/go\.mod$|/go\.sum$|^cli/common/tools/default-tools\.json$' |
     grep -v '_test\.go$' || true
 }
 

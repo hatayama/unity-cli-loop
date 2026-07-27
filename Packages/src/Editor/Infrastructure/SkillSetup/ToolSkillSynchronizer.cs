@@ -79,22 +79,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return false;
         }
 
-        public static List<SkillTargetInfo> DetectTargetsForLayout(bool groupSkillsUnderUnityCliLoop)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            return DetectTargetsForLayoutAtProjectRoot(projectRoot, groupSkillsUnderUnityCliLoop);
-        }
-
-        public static List<SkillTargetInfo> DetectTargetsForLayoutFast(bool groupSkillsUnderUnityCliLoop)
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
-
-            return DetectTargetsForLayoutFastAtProjectRoot(projectRoot, groupSkillsUnderUnityCliLoop);
-        }
-
         internal static List<SkillTargetInfo> DetectTargetsForLayoutAtProjectRoot(
             string projectRoot,
             bool groupSkillsUnderUnityCliLoop)
