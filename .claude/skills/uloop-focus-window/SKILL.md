@@ -22,5 +22,4 @@ Returns JSON with:
 
 ## Notes
 
-- **Works even when Unity is busy** (compiling, domain reload, etc.)
 - Useful before `uloop screenshot` to ensure the target window is visible
