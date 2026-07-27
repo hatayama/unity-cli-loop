@@ -64,6 +64,22 @@ These files are generated copies. Update the source skill definitions instead, t
 - Sources: `Packages/src/Editor/FirstPartyTools/<Tool>/Skill/SKILL.md` and `Packages/src/Editor/CliOnlyTools~/<Tool>/Skill/SKILL.md` (plus each skill's `references/` files, which are copied along with it).
 - Regenerate: `dist/darwin-arm64/uloop skills install --claude --agents` from the project root, substituting the binary for your platform (e.g. `dist/windows-amd64/uloop.exe` on Windows). Only `.claude/` and `.agents/` are tracked in git; other targets are local-only.
 
+## Generated Tool Catalog
+
+`cli/common/tools/default-tools.json` is generated from the skill parameter tables — it is what
+`--help` and `uloop list` print when no project cache is available, and its descriptions must never
+be hand-edited. When you change a parameter table or a tool description in
+`Packages/src/Editor/FirstPartyTools/<Tool>/Skill/SKILL.md` or
+`Packages/src/Editor/CliOnlyTools~/<Tool>/Skill/SKILL.md`, run `scripts/sync-tool-docs.sh` and
+include the regenerated catalog in the same commit. `go run ./cmd/sync-tool-docs --check` in
+`cli/release-automation` reports drift without writing, and CI runs it.
+
+Generation fails when a table and the schema disagree: a visible option with no row, or a row
+matching no accepted option. Fix the table or the schema — do not work around the generator.
+
+Enable the repository hooks once per clone with `git config core.hooksPath .husky`; the pre-commit
+hook then regenerates the catalog for you when a skill file is staged.
+
 ## CI Automation Language
 
 Write GitHub Actions and release automation logic in Go when it needs JSON parsing, workflow polling, state transitions, or non-trivial branching.
