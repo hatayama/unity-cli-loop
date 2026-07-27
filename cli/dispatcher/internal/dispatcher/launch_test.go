@@ -308,15 +308,25 @@ func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 	}
 }
 
-// Verifies a V2 launch confirms only that Unity opened the project and never waits for the V3 named pipe.
-func TestRunLaunchForV2ProjectWaitsForFreshLockfileWithoutServerProbe(t *testing.T) {
+// Verifies a V2 fresh launch waits for the lockfile and V2 server readiness, never the V3 named pipe.
+func TestRunLaunchForV2ProjectWaitsForLockfileAndServerReady(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)
 	writeV2PackageManifest(t, projectRoot)
 	writeV2PackageCachePackageJSON(t, projectRoot, "abc123", "2.2.0")
 	deps := defaultLaunchDeps()
+	lockfileWaited := false
+	v2ServerWaited := false
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) { return nil, nil }
 	deps.resolveUnityExecutablePath = func(string) (string, error) { return fakeUnityExecutablePath(t), nil }
-	deps.waitForFreshUnityLockfile = func(context.Context, string, time.Time, time.Duration, time.Duration) error { return nil }
+	deps.focusUnityProcess = func(context.Context, int) error { return nil }
+	deps.waitForFreshUnityLockfile = func(context.Context, string, time.Time, time.Duration, time.Duration) error {
+		lockfileWaited = true
+		return nil
+	}
+	deps.waitForV2ServerReady = func(context.Context, string, string, time.Duration, time.Duration) error {
+		v2ServerWaited = true
+		return nil
+	}
 	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
 		t.Fatal("V2 launch must not wait for the V3 server")
 		return nil
@@ -327,12 +337,178 @@ func TestRunLaunchForV2ProjectWaitsForFreshLockfileWithoutServerProbe(t *testing
 	if code != 0 {
 		t.Fatalf("V2 launch exit code = %d", code)
 	}
+	if !lockfileWaited || !v2ServerWaited {
+		t.Fatalf("V2 launch waits mismatch: lockfile=%v server=%v", lockfileWaited, v2ServerWaited)
+	}
 	response := decodeLaunchResponseFromOutput(t, stdout.String())
-	if !response.Success || !response.Ready || response.ServerReady || response.ProjectIpcReady {
+	if !response.Success || !response.Ready || !response.ServerReady || response.ProjectIpcReady {
 		t.Fatalf("V2 launch readiness flags = %#v", response)
 	}
-	if !strings.Contains(response.Message, "V2 server readiness was not checked") {
+	if !strings.Contains(response.Message, "V2 uloop server is ready") {
 		t.Fatalf("V2 launch message = %q", response.Message)
+	}
+}
+
+// Verifies V2 fresh launch focuses the Editor before the server probe, and continues when focus fails.
+func TestRunLaunchForV2ProjectFocusesEditorBeforeServerProbe(t *testing.T) {
+	projectRoot := createLaunchTestProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "abc123", "2.2.0")
+	deps := defaultLaunchDeps()
+	var callOrder []string
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) { return nil, nil }
+	deps.resolveUnityExecutablePath = func(string) (string, error) { return fakeUnityExecutablePath(t), nil }
+	deps.waitForFreshUnityLockfile = func(context.Context, string, time.Time, time.Duration, time.Duration) error {
+		callOrder = append(callOrder, "lockfile")
+		return nil
+	}
+	deps.focusUnityProcess = func(context.Context, int) error {
+		callOrder = append(callOrder, "focus")
+		return errors.New("focus failed for test")
+	}
+	deps.waitForV2ServerReady = func(context.Context, string, string, time.Duration, time.Duration) error {
+		callOrder = append(callOrder, "probe")
+		return nil
+	}
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
+		t.Fatal("V2 launch must not wait for the V3 server")
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	code := runLaunchWithDeps(context.Background(), launchOptions{projectPath: projectRoot, editorVersion: "6000.0.0f1"}, projectRoot, &stdout, io.Discard, deps)
+	if code != 0 {
+		t.Fatalf("V2 launch exit code = %d", code)
+	}
+	expectedOrder := []string{"lockfile", "focus", "probe"}
+	if !slices.Equal(callOrder, expectedOrder) {
+		t.Fatalf("call order = %v, want %v", callOrder, expectedOrder)
+	}
+}
+
+// Verifies an already-running V2 Editor probes with previousServerSessionID="" and reports AlreadyRunning.
+func TestRunLaunchForExistingV2ProjectWaitsForServerReady(t *testing.T) {
+	projectRoot := createLaunchTestProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "abc123", "2.2.0")
+	deps := defaultLaunchDeps()
+	var capturedPreviousSessionID string
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 333}, nil
+	}
+	deps.focusUnityProcess = func(context.Context, int) error { return nil }
+	deps.waitForV2ServerReady = func(_ context.Context, _ string, previousServerSessionID string, _ time.Duration, _ time.Duration) error {
+		capturedPreviousSessionID = previousServerSessionID
+		return nil
+	}
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
+		t.Fatal("V2 existing launch must not wait for the V3 server")
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	code := runLaunchWithDeps(context.Background(), launchOptions{projectPath: projectRoot}, projectRoot, &stdout, io.Discard, deps)
+	if code != 0 {
+		t.Fatalf("V2 existing launch exit code = %d", code)
+	}
+	if capturedPreviousSessionID != "" {
+		t.Fatalf("existing V2 path must pass empty previous session id, got %q", capturedPreviousSessionID)
+	}
+	response := decodeLaunchResponseFromOutput(t, stdout.String())
+	if !response.Success || !response.Ready || !response.ServerReady || response.ProjectIpcReady {
+		t.Fatalf("V2 existing readiness flags = %#v", response)
+	}
+	if !response.AlreadyRunning || response.Launched || response.Restarted {
+		t.Fatalf("V2 existing process flags = %#v", response)
+	}
+}
+
+// Verifies -r captures the pre-kill serverSessionId and passes it to the V2 readiness probe.
+func TestRunLaunchForV2RestartPassesPreviousServerSessionID(t *testing.T) {
+	projectRoot := createLaunchTestProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "abc123", "2.2.0")
+	writeV2ServerSettingsJSON(t, projectRoot, v2ServerSettingsFileName, v2ServerSettings{
+		CustomPort:      8700,
+		IsServerRunning: true,
+		ServerSessionID: "pre-restart-session",
+	})
+	deps := defaultLaunchDeps()
+	var capturedPreviousSessionID string
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 444}, nil
+	}
+	deps.killUnityProcess = func(int) error { return nil }
+	deps.waitForUnityProcessExit = func(context.Context, string, int, time.Duration, time.Duration) error { return nil }
+	deps.resolveUnityExecutablePath = func(string) (string, error) { return fakeUnityExecutablePath(t), nil }
+	deps.focusUnityProcess = func(context.Context, int) error { return nil }
+	deps.waitForFreshUnityLockfile = func(context.Context, string, time.Time, time.Duration, time.Duration) error {
+		return nil
+	}
+	deps.waitForV2ServerReady = func(_ context.Context, _ string, previousServerSessionID string, _ time.Duration, _ time.Duration) error {
+		capturedPreviousSessionID = previousServerSessionID
+		return nil
+	}
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
+		t.Fatal("V2 restart must not wait for the V3 server")
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	code := runLaunchWithDeps(
+		context.Background(),
+		launchOptions{projectPath: projectRoot, restart: true, editorVersion: "6000.0.0f1"},
+		projectRoot,
+		&stdout,
+		io.Discard,
+		deps,
+	)
+	if code != 0 {
+		t.Fatalf("V2 restart exit code = %d", code)
+	}
+	if capturedPreviousSessionID != "pre-restart-session" {
+		t.Fatalf("previous session id mismatch: %q", capturedPreviousSessionID)
+	}
+	response := decodeLaunchResponseFromOutput(t, stdout.String())
+	if !response.Success || !response.Ready || !response.ServerReady || !response.Restarted {
+		t.Fatalf("V2 restart response = %#v", response)
+	}
+}
+
+// Verifies a V2 server readiness timeout exits 1 and surfaces the classified timeout error.
+func TestRunLaunchForV2ProjectReportsServerReadyTimeout(t *testing.T) {
+	projectRoot := createLaunchTestProject(t)
+	writeV2PackageManifest(t, projectRoot)
+	writeV2PackageCachePackageJSON(t, projectRoot, "abc123", "2.2.0")
+	deps := defaultLaunchDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) { return nil, nil }
+	deps.resolveUnityExecutablePath = func(string) (string, error) { return fakeUnityExecutablePath(t), nil }
+	deps.focusUnityProcess = func(context.Context, int) error { return nil }
+	deps.waitForFreshUnityLockfile = func(context.Context, string, time.Time, time.Duration, time.Duration) error {
+		return nil
+	}
+	deps.waitForV2ServerReady = func(context.Context, string, string, time.Duration, time.Duration) error {
+		return v2ServerReadyTimeoutError{projectRoot: projectRoot}
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runLaunchWithDeps(
+		context.Background(),
+		launchOptions{projectPath: projectRoot, editorVersion: "6000.0.0f1"},
+		projectRoot,
+		&stdout,
+		&stderr,
+		deps,
+	)
+	if code != 1 {
+		t.Fatalf("V2 timeout exit code = %d stdout=%s", code, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "V2 uloop server did not become reachable") {
+		t.Fatalf("stderr missing V2 timeout message:\n%s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), clierrors.ErrorCodeUnityStartupTimeout) {
+		t.Fatalf("stderr missing startup timeout code:\n%s", stderr.String())
 	}
 }
 
