@@ -17,6 +17,7 @@ type launchDeps struct {
 	waitForUnityProcessExit    func(context.Context, string, int, time.Duration, time.Duration) error
 	waitForUnityStartupMarker  func(context.Context, string, time.Duration, time.Duration) error
 	waitForFreshUnityLockfile  func(context.Context, string, time.Time, time.Duration, time.Duration) error
+	waitForV2ServerReady       func(context.Context, string, string, time.Duration, time.Duration) error
 	waitForToolReadiness       func(context.Context, string, time.Duration) error
 	probeProjectIpcFallback    func(context.Context, string) error
 }
@@ -31,7 +32,10 @@ func defaultLaunchDeps() launchDeps {
 		waitForUnityProcessExit:    waitForUnityProcessExit,
 		waitForUnityStartupMarker:  waitForUnityStartupMarkerOrTimeout,
 		waitForFreshUnityLockfile:  waitForFreshUnityLockfile,
-		waitForToolReadiness:       clicore.WaitForToolReadinessWithTimeout,
-		probeProjectIpcFallback:    clicore.ProbeToolReadinessSequence,
+		waitForV2ServerReady: func(ctx context.Context, projectRoot string, previousServerSessionID string, poll time.Duration, timeout time.Duration) error {
+			return waitForV2ServerReady(ctx, projectRoot, previousServerSessionID, defaultV2ServerDial, poll, timeout)
+		},
+		waitForToolReadiness:    clicore.WaitForToolReadinessWithTimeout,
+		probeProjectIpcFallback: clicore.ProbeToolReadinessSequence,
 	}
 }
