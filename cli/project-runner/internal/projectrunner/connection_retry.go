@@ -258,6 +258,13 @@ func sendWithTransientConnectionRetryWithDeps(
 			)
 		}
 
+		// A caller that cancelled the command gets that cancellation back, as everywhere else that
+		// waits on Unity. Why here: the probe below inherits the cancellation and fails, and its
+		// failure would otherwise be reported as an unreachable Unity — telling the user to launch
+		// an editor they never asked about, and recording a probe warning for their own Ctrl-C.
+		if ctx.Err() != nil {
+			return outcome, ctx.Err()
+		}
 		runningProcess, processErr := deps.findRunningUnityProcess(retryContext, connection.ProjectRoot)
 		if finished, finalOutcome, finalErr := finishUndispatchedRetryProbe(
 			retryContext,

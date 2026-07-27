@@ -218,7 +218,7 @@ func TestSendWithTransientConnectionRetryReportsTheDialErrorWhenTheProcessProbeT
 	connection := unityipc.Connection{
 		Endpoint: unityipc.Endpoint{
 			Network: "unix",
-			Address: t.TempDir() + "/missing.sock",
+			Address: endpointDirectoryWithRequiredMode(t) + "/missing.sock",
 		},
 		ProjectRoot: t.TempDir(),
 	}
@@ -239,6 +239,66 @@ func TestSendWithTransientConnectionRetryReportsTheDialErrorWhenTheProcessProbeT
 	var connectionErr *unityipc.ConnectionAttemptError
 	if !errors.As(err, &connectionErr) {
 		t.Fatalf("expected the connection attempt error, got %v", err)
+	}
+}
+
+// Endpoint validation rejects any directory that is not 0700, which a plain t.TempDir() is not.
+// Tests that need the dial itself to fail must get past that check first.
+func endpointDirectoryWithRequiredMode(t *testing.T) string {
+	t.Helper()
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatalf("failed to set the endpoint directory mode: %v", err)
+	}
+	return directory
+}
+
+// Verifies a cancelled command reports the cancellation rather than an unreachable Unity: the
+// process probe inherits the cancellation and fails, and that failure must not be turned into
+// "Unity may be closed, run uloop launch" guidance for a user who pressed Ctrl-C.
+func TestSendWithTransientConnectionRetryPreservesParentCancellation(t *testing.T) {
+	projectRoot := t.TempDir()
+	t.Setenv(vibelog.CLIVibeLogEnvName, "1")
+
+	deps := defaultConnectionRetryDeps()
+	deps.findRunningUnityProcess = func(ctx context.Context, projectRoot string) (*clicore.UnityProcess, error) {
+		return nil, ctx.Err()
+	}
+	deps.retryPoll = time.Nanosecond
+
+	cancelledContext, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := sendWithTransientConnectionRetryWithDeps(
+		cancelledContext,
+		unityipc.Connection{
+			Endpoint: unityipc.Endpoint{
+				Network: "unix",
+				Address: endpointDirectoryWithRequiredMode(t) + "/missing.sock",
+			},
+			ProjectRoot: projectRoot,
+		},
+		"get-logs",
+		map[string]any{},
+		nil,
+		0,
+		deps)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected the cancellation to be preserved, got %v", err)
+	}
+	logFiles, globErr := filepath.Glob(filepath.Join(projectRoot, vibelog.CLIVibeLogDirectory, "*.json"))
+	if globErr != nil {
+		t.Fatalf("reading the vibe log directory failed: %v", globErr)
+	}
+	for _, logFile := range logFiles {
+		contents, readErr := os.ReadFile(logFile)
+		if readErr != nil {
+			t.Fatalf("reading the vibe log failed: %v", readErr)
+		}
+		if strings.Contains(string(contents), "cli_unity_process_probe_failed") {
+			t.Fatalf("a cancelled command must not record a process probe failure: %s", contents)
+		}
 	}
 }
 
