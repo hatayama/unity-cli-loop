@@ -34,6 +34,7 @@ type v2ServerSettings struct {
 
 type v2ServerReadyTimeoutError struct {
 	projectRoot string
+	timeout     time.Duration
 }
 
 func (err v2ServerReadyTimeoutError) Error() string {
@@ -56,7 +57,7 @@ func (err v2ServerReadyTimeoutError) ToCLIError(context clierrors.ErrorContext) 
 		},
 		Details: map[string]any{
 			"ProjectRoot":    err.projectRoot,
-			"TimeoutSeconds": int(launchReadinessTimeout.Seconds()),
+			"TimeoutSeconds": int(err.timeout.Seconds()),
 		},
 	}
 }
@@ -156,7 +157,7 @@ func waitForV2ServerReady(
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			return v2ServerReadyTimeoutError{projectRoot: projectRoot}
+			return v2ServerReadyTimeoutError{projectRoot: projectRoot, timeout: timeout}
 		case <-ticker.C:
 		}
 	}
@@ -196,6 +197,7 @@ func waitForExistingV2LaunchReadiness(ctx context.Context, projectRoot string, p
 	defer spinner.Stop()
 	writeLaunchReadinessWait(stdout, spinner)
 	if err := deps.waitForV2ServerReady(ctx, projectRoot, "", launchV2ServerReadyPoll, launchReadinessTimeout); err != nil {
+		spinner.Stop()
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
