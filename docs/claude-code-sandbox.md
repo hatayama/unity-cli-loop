@@ -73,17 +73,18 @@ Pick one:
 1. Run dev-binary commands with the sandbox disabled for that command (Claude Code:
    `dangerouslyDisableSandbox`; users can manage restrictions via `/sandbox`).
 2. Add the dev-binary shapes to `excludedCommands` in the personal Claude Code settings:
-   `"dist/*/uloop *"` alongside the existing `"uloop *"`, plus an anchored absolute-path entry
-   such as `"/Users/<user>/ghq/<org>/*/dist/*/uloop *"` if you ever type the binary's full path.
-   Both are measured, not suggestions (2026-07-27). One command shape still defeats them; see
-   the next section before relying on this remedy.
+   `"dist/*/uloop *"` alongside the existing `"uloop *"`, an anchored absolute-path entry such as
+   `"/Users/<user>/ghq/<org>/*/dist/*/uloop *"` if you ever type the binary's full path, and the
+   two `ULOOP_PROJECT_RUNNER_PATH=*` entries from the next section if you pass the override from
+   a shell variable. All of these are measured, not suggestions (2026-07-27); the next section
+   says which command shapes each one covers.
 3. When the change under review lives in the project runner, keep the sandbox on and run
    `ULOOP_PROJECT_RUNNER_PATH=<absolute path to the dist runner> uloop ...` — the plain-`uloop`
    command text stays excluded while the dev runner does the work (the override is documented in
    `docs/project-runner-pin.md`). This does not exercise dispatcher-side changes; for those, use
-   remedy 1 or 2. Write the path literally on the same line, or `export` it as a separate
-   command — taking it from a shell variable in the same command as `uloop` is denied, for the
-   reason in the next section.
+   remedy 1 or 2. Taking the path from a shell variable in the same command as `uloop` needs an
+   `excludedCommands` entry that names the variable (see the next section); without one, write
+   the value literally or `export` it as a separate command first.
 
 Do not burn time re-investigating the Editor side when the error is EPERM: the Editor never
 saw the connection attempt.
@@ -92,12 +93,14 @@ saw the connection attempt.
 
 Measured 2026-07-27 in a live sandboxed session. Each row was decided by whether the command
 reached Unity or failed at `connect()`. The entries in play were `"uloop *"`, `"dist/*/uloop *"`,
-and an anchored absolute-path entry (`"/Users/<user>/ghq/<org>/*/dist/*/uloop *"`).
+an anchored absolute-path entry (`"/Users/<user>/ghq/<org>/*/dist/*/uloop *"`), and the two
+variable-named entries shown below.
 
 | Command as typed | Excluded |
 |---|---|
 | `dist/darwin-arm64/uloop get-logs ...` | yes |
 | `/Users/<user>/.../dist/darwin-arm64/uloop get-logs ...` (absolute) | yes, via the anchored entry |
+| `echo hello; /Users/<user>/.../dist/darwin-arm64/uloop get-logs ...` (compound) | yes |
 | `SOME_VAR=abc dist/darwin-arm64/uloop get-logs ...` (literal env value) | yes |
 | `dist/darwin-arm64/uloop get-logs --project-path "$(git rev-parse --show-toplevel)"` | yes |
 | `P=/path; dist/darwin-arm64/uloop get-logs --project-path "$P"` (variable in an argument) | yes |
@@ -105,32 +108,37 @@ and an anchored absolute-path entry (`"/Users/<user>/ghq/<org>/*/dist/*/uloop *"
 | `echo start; uloop get-logs ...` (compound) | yes |
 | `P=/path; uloop get-logs --project-path "$P"` | yes |
 | `V=abc; export SOME_VAR="$V"` first, then `dist/darwin-arm64/uloop get-logs ...` | yes |
-| **`V=abc; SOME_VAR="$V" dist/darwin-arm64/uloop get-logs ...`** | **no — denied** |
-| **`V=abc; SOME_VAR="$V" /Users/<user>/.../dist/darwin-arm64/uloop get-logs ...`** | **no — denied** |
-| **`V=abc; SOME_VAR="$V" uloop get-logs ...`** | **no — denied** |
+| `R=<path>; ULOOP_PROJECT_RUNNER_PATH="$R" uloop get-logs ...` | yes, via the variable-named entry |
+| `R=<path>; ULOOP_PROJECT_RUNNER_PATH="$R" dist/darwin-arm64/uloop get-logs ...` | yes, via the variable-named entry |
+| **`V=abc; SOME_VAR="$V" uloop get-logs ...`** (no entry names `SOME_VAR`) | **no — denied** |
 
 Command substitution in an argument, a variable in an argument, and being part of a compound
-command are all harmless. Two things are worth knowing:
+command are all harmless, and matching happens per sub-command — `echo hello;` in front of an
+absolute-path invocation does not stop it being excluded. Two shapes need an entry of their own:
 
-- **An absolute path needs its own entry.** The glob is matched against the typed text, so
-  `dist/*/uloop *` only matches text beginning with `dist/`. Adding an entry whose leading
-  segment is literal — `"/Users/<user>/ghq/<org>/*/dist/*/uloop *"` — makes the absolute form
-  work, verified above. Do not reach for a leading wildcard such as `"*/dist/*/uloop *"`: every
-  other entry is anchored at the front, and an unanchored one would let an arbitrary command
-  prefix ride into the exclusion.
-- **A shell variable expanded into an env-var prefix defeats every entry.** The last three rows
-  differ from working ones only in that the env value is `"$V"` rather than a literal, and they
-  fail for the relative dev binary, the absolute dev binary, and the installed `uloop` alike.
-  The same variable expanded into an *argument* is fine. This is not specific to any variable
-  name or to `uloop`, so it is a property of Claude Code's exclusion matching rather than
-  something this repository can fix. It is narrower than "avoid variables", though: exporting
-  the value as its own command and leaving the `uloop` line bare is excluded again (the `export`
-  row above). So
-  either write the env-prefix value literally, or `export` it first. This matters for remedy 3,
-  where `ULOOP_PROJECT_RUNNER_PATH="$RUNNER" uloop ...` is exactly the shape that gets denied
-  while `export ULOOP_PROJECT_RUNNER_PATH="$RUNNER"` followed by a bare `uloop ...` works.
+- **An absolute path.** The glob is matched against the typed text, so `dist/*/uloop *` only
+  matches text beginning with `dist/`. An entry whose leading segment is literal —
+  `"/Users/<user>/ghq/<org>/*/dist/*/uloop *"` — covers it. Anchoring costs nothing in practice
+  because matching is per sub-command. A leading wildcard (`"*/dist/*/uloop *"`) would also cover
+  checkouts outside that root, but how it behaves was not measured, so prefer adding another
+  anchored entry when a new root appears.
+- **A shell variable expanded into an env-var prefix.** `SOME_VAR="$V" uloop ...` is denied while
+  `SOME_VAR=abc uloop ...` is not, and the same variable expanded into an *argument* is fine. An
+  entry that spells the variable out restores it; both of these were verified:
 
-The last row also reproduces the misdiagnosis this document warns about. Because the installed
+      "ULOOP_PROJECT_RUNNER_PATH=* uloop *",
+      "ULOOP_PROJECT_RUNNER_PATH=* dist/*/uloop *"
+
+  That is the shape remedy 3 uses. Without such an entry, write the value literally or `export`
+  it as a separate command first.
+
+One model accounts for every row: the glob is matched against the command text *before*
+expansion, and only when that fails is a literal env assignment stripped and the remainder
+re-matched — which a `"$V"` value cannot be, since its value is not known. Treat that as a rule
+of thumb for predicting new cases, not as fact: it is inferred from the measurements above, not
+from Claude Code's implementation. Measure before relying on a shape that is not in the table.
+
+The denied row also reproduces the misdiagnosis this document warns about. Because the installed
 `uloop` resolves a *released* project runner, its failure is not the refusal report above but
 `... i/o timeout` after the retry window — the pre-fix behaviour described under Symptom. Seeing
 `i/o timeout` therefore still means the runner that served the command predates the fix, not
