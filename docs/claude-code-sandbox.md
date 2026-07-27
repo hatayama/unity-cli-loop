@@ -81,7 +81,9 @@ Pick one:
    `ULOOP_PROJECT_RUNNER_PATH=<absolute path to the dist runner> uloop ...` — the plain-`uloop`
    command text stays excluded while the dev runner does the work (the override is documented in
    `docs/project-runner-pin.md`). This does not exercise dispatcher-side changes; for those, use
-   remedy 1 or 2.
+   remedy 1 or 2. Write the path literally on the same line, or `export` it as a separate
+   command — taking it from a shell variable in the same command as `uloop` is denied, for the
+   reason in the next section.
 
 Do not burn time re-investigating the Editor side when the error is EPERM: the Editor never
 saw the connection attempt.
@@ -102,6 +104,7 @@ and an anchored absolute-path entry (`"/Users/<user>/ghq/<org>/*/dist/*/uloop *"
 | `mkdir -p somewhere; dist/darwin-arm64/uloop get-logs ...` (compound) | yes |
 | `echo start; uloop get-logs ...` (compound) | yes |
 | `P=/path; uloop get-logs --project-path "$P"` | yes |
+| `V=abc; export SOME_VAR="$V"` first, then `dist/darwin-arm64/uloop get-logs ...` | yes |
 | **`V=abc; SOME_VAR="$V" dist/darwin-arm64/uloop get-logs ...`** | **no — denied** |
 | **`V=abc; SOME_VAR="$V" /Users/<user>/.../dist/darwin-arm64/uloop get-logs ...`** | **no — denied** |
 | **`V=abc; SOME_VAR="$V" uloop get-logs ...`** | **no — denied** |
@@ -120,8 +123,12 @@ command are all harmless. Two things are worth knowing:
   fail for the relative dev binary, the absolute dev binary, and the installed `uloop` alike.
   The same variable expanded into an *argument* is fine. This is not specific to any variable
   name or to `uloop`, so it is a property of Claude Code's exclusion matching rather than
-  something this repository can fix; the practical rule is to write env-prefix values literally.
-  `ULOOP_PROJECT_RUNNER_PATH="$RUNNER" uloop ...` (remedy 3 above) is exactly the shape to avoid.
+  something this repository can fix. It is narrower than "avoid variables", though: exporting
+  the value as its own command and leaving the `uloop` line bare is excluded again (the `export`
+  row above). So
+  either write the env-prefix value literally, or `export` it first. This matters for remedy 3,
+  where `ULOOP_PROJECT_RUNNER_PATH="$RUNNER" uloop ...` is exactly the shape that gets denied
+  while `export ULOOP_PROJECT_RUNNER_PATH="$RUNNER"` followed by a bare `uloop ...` works.
 
 The last row also reproduces the misdiagnosis this document warns about. Because the installed
 `uloop` resolves a *released* project runner, its failure is not the refusal report above but
