@@ -1,6 +1,6 @@
 ---
 name: uloop-launch
-description: "Launch or restart Unity Editor. Use when Unity is not running or unresponsive."
+description: "Launch or restart Unity Editor. Use only when Unity is not running or stays frozen after retries — not as a health check after a failed command; it brings the Unity window to the foreground as a side effect."
 ---
 
 # uloop launch
@@ -45,6 +45,13 @@ The final JSON payload includes:
 - `CurrentProcessId`: current Unity process ID, when available
 - `ProjectRoot`: resolved project root
 - `Message`: readiness summary
+
+## When not to use
+
+A single failed, cancelled, or busy command (e.g. right after a domain reload) is not a reason
+to launch — retry the command instead. Running launch while the Editor is up brings the Unity
+window to the foreground, which disrupts the user. Reach for launch only when Unity is not
+running, or still does not respond after retries.
 
 ## Notes
 
