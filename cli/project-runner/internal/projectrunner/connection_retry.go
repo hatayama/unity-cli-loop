@@ -11,7 +11,6 @@ import (
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/vibelog"
 
-	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
@@ -76,6 +75,11 @@ type connectionRetryFocusController struct {
 	deps         connectionRetryDeps
 	attempted    bool
 	restoreFocus unityprocess.RestoreFocusFunc
+	// Captured when the focus succeeds so restore-outcome logs can be joined to the
+	// attempt logs through the same correlation ID instead of standing alone.
+	focusCorrelationID string
+	focusedPid         int
+	focusReason        connectionRetryFocusReason
 }
 
 func newConnectionRetryFocusController(connection unityipc.Connection, method string, deps connectionRetryDeps) *connectionRetryFocusController {
@@ -87,16 +91,47 @@ func newConnectionRetryFocusController(connection unityipc.Connection, method st
 }
 
 func (controller *connectionRetryFocusController) restore(ctx context.Context) {
+	// Silent by design when no restorer is stored: focus never happened (the common
+	// per-command case), the restore was intentionally skipped, or the missing
+	// restorer was already logged at focus time.
 	if controller.restoreFocus == nil {
 		return
 	}
-	_ = controller.restoreFocus(ctx)
+	restoreErr := controller.restoreFocus(ctx)
+	if restoreErr != nil {
+		logConnectionRetryFocusRestoreFailure(
+			controller.connection,
+			controller.method,
+			controller.focusedPid,
+			controller.focusReason,
+			restoreErr,
+			controller.focusCorrelationID,
+		)
+		return
+	}
+	logConnectionRetryFocusRestoreSuccess(
+		controller.connection,
+		controller.method,
+		controller.focusedPid,
+		controller.focusReason,
+		controller.focusCorrelationID,
+	)
 }
 
 func (controller *connectionRetryFocusController) keepUnityFocusedAfterReturn() {
 	// Why: terminal timeout recovery has no in-flight request left, so immediate
 	// restore hides the auto-front signal that tells the user Unity needs attention.
+	if controller.restoreFocus == nil {
+		return
+	}
 	controller.restoreFocus = nil
+	logConnectionRetryFocusRestoreSkipped(
+		controller.connection,
+		controller.method,
+		controller.focusedPid,
+		controller.focusReason,
+		controller.focusCorrelationID,
+	)
 }
 
 func (controller *connectionRetryFocusController) tryFocus(
@@ -133,7 +168,16 @@ func (controller *connectionRetryFocusController) tryFocusProcess(
 	restorer, focusErr := controller.deps.focusUnityProcess(focusContext, pid)
 	if focusErr == nil {
 		controller.restoreFocus = restorer
+		controller.focusCorrelationID = correlationID
+		controller.focusedPid = pid
+		controller.focusReason = reason
 		logConnectionRetryFocusSuccess(controller.connection, controller.method, pid, reason, cause, correlationID)
+		if restorer == nil {
+			// A nil restorer with a nil error means the previous frontmost PID could not
+			// be read, so no restore can ever run for this focus. Logged once here
+			// because restore() stays silent without a restorer.
+			logConnectionRetryFocusRestoreUnavailable(controller.connection, controller.method, pid, reason, correlationID)
+		}
 		return
 	}
 	logConnectionRetryFocusFailure(controller.connection, controller.method, pid, reason, cause, focusErr, correlationID)
@@ -371,75 +415,4 @@ func shouldRetryUndispatchedConnection(err error, outcome unityipc.UnitySendOutc
 	// refused permanently never becomes reachable inside it, and retrying it replaces the
 	// syscall error with the window's own deadline expiry.
 	return !clierrors.IsPermanentConnectError(connectionErr)
-}
-
-func logConnectionRetryFocusAttempt(
-	connection unityipc.Connection,
-	method string,
-	pid int,
-	reason connectionRetryFocusReason,
-	retryCause error,
-	correlationID string,
-) {
-	_ = vibelog.WriteCLIVibeLog(connection.ProjectRoot, vibelog.CLIVibeLogEntry{
-		Level:     "INFO",
-		Operation: "cli_connection_retry_focus_attempt",
-		Message:   "Attempting to focus Unity while recovering a slow or unreachable request.",
-		Context: map[string]any{
-			"command":  method,
-			"pid":      pid,
-			"endpoint": connection.Endpoint.Address,
-			"reason":   string(reason),
-			"cause":    clicore.ErrorMessage(retryCause),
-		},
-		CorrelationID: correlationID,
-	})
-}
-
-func logConnectionRetryFocusSuccess(
-	connection unityipc.Connection,
-	method string,
-	pid int,
-	reason connectionRetryFocusReason,
-	retryCause error,
-	correlationID string,
-) {
-	_ = vibelog.WriteCLIVibeLog(connection.ProjectRoot, vibelog.CLIVibeLogEntry{
-		Level:     "INFO",
-		Operation: "cli_connection_retry_focus_success",
-		Message:   "Focused Unity while recovering a slow or unreachable request.",
-		Context: map[string]any{
-			"command":  method,
-			"pid":      pid,
-			"endpoint": connection.Endpoint.Address,
-			"reason":   string(reason),
-			"cause":    clicore.ErrorMessage(retryCause),
-		},
-		CorrelationID: correlationID,
-	})
-}
-
-func logConnectionRetryFocusFailure(
-	connection unityipc.Connection,
-	method string,
-	pid int,
-	reason connectionRetryFocusReason,
-	retryCause error,
-	focusErr error,
-	correlationID string,
-) {
-	_ = vibelog.WriteCLIVibeLog(connection.ProjectRoot, vibelog.CLIVibeLogEntry{
-		Level:     "WARNING",
-		Operation: "cli_connection_retry_focus_failed",
-		Message:   "Failed to focus Unity before retrying an undispatched request.",
-		Context: map[string]any{
-			"command":    method,
-			"pid":        pid,
-			"endpoint":   connection.Endpoint.Address,
-			"reason":     string(reason),
-			"cause":      clicore.ErrorMessage(retryCause),
-			"focusError": clicore.ErrorMessage(focusErr),
-		},
-		CorrelationID: correlationID,
-	})
 }
