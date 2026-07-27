@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.24](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.23...dispatcher-v3.0.0-beta.24) (2026-07-27)
+
+
+### Bug Fixes
+
+* V2 delegation notice now names the V2 CLI version that ran ([#2027](https://github.com/hatayama/unity-cli-loop/issues/2027)) ([5ed982d](https://github.com/hatayama/unity-cli-loop/commit/5ed982d6d523714355f33b7fe8856f773079afeb))
+
 ## [3.0.0-beta.23](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.22...dispatcher-v3.0.0-beta.23) (2026-07-27)
 
 
