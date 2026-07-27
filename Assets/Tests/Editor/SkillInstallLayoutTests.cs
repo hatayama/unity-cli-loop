@@ -102,12 +102,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void AreSkillsInstalled_WhenLegacyManagedDirectoryIsEmpty_StillDetectsFlatLayout()
         {
             string temporaryRoot = CreateTemporaryProjectRoot();
-            string targetRoot = Path.Combine(temporaryRoot, ".cursor");
+            string targetRoot = Path.Combine(temporaryRoot, ".codex");
             Directory.CreateDirectory(Path.Combine(targetRoot, SkillInstallLayout.SkillsDirName, "uloop-compile"));
             SkillInstallationDetector detector = new();
 
-            Assert.IsTrue(detector.AreSkillsInstalledForLayout(temporaryRoot, ".cursor", false));
-            Assert.IsFalse(detector.AreSkillsInstalledForLayout(temporaryRoot, ".cursor", true));
+            Assert.IsTrue(detector.AreSkillsInstalledForLayout(temporaryRoot, ".codex", false));
+            Assert.IsFalse(detector.AreSkillsInstalledForLayout(temporaryRoot, ".codex", true));
         }
 
         // Tests that Unity-side discovery includes CLI-only skills from the packaged core CLI.
