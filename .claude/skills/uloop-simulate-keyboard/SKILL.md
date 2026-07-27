@@ -1,7 +1,7 @@
 ---
 name: uloop-simulate-keyboard
 toolName: simulate-keyboard
-description: "Simulate keyboard input in PlayMode through Unity Input System. Use for key presses, holds (via Press --duration or KeyDown/KeyUp), releases, and game controls such as WASD or Space."
+description: "Simulate keyboard input in PlayMode through Unity Input System. Use for key presses, holds (via Press --duration or KeyDown/KeyUp), releases, and game controls such as WASD or Space. Requires the Input System package (com.unity.inputsystem)."
 ---
 
 # Task
@@ -27,7 +27,7 @@ uloop simulate-keyboard --action ReleaseAll
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--action` | enum | `Press` | `Press`, `KeyDown`, `KeyUp`, `ReleaseAll` |
+| `--action` | enum | `Press` | `Press` - one-shot key tap (Down then Up), `KeyDown` - hold key down, `KeyUp` - release held key, `ReleaseAll` - force-release every tracked and device-pressed key (allowed while PlayMode is paused; use after a pause-point interruption leaves key state inconsistent) |
 | `--key` | string | (required except `ReleaseAll`) | Key name matching Input System Key enum (e.g. `W`, `Space`, `LeftShift`, `A`, `Enter`). Case-insensitive. Digit keys use `Digit0`-`Digit9` or `Numpad0`-`Numpad9`, not bare `0`-`9`. Not used by `ReleaseAll`. |
 | `--duration` | number | `0` | Hold duration in seconds for Press action (0 = one-shot tap). Ignored by KeyDown/KeyUp/ReleaseAll. |
 

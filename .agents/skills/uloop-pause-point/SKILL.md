@@ -32,6 +32,63 @@ The response returns the derived marker `Id` (`Assets/Scripts/Enemy.cs:42`), the
 
 A hit pauses Unity at the next frame boundary — the patched method and the rest of that frame still run to completion. Only `CapturedVariables` is evidence of the values at the patched line; state read after the pause (for example via `execute-dynamic-code`) may already have advanced past it.
 
+## Parameters
+
+One skill covers several commands, so each command's schema parameters have their own table below.
+CLI-only flags (`--await`, `--trigger`, `--resume-play`, `--expect`, `--captured-variables`,
+`--captured-variable-names`, `--matching-logs-max-count`) are described in the sections above; only
+parameters Unity itself accepts appear here.
+
+### enable-pause-point
+
+Enable a pause point so Unity pauses when that code path is reached, either by a named UloopPausePoint.Pause marker (Id) or by resolving a source file and line (File+Line)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--id` | string | - | Named pause point id passed to UloopPausePoint.Pause. Mutually exclusive with File/Line |
+| `--file` | string | - | Project-relative source file path to patch a pause point into. Requires Line; mutually exclusive with Id |
+| `--line` | integer | - | 1-based source line to resolve within File. Requires File; mutually exclusive with Id |
+| `--timeout-seconds` | integer | `30` | Seconds before the enable request expires and stops pausing late hits |
+| `--mode` | enum | `single-shot` | Capture mode: single-shot pauses once, continuous pauses on every hit, trace records hits without pausing |
+| `--max-history` | integer | `20` | Maximum number of captured hit frames to retain (1-100) |
+| `--max-preview-elements` | integer | `10` | Maximum number of elements to include in a captured collection's preview (1-1000). The value set at enable time also caps the previews in every later pause-point-status response for that marker; status has no flag to change it. |
+
+### clear-pause-point
+
+Clear one or all named UloopPausePoint.Pause markers
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--id` | string | - | Named pause point id to clear |
+| `--all` | flag | - | Clear every active pause point marker |
+
+### enable-watch
+
+Register a C# expression to evaluate on each paused Play Mode step
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--id` | string | - | Unique watch expression identifier |
+| `--expression` | string | - | C# expression returning an object; UloopPausePoint.TryGetCapturedValue can read the latest raw capture |
+| `--max-history` | integer | `20` | Maximum number of watch evaluations to retain (1-100) |
+
+### get-watch-values
+
+Show registered watch expression values and bounded evaluation history
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--id` | string | - | Optional watch expression identifier; omit to return all watches |
+
+### clear-watch
+
+Clear one or all registered C# watch expressions
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--id` | string | - | Watch expression identifier to clear |
+| `--all` | flag | - | Clear every registered watch expression |
+
 ## Capture Modes and History
 
 Choose the capture mode when enabling a pause point:

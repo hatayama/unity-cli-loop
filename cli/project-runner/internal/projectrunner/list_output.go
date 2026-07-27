@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sort"
 
+	"github.com/hatayama/unity-cli-loop/common/skilldocs"
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
@@ -31,7 +32,7 @@ type listOption struct {
 	Values      []string `json:"Values,omitempty"`
 }
 
-func formatToolListResult(result json.RawMessage) json.RawMessage {
+func formatToolListResult(result json.RawMessage, projectRoot string) json.RawMessage {
 	var cache clicore.ToolsCache
 	if err := json.Unmarshal(result, &cache); err != nil {
 		return result
@@ -41,6 +42,10 @@ func formatToolListResult(result json.RawMessage) json.RawMessage {
 	// so the placeholder fallback has to be applied here too. Without it `--help` would show real
 	// descriptions while `list` kept reporting "Parameter: <Name>".
 	cache = clicore.ApplyEmbeddedDescriptionFallback(cache)
+
+	// The installed package's SKILL.md tables win over both the cache and the embedded catalog, so
+	// list reports the same text `uloop <command> --help` does.
+	cache = skilldocs.ApplyToCatalog(cache, projectRoot)
 
 	content, err := json.Marshal(newListCatalog(cache))
 	if err != nil {

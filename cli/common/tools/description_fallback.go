@@ -50,6 +50,7 @@ func fillPlaceholderPropertyDescriptions(schema ToolInputSchema, embeddedSchema 
 		}
 
 		property.Description = embeddedProperty.Description
+		property.SkillSourcedDescription = embeddedProperty.SkillSourcedDescription
 		schema.Properties[propertyName] = property
 	}
 }

@@ -18,7 +18,7 @@ uloop compile [--force-recompile] [--no-wait-for-domain-reload] [--stop-on-exter
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--force-recompile` | flag | - | Full recompile plus domain reload. Rarely needed — see "When to use --force-recompile" below |
+| `--force-recompile` | flag | - | Full recompile plus domain reload. Almost never needed: a plain compile already detects externally edited files, and the forced reload can freeze large projects and come back as `COMPILE_RESULT_UNKNOWN`. |
 | `--no-wait-for-domain-reload` | flag | - | Return before Domain Reload completion |
 | `--stop-on-external-scene-changes` | flag | - | Stop before compilation if open Scene files changed externally instead of auto-reloading them |
 

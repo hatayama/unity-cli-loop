@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/skilldocs"
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
@@ -25,7 +26,9 @@ func tryHandleCommandHelp(command string, startPath string, projectPath string, 
 	if err != nil {
 		if projectPath == "" {
 			if tool, ok := clicore.FindDefaultTool(command); ok {
-				printToolHelp(tool, stdout)
+				// No project resolved, so no installed package to read skills from: this path
+				// renders from the catalog embedded in this binary, as it always has.
+				printToolHelp(tool, "", stdout)
 				return true, 0
 			}
 		}
@@ -45,7 +48,7 @@ func tryHandleCommandHelp(command string, startPath string, projectPath string, 
 		return true, 1
 	}
 
-	printToolHelp(tool, stdout)
+	printToolHelp(tool, connection.ProjectRoot, stdout)
 	return true, 0
 }
 
@@ -83,7 +86,12 @@ func printNativeSingleCommandHelp(command string, stdout io.Writer) {
 	printSkillGuidanceHelp(command, stdout)
 }
 
-func printToolHelp(tool clicore.ToolDefinition, stdout io.Writer) {
+// printToolHelp renders one Unity tool command's help. Descriptions come from the installed
+// package's SKILL.md tables when a project is resolved, so the help and the skill an agent reads
+// cannot disagree; without a project root the embedded catalog is used unchanged.
+func printToolHelp(tool clicore.ToolDefinition, projectRoot string, stdout io.Writer) {
+	tool = skilldocs.ApplyToTool(tool, projectRoot)
+
 	clicore.WriteLine(stdout, "Usage:")
 	clicore.WriteFormat(stdout, "  uloop %s", tool.Name)
 	if len(tooldocs.VisibleOptionHelpEntriesForTool(tool)) > 0 {
