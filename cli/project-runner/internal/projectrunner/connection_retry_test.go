@@ -284,7 +284,10 @@ func TestSendWithTransientConnectionRetryPreservesParentCancellation(t *testing.
 		0,
 		deps)
 
-	if !errors.Is(err, context.Canceled) {
+	// Identity, not errors.Is: a dial cut short by the cancellation wraps context.Canceled too, so
+	// errors.Is holds with or without the guard. The contract is that the cancellation itself comes
+	// back, because anything wrapping it is classified as an unreachable Unity.
+	if err != context.Canceled {
 		t.Fatalf("expected the cancellation to be preserved, got %v", err)
 	}
 	logFiles, globErr := filepath.Glob(filepath.Join(projectRoot, vibelog.CLIVibeLogDirectory, "*.json"))
