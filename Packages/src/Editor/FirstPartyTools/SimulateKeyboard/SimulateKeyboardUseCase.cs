@@ -77,12 +77,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
-            string normalizedKey = KeyNameResolver.NormalizeKeyName(parameters.Key);
             (bool resolved, Key key) = KeyNameResolver.Resolve(parameters.Key);
             if (!resolved)
             {
                 // Suggest from the normalized form so padding does not degrade the candidates,
                 // while the message below still reports the raw input verbatim.
+                string normalizedKey = KeyNameResolver.NormalizeKeyName(parameters.Key);
                 IReadOnlyList<string> suggestions = KeyboardKeyNameSuggester.Suggest(normalizedKey);
                 string suggestionText = suggestions.Count == 0
                     ? string.Empty

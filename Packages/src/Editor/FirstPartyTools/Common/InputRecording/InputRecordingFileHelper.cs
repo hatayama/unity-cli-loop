@@ -101,7 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (string.IsNullOrEmpty(keys))
             {
-                return new KeyFilterParseResult(null, System.Array.Empty<string>());
+                return new KeyFilterParseResult(null, Array.Empty<string>());
             }
 
             HashSet<Key> filter = new();
@@ -124,6 +124,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 filter.Add(key);
+            }
+
+            if (filter.Count == 0 && invalidKeyNames.Count == 0)
+            {
+                // Every entry was empty (for example "," or " "), so the filter would fall back to
+                // recording every key while the response looked like no filter was ever given.
+                // Why not reject the empty entries themselves: a trailing comma in "W," is harmless
+                // once at least one entry names a key.
+                invalidKeyNames.Add(keys);
             }
 
             return new KeyFilterParseResult(filter.Count > 0 ? filter : null, invalidKeyNames);

@@ -51,6 +51,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Tests that a filter made only of empty entries is reported invalid: it would otherwise
+        /// record every key while looking like no filter was requested.
+        /// </summary>
+        [Test]
+        public void ParseKeyFilter_WhenEveryEntryIsEmpty_ReportsTheRawInputInvalid()
+        {
+            KeyFilterParseResult result = InputRecordingFileHelper.ParseKeyFilter(", ,");
+
+            Assert.AreEqual(new[] { ", ," }, result.InvalidKeyNames);
+            Assert.IsNull(result.Filter);
+        }
+
+        /// <summary>
+        /// Tests that a trailing comma is harmless once another entry names a key.
+        /// </summary>
+        [Test]
+        public void ParseKeyFilter_WhenAnEntryIsEmptyBesideANamedKey_KeepsTheKey()
+        {
+            KeyFilterParseResult result = InputRecordingFileHelper.ParseKeyFilter("W,");
+
+            Assert.IsEmpty(result.InvalidKeyNames);
+            Assert.AreEqual(new HashSet<Key> { Key.W }, result.Filter);
+        }
+
+        /// <summary>
         /// Tests that no filter and no invalid name is reported when the parameter is omitted.
         /// </summary>
         [Test]

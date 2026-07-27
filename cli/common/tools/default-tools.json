@@ -654,7 +654,7 @@
           },
           "Keys": {
             "type": "string",
-            "description": "Comma-separated key filter of Input System Key enum names (for example W,A,S,D,Space). Case-insensitive. Digit keys use Digit0-Digit9 or Numpad0-Numpad9, not bare 0-9; a name that matches no key is rejected instead of being dropped from the filter. Empty records all common game keys",
+            "description": "Comma-separated key filter of Input System Key enum names (for example W,A,S,D,Space). Case-insensitive. Digit keys use Digit0-Digit9 or Numpad0-Numpad9, not bare 0-9; a name that matches no key fails the command instead of being dropped from the filter. Empty records all common game keys",
             "default": ""
           },
           "DelaySeconds": {
