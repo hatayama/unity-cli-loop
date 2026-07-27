@@ -72,9 +72,11 @@ Pick one:
 
 1. Run dev-binary commands with the sandbox disabled for that command (Claude Code:
    `dangerouslyDisableSandbox`; users can manage restrictions via `/sandbox`).
-2. Add the dev-binary shape to `excludedCommands` in the personal Claude Code settings, e.g.
-   `"dist/*/uloop *"`, alongside the existing `"uloop *"` (this exact glob is a suggestion, not
-   a measured entry — confirm it matches after adding it).
+2. Add the dev-binary shapes to `excludedCommands` in the personal Claude Code settings:
+   `"dist/*/uloop *"` alongside the existing `"uloop *"`, plus an anchored absolute-path entry
+   such as `"/Users/<user>/ghq/<org>/*/dist/*/uloop *"` if you ever type the binary's full path.
+   Both are measured, not suggestions (2026-07-27). One command shape still defeats them; see
+   the next section before relying on this remedy.
 3. When the change under review lives in the project runner, keep the sandbox on and run
    `ULOOP_PROJECT_RUNNER_PATH=<absolute path to the dist runner> uloop ...` — the plain-`uloop`
    command text stays excluded while the dev runner does the work (the override is documented in
@@ -83,3 +85,46 @@ Pick one:
 
 Do not burn time re-investigating the Editor side when the error is EPERM: the Editor never
 saw the connection attempt.
+
+## Which command shapes the exclusion actually covers
+
+Measured 2026-07-27 in a live sandboxed session. Each row was decided by whether the command
+reached Unity or failed at `connect()`. The entries in play were `"uloop *"`, `"dist/*/uloop *"`,
+and an anchored absolute-path entry (`"/Users/<user>/ghq/<org>/*/dist/*/uloop *"`).
+
+| Command as typed | Excluded |
+|---|---|
+| `dist/darwin-arm64/uloop get-logs ...` | yes |
+| `/Users/<user>/.../dist/darwin-arm64/uloop get-logs ...` (absolute) | yes, via the anchored entry |
+| `SOME_VAR=abc dist/darwin-arm64/uloop get-logs ...` (literal env value) | yes |
+| `dist/darwin-arm64/uloop get-logs --project-path "$(git rev-parse --show-toplevel)"` | yes |
+| `P=/path; dist/darwin-arm64/uloop get-logs --project-path "$P"` (variable in an argument) | yes |
+| `mkdir -p somewhere; dist/darwin-arm64/uloop get-logs ...` (compound) | yes |
+| `echo start; uloop get-logs ...` (compound) | yes |
+| `P=/path; uloop get-logs --project-path "$P"` | yes |
+| **`V=abc; SOME_VAR="$V" dist/darwin-arm64/uloop get-logs ...`** | **no — denied** |
+| **`V=abc; SOME_VAR="$V" /Users/<user>/.../dist/darwin-arm64/uloop get-logs ...`** | **no — denied** |
+| **`V=abc; SOME_VAR="$V" uloop get-logs ...`** | **no — denied** |
+
+Command substitution in an argument, a variable in an argument, and being part of a compound
+command are all harmless. Two things are worth knowing:
+
+- **An absolute path needs its own entry.** The glob is matched against the typed text, so
+  `dist/*/uloop *` only matches text beginning with `dist/`. Adding an entry whose leading
+  segment is literal — `"/Users/<user>/ghq/<org>/*/dist/*/uloop *"` — makes the absolute form
+  work, verified above. Do not reach for a leading wildcard such as `"*/dist/*/uloop *"`: every
+  other entry is anchored at the front, and an unanchored one would let an arbitrary command
+  prefix ride into the exclusion.
+- **A shell variable expanded into an env-var prefix defeats every entry.** The last three rows
+  differ from working ones only in that the env value is `"$V"` rather than a literal, and they
+  fail for the relative dev binary, the absolute dev binary, and the installed `uloop` alike.
+  The same variable expanded into an *argument* is fine. This is not specific to any variable
+  name or to `uloop`, so it is a property of Claude Code's exclusion matching rather than
+  something this repository can fix; the practical rule is to write env-prefix values literally.
+  `ULOOP_PROJECT_RUNNER_PATH="$RUNNER" uloop ...` (remedy 3 above) is exactly the shape to avoid.
+
+The last row also reproduces the misdiagnosis this document warns about. Because the installed
+`uloop` resolves a *released* project runner, its failure is not the refusal report above but
+`... i/o timeout` after the retry window — the pre-fix behaviour described under Symptom. Seeing
+`i/o timeout` therefore still means the runner that served the command predates the fix, not
+that the Editor is slow.
