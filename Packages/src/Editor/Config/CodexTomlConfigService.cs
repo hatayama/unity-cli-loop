@@ -12,6 +12,12 @@ namespace io.github.hatayama.uLoopMCP
         private static readonly Regex SectionRegex = new Regex(
             @"(?ms)^\[mcp_servers\.uLoopMCP\]\s*.*?(?=^\[|\z)",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        // Matches a table-style env section under [mcp_servers.uLoopMCP], typically introduced by
+        // manual edits or external tools such as `codex mcp add`. uLoopMCP itself always writes
+        // the inline env form. SectionRegex stops at this table's own "[" so it never removes it.
+        private static readonly Regex LegacyEnvTableRegex = new Regex(
+            @"(?ms)^\[mcp_servers\.uLoopMCP\.env\]\s*.*?(?=^\[|\z)",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex AnyMcpServerRegex = new Regex(
             @"(?ms)^\[mcp_servers\.[^\]]+\]\s*.*?(?=^\[|\z)",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -52,8 +58,14 @@ namespace io.github.hatayama.uLoopMCP
 
             string serverAbsolutePath = UnityMcpPathResolver.GetTypeScriptServerPath();
             if (string.IsNullOrEmpty(serverAbsolutePath) || !File.Exists(serverAbsolutePath)) return false;
+
+            // A legacy child table means the config still has a duplicate env definition;
+            // AutoConfigure must run again to remove it. Checked after the guard above so an
+            // environment without the server bundle never reaches AutoConfigure's throw path.
+            if (LegacyEnvTableRegex.IsMatch(content)) return true;
+
             string expectedArg0 = UnityMcpPathResolver.MakeRelativeToConfigurationRoot(serverAbsolutePath);
-            
+
             (string arg0, int? existingPort) = ReadCurrentValues(content);
             if (string.IsNullOrEmpty(arg0) || existingPort == null) return true;
 
@@ -90,29 +102,40 @@ namespace io.github.hatayama.uLoopMCP
             // Use relative path for better portability (config is now project-level)
             string relativeServerPath = UnityMcpPathResolver.MakeRelativeToConfigurationRoot(serverPath);
 
-            string block = BuildBlock(port, relativeServerPath);
-
-            string result;
-            if (SectionRegex.IsMatch(content))
-            {
-                result = SectionRegex.Replace(content, block.TrimEnd() + System.Environment.NewLine);
-            }
-            else
-            {
-                var matches = AnyMcpServerRegex.Matches(content);
-                if (matches.Count > 0)
-                {
-                    var last = matches[matches.Count - 1];
-                    int insertIndex = last.Index + last.Length;
-                    result = content.Insert(insertIndex, System.Environment.NewLine + block);
-                }
-                else
-                {
-                    result = string.IsNullOrWhiteSpace(content) ? block : content.TrimEnd() + System.Environment.NewLine + System.Environment.NewLine + block;
-                }
-            }
+            string result = BuildAutoConfiguredContent(content, port, relativeServerPath);
 
             File.WriteAllText(path, result);
+        }
+
+        private static string BuildAutoConfiguredContent(string content, int port, string relativeServerPath)
+        {
+            content = RemoveLegacyEnvTable(content);
+
+            string block = BuildBlock(port, relativeServerPath);
+
+            if (SectionRegex.IsMatch(content))
+            {
+                return SectionRegex.Replace(content, block.TrimEnd() + System.Environment.NewLine);
+            }
+
+            MatchCollection matches = AnyMcpServerRegex.Matches(content);
+            if (matches.Count > 0)
+            {
+                Match last = matches[matches.Count - 1];
+                int insertIndex = last.Index + last.Length;
+                return content.Insert(insertIndex, System.Environment.NewLine + block);
+            }
+
+            return string.IsNullOrWhiteSpace(content) ? block : content.TrimEnd() + System.Environment.NewLine + System.Environment.NewLine + block;
+        }
+
+        // The table is dropped rather than migrated: a duplicate env definition makes Codex reject
+        // the whole config, and AutoConfigure / UpdateDevelopmentSettings regenerate the env values
+        // uLoopMCP manages. Custom keys that only existed in the table are intentionally discarded,
+        // matching AutoConfigure's existing behavior of rebuilding the section.
+        private static string RemoveLegacyEnvTable(string content)
+        {
+            return LegacyEnvTableRegex.Replace(content, string.Empty);
         }
 
         public int GetConfiguredPort()
@@ -134,14 +157,29 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             string content = File.ReadAllText(path);
-            string result = SectionRegex.Replace(content, string.Empty);
-            if (ReferenceEquals(content, result))
+            (bool isChanged, string result) = BuildDeletedContent(content);
+            if (!isChanged)
             {
                 return;
             }
 
-            result = Regex.Replace(result, @"(\r?\n){3,}", System.Environment.NewLine + System.Environment.NewLine);
             File.WriteAllText(path, result);
+        }
+
+        // Removes the uLoopMCP section together with its legacy env table, so deleting the
+        // configuration never leaves the table behind as a dangling duplicate env definition.
+        // Reports whether anything was removed, so a file holding no uLoopMCP entries at all is
+        // left untouched instead of having its blank lines rewritten.
+        private static (bool isChanged, string content) BuildDeletedContent(string content)
+        {
+            string result = SectionRegex.Replace(content, string.Empty);
+            result = LegacyEnvTableRegex.Replace(result, string.Empty);
+            if (ReferenceEquals(content, result))
+            {
+                return (false, content);
+            }
+
+            return (true, Regex.Replace(result, @"(\r?\n){3,}", System.Environment.NewLine + System.Environment.NewLine));
         }
 
         public void UpdateDevelopmentSettings(int port, bool developmentMode, bool enableMcpLogs)
@@ -152,32 +190,35 @@ namespace io.github.hatayama.uLoopMCP
                 AutoConfigure(port);
             }
 
-            string content = File.ReadAllText(path);
-
-            // If section not exists, create it first and reload
-            if (!SectionRegex.IsMatch(content))
+            (bool hasSection, string newContent) = BuildDevelopmentSettingsContent(File.ReadAllText(path), port, developmentMode, enableMcpLogs);
+            if (!hasSection)
             {
+                // No section to update yet: create one, then apply the settings to the fresh content.
                 AutoConfigure(port);
-                content = File.ReadAllText(path);
-            }
-
-            // Replace only within the uLoopMCP section and update dev logs settings
-            Match section = SectionRegex.Match(content);
-            if (!section.Success)
-            {
-                // As a last attempt, try to autoconfigure and reload once
-                AutoConfigure(port);
-                content = File.ReadAllText(path);
-                section = SectionRegex.Match(content);
-                if (!section.Success)
+                (hasSection, newContent) = BuildDevelopmentSettingsContent(File.ReadAllText(path), port, developmentMode, enableMcpLogs);
+                if (!hasSection)
                 {
                     return;
                 }
             }
 
-            string updatedSection = UpdateSectionWithDevelopmentSettings(section.Value, port, developmentMode, enableMcpLogs);
-            string newContent = content.Substring(0, section.Index) + updatedSection + content.Substring(section.Index + section.Length);
             File.WriteAllText(path, newContent);
+        }
+
+        // Applies the development settings to the uLoopMCP section only, after dropping the legacy
+        // env table so the written file never carries a duplicate env definition.
+        private static (bool hasSection, string content) BuildDevelopmentSettingsContent(string content, int port, bool developmentMode, bool enableMcpLogs)
+        {
+            string strippedContent = RemoveLegacyEnvTable(content);
+
+            Match section = SectionRegex.Match(strippedContent);
+            if (!section.Success)
+            {
+                return (false, strippedContent);
+            }
+
+            string updatedSection = UpdateSectionWithDevelopmentSettings(section.Value, port, developmentMode, enableMcpLogs);
+            return (true, strippedContent.Substring(0, section.Index) + updatedSection + strippedContent.Substring(section.Index + section.Length));
         }
 
         private static (string arg0, int? port) ReadCurrentValues(string content)
