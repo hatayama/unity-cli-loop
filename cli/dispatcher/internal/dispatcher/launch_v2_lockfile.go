@@ -9,6 +9,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/ui"
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
@@ -81,15 +82,32 @@ func waitForV2ProjectOpened(
 	stdout io.Writer,
 	stderr io.Writer,
 	launchStartedAt time.Time,
+	previousServerSessionID string,
+	spinner *ui.TerminalSpinner,
 	deps launchDeps,
 ) int {
 	if err := deps.waitForFreshUnityLockfile(ctx, unityLockfilePath(projectRoot), launchStartedAt, launchLockfilePoll, launchReadinessTimeout); err != nil {
+		spinner.Stop()
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
+	// Why: V2 server auto-start is scheduled on EditorApplication.delayCall. A CLI-spawned,
+	// backgrounded idle Editor may never tick on its own, so delayCall never runs
+	// (V3 documents this and uses EditorApplicationTickBridge.SignalTick —
+	// Packages/src/Editor/Infrastructure/Server/UnityCliLoopServerController.cs:369-372).
+	// V2 has no equivalent workaround, so focus once after the lockfile gate. Focus failure
+	// is non-fatal: log and continue into the readiness probe.
+	logLaunchV2FocusWithDeps(ctx, projectRoot, currentPid, deps)
+	writeLaunchReadinessWait(stdout, spinner)
+	if err := deps.waitForV2ServerReady(ctx, projectRoot, previousServerSessionID, launchV2ServerReadyPoll, launchReadinessTimeout); err != nil {
+		spinner.Stop()
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
+		return 1
+	}
+	spinner.Stop()
 	var previousPid *int
 	if runningProcess != nil {
 		previousPid = &runningProcess.Pid
 	}
-	return writeLaunchedV2ProjectOpenedResponse(stdout, stderr, projectRoot, previousPid, currentPid)
+	return writeLaunchedV2ReadyResponse(stdout, stderr, projectRoot, previousPid, currentPid)
 }

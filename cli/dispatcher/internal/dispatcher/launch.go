@@ -22,15 +22,17 @@ import (
 )
 
 const (
-	launchLockfilePoll       = 100 * time.Millisecond
-	launchLockfileTimeout    = 5 * time.Second
-	launchProcessExitPoll    = 100 * time.Millisecond
-	launchProcessExitTimeout = 20 * time.Second
-	launchReadinessTimeout   = 10 * time.Minute
-	projectVersionFilePath   = "ProjectSettings/ProjectVersion.txt"
-	recoveryDirectoryPath    = "Assets/_Recovery"
-	launchTempDirectoryName  = "Temp"
-	unityLockfileName        = "UnityLockfile"
+	launchLockfilePoll        = 100 * time.Millisecond
+	launchLockfileTimeout     = 5 * time.Second
+	launchProcessExitPoll     = 100 * time.Millisecond
+	launchProcessExitTimeout  = 20 * time.Second
+	launchReadinessTimeout    = 10 * time.Minute
+	launchV2ServerReadyPoll   = 500 * time.Millisecond
+	launchV2ServerDialTimeout = 1 * time.Second
+	projectVersionFilePath    = "ProjectSettings/ProjectVersion.txt"
+	recoveryDirectoryPath     = "Assets/_Recovery"
+	launchTempDirectoryName   = "Temp"
+	unityLockfileName         = "UnityLockfile"
 )
 
 var editorVersionPattern = regexp.MustCompile(`(?m)^m_EditorVersion:\s*(.+)$`)
@@ -106,6 +108,11 @@ func runLaunchWithDeps(ctx context.Context, options launchOptions, startPath str
 		return 1
 	}
 	v2Project, _ := detectV2DispatcherProject(projectRoot)
+	// Capture before kill (-r) or start so session-id generation compare sees the prior generation.
+	previousV2ServerSessionID := ""
+	if v2Project.IsV2 {
+		previousV2ServerSessionID = readPreviousV2ServerSessionID(projectRoot)
+	}
 
 	runningProcess, handled, code := findLaunchRunningProcess(ctx, options, projectRoot, stdout, stderr, deps)
 	if handled {
@@ -122,7 +129,7 @@ func runLaunchWithDeps(ctx context.Context, options launchOptions, startPath str
 		return writeLaunchQuitResponse(stdout, stderr, projectRoot, nil, launchNoProcessMessage)
 	}
 
-	return startUnityAndWaitForReadiness(ctx, options, projectRoot, runningProcess, v2Project.IsV2, stdout, stderr, deps)
+	return startUnityAndWaitForReadiness(ctx, options, projectRoot, runningProcess, v2Project.IsV2, previousV2ServerSessionID, stdout, stderr, deps)
 }
 
 func writeLaunchProjectSearch(stdout io.Writer, options launchOptions, startPath string) {
@@ -185,7 +192,7 @@ func handleExistingLaunchProcess(
 			return true, 1
 		}
 		if isV2 {
-			return true, writeExistingV2LaunchOpenedResponse(stdout, stderr, projectRoot, runningProcess.Pid)
+			return true, waitForExistingV2LaunchReadiness(ctx, projectRoot, runningProcess.Pid, stdout, stderr, deps)
 		}
 		return true, waitForExistingLaunchReadiness(ctx, projectRoot, runningProcess.Pid, stdout, stderr, deps)
 	}
@@ -234,6 +241,7 @@ func startUnityAndWaitForReadiness(
 	projectRoot string,
 	runningProcess *unityprocess.UnityProcess,
 	isV2 bool,
+	previousV2ServerSessionID string,
 	stdout io.Writer,
 	stderr io.Writer,
 	deps launchDeps,
@@ -279,7 +287,7 @@ func startUnityAndWaitForReadiness(
 		return 1
 	}
 	if isV2 {
-		return waitForV2ProjectOpened(ctx, projectRoot, runningProcess, currentPid, stdout, stderr, launchStartedAt, deps)
+		return waitForV2ProjectOpened(ctx, projectRoot, runningProcess, currentPid, stdout, stderr, launchStartedAt, previousV2ServerSessionID, spinner, deps)
 	}
 	if err := deps.waitForUnityStartupMarker(ctx, unityLockfilePath(projectRoot), launchLockfilePoll, launchLockfileTimeout); err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
