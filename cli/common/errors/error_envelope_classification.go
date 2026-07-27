@@ -89,6 +89,9 @@ func unityServerNotRespondingCLIError(err UnityServerNotRespondingError, context
 }
 
 func connectionAttemptCLIError(err *unityipc.ConnectionAttemptError, context ErrorContext) CLIError {
+	if IsPermanentConnectError(err) {
+		return refusedConnectionAttemptCLIError(err, context)
+	}
 	return CLIError{
 		ErrorCode:   ErrorCodeUnityNotReachable,
 		Phase:       ErrorPhaseConnection,
@@ -101,6 +104,30 @@ func connectionAttemptCLIError(err *unityipc.ConnectionAttemptError, context Err
 			"If Unity is closed, run `uloop launch`.",
 			"If Unity is starting, compiling, or reloading scripts, wait and retry.",
 			"Confirm that the command targets the intended Unity project.",
+		},
+		Details: map[string]any{
+			"Endpoint": err.Endpoint,
+			"Cause":    connectionAttemptCause(err),
+		},
+	}
+}
+
+// Reports a connect the operating system refused permanently. Waiting changes nothing here, so
+// the envelope states the syscall error as it came back and points at what actually blocks the
+// socket instead of repeating the reachability guidance.
+func refusedConnectionAttemptCLIError(err *unityipc.ConnectionAttemptError, context ErrorContext) CLIError {
+	return CLIError{
+		ErrorCode:   ErrorCodeUnityNotReachable,
+		Phase:       ErrorPhaseConnection,
+		Message:     "The operating system refused the connection to the Unity CLI Loop server for this project.",
+		Retryable:   false,
+		SafeToRetry: false,
+		ProjectRoot: firstNonEmpty(context.ProjectRoot, err.ProjectRoot),
+		Command:     context.Command,
+		NextActions: []string{
+			"Retrying will not help: the connection was refused before it reached Unity, and the Editor never saw it.",
+			"If this command ran inside a sandbox (for example an AI agent's sandboxed shell), the sandbox denied the connection; run it with sandboxing disabled for this command.",
+			"Otherwise check the ownership and permissions of the endpoint path in Details.",
 		},
 		Details: map[string]any{
 			"Endpoint": err.Endpoint,

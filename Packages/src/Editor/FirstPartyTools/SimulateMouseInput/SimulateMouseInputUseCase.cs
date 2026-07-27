@@ -46,14 +46,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 #else
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
 
-            ValidationResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
+            PlayModeToolPreflightResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!preflight.IsValid)
             {
                 return new SimulateMouseInputResponse
                 {
                     Success = false,
                     Message = preflight.ErrorMessage,
-                    Action = parameters.Action.ToString()
+                    Action = parameters.Action.ToString(),
+                    RejectedByActivePausePointId = preflight.RejectedByActivePausePointId
                 };
             }
 

@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -49,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // ReleaseAll must work while paused so agents can recover stuck device state after a
             // pause-point interruption without first resuming PlayMode.
-            ValidationResult preflight = parameters.Action == UnityCliLoopKeyboardAction.ReleaseAll
+            PlayModeToolPreflightResult preflight = parameters.Action == UnityCliLoopKeyboardAction.ReleaseAll
                 ? PlayModeToolPreflightService.RequireActive()
                 : PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!preflight.IsValid)
@@ -58,7 +57,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Success = false,
                     Message = preflight.ErrorMessage,
-                    Action = parameters.Action.ToString()
+                    Action = parameters.Action.ToString(),
+                    RejectedByActivePausePointId = preflight.RejectedByActivePausePointId
                 };
             }
 
@@ -72,23 +72,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new SimulateKeyboardResponse
                 {
                     Success = false,
-                    Message = "Key parameter is required. Examples: \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\".",
+                    Message = "Key parameter is required. Examples: \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\", \"Digit3\".",
                     Action = parameters.Action.ToString()
                 };
             }
 
-            string normalizedKey = NormalizeKeyName(parameters.Key);
-            if (!Enum.TryParse<Key>(normalizedKey, ignoreCase: true, out Key key) || key == Key.None)
+            (bool resolved, Key key) = KeyNameResolver.Resolve(parameters.Key);
+            if (!resolved)
             {
-                IReadOnlyList<string> suggestions = KeyboardKeyNameSuggester.Suggest(parameters.Key);
+                // Suggest from the normalized form so padding does not degrade the candidates,
+                // while the message below still reports the raw input verbatim.
+                string normalizedKey = KeyNameResolver.NormalizeKeyName(parameters.Key);
+                IReadOnlyList<string> suggestions = KeyboardKeyNameSuggester.Suggest(normalizedKey);
                 string suggestionText = suggestions.Count == 0
                     ? string.Empty
                     : $" Did you mean: {string.Join(", ", suggestions)}?";
+                // Why: digits used to resolve silently to unrelated keys, so earlier runs that
+                // reported success may have pressed something else and need to be re-checked.
+                string ordinalHistoryText = LooksLikeNumericKeyInput(parameters.Key)
+                    ? " Digits are not key names: bare digits were previously parsed as enum ordinals (e.g. \"3\" pressed Tab), so re-check any earlier results or scripts that passed digits."
+                    : string.Empty;
                 return new SimulateKeyboardResponse
                 {
                     Success = false,
                     Message =
-                        $"Invalid key name: \"{parameters.Key}\". Use Input System Key enum names (e.g. \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\").{suggestionText}",
+                        $"Invalid key name: \"{parameters.Key}\". Use Input System Key enum names (e.g. \"W\", \"Space\", \"LeftShift\", \"A\", \"Enter\", \"Digit3\").{suggestionText}{ordinalHistoryText}",
                     Action = parameters.Action.ToString()
                 };
             }
@@ -230,14 +238,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             OverlayCanvasFactory.EnsureExists();
         }
 
-        private static string NormalizeKeyName(string keyName)
+        /// <summary>
+        /// Reports whether the raw key input is the numeric form that Enum.TryParse used to accept
+        /// as an enum ordinal, so the rejection can explain what earlier runs actually pressed.
+        /// </summary>
+        private static bool LooksLikeNumericKeyInput(string keyName)
         {
-            if (string.Equals(keyName, "Return", StringComparison.OrdinalIgnoreCase))
+            string trimmed = keyName.Trim();
+            if (trimmed.Length > 0 && (trimmed[0] == '+' || trimmed[0] == '-'))
             {
-                return Key.Enter.ToString();
+                trimmed = trimmed.Substring(1);
             }
-            return keyName;
+
+            if (trimmed.Length == 0)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < trimmed.Length; index++)
+            {
+                // Why not char.IsDigit: it is true for non-ASCII digits, which Enum.TryParse never
+                // accepted as ordinals. Claiming they used to press another key would be false.
+                if (trimmed[index] < '0' || trimmed[index] > '9')
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
+
 
 #endif
     }

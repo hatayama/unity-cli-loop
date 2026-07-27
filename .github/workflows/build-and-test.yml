@@ -95,6 +95,10 @@ jobs:
         working-directory: cli/release-automation
         run: go run ./cmd/check-release-triggers --base "origin/${{ github.base_ref }}" --head HEAD
 
+      - name: Check tool documentation drift
+        working-directory: cli/release-automation
+        run: go run ./cmd/sync-tool-docs --check --repository-root "$GITHUB_WORKSPACE"
+
       - name: Install golangci-lint
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.0

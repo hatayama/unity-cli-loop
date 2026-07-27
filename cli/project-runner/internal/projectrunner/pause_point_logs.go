@@ -52,6 +52,62 @@ type pausePointWaitResult struct {
 	AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
 }
 
+// pausePointHitPayloadInputs gathers everything a hit payload is built from. Both hit paths
+// (await-pause-point and enable-pause-point --await) share one builder because they had drifted
+// apart before: a field added to one silently stayed missing from the other.
+type pausePointHitPayloadInputs struct {
+	response pausePointStatusResponse
+
+	// logs / logsErr come straight from fetchMatchingLogs. A failed fetch omits MatchingLogs
+	// entirely rather than emitting an empty array, so "empty array" keeps meaning "the fetch
+	// succeeded and nothing matched".
+	logs    pausePointMatchingLogsResult
+	logsErr error
+
+	// unityWarning is Unity's own warning for this hit: the status response's on the plain await
+	// path, the enable response's on the enable --await path.
+	unityWarning string
+
+	triggerResult       *pausePointTriggerResult
+	awaitedPausePointID string
+	expectations        []pausePointExpectationResult
+}
+
+// buildPausePointHitPayload assembles the JSON payload for a hit, folding the CLI-side diagnosis
+// (trigger outcome, warnings, --expect verdicts) into the Unity response.
+func buildPausePointHitPayload(inputs pausePointHitPayloadInputs) any {
+	response := inputs.response
+	response.TriggerFailed = pausePointTriggerFailedPointer(inputs.triggerResult)
+	triggerWarning := pausePointTriggerRefusalWarning(inputs.triggerResult, inputs.awaitedPausePointID)
+
+	if inputs.logsErr != nil {
+		// Best-effort: a failed log fetch must not also drop the CLI-side evidence — the warnings
+		// or the --expect results, which are the only evidence left in this branch.
+		return struct {
+			pausePointStatusResponse
+			Warning               string                        `json:"Warning,omitempty"`
+			Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
+			AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
+		}{
+			pausePointStatusResponse: response,
+			Warning:                  joinPausePointWarnings(inputs.unityWarning, triggerWarning),
+			Expectations:             inputs.expectations,
+			AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(inputs.expectations),
+		}
+	}
+
+	return pausePointWaitResult{
+		pausePointStatusResponse: response,
+		MatchingLogs:             inputs.logs.Logs,
+		Warning: joinPausePointWarnings(
+			inputs.unityWarning,
+			buildPausePointWarning(inputs.logs, response.HitCount),
+			triggerWarning),
+		Expectations:          inputs.expectations,
+		AllExpectationsPassed: pausePointAllExpectationsPassedPointer(inputs.expectations),
+	}
+}
+
 // pausePointAllExpectationsPassedPointer returns nil when no --expect was given, and otherwise
 // a pointer to whether every expectation passed.
 func pausePointAllExpectationsPassedPointer(results []pausePointExpectationResult) *bool {

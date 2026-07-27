@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sort"
 
+	"github.com/hatayama/unity-cli-loop/common/skilldocs"
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
@@ -31,11 +32,20 @@ type listOption struct {
 	Values      []string `json:"Values,omitempty"`
 }
 
-func formatToolListResult(result json.RawMessage) json.RawMessage {
+func formatToolListResult(result json.RawMessage, projectRoot string) json.RawMessage {
 	var cache clicore.ToolsCache
 	if err := json.Unmarshal(result, &cache); err != nil {
 		return result
 	}
+
+	// list formats get-tool-details' raw response and never goes through the project-cache loader,
+	// so the placeholder fallback has to be applied here too. Without it `--help` would show real
+	// descriptions while `list` kept reporting "Parameter: <Name>".
+	cache = clicore.ApplyEmbeddedDescriptionFallback(cache)
+
+	// The installed package's SKILL.md tables win over both the cache and the embedded catalog, so
+	// list reports the same text `uloop <command> --help` does.
+	cache = skilldocs.ApplyToCatalog(cache, projectRoot)
 
 	content, err := json.Marshal(newListCatalog(cache))
 	if err != nil {
@@ -45,9 +55,9 @@ func formatToolListResult(result json.RawMessage) json.RawMessage {
 }
 
 func newListCatalog(cache clicore.ToolsCache) listCatalog {
-	tools := make([]listTool, 0, len(cache.Tools))
+	listTools := make([]listTool, 0, len(cache.Tools))
 	for _, tool := range cache.Tools {
-		tools = append(tools, newListTool(tool))
+		listTools = append(listTools, newListTool(tool))
 	}
 
 	// Sourced from the embedded CLI contract because the tool catalog no longer
@@ -56,7 +66,7 @@ func newListCatalog(cache clicore.ToolsCache) listCatalog {
 		Version:       clicontract.ProjectRunnerVersion(),
 		ServerVersion: cache.ServerVersion,
 		UpdatedAt:     cache.UpdatedAt,
-		Tools:         tools,
+		Tools:         listTools,
 	}
 }
 
@@ -101,36 +111,16 @@ func listOptionDefault(property clicore.ToolProperty) any {
 		return false
 	}
 	defaultValue := property.EffectiveDefault()
-	if enumValue, ok := enumValueForNumericDefault(defaultValue, property.Enum); ok {
+	if enumValue, ok := tooldocs.EnumValueForNumericDefault(defaultValue, property.Enum); ok {
 		return enumValue
 	}
+	// Unity reports an empty string as the default of every unset string parameter. Reporting it
+	// would claim the option has a default of "", and omitempty cannot drop it on its own because the
+	// field is an interface. Nil keeps list symmetric with --help, which omits the same value.
+	if defaultValue == "" {
+		return nil
+	}
 	return defaultValue
-}
-
-func enumValueForNumericDefault(defaultValue any, values []string) (string, bool) {
-	if len(values) == 0 || defaultValue == nil {
-		return "", false
-	}
-
-	switch value := defaultValue.(type) {
-	case int:
-		return enumValueAtIndex(value, values)
-	case float64:
-		index := int(value)
-		if value != float64(index) {
-			return "", false
-		}
-		return enumValueAtIndex(index, values)
-	default:
-		return "", false
-	}
-}
-
-func enumValueAtIndex(index int, values []string) (string, bool) {
-	if index < 0 || index >= len(values) {
-		return "", false
-	}
-	return values[index], true
 }
 
 func appendDynamicCodeFileListOption(tool clicore.ToolDefinition, options []listOption) []listOption {
@@ -149,51 +139,29 @@ func appendDynamicCodeFileListOption(tool clicore.ToolDefinition, options []list
 	})
 }
 
-// appendPausePointEnableAwaitListOptions documents --await/--captured-variables/
-// --captured-variable-names on enable-pause-point's catalog entry, mirroring
-// appendDynamicCodeFileListOption: these are CLI-only orchestration flags (pause_point_enable.go)
-// that are not part of the Unity-side EnablePausePointSchema, so they never appear in
-// listOptionsForTool's schema-driven loop above.
+// appendPausePointEnableAwaitListOptions documents enable-pause-point's CLI-only orchestration
+// flags on its catalog entry, mirroring appendDynamicCodeFileListOption: they are not part of the
+// Unity-side EnablePausePointSchema, so they never appear in listOptionsForTool's schema-driven
+// loop above. The flag table itself is shared with the dispatcher's `--help` renderer
+// (tooldocs.PausePointEnableCLIOnlyOptions) so the two listings cannot drift apart.
 func appendPausePointEnableAwaitListOptions(tool clicore.ToolDefinition, options []listOption) []listOption {
 	if tool.Name != pausePointEnableCommandName {
 		return options
 	}
-	if hasListOption(options, "--"+pausePointEnableAwaitFlagName) {
-		return options
+
+	for _, option := range tooldocs.PausePointEnableCLIOnlyOptions() {
+		optionName := "--" + option.FlagName
+		if hasListOption(options, optionName) {
+			continue
+		}
+		options = append(options, listOption{
+			Name:        optionName,
+			Type:        option.Type,
+			Description: option.Description,
+			Values:      option.Values,
+		})
 	}
-	return append(options,
-		listOption{
-			Name:        "--" + pausePointEnableAwaitFlagName,
-			Type:        "boolean",
-			Description: "Wait for the marker to be hit (or time out) after enabling, in a single call, instead of a separate await-pause-point call",
-		},
-		listOption{
-			Name:        "--" + PausePointCapturedVariablesFlagName,
-			Type:        "string",
-			Description: "Requires --await. Same as await-pause-point's --captured-variables",
-			Values:      []string{string(pausePointCapturedVariablesModeFull), string(pausePointCapturedVariablesModeNames)},
-		},
-		listOption{
-			Name:        "--" + PausePointCapturedVariableNamesFlagName,
-			Type:        "string",
-			Description: "Requires --await. Same as await-pause-point's --captured-variable-names",
-		},
-		listOption{
-			Name:        "--" + PausePointExpectFlagName,
-			Type:        "string",
-			Description: "Requires --await. Same as await-pause-point's --expect (repeatable)",
-		},
-		listOption{
-			Name:        "--" + PausePointTriggerFlagName,
-			Type:        "string",
-			Description: "Requires --await. Same as await-pause-point's --trigger",
-		},
-		listOption{
-			Name:        "--" + PausePointResumePlayFlagName,
-			Type:        "boolean",
-			Description: "Requires --await. After confirming the marker is armed, resume PlayMode if paused (before --trigger), so a paused-arm workflow can fire input in one call",
-		},
-	)
+	return options
 }
 
 func hasListOption(options []listOption, name string) bool {

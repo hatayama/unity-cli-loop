@@ -156,6 +156,7 @@ var sharedCommonPackageRoots = []string{
 	"cli/common/ipcendpoint/",
 	"cli/common/progress/",
 	"cli/common/project/",
+	"cli/common/skilldocs/",
 	"cli/common/skillscan/",
 	"cli/common/tooldocs/",
 	"cli/common/tools/",
@@ -186,10 +187,15 @@ func isCommonGoSourceUnderPackageRoots(file string, packageRoots []string) bool 
 	if !strings.HasPrefix(file, "cli/common/") {
 		return false
 	}
-	// JSON files under common (contract.json, default-tools.json) are
-	// release-please stamp targets rather than binary inputs, and test files
-	// never ship, so only code and embedded runtime scripts count as release inputs.
-	if strings.HasSuffix(file, "_test.go") || (!strings.HasSuffix(file, ".go") && !strings.HasSuffix(file, ".ps1")) {
+	// JSON files under common (contract.json) are release-please stamp targets rather than binary
+	// inputs, and test files never ship, so only code and embedded runtime scripts count as release
+	// inputs. The embedded tool catalog is the exception: it is compiled into both binaries and is
+	// generated from the skill parameter tables, so a change to a tool description that shipped no new
+	// binary would be help text nobody receives.
+	if strings.HasSuffix(file, "_test.go") {
+		return false
+	}
+	if file != CatalogRelativePath && !strings.HasSuffix(file, ".go") && !strings.HasSuffix(file, ".ps1") {
 		return false
 	}
 	for _, packageRoot := range packageRoots {

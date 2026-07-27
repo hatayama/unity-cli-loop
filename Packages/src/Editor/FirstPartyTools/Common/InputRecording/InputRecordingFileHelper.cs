@@ -92,14 +92,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return files.OrderByDescending(f => File.GetLastWriteTimeUtc(f)).First();
         }
 
-        public static HashSet<Key>? ParseKeyFilter(string keys)
+        /// <summary>
+        /// Parses the comma-separated key filter into the keys to record. Entries that name no key
+        /// are reported rather than skipped: dropping them silently would record a different set of
+        /// keys than the caller asked for, and dropping all of them would record every key.
+        /// </summary>
+        public static KeyFilterParseResult ParseKeyFilter(string keys)
         {
             if (string.IsNullOrEmpty(keys))
             {
-                return null;
+                return new KeyFilterParseResult(null, Array.Empty<string>());
             }
 
             HashSet<Key> filter = new();
+            List<string> invalidKeyNames = new();
             string[] parts = keys.Split(',');
 
             for (int i = 0; i < parts.Length; i++)
@@ -110,17 +116,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                if (Enum.TryParse<Key>(trimmed, ignoreCase: true, out Key key) && key != Key.None)
+                (bool resolved, Key key) = KeyNameResolver.Resolve(trimmed);
+                if (!resolved)
                 {
-                    filter.Add(key);
+                    invalidKeyNames.Add(trimmed);
+                    continue;
                 }
-                else
-                {
-                    Debug.LogWarning($"[InputRecordingFileHelper] Unknown key name in filter: '{trimmed}'");
-                }
+
+                filter.Add(key);
             }
 
-            return filter.Count > 0 ? filter : null;
+            if (filter.Count == 0 && invalidKeyNames.Count == 0)
+            {
+                // Every entry was empty (for example "," or " "), so the filter would fall back to
+                // recording every key while the response looked like no filter was ever given.
+                // Why not reject the empty entries themselves: a trailing comma in "W," is harmless
+                // once at least one entry names a key.
+                invalidKeyNames.Add(keys);
+            }
+
+            return new KeyFilterParseResult(filter.Count > 0 ? filter : null, invalidKeyNames);
         }
     }
 }

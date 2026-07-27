@@ -1126,27 +1126,27 @@ func TestRunProjectLocalPausePointStatusRespectsToolSettings(t *testing.T) {
 	}
 }
 
-// Verifies an unrecognized flag on await-pause-point/pause-point-status carries a hint
-// that the installed project runner may be older than the skill docs.
-func TestParseUnknownOptionErrorsIncludeOutdatedRunnerHint(t *testing.T) {
-	wantHint := "Unknown option \"--bogus-flag\" for await-pause-point. If the skill documentation mentions this option, the installed project runner may be older than the docs — check 'uloop --version' and update the CLI."
+// Verifies a flag that exists nowhere is reported as a plain unknown option: no stale-runner hint,
+// since the flag being absent from every command means the docs cannot be ahead of this build.
+func TestParseUnknownOptionErrorsOmitStaleRunnerHint(t *testing.T) {
+	wantMessage := `Unknown option "--bogus-flag" for await-pause-point.`
 
 	_, err := parseWaitForPausePointOptions([]string{"--id", "jump", "--bogus-flag", "value"})
 	if err == nil {
 		t.Fatal("expected error for unknown flag")
 	}
-	if err.Error() != wantHint {
-		t.Fatalf("await-pause-point hint mismatch: %v", err)
+	if err.Error() != wantMessage {
+		t.Fatalf("await-pause-point message mismatch: %v", err)
 	}
 
-	wantStatusHint := "Unknown option \"--bogus-flag\" for pause-point-status. If the skill documentation mentions this option, the installed project runner may be older than the docs — check 'uloop --version' and update the CLI."
+	wantStatusMessage := `Unknown option "--bogus-flag" for pause-point-status.`
 
 	_, statusErr := parsePausePointStatusOptions([]string{"--id", "jump", "--bogus-flag", "value"})
 	if statusErr == nil {
 		t.Fatal("expected error for unknown flag")
 	}
-	if statusErr.Error() != wantStatusHint {
-		t.Fatalf("pause-point-status hint mismatch: %v", statusErr)
+	if statusErr.Error() != wantStatusMessage {
+		t.Fatalf("pause-point-status message mismatch: %v", statusErr)
 	}
 }
 

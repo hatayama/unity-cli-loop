@@ -42,6 +42,39 @@ variable to return to normal pin-resolved behavior.
 Related overrides in the same file: `ULOOP_INSTALL_DIR` (dispatcher install
 directory) and `ULOOP_CACHE_DIR` (project runner download cache).
 
+## Which runner actually ran
+
+`resolveDispatcherRealCLI` picks the runner in this order, and **no response field says which
+branch won**:
+
+1. `ULOOP_PROJECT_RUNNER_PATH` (env override).
+2. The sibling `uloop-project-runner` next to the dispatcher binary — taken only when the pin's
+   `projectRunnerVersion` equals the version compiled into *that* dispatcher
+   (`clicontract.ProjectRunnerVersion()`).
+3. `<cache root>/versions/<projectRunnerVersion>/<platform>/` (already downloaded).
+4. GitHub release download.
+
+Read this before trusting a dogfooding result. All four points were measured on 2026-07-27.
+
+- Running `dist/<platform>/uloop` **without** the override still uses your local build, because
+  step 2 finds `dist/<platform>/uloop-project-runner` beside it. Verified by pointing
+  `ULOOP_CACHE_DIR` at an empty directory: the command succeeded and the directory stayed empty,
+  so neither the cache nor a download was involved. The override is therefore not what makes a
+  run local — the dispatcher you typed is.
+- Running the installed `uloop` (`~/.local/bin/uloop`, which has no sibling runner) without the
+  override silently uses whatever step 3 or 4 supplies, i.e. the released runner.
+- Step 2 compares against a version baked into the dispatcher at build time, so it stops
+  applying as soon as the pin moves ahead of your last `scripts/build-go-cli.sh`. That does not
+  necessarily fail loudly: when the cache already holds that version, step 3 quietly succeeds
+  with the released runner instead.
+- A version number does not identify the binary. A local build and the released runner both
+  answer `3.0.0-beta.58` to `uloop-project-runner --version` while their SHA-256 differ. (`version`
+  as a *subcommand* is rejected by the runner on purpose — it belongs to the dispatcher — so only
+  the flag form reports the runner's own version.)
+
+Until the dispatcher reports the resolved runner path, comparing SHA-256 by hand is the only
+reliable way to establish which binary served a verification run.
+
 ## Pin format discipline
 
 The pin evolves additively only — never delete or rename an existing field.

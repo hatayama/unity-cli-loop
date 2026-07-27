@@ -51,6 +51,13 @@ type pausePointStatusResponse struct {
 	// CapturedVariables array for "nothing was captured at this hit".
 	CapturedVariableNameFilterNoMatch bool `json:"CapturedVariableNameFilterNoMatch,omitempty"`
 
+	// CapturedVariableNamesNotFound is set by the CLI, not Unity: the requested
+	// --captured-variable-names that matched no captured variable, in the order they were
+	// requested. Without it a partial match is indistinguishable from a full one, since the
+	// response only carries the names that did match and CapturedVariableNameFilterNoMatch covers
+	// the all-or-nothing case. Both are emitted when nothing matched at all.
+	CapturedVariableNamesNotFound []string `json:"CapturedVariableNamesNotFound,omitempty"`
+
 	// TriggerResult is set by the CLI, not Unity, only when --trigger was passed. It is omitted
 	// entirely otherwise, so callers that never use --trigger see no schema change at all.
 	TriggerResult *pausePointTriggerResult `json:"TriggerResult,omitempty"`
@@ -58,6 +65,26 @@ type pausePointStatusResponse struct {
 	// ResumePlayResult is set by the CLI, not Unity, only when --resume-play was passed. It is
 	// omitted entirely otherwise, matching TriggerResult's omit-when-unused contract.
 	ResumePlayResult *pausePointResumePlayResult `json:"ResumePlayResult,omitempty"`
+
+	// TriggerFailed is set by the CLI, not Unity, only when --trigger was passed and the trigger is
+	// known to have failed. It repeats at the top level what TriggerResult already carries three
+	// levels down, because the loss it guards against is a caller reading Success:true / Status:Hit
+	// and never opening TriggerResult at all. A pointer so the field is absent — rather than a
+	// misleading false — when no trigger ran or its outcome is unknown.
+	TriggerFailed *bool `json:"TriggerFailed,omitempty"`
+}
+
+// pausePointStatusResult wraps a status response with the CLI-evaluated --expect verdicts.
+// pause-point-status marshals the Unity response directly, so it needs this wrapper to carry the
+// two extra fields; the names match pausePointWaitResult's so one query shape reads both commands.
+type pausePointStatusResult struct {
+	pausePointStatusResponse
+
+	// Both fields are omitted unless --expect was passed, and AllExpectationsPassed is a pointer
+	// for the same reason as on pausePointWaitResult: to distinguish "no --expect given" from
+	// "the given expectations failed".
+	Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
+	AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
 }
 
 type pausePointEditorState struct {

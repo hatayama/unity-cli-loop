@@ -16,10 +16,16 @@ Live state injection: when a running PlayMode session is merely in the wrong sta
 
 ## Parameters
 
-- `--code '<code>'`: Inline C# statements to execute. Use direct statements only; `return` is optional, and `using` directives may appear at the top of the snippet.
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--code` | string | - | Inline C# statements to execute. Direct statements only; `return` is optional, and `using` directives may appear at the top of the snippet. |
+| `--parameters` | object | - | Shell-quoted JSON object literal for reusing a snippet with varying data or keeping values outside the code. Values are exposed as `parameters["param0"]`, `parameters["param1"]`, and so on. Omit for most snippets; never pass a JSON string value. |
+| `--wait-for-domain-reload` | flag | - | Wait for Domain Reload recovery after snippets that intentionally trigger Unity script reload or import work. Omit for normal inspection and editor-state workflows. |
+| `--yield-to-foreground-requests` | flag | - | Allow foreground requests to preempt this execution |
+
+CLI-only flag, accepted instead of a schema parameter:
+
 - `--code-file <path>`: Read the C# statements from a file instead of `--code`. Use this when the active shell or launcher cannot preserve inline code exactly. Exactly one of `--code` or `--code-file` is required; combining them is an error.
-- `--parameters {}` (advanced, optional): Pass a shell-quoted JSON object literal when reusing a snippet with varying data or when keeping values outside the code. Values are exposed as `parameters["param0"]`, `parameters["param1"]`, and so on. Omit this flag for most snippets. Do not pass a JSON string value such as `"{\"param0\":\"value\"}"`.
-- `--wait-for-domain-reload` (optional): Wait for Domain Reload recovery after snippets that intentionally trigger Unity script reload or import work. Omit this for normal inspection and editor-state workflows.
 
 ## Code Rules
 

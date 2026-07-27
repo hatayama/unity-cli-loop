@@ -1,25 +1,20 @@
 package projectrunner
 
 import (
-	"fmt"
 	"io"
 	"sort"
-
-	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 )
 
+// Runner-specific pause-point flags: --id and --timeout-seconds mirror the Unity-side schema, and
+// --matching-logs-max-count only exists on the wait commands. The CLI-only flags shared with
+// enable-pause-point's --help listing live in tooldocs instead (pause_point_cli_options.go).
 const (
-	PausePointIDFlagName                    = "id"
-	PausePointTimeoutFlagName               = "timeout-seconds"
-	PausePointLogsMaxCountFlagName          = "matching-logs-max-count"
-	PausePointCapturedVariablesFlagName     = "captured-variables"
-	PausePointCapturedVariableNamesFlagName = "captured-variable-names"
-	PausePointExpectFlagName                = "expect"
-	PausePointTriggerFlagName               = "trigger"
-	PausePointResumePlayFlagName            = "resume-play"
+	PausePointIDFlagName           = "id"
+	PausePointTimeoutFlagName      = "timeout-seconds"
+	PausePointLogsMaxCountFlagName = "matching-logs-max-count"
 )
 
 // runnerNativeCommandOptions lists the flags accepted by each runner-owned
@@ -31,16 +26,17 @@ var runnerNativeCommandOptions = map[string][]string{
 		"--" + PausePointIDFlagName,
 		"--" + PausePointTimeoutFlagName,
 		"--" + PausePointLogsMaxCountFlagName,
-		"--" + PausePointCapturedVariablesFlagName,
-		"--" + PausePointCapturedVariableNamesFlagName,
-		"--" + PausePointExpectFlagName,
-		"--" + PausePointTriggerFlagName,
-		"--" + PausePointResumePlayFlagName,
+		"--" + tooldocs.PausePointCapturedVariablesFlagName,
+		"--" + tooldocs.PausePointCapturedVariableNamesFlagName,
+		"--" + tooldocs.PausePointExpectFlagName,
+		"--" + tooldocs.PausePointTriggerFlagName,
+		"--" + tooldocs.PausePointResumePlayFlagName,
 	},
 	clicore.PausePointStatusUserCommandName: {
 		"--" + PausePointIDFlagName,
-		"--" + PausePointCapturedVariablesFlagName,
-		"--" + PausePointCapturedVariableNamesFlagName,
+		"--" + tooldocs.PausePointCapturedVariablesFlagName,
+		"--" + tooldocs.PausePointCapturedVariableNamesFlagName,
+		"--" + tooldocs.PausePointExpectFlagName,
 	},
 }
 
@@ -80,21 +76,12 @@ func printNativeCommandHelp(command string, stdout io.Writer) {
 	clicore.WriteLine(stdout, "")
 	clicore.WriteLine(stdout, "Global options:")
 	clicore.WriteFormat(stdout, "  --%s <path>   Run against a Unity project outside the current directory\n", tooldocs.ProjectPathFlagName)
-}
 
-// pausePointUnknownOptionError reports an unrecognized flag for a runner-owned native
-// command. The hint calls out an outdated installed project runner as the likely cause when
-// the flag is documented in the skill but this runner build predates it, rather than leaving
-// the caller to guess between a typo and a stale binary.
-func pausePointUnknownOptionError(command string, name string) *clierrors.ArgumentError {
-	return &clierrors.ArgumentError{
-		Message: fmt.Sprintf(
-			"Unknown option %q for %s. If the skill documentation mentions this option, the installed "+
-				"project runner may be older than the docs — check 'uloop --version' and update the CLI.",
-			"--"+name, command),
-		Option:      "--" + name,
-		Command:     command,
-		NextActions: []string{fmt.Sprintf("Run `uloop %s --help` to inspect supported options.", command)},
+	// Runner-owned commands print their own help, so the dispatcher's closing skill line never
+	// reaches them: await-pause-point and pause-point-status need it added here.
+	if guidance, ok := tooldocs.SkillGuidanceLine(command); ok {
+		clicore.WriteLine(stdout, "")
+		clicore.WriteLine(stdout, guidance)
 	}
 }
 
