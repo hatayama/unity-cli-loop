@@ -8,6 +8,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void Initialize()
         {
             ControlPlayModeServices.InitializeForEditorStartup();
+            PlayModeFocusSuppressionStartup.Initialize();
         }
     }
 }
