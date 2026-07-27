@@ -232,7 +232,7 @@
         "properties": {
           "WindowName": {
             "type": "string",
-            "description": "Window name to capture. Ignored when --capture-mode rendering. When the Game tab is Device Simulator and the title is Simulator, default Game falls back to Simulator.",
+            "description": "Window name to capture (for example Game, Scene, Console, Inspector). Ignored when --capture-mode rendering. When the Game tab is Device Simulator and the title is Simulator, default Game falls back to Simulator.",
             "default": "Game"
           },
           "ResolutionScale": {
@@ -257,7 +257,7 @@
           },
           "CaptureMode": {
             "type": "string",
-            "description": "window=capture EditorWindow including toolbar, rendering=capture game rendering only (PlayMode required, coordinates match simulate-mouse)",
+            "description": "window - capture EditorWindow including toolbar, rendering - capture game rendering only (PlayMode required). Rendering screenshots return ScreenshotToInputFormula for converting raw image pixels before calling simulate-mouse-input or raycast.",
             "enum": [
               "window",
               "rendering"
@@ -266,7 +266,7 @@
           },
           "AnnotateElements": {
             "type": "boolean",
-            "description": "Annotate interactive UI elements with index labels and interaction hints (A / CLICK, B / DRAG, ...). Only works with --capture-mode rendering in PlayMode.",
+            "description": "Annotate interactive UI elements with index labels and interaction hints (A / CLICK, B / DRAG, ...). The response includes an AnnotatedElements array with element metadata sorted by z-order. Only works with --capture-mode rendering in PlayMode.",
             "default": false
           },
           "ElementsOnly": {
@@ -326,7 +326,7 @@
         "properties": {
           "Action": {
             "type": "string",
-            "description": "Action to perform: Play, Stop, Pause, Step, Status, Resume (alias of Play)",
+            "description": "Play - start Play Mode, Stop - stop Play Mode, Pause - pause Play Mode, Step - advance one frame while paused, Status - report current state without changing anything, Resume - alias of Play in every state, including starting Play Mode when stopped",
             "enum": [
               "Play",
               "Stop",
@@ -468,7 +468,7 @@
         "properties": {
           "Action": {
             "type": "string",
-            "description": "Click, Drag, DragStart, DragMove, DragEnd, LongPress",
+            "description": "Click - click at position, Drag - one-shot drag, DragStart - begin drag and hold, DragMove - move while holding drag, DragEnd - release drag, LongPress - press and hold for --duration seconds",
             "enum": [
               "Click",
               "Drag",
@@ -491,12 +491,12 @@
           },
           "FromX": {
             "type": "number",
-            "description": "Start X position for Drag action. Drag starts here and moves to x,y.",
+            "description": "Start X position for Drag action (origin: top-left). Drag starts here and moves to --x,--y.",
             "default": 0
           },
           "FromY": {
             "type": "number",
-            "description": "Start Y position for Drag action. Drag starts here and moves to x,y.",
+            "description": "Start Y position for Drag action (origin: top-left). Drag starts here and moves to --x,--y.",
             "default": 0
           },
           "DragSpeed": {
@@ -545,7 +545,7 @@
         "properties": {
           "Action": {
             "type": "string",
-            "description": "Click, LongPress, MoveDelta, SmoothDelta, Scroll",
+            "description": "Click - inject button press+release, LongPress - inject button hold for --duration seconds, MoveDelta - inject mouse delta (one-shot), SmoothDelta - inject mouse delta smoothly over --duration seconds, Scroll - inject scroll wheel",
             "enum": [
               "Click",
               "LongPress",
@@ -597,7 +597,7 @@
           },
           "ScrollY": {
             "type": "number",
-            "description": "Vertical scroll delta for Scroll action. Typically 120 per notch.",
+            "description": "Vertical scroll delta for Scroll action. Positive = up, negative = down. Typically 120 per notch.",
             "default": 0
           }
         }
@@ -611,7 +611,7 @@
         "properties": {
           "Action": {
             "type": "string",
-            "description": "Press, KeyDown, KeyUp, ReleaseAll",
+            "description": "Press - one-shot key tap (Down then Up), KeyDown - hold key down, KeyUp - release held key, ReleaseAll - force-release every tracked and device-pressed key (allowed while PlayMode is paused; use after a pause-point interruption leaves key state inconsistent)",
             "enum": [
               "Press",
               "KeyDown",
@@ -644,17 +644,17 @@
               "Start",
               "Stop"
             ],
-            "description": "Start - begin recording, Stop - stop and save",
+            "description": "Start - begin recording input, Stop - stop recording and save to file",
             "default": "Start"
           },
           "OutputPath": {
             "type": "string",
-            "description": "Save path. Auto-generates under .uloop/outputs/InputRecordings/",
+            "description": "Save path for the recording JSON. When empty, auto-generates under .uloop/outputs/InputRecordings/",
             "default": ""
           },
           "Keys": {
             "type": "string",
-            "description": "Comma-separated key filter. Empty = all common game keys",
+            "description": "Comma-separated key filter (for example W,A,S,D,Space). Empty records all common game keys",
             "default": ""
           },
           "DelaySeconds": {
@@ -683,12 +683,12 @@
               "Stop",
               "Status"
             ],
-            "description": "Start, Stop, Status",
+            "description": "Start - begin replaying, Stop - stop mid-way, Status - check progress",
             "default": "Start"
           },
           "InputPath": {
             "type": "string",
-            "description": "JSON path. Auto-detects latest in .uloop/outputs/InputRecordings/",
+            "description": "Path to the recording JSON. When empty, auto-detects the latest recording in .uloop/outputs/InputRecordings/",
             "default": ""
           },
           "ShowOverlay": {

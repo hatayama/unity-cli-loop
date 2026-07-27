@@ -32,7 +32,7 @@ uloop simulate-mouse-input --action <action> [options]
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--action` | enum | `Click` | `Click`, `LongPress`, `MoveDelta`, `SmoothDelta`, `Scroll` |
+| `--action` | enum | `Click` | `Click` - inject button press+release, `LongPress` - inject button hold for `--duration` seconds, `MoveDelta` - inject mouse delta (one-shot), `SmoothDelta` - inject mouse delta smoothly over `--duration` seconds, `Scroll` - inject scroll wheel |
 | `--x` | number | `0` | Target X position in Game View pixels (origin: top-left). Used by Click and LongPress. Use `AnnotatedElements[].SimX`, or raw image pixels converted with `ScreenshotToInputFormula`. |
 | `--y` | number | `0` | Target Y position in Game View pixels (origin: top-left). Used by Click and LongPress. Use `AnnotatedElements[].SimY`, or raw image pixels converted with `ScreenshotToInputFormula`. |
 | `--button` | enum | `Left` | Mouse button: `Left`, `Right`, `Middle`. Used by Click and LongPress. |
@@ -40,7 +40,7 @@ uloop simulate-mouse-input --action <action> [options]
 | `--delta-x` | number | `0` | Delta X in pixels for MoveDelta/SmoothDelta. Positive = right. |
 | `--delta-y` | number | `0` | Delta Y in pixels for MoveDelta/SmoothDelta. Positive = up. |
 | `--scroll-x` | number | `0` | Horizontal scroll delta for Scroll action. |
-| `--scroll-y` | number | `0` | Vertical scroll delta for Scroll action. Typically 120 per notch. |
+| `--scroll-y` | number | `0` | Vertical scroll delta for Scroll action. Positive = up, negative = down. Typically 120 per notch. |
 
 ### Actions
 
