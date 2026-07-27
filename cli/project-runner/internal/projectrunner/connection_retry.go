@@ -260,7 +260,6 @@ func sendWithTransientConnectionRetryWithDeps(
 
 		runningProcess, processErr := deps.findRunningUnityProcess(retryContext, connection.ProjectRoot)
 		if finished, finalOutcome, finalErr := finishUndispatchedRetryProbe(
-			ctx,
 			retryContext,
 			connection,
 			sendAttempt{

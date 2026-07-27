@@ -203,8 +203,10 @@ func TestSendWithTransientConnectionRetryWritesFocusFailureVibeLog(t *testing.T)
 	}
 }
 
-// Verifies process probe timeouts keep the structured server-not-responding error.
-func TestSendWithTransientConnectionRetryClassifiesProcessProbeTimeout(t *testing.T) {
+// Verifies a process probe that timed out reports the dial error instead of the
+// server-not-responding error: a probe that never read the process table cannot be the evidence
+// for claiming Unity is running.
+func TestSendWithTransientConnectionRetryReportsTheDialErrorWhenTheProcessProbeTimesOut(t *testing.T) {
 	deps := defaultConnectionRetryDeps()
 	deps.findRunningUnityProcess = func(ctx context.Context, projectRoot string) (*clicore.UnityProcess, error) {
 		<-ctx.Done()
@@ -231,8 +233,12 @@ func TestSendWithTransientConnectionRetryClassifiesProcessProbeTimeout(t *testin
 		deps)
 
 	var notRespondingErr clierrors.UnityServerNotRespondingError
-	if !errors.As(err, &notRespondingErr) {
-		t.Fatalf("expected unityServerNotRespondingError, got %v", err)
+	if errors.As(err, &notRespondingErr) {
+		t.Fatalf("a failed process probe must not report Unity as running: %v", err)
+	}
+	var connectionErr *unityipc.ConnectionAttemptError
+	if !errors.As(err, &connectionErr) {
+		t.Fatalf("expected the connection attempt error, got %v", err)
 	}
 }
 

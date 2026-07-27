@@ -10,6 +10,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
+	"github.com/hatayama/unity-cli-loop/common/vibelog"
 )
 
 func newConnectionRetryClient(
@@ -93,8 +94,13 @@ type sendAttempt struct {
 	err     error
 }
 
+// finishUndispatchedRetryProbe decides whether the retry loop keeps waiting after a dial that
+// never reached Unity. The process probe's only job here is to promote the diagnosis from "not
+// reachable" to "running but not responding", so a probe that failed cannot promote anything: it
+// observed no process, and claiming one would be an assertion this code has no evidence for.
+// Both probe outcomes therefore report the dial error the caller can act on, and the probe
+// failure goes to the CLI vibe log instead of replacing that error.
 func finishUndispatchedRetryProbe(
-	ctx context.Context,
 	retryContext context.Context,
 	connection unityipc.Connection,
 	currentAttempt sendAttempt,
@@ -103,29 +109,35 @@ func finishUndispatchedRetryProbe(
 	lastAttempt sendAttempt,
 ) (bool, unityipc.UnitySendOutcome, error) {
 	if processErr != nil {
-		if retryContext.Err() == nil {
-			return true, currentAttempt.outcome, processErr
-		}
-		if ctx.Err() != nil {
-			return true, currentAttempt.outcome, ctx.Err()
-		}
-		// A busy response seen during the window is the truer diagnosis than a
-		// final dial cut short by the expiring retry context.
-		if isUnityServerBusyRPCError(lastAttempt.err) {
-			return true, lastAttempt.outcome, lastAttempt.err
-		}
-		return true, currentAttempt.outcome, newUnityServerNotRespondingError(connection, currentAttempt.err)
+		logUnityProcessProbeFailure(connection, currentAttempt.err, processErr)
 	}
 	if runningProcess != nil {
 		return false, currentAttempt.outcome, nil
 	}
-	// Same masking as the probe-error path: a busy response seen during the
-	// window proves a server answered moments ago, so it is a truer diagnosis
-	// than a final dial cut short by the expiring retry context.
+	// A busy response seen during the window proves a server answered moments ago, so it is a
+	// truer diagnosis than a final dial cut short by the expiring retry context.
 	if retryContext.Err() != nil && isUnityServerBusyRPCError(lastAttempt.err) {
 		return true, lastAttempt.outcome, lastAttempt.err
 	}
 	return true, currentAttempt.outcome, currentAttempt.err
+}
+
+// Records a process probe that could not answer whether Unity is running. Why log it at all: the
+// probe failure no longer shows up in the returned error, and it is the only clue that the
+// diagnosis was decided without a process reading — a sysctl refusal on macOS, or a PowerShell
+// launch failure or process-list timeout on Windows.
+func logUnityProcessProbeFailure(connection unityipc.Connection, dialErr error, probeErr error) {
+	_ = vibelog.WriteCLIVibeLog(connection.ProjectRoot, vibelog.CLIVibeLogEntry{
+		Level:     "WARNING",
+		Operation: "cli_unity_process_probe_failed",
+		Message:   "Could not determine whether Unity is running while recovering an unreachable request.",
+		Context: map[string]any{
+			"endpoint":   connection.Endpoint.Address,
+			"dial_cause": clicore.ErrorMessage(dialErr),
+			"cause":      clicore.ErrorMessage(probeErr),
+		},
+		CorrelationID: vibelog.NewCLIVibeCorrelationID(),
+	})
 }
 
 func finishUnityAliveRetryWait(
