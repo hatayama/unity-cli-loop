@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -78,15 +77,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
-            // Why not Enum.TryParse alone: it also accepts ordinals ("3"), signed ordinals ("+3"),
-            // whitespace-padded input, comma-separated names OR-ed together ("Space,Enter"), and
-            // undefined ordinals ("300") that later throw from the keyboard indexer. Only a name
-            // that is defined on the Key enum may resolve to a key.
-            string normalizedKey = NormalizeKeyName(parameters.Key);
-            if (!DefinedKeysByName.TryGetValue(normalizedKey, out Key key) || key == Key.None)
+            (bool resolved, Key key) = KeyNameResolver.Resolve(parameters.Key);
+            if (!resolved)
             {
                 // Suggest from the normalized form so padding does not degrade the candidates,
                 // while the message below still reports the raw input verbatim.
+                string normalizedKey = KeyNameResolver.NormalizeKeyName(parameters.Key);
                 IReadOnlyList<string> suggestions = KeyboardKeyNameSuggester.Suggest(normalizedKey);
                 string suggestionText = suggestions.Count == 0
                     ? string.Empty
@@ -242,23 +238,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             OverlayCanvasFactory.EnsureExists();
         }
 
-        // Immutable name-to-value map of the Input System Key enum, so key resolution never falls
-        // back to Enum.TryParse's ordinal and flag-combination behavior.
-        private static readonly IReadOnlyDictionary<string, Key> DefinedKeysByName = BuildDefinedKeysByName();
-
-        private static IReadOnlyDictionary<string, Key> BuildDefinedKeysByName()
-        {
-            string[] names = Enum.GetNames(typeof(Key));
-            Array values = Enum.GetValues(typeof(Key));
-            Dictionary<string, Key> keysByName = new(names.Length, StringComparer.OrdinalIgnoreCase);
-            for (int index = 0; index < names.Length; index++)
-            {
-                keysByName[names[index]] = (Key)values.GetValue(index);
-            }
-
-            return keysByName;
-        }
-
         /// <summary>
         /// Reports whether the raw key input is the numeric form that Enum.TryParse used to accept
         /// as an enum ordinal, so the rejection can explain what earlier runs actually pressed.
@@ -289,18 +268,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        private static string NormalizeKeyName(string keyName)
-        {
-            // Why trim here rather than at the whitelist comparison: Enum.TryParse used to accept
-            // whitespace-padded names, so padded correct input already worked. Blocking ambiguous
-            // input must not narrow correct input, and the alias has to see the padded form too.
-            string trimmed = keyName.Trim();
-            if (string.Equals(trimmed, "Return", StringComparison.OrdinalIgnoreCase))
-            {
-                return Key.Enter.ToString();
-            }
-            return trimmed;
-        }
 
 #endif
     }
