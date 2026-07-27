@@ -358,7 +358,13 @@ func shouldRetryUndispatchedConnection(err error, outcome unityipc.UnitySendOutc
 	}
 
 	var connectionErr *unityipc.ConnectionAttemptError
-	return errors.As(err, &connectionErr)
+	if !errors.As(err, &connectionErr) {
+		return false
+	}
+	// The retry window exists for a server that is not listening yet. A connect the kernel
+	// refused permanently never becomes reachable inside it, and retrying it replaces the
+	// syscall error with the window's own deadline expiry.
+	return !clierrors.IsPermanentConnectError(connectionErr)
 }
 
 func logConnectionRetryFocusAttempt(

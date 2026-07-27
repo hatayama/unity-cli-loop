@@ -12,10 +12,13 @@ all along" — this document exists so nobody walks that path again.
   sees the connection attempt (server-side logs are VibeLogger-based and exist only when the
   `ULOOP_DEBUG` scripting define is set — do not read missing log lines as evidence either way).
 - Commands that never touch the Editor (`uloop --version`, `uloop --help`) work normally.
-- The reported error is misleading: the CLI retries for 60 seconds and then reports
-  `dial unix ...: i/o timeout`, while the underlying per-attempt error is
-  `connect: operation not permitted` (EPERM). Fixing that misdiagnosis is tracked as its own
-  work item (report the permanent errno verbatim and stop advising retries).
+- The reported error names the refusal: the command fails on the first attempt with
+  `ErrorCode: UNITY_NOT_REACHABLE`, `Retryable: false`, `SafeToRetry: false`, and
+  `Details.Cause` carrying the syscall error verbatim
+  (`dial unix ...: connect: operation not permitted`). Its next actions point at sandboxing and
+  socket permissions, not at waiting. An older CLI instead retried for 60 seconds and then
+  reported `dial unix ...: i/o timeout` with retry guidance — that misdiagnosis is what cost the
+  2026-07-26 investigation, so an `i/o timeout` here means the CLI predates the fix.
 
 ## Cause
 
@@ -26,6 +29,12 @@ digits of the SHA-256 of the canonical project root) through that policy — `co
 `bind()` on Unix sockets are denied with EPERM regardless of filesystem permissions. Write
 access to the socket's directory does not help; this was verified empirically: a directory the
 sandbox allowed file writes into still refused a socket `bind()`.
+
+The block is not specific to the transport: with the default `allowedHosts` policy the sandbox
+also stops V2's localhost TCP connection (verified 2026-07-27), so a plain `uloop ...` command
+succeeding proves only that `excludedCommands` took it out of the sandbox — not that Unix sockets
+are the problem and TCP would get through. What is specific to a Unix socket is only that it has
+no hostname to put on `allowedHosts`, so that escape hatch does not exist for it.
 
 This is specific to the sandboxed shell. The same command in a normal terminal, or in a session
 without sandboxing, is unaffected. Windows uses a named pipe instead of a Unix socket; whether
