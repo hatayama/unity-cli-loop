@@ -75,12 +75,18 @@ func TestWaitForToolReadinessReturnsPermanentlyRefusedConnectImmediately(t *test
 			probeCount++
 			return expectedErr
 		},
+		findRunningUnityProcess: func(context.Context, string) (*unityprocess.UnityProcess, error) {
+			return nil, nil
+		},
 	}
 
-	err := waitForToolReadinessWithDeps(context.Background(), t.TempDir(), time.Hour, deps)
+	// Why a timeout shorter than the poll interval: without the abort the wait falls through to
+	// its own timeout, and this test then fails on the assertions below rather than hanging until
+	// the package test deadline.
+	err := waitForToolReadinessWithDeps(context.Background(), t.TempDir(), ToolReadinessPoll/10, deps)
 
-	if !errors.Is(err, expectedErr) {
-		t.Fatalf("expected the refused connect error, got %v", err)
+	if err != error(expectedErr) {
+		t.Fatalf("expected the refused connect error itself, got %v", err)
 	}
 	if probeCount != 1 {
 		t.Fatalf("expected the wait to stop after the first probe, got %d probes", probeCount)

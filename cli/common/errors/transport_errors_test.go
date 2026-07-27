@@ -113,6 +113,37 @@ func TestIsPermanentConnectErrorMatchesRefusedSyscalls(t *testing.T) {
 	}
 }
 
+// Verifies a named pipe access denial is classified as permanent too. go-winio reports it as a
+// path error whose cause maps to os.ErrPermission and to neither POSIX errno, so matching errnos
+// alone would leave Windows retrying a refusal that never clears.
+func TestIsPermanentConnectErrorMatchesNamedPipeAccessDenial(t *testing.T) {
+	deniedPipe := &unityipc.ConnectionAttemptError{
+		Cause: &os.PathError{
+			Op:   "open",
+			Path: `\\.\pipe\UnityCliLoop-sample`,
+			Err:  os.ErrPermission,
+		},
+	}
+
+	if !IsPermanentConnectError(deniedPipe) {
+		t.Fatalf("denied named pipe was not classified as permanent: %v", deniedPipe)
+	}
+}
+
+// Verifies a permission failure that is not a dial outcome stays out of this classification: the
+// same callers also surface project and endpoint file errors, and those must not abort a wait.
+func TestIsPermanentConnectErrorIgnoresPermissionErrorsOutsideDialing(t *testing.T) {
+	fileError := &os.PathError{
+		Op:   "open",
+		Path: "/tmp/MyProject/ProjectSettings/ProjectVersion.txt",
+		Err:  syscall.EACCES,
+	}
+
+	if IsPermanentConnectError(fileError) {
+		t.Fatalf("a file permission error was classified as a refused connect: %v", fileError)
+	}
+}
+
 // Verifies the errors a retry is meant to absorb — the socket not existing yet, nobody
 // listening yet, a deadline expiry — stay retryable.
 func TestIsPermanentConnectErrorRejectsTransientFailures(t *testing.T) {

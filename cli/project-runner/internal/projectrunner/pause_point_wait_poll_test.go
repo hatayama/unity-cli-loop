@@ -3,8 +3,13 @@ package projectrunner
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
+	"net"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -36,6 +41,56 @@ func pausePointArmedStatusResponse(id string) pausePointStatusResponse {
 		TimeoutSeconds:                  60,
 		ElapsedSinceEnabledMilliseconds: 1_000,
 		EditorState:                     pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+	}
+}
+
+// Verifies a connect the operating system refused permanently aborts the wait at the first poll.
+// Every poll dials again, so without the abort the refusal is reported only after the whole
+// --timeout has been spent on an error that cannot clear.
+func TestWaitForPausePointAbortsWhenTheConnectIsRefused(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	defer func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+	}()
+
+	refusedConnect := &unityipc.ConnectionAttemptError{
+		Endpoint: "/tmp/uloop-501/UnityCliLoop-sample.sock",
+		Cause: &net.OpError{
+			Op:   "dial",
+			Net:  "unix",
+			Addr: &net.UnixAddr{Name: "/tmp/uloop-501/UnityCliLoop-sample.sock", Net: "unix"},
+			Err:  os.NewSyscallError("connect", syscall.EPERM),
+		},
+	}
+	queryCount := 0
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		queryCount++
+		return pausePointStatusResponse{}, fmt.Errorf("pause point status query failed: %w", refusedConnect)
+	}
+
+	startedAt := time.Now()
+	_, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 60,
+		timeout:        10 * time.Second,
+	})
+	elapsed := time.Since(startedAt)
+
+	if !errors.Is(err, refusedConnect) {
+		t.Fatalf("expected the refused connect error, got %v", err)
+	}
+	if queryCount != 1 {
+		t.Fatalf("expected the wait to stop after the first poll, got %d polls", queryCount)
+	}
+	if elapsed >= 5*time.Second {
+		t.Fatalf("expected an early abort, waited %v of a 10s timeout", elapsed)
 	}
 }
 

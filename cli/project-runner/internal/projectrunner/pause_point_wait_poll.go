@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -162,6 +163,12 @@ func waitForPausePointStatus(
 				return response, state, triggerResult, nil
 			}
 		} else {
+			// Why abort: every poll dials again, so a connect the operating system refused
+			// permanently keeps failing for the whole --timeout and the refusal is reported only
+			// after that wait is spent.
+			if clierrors.IsPermanentConnectError(err) {
+				return lastResponse, "", triggerResult, err
+			}
 			lastErr = err
 		}
 
