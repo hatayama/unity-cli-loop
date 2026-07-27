@@ -429,6 +429,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         // The first column never contains an escaped pipe, so splitting the row structurally is enough
         // to read it; only descriptions carry "\|" and this guard never looks at them.
+        // Why not handle the escape: nothing here reads a description. Extending this to read one needs
+        // the same escape handling cli/common/skilldocs.splitTableRow does, or cells will be truncated.
         private static string[] SplitTableRow(string line)
         {
             string trimmed = line.Trim();

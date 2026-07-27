@@ -35,7 +35,7 @@ func ParseSkill(content string) map[string]ToolDocs {
 	if ok && hasSubsectionHeading(sectionLines) {
 		return parseMultiToolSkill(sectionLines)
 	}
-	return parseSingleToolSkill(content, lines)
+	return parseSingleToolSkill(lines)
 }
 
 // normalizedLines makes the parser indifferent to how the checkout wrote the file. A Windows
@@ -47,8 +47,10 @@ func normalizedLines(content string) []string {
 	return strings.Split(content, "\n")
 }
 
-func parseSingleToolSkill(content string, lines []string) map[string]ToolDocs {
-	frontmatter := skillscan.ParseSkillFrontmatter(strings.TrimPrefix(content, byteOrderMark))
+// parseSingleToolSkill reads the frontmatter from the same normalized lines the table is read from, so
+// line endings and a BOM are handled in exactly one place rather than once per consumer.
+func parseSingleToolSkill(lines []string) map[string]ToolDocs {
+	frontmatter := skillscan.ParseSkillFrontmatter(strings.Join(lines, "\n"))
 	toolName := singleSkillToolName(frontmatter)
 	if toolName == "" {
 		return map[string]ToolDocs{}
