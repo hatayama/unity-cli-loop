@@ -145,9 +145,12 @@ dist/darwin-arm64/uloop compile --project-path "$(git rev-parse --show-toplevel)
 Substitute the binary for your platform (e.g. `dist/windows-amd64/uloop.exe` on Windows).
 
 When an AI agent runs these dev-binary commands through a sandboxed shell, Unity IPC over the
-Unix socket is blocked with EPERM (misreported as an i/o timeout) even though plain `uloop ...`
-may appear to work. Before investigating any "Unity not reachable" symptom in that setting,
-read `docs/claude-code-sandbox.md`.
+Unix socket is denied with EPERM even though plain `uloop ...` may appear to work: the sandbox
+exclusion is matched against the command text, and which command shapes survive that matching
+is not guessable from the outside. Read `docs/claude-code-sandbox.md` *before* running
+dev-binary commands in that setting, not only once a "Unity not reachable" symptom appears. A
+CLI predating the refusal report turns the same denial into an `i/o timeout`, which is what
+made this cost a full investigation.
 
 Before running a command with `--project-path`, confirm the path is the intended Unity project
 for the current task — do not copy a sibling checkout path from another repository or session.
@@ -159,7 +162,11 @@ to refresh `dist` binaries; they are git-ignored and must not be committed.
 
 To validate an unreleased project runner from an external Unity project, set the
 `ULOOP_PROJECT_RUNNER_PATH` environment variable to a locally built binary — it overrides the
-pin-based resolution entirely (see `docs/project-runner-pin.md`).
+pin-based resolution entirely (see `docs/project-runner-pin.md`). Inside this checkout the
+variable is not what makes a run use your build: `dist/<platform>/uloop` already takes the
+runner built beside it, and no response field says which runner served a command. Read "Which
+runner actually ran" in that document before concluding that a runner-side change does or does
+not work.
 
 ## Unity Freeze Prevention
 
