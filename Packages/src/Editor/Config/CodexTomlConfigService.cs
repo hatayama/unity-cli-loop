@@ -157,15 +157,29 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             string content = File.ReadAllText(path);
-            string result = SectionRegex.Replace(content, string.Empty);
-            result = LegacyEnvTableRegex.Replace(result, string.Empty);
-            if (ReferenceEquals(content, result))
+            (bool isChanged, string result) = BuildDeletedContent(content);
+            if (!isChanged)
             {
                 return;
             }
 
-            result = Regex.Replace(result, @"(\r?\n){3,}", System.Environment.NewLine + System.Environment.NewLine);
             File.WriteAllText(path, result);
+        }
+
+        // Removes the uLoopMCP section together with its legacy env table, so deleting the
+        // configuration never leaves the table behind as a dangling duplicate env definition.
+        // Reports whether anything was removed, so a file holding no uLoopMCP entries at all is
+        // left untouched instead of having its blank lines rewritten.
+        private static (bool isChanged, string content) BuildDeletedContent(string content)
+        {
+            string result = SectionRegex.Replace(content, string.Empty);
+            result = LegacyEnvTableRegex.Replace(result, string.Empty);
+            if (ReferenceEquals(content, result))
+            {
+                return (false, content);
+            }
+
+            return (true, Regex.Replace(result, @"(\r?\n){3,}", System.Environment.NewLine + System.Environment.NewLine));
         }
 
         public void UpdateDevelopmentSettings(int port, bool developmentMode, bool enableMcpLogs)
@@ -176,33 +190,35 @@ namespace io.github.hatayama.uLoopMCP
                 AutoConfigure(port);
             }
 
-            string content = File.ReadAllText(path);
-            content = RemoveLegacyEnvTable(content);
-
-            // If section not exists, create it first and reload
-            if (!SectionRegex.IsMatch(content))
+            (bool hasSection, string newContent) = BuildDevelopmentSettingsContent(File.ReadAllText(path), port, developmentMode, enableMcpLogs);
+            if (!hasSection)
             {
+                // No section to update yet: create one, then apply the settings to the fresh content.
                 AutoConfigure(port);
-                content = File.ReadAllText(path);
-            }
-
-            // Replace only within the uLoopMCP section and update dev logs settings
-            Match section = SectionRegex.Match(content);
-            if (!section.Success)
-            {
-                // As a last attempt, try to autoconfigure and reload once
-                AutoConfigure(port);
-                content = File.ReadAllText(path);
-                section = SectionRegex.Match(content);
-                if (!section.Success)
+                (hasSection, newContent) = BuildDevelopmentSettingsContent(File.ReadAllText(path), port, developmentMode, enableMcpLogs);
+                if (!hasSection)
                 {
                     return;
                 }
             }
 
-            string updatedSection = UpdateSectionWithDevelopmentSettings(section.Value, port, developmentMode, enableMcpLogs);
-            string newContent = content.Substring(0, section.Index) + updatedSection + content.Substring(section.Index + section.Length);
             File.WriteAllText(path, newContent);
+        }
+
+        // Applies the development settings to the uLoopMCP section only, after dropping the legacy
+        // env table so the written file never carries a duplicate env definition.
+        private static (bool hasSection, string content) BuildDevelopmentSettingsContent(string content, int port, bool developmentMode, bool enableMcpLogs)
+        {
+            string strippedContent = RemoveLegacyEnvTable(content);
+
+            Match section = SectionRegex.Match(strippedContent);
+            if (!section.Success)
+            {
+                return (false, strippedContent);
+            }
+
+            string updatedSection = UpdateSectionWithDevelopmentSettings(section.Value, port, developmentMode, enableMcpLogs);
+            return (true, strippedContent.Substring(0, section.Index) + updatedSection + strippedContent.Substring(section.Index + section.Length));
         }
 
         private static (string arg0, int? port) ReadCurrentValues(string content)
