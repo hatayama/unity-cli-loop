@@ -80,10 +80,12 @@ binary, and one `cli-release` environment approval, since the publish workflows
 ### Symbol-level reachability (call graph)
 
 Feasible and rejected on cost. `golang.org/x/tools/go/callgraph` (RTA/CHA/VTA) from each
-component's main package would resolve reachable functions per component, and mapping them
-to files would classify each changed file exactly. Rejected because it buys clean version
-numbering at the price of the two properties above, and because any under-approximation
-lands on the dangerous side of the asymmetry.
+component's main package computes an overapproximation of the functions reachable per
+component; mapping them to files would classify each changed file conservatively, since
+spurious call edges can only add a trigger, never drop one. Platform-specific files would
+require running the analysis per release platform rather than from a single entry point.
+Rejected because it buys clean version numbering at the price of the two properties above,
+and because any under-approximation lands on the dangerous side of the asymmetry.
 
 Reversal condition: revisit if the per-release cost grows beyond today's single approval
 click — for example per-release attestation, review, or announcement duties after leaving
