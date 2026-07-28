@@ -18,6 +18,17 @@ import (
 const (
 	compileAttachProbeTimeout  = 10 * time.Second
 	compileAttachProbeInterval = 1 * time.Second
+	// Why 3: a single Ready&&!HasResult sample can race the completion→store window.
+	compileAttachMissingResultStreak = 3
+)
+
+type attachWaitOutcome int
+
+const (
+	attachWaitCompleted attachWaitOutcome = iota
+	attachWaitTimedOut
+	attachWaitDisappeared
+	attachWaitFailed
 )
 
 // tryAttachToPendingCompile reattaches to a previously timed-out compile when a
@@ -43,16 +54,20 @@ func tryAttachToPendingCompile(
 		return false, 0
 	}
 
-	if !status.Ready {
-		return true, attachWaitForPendingCompile(ctx, connection, record, waitTimeout, stdout, stderr, deps)
-	}
-
+	// Why HasResult first: Ready is editor-wide (!compiling/!updating/!reload), not
+	// scoped to record.RequestID. Only HasResult is request-specific, and results are
+	// stored only after that request finishes — so a result is definitive even when
+	// the editor is busy with unrelated work.
 	if status.HasResult && len(status.Result) > 0 {
 		if compileForceRecompileEnabled(params) {
 			clearCompilePendingRecord(connection.ProjectRoot)
 			return false, 0
 		}
 		return true, returnAttachedStoredCompileResult(ctx, connection, record, status.Result, stdout, stderr)
+	}
+
+	if !status.Ready {
+		return attachWaitForPendingCompile(ctx, connection, record, params, waitTimeout, stdout, stderr, deps)
 	}
 
 	clearCompilePendingRecord(connection.ProjectRoot)
@@ -103,22 +118,33 @@ func attachWaitForPendingCompile(
 	ctx context.Context,
 	connection unityipc.Connection,
 	record compilePendingRecord,
+	params map[string]any,
 	waitTimeout time.Duration,
 	stdout io.Writer,
 	stderr io.Writer,
 	deps compileWaitDeps,
-) int {
+) (bool, int) {
+	if compileForceRecompileEnabled(params) {
+		_, _ = fmt.Fprintf(
+			stderr,
+			"warning: reattaching to an in-flight compile; --force-recompile is not applied. Re-run with --force-recompile after this compile finishes if you still need a forced recompile.\n",
+		)
+	}
+
 	startedAt := time.Now()
 	logCompileAttachStart(connection, record.RequestID, "waiting")
 	spinner := clicore.NewToolSpinner(stderr, clicore.CompileCommandName)
 	spinner.Update("Reattaching to in-flight compile...")
 
-	result, completed, waitErr := waitForCompileCompletionWithDeps(ctx, compileCompletionOptions{
-		connection:     connection,
-		requestID:      record.RequestID,
-		forceRecompile: false,
-		timeout:        waitTimeout,
-		pollInterval:   compileWaitPollInterval,
+	pollInterval := deps.attachWaitPollInterval
+	if pollInterval <= 0 {
+		pollInterval = compileWaitPollInterval
+	}
+	result, outcome, waitErr := waitForAttachedCompileCompletion(ctx, compileCompletionOptions{
+		connection:   connection,
+		requestID:    record.RequestID,
+		timeout:      waitTimeout,
+		pollInterval: pollInterval,
 	}, deps)
 	if waitErr != nil {
 		spinner.Stop()
@@ -127,19 +153,87 @@ func attachWaitForPendingCompile(
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return 1
+		return true, 1
 	}
-	if !completed {
+
+	switch outcome {
+	case attachWaitDisappeared:
+		spinner.Stop()
+		clearCompilePendingRecord(connection.ProjectRoot)
+		logCompileAttachResult(connection, record.RequestID, "disappeared", true)
+		return false, 0
+	case attachWaitTimedOut:
 		spinner.Stop()
 		// Why not refresh TimedOutAtUtc: stale expiry must stay anchored to the first timeout.
 		logCompileAttachResult(connection, record.RequestID, "timeout", false)
 		clierrors.WriteErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot, waitTimeout))
-		return 1
+		return true, 1
+	case attachWaitCompleted:
+		clearCompilePendingRecord(connection.ProjectRoot)
+		logCompileAttachResult(connection, record.RequestID, "completed", true)
+		return true, completeCompileResultOutput(ctx, connection, result, stdout, stderr, spinner, startedAt, unityipc.UnitySendOutcome{})
+	default:
+		spinner.Stop()
+		logCompileAttachResult(connection, record.RequestID, "error", false)
+		return true, 1
+	}
+}
+
+func waitForAttachedCompileCompletion(
+	ctx context.Context,
+	options compileCompletionOptions,
+	deps compileWaitDeps,
+) (json.RawMessage, attachWaitOutcome, error) {
+	startedAt := time.Now()
+	deadline := startedAt.Add(options.timeout)
+	attempts := 0
+	missingResultStreak := 0
+	var lastStatus compileStatusResponse
+	var lastErr error
+	lastObservationKey := ""
+
+	logCompileStatusPollStart(options, startedAt, deadline)
+
+	ticker := time.NewTicker(options.pollInterval)
+	defer ticker.Stop()
+	for {
+		now := time.Now()
+		if !now.Before(deadline) {
+			break
+		}
+
+		attempts++
+		status, err := deps.queryCompileStatus(ctx, options.connection, options.requestID)
+		lastErr = err
+		if err == nil {
+			lastStatus = status
+			if status.HasResult && len(status.Result) > 0 {
+				logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, nil, &lastObservationKey)
+				logCompileStatusPollComplete(options, startedAt, attempts, status)
+				return status.Result, attachWaitCompleted, nil
+			}
+			if status.Ready && !status.HasResult {
+				missingResultStreak++
+				if missingResultStreak >= compileAttachMissingResultStreak {
+					logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, nil, &lastObservationKey)
+					return nil, attachWaitDisappeared, nil
+				}
+			} else {
+				missingResultStreak = 0
+			}
+		}
+		logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, err, &lastObservationKey)
+
+		select {
+		case <-ctx.Done():
+			logCompileWaitCancelled(options, startedAt, attempts, lastStatus, lastErr, ctx.Err())
+			return nil, attachWaitFailed, ctx.Err()
+		case <-ticker.C:
+		}
 	}
 
-	clearCompilePendingRecord(connection.ProjectRoot)
-	logCompileAttachResult(connection, record.RequestID, "completed", true)
-	return completeCompileResultOutput(ctx, connection, result, stdout, stderr, spinner, startedAt, unityipc.UnitySendOutcome{})
+	logCompileWaitTimedOut(options, startedAt, attempts, lastStatus, lastErr)
+	return nil, attachWaitTimedOut, nil
 }
 
 func returnAttachedStoredCompileResult(

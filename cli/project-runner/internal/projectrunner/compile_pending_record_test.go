@@ -13,7 +13,7 @@ import (
 // Verifies a pending compile record round-trips through the project .uloop path.
 func TestWriteReadCompilePendingRecordRoundTrip(t *testing.T) {
 	projectRoot := t.TempDir()
-	timedOutAt := time.Date(2026, 7, 28, 7, 0, 0, 0, time.UTC)
+	timedOutAt := time.Now().UTC().Truncate(time.Second)
 	record := compilePendingRecord{
 		RequestID:     "compile_test_record",
 		TimedOutAtUtc: timedOutAt,
@@ -119,11 +119,13 @@ func TestClearCompilePendingRecord(t *testing.T) {
 	clearCompilePendingRecord(projectRoot)
 }
 
-// Verifies pending-record paths use filepath.Join separators on every OS.
+// Verifies pending-record paths join .uloop and the file name with OS separators.
 func TestCompilePendingRecordPathUsesOSSeparators(t *testing.T) {
 	projectRoot := filepath.FromSlash("/tmp/MyProject")
 	path := compilePendingRecordPath(projectRoot)
-	expected := filepath.Join(projectRoot, tools.CacheDirectoryName, compilePendingRecordFileName)
+	// Why literal FromSlash expected: building expected with the same Join helpers as the
+	// implementation would make this assertion tautological.
+	expected := filepath.FromSlash("/tmp/MyProject/.uloop/pending-compile-request.json")
 	if path != expected {
 		t.Fatalf("path mismatch: got %q want %q", path, expected)
 	}

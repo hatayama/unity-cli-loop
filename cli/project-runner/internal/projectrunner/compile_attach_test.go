@@ -51,6 +51,50 @@ func TestRunCompileAttachWithoutPendingRecordUsesNormalPath(t *testing.T) {
 	}
 }
 
+// Verifies HasResult is returned even when Ready is false (editor-wide busy is unrelated).
+func TestRunCompileAttachReturnsStoredResultWhenEditorNotReady(t *testing.T) {
+	enableCliVibeLog(t)
+	projectRoot := t.TempDir()
+	if err := writeCompilePendingRecord(projectRoot, compilePendingRecord{
+		RequestID:     "compile_attach_busy_stored",
+		TimedOutAtUtc: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("write pending record failed: %v", err)
+	}
+
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		return compileStatusResponse{
+			Ready:       false,
+			IsCompiling: true,
+			HasResult:   true,
+			Result:      json.RawMessage(`{"Success":false,"ErrorCount":7}`),
+		}, nil
+	})
+	connection := unityipc.Connection{
+		Endpoint:    unityipc.Endpoint{Network: "tcp", Address: "127.0.0.1:1"},
+		ProjectRoot: projectRoot,
+	}
+	var stdout, stderr bytes.Buffer
+
+	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, map[string]any{}, &stdout, &stderr, deps)
+	if code != 1 {
+		t.Fatalf("expected failed compile envelope: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"ErrorCount"`) || !strings.Contains(stdout.String(), "7") {
+		t.Fatalf("stored result missing from stdout: %s", stdout.String())
+	}
+	if _, err := os.Stat(compilePendingRecordPath(projectRoot)); !os.IsNotExist(err) {
+		t.Fatalf("pending record should be cleared: %v", err)
+	}
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	if !strings.Contains(logContent, `"attach_mode":"stored_result"`) {
+		t.Fatalf("stored-result attach mode missing:\n%s", logContent)
+	}
+	if strings.Contains(logContent, `"operation":"cli_compile_request_prepared"`) {
+		t.Fatalf("stored result must not send a new compile request:\n%s", logContent)
+	}
+}
+
 // Verifies an in-flight pending compile is waited on without sending a new compile request.
 func TestRunCompileAttachWaitsForInFlightCompileAndClearsRecord(t *testing.T) {
 	enableCliVibeLog(t)
@@ -360,6 +404,163 @@ func TestRunCompileAttachProbeFailureKeepsRecordAndStartsNewCompile(t *testing.T
 	case err := <-serverErr:
 		t.Fatalf("server failed: %v", err)
 	default:
+	}
+}
+
+// Verifies three consecutive Ready&&!HasResult observations abandon attach without waiting out the deadline.
+func TestRunCompileAttachDisappearedResultFallsThroughQuickly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	enableCliVibeLog(t)
+	endpoint, serverErr := startCompileAcceptOnceServer(t)
+	projectRoot := t.TempDir()
+	if err := writeCompilePendingRecord(projectRoot, compilePendingRecord{
+		RequestID:     "compile_attach_disappeared",
+		TimedOutAtUtc: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("write pending record failed: %v", err)
+	}
+
+	callCount := 0
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		callCount++
+		if callCount == 1 {
+			// Probe: editor busy with unrelated work, no stored result for this RequestId.
+			return compileStatusResponse{Ready: false, IsCompiling: true, HasResult: false}, nil
+		}
+		if callCount <= 1+compileAttachMissingResultStreak {
+			return compileStatusResponse{Ready: true, HasResult: false}, nil
+		}
+		return compileStatusResponse{
+			Ready:     true,
+			HasResult: true,
+			Result:    json.RawMessage(`{"Success":false,"ErrorCount":8}`),
+		}, nil
+	})
+	connection := unityipc.Connection{Endpoint: endpoint, ProjectRoot: projectRoot}
+	params := map[string]any{compileWaitTimeoutParam: 600}
+	var stdout, stderr bytes.Buffer
+
+	startedAt := time.Now()
+	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, params, &stdout, &stderr, deps)
+	elapsed := time.Since(startedAt)
+	if code != 1 {
+		t.Fatalf("expected failed compile envelope: code=%d stderr=%s", code, stderr.String())
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("disappearance should not wait for the configured timeout: elapsed=%v", elapsed)
+	}
+	if _, err := os.Stat(compilePendingRecordPath(projectRoot)); !os.IsNotExist(err) {
+		t.Fatalf("disappeared attach should clear the pending record: %v", err)
+	}
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	if !strings.Contains(logContent, `"attach_outcome":"disappeared"`) {
+		t.Fatalf("disappeared attach outcome missing:\n%s", logContent)
+	}
+	if !strings.Contains(logContent, `"operation":"cli_compile_request_prepared"`) {
+		t.Fatalf("disappearance should fall through to a new compile:\n%s", logContent)
+	}
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
+
+// Verifies a single Ready&&!HasResult sample does not abort attach (completion/store race).
+func TestRunCompileAttachToleratesTransientReadyWithoutResult(t *testing.T) {
+	enableCliVibeLog(t)
+	projectRoot := t.TempDir()
+	if err := writeCompilePendingRecord(projectRoot, compilePendingRecord{
+		RequestID:     "compile_attach_transient_ready",
+		TimedOutAtUtc: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("write pending record failed: %v", err)
+	}
+
+	callCount := 0
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		callCount++
+		switch callCount {
+		case 1:
+			return compileStatusResponse{Ready: false, IsCompiling: true}, nil
+		case 2:
+			return compileStatusResponse{Ready: true, HasResult: false}, nil
+		default:
+			return compileStatusResponse{
+				Ready:     true,
+				HasResult: true,
+				Result:    json.RawMessage(`{"Success":false,"ErrorCount":6}`),
+			}, nil
+		}
+	})
+	connection := unityipc.Connection{
+		Endpoint:    unityipc.Endpoint{Network: "tcp", Address: "127.0.0.1:1"},
+		ProjectRoot: projectRoot,
+	}
+	var stdout, stderr bytes.Buffer
+
+	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, map[string]any{}, &stdout, &stderr, deps)
+	if code != 1 {
+		t.Fatalf("expected failed compile envelope: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"ErrorCount"`) || !strings.Contains(stdout.String(), "6") {
+		t.Fatalf("attach should continue after one Ready&&!HasResult sample: %s", stdout.String())
+	}
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	if strings.Contains(logContent, `"attach_outcome":"disappeared"`) {
+		t.Fatalf("one Ready&&!HasResult sample must not count as disappearance:\n%s", logContent)
+	}
+	if !strings.Contains(logContent, `"attach_outcome":"completed"`) {
+		t.Fatalf("attach should complete after the stored result appears:\n%s", logContent)
+	}
+}
+
+// Verifies ForceRecompile during attach wait warns and does not start a forced recompile.
+func TestRunCompileAttachWarnsWhenForceRecompileIgnoredDuringWait(t *testing.T) {
+	enableCliVibeLog(t)
+	projectRoot := t.TempDir()
+	if err := writeCompilePendingRecord(projectRoot, compilePendingRecord{
+		RequestID:     "compile_attach_force_warn",
+		TimedOutAtUtc: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("write pending record failed: %v", err)
+	}
+
+	callCount := 0
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		callCount++
+		if callCount == 1 {
+			return compileStatusResponse{Ready: false, IsCompiling: true}, nil
+		}
+		return compileStatusResponse{
+			Ready:     true,
+			HasResult: true,
+			Result:    json.RawMessage(`{"Success":false,"ErrorCount":11}`),
+		}, nil
+	})
+	connection := unityipc.Connection{
+		Endpoint:    unityipc.Endpoint{Network: "tcp", Address: "127.0.0.1:1"},
+		ProjectRoot: projectRoot,
+	}
+	params := map[string]any{compileForceParam: true}
+	var stdout, stderr bytes.Buffer
+
+	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, params, &stdout, &stderr, deps)
+	if code != 1 {
+		t.Fatalf("expected failed compile envelope: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "--force-recompile is not applied") {
+		t.Fatalf("expected force-recompile ignored warning: %s", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"ErrorCount"`) || !strings.Contains(stdout.String(), "11") {
+		t.Fatalf("attach should still return the in-flight result: %s", stdout.String())
+	}
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	if strings.Contains(logContent, `"operation":"cli_compile_request_prepared"`) {
+		t.Fatalf("force during attach wait must not send a new compile request:\n%s", logContent)
 	}
 }
 
