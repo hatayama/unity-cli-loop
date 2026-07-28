@@ -65,7 +65,7 @@
   },
   "homepage": "https://github.com/hatayama/uLoopMCP#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "launch-unity": "0.17.1",
     "uuid": "14.0.1",
     "zod": "4.4.3"
