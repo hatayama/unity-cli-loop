@@ -174,8 +174,23 @@ func runCompileWithDomainReloadWaitWithDeps(
 		return 1
 	}
 
+	waitTimeout, timeoutErr := compileWaitTimeoutFromParams(params)
+	if timeoutErr != nil {
+		clierrors.WriteClassifiedError(stderr, timeoutErr, clierrors.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.CompileCommandName,
+		})
+		return 1
+	}
+	if waitTimeout > time.Duration(compileWaitTimeoutRetentionWarningSeconds)*time.Second {
+		_, _ = fmt.Fprintf(
+			stderr,
+			"warning: --compile-wait-timeout-seconds exceeds the Unity-side compile result retention window (20 minutes); if the wait times out, the result may expire before a retry can recover it.\n",
+		)
+	}
+
 	logCliDebugModeResolved(connection, clicore.CompileCommandName)
-	logCompileRequestPrepared(connection, params, requestID)
+	logCompileRequestPrepared(connection, params, requestID, waitTimeout)
 
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, clicore.CompileCommandName)
@@ -205,7 +220,7 @@ func runCompileWithDomainReloadWaitWithDeps(
 		connection:     connection,
 		requestID:      requestID,
 		forceRecompile: compileForceRecompileEnabled(params),
-		timeout:        compileWaitTimeout,
+		timeout:        waitTimeout,
 		pollInterval:   compileWaitPollInterval,
 	}, compileWait)
 	if waitErr != nil {
@@ -218,7 +233,7 @@ func runCompileWithDomainReloadWaitWithDeps(
 	}
 	if !completed {
 		spinner.Stop()
-		clierrors.WriteErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot))
+		clierrors.WriteErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot, waitTimeout))
 		return 1
 	}
 	switch compileResultReadinessWaitMode(result) {
