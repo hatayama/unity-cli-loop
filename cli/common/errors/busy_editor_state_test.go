@@ -17,6 +17,42 @@ func TestUnityServerBusyNextActions_WhenCompiling_IncludesCompileGuidance(t *tes
 	}
 }
 
+// Verifies a busy compile tool adds reattach guidance that only applies after the
+// caller's own COMPILE_WAIT_TIMEOUT (not for unrelated clients or unity-compile).
+func TestUnityServerBusyNextActions_WhenRunningCompileTool_IncludesReattachGuidance(t *testing.T) {
+	data := map[string]any{
+		"runningToolName": "compile",
+	}
+
+	actions := unityServerBusyNextActions(data)
+	expected := "A compile can take several minutes on large projects. Wait for it to finish, then retry. If your own `uloop compile` previously failed with COMPILE_WAIT_TIMEOUT, re-running `uloop compile` reattaches to that compile instead of starting a new one."
+	found := false
+	for _, action := range actions {
+		if action == expected {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("compile reattach guidance missing: %#v", actions)
+	}
+}
+
+// Verifies editor-state unity-compile busy does not promise uloop compile reattach.
+func TestUnityServerBusyNextActions_WhenRunningUnityCompile_OmitsReattachGuidance(t *testing.T) {
+	data := map[string]any{
+		"runningToolName": "unity-compile",
+		"isCompiling":     true,
+	}
+
+	actions := unityServerBusyNextActions(data)
+	for _, action := range actions {
+		if action == "A compile can take several minutes on large projects. Wait for it to finish, then retry. If your own `uloop compile` previously failed with COMPILE_WAIT_TIMEOUT, re-running `uloop compile` reattaches to that compile instead of starting a new one." {
+			t.Fatalf("unity-compile busy must not promise reattach: %#v", actions)
+		}
+	}
+}
+
 // Verifies stalled main-thread ticks add a lightweight responsiveness check action.
 func TestUnityServerBusyNextActions_WhenMainThreadStalled_IncludesResponsivenessCheck(t *testing.T) {
 	data := map[string]any{
