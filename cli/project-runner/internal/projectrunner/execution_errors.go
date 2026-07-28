@@ -9,7 +9,12 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
-func compileWaitTimeoutError(projectRoot string, timeout time.Duration) clierrors.CLIError {
+func compileWaitTimeoutError(
+	projectRoot string,
+	timeout time.Duration,
+	lastStatus *compileStatusResponse,
+	waited time.Duration,
+) clierrors.CLIError {
 	return clierrors.CLIError{
 		ErrorCode: clierrors.ErrorCodeCompileWaitTimeout,
 		Phase:     clierrors.ErrorPhaseCompileWaiting,
@@ -24,7 +29,21 @@ func compileWaitTimeoutError(projectRoot string, timeout time.Duration) clierror
 		// launch -r. Recovery is reattach via a later uloop compile while Unity still
 		// holds the result (CompileResultLifetime / compilePendingRecordLifetime).
 		NextActions: compileWaitTimeoutNextActions(timeout),
+		Details:     compileWaitTimeoutDetails(lastStatus, waited),
 	}
+}
+
+func compileWaitTimeoutDetails(lastStatus *compileStatusResponse, waited time.Duration) map[string]any {
+	details := map[string]any{
+		"WaitedMs": waited.Milliseconds(),
+	}
+	if lastStatus == nil {
+		return details
+	}
+	details["IsCompiling"] = lastStatus.IsCompiling
+	details["IsUpdating"] = lastStatus.IsUpdating
+	details["IsDomainReloadInProgress"] = lastStatus.IsDomainReloadInProgress
+	return details
 }
 
 func compileWaitTimeoutNextActions(timeout time.Duration) []string {

@@ -220,7 +220,8 @@ func runCompileWithDomainReloadWaitWithDeps(
 	}
 
 	spinner.Update("Waiting for domain reload to complete...")
-	result, completed, waitErr := waitForCompileCompletionWithDeps(ctx, compileCompletionOptions{
+	waitStartedAt := time.Now()
+	result, completed, lastStatus, waitErr := waitForCompileCompletionWithDeps(ctx, compileCompletionOptions{
 		connection:     connection,
 		requestID:      requestID,
 		forceRecompile: compileForceRecompileEnabled(params),
@@ -238,7 +239,12 @@ func runCompileWithDomainReloadWaitWithDeps(
 	if !completed {
 		spinner.Stop()
 		persistCompilePendingRecordOrWarn(connection.ProjectRoot, requestID, stderr)
-		clierrors.WriteErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot, waitTimeout))
+		clierrors.WriteErrorEnvelope(stderr, compileWaitTimeoutError(
+			connection.ProjectRoot,
+			waitTimeout,
+			lastStatus,
+			time.Since(waitStartedAt),
+		))
 		return 1
 	}
 	return completeCompileResultOutput(ctx, connection, result, stdout, stderr, spinner, startedAt, outcome)

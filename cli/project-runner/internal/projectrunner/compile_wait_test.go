@@ -185,7 +185,7 @@ func TestWaitForCompileCompletionReturnsReadyStatusResult(t *testing.T) {
 		return compileStatusResponse{Ready: true, HasResult: true, Result: json.RawMessage(`{"Success":true}`)}, nil
 	})
 
-	result, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+	result, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:   connection,
 		requestID:    requestID,
 		timeout:      time.Second,
@@ -226,7 +226,7 @@ func TestWaitForCompileCompletionWritesPollLifecycleVibeLogs(t *testing.T) {
 		}, nil
 	})
 
-	result, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+	result, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:   connection,
 		requestID:    requestID,
 		timeout:      time.Second,
@@ -276,7 +276,7 @@ func TestWaitForCompileCompletionForceCompileWaitsForStoredResult(t *testing.T) 
 		}, nil
 	})
 
-	result, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+	result, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:     connection,
 		requestID:      requestID,
 		forceRecompile: true,
@@ -317,7 +317,7 @@ func TestWaitForCompileCompletionForceCompileTimesOutWithoutStoredResult(t *test
 		return compileStatusResponse{Ready: true, HasResult: false}, nil
 	})
 
-	_, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+	_, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:     connection,
 		requestID:      requestID,
 		forceRecompile: true,
@@ -341,7 +341,7 @@ func TestWaitForCompileCompletionWritesTimeoutVibeLog(t *testing.T) {
 		return compileStatusResponse{Ready: false, IsCompiling: true, Message: "Compiling"}, nil
 	})
 
-	_, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+	_, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:   connection,
 		requestID:    requestID,
 		timeout:      20 * time.Millisecond,
@@ -380,7 +380,7 @@ func TestWaitForCompileCompletionWritesCancellationVibeLog(t *testing.T) {
 		return compileStatusResponse{Ready: false, IsDomainReloadInProgress: true}, nil
 	})
 
-	_, completed, err := waitForCompileCompletionWithDeps(ctx, compileCompletionOptions{
+	_, completed, _, err := waitForCompileCompletionWithDeps(ctx, compileCompletionOptions{
 		connection:   connection,
 		requestID:    requestID,
 		timeout:      time.Second,
@@ -783,7 +783,7 @@ func TestWaitForCompileCompletionRespectsConfiguredTimeout(t *testing.T) {
 	})
 
 	startedAt := time.Now()
-	_, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+	_, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:   connection,
 		requestID:    "compile_configured_timeout",
 		timeout:      40 * time.Millisecond,
@@ -808,7 +808,7 @@ func TestWaitForCompileCompletionRespectsConfiguredTimeout(t *testing.T) {
 // responsiveness instead of assuming a freeze, because agents have terminated
 // whole sessions after misreading this timeout as a frozen Editor.
 func TestCompileWaitTimeoutError(t *testing.T) {
-	cliErr := compileWaitTimeoutError("/tmp/MyProject", 90*time.Second)
+	cliErr := compileWaitTimeoutError("/tmp/MyProject", 90*time.Second, nil, 90*time.Second)
 
 	if cliErr.ErrorCode != clierrors.ErrorCodeCompileWaitTimeout {
 		t.Fatalf("error code mismatch: %#v", cliErr)
@@ -841,13 +841,77 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 
 // Verifies a wait that consumes the full retention window omits the remaining-minutes sentence.
 func TestCompileWaitTimeoutErrorOmitsRemainingMinutesWhenNoneLeft(t *testing.T) {
-	cliErr := compileWaitTimeoutError("/tmp/MyProject", compilePendingRecordLifetime)
+	cliErr := compileWaitTimeoutError("/tmp/MyProject", compilePendingRecordLifetime, nil, compilePendingRecordLifetime)
 	reattach := cliErr.NextActions[1]
 	if strings.Contains(reattach, "retrievable for roughly") {
 		t.Fatalf("remaining-minutes sentence should be omitted: %#v", reattach)
 	}
 	if !strings.Contains(reattach, "reattach to the in-flight compile") {
 		t.Fatalf("reattach guidance missing: %#v", reattach)
+	}
+}
+
+// Verifies COMPILE_WAIT_TIMEOUT Details include the last observed status flags and WaitedMs.
+func TestCompileWaitTimeoutErrorIncludesLastObservedStatusDetails(t *testing.T) {
+	lastStatus := &compileStatusResponse{
+		IsCompiling:              true,
+		IsUpdating:               false,
+		IsDomainReloadInProgress: true,
+	}
+	cliErr := compileWaitTimeoutError("/tmp/MyProject", time.Second, lastStatus, 1234*time.Millisecond)
+	if cliErr.Details["WaitedMs"] != int64(1234) {
+		t.Fatalf("WaitedMs mismatch: %#v", cliErr.Details["WaitedMs"])
+	}
+	if cliErr.Details["IsCompiling"] != true {
+		t.Fatalf("IsCompiling mismatch: %#v", cliErr.Details)
+	}
+	if cliErr.Details["IsUpdating"] != false {
+		t.Fatalf("IsUpdating mismatch: %#v", cliErr.Details)
+	}
+	if cliErr.Details["IsDomainReloadInProgress"] != true {
+		t.Fatalf("IsDomainReloadInProgress mismatch: %#v", cliErr.Details)
+	}
+}
+
+// Verifies timeout Details omit status flags when no compile status was observed.
+func TestCompileWaitTimeoutErrorOmitsStatusDetailsWhenUnobserved(t *testing.T) {
+	cliErr := compileWaitTimeoutError("/tmp/MyProject", time.Second, nil, time.Second)
+	if _, ok := cliErr.Details["IsCompiling"]; ok {
+		t.Fatalf("IsCompiling should be omitted without an observation: %#v", cliErr.Details)
+	}
+	if cliErr.Details["WaitedMs"] != int64(1000) {
+		t.Fatalf("WaitedMs mismatch: %#v", cliErr.Details["WaitedMs"])
+	}
+}
+
+// Verifies the wait helper returns the last successful status observation on timeout.
+func TestWaitForCompileCompletionReturnsLastStatusOnTimeout(t *testing.T) {
+	connection := compileWaitTestConnection(t)
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		return compileStatusResponse{
+			Ready:                    false,
+			IsCompiling:              true,
+			IsDomainReloadInProgress: true,
+		}, nil
+	})
+
+	_, completed, lastStatus, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+		connection:   connection,
+		requestID:    "compile_last_status",
+		timeout:      30 * time.Millisecond,
+		pollInterval: 5 * time.Millisecond,
+	}, deps)
+	if err != nil {
+		t.Fatalf("waitForCompileCompletion failed: %v", err)
+	}
+	if completed {
+		t.Fatal("expected timeout")
+	}
+	if lastStatus == nil {
+		t.Fatal("expected last observed status")
+	}
+	if !lastStatus.IsCompiling || !lastStatus.IsDomainReloadInProgress {
+		t.Fatalf("last status mismatch: %#v", lastStatus)
 	}
 }
 
