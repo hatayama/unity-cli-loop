@@ -326,6 +326,7 @@ func TestRunCompileAttachRetimesOutPreservesPendingRecord(t *testing.T) {
 	if !strings.Contains(stderr.String(), "Compile status wait timed out after 1000ms") {
 		t.Fatalf("reattach timeout message mismatch: %s", stderr.String())
 	}
+	assertCompileWaitTimeoutEnvelopeDetails(t, stderr.Bytes(), true)
 
 	got, ok := readCompilePendingRecord(projectRoot)
 	if !ok {

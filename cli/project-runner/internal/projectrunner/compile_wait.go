@@ -170,11 +170,16 @@ func isSafeCompileRequestID(requestID string) bool {
 	return true
 }
 
-func waitForCompileCompletionWithDeps(ctx context.Context, options compileCompletionOptions, deps compileWaitDeps) (json.RawMessage, bool, error) {
+func waitForCompileCompletionWithDeps(
+	ctx context.Context,
+	options compileCompletionOptions,
+	deps compileWaitDeps,
+) (json.RawMessage, bool, *compileStatusResponse, error) {
 	startedAt := time.Now()
 	deadline := startedAt.Add(options.timeout)
 	attempts := 0
 	var lastStatus compileStatusResponse
+	observedStatus := false
 	var lastErr error
 	lastObservationKey := ""
 
@@ -194,23 +199,32 @@ func waitForCompileCompletionWithDeps(ctx context.Context, options compileComple
 		if err == nil && status.Ready && status.HasResult && len(status.Result) > 0 {
 			logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, nil, &lastObservationKey)
 			logCompileStatusPollComplete(options, startedAt, attempts, status)
-			return status.Result, true, nil
+			return status.Result, true, nil, nil
 		}
 		if err == nil {
 			lastStatus = status
+			observedStatus = true
 		}
 		logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, err, &lastObservationKey)
 
 		select {
 		case <-ctx.Done():
 			logCompileWaitCancelled(options, startedAt, attempts, lastStatus, lastErr, ctx.Err())
-			return nil, false, ctx.Err()
+			return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), ctx.Err()
 		case <-ticker.C:
 		}
 	}
 
 	logCompileWaitTimedOut(options, startedAt, attempts, lastStatus, lastErr)
-	return nil, false, nil
+	return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), nil
+}
+
+func lastObservedCompileStatus(status compileStatusResponse, observed bool) *compileStatusResponse {
+	if !observed {
+		return nil
+	}
+	copied := status
+	return &copied
 }
 
 func compileForceRecompileEnabled(params map[string]any) bool {

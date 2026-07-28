@@ -18,6 +18,16 @@ func unityServerBusyNextActions(data map[string]any) []string {
 			actions...)
 	}
 
+	// Why only runningToolName == "compile": attach recovery requires a local pending
+	// record from this client's own COMPILE_WAIT_TIMEOUT. Editor-state "unity-compile"
+	// busy and other clients' compiles must not promise reattach.
+	if rpcStringData(data, "runningToolName") == "compile" {
+		actions = append(
+			actions,
+			"A compile can take several minutes on large projects. Wait for it to finish, then retry. If your own `uloop compile` previously failed with COMPILE_WAIT_TIMEOUT, re-running `uloop compile` reattaches to that compile instead of starting a new one.",
+		)
+	}
+
 	if stallSeconds, ok := rpcFloatData(data, "secondsSinceLastMainThreadTick"); ok &&
 		stallSeconds >= unityServerBusyResponsivenessStallThresholdSeconds {
 		actions = append(

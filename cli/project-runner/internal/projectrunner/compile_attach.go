@@ -140,7 +140,8 @@ func attachWaitForPendingCompile(
 	if pollInterval <= 0 {
 		pollInterval = compileWaitPollInterval
 	}
-	result, outcome, waitErr := waitForAttachedCompileCompletion(ctx, compileCompletionOptions{
+	waitStartedAt := time.Now()
+	result, outcome, lastStatus, waitErr := waitForAttachedCompileCompletion(ctx, compileCompletionOptions{
 		connection:   connection,
 		requestID:    record.RequestID,
 		timeout:      waitTimeout,
@@ -166,7 +167,12 @@ func attachWaitForPendingCompile(
 		spinner.Stop()
 		// Why not refresh TimedOutAtUtc: stale expiry must stay anchored to the first timeout.
 		logCompileAttachResult(connection, record.RequestID, "timeout", false)
-		clierrors.WriteErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot, waitTimeout))
+		clierrors.WriteErrorEnvelope(stderr, compileWaitTimeoutError(
+			connection.ProjectRoot,
+			waitTimeout,
+			lastStatus,
+			time.Since(waitStartedAt),
+		))
 		return true, 1
 	case attachWaitCompleted:
 		clearCompilePendingRecord(connection.ProjectRoot)
@@ -183,12 +189,13 @@ func waitForAttachedCompileCompletion(
 	ctx context.Context,
 	options compileCompletionOptions,
 	deps compileWaitDeps,
-) (json.RawMessage, attachWaitOutcome, error) {
+) (json.RawMessage, attachWaitOutcome, *compileStatusResponse, error) {
 	startedAt := time.Now()
 	deadline := startedAt.Add(options.timeout)
 	attempts := 0
 	missingResultStreak := 0
 	var lastStatus compileStatusResponse
+	observedStatus := false
 	var lastErr error
 	lastObservationKey := ""
 
@@ -207,16 +214,17 @@ func waitForAttachedCompileCompletion(
 		lastErr = err
 		if err == nil {
 			lastStatus = status
+			observedStatus = true
 			if status.HasResult && len(status.Result) > 0 {
 				logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, nil, &lastObservationKey)
 				logCompileStatusPollComplete(options, startedAt, attempts, status)
-				return status.Result, attachWaitCompleted, nil
+				return status.Result, attachWaitCompleted, nil, nil
 			}
 			if status.Ready && !status.HasResult {
 				missingResultStreak++
 				if missingResultStreak >= compileAttachMissingResultStreak {
 					logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, nil, &lastObservationKey)
-					return nil, attachWaitDisappeared, nil
+					return nil, attachWaitDisappeared, lastObservedCompileStatus(lastStatus, observedStatus), nil
 				}
 			} else {
 				missingResultStreak = 0
@@ -227,13 +235,13 @@ func waitForAttachedCompileCompletion(
 		select {
 		case <-ctx.Done():
 			logCompileWaitCancelled(options, startedAt, attempts, lastStatus, lastErr, ctx.Err())
-			return nil, attachWaitFailed, ctx.Err()
+			return nil, attachWaitFailed, lastObservedCompileStatus(lastStatus, observedStatus), ctx.Err()
 		case <-ticker.C:
 		}
 	}
 
 	logCompileWaitTimedOut(options, startedAt, attempts, lastStatus, lastErr)
-	return nil, attachWaitTimedOut, nil
+	return nil, attachWaitTimedOut, lastObservedCompileStatus(lastStatus, observedStatus), nil
 }
 
 func returnAttachedStoredCompileResult(
