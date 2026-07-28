@@ -63,15 +63,37 @@ arguments; the PowerShell parameters are the same names in PascalCase, e.g.
 | `--sleep-seconds` | 0 | Pause between iterations |
 | `--out-dir` | `./uloop-soak-results/<timestamp>` | Results directory |
 
+PowerShell-only parameters:
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `-CommandTimeoutSeconds` | 600 | Kill bound for one uloop call. Raise it for large projects and parallel soaks (see below) |
+| `-KeepCodeOptimization` | off | Leave the editor's code optimization mode alone (see below) |
+
 Environment: `ULOOP_BIN` selects the uloop binary (default: `uloop` from
 `PATH`, the realistic released configuration). Point it at a `dist/` binary to
 soak unreleased CLI code, per the Native Go CLI Validation rules in CLAUDE.md
 (`dist\windows-amd64\uloop.exe` on Windows).
 
-Every uloop call runs under a 10-minute kill watchdog. A hung IPC call — a
-frozen editor that accepted the connection but never answers — is recorded as
-one finite failure (exit code `124`) so the consecutive-failure recovery can
-fire instead of blocking an unattended soak forever.
+Every uloop call runs under a kill watchdog (10 minutes by default). A hung IPC
+call — a frozen editor that accepted the connection but never answers — is
+recorded as one finite failure (exit code `124`) so the consecutive-failure
+recovery can fire instead of blocking an unattended soak forever. The default
+is not enough for every project: a forced full recompile of one large project
+took ~8 minutes on its own, and over 10 minutes with three editors compiling in
+parallel, so raise `-CommandTimeoutSeconds` for runs like that.
+
+uloop is single-flight, so a command issued while Unity still runs an earlier
+one is refused at dispatch with `UNITY_SERVER_BUSY`. That is back-pressure from
+the harness's own previous command, not a defect: the PowerShell variant waits
+(up to 20 tries, 30s apart) and records only the decisive attempt, so one slow
+compile no longer fails every command behind it.
+
+Heavy operations are also kept off the same iteration: a `run-tests` due on the
+same iteration as `compile --force-recompile` is deferred by one iteration
+(except on the last iteration, where deferring would drop the run entirely).
+Stacking them serialises a full rebuild in front of the test run and can leave
+Unity compiling while the tests try to start.
 
 ## What one iteration does
 

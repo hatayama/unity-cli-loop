@@ -285,6 +285,17 @@ function Invoke-Uloop {
 # CSV stays the unfiltered record, the log and the summary stay signal.
 [hashtable]$ToleratedCounts = @{}
 
+# uloop is single-flight: while Unity runs one tool, every other command is
+# refused at dispatch with UNITY_SERVER_BUSY (Retryable: true). That is
+# back-pressure from work the harness itself started - a compile that outlived
+# the runner's own wait keeps the editor busy for minutes - not a defect, and
+# counting it would fail a whole iteration's worth of commands over one slow
+# compile. Busy attempts are waited out instead, and only the decisive attempt
+# is recorded, so commands.csv keeps one row per intended invocation.
+[string]$BusyErrorCode = '"ErrorCode": "UNITY_SERVER_BUSY"'
+[int]$BusyRetryLimit = 20
+[int]$BusyRetryDelaySeconds = 30
+
 # Runs one uloop command, appends a CSV row, and returns the command result.
 # ToleratedPattern names the one documented outcome for this command that is
 # expected to fail without being a defect (see docs/soak-testing.md); a
@@ -298,9 +309,29 @@ function Invoke-TimedUloop {
         [string]$ToleratedPattern = ""
     )
 
-    [int64]$start = Get-EpochMilliseconds
-    [pscustomobject]$result = Invoke-Uloop -CommandArguments $CommandArguments
-    [int64]$end = Get-EpochMilliseconds
+    [int64]$start = 0
+    [int64]$end = 0
+    [pscustomobject]$result = $null
+    [bool]$waitedForEditor = $false
+    for ([int]$attempt = 1; $attempt -le $BusyRetryLimit; $attempt++) {
+        $start = Get-EpochMilliseconds
+        $result = Invoke-Uloop -CommandArguments $CommandArguments
+        $end = Get-EpochMilliseconds
+
+        if ($result.ExitCode -eq 0 -or -not $result.Text.Contains($BusyErrorCode) -or $attempt -eq $BusyRetryLimit) {
+            break
+        }
+
+        if (-not $waitedForEditor) {
+            $waitedForEditor = $true
+            Write-SoakLog -Message "iter=$Iteration $Label deferred: Unity is busy with an earlier command, retrying every ${BusyRetryDelaySeconds}s"
+        }
+        Start-Sleep -Seconds $BusyRetryDelaySeconds
+    }
+
+    if ($waitedForEditor -and $result.ExitCode -eq 0) {
+        Write-SoakLog -Message "iter=$Iteration $Label ran once the editor was free"
+    }
 
     Add-TextLine -Path $CommandsCsv -Line ("{0},{1},{2},{3},{4},{5}" -f $start, $Iteration, $Label, $result.ExitCode, ($end - $start), $result.Bytes)
 
@@ -741,8 +772,15 @@ function Invoke-PauseCycle {
 
     [bool]$failed = $false
     [pscustomobject]$sceneResult = Invoke-EnsureSoakScene -Iteration $Iteration
-    if ($sceneResult.ExitCode -ne 0 -or $sceneResult.Text.Contains("DIRTY_SCENE")) {
-        Write-SoakLog -Message "iter=$Iteration could not open the soak scene (unsaved changes?) - pause cycle failed"
+    # Told apart deliberately: the command failing is a defect signal whose
+    # payload the FAIL line above already carries, while DIRTY_SCENE is the
+    # guard refusing to discard someone's unsaved work.
+    if ($sceneResult.ExitCode -ne 0) {
+        Write-SoakLog -Message "iter=$Iteration soak scene could not be rebuilt - pause cycle failed"
+        return $true
+    }
+    if ($sceneResult.Text.Contains("DIRTY_SCENE")) {
+        Write-SoakLog -Message "iter=$Iteration the active scene has unsaved changes - pause cycle skipped to protect them"
         return $true
     }
 
@@ -887,17 +925,19 @@ try {
     }
 
     [int]$consecutiveFails = 0
+    [bool]$testsDeferred = $false
     for ([int]$i = 1; $i -le $Iterations; $i++) {
         Write-ScratchScript -Iteration $i
 
         [bool]$iterationFailed = $false
+        [bool]$forcedThisIteration = $ForceEvery -gt 0 -and ($i % $ForceEvery) -eq 0
         # Forced recompiles rebuild every assembly - a heavier reload path
         # worth soaking, but far too slow to run on every iteration of a large
         # project. Unity may legitimately report an unknown forced result after
         # the domain reload (ForceCompileUnknownResult); the tool's own
         # guidance is to follow up with a plain compile, so only that follow-up
         # counts against the iteration and any other forced failure still does.
-        if ($ForceEvery -gt 0 -and ($i % $ForceEvery) -eq 0) {
+        if ($forcedThisIteration) {
             [pscustomobject]$forcedResult = Invoke-TimedUloop -Iteration $i -Label "compile-forced" -CommandArguments (@("compile") + $CompileWaitArguments + @("--force-recompile")) -ToleratedPattern "definitive result"
             if ($forcedResult.ExitCode -ne 0 -and -not $forcedResult.Tolerated) {
                 $iterationFailed = $true
@@ -928,7 +968,22 @@ try {
             }
         }
 
-        if ($TestsEvery -gt 0 -and ($i % $TestsEvery) -eq 0) {
+        # The default cadences share their multiples, so tests used to land on
+        # the same iteration as the forced recompile. Stacking them serialises
+        # a full project rebuild in front of the test run, and while that
+        # rebuild is still running inside Unity the test run cannot start at
+        # all. Testing one iteration later keeps both measurable on their own.
+        # The last iteration is the exception: deferring there would drop the
+        # test run entirely, which is worse than running it stacked.
+        [bool]$testsDue = $TestsEvery -gt 0 -and ((($i % $TestsEvery) -eq 0) -or $testsDeferred)
+        if ($testsDue -and $forcedThisIteration -and $i -lt $Iterations) {
+            $testsDeferred = $true
+            $testsDue = $false
+            Write-SoakLog -Message "iter=$i tests deferred one iteration to keep them apart from the forced recompile"
+        }
+
+        if ($testsDue) {
+            $testsDeferred = $false
             # Red project tests are not a soak failure - the harness measures
             # whether uloop transported and completed the run, so only a
             # missing test report (no TestCount in the response) counts against
