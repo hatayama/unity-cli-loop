@@ -8,6 +8,7 @@ using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -142,7 +143,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void PausePointResponse_WhenErrorCodeIsSet_SerializesErrorCodeWireName()
         {
-            string json = JsonConvert.SerializeObject(new PausePointResponse { Success = false, ErrorCode = "X" });
+            // Why production settings: JsonRpcResponseFactory uses these settings; a bare
+            // SerializeObject would miss ContractResolver renames and give false confidence.
+            string json = JsonConvert.SerializeObject(
+                new PausePointResponse { Success = false, ErrorCode = "X" },
+                Formatting.None,
+                UnityCliLoopJsonResponseSerializerSettings.Settings);
 
             Assert.That(json, Does.Contain("\"ErrorCode\":\"X\""));
         }
