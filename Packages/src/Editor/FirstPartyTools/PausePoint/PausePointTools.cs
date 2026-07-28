@@ -79,6 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int ClearedCount { get; set; }
         public string Message { get; set; } = string.Empty;
         public string RecommendedNextAction { get; set; } = string.Empty;
+        public string ErrorCode { get; set; } = string.Empty;
         public string Warning { get; set; } = string.Empty;
         public string ClearedReason { get; set; } = string.Empty;
         public string StatusBeforeClear { get; set; } = string.Empty;
@@ -313,18 +314,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string captureSettingsError = ValidateCaptureSettings(parameters);
             if (captureSettingsError != null)
             {
-                return CreateValidationFailure(captureSettingsError);
+                return CreateValidationFailure(
+                    captureSettingsError,
+                    SourcePausePointConstants.ErrorCodeInvalidArgument,
+                    "Fix the rejected capture argument described in Message and re-run; uloop enable-pause-point --help lists the accepted values.");
             }
 
             string modeError = ValidateEnableMode(parameters);
             if (modeError != null)
             {
-                return CreateValidationFailure(modeError);
+                return CreateValidationFailure(
+                    modeError,
+                    SourcePausePointConstants.ErrorCodeInvalidArgument,
+                    "Re-run with either --id alone, or --file and --line together.");
             }
 
             if (parameters.TimeoutSeconds <= 0)
             {
-                return CreateValidationFailure("TimeoutSeconds must be greater than zero.");
+                return CreateValidationFailure(
+                    "TimeoutSeconds must be greater than zero.",
+                    SourcePausePointConstants.ErrorCodeInvalidArgument,
+                    "Re-run with --timeout-seconds set to a positive integer.");
             }
 
             if (!string.IsNullOrWhiteSpace(parameters.File))
@@ -384,7 +394,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string idError = ValidateId(parameters.Id);
             if (idError != null)
             {
-                return CreateValidationFailure(idError);
+                return CreateValidationFailure(
+                    idError,
+                    SourcePausePointConstants.ErrorCodeInvalidArgument,
+                    "Pass --id with the id returned by enable-pause-point, or use --all to clear every marker.");
             }
 
             (UloopPausePointSnapshot snapshot, bool resumedFromPause) = UloopPausePointRegistry.Clear(parameters.Id);
@@ -437,13 +450,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (CompilationPipeline.codeOptimization == CodeOptimization.Release)
             {
-                return CreateValidationFailure(SourcePausePointConstants.ReleaseCodeOptimizationRejectionMessage);
+                return CreateValidationFailure(
+                    SourcePausePointConstants.ReleaseCodeOptimizationRejectionMessage,
+                    SourcePausePointConstants.ErrorCodeReleaseCodeOptimization,
+                    SourcePausePointConstants.ReleaseCodeOptimizationRecommendedNextAction);
             }
 
             SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(parameters.File, parameters.Line);
             if (!resolveResult.Success)
             {
-                return CreateValidationFailure(resolveResult.ErrorMessage);
+                return CreateValidationFailure(
+                    resolveResult.ErrorMessage,
+                    SourcePausePointConstants.ErrorCodeResolveFailed,
+                    SourcePausePointConstants.ResolveFailedRecommendedNextAction);
             }
 
             string id = BuildSourcePausePointId(parameters.File, parameters.Line);
@@ -453,6 +472,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new PausePointResponse
                 {
                     Success = false,
+                    ErrorCode = SourcePausePointConstants.ErrorCodePatchFailed,
                     Message = patchResult.ErrorMessage,
                     RecommendedNextAction = patchResult.Hint
                 };
@@ -627,12 +647,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        private static PausePointResponse CreateValidationFailure(string message)
+        private static PausePointResponse CreateValidationFailure(
+            string message,
+            string errorCode,
+            string recommendedNextAction)
         {
             return new PausePointResponse
             {
                 Success = false,
-                Message = message
+                Message = message,
+                ErrorCode = errorCode,
+                RecommendedNextAction = recommendedNextAction
             };
         }
 
