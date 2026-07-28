@@ -53,6 +53,10 @@ param(
     # Test assembly passed to run-tests --filter-type assembly (required when
     # -TestsEvery > 0; never run the full suite of a large project).
     [string]$TestAssembly = "",
+    # Leave the editor's code optimization mode alone. Without this the
+    # PlayMode cycle switches a Release editor to Debug for the duration of the
+    # run, because pause points cannot be armed by file and line otherwise.
+    [switch]$KeepCodeOptimization,
     # Pause between iterations.
     [int]$SleepSeconds = 0,
     # Results directory (default: .\uloop-soak-results\<timestamp>).
@@ -271,12 +275,22 @@ function Invoke-Uloop {
     }
 }
 
+# Known-benign outcomes are counted per label so the summary can report them
+# apart from real failures. The raw exit code still reaches commands.csv: the
+# CSV stays the unfiltered record, the log and the summary stay signal.
+[hashtable]$ToleratedCounts = @{}
+
 # Runs one uloop command, appends a CSV row, and returns the command result.
+# ToleratedPattern names the one documented outcome for this command that is
+# expected to fail without being a defect (see docs/soak-testing.md); a
+# non-zero exit whose payload contains it is reported as TOLERATED, and the
+# returned Tolerated flag tells the caller not to fail the iteration.
 function Invoke-TimedUloop {
     param(
         [int]$Iteration,
         [string]$Label,
-        [string[]]$CommandArguments
+        [string[]]$CommandArguments,
+        [string]$ToleratedPattern = ""
     )
 
     [int64]$start = Get-EpochMilliseconds
@@ -285,16 +299,78 @@ function Invoke-TimedUloop {
 
     Add-TextLine -Path $CommandsCsv -Line ("{0},{1},{2},{3},{4},{5}" -f $start, $Iteration, $Label, $result.ExitCode, ($end - $start), $result.Bytes)
 
+    [bool]$tolerated = $false
     if ($result.ExitCode -ne 0) {
+        $tolerated = (-not [string]::IsNullOrEmpty($ToleratedPattern)) -and $result.Text.Contains($ToleratedPattern)
         [string]$excerpt = $result.Text
         if ($excerpt.Length -gt 200) {
             $excerpt = $excerpt.Substring(0, 200)
         }
         $excerpt = ($excerpt -replace '\r?\n', ' ')
-        Write-SoakLog -Message "FAIL iter=$Iteration $Label exit=$($result.ExitCode) ($excerpt)"
+
+        if ($tolerated) {
+            if (-not $ToleratedCounts.ContainsKey($Label)) {
+                $ToleratedCounts[$Label] = 0
+            }
+            $ToleratedCounts[$Label] = $ToleratedCounts[$Label] + 1
+            Write-SoakLog -Message "TOLERATED iter=$Iteration $Label exit=$($result.ExitCode) ($excerpt)"
+        }
+        else {
+            Write-SoakLog -Message "FAIL iter=$Iteration $Label exit=$($result.ExitCode) ($excerpt)"
+        }
     }
 
-    return $result
+    return [pscustomobject]@{
+        Arguments = $result.Arguments
+        ExitCode = $result.ExitCode
+        Text = $result.Text
+        Bytes = $result.Bytes
+        Tolerated = $tolerated
+    }
+}
+
+# An explicit compile can collide with a compilation Unity started on its own
+# ("Compilation is already in progress", Retryable: true) - after an editor
+# restart, and after the setup switches code optimization, which recompiles
+# every assembly. Retrying absorbs that race; any other failure is returned to
+# the caller untouched. Exhausting the attempts is a real failure, so the last
+# collision is un-tolerated before returning.
+function Invoke-CompileWithRetry {
+    param(
+        [int]$Iteration,
+        [string]$Label,
+        [string[]]$CompileArguments,
+        [int]$MaxAttempts = 3
+    )
+
+    [pscustomobject]$result = $null
+    [string]$attemptLabel = $Label
+    for ([int]$attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        $attemptLabel = $Label
+        if ($attempt -gt 1) {
+            $attemptLabel = "$Label-retry"
+        }
+
+        $result = Invoke-TimedUloop -Iteration $Iteration -Label $attemptLabel -CommandArguments $CompileArguments -ToleratedPattern "Compilation is already in progress"
+        if ($result.ExitCode -eq 0 -or -not $result.Tolerated) {
+            return $result
+        }
+
+        Start-Sleep -Seconds 10
+    }
+
+    if ($ToleratedCounts.ContainsKey($attemptLabel)) {
+        $ToleratedCounts[$attemptLabel] = $ToleratedCounts[$attemptLabel] - 1
+    }
+    Write-SoakLog -Message "FAIL iter=$Iteration $Label still collided with an in-progress compilation after $MaxAttempts attempts"
+
+    return [pscustomobject]@{
+        Arguments = $result.Arguments
+        ExitCode = $result.ExitCode
+        Text = $result.Text
+        Bytes = $result.Bytes
+        Tolerated = $false
+    }
 }
 
 # Forces a script recompile by rewriting the scratch file with a new constant.
@@ -492,6 +568,60 @@ function Wait-Editor {
     return $false
 }
 
+# enable-pause-point resolves a file and line through information Unity only
+# keeps under Debug code optimization: against a Release editor every arm call
+# fails on that precondition, so the whole PlayMode cycle would soak a
+# guaranteed failure instead of the paths it is meant to exercise. The original
+# mode is remembered here and restored when the run ends.
+[string]$PreviousCodeOptimization = ""
+
+function Initialize-CodeOptimization {
+    if ($KeepCodeOptimization) {
+        return
+    }
+
+    [pscustomobject]$result = Invoke-TimedUloop -Iteration 0 -Label "code-optimization" -CommandArguments @(
+        "execute-dynamic-code",
+        "--code",
+        'UnityEditor.Compilation.CodeOptimization previous = UnityEditor.Compilation.CompilationPipeline.codeOptimization; if (previous != UnityEditor.Compilation.CodeOptimization.Debug) { UnityEditor.Compilation.CompilationPipeline.codeOptimization = UnityEditor.Compilation.CodeOptimization.Debug; } return previous.ToString();'
+    )
+    if ($result.ExitCode -ne 0) {
+        Write-SoakLog -Message "Could not set Debug code optimization - pause points will fail while the editor stays on Release."
+        return
+    }
+
+    [object]$json = $null
+    try {
+        $json = $result.Text | ConvertFrom-Json
+    }
+    catch {
+        return
+    }
+
+    if ($null -eq $json -or ($json.PSObject.Properties.Name -notcontains "Result") -or ($json.Result -eq "Debug")) {
+        return
+    }
+
+    $script:PreviousCodeOptimization = [string]$json.Result
+    Write-SoakLog -Message "code optimization: switched $($json.Result) -> Debug so pause points can be armed (restored when the run ends)"
+}
+
+function Restore-CodeOptimization {
+    if ([string]::IsNullOrEmpty($PreviousCodeOptimization)) {
+        return
+    }
+
+    [string]$previous = $PreviousCodeOptimization
+    # Cleared first so a failing restore is not retried on every later call.
+    $script:PreviousCodeOptimization = ""
+    $null = Invoke-Uloop -CommandArguments @(
+        "execute-dynamic-code",
+        "--code",
+        "UnityEditor.Compilation.CompilationPipeline.codeOptimization = UnityEditor.Compilation.CodeOptimization.$previous; return UnityEditor.Compilation.CompilationPipeline.codeOptimization.ToString();"
+    )
+    Write-SoakLog -Message "code optimization: restored $previous (the editor recompiles once more in the background)"
+}
+
 # A soak aborted mid-pause-cycle would leave the editor paused in PlayMode;
 # always hand the editor back in a usable state.
 function Reset-EditorState {
@@ -502,6 +632,8 @@ function Reset-EditorState {
     try {
         $null = Invoke-Uloop -CommandArguments @("clear-pause-point", "--all")
         $null = Invoke-Uloop -CommandArguments @("control-play-mode", "--action", "Stop")
+        # Only after PlayMode has stopped: Unity refuses to recompile while playing.
+        Restore-CodeOptimization
     }
     catch {
         Write-SoakLog -Message "Editor state cleanup failed: $($_.Exception.Message)"
@@ -513,18 +645,23 @@ function Write-Summary {
     Write-SoakLog -Message "Results: $ResolvedOutDir"
 
     [object[]]$rows = @(Import-Csv -LiteralPath $CommandsCsv)
-    [string]$header = "{0,-14} {1,8} {2,8} {3,10}" -f "command", "runs", "fails", "avg_ms"
+    [string]$header = "{0,-20} {1,8} {2,8} {3,10} {4,10}" -f "command", "runs", "fails", "tolerated", "avg_ms"
     Write-Host $header
     Add-TextLine -Path $RunLog -Line $header
     foreach ($group in ($rows | Group-Object -Property command)) {
         [int]$runs = $group.Count
-        [int]$fails = @($group.Group | Where-Object { $_.exit_code -ne "0" }).Count
+        [int]$nonZero = @($group.Group | Where-Object { $_.exit_code -ne "0" }).Count
+        [int]$tolerated = 0
+        if ($ToleratedCounts.ContainsKey($group.Name)) {
+            $tolerated = $ToleratedCounts[$group.Name]
+        }
+        [int]$fails = $nonZero - $tolerated
         [int64]$totalMs = 0
         foreach ($row in $group.Group) {
             $totalMs += [int64]$row.duration_ms
         }
 
-        [string]$line = "{0,-14} {1,8} {2,8} {3,10}" -f $group.Name, $runs, $fails, [int64]($totalMs / $runs)
+        [string]$line = "{0,-20} {1,8} {2,8} {3,10} {4,10}" -f $group.Name, $runs, $fails, $tolerated, [int64]($totalMs / $runs)
         Write-Host $line
         Add-TextLine -Path $RunLog -Line $line
     }
@@ -707,7 +844,10 @@ try {
     if ($PauseEvery -gt 0) {
         Write-TickerScripts
         $TickerLine = Get-TickerPauseLine
-        if ((Invoke-TimedUloop -Iteration 0 -Label "setup-compile" -CommandArguments (@("compile") + $CompileWaitArguments)).ExitCode -ne 0) {
+        # Before the setup compile: switching the mode recompiles everything
+        # anyway, so the compile below doubles as the confirmation.
+        Initialize-CodeOptimization
+        if ((Invoke-CompileWithRetry -Iteration 0 -Label "setup-compile" -CompileArguments (@("compile") + $CompileWaitArguments)).ExitCode -ne 0) {
             Write-SoakLog -Message "Setup compile for the pause-point ticker failed - aborting."
             exit 1
         }
@@ -738,28 +878,15 @@ try {
         # guidance is to follow up with a plain compile, so only that follow-up
         # counts against the iteration and any other forced failure still does.
         if ($ForceEvery -gt 0 -and ($i % $ForceEvery) -eq 0) {
-            [pscustomobject]$forcedResult = Invoke-TimedUloop -Iteration $i -Label "compile-forced" -CommandArguments (@("compile") + $CompileWaitArguments + @("--force-recompile"))
-            if ($forcedResult.ExitCode -ne 0 -and -not $forcedResult.Text.Contains("definitive result")) {
+            [pscustomobject]$forcedResult = Invoke-TimedUloop -Iteration $i -Label "compile-forced" -CommandArguments (@("compile") + $CompileWaitArguments + @("--force-recompile")) -ToleratedPattern "definitive result"
+            if ($forcedResult.ExitCode -ne 0 -and -not $forcedResult.Tolerated) {
                 $iterationFailed = $true
             }
         }
 
-        # Right after an editor (re)start, an explicit compile can collide with
-        # Unity's own startup compilation ("Compilation is already in
-        # progress", Retryable: true). That race is expected under load, so a
-        # single retry absorbs it; any other compile failure still fails the
-        # iteration.
-        [pscustomobject]$compileResult = Invoke-TimedUloop -Iteration $i -Label "compile" -CommandArguments (@("compile") + $CompileWaitArguments)
+        [pscustomobject]$compileResult = Invoke-CompileWithRetry -Iteration $i -Label "compile" -CompileArguments (@("compile") + $CompileWaitArguments)
         if ($compileResult.ExitCode -ne 0) {
-            if ($compileResult.Text.Contains("Compilation is already in progress")) {
-                Start-Sleep -Seconds 10
-                if ((Invoke-TimedUloop -Iteration $i -Label "compile-retry" -CommandArguments (@("compile") + $CompileWaitArguments)).ExitCode -ne 0) {
-                    $iterationFailed = $true
-                }
-            }
-            else {
-                $iterationFailed = $true
-            }
+            $iterationFailed = $true
         }
 
         if ((Invoke-TimedUloop -Iteration $i -Label "get-logs" -CommandArguments @("get-logs", "--max-count", "200")).ExitCode -ne 0) {
@@ -786,8 +913,8 @@ try {
             # whether uloop transported and completed the run, so only a
             # missing test report (no TestCount in the response) counts against
             # the iteration.
-            [pscustomobject]$testsResult = Invoke-TimedUloop -Iteration $i -Label "run-tests" -CommandArguments @("run-tests", "--test-mode", "EditMode", "--filter-type", "assembly", "--filter-value", $TestAssembly)
-            if ($testsResult.ExitCode -ne 0 -and -not $testsResult.Text.Contains('"TestCount"')) {
+            [pscustomobject]$testsResult = Invoke-TimedUloop -Iteration $i -Label "run-tests" -CommandArguments @("run-tests", "--test-mode", "EditMode", "--filter-type", "assembly", "--filter-value", $TestAssembly) -ToleratedPattern '"TestCount"'
+            if ($testsResult.ExitCode -ne 0 -and -not $testsResult.Tolerated) {
                 $iterationFailed = $true
             }
         }

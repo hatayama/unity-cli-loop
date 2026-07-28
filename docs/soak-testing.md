@@ -8,7 +8,11 @@ script compilations, domain reloads, PlayMode cycles, test runs, and full
 editor restarts?
 
 Both variants run the same iteration plan and write the same CSV schema, so
-results from either platform are directly comparable.
+results from either platform are directly comparable. Two behaviours are so
+far implemented only in the PowerShell variant: the Debug code-optimization
+setup below, and reporting known-benign outcomes as `TOLERATED` instead of
+`FAIL`. The shell variant applies the same tolerance rules to its
+pass/fail decisions but still prints them as `FAIL`.
 
 It works against **any** Unity project that has the uloop package installed —
 point it at a large production project for the most realistic signal.
@@ -85,10 +89,30 @@ fire instead of blocking an unattended soak forever.
 Three consecutive failing iterations trigger one recovery restart; a second
 consecutive trip aborts the run.
 
+## Code optimization (pause points)
+
+`enable-pause-point` resolves a file and line through information Unity only
+keeps under **Debug** code optimization. Against a Release editor every arm
+call fails on that precondition, so the whole PlayMode cycle would soak a
+guaranteed failure. When `-PauseEvery` > 0, `soak-loop.ps1` reads the editor's
+mode at setup, switches it to Debug if needed, and restores the original mode
+when the run ends. Both switches trigger a full recompile — the setup compile
+absorbs the first one by retrying past `Compilation is already in progress`,
+and the restoring recompile runs in the background after the summary. Pass
+`-KeepCodeOptimization` to leave the setting alone — expect every pause-point
+command to fail if the project stays on Release.
+
+Debug code optimization also makes compiles slower (on one large project,
+`compile` averaged ~53s under Release and ~82s under Debug), so only compare
+latency between runs that used the same mode.
+
 ## Expected (tolerated) failures
 
 The harness distinguishes uloop defects from known-benign outcomes. These do
-NOT fail an iteration:
+NOT fail an iteration; they are logged as `TOLERATED` (not `FAIL`) and counted
+in the summary's `tolerated` column instead of `fails`. `commands.csv` keeps
+the raw non-zero exit code either way, so it remains the unfiltered record for
+graphing.
 
 - **Forced recompile without a definitive result** — designed behavior
   (`ForceCompileUnknownResult`); the follow-up plain compile is what counts.
@@ -125,8 +149,9 @@ and the harness's scene restore are not protected.
 
 The output directory contains:
 
-- `run.log` — human-readable progress, `FAIL` lines, and a per-command
-  summary table (runs / fails / avg ms) printed at the end.
+- `run.log` — human-readable progress, `FAIL` (and, in the PowerShell variant,
+  `TOLERATED`) lines, and a per-command summary table printed at the end
+  (runs / fails / avg ms; the PowerShell variant adds a `tolerated` column).
 - `commands.csv` — `epoch_ms,iteration,command,exit_code,duration_ms,payload_bytes`
   for every command, for graphing latency drift and failure rate over time.
 - `metrics.csv` — `epoch_ms,iteration,unity_rss_kb,project_runner_procs,outputs_dir_kb`
