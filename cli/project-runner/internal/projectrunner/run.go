@@ -190,7 +190,7 @@ func runCompileWithDomainReloadWaitWithDeps(
 	}
 
 	logCliDebugModeResolved(connection, clicore.CompileCommandName)
-	logCompileRequestPrepared(connection, params, requestID)
+	logCompileRequestPrepared(connection, params, requestID, waitTimeout)
 
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, clicore.CompileCommandName)

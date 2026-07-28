@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
+	"github.com/hatayama/unity-cli-loop/common/vibelog"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
@@ -411,42 +413,7 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 	}
 
 	enableCliVibeLog(t)
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
-	defer func() {
-		_ = listener.Close()
-	}()
-
-	serverErr := make(chan error, 1)
-	go func() {
-		conn, err := listener.Accept()
-		if err != nil {
-			serverErr <- err
-			return
-		}
-		defer func() {
-			_ = conn.Close()
-		}()
-
-		if _, err := unityipc.Read(bufio.NewReader(conn)); err != nil {
-			serverErr <- err
-			return
-		}
-
-		accepted := []byte(`{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`)
-		if err := unityipc.Write(conn, accepted); err != nil {
-			serverErr <- err
-			return
-		}
-
-		final := []byte(`{"jsonrpc":"2.0","result":{"Accepted":true},"id":1}`)
-		if err := unityipc.Write(conn, final); err != nil {
-			serverErr <- err
-			return
-		}
-	}()
+	endpoint, serverErr := startCompileAcceptOnceServer(t)
 
 	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
 		return compileStatusResponse{
@@ -458,10 +425,7 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 
 	projectRoot := t.TempDir()
 	connection := unityipc.Connection{
-		Endpoint: unityipc.Endpoint{
-			Network: "tcp",
-			Address: listener.Addr().String(),
-		},
+		Endpoint:    endpoint,
 		ProjectRoot: projectRoot,
 	}
 	params := map[string]any{
@@ -487,6 +451,7 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 		`"response_received":true`,
 		`"force_recompile":true`,
 		`"reload_external_scene_changes":false`,
+		`"timeout_ms":600000`,
 	} {
 		if !strings.Contains(logContent, expected) {
 			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
@@ -498,6 +463,183 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 		t.Fatalf("server failed: %v", err)
 	default:
 	}
+}
+
+// Verifies runCompileWithDomainReloadWaitWithDeps wires CompileWaitTimeoutSeconds into
+// the wait deadline and COMPILE_WAIT_TIMEOUT message (not only the wait helper itself).
+func TestRunCompileWithDomainReloadWaitUsesConfiguredTimeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	enableCliVibeLog(t)
+	endpoint, serverErr := startCompileAcceptOnceServer(t)
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		return compileStatusResponse{Ready: false, IsCompiling: true, Message: "Compiling"}, nil
+	})
+
+	projectRoot := t.TempDir()
+	connection := unityipc.Connection{
+		Endpoint:    endpoint,
+		ProjectRoot: projectRoot,
+	}
+	params := map[string]any{
+		compileWaitTimeoutParam: 1,
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, params, &stdout, &stderr, deps)
+	if code != 1 {
+		t.Fatalf("expected timeout exit 1: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Compile status wait timed out after 1000ms") {
+		t.Fatalf("timeout message missing configured duration: %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), `"ErrorCode": "COMPILE_WAIT_TIMEOUT"`) &&
+		!strings.Contains(stderr.String(), `"ErrorCode":"COMPILE_WAIT_TIMEOUT"`) {
+		t.Fatalf("expected COMPILE_WAIT_TIMEOUT envelope: %s", stderr.String())
+	}
+
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	if !strings.Contains(logContent, `"timeout_ms":1000`) {
+		t.Fatalf("prepared vibe log should record configured timeout_ms=1000:\n%s", logContent)
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
+
+// Verifies invalid CompileWaitTimeoutSeconds fails before a compile request is dispatched.
+func TestRunCompileWithDomainReloadWaitRejectsNonPositiveTimeout(t *testing.T) {
+	enableCliVibeLog(t)
+	projectRoot := t.TempDir()
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: "127.0.0.1:1",
+		},
+		ProjectRoot: projectRoot,
+	}
+	params := map[string]any{
+		compileWaitTimeoutParam: 0,
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	queryCalls := 0
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		queryCalls++
+		return compileStatusResponse{}, nil
+	})
+
+	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, params, &stdout, &stderr, deps)
+	if code != 1 {
+		t.Fatalf("expected invalid timeout exit 1: code=%d stderr=%s", code, stderr.String())
+	}
+	if queryCalls != 0 {
+		t.Fatalf("compile status must not be queried for invalid timeout: calls=%d", queryCalls)
+	}
+	logFiles, err := filepath.Glob(filepath.Join(projectRoot, vibelog.CLIVibeLogDirectory, vibelog.CLIVibeLogPrefix+"_*.json"))
+	if err != nil {
+		t.Fatalf("failed to glob CLI Vibe logs: %v", err)
+	}
+	if len(logFiles) != 0 {
+		t.Fatalf("compile request must not write vibe logs for invalid timeout: %#v", logFiles)
+	}
+	if !strings.Contains(stderr.String(), "positive integer") {
+		t.Fatalf("expected positive integer validation error: %s", stderr.String())
+	}
+}
+
+// Verifies timeouts above the Unity result retention window warn on stderr before compile proceeds.
+func TestRunCompileWithDomainReloadWaitWarnsWhenTimeoutExceedsRetention(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	endpoint, serverErr := startCompileAcceptOnceServer(t)
+	// Why Success:false: Success:true triggers post-compile warmup against a live Editor
+	// and would hang this unit test. The warning is emitted before send/wait.
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		return compileStatusResponse{
+			Ready:     true,
+			HasResult: true,
+			Result:    json.RawMessage(`{"Success":false,"ErrorCount":1,"WarningCount":0}`),
+		}, nil
+	})
+
+	connection := unityipc.Connection{
+		Endpoint:    endpoint,
+		ProjectRoot: t.TempDir(),
+	}
+	params := map[string]any{
+		compileWaitTimeoutParam: compileWaitTimeoutRetentionWarningSeconds + 1,
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, params, &stdout, &stderr, deps)
+	if code != 1 {
+		t.Fatalf("expected failed compile envelope exit 1: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "exceeds the Unity-side compile result retention window (20 minutes)") {
+		t.Fatalf("expected retention warning on stderr: %s", stderr.String())
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
+
+// startCompileAcceptOnceServer accepts one compile IPC session and returns accepted + final responses.
+func startCompileAcceptOnceServer(t *testing.T) (unityipc.Endpoint, <-chan error) {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = listener.Close()
+	})
+
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverErr <- acceptErr
+			return
+		}
+		defer func() {
+			_ = conn.Close()
+		}()
+
+		if _, readErr := unityipc.Read(bufio.NewReader(conn)); readErr != nil {
+			serverErr <- readErr
+			return
+		}
+
+		accepted := []byte(`{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`)
+		if writeErr := unityipc.Write(conn, accepted); writeErr != nil {
+			serverErr <- writeErr
+			return
+		}
+
+		final := []byte(`{"jsonrpc":"2.0","result":{"Accepted":true},"id":1}`)
+		if writeErr := unityipc.Write(conn, final); writeErr != nil {
+			serverErr <- writeErr
+			return
+		}
+	}()
+
+	return unityipc.Endpoint{
+		Network: "tcp",
+		Address: listener.Addr().String(),
+	}, serverErr
 }
 
 func TestShouldWaitForCompileStatusRequiresDispatchedTransportError(t *testing.T) {

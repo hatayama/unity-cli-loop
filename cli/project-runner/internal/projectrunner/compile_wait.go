@@ -292,6 +292,7 @@ func logCompileRequestPrepared(
 	connection unityipc.Connection,
 	params map[string]any,
 	requestID string,
+	waitTimeout time.Duration,
 ) {
 	writeCompileVibeLog(connection.ProjectRoot, func() vibelog.CLIVibeLogEntry {
 		reloadExternalSceneChanges := compileReloadExternalSceneChangesEnabled(params)
@@ -308,7 +309,7 @@ func logCompileRequestPrepared(
 				"stop_on_external_scene_changes": !reloadExternalSceneChanges,
 				"project_identity":               vibelog.ProjectIdentity(connection.ProjectRoot),
 				"endpoint":                       connection.Endpoint.Address,
-				"timeout_ms":                     compileWaitTimeout.Milliseconds(),
+				"timeout_ms":                     waitTimeout.Milliseconds(),
 				"poll_interval_ms":               compileWaitPollInterval.Milliseconds(),
 				"response_timeout_ms":            compileResponseTimeout.Milliseconds(),
 			},
