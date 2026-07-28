@@ -500,6 +500,7 @@ func TestRunCompileWithDomainReloadWaitUsesConfiguredTimeout(t *testing.T) {
 		!strings.Contains(stderr.String(), `"ErrorCode":"COMPILE_WAIT_TIMEOUT"`) {
 		t.Fatalf("expected COMPILE_WAIT_TIMEOUT envelope: %s", stderr.String())
 	}
+	assertCompileWaitTimeoutEnvelopeDetails(t, stderr.Bytes(), true)
 
 	logContent := readOnlyCliVibeLog(t, projectRoot)
 	if !strings.Contains(logContent, `"timeout_ms":1000`) {
@@ -912,6 +913,37 @@ func TestWaitForCompileCompletionReturnsLastStatusOnTimeout(t *testing.T) {
 	}
 	if !lastStatus.IsCompiling || !lastStatus.IsDomainReloadInProgress {
 		t.Fatalf("last status mismatch: %#v", lastStatus)
+	}
+}
+
+// assertCompileWaitTimeoutEnvelopeDetails checks the run/attach wiring that passes
+// lastStatus and WaitedMs into the COMPILE_WAIT_TIMEOUT stderr envelope.
+func assertCompileWaitTimeoutEnvelopeDetails(t *testing.T, stderr []byte, wantCompiling bool) {
+	t.Helper()
+	jsonStart := bytes.IndexByte(stderr, '{')
+	if jsonStart < 0 {
+		t.Fatalf("stderr has no JSON envelope: %s", string(stderr))
+	}
+	var envelope clierrors.CLIErrorEnvelope
+	if err := json.Unmarshal(stderr[jsonStart:], &envelope); err != nil {
+		t.Fatalf("stderr is not a JSON error envelope: %v\n%s", err, string(stderr))
+	}
+	if envelope.Error.ErrorCode != clierrors.ErrorCodeCompileWaitTimeout {
+		t.Fatalf("error code mismatch: %#v", envelope.Error.ErrorCode)
+	}
+	details := envelope.Error.Details
+	if details == nil {
+		t.Fatal("COMPILE_WAIT_TIMEOUT Details missing")
+	}
+	if details["IsCompiling"] != wantCompiling {
+		t.Fatalf("IsCompiling mismatch: %#v", details["IsCompiling"])
+	}
+	waitedMs, ok := details["WaitedMs"].(float64)
+	if !ok {
+		t.Fatalf("WaitedMs missing or wrong type: %#v", details["WaitedMs"])
+	}
+	if waitedMs < 1000 {
+		t.Fatalf("WaitedMs should cover the configured 1s wait: %#v", waitedMs)
 	}
 }
 
