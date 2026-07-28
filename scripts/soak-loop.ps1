@@ -61,6 +61,11 @@ param(
     # especially for parallel soaks: a full recompile of one large project took
     # over 10 minutes with three editors compiling at once.
     [int]$CommandTimeoutSeconds = 600,
+    # Passed to every compile as --compile-wait-timeout-seconds when the pinned
+    # runner accepts it (0 = leave the runner's own default alone). Raise it on
+    # a project whose forced recompile outlives the runner's 10-minute wait;
+    # above 1200 the runner warns that Unity may drop the retained result.
+    [int]$CompileWaitTimeoutSeconds = 0,
     # Pause between iterations.
     [int]$SleepSeconds = 0,
     # Results directory (default: .\uloop-soak-results\<timestamp>).
@@ -84,6 +89,12 @@ if (-not (Test-Path -LiteralPath (Join-Path $ResolvedProjectPath "ProjectSetting
 }
 if ($TestsEvery -gt 0 -and [string]::IsNullOrWhiteSpace($TestAssembly)) {
     throw "Error: -TestAssembly is required when tests are enabled (pass -TestsEvery 0 to skip tests; running the full suite of a large project is not a safe default)"
+}
+# A kill watchdog at or below the compile wait would end the command before the
+# CLI could report COMPILE_WAIT_TIMEOUT, turning a diagnosable timeout into a
+# bare exit 124, so the watchdog is lifted over it instead of failing the run.
+if ($CompileWaitTimeoutSeconds -gt 0 -and $CommandTimeoutSeconds -le $CompileWaitTimeoutSeconds) {
+    $CommandTimeoutSeconds = $CompileWaitTimeoutSeconds + 120
 }
 
 # Start-Process needs a real executable path, and resolving once keeps every
@@ -887,8 +898,9 @@ try {
     # explicit --wait-for-domain-reload (off by default), older ones wait by
     # default and only expose --no-wait-for-domain-reload. Detect which flavor
     # the pinned runner speaks.
+    [string]$compileHelp = (Invoke-Uloop -CommandArguments @("compile", "--help")).Text
     [string[]]$CompileWaitArguments = @()
-    if ((Invoke-Uloop -CommandArguments @("compile", "--help")).Text -match '(?m)^\s*--wait-for-domain-reload') {
+    if ($compileHelp -match '(?m)^\s*--wait-for-domain-reload') {
         $CompileWaitArguments = @("--wait-for-domain-reload")
     }
     if ($CompileWaitArguments.Count -gt 0) {
@@ -896,6 +908,18 @@ try {
     }
     else {
         Write-SoakLog -Message "compile wait flag: (runner waits by default)"
+    }
+
+    # Runners predating the configurable wait reject the flag outright, and the
+    # soak has to keep working against whichever runner the project pins.
+    if ($CompileWaitTimeoutSeconds -gt 0) {
+        if ($compileHelp -match '(?m)^\s*--compile-wait-timeout-seconds') {
+            $CompileWaitArguments += @("--compile-wait-timeout-seconds", "$CompileWaitTimeoutSeconds")
+            Write-SoakLog -Message "compile wait timeout: ${CompileWaitTimeoutSeconds}s (watchdog ${CommandTimeoutSeconds}s)"
+        }
+        else {
+            Write-SoakLog -Message "compile wait timeout: ignored - the pinned runner has no --compile-wait-timeout-seconds"
+        }
     }
 
     [int]$TickerLine = 0
