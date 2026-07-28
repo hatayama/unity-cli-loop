@@ -57,6 +57,10 @@ param(
     # PlayMode cycle switches a Release editor to Debug for the duration of the
     # run, because pause points cannot be armed by file and line otherwise.
     [switch]$KeepCodeOptimization,
+    # Kill bound for a single uloop call. Raise it for a large project, and
+    # especially for parallel soaks: a full recompile of one large project took
+    # over 10 minutes with three editors compiling at once.
+    [int]$CommandTimeoutSeconds = 600,
     # Pause between iterations.
     [int]$SleepSeconds = 0,
     # Results directory (default: .\uloop-soak-results\<timestamp>).
@@ -222,10 +226,11 @@ function Get-FileByteLength {
 # Every uloop call runs under a kill watchdog: a hung IPC call - e.g. a frozen
 # editor that accepted the connection but never answers - must surface as one
 # failed, finite sample so the consecutive-failure recovery can fire, instead
-# of blocking the unattended soak forever. The bound sits well above the
-# slowest legitimate command observed under parallel load (forced recompile /
-# run-tests, ~4 min).
-[int]$CommandTimeoutSeconds = 600
+# of blocking the unattended soak forever. The bound has to stay above the
+# slowest legitimate command, which is project- and load-dependent, so
+# -CommandTimeoutSeconds exists: a forced recompile of a large project takes
+# ~8 minutes on its own and longer while other editors compile in parallel.
+#
 # Reported for a killed command; matches the exit code GNU timeout(1) uses, so
 # a timeout is distinguishable from any exit code uloop itself returns.
 [int]$TimeoutExitCode = 124
@@ -606,6 +611,11 @@ function Initialize-CodeOptimization {
     Write-SoakLog -Message "code optimization: switched $($json.Result) -> Debug so pause points can be armed (restored when the run ends)"
 }
 
+# Teardown runs right after whatever ended the soak, so the editor is often
+# still busy (a killed compile keeps running inside Unity) and rejects the
+# command. Leaving a project on Debug because one attempt bounced is a state
+# leak the operator has no reason to expect, so this retries and only claims
+# success once the editor reports the restored mode back.
 function Restore-CodeOptimization {
     if ([string]::IsNullOrEmpty($PreviousCodeOptimization)) {
         return
@@ -614,12 +624,22 @@ function Restore-CodeOptimization {
     [string]$previous = $PreviousCodeOptimization
     # Cleared first so a failing restore is not retried on every later call.
     $script:PreviousCodeOptimization = ""
-    $null = Invoke-Uloop -CommandArguments @(
-        "execute-dynamic-code",
-        "--code",
-        "UnityEditor.Compilation.CompilationPipeline.codeOptimization = UnityEditor.Compilation.CodeOptimization.$previous; return UnityEditor.Compilation.CompilationPipeline.codeOptimization.ToString();"
-    )
-    Write-SoakLog -Message "code optimization: restored $previous (the editor recompiles once more in the background)"
+
+    for ([int]$attempt = 1; $attempt -le 10; $attempt++) {
+        [pscustomobject]$result = Invoke-Uloop -CommandArguments @(
+            "execute-dynamic-code",
+            "--code",
+            "UnityEditor.Compilation.CompilationPipeline.codeOptimization = UnityEditor.Compilation.CodeOptimization.$previous; return UnityEditor.Compilation.CompilationPipeline.codeOptimization.ToString();"
+        )
+        if ($result.ExitCode -eq 0 -and $result.Text.Contains('"Result": "' + $previous + '"')) {
+            Write-SoakLog -Message "code optimization: restored $previous (the editor recompiles once more in the background)"
+            return
+        }
+
+        Start-Sleep -Seconds 30
+    }
+
+    Write-SoakLog -Message "WARNING: could not restore code optimization to $previous - the editor is still on Debug, switch it back from the bug icon in the main toolbar."
 }
 
 # A soak aborted mid-pause-cycle would leave the editor paused in PlayMode;
@@ -799,7 +819,7 @@ function Invoke-PauseCycle {
 
 try {
     Write-SoakLog -Message "Soak start: $Iterations iterations against $ResolvedProjectPath (uloop: $ResolvedUloopBin)"
-    Write-SoakLog -Message "restart-every=$RestartEvery force-every=$ForceEvery pause-every=$PauseEvery tests-every=$TestsEvery sleep=${SleepSeconds}s"
+    Write-SoakLog -Message "restart-every=$RestartEvery force-every=$ForceEvery pause-every=$PauseEvery tests-every=$TestsEvery sleep=${SleepSeconds}s command-timeout=${CommandTimeoutSeconds}s"
 
     # A freshly launched editor can be busy importing/compiling for a long time
     # (especially on large projects), so the preflight polls instead of
