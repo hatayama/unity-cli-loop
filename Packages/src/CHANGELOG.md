@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.67](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.66...v3.0.0-beta.67) (2026-07-28)
+
+
+### Features
+
+* configurable compile wait timeout and working timeout recovery ([#2036](https://github.com/hatayama/unity-cli-loop/issues/2036)) ([fc867c3](https://github.com/hatayama/unity-cli-loop/commit/fc867c3914f979dbc8f31f26be4c5753f66e1c36))
+
 ## [3.0.0-beta.66](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.65...v3.0.0-beta.66) (2026-07-27)
 
 
