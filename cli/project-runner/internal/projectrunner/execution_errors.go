@@ -21,13 +21,31 @@ func compileWaitTimeoutError(projectRoot string, timeout time.Duration) clierror
 		ProjectRoot: projectRoot,
 		Command:     clicore.CompileCommandName,
 		// Why: agents historically treated this timeout as a frozen Editor and ran
-		// launch -r. The real recovery path is retrying compile while C# still holds
-		// the result (CompileResultLifetime 20m = wait 10m + ~10m retrievable window).
-		NextActions: []string{
-			"Run a light command such as `uloop get-logs --max-count 1` to check whether Unity is responsive before treating this as a freeze.",
-			"Unity-side compile continues after this timeout; retry `uloop compile` — the result remains retrievable for about 10 more minutes without `uloop launch -r`.",
-			clierrors.ApiUpdateConsentModalNextAction,
-			"Only if Unity does not respond to any command, restart it with `uloop launch -r`.",
-		},
+		// launch -r. Recovery is reattach via a later uloop compile while Unity still
+		// holds the result (CompileResultLifetime / compilePendingRecordLifetime).
+		NextActions: compileWaitTimeoutNextActions(timeout),
+	}
+}
+
+func compileWaitTimeoutNextActions(timeout time.Duration) []string {
+	reattachAction := "Unity keeps compiling and refuses other commands with UNITY_SERVER_BUSY until it finishes. Re-run `uloop compile`: it will reattach to the in-flight compile and wait for its result instead of starting a new one."
+	remaining := compilePendingRecordLifetime - timeout
+	if remaining < 0 {
+		remaining = 0
+	}
+	remainingMinutes := int(remaining / time.Minute)
+	if remainingMinutes > 0 {
+		reattachAction = fmt.Sprintf(
+			"%s The result stays retrievable for roughly %d more minutes.",
+			reattachAction,
+			remainingMinutes,
+		)
+	}
+
+	return []string{
+		"Run a light command such as `uloop get-logs --max-count 1` to check whether Unity is responsive before treating this as a freeze.",
+		reattachAction,
+		clierrors.ApiUpdateConsentModalNextAction,
+		"Only if Unity does not respond to any command, restart it with `uloop launch -r`.",
 	}
 }
