@@ -6,11 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
-	"github.com/hatayama/unity-cli-loop/common/vibelog"
 
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
@@ -22,13 +22,21 @@ const (
 	compileRequestIDParam    = "RequestId"
 	compileWaitParam         = clicore.DomainReloadWaitParam
 	compileForceParam        = "ForceRecompile"
+	compileWaitTimeoutParam  = "CompileWaitTimeoutSeconds"
 	// Why separate from ToolReadinessTimeout (180s): launch readiness stays short.
 	// Why 10m: worst-case blind block beats headroom. Why ≤ C# CompileResultLifetime (20m):
 	// timed-out clients can still retrieve results by retrying uloop compile ~10m more.
-	compileWaitTimeout        = 10 * time.Minute
-	compileWaitPollInterval   = clicore.ToolReadinessPoll
-	compileStatusProbeTimeout = clicore.ToolReadinessProbeTimeout
-	compileResponseTimeout    = 2 * time.Second
+	compileWaitTimeout = 10 * time.Minute
+	// Why warn at 20m: Unity stores compile results for CompileResultLifetime (20m).
+	// Waiting longer does not fail, but a timed-out retry may miss the retained result.
+	compileWaitTimeoutRetentionWarningSeconds = 1200
+	// Why: time.Duration is int64 nanoseconds. Values above this overflow to a negative
+	// duration when multiplied by time.Second, which would look like an immediate timeout.
+	// This is an overflow guard, not a product-imposed maximum wait.
+	compileWaitTimeoutMaxSeconds = int64(math.MaxInt64 / int64(time.Second))
+	compileWaitPollInterval      = clicore.ToolReadinessPoll
+	compileStatusProbeTimeout    = clicore.ToolReadinessProbeTimeout
+	compileResponseTimeout       = 2 * time.Second
 )
 
 type compileCompletionOptions struct {
@@ -64,6 +72,59 @@ func prepareCompileWaitParams(params map[string]any) (string, error) {
 	}
 	params[compileWaitParam] = true
 	return requestID, nil
+}
+
+// compileWaitTimeoutFromParams reads CompileWaitTimeoutSeconds from tool params.
+// Missing values keep the default compileWaitTimeout (10m). Non-positive or non-integer
+// values are rejected before a compile request is sent.
+func compileWaitTimeoutFromParams(params map[string]any) (time.Duration, error) {
+	value, exists := params[compileWaitTimeoutParam]
+	if !exists || value == nil {
+		return compileWaitTimeout, nil
+	}
+
+	seconds, ok := positiveInt64FromAny(value)
+	if !ok || seconds > compileWaitTimeoutMaxSeconds {
+		return 0, clierrors.InvalidValueArgumentError(
+			"--compile-wait-timeout-seconds",
+			fmt.Sprint(value),
+			"positive integer",
+		)
+	}
+	return time.Duration(seconds) * time.Second, nil
+}
+
+func positiveInt64FromAny(value any) (int64, bool) {
+	switch typed := value.(type) {
+	case int:
+		if typed <= 0 {
+			return 0, false
+		}
+		return int64(typed), true
+	case int32:
+		if typed <= 0 {
+			return 0, false
+		}
+		return int64(typed), true
+	case int64:
+		if typed <= 0 {
+			return 0, false
+		}
+		return typed, true
+	case float64:
+		if typed <= 0 || typed != math.Trunc(typed) || typed > float64(compileWaitTimeoutMaxSeconds) {
+			return 0, false
+		}
+		return int64(typed), true
+	case json.Number:
+		parsed, err := typed.Int64()
+		if err != nil || parsed <= 0 {
+			return 0, false
+		}
+		return parsed, true
+	default:
+		return 0, false
+	}
 }
 
 func ensureCompileRequestID(params map[string]any) (string, error) {
@@ -108,11 +169,16 @@ func isSafeCompileRequestID(requestID string) bool {
 	return true
 }
 
-func waitForCompileCompletionWithDeps(ctx context.Context, options compileCompletionOptions, deps compileWaitDeps) (json.RawMessage, bool, error) {
+func waitForCompileCompletionWithDeps(
+	ctx context.Context,
+	options compileCompletionOptions,
+	deps compileWaitDeps,
+) (json.RawMessage, bool, *compileStatusResponse, error) {
 	startedAt := time.Now()
 	deadline := startedAt.Add(options.timeout)
 	attempts := 0
 	var lastStatus compileStatusResponse
+	observedStatus := false
 	var lastErr error
 	lastObservationKey := ""
 
@@ -132,23 +198,32 @@ func waitForCompileCompletionWithDeps(ctx context.Context, options compileComple
 		if err == nil && status.Ready && status.HasResult && len(status.Result) > 0 {
 			logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, nil, &lastObservationKey)
 			logCompileStatusPollComplete(options, startedAt, attempts, status)
-			return status.Result, true, nil
+			return status.Result, true, nil, nil
 		}
 		if err == nil {
 			lastStatus = status
+			observedStatus = true
 		}
 		logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, err, &lastObservationKey)
 
 		select {
 		case <-ctx.Done():
 			logCompileWaitCancelled(options, startedAt, attempts, lastStatus, lastErr, ctx.Err())
-			return nil, false, ctx.Err()
+			return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), ctx.Err()
 		case <-ticker.C:
 		}
 	}
 
 	logCompileWaitTimedOut(options, startedAt, attempts, lastStatus, lastErr)
-	return nil, false, nil
+	return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), nil
+}
+
+func lastObservedCompileStatus(status compileStatusResponse, observed bool) *compileStatusResponse {
+	if !observed {
+		return nil
+	}
+	copied := status
+	return &copied
 }
 
 func compileForceRecompileEnabled(params map[string]any) bool {
@@ -195,306 +270,4 @@ func shouldWaitForCompileStatus(err error, outcome unityipc.UnitySendOutcome) bo
 		return true
 	}
 	return outcome.RequestAccepted && clierrors.IsFinalResponseTimeoutError(err)
-}
-
-func writeCompileVibeLog(projectRoot string, buildEntry func() vibelog.CLIVibeLogEntry) {
-	if !vibelog.IsCLIVibeLogEnabled() {
-		return
-	}
-
-	writeCompileVibeLogEntry(projectRoot, buildEntry())
-}
-
-func writeCompileVibeLogEntry(projectRoot string, entry vibelog.CLIVibeLogEntry) {
-	_ = vibelog.WriteCLIVibeLog(projectRoot, entry)
-}
-
-func logCliDebugModeResolved(connection unityipc.Connection, command string) {
-	writeCompileVibeLog(connection.ProjectRoot, func() vibelog.CLIVibeLogEntry {
-		return vibelog.CLIVibeLogEntry{
-			Level:     "INFO",
-			Operation: "cli_debug_mode_resolved",
-			Message:   "Resolved CLI debug mode for the command.",
-			Context: map[string]any{
-				"command":          command,
-				"debug_enabled":    true,
-				"debug_source":     "env",
-				"project_identity": vibelog.ProjectIdentity(connection.ProjectRoot),
-				"cli_version":      clicontract.ProjectRunnerVersion(),
-			},
-		}
-	})
-}
-
-func logCompileRequestPrepared(
-	connection unityipc.Connection,
-	params map[string]any,
-	requestID string,
-) {
-	writeCompileVibeLog(connection.ProjectRoot, func() vibelog.CLIVibeLogEntry {
-		reloadExternalSceneChanges := compileReloadExternalSceneChangesEnabled(params)
-		return vibelog.CLIVibeLogEntry{
-			Level:     "INFO",
-			Operation: "cli_compile_request_prepared",
-			Message:   "Prepared compile request parameters before dispatch.",
-			Context: map[string]any{
-				"command":                        clicore.CompileCommandName,
-				"request_id":                     requestID,
-				"wait_for_domain_reload":         true,
-				"force_recompile":                compileForceRecompileEnabled(params),
-				"reload_external_scene_changes":  reloadExternalSceneChanges,
-				"stop_on_external_scene_changes": !reloadExternalSceneChanges,
-				"project_identity":               vibelog.ProjectIdentity(connection.ProjectRoot),
-				"endpoint":                       connection.Endpoint.Address,
-				"timeout_ms":                     compileWaitTimeout.Milliseconds(),
-				"poll_interval_ms":               compileWaitPollInterval.Milliseconds(),
-				"response_timeout_ms":            compileResponseTimeout.Milliseconds(),
-			},
-			CorrelationID: requestID,
-		}
-	})
-}
-
-func logCompileRequestSendResult(
-	connection unityipc.Connection,
-	requestID string,
-	outcome unityipc.UnitySendOutcome,
-	err error,
-	startedAt time.Time,
-) {
-	writeCompileVibeLog(connection.ProjectRoot, func() vibelog.CLIVibeLogEntry {
-		return vibelog.CLIVibeLogEntry{
-			Level:     compileRequestSendResultLogLevel(err),
-			Operation: "cli_compile_request_send_result",
-			Message:   "Recorded compile request dispatch outcome before status polling.",
-			Context: map[string]any{
-				"command":            clicore.CompileCommandName,
-				"request_id":         requestID,
-				"request_dispatched": outcome.RequestDispatched,
-				"request_accepted":   outcome.RequestAccepted,
-				"response_received":  err == nil && len(outcome.Result) > 0,
-				"response_timeout":   err != nil && clierrors.IsFinalResponseTimeoutError(err),
-				"transport_error":    clicore.ErrorMessage(err),
-				"elapsed_ms":         time.Since(startedAt).Milliseconds(),
-				"endpoint":           connection.Endpoint.Address,
-				"project_identity":   vibelog.ProjectIdentity(connection.ProjectRoot),
-				"outcome_total_ms":   outcome.Timing.Total.Milliseconds(),
-				"outcome_dial_ms":    outcome.Timing.Dial.Milliseconds(),
-				"outcome_write_ms":   outcome.Timing.Write.Milliseconds(),
-				"outcome_read_ms":    outcome.Timing.Read.Milliseconds(),
-				"outcome_decode_ms":  outcome.Timing.Decode.Milliseconds(),
-			},
-			CorrelationID: requestID,
-		}
-	})
-}
-
-func compileRequestSendResultLogLevel(err error) string {
-	if err == nil {
-		return "INFO"
-	}
-	return "WARNING"
-}
-
-func logCompileStatusPollStart(
-	options compileCompletionOptions,
-	startedAt time.Time,
-	deadline time.Time,
-) {
-	writeCompileVibeLog(options.connection.ProjectRoot, func() vibelog.CLIVibeLogEntry {
-		return vibelog.CLIVibeLogEntry{
-			Level:     "INFO",
-			Operation: "cli_compile_status_poll_start",
-			Message:   "Started polling Unity compile status.",
-			Context: compileWaitLogContext(options, startedAt, map[string]any{
-				"started_at":       startedAt.UTC().Format(time.RFC3339Nano),
-				"deadline_at":      deadline.UTC().Format(time.RFC3339Nano),
-				"project_identity": vibelog.ProjectIdentity(options.connection.ProjectRoot),
-			}),
-			CorrelationID: options.requestID,
-		}
-	})
-}
-
-func logCompileStatusPollObservedIfChanged(
-	options compileCompletionOptions,
-	startedAt time.Time,
-	attempt int,
-	status compileStatusResponse,
-	err error,
-	lastObservationKey *string,
-) {
-	if !vibelog.IsCLIVibeLogEnabled() {
-		return
-	}
-
-	observationKey := compileStatusObservationKey(status, err)
-	if observationKey == *lastObservationKey {
-		return
-	}
-
-	*lastObservationKey = observationKey
-	writeCompileVibeLogEntry(options.connection.ProjectRoot, vibelog.CLIVibeLogEntry{
-		Level:     compileStatusPollObservedLogLevel(err),
-		Operation: "cli_compile_status_poll_observed",
-		Message:   "Observed Unity compile status while polling.",
-		Context: compileWaitLogContext(options, startedAt, map[string]any{
-			"attempt":                      attempt,
-			"ready":                        status.Ready,
-			"has_result":                   status.HasResult,
-			"is_compiling":                 status.IsCompiling,
-			"is_updating":                  status.IsUpdating,
-			"is_domain_reload_in_progress": status.IsDomainReloadInProgress,
-			"message":                      status.Message,
-			"transport_error":              clicore.ErrorMessage(err),
-		}),
-		CorrelationID: options.requestID,
-	})
-}
-
-func compileStatusPollObservedLogLevel(err error) string {
-	if err == nil {
-		return "INFO"
-	}
-	return "WARNING"
-}
-
-func compileStatusObservationKey(status compileStatusResponse, err error) string {
-	return fmt.Sprintf(
-		"%t|%t|%t|%t|%t|%s|%s",
-		status.Ready,
-		status.HasResult,
-		status.IsCompiling,
-		status.IsUpdating,
-		status.IsDomainReloadInProgress,
-		status.Message,
-		clicore.ErrorMessage(err),
-	)
-}
-
-func logCompileStatusPollComplete(
-	options compileCompletionOptions,
-	startedAt time.Time,
-	attempts int,
-	status compileStatusResponse,
-) {
-	writeCompileVibeLog(options.connection.ProjectRoot, func() vibelog.CLIVibeLogEntry {
-		summary := compileResultLogSummary(status.Result)
-		return vibelog.CLIVibeLogEntry{
-			Level:     "INFO",
-			Operation: "cli_compile_status_poll_complete",
-			Message:   "Unity compile status polling returned the stored result.",
-			Context: compileWaitLogContext(options, startedAt, map[string]any{
-				"poll_attempts": attempts,
-				"success":       summary.success,
-				"error_count":   summary.errorCount,
-				"warning_count": summary.warningCount,
-			}),
-			CorrelationID: options.requestID,
-		}
-	})
-}
-
-func logCompileWaitTimedOut(
-	options compileCompletionOptions,
-	startedAt time.Time,
-	attempts int,
-	lastStatus compileStatusResponse,
-	lastErr error,
-) {
-	writeCompileVibeLog(options.connection.ProjectRoot, func() vibelog.CLIVibeLogEntry {
-		return vibelog.CLIVibeLogEntry{
-			Level:     "WARNING",
-			Operation: "cli_compile_status_poll_timeout",
-			Message:   "Timed out while polling Unity compile status.",
-			Context: compileWaitLogContext(options, startedAt, map[string]any{
-				"poll_attempts":        attempts,
-				"last_status":          compileStatusLogContext(lastStatus),
-				"last_transport_error": clicore.ErrorMessage(lastErr),
-				"project_identity":     vibelog.ProjectIdentity(options.connection.ProjectRoot),
-			}),
-			CorrelationID: options.requestID,
-		}
-	})
-}
-
-func logCompileWaitCancelled(
-	options compileCompletionOptions,
-	startedAt time.Time,
-	attempts int,
-	lastStatus compileStatusResponse,
-	lastErr error,
-	cancelErr error,
-) {
-	writeCompileVibeLog(options.connection.ProjectRoot, func() vibelog.CLIVibeLogEntry {
-		return vibelog.CLIVibeLogEntry{
-			Level:     "WARNING",
-			Operation: "cli_compile_status_poll_cancelled",
-			Message:   "Compile status polling was cancelled.",
-			Context: compileWaitLogContext(options, startedAt, map[string]any{
-				"poll_attempts":        attempts,
-				"last_status":          compileStatusLogContext(lastStatus),
-				"last_transport_error": clicore.ErrorMessage(lastErr),
-				"cancel_error":         clicore.ErrorMessage(cancelErr),
-			}),
-			CorrelationID: options.requestID,
-		}
-	})
-}
-
-func compileWaitLogContext(
-	options compileCompletionOptions,
-	startedAt time.Time,
-	extra map[string]any,
-) map[string]any {
-	context := map[string]any{
-		"command":          clicore.CompileCommandName,
-		"request_id":       options.requestID,
-		"force_recompile":  options.forceRecompile,
-		"endpoint":         options.connection.Endpoint.Address,
-		"timeout_ms":       options.timeout.Milliseconds(),
-		"poll_interval_ms": options.pollInterval.Milliseconds(),
-		"elapsed_ms":       time.Since(startedAt).Milliseconds(),
-	}
-	for key, value := range extra {
-		context[key] = value
-	}
-	return context
-}
-
-type compileResultSummary struct {
-	success      any
-	errorCount   any
-	warningCount any
-}
-
-func compileResultLogSummary(result json.RawMessage) compileResultSummary {
-	var payload map[string]any
-	if err := json.Unmarshal(result, &payload); err != nil {
-		return compileResultSummary{}
-	}
-	return compileResultSummary{
-		success:      firstPresentJSONValue(payload, "Success", "success"),
-		errorCount:   firstPresentJSONValue(payload, "ErrorCount", "errorCount"),
-		warningCount: firstPresentJSONValue(payload, "WarningCount", "warningCount"),
-	}
-}
-
-func firstPresentJSONValue(payload map[string]any, primaryKey string, legacyKey string) any {
-	value, ok := payload[primaryKey]
-	if ok {
-		return value
-	}
-	return payload[legacyKey]
-}
-
-func compileStatusLogContext(status compileStatusResponse) map[string]any {
-	return map[string]any{
-		"ready":                        status.Ready,
-		"has_result":                   status.HasResult,
-		"is_compiling":                 status.IsCompiling,
-		"is_updating":                  status.IsUpdating,
-		"is_domain_reload_in_progress": status.IsDomainReloadInProgress,
-		"message":                      status.Message,
-	}
 }

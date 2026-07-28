@@ -165,6 +165,25 @@ func runCompileWithDomainReloadWaitWithDeps(
 	stderr io.Writer,
 	compileWait compileWaitDeps,
 ) int {
+	waitTimeout, timeoutErr := compileWaitTimeoutFromParams(params)
+	if timeoutErr != nil {
+		clierrors.WriteClassifiedError(stderr, timeoutErr, clierrors.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.CompileCommandName,
+		})
+		return 1
+	}
+	if waitTimeout > time.Duration(compileWaitTimeoutRetentionWarningSeconds)*time.Second {
+		_, _ = fmt.Fprintf(
+			stderr,
+			"warning: --compile-wait-timeout-seconds exceeds the Unity-side compile result retention window (20 minutes); if the wait times out, the result may expire before a retry can recover it.\n",
+		)
+	}
+
+	if handled, code := tryAttachToPendingCompile(ctx, connection, params, waitTimeout, stdout, stderr, compileWait); handled {
+		return code
+	}
+
 	requestID, err := prepareCompileWaitParams(params)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
@@ -175,7 +194,7 @@ func runCompileWithDomainReloadWaitWithDeps(
 	}
 
 	logCliDebugModeResolved(connection, clicore.CompileCommandName)
-	logCompileRequestPrepared(connection, params, requestID)
+	logCompileRequestPrepared(connection, params, requestID, waitTimeout)
 
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, clicore.CompileCommandName)
@@ -201,11 +220,12 @@ func runCompileWithDomainReloadWaitWithDeps(
 	}
 
 	spinner.Update("Waiting for domain reload to complete...")
-	result, completed, waitErr := waitForCompileCompletionWithDeps(ctx, compileCompletionOptions{
+	waitStartedAt := time.Now()
+	result, completed, lastStatus, waitErr := waitForCompileCompletionWithDeps(ctx, compileCompletionOptions{
 		connection:     connection,
 		requestID:      requestID,
 		forceRecompile: compileForceRecompileEnabled(params),
-		timeout:        compileWaitTimeout,
+		timeout:        waitTimeout,
 		pollInterval:   compileWaitPollInterval,
 	}, compileWait)
 	if waitErr != nil {
@@ -218,21 +238,17 @@ func runCompileWithDomainReloadWaitWithDeps(
 	}
 	if !completed {
 		spinner.Stop()
-		clierrors.WriteErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot))
+		persistCompilePendingRecordOrWarn(connection.ProjectRoot, requestID, stderr)
+		clierrors.WriteErrorEnvelope(stderr, compileWaitTimeoutError(
+			connection.ProjectRoot,
+			waitTimeout,
+			lastStatus,
+			time.Since(waitStartedAt),
+			compilePendingRecordLifetime-waitTimeout,
+		))
 		return 1
 	}
-	switch compileResultReadinessWaitMode(result) {
-	case compileReadinessWaitWarmup:
-		spinner.Update("Warming execute-dynamic-code after compile...")
-		if err := clicore.WaitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
-			spinner.Stop()
-			writePostCompileWarmupWarning(stderr, err)
-		}
-	}
-	spinner.Stop()
-	clicore.WriteJSON(stdout, result)
-	writeDebugTiming(stderr, clicore.CompileCommandName, time.Since(startedAt), outcome)
-	return toolEnvelopeExitCode(result)
+	return completeCompileResultOutput(ctx, connection, result, stdout, stderr, spinner, startedAt, outcome)
 }
 
 func writePostCompileWarmupWarning(stderr io.Writer, err error) {
