@@ -1,10 +1,14 @@
-# Soak testing with scripts/soak-loop.sh
+# Soak testing with the soak-loop harness
 
-`scripts/soak-loop.sh` is an endurance harness that exercises the `uloop` CLI
-against a real Unity project for hundreds of iterations. It answers the
-question a normal test suite cannot: does uloop stay correct, responsive, and
-leak-free across many script compilations, domain reloads, PlayMode cycles,
-test runs, and full editor restarts?
+`scripts/soak-loop.sh` (macOS/Linux) and `scripts/soak-loop.ps1` (Windows) are
+an endurance harness that exercises the `uloop` CLI against a real Unity
+project for hundreds of iterations. They answer the question a normal test
+suite cannot: does uloop stay correct, responsive, and leak-free across many
+script compilations, domain reloads, PlayMode cycles, test runs, and full
+editor restarts?
+
+Both variants run the same iteration plan and write the same CSV schema, so
+results from either platform are directly comparable.
 
 It works against **any** Unity project that has the uloop package installed —
 point it at a large production project for the most realistic signal.
@@ -16,9 +20,12 @@ point it at a large production project for the most realistic signal.
 - The Unity Editor does not have to be running: if no editor has the target
   project open, the harness launches one via `uloop launch`; a running but
   busy editor (importing/compiling) is waited on for up to 15 minutes.
-- `jq`, when the PlayMode cycle is enabled (`--pause-every` > 0).
-- macOS or Linux. The harness is POSIX sh but samples metrics with
-  `ps`/`pgrep`/`perl`; it is not expected to run on Windows.
+- macOS/Linux (`soak-loop.sh`): POSIX sh, plus `jq` when the PlayMode cycle is
+  enabled (`--pause-every` > 0). Metrics are sampled with `ps`/`pgrep`/`perl`,
+  so this variant is not expected to run on Windows.
+- Windows (`soak-loop.ps1`): Windows PowerShell 5.1 or PowerShell 7. No `jq` —
+  responses are parsed with `ConvertFrom-Json`. Metrics come from
+  `Win32_Process`, so `unity_rss_kb` is `Unity.exe`'s working set.
 
 ## Quick start
 
@@ -29,7 +36,16 @@ sh scripts/soak-loop.sh \
   --test-assembly YourProject.Tests.Editor
 ```
 
-Options and defaults (also printed by running the script without arguments):
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\soak-loop.ps1 `
+  -ProjectPath C:\path\to\unity-project `
+  -Iterations 20 `
+  -TestAssembly YourProject.Tests.Editor
+```
+
+Options and defaults (also printed by running the shell script without
+arguments; the PowerShell parameters are the same names in PascalCase, e.g.
+`--restart-every` is `-RestartEvery`):
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -45,7 +61,13 @@ Options and defaults (also printed by running the script without arguments):
 
 Environment: `ULOOP_BIN` selects the uloop binary (default: `uloop` from
 `PATH`, the realistic released configuration). Point it at a `dist/` binary to
-soak unreleased CLI code, per the Native Go CLI Validation rules in CLAUDE.md.
+soak unreleased CLI code, per the Native Go CLI Validation rules in CLAUDE.md
+(`dist\windows-amd64\uloop.exe` on Windows).
+
+Every uloop call runs under a 10-minute kill watchdog. A hung IPC call — a
+frozen editor that accepted the connection but never answers — is recorded as
+one finite failure (exit code `124`) so the consecutive-failure recovery can
+fire instead of blocking an unattended soak forever.
 
 ## What one iteration does
 
