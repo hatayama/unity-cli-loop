@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
@@ -22,13 +23,17 @@ const (
 	compileRequestIDParam    = "RequestId"
 	compileWaitParam         = clicore.DomainReloadWaitParam
 	compileForceParam        = "ForceRecompile"
+	compileWaitTimeoutParam  = "CompileWaitTimeoutSeconds"
 	// Why separate from ToolReadinessTimeout (180s): launch readiness stays short.
 	// Why 10m: worst-case blind block beats headroom. Why ≤ C# CompileResultLifetime (20m):
 	// timed-out clients can still retrieve results by retrying uloop compile ~10m more.
-	compileWaitTimeout        = 10 * time.Minute
-	compileWaitPollInterval   = clicore.ToolReadinessPoll
-	compileStatusProbeTimeout = clicore.ToolReadinessProbeTimeout
-	compileResponseTimeout    = 2 * time.Second
+	compileWaitTimeout = 10 * time.Minute
+	// Why warn at 20m: Unity stores compile results for CompileResultLifetime (20m).
+	// Waiting longer does not fail, but a timed-out retry may miss the retained result.
+	compileWaitTimeoutRetentionWarningSeconds = 1200
+	compileWaitPollInterval                   = clicore.ToolReadinessPoll
+	compileStatusProbeTimeout                 = clicore.ToolReadinessProbeTimeout
+	compileResponseTimeout                    = 2 * time.Second
 )
 
 type compileCompletionOptions struct {
@@ -64,6 +69,59 @@ func prepareCompileWaitParams(params map[string]any) (string, error) {
 	}
 	params[compileWaitParam] = true
 	return requestID, nil
+}
+
+// compileWaitTimeoutFromParams reads CompileWaitTimeoutSeconds from tool params.
+// Missing values keep the default compileWaitTimeout (10m). Non-positive or non-integer
+// values are rejected before a compile request is sent.
+func compileWaitTimeoutFromParams(params map[string]any) (time.Duration, error) {
+	value, exists := params[compileWaitTimeoutParam]
+	if !exists || value == nil {
+		return compileWaitTimeout, nil
+	}
+
+	seconds, ok := positiveIntFromAny(value)
+	if !ok {
+		return 0, clierrors.InvalidValueArgumentError(
+			"--compile-wait-timeout-seconds",
+			fmt.Sprint(value),
+			"positive integer",
+		)
+	}
+	return time.Duration(seconds) * time.Second, nil
+}
+
+func positiveIntFromAny(value any) (int, bool) {
+	switch typed := value.(type) {
+	case int:
+		if typed <= 0 {
+			return 0, false
+		}
+		return typed, true
+	case int32:
+		if typed <= 0 {
+			return 0, false
+		}
+		return int(typed), true
+	case int64:
+		if typed <= 0 {
+			return 0, false
+		}
+		return int(typed), true
+	case float64:
+		if typed <= 0 || typed != math.Trunc(typed) {
+			return 0, false
+		}
+		return int(typed), true
+	case json.Number:
+		parsed, err := typed.Int64()
+		if err != nil || parsed <= 0 {
+			return 0, false
+		}
+		return int(parsed), true
+	default:
+		return 0, false
+	}
 }
 
 func ensureCompileRequestID(params map[string]any) (string, error) {

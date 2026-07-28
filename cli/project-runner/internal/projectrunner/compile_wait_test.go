@@ -552,11 +552,111 @@ func TestWritePostCompileWarmupWarningReportsNonFatalFailure(t *testing.T) {
 	}
 }
 
+// Verifies CompileWaitTimeoutSeconds is parsed from tool params with the default
+// kept when absent and non-positive or non-integer values rejected.
+func TestCompileWaitTimeoutFromParams(t *testing.T) {
+	cases := []struct {
+		name    string
+		params  map[string]any
+		want    time.Duration
+		wantErr bool
+	}{
+		{
+			name:   "missing uses default",
+			params: map[string]any{},
+			want:   compileWaitTimeout,
+		},
+		{
+			name:   "nil value uses default",
+			params: map[string]any{compileWaitTimeoutParam: nil},
+			want:   compileWaitTimeout,
+		},
+		{
+			name:   "int value",
+			params: map[string]any{compileWaitTimeoutParam: 90},
+			want:   90 * time.Second,
+		},
+		{
+			name:   "float64 whole number",
+			params: map[string]any{compileWaitTimeoutParam: float64(120)},
+			want:   120 * time.Second,
+		},
+		{
+			name:   "json.Number",
+			params: map[string]any{compileWaitTimeoutParam: json.Number("45")},
+			want:   45 * time.Second,
+		},
+		{
+			name:    "zero is rejected",
+			params:  map[string]any{compileWaitTimeoutParam: 0},
+			wantErr: true,
+		},
+		{
+			name:    "negative is rejected",
+			params:  map[string]any{compileWaitTimeoutParam: -1},
+			wantErr: true,
+		},
+		{
+			name:    "non-integer float is rejected",
+			params:  map[string]any{compileWaitTimeoutParam: 1.5},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := compileWaitTimeoutFromParams(tc.params)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("timeout mismatch: got %v want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// Verifies waitForCompileCompletionWithDeps stops when the configured timeout elapses
+// instead of waiting for the default compileWaitTimeout.
+func TestWaitForCompileCompletionRespectsConfiguredTimeout(t *testing.T) {
+	connection := compileWaitTestConnection(t)
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		return compileStatusResponse{Ready: false, IsCompiling: true}, nil
+	})
+
+	startedAt := time.Now()
+	_, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+		connection:   connection,
+		requestID:    "compile_configured_timeout",
+		timeout:      40 * time.Millisecond,
+		pollInterval: 5 * time.Millisecond,
+	}, deps)
+	elapsed := time.Since(startedAt)
+	if err != nil {
+		t.Fatalf("waitForCompileCompletion failed: %v", err)
+	}
+	if completed {
+		t.Fatal("compile wait should time out while still compiling")
+	}
+	if elapsed < 40*time.Millisecond {
+		t.Fatalf("timed out too early: %v", elapsed)
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("timed out too late for a 40ms deadline: %v", elapsed)
+	}
+}
+
 // Tests that compile wait timeout guidance teaches the caller to verify Editor
 // responsiveness instead of assuming a freeze, because agents have terminated
 // whole sessions after misreading this timeout as a frozen Editor.
 func TestCompileWaitTimeoutError(t *testing.T) {
-	cliErr := compileWaitTimeoutError("/tmp/MyProject")
+	cliErr := compileWaitTimeoutError("/tmp/MyProject", 90*time.Second)
 
 	if cliErr.ErrorCode != clierrors.ErrorCodeCompileWaitTimeout {
 		t.Fatalf("error code mismatch: %#v", cliErr)
@@ -567,7 +667,7 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 	if cliErr.ProjectRoot != "/tmp/MyProject" {
 		t.Fatalf("project root mismatch: %#v", cliErr)
 	}
-	expectedMessage := "Compile status wait timed out after 600000ms. This does not mean the Unity Editor is frozen; the compile may simply still be running."
+	expectedMessage := "Compile status wait timed out after 90000ms. This does not mean the Unity Editor is frozen; the compile may simply still be running."
 	if cliErr.Message != expectedMessage {
 		t.Fatalf("message mismatch: %#v", cliErr.Message)
 	}
