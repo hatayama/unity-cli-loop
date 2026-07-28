@@ -24,3 +24,14 @@ the change. Pull request CI runs `check-release-triggers` (authoritative rules:
 `releaseTriggerRules` in
 `cli/release-automation/internal/automation/release_trigger_guard.go`) and
 fails when shared release inputs changed without the matching triggers.
+
+## Trigger scoping stops at package granularity
+
+Trigger rules resolve which components a shared input reaches by package, not by
+symbol: within a shared-list package, every non-test Go change triggers both
+components regardless of which one can actually execute the changed code. A
+change reachable from only one component therefore still releases both — that is
+expected behaviour, not accidental churn. Before proposing finer scoping to
+remove the resulting no-op releases, read
+`docs/adr/0003-release-trigger-scoping-granularity.md`: the gap is deliberate,
+and both finer alternatives are recorded there with their reversal conditions.
