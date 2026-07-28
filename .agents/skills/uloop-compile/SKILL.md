@@ -11,7 +11,7 @@ Execute Unity project compilation.
 ## Usage
 
 ```bash
-uloop compile [--force-recompile] [--no-wait-for-domain-reload] [--stop-on-external-scene-changes]
+uloop compile [--force-recompile] [--no-wait-for-domain-reload] [--stop-on-external-scene-changes] [--compile-wait-timeout-seconds <seconds>]
 ```
 
 ## Parameters

@@ -601,6 +601,16 @@ func TestCompileWaitTimeoutFromParams(t *testing.T) {
 			params:  map[string]any{compileWaitTimeoutParam: 1.5},
 			wantErr: true,
 		},
+		{
+			name:   "max representable duration is accepted",
+			params: map[string]any{compileWaitTimeoutParam: compileWaitTimeoutMaxSeconds},
+			want:   time.Duration(compileWaitTimeoutMaxSeconds) * time.Second,
+		},
+		{
+			name:    "overflowing duration is rejected",
+			params:  map[string]any{compileWaitTimeoutParam: compileWaitTimeoutMaxSeconds + 1},
+			wantErr: true,
+		},
 	}
 
 	for _, tc := range cases {
