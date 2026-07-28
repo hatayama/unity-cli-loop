@@ -307,17 +307,25 @@ function Invoke-Uloop {
 [int]$BusyRetryLimit = 20
 [int]$BusyRetryDelaySeconds = 30
 
+# Documented outcomes that are expected to fail without being a defect.
+# CompileCollisionPattern is the only one worth retrying - the others describe
+# a finished command whose result is simply not a clean success.
+[string]$CompileCollisionPattern = "Compilation is already in progress"
+[string]$ForcedUnknownResultPattern = "definitive result"
+
 # Runs one uloop command, appends a CSV row, and returns the command result.
-# ToleratedPattern names the one documented outcome for this command that is
+# ToleratedPatterns names the documented outcomes for this command that are
 # expected to fail without being a defect (see docs/soak-testing.md); a
-# non-zero exit whose payload contains it is reported as TOLERATED, and the
+# non-zero exit whose payload contains one is reported as TOLERATED, and the
 # returned Tolerated flag tells the caller not to fail the iteration.
+# ToleratedPattern reports which one matched, so a caller can react to a
+# specific outcome rather than to tolerance in general.
 function Invoke-TimedUloop {
     param(
         [int]$Iteration,
         [string]$Label,
         [string[]]$CommandArguments,
-        [string]$ToleratedPattern = ""
+        [string[]]$ToleratedPatterns = @()
     )
 
     [int64]$start = 0
@@ -347,8 +355,16 @@ function Invoke-TimedUloop {
     Add-TextLine -Path $CommandsCsv -Line ("{0},{1},{2},{3},{4},{5}" -f $start, $Iteration, $Label, $result.ExitCode, ($end - $start), $result.Bytes)
 
     [bool]$tolerated = $false
+    [string]$matchedPattern = ""
     if ($result.ExitCode -ne 0) {
-        $tolerated = (-not [string]::IsNullOrEmpty($ToleratedPattern)) -and $result.Text.Contains($ToleratedPattern)
+        foreach ($pattern in $ToleratedPatterns) {
+            if ((-not [string]::IsNullOrEmpty($pattern)) -and $result.Text.Contains($pattern)) {
+                $tolerated = $true
+                $matchedPattern = $pattern
+                break
+            }
+        }
+
         [string]$excerpt = $result.Text
         if ($excerpt.Length -gt 200) {
             $excerpt = $excerpt.Substring(0, 200)
@@ -373,6 +389,7 @@ function Invoke-TimedUloop {
         Text = $result.Text
         Bytes = $result.Bytes
         Tolerated = $tolerated
+        ToleratedPattern = $matchedPattern
     }
 }
 
@@ -398,8 +415,12 @@ function Invoke-CompileWithRetry {
             $attemptLabel = "$Label-retry"
         }
 
-        $result = Invoke-TimedUloop -Iteration $Iteration -Label $attemptLabel -CommandArguments $CompileArguments -ToleratedPattern "Compilation is already in progress"
-        if ($result.ExitCode -eq 0 -or -not $result.Tolerated) {
+        # A plain compile issued after a forced one that outlived the runner's
+        # wait attaches to it and returns the forced compile's own unknown
+        # result. That is the recovery working, not a collision, so it is
+        # tolerated but must not be retried.
+        $result = Invoke-TimedUloop -Iteration $Iteration -Label $attemptLabel -CommandArguments $CompileArguments -ToleratedPatterns @($CompileCollisionPattern, $ForcedUnknownResultPattern)
+        if ($result.ExitCode -eq 0 -or $result.ToleratedPattern -ne $CompileCollisionPattern) {
             return $result
         }
 
@@ -622,18 +643,39 @@ function Wait-Editor {
 # mode is remembered here and restored when the run ends.
 [string]$PreviousCodeOptimization = ""
 
-function Initialize-CodeOptimization {
-    if ($KeepCodeOptimization) {
+# Re-applied after every editor restart, not just at setup: the mode does not
+# survive `uloop launch -r`. An editor that comes back on the project's own
+# Release setting cannot arm pause points at all, which silently turned every
+# post-restart pause cycle into a failure until this was found.
+function Set-DebugCodeOptimization {
+    param(
+        [int]$Iteration
+    )
+
+    if ($KeepCodeOptimization -or $PauseEvery -le 0) {
         return
     }
 
-    [pscustomobject]$result = Invoke-TimedUloop -Iteration 0 -Label "code-optimization" -CommandArguments @(
+    [pscustomobject]$result = Invoke-TimedUloop -Iteration $Iteration -Label "code-optimization" -CommandArguments @(
         "execute-dynamic-code",
         "--code",
         'UnityEditor.Compilation.CodeOptimization previous = UnityEditor.Compilation.CompilationPipeline.codeOptimization; if (previous != UnityEditor.Compilation.CodeOptimization.Debug) { UnityEditor.Compilation.CompilationPipeline.codeOptimization = UnityEditor.Compilation.CodeOptimization.Debug; } return previous.ToString();'
     )
     if ($result.ExitCode -ne 0) {
-        Write-SoakLog -Message "Could not set Debug code optimization - pause points will fail while the editor stays on Release."
+        Write-SoakLog -Message "iter=$Iteration could not set Debug code optimization - pause points will fail while the editor stays on Release."
+        return $null
+    }
+
+    return $result
+}
+
+function Initialize-CodeOptimization {
+    if ($KeepCodeOptimization) {
+        return
+    }
+
+    [pscustomobject]$result = Set-DebugCodeOptimization -Iteration 0
+    if ($null -eq $result) {
         return
     }
 
@@ -962,7 +1004,7 @@ try {
         # guidance is to follow up with a plain compile, so only that follow-up
         # counts against the iteration and any other forced failure still does.
         if ($forcedThisIteration) {
-            [pscustomobject]$forcedResult = Invoke-TimedUloop -Iteration $i -Label "compile-forced" -CommandArguments (@("compile") + $CompileWaitArguments + @("--force-recompile")) -ToleratedPattern "definitive result"
+            [pscustomobject]$forcedResult = Invoke-TimedUloop -Iteration $i -Label "compile-forced" -CommandArguments (@("compile") + $CompileWaitArguments + @("--force-recompile")) -ToleratedPatterns @($ForcedUnknownResultPattern)
             if ($forcedResult.ExitCode -ne 0 -and -not $forcedResult.Tolerated) {
                 $iterationFailed = $true
             }
@@ -1012,7 +1054,7 @@ try {
             # whether uloop transported and completed the run, so only a
             # missing test report (no TestCount in the response) counts against
             # the iteration.
-            [pscustomobject]$testsResult = Invoke-TimedUloop -Iteration $i -Label "run-tests" -CommandArguments @("run-tests", "--test-mode", "EditMode", "--filter-type", "assembly", "--filter-value", $TestAssembly) -ToleratedPattern '"TestCount"'
+            [pscustomobject]$testsResult = Invoke-TimedUloop -Iteration $i -Label "run-tests" -CommandArguments @("run-tests", "--test-mode", "EditMode", "--filter-type", "assembly", "--filter-value", $TestAssembly) -ToleratedPatterns @('"TestCount"')
             if ($testsResult.ExitCode -ne 0 -and -not $testsResult.Tolerated) {
                 $iterationFailed = $true
             }
@@ -1025,6 +1067,9 @@ try {
                 Write-SoakLog -Message "Editor did not come back within 15 minutes after scheduled restart - aborting."
                 exit 1
             }
+
+            # The editor comes back on the project's own code optimization mode.
+            $null = Set-DebugCodeOptimization -Iteration $i
 
             # The reopened startup scene may be auto-dirtied by project
             # tooling, which would trip the DIRTY_SCENE guard on the next pause
@@ -1054,7 +1099,8 @@ try {
                 exit 1
             }
 
-            # Same post-restart scene restore as the scheduled restart path.
+            # Same post-restart repair as the scheduled restart path.
+            $null = Set-DebugCodeOptimization -Iteration $i
             if ($PauseEvery -gt 0) {
                 if ((Invoke-TimedUloop -Iteration $i -Label "scene-restore" -CommandArguments @("execute-dynamic-code", "--code-file", $SceneSetupForceFile)).ExitCode -ne 0) {
                     Write-SoakLog -Message "iter=$i post-recovery scene restore failed"

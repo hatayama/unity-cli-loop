@@ -127,7 +127,12 @@ keeps under **Debug** code optimization. Against a Release editor every arm
 call fails on that precondition, so the whole PlayMode cycle would soak a
 guaranteed failure. When `-PauseEvery` > 0, `soak-loop.ps1` reads the editor's
 mode at setup, switches it to Debug if needed, and restores the original mode
-when the run ends. Both switches trigger a full recompile — the setup compile
+when the run ends.
+
+The mode does **not** survive `uloop launch -r`: an editor restarted mid-soak
+comes back on the project's own setting, measured going from Debug to Release
+across one restart. Debug is therefore re-applied after every scheduled and
+recovery restart, the same way the soak scene is rebuilt there. Both switches trigger a full recompile — the setup compile
 absorbs the first one by retrying past `Compilation is already in progress`,
 and the restoring recompile runs in the background after the summary. Pass
 `-KeepCodeOptimization` to leave the setting alone — expect every pause-point
