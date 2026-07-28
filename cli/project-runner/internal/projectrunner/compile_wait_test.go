@@ -825,7 +825,7 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 	}
 	expectedActions := []string{
 		"Run a light command such as `uloop get-logs --max-count 1` to check whether Unity is responsive before treating this as a freeze.",
-		"Unity-side compile continues after this timeout; retry `uloop compile` — the result remains retrievable for about 10 more minutes without `uloop launch -r`.",
+		"Unity keeps compiling and refuses other commands with UNITY_SERVER_BUSY until it finishes. Re-run `uloop compile`: it will reattach to the in-flight compile and wait for its result instead of starting a new one. The result stays retrievable for roughly 18 more minutes.",
 		clierrors.ApiUpdateConsentModalNextAction,
 		"Only if Unity does not respond to any command, restart it with `uloop launch -r`.",
 	}
@@ -834,8 +834,20 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 	}
 	for i, expected := range expectedActions {
 		if cliErr.NextActions[i] != expected {
-			t.Fatalf("next action %d mismatch: %#v", i, cliErr.NextActions)
+			t.Fatalf("next action %d mismatch:\n got: %#v\nwant: %#v", i, cliErr.NextActions[i], expected)
 		}
+	}
+}
+
+// Verifies a wait that consumes the full retention window omits the remaining-minutes sentence.
+func TestCompileWaitTimeoutErrorOmitsRemainingMinutesWhenNoneLeft(t *testing.T) {
+	cliErr := compileWaitTimeoutError("/tmp/MyProject", compilePendingRecordLifetime)
+	reattach := cliErr.NextActions[1]
+	if strings.Contains(reattach, "retrievable for roughly") {
+		t.Fatalf("remaining-minutes sentence should be omitted: %#v", reattach)
+	}
+	if !strings.Contains(reattach, "reattach to the in-flight compile") {
+		t.Fatalf("reattach guidance missing: %#v", reattach)
 	}
 }
 
@@ -854,6 +866,9 @@ func compileWaitTestDeps(
 	replacement func(context.Context, unityipc.Connection, string) (compileStatusResponse, error),
 ) compileWaitDeps {
 	return compileWaitDeps{
-		queryCompileStatus: replacement,
+		queryCompileStatus:     replacement,
+		attachProbeTimeout:     40 * time.Millisecond,
+		attachProbeInterval:    5 * time.Millisecond,
+		attachWaitPollInterval: 5 * time.Millisecond,
 	}
 }

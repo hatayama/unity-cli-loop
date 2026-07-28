@@ -165,15 +165,6 @@ func runCompileWithDomainReloadWaitWithDeps(
 	stderr io.Writer,
 	compileWait compileWaitDeps,
 ) int {
-	requestID, err := prepareCompileWaitParams(params)
-	if err != nil {
-		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
-			ProjectRoot: connection.ProjectRoot,
-			Command:     clicore.CompileCommandName,
-		})
-		return 1
-	}
-
 	waitTimeout, timeoutErr := compileWaitTimeoutFromParams(params)
 	if timeoutErr != nil {
 		clierrors.WriteClassifiedError(stderr, timeoutErr, clierrors.ErrorContext{
@@ -187,6 +178,19 @@ func runCompileWithDomainReloadWaitWithDeps(
 			stderr,
 			"warning: --compile-wait-timeout-seconds exceeds the Unity-side compile result retention window (20 minutes); if the wait times out, the result may expire before a retry can recover it.\n",
 		)
+	}
+
+	if handled, code := tryAttachToPendingCompile(ctx, connection, params, waitTimeout, stdout, stderr, compileWait); handled {
+		return code
+	}
+
+	requestID, err := prepareCompileWaitParams(params)
+	if err != nil {
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.CompileCommandName,
+		})
+		return 1
 	}
 
 	logCliDebugModeResolved(connection, clicore.CompileCommandName)
@@ -233,21 +237,11 @@ func runCompileWithDomainReloadWaitWithDeps(
 	}
 	if !completed {
 		spinner.Stop()
+		persistCompilePendingRecordOrWarn(connection.ProjectRoot, requestID, stderr)
 		clierrors.WriteErrorEnvelope(stderr, compileWaitTimeoutError(connection.ProjectRoot, waitTimeout))
 		return 1
 	}
-	switch compileResultReadinessWaitMode(result) {
-	case compileReadinessWaitWarmup:
-		spinner.Update("Warming execute-dynamic-code after compile...")
-		if err := clicore.WaitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
-			spinner.Stop()
-			writePostCompileWarmupWarning(stderr, err)
-		}
-	}
-	spinner.Stop()
-	clicore.WriteJSON(stdout, result)
-	writeDebugTiming(stderr, clicore.CompileCommandName, time.Since(startedAt), outcome)
-	return toolEnvelopeExitCode(result)
+	return completeCompileResultOutput(ctx, connection, result, stdout, stderr, spinner, startedAt, outcome)
 }
 
 func writePostCompileWarmupWarning(stderr io.Writer, err error) {
