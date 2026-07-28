@@ -167,11 +167,15 @@ func attachWaitForPendingCompile(
 		spinner.Stop()
 		// Why not refresh TimedOutAtUtc: stale expiry must stay anchored to the first timeout.
 		logCompileAttachResult(connection, record.RequestID, "timeout", false)
+		// Why not (TTL - waitTimeout): attach keeps the first TimedOutAtUtc, so remaining
+		// retrieval time is wall-clock until that anchor plus compilePendingRecordLifetime.
+		retentionRemaining := time.Until(record.TimedOutAtUtc.Add(compilePendingRecordLifetime))
 		clierrors.WriteErrorEnvelope(stderr, compileWaitTimeoutError(
 			connection.ProjectRoot,
 			waitTimeout,
 			lastStatus,
 			time.Since(waitStartedAt),
+			retentionRemaining,
 		))
 		return true, 1
 	case attachWaitCompleted:

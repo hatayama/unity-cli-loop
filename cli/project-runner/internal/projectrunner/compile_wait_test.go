@@ -809,7 +809,13 @@ func TestWaitForCompileCompletionRespectsConfiguredTimeout(t *testing.T) {
 // responsiveness instead of assuming a freeze, because agents have terminated
 // whole sessions after misreading this timeout as a frozen Editor.
 func TestCompileWaitTimeoutError(t *testing.T) {
-	cliErr := compileWaitTimeoutError("/tmp/MyProject", 90*time.Second, nil, 90*time.Second)
+	cliErr := compileWaitTimeoutError(
+		"/tmp/MyProject",
+		90*time.Second,
+		nil,
+		90*time.Second,
+		compilePendingRecordLifetime-90*time.Second,
+	)
 
 	if cliErr.ErrorCode != clierrors.ErrorCodeCompileWaitTimeout {
 		t.Fatalf("error code mismatch: %#v", cliErr)
@@ -842,13 +848,37 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 
 // Verifies a wait that consumes the full retention window omits the remaining-minutes sentence.
 func TestCompileWaitTimeoutErrorOmitsRemainingMinutesWhenNoneLeft(t *testing.T) {
-	cliErr := compileWaitTimeoutError("/tmp/MyProject", compilePendingRecordLifetime, nil, compilePendingRecordLifetime)
+	cliErr := compileWaitTimeoutError(
+		"/tmp/MyProject",
+		compilePendingRecordLifetime,
+		nil,
+		compilePendingRecordLifetime,
+		0,
+	)
 	reattach := cliErr.NextActions[1]
 	if strings.Contains(reattach, "retrievable for roughly") {
 		t.Fatalf("remaining-minutes sentence should be omitted: %#v", reattach)
 	}
 	if !strings.Contains(reattach, "reattach to the in-flight compile") {
 		t.Fatalf("reattach guidance missing: %#v", reattach)
+	}
+}
+
+// Verifies NextActions use the caller-supplied retentionRemaining instead of (TTL - timeout).
+func TestCompileWaitTimeoutErrorUsesCallerRetentionRemaining(t *testing.T) {
+	cliErr := compileWaitTimeoutError(
+		"/tmp/MyProject",
+		10*time.Minute,
+		nil,
+		10*time.Minute,
+		time.Minute,
+	)
+	reattach := cliErr.NextActions[1]
+	if strings.Contains(reattach, "roughly 10 more minutes") {
+		t.Fatalf("must not derive remaining from wait timeout: %#v", reattach)
+	}
+	if !strings.Contains(reattach, "roughly 1 more minutes") {
+		t.Fatalf("must use caller retentionRemaining: %#v", reattach)
 	}
 }
 
@@ -859,7 +889,13 @@ func TestCompileWaitTimeoutErrorIncludesLastObservedStatusDetails(t *testing.T) 
 		IsUpdating:               false,
 		IsDomainReloadInProgress: true,
 	}
-	cliErr := compileWaitTimeoutError("/tmp/MyProject", time.Second, lastStatus, 1234*time.Millisecond)
+	cliErr := compileWaitTimeoutError(
+		"/tmp/MyProject",
+		time.Second,
+		lastStatus,
+		1234*time.Millisecond,
+		compilePendingRecordLifetime-time.Second,
+	)
 	if cliErr.Details["WaitedMs"] != int64(1234) {
 		t.Fatalf("WaitedMs mismatch: %#v", cliErr.Details["WaitedMs"])
 	}
@@ -876,7 +912,13 @@ func TestCompileWaitTimeoutErrorIncludesLastObservedStatusDetails(t *testing.T) 
 
 // Verifies timeout Details omit status flags when no compile status was observed.
 func TestCompileWaitTimeoutErrorOmitsStatusDetailsWhenUnobserved(t *testing.T) {
-	cliErr := compileWaitTimeoutError("/tmp/MyProject", time.Second, nil, time.Second)
+	cliErr := compileWaitTimeoutError(
+		"/tmp/MyProject",
+		time.Second,
+		nil,
+		time.Second,
+		compilePendingRecordLifetime-time.Second,
+	)
 	if _, ok := cliErr.Details["IsCompiling"]; ok {
 		t.Fatalf("IsCompiling should be omitted without an observation: %#v", cliErr.Details)
 	}

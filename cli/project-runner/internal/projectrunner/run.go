@@ -244,6 +244,7 @@ func runCompileWithDomainReloadWaitWithDeps(
 			waitTimeout,
 			lastStatus,
 			time.Since(waitStartedAt),
+			compilePendingRecordLifetime-waitTimeout,
 		))
 		return 1
 	}

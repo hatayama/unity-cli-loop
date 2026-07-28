@@ -296,12 +296,15 @@ func TestRunCompileAttachReadyWithoutResultClearsRecordAndStartsNewCompile(t *te
 	}
 }
 
-// Verifies an attach wait that times out again keeps the original pending record untouched.
+// Verifies an attach wait that times out again keeps the original pending record untouched,
+// and reports remaining retention from the first TimedOutAtUtc (not TTL minus this wait).
 func TestRunCompileAttachRetimesOutPreservesPendingRecord(t *testing.T) {
 	enableCliVibeLog(t)
 	projectRoot := t.TempDir()
 	requestID := "compile_attach_retimeout"
-	timedOutAt := time.Now().UTC().Add(-time.Minute)
+	// Why 15m ago: a 1s attach wait would overstate "roughly 19 more minutes" if NextActions
+	// used (TTL - waitTimeout). Wall-clock remaining is ~5 minutes (stable against minute floor).
+	timedOutAt := time.Now().UTC().Add(-15 * time.Minute)
 	if err := writeCompilePendingRecord(projectRoot, compilePendingRecord{
 		RequestID:     requestID,
 		TimedOutAtUtc: timedOutAt,
@@ -327,6 +330,13 @@ func TestRunCompileAttachRetimesOutPreservesPendingRecord(t *testing.T) {
 		t.Fatalf("reattach timeout message mismatch: %s", stderr.String())
 	}
 	assertCompileWaitTimeoutEnvelopeDetails(t, stderr.Bytes(), true)
+	if strings.Contains(stderr.String(), "roughly 19 more minutes") {
+		t.Fatalf("attach re-timeout must not overstate retention from this wait: %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "roughly 5 more minutes") &&
+		!strings.Contains(stderr.String(), "roughly 4 more minutes") {
+		t.Fatalf("attach re-timeout should report ~5 minutes left from first timeout: %s", stderr.String())
+	}
 
 	got, ok := readCompilePendingRecord(projectRoot)
 	if !ok {

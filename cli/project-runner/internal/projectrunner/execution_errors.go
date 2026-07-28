@@ -14,6 +14,7 @@ func compileWaitTimeoutError(
 	timeout time.Duration,
 	lastStatus *compileStatusResponse,
 	waited time.Duration,
+	retentionRemaining time.Duration,
 ) clierrors.CLIError {
 	return clierrors.CLIError{
 		ErrorCode: clierrors.ErrorCodeCompileWaitTimeout,
@@ -28,7 +29,7 @@ func compileWaitTimeoutError(
 		// Why: agents historically treated this timeout as a frozen Editor and ran
 		// launch -r. Recovery is reattach via a later uloop compile while Unity still
 		// holds the result (CompileResultLifetime / compilePendingRecordLifetime).
-		NextActions: compileWaitTimeoutNextActions(timeout),
+		NextActions: compileWaitTimeoutNextActions(retentionRemaining),
 		Details:     compileWaitTimeoutDetails(lastStatus, waited),
 	}
 }
@@ -46,9 +47,11 @@ func compileWaitTimeoutDetails(lastStatus *compileStatusResponse, waited time.Du
 	return details
 }
 
-func compileWaitTimeoutNextActions(timeout time.Duration) []string {
+func compileWaitTimeoutNextActions(retentionRemaining time.Duration) []string {
 	reattachAction := "Unity keeps compiling and refuses other commands with UNITY_SERVER_BUSY until it finishes. Re-run `uloop compile`: it will reattach to the in-flight compile and wait for its result instead of starting a new one."
-	remaining := compilePendingRecordLifetime - timeout
+	// Why the caller passes remaining: attach re-timeouts keep the original TimedOutAtUtc,
+	// so remaining retention is wall-clock from that first timeout, not (TTL - this wait).
+	remaining := retentionRemaining
 	if remaining < 0 {
 		remaining = 0
 	}
