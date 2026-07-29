@@ -31,8 +31,7 @@
 
 **なぜ重要なのか:** Safe Modeでは、ホワイトリストに登録されたアセンブリだけが読み込まれます。Unity CLI Loopのエディタ拡張はこのホワイトリストに含まれないため、Safe Modeではパッケージのコードが動かず、**移行ウィンドウが開きません**。Safe Modeを拒否することが、この先の手順の前提になります。
 
-> 📸 **SCREENSHOT NEEDED** — `images/migration-safe-mode-dialog.png`
-> 起動時に表示される Safe Mode 確認ダイアログ。`Ignore` ボタンが見える状態。
+![起動時に表示されるSafe Mode確認ダイアログ。Ignoreを押す](images/migration-safe-mode-dialog.png)
 
 > [!WARNING]
 > `Preferences > Asset Pipeline > Show Enter Safe Mode Dialog` をOFFにしていると、Unityは**確認なしでSafe Modeに入ります**。この場合 `Ignore` を押す機会自体がありません。この設定をONに戻してから、Editorを再起動してください。
@@ -45,21 +44,15 @@ CLIから起動してもこのダイアログは回避できません。`uloop l
 
 Editorが起動すると、`Unity CLI Loop Migration` ウィンドウが**自動的に開き、スキャンが始まります**。この自動オープンは、パッケージのメジャーバージョンがV2からV3になった最初の起動時に発火します。つまり一度きりのイベントで、再起動すればまた出せるというものではありません。
 
-> 📸 **SCREENSHOT NEEDED** — `images/migration-wizard-overview.png`
-> `Unity CLI Loop Migration` ウィンドウ全体。`C# Source Structure Migration` と `AI Skill and Script Migration` の2セクションが両方見える状態。
+![Unity CLI Loop Migrationウィンドウ。C# Source Structure MigrationとAI Skill and Script Migrationの2セクションが表示され、検出結果とMigrateボタンが見える](images/migration-wizard-detected.png)
 
 **スキャンが終わるまで少し待ってください。** コンパイルが失敗している間、Unityはドメインリロードを行いません。そのためパッケージはコールバック1回に頼らず、失敗状態をポーリングして検出します。ステータスが表示されるまでに少し間があるのは正常な挙動で、ウィンドウが固まったわけではありません。
 
-スキャンが落ち着くと、`C# Source Structure Migration` セクションが結果を表示します。自動オープン直後は、コンパイルエラー起点の検出として次のように表示されます。
+スキャンが落ち着くと、`C# Source Structure Migration` セクションが結果を表示します。自動オープン直後は、コンパイルエラー起点の検出として次のように表示されます（対象ファイル数を特定できなかった場合は件数なしの文言になります）。
 
-> Detected legacy V2 custom tool API usage from a compile error. Click Migrate to scan the project and update the affected files.
+> Detected 36 C# files using legacy V2 custom tool APIs from a compile error. Click Migrate to scan the project and update them.
 
-プロジェクトスキャンでファイル一覧が確定すると、次の表示になります。
-
-> Found 3 C# files that need V3 migration.
-
-> 📸 **SCREENSHOT NEEDED** — `images/migration-wizard-detected.png`
-> 移行対象を検出した状態のウィザード。`Found {N} C# files that need V3 migration.` のステータスが表示され、`Migrate` ボタンが押せる状態。
+この後 `Migrate` を押してプロジェクトスキャンでファイル一覧が確定すると、`Found {N} C# files that need V3 migration.` という表示に変わります。
 
 **ウィンドウが自動で開かなかった場合**は、`Window > Unity CLI Loop > Custom Tool Migration` から手動で開いてください。
 
@@ -67,8 +60,7 @@ Editorが起動すると、`Unity CLI Loop Migration` ウィンドウが**自動
 
 **`Migrate`** を押します。`Migrate C# Sources?` というタイトルの確認ダイアログが表示され、ファイルがその場で書き換えられること、先にcommitまたはバックアップを取るべきことが警告されます。**`Migrate`** で確定してください。
 
-> 📸 **SCREENSHOT NEEDED** — `images/migration-wizard-confirm-dialog.png`
-> `Migrate C# Sources?` 確認ダイアログ。"Commit or back up your project first (VCS recommended)." の警告文が読める状態。
+![Migrate C# Sources?確認ダイアログ。commitまたはバックアップを促す警告が表示される](images/migration-wizard-confirm-dialog.png)
 
 実行中はボタンが `Migrating...` になり、ステータス行に `{n}/{N} steps complete.` と進捗が表示されます。完了すると次のように表示されます。
 
@@ -104,8 +96,7 @@ Editorが起動すると、`Unity CLI Loop Migration` ウィンドウが**自動
 
 2つ目のセクション `AI Skill and Script Migration` は、残り半分の作業を担当します。対象は、`uloop` を呼び出している `SKILL.md`・Markdownドキュメント・シェルスクリプト・PowerShellスクリプトです。
 
-> 📸 **SCREENSHOT NEEDED** — `images/migration-wizard-ai-skill.png`
-> ウィザードの `AI Skill and Script Migration` セクション。`Prompt for your AI agent` の折りたたみを開いた状態が望ましい。
+![AI Skill and Script Migrationセクション。Install Migration SkillボタンとPrompt for your AI agentの内容が表示されている](images/migration-wizard-ai-skill.png)
 
 **このウィンドウ自身はファイルを書き換えません。** 行うのは一時AIスキルのインストールと削除だけで、実際の編集はAIエージェントが行います。手順は次のとおりです。
 
