@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -58,6 +59,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(
                 startInfo.EnvironmentVariables[SharedRoslynCompilerWorkerAssemblyBuilder.DotnetMultilevelLookupEnvironmentVariableName],
                 Is.EqualTo(SharedRoslynCompilerWorkerAssemblyBuilder.DotnetMultilevelLookupDisabledValue));
+        }
+
+        /// <summary>
+        /// Verifies the worker reference set includes System.Security.Cryptography.Primitives when that assembly exists in the Unity runtime.
+        /// </summary>
+        [Test]
+        public void BuildWorkerReferenceSet_WhenPrimitivesAssemblyExists_ShouldIncludePrimitivesReference()
+        {
+            ExternalCompilerPaths externalCompilerPaths = ExternalCompilerPathResolver.Resolve();
+            Assert.That(externalCompilerPaths, Is.Not.Null, "Unity external compiler layout should be available.");
+
+            string primitivesAssemblyPath = Path.Combine(
+                externalCompilerPaths.NetCoreRuntimeSharedDirectoryPath,
+                "System.Security.Cryptography.Primitives.dll");
+            if (!File.Exists(primitivesAssemblyPath))
+            {
+                Assert.Ignore(
+                    "System.Security.Cryptography.Primitives.dll is not present in this Unity NetCoreRuntime shared directory.");
+            }
+
+            List<string> references =
+                SharedRoslynCompilerWorkerAssemblyBuilder.BuildWorkerReferenceSet(externalCompilerPaths);
+
+            Assert.That(references, Does.Contain(primitivesAssemblyPath));
         }
 
         /// <summary>
