@@ -100,13 +100,13 @@ v2への委譲には、初回コマンドでcacheを作成するnpmを含むNode
 
 Unity Package の setup を開かず、standalone の global CLI だけを入れたい場合に使ってください。
 
-最初にOSまたはパッケージ管理経由で`gh`と`jq`を導入してください。bootstrapはこれらを導入せず、代替手段にもフォールバックしません。immutableなdispatcher Release tagとsource branchを選択します。mainのReleaseは`refs/heads/main`、v3-betaのReleaseは`refs/heads/v3-beta`を指定してください。
+最初にOSまたはパッケージ管理経由で`gh`（ログイン済み）と`jq`を導入してください。bootstrapはこれらを導入せず、代替手段にもフォールバックしません。以下のコマンドは最新のdispatcher Release tagを自動で解決します。特定のバージョンを入れたい場合は、`RELEASE_TAG`にimmutableなタグ（例: `dispatcher-v3.0.0`）を直接指定してください。`SOURCE_REF`はReleaseの出所ブランチで、mainのReleaseは`refs/heads/main`、v3-betaのReleaseは`refs/heads/v3-beta`を指定します。
 
 macOS、Windows Git Bash の場合:
 
 ```bash
 REPOSITORY=hatayama/unity-cli-loop
-RELEASE_TAG=dispatcher-v<RELEASE_VERSION>
+RELEASE_TAG=$(gh api "repos/$REPOSITORY/releases?per_page=100" --jq '[.[] | select(.tag_name | startswith("dispatcher-v"))][0].tag_name')
 SOURCE_REF=refs/heads/v3-beta
 tmp_dir=$(mktemp -d)
 gh release download "$RELEASE_TAG" --repo "$REPOSITORY" --pattern 'install.sh' --pattern 'install.sh.sigstore.json' --dir "$tmp_dir" && \
@@ -120,7 +120,8 @@ Windows PowerShell の場合:
 
 ```powershell
 $repository = 'hatayama/unity-cli-loop'
-$releaseTag = 'dispatcher-v<RELEASE_VERSION>'
+$releaseTag = (gh api "repos/$repository/releases?per_page=100" | ConvertFrom-Json | Where-Object { $_.tag_name -like 'dispatcher-v*' } | Select-Object -First 1).tag_name
+if (-not $releaseTag) { throw 'No dispatcher release found.' }
 $sourceRef = 'refs/heads/v3-beta'
 $temporaryDirectory = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
 gh release download $releaseTag --repo $repository --pattern 'install.ps1' --pattern 'install.ps1.sigstore.json' --dir $temporaryDirectory.FullName
