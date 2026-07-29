@@ -16,7 +16,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Value has not changed across the last {0} evaluations. Watch values only refresh " +
             "when the Editor is paused on a changed frame, so confirm the linked pause point has " +
             "been hit again if you expect this value to be different (a marker on a conditional " +
-            "line freezes after its first hit).";
+            "line freezes after its first hit). A custom ToString() that omits changing fields " +
+            "can also make a changing value appear frozen; in that case watch a more specific " +
+            "field or property instead.";
 
         public static string EvaluateFreezeHint(IReadOnlyList<WatchHistoryResponse> history)
         {

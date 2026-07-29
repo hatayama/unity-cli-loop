@@ -107,12 +107,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 FrameCount = entry.FrameCount,
                 EvaluatedAtUtc = entry.EvaluatedAtUtc.ToString("O"),
                 Success = result.Success,
-                Value = result.Success
-                    ? result.Value == null ? "null" : result.Value.ToString()
-                    : string.Empty,
+                Value = result.Success ? FormatSuccessfulValue(result.Value) : string.Empty,
                 ErrorTypeName = result.ErrorTypeName,
                 ErrorMessage = result.ErrorMessage
             };
+        }
+
+        // Why: watch Value used plain ToString(), so collections collapsed to type names and
+        // looked frozen even when contents changed; reuse CapturedVariables preview rules.
+        private static string FormatSuccessfulValue(object value)
+        {
+            if (value == null)
+            {
+                return "null";
+            }
+
+            bool truncated = false;
+            if (SourcePausePointCollectionPreviewSerializer.TrySerialize(
+                    value,
+                    SourcePausePointConstants.MaxCollectionPreviewElementCount,
+                    ref truncated,
+                    out string preview))
+            {
+                return preview;
+            }
+
+            return value.ToString();
         }
     }
 
