@@ -103,10 +103,19 @@ Unity Package の setup を開かず、standalone の global CLI だけを入れ
 > [!NOTE]
 > この手順が長いのはセキュリティのためです。ダウンロードしたインストーラと成果物が、このリポジトリのCIが実際にビルドしたものと一致することをsigstore attestationで検証してから実行します。UnityのGUI（**Install CLI** ボタン）も同じ検証済みdigestとの照合を行っていますが、そちらはCIがリリース時に検証した結果をパッケージ内に持っているため、`gh` や `jq` は不要です。
 
-最初にOSまたはパッケージ管理経由で`gh`（ログイン済み）と`jq`を導入してください。bootstrapはこれらを導入せず、代替手段にもフォールバックしません。以下のコマンドは最新のdispatcher Release tagを自動で解決します。特定のバージョンを入れたい場合は、`RELEASE_TAG`にimmutableなタグ（例: `dispatcher-v3.0.0`）を直接指定してください。`SOURCE_REF`はReleaseの出所ブランチで、mainのReleaseは`refs/heads/main`、v3-betaのReleaseは`refs/heads/v3-beta`を指定します。
+最初にOSまたはパッケージ管理経由で`gh`（ログイン済み）と`jq`を導入してください。以下のコマンドはこの2つを自動では導入せず、代替手段にもフォールバックしません。最新のdispatcher Release tagは自動で解決されます。特定のバージョンを入れたい場合は、`RELEASE_TAG`にimmutableなタグ（例: `dispatcher-v3.0.0`）を直接指定してください。`SOURCE_REF`はReleaseの出所ブランチで、mainのReleaseは`refs/heads/main`、v3-betaのReleaseは`refs/heads/v3-beta`を指定します。
+
+コマンドがやっていることは順に次の5つです。
+
+1. 最新のdispatcher Release tagを解決する（`RELEASE_TAG`）
+2. Releaseからインストーラと、その署名情報（sigstore attestation bundle）を取得する（`gh release download`）
+3. インストーラが「このリポジトリのCIが、このタグのコミットからビルドしたもの」であることを検証する（`gh attestation verify`）
+4. 検証済みの署名情報から、CLI本体アーカイブの正しいハッシュ一覧を取り出す（`jq`）
+5. ハッシュ一覧を渡してインストーラを実行する。アーカイブが一覧と一致しなければ、実行前に中断されます
 
 macOS、Windows Git Bash の場合:
 
+<!-- このブロックに # コメントを入れないこと。素のzsh（interactivecomments無効）にコピペするとコメント行がエラーになり、検証失敗時に実行を止める && の連結も壊れる。説明は上のリストに書く。 -->
 ```bash
 REPOSITORY=hatayama/unity-cli-loop
 RELEASE_TAG=$(gh api "repos/$REPOSITORY/releases?per_page=100" --jq '[.[] | select(.tag_name | startswith("dispatcher-v"))][0].tag_name')
@@ -123,19 +132,24 @@ Windows PowerShell の場合:
 
 ```powershell
 $repository = 'hatayama/unity-cli-loop'
+# 最新のdispatcher Release tagを解決する（固定したい場合はタグ文字列を直接代入）
 $releaseTag = (gh api "repos/$repository/releases?per_page=100" | ConvertFrom-Json | Where-Object { $_.tag_name -like 'dispatcher-v*' } | Select-Object -First 1).tag_name
 if (-not $releaseTag) { throw 'No dispatcher release found.' }
 $sourceRef = 'refs/heads/v3-beta'
 $temporaryDirectory = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
+# Releaseからインストーラと、その署名情報（sigstore attestation bundle）を取得する
 gh release download $releaseTag --repo $repository --pattern 'install.ps1' --pattern 'install.ps1.sigstore.json' --dir $temporaryDirectory.FullName
 if ($LASTEXITCODE -ne 0) { throw 'Installer download failed.' }
 $tagSha = gh api "repos/$repository/commits/$releaseTag" --jq .sha
 if ($LASTEXITCODE -ne 0) { throw 'Release tag resolution failed.' }
+# インストーラが「このリポジトリのCIが、このタグのコミットからビルドしたもの」であることを検証する
 gh attestation verify (Join-Path $temporaryDirectory.FullName 'install.ps1') --bundle (Join-Path $temporaryDirectory.FullName 'install.ps1.sigstore.json') --repo $repository --signer-workflow "$repository/.github/workflows/dispatcher-publish.yml" --source-ref $sourceRef --source-digest $tagSha
 if ($LASTEXITCODE -ne 0) { throw 'Installer attestation verification failed.' }
+# 検証済みの署名情報から、CLI本体アーカイブの正しいハッシュ一覧を取り出す
 $bundle = Get-Content -Raw -Encoding UTF8 (Join-Path $temporaryDirectory.FullName 'install.ps1.sigstore.json') | ConvertFrom-Json
 $statement = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($bundle.dsseEnvelope.payload)) | ConvertFrom-Json
 $manifest = [string]::Join("`n", @($statement.subject | ForEach-Object { "$($_.digest.sha256)  $($_.name)" } | Sort-Object))
+# ハッシュ一覧を渡してインストーラを実行する（アーカイブが一覧と一致しなければ実行前に中断される）
 $env:ULOOP_VERSION = $releaseTag
 $env:ULOOP_ARCHIVE_MANIFEST = $manifest
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $temporaryDirectory.FullName 'install.ps1')
