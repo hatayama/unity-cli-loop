@@ -2,7 +2,11 @@
 
 [日本語](whats-new-v3_ja.md)
 
-V3 replaces the npm-distributed CLI with a native Go binary, so Node.js is no longer required to drive Unity from an AI agent. The transport moved from TCP port management to a Unix domain socket on macOS/Linux and a named pipe on Windows, which removes port configuration and port conflicts entirely. The headline new capability is `pause-point`: it stops PlayMode at any `file:line` and reports the locals, parameters, and instance fields at that exact frame, without editing source or recompiling. MCP support and shell completion are gone; the CLI plus Skills is now the only integration path.
+V3 replaces the npm-distributed CLI with a native Go binary and moves the transport from TCP port management to OS-native IPC. Driving Unity from an AI agent no longer needs a Node.js setup or any port management.
+
+The headline new capability is `pause-point`: stop PlayMode at any source line and read the variables at that moment, without editing source or recompiling.
+
+MCP support and shell completion are gone; the CLI plus Skills is now the only integration path. The highlights and sections below carry the details of each change.
 
 ## Upgrading
 
