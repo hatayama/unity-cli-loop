@@ -91,8 +91,6 @@ Unity Package の setup を開かず、standalone の global CLI だけを入れ
 
 > [!NOTE]
 > このコマンドが冗長なのはセキュリティのためです。ダウンロードしたインストーラと成果物が、このリポジトリのCIが実際にビルドしたものと一致することをsigstore attestationで検証してから実行します。UnityのGUI（**Install CLI** ボタン）も同じ検証済みdigestとの照合を行っていますが、そちらはCIがリリース時に検証した結果をパッケージ内に持っているため、`gh` や `jq` は不要です。
->
-> 冗長ですが、下記のブロックはコピペしてそのまま一気に実行できます。
 
 最初にOSまたはパッケージ管理経由で`gh`（ログイン済み）と`jq`を導入してください。以下のコマンドはこの2つを自動では導入せず、代替手段にもフォールバックしません。最新のdispatcher Release tagは自動で解決されます。特定のバージョンを入れたい場合は、`RELEASE_TAG`にimmutableなタグ（例: `dispatcher-v3.0.0`）を直接指定してください。
 
@@ -104,7 +102,7 @@ Unity Package の setup を開かず、standalone の global CLI だけを入れ
 4. 検証済みの署名情報から、CLI本体アーカイブの正しいハッシュ一覧を取り出す（`jq`）
 5. ハッシュ一覧を渡してインストーラを実行する。アーカイブが一覧と一致しなければ、実行前に中断されます
 
-macOS、Windows Git Bash の場合:
+macOS、Windows Git Bash の場合は、次のブロックを丸ごとそのままコピー＆ペーストして実行してください。1行ずつ実行する必要はありません。
 
 <!-- このブロックに # コメントを入れないこと。素のzsh（interactivecomments無効）にコピペするとコメント行がエラーになり、検証失敗時に実行を止める && の連結も壊れる。説明は上のリストに書く。 -->
 ```bash
@@ -119,7 +117,7 @@ manifest=$(jq -r '.dsseEnvelope.payload | @base64d | fromjson | .subject[] | "\(
 ULOOP_VERSION="$RELEASE_TAG" ULOOP_ARCHIVE_MANIFEST="$manifest" sh "$tmp_dir/install.sh"
 ```
 
-Windows PowerShell の場合:
+Windows PowerShell の場合も同様に、次のブロックを丸ごとそのままコピー＆ペーストして実行してください。
 
 ```powershell
 $repository = 'hatayama/unity-cli-loop'

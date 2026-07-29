@@ -91,8 +91,6 @@ Use this only when you want to install the standalone global CLI without opening
 
 > [!NOTE]
 > This command is verbose for a security reason: it verifies with sigstore attestations that the downloaded installer and assets match what this repository's CI actually built, before anything runs. Unity's GUI (the **Install CLI** button) performs the same check against verified digests, but it ships those CI-verified digests inside the package, which is why it does not need `gh` or `jq`.
->
-> Verbose as it is, the block below can be pasted and executed in one go.
 
 Install `gh` (logged in) and `jq` through your operating system or package channel first. The commands below neither install these two tools nor fall back to alternatives. The latest dispatcher Release tag is resolved automatically. To install a specific version instead, assign an immutable tag (e.g. `dispatcher-v3.0.0`) to `RELEASE_TAG` directly.
 
@@ -104,7 +102,7 @@ The command performs these five steps in order:
 4. Extract the verified hash list for the CLI archives from the signing information (`jq`)
 5. Run the installer with the hash list. If an archive does not match the list, the installer aborts before executing anything
 
-On macOS or Windows Git Bash:
+On macOS or Windows Git Bash, copy and paste the whole block below as-is and run it. There is no need to execute it line by line.
 
 <!-- Do not add # comments to this block. Pasted into plain zsh (interactivecomments disabled), comment lines error out and break the && chaining that stops execution when verification fails. Put explanations in the list above. -->
 ```bash
@@ -119,7 +117,7 @@ manifest=$(jq -r '.dsseEnvelope.payload | @base64d | fromjson | .subject[] | "\(
 ULOOP_VERSION="$RELEASE_TAG" ULOOP_ARCHIVE_MANIFEST="$manifest" sh "$tmp_dir/install.sh"
 ```
 
-On Windows PowerShell:
+On Windows PowerShell, likewise copy and paste the whole block below as-is and run it.
 
 ```powershell
 $repository = 'hatayama/unity-cli-loop'
