@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
@@ -47,8 +48,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             // Tests that every enum a first-party schema exposes can be resolved by its ordinal.
             // The schema cache stores an enum default as a number while listing the members by name,
             // so the CLI recovers the name shown in `--help` by indexing the name list with that
-            // number. A member with an explicit value or a [Flags] enum would make the CLI print a
-            // different member's name as the default.
+            // number. Same-value aliases are allowed after the canonical name; gaps, negative
+            // values, and a [Flags] enum would make the CLI print a different member's name.
             Type[] schemaTypes = FirstPartySchemaTypes();
 
             Assert.That(schemaTypes, Is.Not.Empty);
@@ -76,14 +77,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                         Is.Null,
                         $"{location} is a [Flags] enum, which cannot be resolved by ordinal");
 
-                    Array members = Enum.GetValues(propertyType);
-                    for (int index = 0; index < members.Length; index++)
+                    // Why allow same-value aliases: CaptureMode.GameView shares rendering's
+                    // ordinal so agents can pass GameView. CLI default lookup still indexes the
+                    // name list by the numeric default, so the canonical name must stay at that
+                    // index and aliases must be declared after it.
+                    string[] names = Enum.GetNames(propertyType);
+                    HashSet<long> distinctValues = new();
+                    long maxValue = -1;
+                    foreach (object member in Enum.GetValues(propertyType))
                     {
-                        long value = Convert.ToInt64(members.GetValue(index));
+                        long value = Convert.ToInt64(member);
                         Assert.That(
                             value,
-                            Is.EqualTo((long)index),
-                            $"{location} is not zero-based and contiguous at index {index}");
+                            Is.GreaterThanOrEqualTo(0),
+                            $"{location} has a negative member value {value}");
+                        distinctValues.Add(value);
+                        if (value > maxValue)
+                        {
+                            maxValue = value;
+                        }
+                    }
+
+                    Assert.That(
+                        distinctValues.Count,
+                        Is.EqualTo(maxValue + 1),
+                        $"{location} has gaps in its ordinal values");
+
+                    for (long value = 0; value <= maxValue; value++)
+                    {
+                        Assert.That(
+                            names.Length,
+                            Is.GreaterThan((int)value),
+                            $"{location} is missing a canonical name at index {value}");
+                        long nameValue = Convert.ToInt64(Enum.Parse(propertyType, names[value]));
+                        Assert.That(
+                            nameValue,
+                            Is.EqualTo(value),
+                            $"{location} canonical name at index {value} is '{names[value]}' with value {nameValue}");
                     }
 
                     checkedEnumPropertyCount++;
