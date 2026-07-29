@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.27](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.26...dispatcher-v3.0.0-beta.27) (2026-07-29)
+
+
+### Features
+
+* address pause point round 13-14 leftover improvements ([#2065](https://github.com/hatayama/unity-cli-loop/issues/2065)) ([ce21b4f](https://github.com/hatayama/unity-cli-loop/commit/ce21b4f5d1d3693cb9837288da15f4b43102fabe))
+
 ## [3.0.0-beta.26](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.25...dispatcher-v3.0.0-beta.26) (2026-07-29)
 
 
