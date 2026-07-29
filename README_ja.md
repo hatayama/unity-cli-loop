@@ -495,7 +495,10 @@ Input System経由でPlayMode中のマウス入力をシミュレーションし
 
 5つのアクションに対応: Click、LongPress、MoveDelta、SmoothDelta、Scroll
 
+`--dry-run` を付けると、マウス入力を注入する代わりに、その座標が3D物理で何にヒットするか（GameObjectの名前とパス、レイヤー、距離、ヒット位置・法線）だけを返します。スクリーンショットで決めた座標にクリックを送る前の確認に使います。dry-runはEditModeでも動作し、Input Systemパッケージも不要です。
+
 ```text
+→ simulate-mouse-input (DryRun: true, X: 400, Y: 300)
 → simulate-mouse-input (Action: Click, X: 400, Y: 300)
 → simulate-mouse-input (Action: Click, X: 400, Y: 300, Button: Right)
 → simulate-mouse-input (Action: LongPress, X: 400, Y: 300, Duration: 2.0)

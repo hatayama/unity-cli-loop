@@ -35,6 +35,8 @@ uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"
 ```
 
 > `set-game-view-size` もV3で追加されました。Game Viewのカスタム解像度を取得・設定でき（`uloop set-game-view-size --width 1920 --height 1080`）、`screenshot --capture-mode rendering` の座標系を実行ごとに安定させたいときに使えます。
+>
+> `simulate-mouse-input` には `--dry-run` が追加されました。マウス入力を注入せずに、Game View座標が3D物理で何にヒットするかを確認できます（`uloop simulate-mouse-input --dry-run --x 640 --y 360`）。クリックを送る前の着弾確認に使えます。
 
 ## CLI・配布方法の変更
 
