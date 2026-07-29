@@ -111,7 +111,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 classification.Kind, classification.Path, classification.InstanceId, truncated: false);
         }
 
-        private static string ApplyValueLengthCap(string value, int maxLength, ref bool truncated)
+        // Why internal: Watch reuses this cap so get-watch-values previews match CapturedVariables
+        // length limits instead of duplicating the clipping rule.
+        internal static string ApplyValueLengthCap(string value, int maxLength, ref bool truncated)
         {
             if (value.Length <= maxLength)
             {
