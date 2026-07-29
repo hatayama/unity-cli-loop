@@ -1,21 +1,22 @@
 ---
 name: uloop-simulate-mouse-input
 toolName: simulate-mouse-input
-description: "Simulate Mouse.current input in PlayMode through Unity Input System. Use for gameplay mouse clicks, long-press (LongPress), movement delta (MoveDelta/SmoothDelta), or scroll. Use simulate-mouse-ui for UI. Requires the Input System package and Active Input Handling set to 'Input System Package (New)' or 'Both'."
+description: "Simulate Mouse.current input in PlayMode through Unity Input System. Use for gameplay mouse clicks, long-press (LongPress), movement delta (MoveDelta/SmoothDelta), or scroll. Use --dry-run to check what a Game View coordinate hits in 3D physics before clicking (works in EditMode; no Input System required). Use simulate-mouse-ui for UI. Requires the Input System package and Active Input Handling set to 'Input System Package (New)' or 'Both' (except --dry-run)."
 ---
 
 # Task
 
-Simulate mouse input via Input System in Unity PlayMode.
+Simulate mouse input via Input System in Unity PlayMode, or dry-run a Game View coordinate against 3D physics without injecting input.
 
 ## Workflow
 
-1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
-2. For Click/LongPress: determine the target Game View input position from annotated `SimX`/`SimY`, raycast-grid `InputX`/`InputY`, or raw image pixels converted with `ScreenshotToInputFormula`
-3. Execute the needed `uloop simulate-mouse-input` commands
-4. Inspect the result with the lightest useful evidence: runtime state, logs, or a screenshot
-5. When this input verifies a state transition, use Pause Point inspection from the section below as the standard frame proof
-6. Report what happened and which evidence was used
+1. When checking what a screenshot coordinate would hit in 3D physics before clicking, run `uloop simulate-mouse-input --dry-run --x <x> --y <y>` first (EditMode is fine; no Input System required)
+2. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not) before injecting real mouse input
+3. For Click/LongPress: determine the target Game View input position from annotated `SimX`/`SimY`, raycast-grid `InputX`/`InputY`, or raw image pixels converted with `ScreenshotToInputFormula`
+4. Execute the needed `uloop simulate-mouse-input` commands
+5. Inspect the result with the lightest useful evidence: runtime state, logs, or a screenshot
+6. When this input verifies a state transition, use Pause Point inspection from the section below as the standard frame proof
+7. Report what happened and which evidence was used
 
 Two rules while verifying:
 
@@ -26,6 +27,7 @@ Two rules while verifying:
 
 ```bash
 uloop simulate-mouse-input --action <action> [options]
+uloop simulate-mouse-input --dry-run --x <x> --y <y> [--layer-mask <mask>] [--max-distance <distance>]
 ```
 
 ### Parameters
@@ -33,14 +35,17 @@ uloop simulate-mouse-input --action <action> [options]
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--action` | enum | `Click` | `Click` - inject button press+release, `LongPress` - inject button hold for `--duration` seconds, `MoveDelta` - inject mouse delta (one-shot), `SmoothDelta` - inject mouse delta smoothly over `--duration` seconds, `Scroll` - inject scroll wheel |
-| `--x` | number | `0` | Target X position in Game View pixels (origin: top-left). Used by Click and LongPress. Use `AnnotatedElements[].SimX`, or raw image pixels converted with `ScreenshotToInputFormula`. |
-| `--y` | number | `0` | Target Y position in Game View pixels (origin: top-left). Used by Click and LongPress. Use `AnnotatedElements[].SimY`, or raw image pixels converted with `ScreenshotToInputFormula`. |
+| `--x` | number | `0` | Target X position in Game View pixels (origin: top-left). Used by Click, LongPress, and `--dry-run`. Use `AnnotatedElements[].SimX`, or raw image pixels converted with `ScreenshotToInputFormula`. |
+| `--y` | number | `0` | Target Y position in Game View pixels (origin: top-left). Used by Click, LongPress, and `--dry-run`. Use `AnnotatedElements[].SimY`, or raw image pixels converted with `ScreenshotToInputFormula`. |
 | `--button` | enum | `Left` | Mouse button: `Left`, `Right`, `Middle`. Used by Click and LongPress. |
 | `--duration` | number | `0` | Hold duration for LongPress, or interpolation duration for SmoothDelta (seconds, max 30). For Click, 0 = one-shot tap. |
 | `--delta-x` | number | `0` | Delta X in pixels for MoveDelta/SmoothDelta. Positive = right. |
 | `--delta-y` | number | `0` | Delta Y in pixels for MoveDelta/SmoothDelta. Positive = up. |
 | `--scroll-x` | number | `0` | Horizontal scroll delta for Scroll action. |
 | `--scroll-y` | number | `0` | Vertical scroll delta for Scroll action. Positive = up, negative = down. Typically 120 per notch. |
+| `--dry-run` | flag | - | Query 3D physics at `--x`/`--y` without injecting mouse input. Works in EditMode and without the Input System package. Skips PlayMode / Input System preflight. |
+| `--layer-mask` | number | Unity default raycast layers | Physics layer mask used by the raycast. Effective only with `--dry-run`. |
+| `--max-distance` | number | `1000` | Maximum raycast distance in world units. Effective only with `--dry-run`. |
 
 ### Actions
 
@@ -68,6 +73,23 @@ All rows below assume the New Input System is installed.
 | Drag a UI slider | `simulate-mouse-ui --action Drag` |
 | Runtime logic reads `Mouse.current.delta` | `simulate-mouse-input --action MoveDelta` |
 | Runtime logic reads `Mouse.current.scroll` | `simulate-mouse-input --action Scroll` |
+
+## Dry-run (3D physics hit check)
+
+Use `--dry-run` to check what a top-left Game View coordinate hits in 3D physics before clicking.
+This path does not require PlayMode or the Input System package.
+
+- Requires an active `Camera.main`.
+- Uses Unity Physics raycasts, not UI EventSystem raycasts.
+- `--x` / `--y` use the same top-left Game View input coordinates as Click/LongPress.
+
+```bash
+# Check what is under a screenshot coordinate
+uloop simulate-mouse-input --dry-run --x 960 --y 540
+
+# Check only specific layers
+uloop simulate-mouse-input --dry-run --x 960 --y 540 --layer-mask 1
+```
 
 ## Examples
 
@@ -111,9 +133,8 @@ unity_y = gameViewHeight - input_y
 
 ## Prerequisites
 
-- Unity must be in **PlayMode**
-- **Input System package** (`com.unity.inputsystem`) must be installed; this tool only works with the New Input System.
-- Game code must read input via Input System API (e.g. `Mouse.current.leftButton.wasPressedThisFrame`)
+- For real mouse injection: Unity must be in **PlayMode**, and the **Input System package** (`com.unity.inputsystem`) must be installed; game code must read input via Input System API (e.g. `Mouse.current.leftButton.wasPressedThisFrame`).
+- For `--dry-run`: an active `Camera.main` is required; PlayMode and the Input System package are not required.
 
 ## Output
 
@@ -121,14 +142,19 @@ Returns JSON with:
 
 - `Success`: Whether the operation succeeded
 - `Message`: Status message
-- `Action`: Echoes which action was executed (`Click`, `LongPress`, `MoveDelta`, `SmoothDelta`, or `Scroll`)
+- `Action`: Echoes which action was executed (`Click`, `LongPress`, `MoveDelta`, `SmoothDelta`, or `Scroll`); unused for `--dry-run`
 - `Button`: Which button was used (nullable string; populated for `Click` / `LongPress`, null otherwise)
 - `PositionX` / `PositionY`: Target top-left Game View coordinates (nullable float; populated for `Click` / `LongPress`)
-- `InputCoordinateSystem`: `"top-left-game-view"` for click/long-press coordinates
-- `UnityCoordinateSystem`: `"bottom-left-game-view"` for the injected `Mouse.current.position`
+- `CameraName` / `CameraPath`: Camera that `Camera.main` resolved to for `--dry-run` (reported on both hit and no-hit). When a `No physics hit` result looks wrong, check these first — another camera carrying the `MainCamera` tag can silently win `Camera.main` resolution
+- `Hit`: Whether physics hit anything (`--dry-run` only)
+- `HitGameObjectName` / `HitGameObjectPath`: Hit object identity when `Hit` is true
+- `HitLayer` / `HitLayerName`: Hit object layer when `Hit` is true
+- `Distance`, `HitPointX/Y/Z`, `HitNormalX/Y/Z`: Hit details when `Hit` is true
+- `InputCoordinateSystem`: `"top-left-game-view"` for click/long-press/dry-run coordinates
+- `UnityCoordinateSystem`: `"bottom-left-game-view"` for the injected `Mouse.current.position` (and dry-run conversion)
 - `GameViewWidth` / `GameViewHeight`: Game View size used for conversion
 - `InputPositionX` / `InputPositionY`: Coordinates received from the caller
-- `InjectedUnityPositionX` / `InjectedUnityPositionY`: Coordinates injected into `Mouse.current.position`
+- `InjectedUnityPositionX` / `InjectedUnityPositionY`: Coordinates injected into `Mouse.current.position` (or used for dry-run ScreenPointToRay)
 - `CoordinateConversionFormula`: Conversion formula used by the tool
 - `InterruptedByPausePoint` / `PausePointId` / `PausePointHitCount` / `PausePointHits`: Pause-point interruption info (all nullable except the boolean). `PausePointHits` lists every marker hit during this input in hit order; `PausePointId` only names the latest one. See the Pause Point Inspection section above
 
