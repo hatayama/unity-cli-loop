@@ -101,9 +101,11 @@ v2への委譲には、初回コマンドでcacheを作成するnpmを含むNode
 Unity Package の setup を開かず、standalone の global CLI だけを入れたい場合に使ってください。
 
 > [!NOTE]
-> この手順が長いのはセキュリティのためです。ダウンロードしたインストーラと成果物が、このリポジトリのCIが実際にビルドしたものと一致することをsigstore attestationで検証してから実行します。UnityのGUI（**Install CLI** ボタン）も同じ検証済みdigestとの照合を行っていますが、そちらはCIがリリース時に検証した結果をパッケージ内に持っているため、`gh` や `jq` は不要です。
+> このコマンドが冗長なのはセキュリティのためです。ダウンロードしたインストーラと成果物が、このリポジトリのCIが実際にビルドしたものと一致することをsigstore attestationで検証してから実行します。UnityのGUI（**Install CLI** ボタン）も同じ検証済みdigestとの照合を行っていますが、そちらはCIがリリース時に検証した結果をパッケージ内に持っているため、`gh` や `jq` は不要です。
+>
+> 冗長ですが、下記のブロックはコピペしてそのまま一気に実行できます。
 
-最初にOSまたはパッケージ管理経由で`gh`（ログイン済み）と`jq`を導入してください。以下のコマンドはこの2つを自動では導入せず、代替手段にもフォールバックしません。最新のdispatcher Release tagは自動で解決されます。特定のバージョンを入れたい場合は、`RELEASE_TAG`にimmutableなタグ（例: `dispatcher-v3.0.0`）を直接指定してください。`SOURCE_REF`はReleaseの出所ブランチで、mainのReleaseは`refs/heads/main`、v3-betaのReleaseは`refs/heads/v3-beta`を指定します。
+最初にOSまたはパッケージ管理経由で`gh`（ログイン済み）と`jq`を導入してください。以下のコマンドはこの2つを自動では導入せず、代替手段にもフォールバックしません。最新のdispatcher Release tagは自動で解決されます。特定のバージョンを入れたい場合は、`RELEASE_TAG`にimmutableなタグ（例: `dispatcher-v3.0.0`）を直接指定してください。
 
 コマンドがやっていることは順に次の5つです。
 
@@ -119,7 +121,7 @@ macOS、Windows Git Bash の場合:
 ```bash
 REPOSITORY=hatayama/unity-cli-loop
 RELEASE_TAG=$(gh api "repos/$REPOSITORY/releases?per_page=100" --jq '[.[] | select(.tag_name | startswith("dispatcher-v"))][0].tag_name')
-SOURCE_REF=refs/heads/v3-beta
+SOURCE_REF=refs/heads/main
 tmp_dir=$(mktemp -d)
 gh release download "$RELEASE_TAG" --repo "$REPOSITORY" --pattern 'install.sh' --pattern 'install.sh.sigstore.json' --dir "$tmp_dir" && \
 tag_sha=$(gh api "repos/$REPOSITORY/commits/$RELEASE_TAG" --jq .sha) && \
@@ -135,7 +137,7 @@ $repository = 'hatayama/unity-cli-loop'
 # 最新のdispatcher Release tagを解決する（固定したい場合はタグ文字列を直接代入）
 $releaseTag = (gh api "repos/$repository/releases?per_page=100" | ConvertFrom-Json | Where-Object { $_.tag_name -like 'dispatcher-v*' } | Select-Object -First 1).tag_name
 if (-not $releaseTag) { throw 'No dispatcher release found.' }
-$sourceRef = 'refs/heads/v3-beta'
+$sourceRef = 'refs/heads/main'
 $temporaryDirectory = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
 # Releaseからインストーラと、その署名情報（sigstore attestation bundle）を取得する
 gh release download $releaseTag --repo $repository --pattern 'install.ps1' --pattern 'install.ps1.sigstore.json' --dir $temporaryDirectory.FullName
