@@ -192,6 +192,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string UnityObjectKind { get; set; } = string.Empty;
         public string UnityObjectPath { get; set; } = string.Empty;
         public int UnityObjectInstanceId { get; set; }
+        public bool Truncated { get; set; }
 
         internal static PausePointCapturedVariable FromSnapshot(UloopCapturedVariable snapshot)
         {
@@ -208,7 +209,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Value = snapshot.Value,
                 UnityObjectKind = snapshot.UnityObjectKind,
                 UnityObjectPath = snapshot.UnityObjectPath,
-                UnityObjectInstanceId = snapshot.UnityObjectInstanceId
+                UnityObjectInstanceId = snapshot.UnityObjectInstanceId,
+                Truncated = snapshot.Truncated
             };
         }
     }

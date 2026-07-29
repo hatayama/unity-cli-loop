@@ -22,6 +22,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Keeps a single hit's payload small enough for the CLI response and for the console-like
         // pause-point evidence to stay skimmable, mirroring the truncation-by-cap pattern MatchingLogs uses.
         public const int MaxCapturedVariableCount = 50;
+        // How many discarded variable names to surface when the count cap drops extras. The exact
+        // discarded count is still reported in full via TruncatedVariableCount.
+        public const int MaxTruncatedVariableNamesReported = 20;
         public const int MaxCapturedVariableValueLength = 256;
         // Mirrors UloopPausePointRegistry.DefaultMaxPreviewElements (the Runtime-owned per-marker
         // default enforced at Enable time) instead of a second independent literal, so the two
