@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.69](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.68...v3.0.0-beta.69) (2026-07-29)
+
+
+### Features
+
+* address pause point round 13-14 leftover improvements ([#2065](https://github.com/hatayama/unity-cli-loop/issues/2065)) ([ce21b4f](https://github.com/hatayama/unity-cli-loop/commit/ce21b4f5d1d3693cb9837288da15f4b43102fabe))
+
 ## [3.0.0-beta.68](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.67...v3.0.0-beta.68) (2026-07-29)
 
 
