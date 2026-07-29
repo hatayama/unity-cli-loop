@@ -26,6 +26,7 @@ type watchHistoryResponse struct {
 	EvaluatedAtUtc string `json:"EvaluatedAtUtc"`
 	Success        bool   `json:"Success"`
 	Value          string `json:"Value"`
+	Truncated      bool   `json:"Truncated"`
 	ErrorTypeName  string `json:"ErrorTypeName"`
 	ErrorMessage   string `json:"ErrorMessage"`
 }

@@ -1,6 +1,8 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.Editor")]
+// Watch reuses the captured-variable preview serializer so get-watch-values matches CapturedVariables.
+[assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.Watch.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor.SourcePausePointResolver")]
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor.SourcePausePointCapture")]
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor.SourcePausePointPatcher")]

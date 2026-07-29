@@ -63,11 +63,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Tests that evaluation errors are not mistaken for a frozen value; a failure is a
             // distinct problem the freeze hint should not paper over.
-            List<WatchHistoryResponse> history = new()
+            List<WatchHistoryResponse> history = new List<WatchHistoryResponse>
             {
-                CreateEntry("1", success: true),
-                CreateEntry("1", success: true),
-                CreateEntry(string.Empty, success: false)
+                CreateEntry("1", success: true, truncated: false),
+                CreateEntry("1", success: true, truncated: false),
+                CreateEntry(string.Empty, success: false, truncated: false)
             };
 
             string hint = WatchValueFreezeHintEvaluator.EvaluateFreezeHint(history);
@@ -84,23 +84,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(hint, Is.Empty);
         }
 
+        [Test]
+        public void EvaluateFreezeHint_WhenFrozenAndRecentEntryIsTruncated_AppendsTruncationNote()
+        {
+            // Verifies truncated identical previews warn that cap-hidden changes are invisible.
+            List<WatchHistoryResponse> history = new List<WatchHistoryResponse>
+            {
+                CreateEntry("1", success: true, truncated: false),
+                CreateEntry("1", success: true, truncated: true),
+                CreateEntry("1", success: true, truncated: false)
+            };
+
+            string hint = WatchValueFreezeHintEvaluator.EvaluateFreezeHint(history);
+
+            Assert.That(hint, Is.Not.Empty);
+            Assert.That(
+                hint,
+                Does.Contain(
+                    "Note: the compared values are truncated previews - changes beyond the element or length cap are invisible to this comparison."));
+        }
+
+        [Test]
+        public void EvaluateFreezeHint_WhenFrozenWithoutTruncation_DoesNotAppendTruncationNote()
+        {
+            // Verifies the truncation caveat is omitted when every compared preview is complete.
+            List<WatchHistoryResponse> history = CreateHistory("1", "1", "1");
+
+            string hint = WatchValueFreezeHintEvaluator.EvaluateFreezeHint(history);
+
+            Assert.That(hint, Is.Not.Empty);
+            Assert.That(hint, Does.Not.Contain("truncated previews"));
+        }
+
         private static List<WatchHistoryResponse> CreateHistory(params string[] values)
         {
-            List<WatchHistoryResponse> history = new();
+            List<WatchHistoryResponse> history = new List<WatchHistoryResponse>();
             foreach (string value in values)
             {
-                history.Add(CreateEntry(value, success: true));
+                history.Add(CreateEntry(value, success: true, truncated: false));
             }
 
             return history;
         }
 
-        private static WatchHistoryResponse CreateEntry(string value, bool success)
+        private static WatchHistoryResponse CreateEntry(string value, bool success, bool truncated)
         {
             return new WatchHistoryResponse
             {
                 Success = success,
-                Value = value
+                Value = value,
+                Truncated = truncated
             };
         }
     }
