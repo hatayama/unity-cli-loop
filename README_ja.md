@@ -100,6 +100,9 @@ v2への委譲には、初回コマンドでcacheを作成するnpmを含むNode
 
 Unity Package の setup を開かず、standalone の global CLI だけを入れたい場合に使ってください。
 
+> [!NOTE]
+> この手順が長いのはセキュリティのためです。ダウンロードしたインストーラと成果物が、このリポジトリのCIが実際にビルドしたものと一致することをsigstore attestationで検証してから実行します。UnityのGUI（**Install CLI** ボタン）も同じ検証済みdigestとの照合を行っていますが、そちらはCIがリリース時に検証した結果をパッケージ内に持っているため、`gh` や `jq` は不要です。
+
 最初にOSまたはパッケージ管理経由で`gh`（ログイン済み）と`jq`を導入してください。bootstrapはこれらを導入せず、代替手段にもフォールバックしません。以下のコマンドは最新のdispatcher Release tagを自動で解決します。特定のバージョンを入れたい場合は、`RELEASE_TAG`にimmutableなタグ（例: `dispatcher-v3.0.0`）を直接指定してください。`SOURCE_REF`はReleaseの出所ブランチで、mainのReleaseは`refs/heads/main`、v3-betaのReleaseは`refs/heads/v3-beta`を指定します。
 
 macOS、Windows Git Bash の場合:
