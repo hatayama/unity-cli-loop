@@ -20,9 +20,12 @@ If both apply, work through the guide from the top in order.
 
 Before you begin, **commit your work or take a backup**. The wizard rewrites matching files in place, and its confirmation dialog says the same thing: *"Commit or back up your project first (VCS recommended)."* A version control system is the easiest way to review exactly what the wizard changed.
 
-## Step 1: Restart Unity and decline Safe Mode
+## Step 1: Start Unity on V3 and decline Safe Mode
 
-**Start by restarting the Unity Editor.** If you updated the package from Package Manager and Unity is still running, close it and reopen it anyway. The reason matters: the dialog that asks whether to enter Safe Mode only appears while the Editor is starting up, so if you stay in a running session you never see it and cannot follow the rest of this guide.
+This guide picks up at the moment **the Unity Editor starts with the updated V3 package**. How you get there depends on how you updated the package:
+
+- **If you edited `Packages/manifest.json` directly while Unity was closed** — just start Unity. No restart is needed; this launch is already the first startup on V3.
+- **If you updated from Package Manager while Unity was running** — close Unity and reopen it. The dialog that asks whether to enter Safe Mode only appears while the Editor is starting up, so a running session never shows it and you cannot follow the rest of this guide.
 
 On startup, Unity finds the compile errors from the V2 sources and asks whether to enter Safe Mode. **Press `Ignore` so that Unity starts up without entering Safe Mode.**
 
@@ -224,7 +227,7 @@ If you prefer to migrate by hand, these are the concrete replacements the wizard
 
 **Unity entered Safe Mode.** The package code does not run there, so nothing was recorded and nothing was lost. Restart the Editor and press `Ignore` at the prompt. If you were never asked, re-enable `Preferences > Asset Pipeline > Show Enter Safe Mode Dialog` and restart again.
 
-**The wizard did not open automatically.** First confirm you actually restarted the Editor after updating the package — the automatic open happens during startup, on the first launch after the major version goes from V2 to V3. Open it manually from `Window > Unity CLI Loop > Custom Tool Migration`; everything in Step 2 onward works the same way from the manual route.
+**The wizard did not open automatically.** First confirm the Editor actually went through a fresh startup on V3 — the automatic open happens during startup, on the first launch after the major version goes from V2 to V3. If you updated from Package Manager while Unity was running, that session does not count; restart the Editor. Open it manually from `Window > Unity CLI Loop > Custom Tool Migration`; everything in Step 2 onward works the same way from the manual route.
 
 **Compile errors remain after `Migrate` finishes.** Read the remaining errors before doing anything else: sources that mix custom logic with V2 API calls can need a manual touch-up that the rules do not cover. Use your VCS diff to see what the wizard changed, restore from your commit or backup if you want a clean slate, and work through the Manual migration reference above for whatever is left.
 
