@@ -1,3 +1,4 @@
+using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -17,5 +18,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public float DeltaY { get; set; } = 0f;
         public float ScrollX { get; set; } = 0f;
         public float ScrollY { get; set; } = 0f;
+        public bool DryRun { get; set; } = false;
+        public int LayerMask { get; set; } = Physics.DefaultRaycastLayers;
+        public float MaxDistance { get; set; } = UnityCliLoopConstants.RAYCAST_DEFAULT_MAX_DISTANCE;
     }
 }

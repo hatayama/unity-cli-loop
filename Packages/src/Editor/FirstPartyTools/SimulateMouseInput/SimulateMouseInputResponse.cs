@@ -16,6 +16,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string? Button { get; set; }
         public float? PositionX { get; set; }
         public float? PositionY { get; set; }
+        public string? CameraName { get; set; }
+        public string? CameraPath { get; set; }
+        public bool? Hit { get; set; }
+        public string? HitGameObjectName { get; set; }
+        public string? HitGameObjectPath { get; set; }
+        public int? HitLayer { get; set; }
+        public string? HitLayerName { get; set; }
+        public float? Distance { get; set; }
+        public float? HitPointX { get; set; }
+        public float? HitPointY { get; set; }
+        public float? HitPointZ { get; set; }
+        public float? HitNormalX { get; set; }
+        public float? HitNormalY { get; set; }
+        public float? HitNormalZ { get; set; }
         public string InputCoordinateSystem { get; set; } = "";
         public string UnityCoordinateSystem { get; set; } = "";
         public float? GameViewWidth { get; set; }
