@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEditor;
 
+using io.github.hatayama.UnityCliLoop.InternalAPIBridge;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -139,50 +140,71 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Texture2D texture;
             GameRenderingImageInfo captureRenderingInfo;
             bool captureTimedOut;
+            (GameObject inputVisualizationOverlay, bool inputVisualizationWasActive, bool inputVisualizationHideTimedOut) =
+                await BeginHideInputVisualizationOverlayAsync(editorContext, ct).ConfigureAwait(false);
+            if (inputVisualizationHideTimedOut)
+            {
+                RestoreInputVisualizationOverlay(inputVisualizationOverlay, inputVisualizationWasActive, editorContext);
+                return CreateTimedOutResult(
+                    "input visualization overlay hide",
+                    correlationId,
+                    new List<ScreenshotInfo>());
+            }
+
+            // Why: BeginHide is awaited with ConfigureAwait(false), so resume can leave the main thread.
+            await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+
             try
             {
-                if (request.AnnotateElements || request.AnnotateRaycastGrid)
+                try
                 {
-                    List<UIElementInfo> overlayElements = new(annotatedElements);
-                    overlayElements.AddRange(physicsColliderElements);
-                    annotationOverlay = UIElementAnnotator.CreateAnnotationOverlay(
-                        overlayElements,
-                        request.ResolutionScale);
-                    Canvas.ForceUpdateCanvases();
-                    // Chained CLI calls can read the previous GameView RT before overlay rendering catches up.
-                    bool overlayFramesReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
-                        ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES,
+                    if (request.AnnotateElements || request.AnnotateRaycastGrid)
+                    {
+                        List<UIElementInfo> overlayElements = new(annotatedElements);
+                        overlayElements.AddRange(physicsColliderElements);
+                        annotationOverlay = UIElementAnnotator.CreateAnnotationOverlay(
+                            overlayElements,
+                            request.ResolutionScale);
+                        Canvas.ForceUpdateCanvases();
+                        // Chained CLI calls can read the previous GameView RT before overlay rendering catches up.
+                        bool overlayFramesReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                            ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES,
+                            UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                            ct).ConfigureAwait(false);
+                        if (!overlayFramesReady)
+                        {
+                            return CreateTimedOutResult(
+                                "annotation overlay render",
+                                correlationId,
+                                new List<ScreenshotInfo>());
+                        }
+
+                        await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+                    }
+
+                    (texture, captureRenderingInfo, captureTimedOut) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
+                        request.ResolutionScale,
+                        raycastGridRenderingInfo,
                         UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
                         ct).ConfigureAwait(false);
-                    if (!overlayFramesReady)
+                    if (captureTimedOut)
                     {
                         return CreateTimedOutResult(
-                            "annotation overlay render",
+                            "Play Mode view rendering capture",
                             correlationId,
                             new List<ScreenshotInfo>());
                     }
 
                     await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
                 }
-
-                (texture, captureRenderingInfo, captureTimedOut) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(
-                    request.ResolutionScale,
-                    raycastGridRenderingInfo,
-                    UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
-                    ct).ConfigureAwait(false);
-                if (captureTimedOut)
+                finally
                 {
-                    return CreateTimedOutResult(
-                        "Play Mode view rendering capture",
-                        correlationId,
-                        new List<ScreenshotInfo>());
+                    DestroyAnnotationOverlay(annotationOverlay, editorContext);
                 }
-
-                await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
             }
             finally
             {
-                DestroyAnnotationOverlay(annotationOverlay, editorContext);
+                RestoreInputVisualizationOverlay(inputVisualizationOverlay, inputVisualizationWasActive, editorContext);
             }
 
             // Uses the settled capture-time size, not the pre-capture gameViewSize sample, so annotated
@@ -317,66 +339,84 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
             List<ScreenshotInfo> screenshots = new();
 
-            for (int i = 0; i < windows.Length; i++)
+            (GameObject inputVisualizationOverlay, bool inputVisualizationWasActive, bool inputVisualizationHideTimedOut) =
+                await BeginHideInputVisualizationOverlayAsync(editorContext, ct).ConfigureAwait(false);
+            if (inputVisualizationHideTimedOut)
             {
-                EditorWindow window = windows[i];
-                (Texture2D texture, bool timedOut) = await EditorWindowCaptureUtility.CaptureWindowAsync(
-                    window,
-                    request.ResolutionScale,
-                    UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
-                    ct).ConfigureAwait(false);
-                if (timedOut)
+                RestoreInputVisualizationOverlay(inputVisualizationOverlay, inputVisualizationWasActive, editorContext);
+                return CreateTimedOutResult("input visualization overlay hide", correlationId, screenshots);
+            }
+
+            // Why: BeginHide is awaited with ConfigureAwait(false), so resume can leave the main thread.
+            await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+
+            try
+            {
+                for (int i = 0; i < windows.Length; i++)
                 {
-                    return CreateTimedOutResult("EditorWindow capture", correlationId, screenshots);
-                }
-
-                await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
-                if (texture == null)
-                {
-                    VibeLogger.LogWarning(
-                        "screenshot_failed",
-                        $"Failed to capture window index {i}",
-                        correlationId: correlationId
-                    );
-                    continue;
-                }
-
-                string fileName = windows.Length == 1
-                    ? $"{safeWindowName}_{timestamp}.png"
-                    : $"{safeWindowName}_{i + 1}_{timestamp}.png";
-                string savedPath = Path.Combine(outputDirectory, fileName);
-
-                int width = texture.width;
-                int height = texture.height;
-
-                try
-                {
-                    ScreenshotFileWriter.SaveTextureAsPng(texture, savedPath);
-
-                    FileInfo savedFileInfo = new(savedPath);
-                    ScreenshotInfo info = new()
+                    EditorWindow window = windows[i];
+                    (Texture2D texture, bool timedOut) = await EditorWindowCaptureUtility.CaptureWindowAsync(
+                        window,
+                        request.ResolutionScale,
+                        UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                        ct).ConfigureAwait(false);
+                    if (timedOut)
                     {
-                        ImagePath = savedPath,
-                        FileSizeBytes = savedFileInfo.Length,
-                        Width = width,
-                        Height = height,
-                    };
-                    ApplyWindowCoordinateMetadata(info);
-                    screenshots.Add(info);
+                        return CreateTimedOutResult("EditorWindow capture", correlationId, screenshots);
+                    }
+
+                    await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+                    if (texture == null)
+                    {
+                        VibeLogger.LogWarning(
+                            "screenshot_failed",
+                            $"Failed to capture window index {i}",
+                            correlationId: correlationId
+                        );
+                        continue;
+                    }
+
+                    string fileName = windows.Length == 1
+                        ? $"{safeWindowName}_{timestamp}.png"
+                        : $"{safeWindowName}_{i + 1}_{timestamp}.png";
+                    string savedPath = Path.Combine(outputDirectory, fileName);
+
+                    int width = texture.width;
+                    int height = texture.height;
+
+                    try
+                    {
+                        ScreenshotFileWriter.SaveTextureAsPng(texture, savedPath);
+
+                        FileInfo savedFileInfo = new(savedPath);
+                        ScreenshotInfo info = new()
+                        {
+                            ImagePath = savedPath,
+                            FileSizeBytes = savedFileInfo.Length,
+                            Width = width,
+                            Height = height,
+                        };
+                        ApplyWindowCoordinateMetadata(info);
+                        screenshots.Add(info);
+                    }
+                    catch (Exception ex)
+                    {
+                        // File I/O is external resource access; catch to continue processing remaining windows
+                        VibeLogger.LogWarning(
+                            "screenshot_save_exception",
+                            $"Exception saving window index {i}: {ex.Message}",
+                            correlationId: correlationId
+                        );
+                    }
+                    finally
+                    {
+                        UnityEngine.Object.DestroyImmediate(texture);
+                    }
                 }
-                catch (Exception ex)
-                {
-                    // File I/O is external resource access; catch to continue processing remaining windows
-                    VibeLogger.LogWarning(
-                        "screenshot_save_exception",
-                        $"Exception saving window index {i}: {ex.Message}",
-                        correlationId: correlationId
-                    );
-                }
-                finally
-                {
-                    UnityEngine.Object.DestroyImmediate(texture);
-                }
+            }
+            finally
+            {
+                RestoreInputVisualizationOverlay(inputVisualizationOverlay, inputVisualizationWasActive, editorContext);
             }
 
             // why: only prune the package default Screenshots folder; never delete files in a user-specified OutputDirectory
@@ -393,6 +433,81 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             );
 
             return new ScreenshotResponse { Screenshots = screenshots };
+        }
+
+        // Why wait after SetActive(false): the Game View RT can still show the previous frame's
+        // overlay badges unless we give rendering the same 2-frame settle used for annotation draw.
+        private static async Task<(GameObject Overlay, bool WasActive, bool TimedOut)> BeginHideInputVisualizationOverlayAsync(
+            SynchronizationContext editorContext,
+            CancellationToken ct)
+        {
+            // Why SwitchTo first: capture paths often resume off the main thread after ConfigureAwait(false).
+            await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+
+            GameObject overlay = OverlayCanvasFactory.TryGetExisting();
+            bool wasActive = overlay != null && overlay.activeSelf;
+            if (!wasActive)
+            {
+                return (overlay, false, false);
+            }
+
+            overlay.SetActive(false);
+            // Also disable Canvas: Screen Space Overlay can keep compositing into the Play Mode
+            // view RT for a frame after the GameObject alone is deactivated.
+            Canvas overlayCanvas = overlay.GetComponent<Canvas>();
+            if (overlayCanvas != null)
+            {
+                overlayCanvas.enabled = false;
+            }
+
+            Canvas.ForceUpdateCanvases();
+            // Why clear then wait: with no camera the Play Mode RT never rewrites itself after a
+            // Screen Space Overlay is hidden, so the last badge composite would stay forever.
+            // With cameras, the following frame wait redraws the scene without the overlay.
+            GameViewBridge.ClearMainPlayModeViewRenderTexture();
+            GameViewBridge.RepaintMainPlayModeView();
+            bool framesReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES,
+                UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                ct).ConfigureAwait(false);
+            if (!framesReady)
+            {
+                return (overlay, true, true);
+            }
+
+            await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+            return (overlay, true, false);
+        }
+
+        private static void RestoreInputVisualizationOverlay(
+            GameObject overlay,
+            bool wasActive,
+            SynchronizationContext editorContext)
+        {
+            if (!wasActive || overlay == null)
+            {
+                return;
+            }
+
+            if (SynchronizationContext.Current == editorContext)
+            {
+                RestoreInputVisualizationOverlayOnMainThread(overlay);
+                return;
+            }
+
+            // Why post: timeout/error paths may restore from a non-main thread.
+            editorContext.Post(_ => RestoreInputVisualizationOverlayOnMainThread(overlay), null);
+        }
+
+        private static void RestoreInputVisualizationOverlayOnMainThread(GameObject overlay)
+        {
+            Canvas overlayCanvas = overlay.GetComponent<Canvas>();
+            if (overlayCanvas != null)
+            {
+                overlayCanvas.enabled = true;
+            }
+
+            overlay.SetActive(true);
         }
 
         internal static ScreenshotResponse CreateTimedOutResult(
