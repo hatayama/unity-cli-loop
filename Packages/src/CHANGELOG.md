@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.70](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.69...v3.0.0-beta.70) (2026-07-29)
+
+
+### Bug Fixes
+
+* reference System.Security.Cryptography.Primitives when building the Roslyn worker ([8bb1f28](https://github.com/hatayama/unity-cli-loop/commit/8bb1f287346569b05b43a27952c09d17679c1de7))
+
 ## [3.0.0-beta.69](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.68...v3.0.0-beta.69) (2026-07-29)
 
 
