@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.65](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.64...uloop-project-runner-v3.0.0-beta.65) (2026-07-29)
+
+
+### Features
+
+* install the Unity package from the terminal with uloop package install ([#2078](https://github.com/hatayama/unity-cli-loop/issues/2078)) ([5e62a86](https://github.com/hatayama/unity-cli-loop/commit/5e62a86d880d05f15eb246ed5adbfa7ad5db74f7))
+
 ## [3.0.0-beta.64](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.63...uloop-project-runner-v3.0.0-beta.64) (2026-07-29)
 
 
