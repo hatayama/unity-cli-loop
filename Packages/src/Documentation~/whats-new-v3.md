@@ -8,6 +8,8 @@ V3 replaces the npm-distributed CLI with a native Go binary, so Node.js is no lo
 
 For most users the upgrade is two steps: raise the Unity package version, then open `Window > Unity CLI Loop > Settings` and press **Install CLI** (or **Update CLI**) to replace the old npm CLI with the native dispatcher. The installer attempts to remove the obsolete npm package with `npm uninstall -g uloop-cli` and prints the command to run manually when it cannot.
 
+The new dispatcher is also compatible with V2 projects. When a project still resolves to the V2 package, the dispatcher fetches the matching V2 CLI automatically and delegates the command to it — so replacing the CLI first does not break the V2 projects you still have around.
+
 You only need the migration guide if you wrote your own integrations: C# custom tools built on the V2 extension API, or your own `SKILL.md` files, Markdown docs, shell scripts, or PowerShell scripts that invoke `uloop`. In that case read [Migrating Custom Tools and Skills to V3](migration-v2-to-v3.md) before you start fixing anything by hand.
 
 ## Highlights
@@ -15,8 +17,7 @@ You only need the migration guide if you wrote your own integrations: C# custom 
 - **Native Go CLI, no Node.js** — `uloop` ships as a platform binary instead of an npm package. Node.js 22+ is no longer a requirement for running V3 projects.
 - **`pause-point` — breakpoint-style investigation without touching code** — pause PlayMode at any source line and read the variables at that frame. No `Debug.Log` statements, no recompile, and it can be armed in the middle of a PlayMode session.
 - **No more port management** — the CLI reaches Unity over a Unix domain socket (macOS/Linux) or a named pipe (Windows). There is no port to configure, and no port to collide with another Editor instance.
-- **Version compatibility is enforced by protocol version** — the CLI and the Unity package agree on an integer protocol version, so a mismatched pair fails fast with a clear message instead of misbehaving at runtime.
-- **Per-project CLI resolution** — each project pins the runner version it needs in `.uloop/project-runner-pin.json`, so several projects on different versions can coexist on one machine.
+- **The runner tracks the Unity package automatically** — install the dispatcher once, and the runner version each project needs is resolved and downloaded automatically from `.uloop/project-runner-pin.json`. The runner follows Unity package updates on its own, so there is no per-project CLI version to manage, and projects on different versions coexist on one machine.
 
 ## New Tools
 
