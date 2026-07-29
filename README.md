@@ -82,7 +82,7 @@ Scope(s): io.github.hatayama.uloopmcp
 
 Select Window > Unity CLI Loop > Settings. A dedicated window will open. If the **CLI** button is not highlighted in blue, press **Install CLI**.
 
-The installer places the global `uloop` dispatcher on PATH. Project-specific `uloop-project-runner` binaries are downloaded into the user cache automatically from each project's `.uloop/project-runner-pin.json`.
+The installer places the global `uloop` command on PATH. Project-specific `uloop-project-runner` binaries are downloaded into the user cache automatically from each project's `.uloop/project-runner-pin.json`.
 
 <details>
 <summary>Working with V2 projects side by side</summary>
