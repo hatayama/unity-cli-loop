@@ -179,7 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
         }
 
-        private static List<string> BuildWorkerReferenceSet(ExternalCompilerPaths externalCompilerPaths)
+        internal static List<string> BuildWorkerReferenceSet(ExternalCompilerPaths externalCompilerPaths)
         {
             string sharedRuntimeDirectoryPath = externalCompilerPaths.NetCoreRuntimeSharedDirectoryPath;
             List<string> references = new()            {
@@ -203,6 +203,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Memory.dll"));
             AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Buffers.dll"));
             AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Threading.Tasks.Extensions.dll"));
+            // Why: the CodeAnalysis Emit API surface references HashAlgorithmName from
+            // System.Security.Cryptography.Primitives; without this reference the worker build itself
+            // fails with CS0012 whenever the worker assembly has to be rebuilt.
+            AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Security.Cryptography.Primitives.dll"));
 
             return references;
         }
