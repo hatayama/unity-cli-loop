@@ -26,6 +26,12 @@ const (
 	pausePointStatusNotEnabled        = "NotEnabled"
 	pausePointStatusExpired           = "Expired"
 	pausePointStatusCleared           = "Cleared"
+
+	// Mode strings mirror UloopPausePointCaptureMode on the Unity side. Await uses an allowlist
+	// (continuous/trace) for the new-hit baseline — never `Mode != "single-shot"` — so an empty
+	// Mode from an older package keeps the historical immediate-Hit success path.
+	pausePointModeContinuous = "continuous"
+	pausePointModeTrace      = "trace"
 )
 
 var (
@@ -208,7 +214,7 @@ func runWaitForPausePoint(
 ) int {
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, clicore.PausePointAwaitCommandName)
-	response, state, triggerResult, resumeResult, err := waitForPausePoint(ctx, connection, options)
+	response, state, triggerResult, resumeResult, hasNewHitBaseline, err := waitForPausePoint(ctx, connection, options)
 	spinner.Stop()
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
@@ -257,7 +263,7 @@ func runWaitForPausePoint(
 		clearPausePointAfterWaitTimeout(ctx, connection, options.id)
 	}
 
-	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state)
+	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state, hasNewHitBaseline)
 	if triggerResult != nil {
 		waitErr.Details["TriggerResult"] = triggerResult
 	}

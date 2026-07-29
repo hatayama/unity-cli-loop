@@ -382,7 +382,7 @@ func runPausePointWaitAfterEnable(
 	stderr io.Writer,
 ) int {
 	spinner := clicore.NewToolSpinner(stderr, pausePointEnableCommandName)
-	response, state, triggerResult, resumeResult, err := waitForPausePoint(ctx, connection, options)
+	response, state, triggerResult, resumeResult, hasNewHitBaseline, err := waitForPausePoint(ctx, connection, options)
 	spinner.Stop()
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
@@ -436,7 +436,7 @@ func runPausePointWaitAfterEnable(
 		clearPausePointAfterWaitTimeout(ctx, connection, options.id)
 	}
 
-	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state)
+	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state, hasNewHitBaseline)
 	waitErr.Command = pausePointEnableCommandName
 	if enableFields.Warning != "" {
 		waitErr.Details["EnableWarning"] = enableFields.Warning
