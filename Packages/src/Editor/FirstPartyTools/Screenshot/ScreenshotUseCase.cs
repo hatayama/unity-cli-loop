@@ -140,22 +140,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Texture2D texture;
             GameRenderingImageInfo captureRenderingInfo;
             bool captureTimedOut;
-            (GameObject inputVisualizationOverlay, bool inputVisualizationWasActive, bool inputVisualizationHideTimedOut) =
-                await BeginHideInputVisualizationOverlayAsync(editorContext, ct).ConfigureAwait(false);
-            if (inputVisualizationHideTimedOut)
-            {
-                RestoreInputVisualizationOverlay(inputVisualizationOverlay, inputVisualizationWasActive, editorContext);
-                return CreateTimedOutResult(
-                    "input visualization overlay hide",
-                    correlationId,
-                    new List<ScreenshotInfo>());
-            }
 
-            // Why: BeginHide is awaited with ConfigureAwait(false), so resume can leave the main thread.
+            // Why SwitchTo before hide: SetActive/Canvas/RT clear are main-thread only. Keep this
+            // await outside try — nothing is hidden yet if cancellation throws here.
             await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+            (GameObject inputVisualizationOverlay, bool inputVisualizationWasActive) =
+                HideInputVisualizationOverlay();
 
             try
             {
+                // Why wait inside try: WaitFramesOrTimeoutAsync / SwitchTo throw OperationCanceledException
+                // on CLI disconnect; finally must still restore the overlay.
+                if (inputVisualizationWasActive)
+                {
+                    bool hideFramesReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                        ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES,
+                        UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                        ct).ConfigureAwait(false);
+                    if (!hideFramesReady)
+                    {
+                        return CreateTimedOutResult(
+                            "input visualization overlay hide",
+                            correlationId,
+                            new List<ScreenshotInfo>());
+                    }
+
+                    await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+                }
+
                 try
                 {
                     if (request.AnnotateElements || request.AnnotateRaycastGrid)
@@ -339,19 +351,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
             List<ScreenshotInfo> screenshots = new();
 
-            (GameObject inputVisualizationOverlay, bool inputVisualizationWasActive, bool inputVisualizationHideTimedOut) =
-                await BeginHideInputVisualizationOverlayAsync(editorContext, ct).ConfigureAwait(false);
-            if (inputVisualizationHideTimedOut)
-            {
-                RestoreInputVisualizationOverlay(inputVisualizationOverlay, inputVisualizationWasActive, editorContext);
-                return CreateTimedOutResult("input visualization overlay hide", correlationId, screenshots);
-            }
-
-            // Why: BeginHide is awaited with ConfigureAwait(false), so resume can leave the main thread.
+            // Why SwitchTo before hide: SetActive/Canvas/RT clear are main-thread only. Keep this
+            // await outside try — nothing is hidden yet if cancellation throws here.
             await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+            (GameObject inputVisualizationOverlay, bool inputVisualizationWasActive) =
+                HideInputVisualizationOverlay();
 
             try
             {
+                // Why wait inside try: WaitFramesOrTimeoutAsync / SwitchTo throw OperationCanceledException
+                // on CLI disconnect; finally must still restore the overlay.
+                if (inputVisualizationWasActive)
+                {
+                    bool hideFramesReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                        ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES,
+                        UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                        ct).ConfigureAwait(false);
+                    if (!hideFramesReady)
+                    {
+                        return CreateTimedOutResult(
+                            "input visualization overlay hide",
+                            correlationId,
+                            screenshots);
+                    }
+
+                    await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+                }
+
                 for (int i = 0; i < windows.Length; i++)
                 {
                     EditorWindow window = windows[i];
@@ -435,20 +461,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new ScreenshotResponse { Screenshots = screenshots };
         }
 
-        // Why wait after SetActive(false): the Game View RT can still show the previous frame's
-        // overlay badges unless we give rendering the same 2-frame settle used for annotation draw.
-        private static async Task<(GameObject Overlay, bool WasActive, bool TimedOut)> BeginHideInputVisualizationOverlayAsync(
-            SynchronizationContext editorContext,
-            CancellationToken ct)
+        // Hides the input-visualization canvas synchronously. Caller must already be on the editor
+        // main thread, and must run the 2-frame settle wait inside a try/finally that restores.
+        private static (GameObject Overlay, bool WasActive) HideInputVisualizationOverlay()
         {
-            // Why SwitchTo first: capture paths often resume off the main thread after ConfigureAwait(false).
-            await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
-
             GameObject overlay = OverlayCanvasFactory.TryGetExisting();
             bool wasActive = overlay != null && overlay.activeSelf;
             if (!wasActive)
             {
-                return (overlay, false, false);
+                return (overlay, false);
             }
 
             overlay.SetActive(false);
@@ -461,22 +482,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Canvas.ForceUpdateCanvases();
-            // Why clear then wait: with no camera the Play Mode RT never rewrites itself after a
-            // Screen Space Overlay is hidden, so the last badge composite would stay forever.
-            // With cameras, the following frame wait redraws the scene without the overlay.
+            // Why clear: with no camera the Play Mode RT never rewrites itself after a Screen Space
+            // Overlay is hidden, so the last badge composite would stay forever. With cameras, the
+            // caller's frame wait redraws the scene without the overlay.
             GameViewBridge.ClearMainPlayModeViewRenderTexture();
             GameViewBridge.RepaintMainPlayModeView();
-            bool framesReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
-                ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES,
-                UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
-                ct).ConfigureAwait(false);
-            if (!framesReady)
-            {
-                return (overlay, true, true);
-            }
-
-            await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
-            return (overlay, true, false);
+            return (overlay, true);
         }
 
         private static void RestoreInputVisualizationOverlay(
@@ -501,6 +512,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void RestoreInputVisualizationOverlayOnMainThread(GameObject overlay)
         {
+            // Why: Post may run after Play Mode teardown destroyed the DontDestroyOnLoad overlay.
+            if (overlay == null)
+            {
+                return;
+            }
+
             Canvas overlayCanvas = overlay.GetComponent<Canvas>();
             if (overlayCanvas != null)
             {

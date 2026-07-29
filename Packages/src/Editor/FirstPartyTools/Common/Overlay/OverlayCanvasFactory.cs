@@ -101,12 +101,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void EnsureActive(GameObject overlayRoot)
         {
-            if (overlayRoot.activeSelf)
+            // Why Canvas too: screenshot hide disables Canvas.enabled as well as the GameObject.
+            // Recovering only activeSelf leaves badges permanently invisible while looking active.
+            Canvas overlayCanvas = overlayRoot.GetComponent<Canvas>();
+            if (overlayCanvas != null && !overlayCanvas.enabled)
             {
-                return;
+                overlayCanvas.enabled = true;
             }
 
-            overlayRoot.SetActive(true);
+            if (!overlayRoot.activeSelf)
+            {
+                overlayRoot.SetActive(true);
+            }
         }
     }
 
