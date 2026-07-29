@@ -52,7 +52,17 @@ https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
 
 ## Via OpenUPM (Recommended)
 
-## Using Scoped registry in Unity Package Manager
+After the global `uloop` CLI is on PATH, install the Unity package from a terminal at the project root (or pass `--project-path`):
+
+```bash
+uloop package install
+uloop package status
+```
+
+`uloop package install` writes the OpenUPM scoped registry and the `io.github.hatayama.uloopmcp` dependency into `Packages/manifest.json`. Pass `--version <x.y.z>` to pin a specific package version instead of OpenUPM `dist-tags.latest`. Use `uloop package status` to confirm the registry and dependency are present.
+
+### Manual setup in Unity Package Manager
+
 1. Open Project Settings window and go to Package Manager page
 2. Add the following entry to the Scoped Registries list:
 ```text

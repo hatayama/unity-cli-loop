@@ -34,7 +34,11 @@ const (
 	ErrorCodePausePointExpired               = "PAUSE_POINT_EXPIRED"
 	ErrorCodePausePointCleared               = "PAUSE_POINT_CLEARED"
 	ErrorCodePausePointTriggerFailed         = "PAUSE_POINT_TRIGGER_FAILED"
-	ErrorCodeInternalError                   = "INTERNAL_ERROR"
+	// ErrorCodePackageManifestInvalid is returned when Packages/manifest.json is missing or not valid JSON.
+	ErrorCodePackageManifestInvalid = "PACKAGE_MANIFEST_INVALID"
+	// ErrorCodePackageRegistryUnavailable is returned when the OpenUPM registry HTTP lookup fails.
+	ErrorCodePackageRegistryUnavailable = "PACKAGE_REGISTRY_UNAVAILABLE"
+	ErrorCodeInternalError              = "INTERNAL_ERROR"
 
 	ErrorPhaseArgumentParsing = "argument_parsing"
 	ErrorPhaseProjectResolve  = "project_resolution"

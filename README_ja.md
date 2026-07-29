@@ -61,7 +61,17 @@ https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
 
 ## OpenUPM経由（推奨）
 
-## Unity Package ManagerでScoped registryを使用
+グローバルな `uloop` CLI が PATH に入った状態で、プロジェクトルートのターミナルから（または `--project-path` を指定して）Unity パッケージを導入できます。
+
+```bash
+uloop package install
+uloop package status
+```
+
+`uloop package install` は OpenUPM の scoped registry と `io.github.hatayama.uloopmcp` 依存を `Packages/manifest.json` に書き込みます。OpenUPM の `dist-tags.latest` ではなく特定バージョンを入れたいときは `--version <x.y.z>` を付けます。導入状態の確認には `uloop package status` を使います。
+
+### 手動で設定する場合（Unity Package Manager）
+
 1. Project Settingsウィンドウを開き、Package Managerページに移動
 2. Scoped Registriesリストに以下のエントリを追加：
 ```text
