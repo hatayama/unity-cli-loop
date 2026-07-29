@@ -42,15 +42,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
+        // Why this wording: keyboard interruptions already tell agents the queued edge was
+        // discarded; the previous generic mouse message left agents guessing whether a click
+        // still landed after resume (false "extra dig" diagnoses).
         internal static SimulateMouseInputResponse InterruptedButtonResult(
             UnityCliLoopMouseInputAction action,
             string buttonName,
             Vector2 inputPos)
         {
-            SimulateMouseInputResponse result = InterruptedActionResult(action);
-            result.Button = buttonName;
-            result.PositionX = inputPos.x;
-            result.PositionY = inputPos.y;
+            SimulateMouseInputResponse result = new()
+            {
+                Success = true,
+                Message =
+                    $"Mouse input stopped because Unity paused during Pause Point inspection. Button '{buttonName}' was released from Unity CLI Loop bookkeeping; the queued input edge was discarded.",
+                Action = action.ToString(),
+                Button = buttonName,
+                PositionX = inputPos.x,
+                PositionY = inputPos.y,
+                InterruptedByPausePoint = true
+            };
+            AttachPausePointHit(result);
             return result;
         }
 
