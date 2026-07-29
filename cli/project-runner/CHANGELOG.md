@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.63](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.62...uloop-project-runner-v3.0.0-beta.63) (2026-07-29)
+
+
+### Features
+
+* address pause point round 13-14 leftover improvements ([#2065](https://github.com/hatayama/unity-cli-loop/issues/2065)) ([ce21b4f](https://github.com/hatayama/unity-cli-loop/commit/ce21b4f5d1d3693cb9837288da15f4b43102fabe))
+
 ## [3.0.0-beta.62](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.61...uloop-project-runner-v3.0.0-beta.62) (2026-07-29)
 
 
