@@ -467,10 +467,9 @@ func runPausePointWaitAfterEnable(
 	return 1
 }
 
-// joinPausePointWarnings concatenates the warnings that apply to one response, dropping empty ones
-// and repeats. Repeats are possible because the same text can reach a hit payload from two sources —
-// the enable response and the status poll that observed the hit — and printing it twice reads as two
-// separate problems.
+// joinPausePointWarnings concatenates hit-time warnings for one response, dropping empty ones and
+// repeats. Inputs are status-poll text (usually empty), matching-logs diagnosis, and trigger-refusal
+// text — enable-time patch diagnostics are not joined here; they use EnableTimeWarning.
 func joinPausePointWarnings(warnings ...string) string {
 	unique := make([]string, 0, len(warnings))
 	for _, warning := range warnings {

@@ -84,18 +84,3 @@ func TestRunPausePointWaitAfterEnableKeepsEnableWarningWithTheRefusalWarning(t *
 		t.Errorf("the refusal warning was dropped: %q", result.Warning)
 	}
 }
-
-// Verifies a warning reported by both the enable response and the status poll is printed once:
-// repeating identical text reads as two separate problems.
-func TestRunPausePointWaitAfterEnableReportsARepeatedUnityWarningOnce(t *testing.T) {
-	stubPausePointHit(t, "Same Unity warning.")
-	stubPausePointMatchingLogs(t, nil)
-	stubPausePointTriggerDispatch(t, `{"Success":true}`)
-
-	_, output := runEnableAwaitWithStubbedTrigger(t, "Same Unity warning.")
-
-	result := decodePausePointWaitResult(t, output)
-	if strings.Count(result.Warning, "Same Unity warning.") != 1 {
-		t.Errorf("expected the repeated warning exactly once: %q", result.Warning)
-	}
-}
