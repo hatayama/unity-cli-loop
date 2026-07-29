@@ -371,9 +371,6 @@ Unity CLI Loopはコアパッケージへの変更を必要とせず、プロジ
 
 開発した拡張ツールはGitHubで公開し、他のプロジェクトでも再利用できます。
 
-> [!TIP]
-> **AI支援開発向け**: 詳細な実装ガイドが [.claude/rules/cli.md](/.claude/rules/cli.md) に用意されています。このガイドは、Claude Codeが該当ディレクトリで作業する際に自動的に読み込まれます。
-
 <details>
 <summary>実装ガイドを見る</summary>
 
