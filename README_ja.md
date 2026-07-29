@@ -165,19 +165,22 @@ uloop --version
 </details>
 
 
-<img width="277" height="306" alt="1" src="https://github.com/user-attachments/assets/0e25c327-73bf-4af6-997b-eebb3c26b372" />
+> 📸 **SCREENSHOT NEEDED** — user-attachments URLに差し替え
+> V3のSettingsウィンドウ。CLI未インストール状態で **Install CLI** ボタンが見える状態。
 
 Settings ウィンドウでは、グローバルな `uloop` コマンドが検出されているかを確認できます。
 
 
 
 下記の表示になれば成功です。  
-<img width="272" height="309" alt="2" src="https://github.com/user-attachments/assets/ec14f73b-53be-4435-af95-84bb9125e3e4" />
+> 📸 **SCREENSHOT NEEDED** — user-attachments URLに差し替え
+> V3のSettingsウィンドウ。緑のインジケータと `CLI: v3.x.x` が表示され、CLI検出に成功した状態。
 
 ## ステップ2: Skillsのインストール
 
 Claude CodeやCodexなど、対象を選択して **Install Skills** ボタンを押します。  
-<img width="272" height="306" alt="3" src="https://github.com/user-attachments/assets/492e9680-726a-425b-8bf1-e5983f4f15a5" />
+> 📸 **SCREENSHOT NEEDED** — user-attachments URLに差し替え
+> V3のSettingsウィンドウのSkillsセクション。対象（Claude Code / Codexなど）を選択して **Install Skills** ボタンが押せる状態。
 
 
 <details> 
