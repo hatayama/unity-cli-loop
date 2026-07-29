@@ -58,15 +58,17 @@ changed_shared_inputs="$(git diff --cached --name-only --diff-filter=ACMRD \
   | grep -E '^(cli/common/|scripts/install\.sh$|scripts/install\.ps1$|cli/dispatcher/internal/install/scripts/|cli/dispatcher/internal/uninstall/scripts/)' || true)"
 
 if [ -n "$changed_shared_inputs" ]; then
-  # The stamp script hashes working-tree contents against the index file list, so a partially
-  # staged input would produce a stamp describing contents this commit does not contain.
-  for input_file in $changed_shared_inputs; do
-    if [ -n "$(git diff --name-only -- "$input_file")" ]; then
-      echo "$input_file is only partially staged." >&2
-      echo "Shared-inputs stamps are computed from the working tree, so stage the file fully or unstage it." >&2
-      exit 1
-    fi
-  done
+  # The stamp script hashes working-tree contents against the index file list, so any unstaged
+  # edit to a shared input - partially staged or not staged at all - would produce a stamp
+  # describing contents this commit does not contain.
+  dirty_shared_inputs="$(git diff --name-only \
+    | grep -E '^(cli/common/|scripts/install\.sh$|scripts/install\.ps1$|cli/dispatcher/internal/install/scripts/|cli/dispatcher/internal/uninstall/scripts/)' || true)"
+  if [ -n "$dirty_shared_inputs" ]; then
+    echo "Shared release inputs have unstaged changes:" >&2
+    echo "$dirty_shared_inputs" >&2
+    echo "Shared-inputs stamps are computed from the working tree, so stage these changes fully or stash them." >&2
+    exit 1
+  fi
 
   if [ -n "$(git diff --name-only -- cli/project-runner/shared-inputs-stamp.json cli/dispatcher/shared-inputs-stamp.json)" ]; then
     echo "A shared-inputs stamp file has unstaged changes." >&2
