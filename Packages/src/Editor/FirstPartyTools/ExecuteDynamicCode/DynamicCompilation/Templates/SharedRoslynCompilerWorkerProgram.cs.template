@@ -167,9 +167,16 @@ public static class Program
         SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(sourceText, CreateParseOptions(defineSymbols), sourcePath);
         List<MetadataReference> references = BuildReferences(requestLines);
         CSharpCompilation compilation = CSharpCompilation.Create(Path.GetFileNameWithoutExtension(dllPath), new[] { syntaxTree }, references, CreateCompilationOptions(allowUnsafe));
+        // Why portable PDB: execute-dynamic-code loads these bytes so runtime exceptions can
+        // surface user-snippet.cs line numbers from #line directives in the wrapper.
+        string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
         using (FileStream peStream = new FileStream(dllPath, FileMode.Create, FileAccess.Write, FileShare.Read))
+        using (FileStream pdbStream = new FileStream(pdbPath, FileMode.Create, FileAccess.Write, FileShare.Read))
         {
-            EmitResult emitResult = compilation.Emit(peStream);
+            EmitResult emitResult = compilation.Emit(
+                peStream,
+                pdbStream,
+                options: new EmitOptions(debugInformationFormat: DebugInformationFormat.PortablePdb));
             int exitCode = 0;
             List<string> diagnosticLines = new List<string>();
             foreach (Diagnostic diagnostic in emitResult.Diagnostics)

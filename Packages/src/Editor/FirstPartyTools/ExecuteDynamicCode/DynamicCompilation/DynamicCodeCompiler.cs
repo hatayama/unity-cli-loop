@@ -135,7 +135,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return failureResult;
             }
 
-            CompiledAssemblyLoadResult assemblyLoadResult = _assemblyLoader.Load(buildResult.AssemblyBytes);
+            CompiledAssemblyLoadResult assemblyLoadResult = _assemblyLoader.Load(
+                buildResult.AssemblyBytes,
+                buildResult.PdbBytes);
 
             CompilationResult result = new()            {
                 Success = true,
