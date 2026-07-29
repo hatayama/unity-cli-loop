@@ -22,19 +22,38 @@ all along" — this document exists so nobody walks that path again.
 
 ## Cause
 
-Claude Code runs shell commands inside a sandbox whose network policy is expressed as a list of
-allowed **hostnames**. A Unix domain socket has no hostname, so there is no way to allowlist the
-project socket (`/tmp/uloop-<euid>/UnityCliLoop-<hash>.sock`, where `<hash>` is the first 16 hex
-digits of the SHA-256 of the canonical project root) through that policy — `connect()` and
-`bind()` on Unix sockets are denied with EPERM regardless of filesystem permissions. Write
-access to the socket's directory does not help; this was verified empirically: a directory the
-sandbox allowed file writes into still refused a socket `bind()`.
+Claude Code runs shell commands inside a sandbox that denies `connect()` and `bind()` on Unix
+domain sockets with EPERM, so the project socket
+(`/tmp/uloop-<euid>/UnityCliLoop-<hash>.sock`, where `<hash>` is the first 16 hex digits of the
+SHA-256 of the canonical project root — see `CreateEndpoint` in `cli/common/project/project.go`)
+is unreachable from a sandboxed command.
+
+Filesystem permissions do not lift the denial. A directory the sandbox allowed file writes into
+still refused a socket `bind()`, and granting write access to the socket node — which a Unix
+socket `connect()` does require — leaves `connect()` denied all the same.
+
+There is a `sandbox.network.allowUnixSockets` setting (an array of socket paths; the schema also
+documents `allowAllUnixSockets`), but it was measured not to lift this denial (2026-07-27,
+Claude Code 2.1.220, macOS/Seatbelt). All three of the following were true at once, and
+`connect()` still returned EPERM:
+
+- the exact socket path was present in the resolved sandbox config, confirmed on the Config tab
+  of `/sandbox` — so this is not a settings-reload problem;
+- `sandbox.filesystem.allowWrite` covered the socket's directory, and `os.access(sock, W_OK)`
+  returned true;
+- an allowlisted socket and a non-allowlisted one behaved identically, which is what rules the
+  setting out rather than merely failing to confirm it.
+
+A directory path in `allowUnixSockets` (`/tmp/uloop-<euid>/`) was measured too, with the same
+result. Do not spend time on this setting again without new evidence that its behaviour changed;
+use the remedies below.
 
 The block is not specific to the transport: with the default `allowedHosts` policy the sandbox
 also stops V2's localhost TCP connection (verified 2026-07-27), so a plain `uloop ...` command
 succeeding proves only that `excludedCommands` took it out of the sandbox — not that Unix sockets
-are the problem and TCP would get through. What is specific to a Unix socket is only that it has
-no hostname to put on `allowedHosts`, so that escape hatch does not exist for it.
+are the problem and TCP would get through. The difference is only in the escape hatch each one
+has: a TCP host can be put on `allowedHosts`, while the equivalent for a Unix socket is the
+`allowUnixSockets` setting ruled out above.
 
 This is specific to the sandboxed shell. The same command in a normal terminal, or in a session
 without sandboxing, is unaffected. Windows uses a named pipe instead of a Unix socket; whether
