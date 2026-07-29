@@ -21,7 +21,7 @@ uloop screenshot [--window-name <name>] [--resolution-scale <scale>] [--match-mo
 | `--window-name` | string | `Game` | Window name to capture (for example `Game`, `Scene`, `Console`, `Inspector`). Ignored when `--capture-mode rendering`. When the Game tab is Device Simulator and the title is Simulator, default Game falls back to Simulator. |
 | `--resolution-scale` | number | `1.0` | Resolution scale (0.1 to 1.0) |
 | `--match-mode` | enum | `exact` | Window name matching mode: `exact`, `prefix`, or `contains`. Ignored when `--capture-mode rendering`. |
-| `--capture-mode` | enum | `window` | `window` - capture EditorWindow including toolbar, `rendering` - capture game rendering only (PlayMode required), `GameView` - alias for `rendering`. Rendering screenshots return `ScreenshotToInputFormula` for converting raw image pixels before calling simulate-mouse-input or raycast. |
+| `--capture-mode` | enum | `window` | `window` - capture EditorWindow including toolbar, `rendering` - capture game rendering only (PlayMode required), `GameView` - alias for `rendering`. Rendering screenshots return `ScreenshotToInputFormula` for converting raw image pixels before calling simulate-mouse-input (including `--dry-run`) or simulate-mouse-ui. |
 | `--output-directory` | string | `""` | Output directory path for saving screenshots. When empty, uses default path (.uloop/outputs/Screenshots/). Accepts absolute paths. |
 | `--annotate-elements` | flag | - | Annotate interactive UI elements with index labels and interaction hints (A / CLICK, B / DRAG, ...). The response includes an `AnnotatedElements` array with element metadata sorted by z-order. Only works with `--capture-mode rendering` in PlayMode. |
 | `--annotate-raycast-grid` | flag | - | Annotate clustered 3D physics collider candidates as `PhysicsCollider` entries in `AnnotatedElements`. Uses `Camera.main` visibility and the same top-left Game View coordinates as `simulate-mouse-input`. Only works with `--capture-mode rendering` in PlayMode. |
@@ -42,7 +42,7 @@ The window name is the text displayed in the window's title bar (tab). Common na
 
 ## Device Simulator
 
-- Prefer `--capture-mode rendering` for the annotate → click flow. It works with both the normal Game view and Device Simulator, and coordinates match `simulate-mouse-ui` / `simulate-mouse-input` / `raycast`.
+- Prefer `--capture-mode rendering` for the annotate → click flow. It works with both the normal Game view and Device Simulator, and coordinates match `simulate-mouse-ui` / `simulate-mouse-input` (including `--dry-run`).
 - `--capture-mode window` captures Editor chrome (toolbar/borders). With Device Simulator as the play view, default `--window-name Game` falls back to `Simulator` when no Game tab exists; you can also pass `--window-name Simulator`.
 - Simulator Fit to Screen / Scale / Safe Area overlays are chrome-only and do not change rendering-mode input coordinates. After device rotation, re-run annotate (or re-read `Screen` size) before clicking.
 
