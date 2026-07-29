@@ -172,7 +172,7 @@ func TestWaitForPausePointReturnsHitAfterEnabledStatus(t *testing.T) {
 		return response, nil
 	}
 
-	response, state, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	response, state, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
 		timeout:        time.Second,
@@ -284,7 +284,7 @@ func TestPausePointExpiredErrorReportsRecoveryFields(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateExpired)
+	}, response, pausePointWaitStateExpired, false)
 
 	if cliErr.Details["Expired"] != true {
 		t.Fatalf("expired detail mismatch: %#v", cliErr.Details)
@@ -313,7 +313,7 @@ func TestPausePointExpiredErrorReportsMarkerTimeoutSeconds(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 5,
-	}, response, pausePointWaitStateExpired)
+	}, response, pausePointWaitStateExpired, false)
 
 	if cliErr.Details["TimeoutSeconds"] != 30 {
 		t.Fatalf("timeoutSeconds detail mismatch: %#v", cliErr.Details)
@@ -332,7 +332,7 @@ func TestPausePointExpiredErrorDerivesExpiredFromStatus(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateExpired)
+	}, response, pausePointWaitStateExpired, false)
 
 	if cliErr.Details["Expired"] != true {
 		t.Fatalf("expired detail mismatch: %#v", cliErr.Details)
@@ -426,7 +426,7 @@ func TestWaitForPausePointReturnsNotEnabledStateImmediately(t *testing.T) {
 		}, nil
 	}
 
-	response, state, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	response, state, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
 		timeout:        time.Second,
@@ -962,7 +962,7 @@ func TestPausePointTimeoutErrorIncludesDiagnosisHint(t *testing.T) {
 			cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 				id:             "jump",
 				timeoutSeconds: 1,
-			}, testCase.response, pausePointWaitStateTimeout)
+			}, testCase.response, pausePointWaitStateTimeout, false)
 
 			if cliErr.Details["Hint"] != testCase.wantHint {
 				t.Fatalf("hint mismatch: %#v", cliErr.Details)
@@ -1011,7 +1011,7 @@ func TestPausePointExpiredErrorIncludesDiagnosisHint(t *testing.T) {
 			cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 				id:             "jump",
 				timeoutSeconds: 1,
-			}, testCase.response, pausePointWaitStateExpired)
+			}, testCase.response, pausePointWaitStateExpired, false)
 
 			if cliErr.Details["Hint"] != testCase.wantHint {
 				t.Fatalf("hint mismatch: %#v", cliErr.Details)
@@ -1031,7 +1031,7 @@ func TestPausePointHintIsOmittedOutsideDiagnosableStates(t *testing.T) {
 	timeoutErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, hitResponse, pausePointWaitStateTimeout)
+	}, hitResponse, pausePointWaitStateTimeout, false)
 	if _, exists := timeoutErr.Details["Hint"]; exists {
 		t.Fatalf("hint should be omitted when no diagnosis applies: %#v", timeoutErr.Details)
 	}
@@ -1044,7 +1044,7 @@ func TestPausePointHintIsOmittedOutsideDiagnosableStates(t *testing.T) {
 	clearedErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, clearedResponse, pausePointWaitStateCleared)
+	}, clearedResponse, pausePointWaitStateCleared, false)
 	if _, exists := clearedErr.Details["Hint"]; exists {
 		t.Fatalf("hint should be omitted for cleared markers: %#v", clearedErr.Details)
 	}
@@ -1064,7 +1064,7 @@ func TestPausePointExpiredErrorReportsNoRemainingTime(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateExpired)
+	}, response, pausePointWaitStateExpired, false)
 
 	if cliErr.ErrorCode != clierrors.ErrorCodePausePointExpired {
 		t.Fatalf("error code mismatch: %#v", cliErr)

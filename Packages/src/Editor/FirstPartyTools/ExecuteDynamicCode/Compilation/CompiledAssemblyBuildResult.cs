@@ -17,6 +17,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public byte[] AssemblyBytes { get; }
 
+        /// <summary>
+        /// Portable PDB bytes when the compiler emitted them; null for AssemblyBuilder fallback
+        /// or failed builds. Loaded with AssemblyBytes so runtime stacks can name user-snippet.cs.
+        /// </summary>
+        public byte[] PdbBytes { get; }
+
         public double ReferenceResolutionMilliseconds { get; }
 
         public double BuildMilliseconds { get; }
@@ -33,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Dictionary<string, List<string>> ambiguousTypeCandidates,
             List<string> autoInjectedNamespaces,
             byte[] assemblyBytes,
+            byte[] pdbBytes,
             double referenceResolutionMilliseconds,
             double buildMilliseconds,
             int buildCount,
@@ -44,6 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AmbiguousTypeCandidates = ambiguousTypeCandidates;
             AutoInjectedNamespaces = autoInjectedNamespaces;
             AssemblyBytes = assemblyBytes;
+            PdbBytes = pdbBytes;
             ReferenceResolutionMilliseconds = referenceResolutionMilliseconds;
             BuildMilliseconds = buildMilliseconds;
             BuildCount = buildCount;

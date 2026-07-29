@@ -271,7 +271,7 @@ func TestWaitForPausePointJoinsTriggerResult(t *testing.T) {
 			return 0
 		}
 
-		_, _, triggerResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		_, _, triggerResult, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 			id:             "jump",
 			timeoutSeconds: 1,
 			timeout:        time.Second,
@@ -307,7 +307,7 @@ func TestWaitForPausePointJoinsTriggerResult(t *testing.T) {
 			return 0
 		}
 
-		_, _, triggerResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		_, _, triggerResult, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 			id:             "jump",
 			timeoutSeconds: 1,
 			timeout:        time.Second,
@@ -362,7 +362,7 @@ func TestWaitForPausePointSkipsTriggerWhenNotArmed(t *testing.T) {
 		return 0
 	}
 
-	_, state, triggerResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	_, state, triggerResult, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "does-not-exist",
 		timeoutSeconds: 1,
 		timeout:        time.Second,

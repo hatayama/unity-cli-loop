@@ -45,4 +45,6 @@ jobs:
           --include-kept false
           --format table
           --fail-on high-confidence
-          --max-public-candidates 23
+          # 24: CaptureMode.GameView is a JSON/schema alias for rendering (Enum.TryParse);
+          # Roslyn sees no C# references by design.
+          --max-public-candidates 24

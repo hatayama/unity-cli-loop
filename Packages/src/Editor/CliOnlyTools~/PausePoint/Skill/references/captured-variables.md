@@ -63,6 +63,8 @@ Capturing a deep copy at hit time was deliberately not adopted: it would cost ho
 
 ## Raw Capture API While Paused
 
+Add `using io.github.hatayama.UnityCliLoop.Runtime;` in `execute-dynamic-code` snippets before calling `UloopPausePoint.TryGetCapturedValue` / `GetCapturedNames` / `GetCapturedPausePointId`.
+
 While Unity is paused on a hit, `execute-dynamic-code` can read live captured references through `UloopPausePoint`:
 
 - `TryGetCapturedValue(string name)` returns `(bool Found, object Value)` for the latest hit only. When multiple captured variables share the same name, the last one wins.
@@ -86,6 +88,6 @@ For a self-progressing game, arranging a scenario through real input alone is a 
 
 ## Warnings and Marker Freshness
 
-`await-pause-point`'s hit response also carries a top-level `Warning` (omitted when empty): it flags multiple hits, multiple matching logs, or truncated matching logs, so you can tell a single clean hit apart from evidence that needs closer inspection. `MatchingLogs` (log entries whose text contains the marker id) is still embedded, but source-derived ids rarely appear in log text, so treat `CapturedVariables` as the primary variable evidence.
+`await-pause-point`'s hit response also carries a top-level `Warning` (omitted when empty): it flags multiple hits, multiple matching logs, or truncated matching logs, so you can tell a single clean hit apart from evidence that needs closer inspection. Enable-time patch diagnostics (for example physics-callback cached dispatch) are not in `Warning`; on `enable-pause-point --await` they appear as `EnableTimeWarning` instead. `MatchingLogs` (log entries whose text contains the marker id) is still embedded, but source-derived ids rarely appear in log text, so treat `CapturedVariables` as the primary variable evidence.
 
 Use `Generation`, `EnabledAtUtc`, and the hit sequence fields from the hit or status response to tell a fresh marker from stale evidence with the same id. `RemainingMilliseconds` and `Expired` are returned directly so you do not need to infer marker lifetime from elapsed time.

@@ -5,6 +5,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public interface ICompiledAssemblyLoader
     {
-        CompiledAssemblyLoadResult Load(byte[] assemblyBytes);
+        // Why pdbBytes: optional portable PDB from shared-worker / one-shot csc; null keeps the
+        // AssemblyBuilder fallback path (no line numbers) working without a second Load API.
+        CompiledAssemblyLoadResult Load(byte[] assemblyBytes, byte[] pdbBytes);
     }
 }

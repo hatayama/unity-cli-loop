@@ -172,7 +172,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 value,
                 string.Empty,
                 string.Empty,
-                0);
+                0,
+                truncated: false);
         }
 
         private sealed class FakePausePointPauseController : IUloopPausePointPauseController

@@ -132,6 +132,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public IReadOnlyList<PausePointStatusCapturedVariable> CapturedVariables { get; set; } =
             Array.Empty<PausePointStatusCapturedVariable>();
         public bool CapturedVariablesTruncated { get; set; }
+        public IReadOnlyList<string> TruncatedVariableNames { get; set; } = Array.Empty<string>();
+        public int TruncatedVariableCount { get; set; }
         public string ClearedReason { get; set; } = string.Empty;
         public string StatusBeforeClear { get; set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; set; }
@@ -174,6 +176,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     .Select(PausePointStatusCapturedVariable.FromCapturedVariable)
                     .ToList(),
                 CapturedVariablesTruncated = snapshot.CapturedVariablesTruncated,
+                TruncatedVariableNames = snapshot.TruncatedVariableNames,
+                TruncatedVariableCount = snapshot.TruncatedVariableCount,
                 ClearedReason = snapshot.ClearedReason,
                 StatusBeforeClear = snapshot.StatusBeforeClear,
                 LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear
@@ -252,6 +256,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public string UnityObjectKind { get; set; } = string.Empty;
         public string UnityObjectPath { get; set; } = string.Empty;
         public int UnityObjectInstanceId { get; set; }
+        public bool Truncated { get; set; }
 
         internal static PausePointStatusCapturedVariable FromCapturedVariable(UloopCapturedVariable capturedVariable)
         {
@@ -268,7 +273,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Value = capturedVariable.Value,
                 UnityObjectKind = capturedVariable.UnityObjectKind,
                 UnityObjectPath = capturedVariable.UnityObjectPath,
-                UnityObjectInstanceId = capturedVariable.UnityObjectInstanceId
+                UnityObjectInstanceId = capturedVariable.UnityObjectInstanceId,
+                Truncated = capturedVariable.Truncated
             };
         }
     }

@@ -326,9 +326,16 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             int hitSequence = ++_nextHitSequence;
             int frameCount = Time.frameCount;
+            IReadOnlyList<string> truncatedVariableNames = capturedFrame != null
+                ? capturedFrame.TruncatedVariableNames
+                : Array.Empty<string>();
+            int truncatedVariableCount = capturedFrame != null
+                ? capturedFrame.TruncatedVariableCount
+                : 0;
             entry.RecordHitWithCapturedVariables(
                 now, _pauseController.IsPlaying, _pauseController.IsPaused, hitSequence,
-                frameCount, capturedVariables, capturedVariablesTruncated);
+                frameCount, capturedVariables, capturedVariablesTruncated,
+                truncatedVariableNames, truncatedVariableCount);
             UloopPausePointSnapshot snapshot = entry.ToSnapshot(now, _pauseController);
             _latestHitSnapshot = snapshot;
             _hitSnapshots.RemoveAll(hitSnapshot => hitSnapshot.Id == id);

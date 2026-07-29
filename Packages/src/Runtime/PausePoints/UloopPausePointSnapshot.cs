@@ -37,6 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             string recommendedNextAction,
             IReadOnlyList<UloopCapturedVariable> capturedVariables,
             bool capturedVariablesTruncated,
+            IReadOnlyList<string> truncatedVariableNames,
+            int truncatedVariableCount,
             string clearedReason,
             string statusBeforeClear,
             bool lateHitDiscardedAfterClear)
@@ -68,6 +70,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             RecommendedNextAction = recommendedNextAction ?? string.Empty;
             CapturedVariables = capturedVariables ?? Array.Empty<UloopCapturedVariable>();
             CapturedVariablesTruncated = capturedVariablesTruncated;
+            TruncatedVariableNames = truncatedVariableNames ?? Array.Empty<string>();
+            TruncatedVariableCount = truncatedVariableCount;
             ClearedReason = clearedReason ?? string.Empty;
             StatusBeforeClear = statusBeforeClear ?? string.Empty;
             LateHitDiscardedAfterClear = lateHitDiscardedAfterClear;
@@ -98,6 +102,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string RecommendedNextAction { get; }
         public IReadOnlyList<UloopCapturedVariable> CapturedVariables { get; }
         public bool CapturedVariablesTruncated { get; }
+        public IReadOnlyList<string> TruncatedVariableNames { get; }
+        public int TruncatedVariableCount { get; }
         public string ClearedReason { get; }
         public string StatusBeforeClear { get; }
         public bool LateHitDiscardedAfterClear { get; }
@@ -134,6 +140,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 string.Empty,
                 Array.Empty<UloopCapturedVariable>(),
                 false,
+                Array.Empty<string>(),
+                0,
                 string.Empty,
                 string.Empty,
                 false);
