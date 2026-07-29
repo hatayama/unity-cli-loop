@@ -28,13 +28,12 @@ AI駆動の開発ループを既存のUnityプロジェクト内で自律的に�
 Unity CLI Loopは、「AIがUnityプロジェクトの実装をできるだけ人手を介さずに進められる」ことを目指して作られた Unity連携ツールです。
 人間が手で行っていたコンパイル、Test Runner の実行、ログ確認、シーン編集、画面キャプチャによるUIレイアウト確認などの作業を、LLM ツールからまとめて操作できるようにします。
 
-Unity CLI Loopのコアとなるコンセプトは次の5つです。
+Unity CLI Loopのコアとなるコンセプトは次の4つです。
 
-1. **AIが自律的にビルド・テスト・ログ解析・修正を回し続ける「自律開発ループ」** — `compile`, `run-tests`, `get-logs`, `clear-console`
+1. **AIが自律的にビルド・テスト・ログ解析・修正を回し続ける「自律開発ループ」** — コードを書き換えずに任意の行で実行を止め、その瞬間の変数を読み取って原因を特定することもできます。`compile`, `run-tests`, `get-logs`, `clear-console`, `pause-point`
 2. **シーン構築、オブジェクト操作、メニュー実行、スクリーンショットからのUI改善など、Unity Editorの操作をAIに委任** — `execute-dynamic-code`, `screenshot`
 3. **PlayMode中の自動テスト — ボタンクリック、ドラッグ、キーボード入力、入力の記録・再生、ゲーム動作の検証をAIが実行** — `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `record-input`, `replay-input`, `execute-dynamic-code`, `screenshot`
 4. **上記を最小限のツール数で実現する** → [設計思想](#設計思想)
-5. **コードを書き換えずに任意の行で実行を止め、その瞬間の変数をAIが読み取って原因を特定する** — `pause-point`
 
 https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 
@@ -46,6 +45,8 @@ https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 > - **Unity 2022.3以上**
 >
 > CLIはネイティブバイナリで配布されるため、**Node.jsは不要です。**
+
+ここでインストールするのはUnityパッケージです。CLI本体（ネイティブバイナリ）は、パッケージ導入後に[クイックスタートのステップ1](#ステップ1-cliのインストール)でインストールします。Unityを経由せずterminalだけでCLIを入れる方法も、同じステップに畳んで記載しています。
 
 ## Unity Package Manager経由
 
@@ -308,8 +309,6 @@ uloop compile --project-path ../other-project
 - **Unity Editor内のIPCサーバー** — runnerからの接続を受け取り、Unity APIを実行して結果を返します
 
 接続には**TCPポートを使いません**。macOS/LinuxではUnixドメインソケット、Windowsでは名前付きパイプで接続するため、ポートの設定も、他のEditorインスタンスとのポート衝突もありません。
-
-CLIとUnityパッケージの互換性は、整数の**protocol version**で判定されます。組み合わせが不一致な場合は、実行時に不可解な動作をするのではなく、明確なメッセージで即座に失敗します → [protocol versionの詳細](docs/protocol-version.md)
 
 # 設計思想
 
