@@ -100,6 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(variables.Single().Value.Length, Is.EqualTo(SourcePausePointConstants.MaxCapturedVariableValueLength));
             Assert.That(truncated, Is.True);
+            Assert.That(variables.Single().Truncated, Is.True);
         }
 
         [Test]

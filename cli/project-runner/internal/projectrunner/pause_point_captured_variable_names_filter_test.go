@@ -63,6 +63,10 @@ func TestFilterPausePointCapturedVariablesByName(t *testing.T) {
 		if !result.CapturedVariableNameFilterNoMatch {
 			t.Fatal("expected CapturedVariableNameFilterNoMatch to be true when nothing matches")
 		}
+		const wantWarning = "No captured variable matched the requested names; check CapturedVariableNamesNotFound. Names must exist in the scope of ResolvedMethod."
+		if result.Warning != wantWarning {
+			t.Fatalf("expected human-readable Warning for no-match filter: %q", result.Warning)
+		}
 	})
 
 	t.Run("composes with captured-variables names mode: filter first, then strip values", func(t *testing.T) {

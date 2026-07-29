@@ -43,10 +43,15 @@
       "Value": "Enemy",
       "UnityObjectKind": "SceneObject",
       "UnityObjectPath": "MainScene:/Root/Enemy",
-      "UnityObjectInstanceId": -1234
+      "UnityObjectInstanceId": -1234,
+      "Truncated": false
     }
   ],
   "CapturedVariablesTruncated": true,
+  "TruncatedVariableNames": [
+    "extraField"
+  ],
+  "TruncatedVariableCount": 1,
   "ClearedReason": "",
   "StatusBeforeClear": "",
   "LateHitDiscardedAfterClear": false

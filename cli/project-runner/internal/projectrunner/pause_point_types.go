@@ -27,6 +27,8 @@ type pausePointStatusResponse struct {
 	RecommendedNextAction           string                           `json:"RecommendedNextAction"`
 	CapturedVariables               []pausePointCapturedVariable     `json:"CapturedVariables"`
 	CapturedVariablesTruncated      bool                             `json:"CapturedVariablesTruncated"`
+	TruncatedVariableNames          []string                         `json:"TruncatedVariableNames"`
+	TruncatedVariableCount          int                              `json:"TruncatedVariableCount"`
 	ClearedReason                   string                           `json:"ClearedReason"`
 	StatusBeforeClear               string                           `json:"StatusBeforeClear"`
 	LateHitDiscardedAfterClear      bool                             `json:"LateHitDiscardedAfterClear"`
@@ -126,6 +128,7 @@ type pausePointCapturedVariable struct {
 	UnityObjectKind       string  `json:"UnityObjectKind,omitempty"`
 	UnityObjectPath       string  `json:"UnityObjectPath,omitempty"`
 	UnityObjectInstanceId int     `json:"UnityObjectInstanceId,omitempty"`
+	Truncated             bool    `json:"Truncated"`
 }
 
 // pausePointVariableValue returns a pointer to value for use in pausePointCapturedVariable

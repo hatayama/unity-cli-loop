@@ -25,6 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject expected = ReadSharedContractFieldShape();
             PausePointStatusResponse response = new()
             {
+                Success = true,
                 Id = "Assets/Scripts/Enemy.cs:42",
                 Status = "Hit",
                 IsEnabled = true,
@@ -33,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 TimeoutSeconds = 30,
                 Mode = "continuous",
                 MaxHistory = 20,
+                MaxPreviewElements = 15,
                 CapturedVariableHistory = new List<PausePointStatusCapturedHistoryFrame>
                 {
                     new()
@@ -72,10 +74,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         Value = "Enemy",
                         UnityObjectKind = "SceneObject",
                         UnityObjectPath = "MainScene:/Root/Enemy",
-                        UnityObjectInstanceId = -1234
+                        UnityObjectInstanceId = -1234,
+                        Truncated = false
                     }
                 },
                 CapturedVariablesTruncated = true,
+                TruncatedVariableNames = new[] { "extraField" },
+                TruncatedVariableCount = 1,
                 ClearedReason = "",
                 StatusBeforeClear = "",
                 LateHitDiscardedAfterClear = false

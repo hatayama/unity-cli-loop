@@ -60,6 +60,13 @@ func filterPausePointCapturedVariablesByName(
 
 	response.CapturedVariableNameFilterNoMatch = totalMatchCount == 0
 	response.CapturedVariableNamesNotFound = unmatchedCapturedVariableNames(names, matchedNames)
+	if response.CapturedVariableNameFilterNoMatch {
+		// Why also Warning: CapturedVariableNameFilterNoMatch is easy to miss when agents only
+		// skim Warning / CapturedVariables. Reuse the already-computed flag — do not re-derive.
+		response.Warning = joinPausePointWarnings(
+			response.Warning,
+			"No captured variable matched the requested names; check CapturedVariableNamesNotFound. Names must exist in the scope of ResolvedMethod.")
+	}
 	return response
 }
 
