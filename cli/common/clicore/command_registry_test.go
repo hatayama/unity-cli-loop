@@ -11,6 +11,7 @@ func TestNativeCommandEntriesDeclareOwners(t *testing.T) {
 		UninstallCommandName:            DispatcherOwned,
 		VersionCommandName:              DispatcherOwned,
 		SkillsCommandName:               DispatcherOwned,
+		PackageCommandName:              DispatcherOwned,
 		CompletionCommand:               DispatcherOwned,
 		"list":                          RunnerOwned,
 		"sync":                          RunnerOwned,
@@ -41,6 +42,7 @@ func TestIsDispatcherOwnedCommandName(t *testing.T) {
 		UninstallCommandName,
 		VersionCommandName,
 		SkillsCommandName,
+		PackageCommandName,
 		CompletionCommand,
 	} {
 		if !IsDispatcherOwnedCommandName(command) {
@@ -81,6 +83,7 @@ func TestIsRunnerOwnedCommandName(t *testing.T) {
 		UninstallCommandName,
 		VersionCommandName,
 		SkillsCommandName,
+		PackageCommandName,
 		CompletionCommand,
 		CompileCommandName,
 		"",
