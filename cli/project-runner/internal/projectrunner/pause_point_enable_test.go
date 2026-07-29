@@ -203,8 +203,11 @@ func TestRunEnablePausePointCommandAwaitsAfterSuccessfulEnable(t *testing.T) {
 	if response.Status != pausePointStatusHit || response.HitCount != 1 {
 		t.Fatalf("response mismatch: %#v", response)
 	}
-	if !strings.Contains(response.Warning, "cached message dispatch warning") {
-		t.Fatalf("expected enable-time warning to be propagated, got: %q", response.Warning)
+	if !strings.Contains(response.EnableTimeWarning, "cached message dispatch warning") {
+		t.Fatalf("expected enable-time warning on EnableTimeWarning, got: %q", response.EnableTimeWarning)
+	}
+	if strings.Contains(response.Warning, "cached message dispatch warning") {
+		t.Fatalf("enable-time warning must not be folded into Warning: %q", response.Warning)
 	}
 	if statusCallCount != 2 {
 		t.Fatalf("status call count mismatch: %d", statusCallCount)

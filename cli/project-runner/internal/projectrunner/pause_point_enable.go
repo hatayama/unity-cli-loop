@@ -410,13 +410,15 @@ func runPausePointWaitAfterEnable(
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
-		// Unity's warning can come from either the enable response or the status poll that observed
-		// the hit, so both are passed; the join drops the repeat when they carry the same text.
+		// Why not join enableFields.Warning into Warning: that text is an enable-time patch
+		// diagnostic (for example "may not hit on pre-existing GameObjects") and contradicts a
+		// successful hit when folded into the hit-time Warning. It is exposed separately.
 		payload := buildPausePointHitPayload(pausePointHitPayloadInputs{
 			response:            response,
 			logs:                logs,
 			logsErr:             logsErr,
-			unityWarning:        joinPausePointWarnings(enableFields.Warning, response.Warning),
+			unityWarning:        response.Warning,
+			enableTimeWarning:   enableFields.Warning,
 			triggerResult:       triggerResult,
 			awaitedPausePointID: options.id,
 			expectations:        expectations,
