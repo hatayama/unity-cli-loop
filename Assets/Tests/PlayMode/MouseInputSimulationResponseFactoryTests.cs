@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
         }
 
         /// <summary>
-        /// Verifies interrupted button responses project every Pause Point hit and preserve button coordinates.
+        /// Verifies an interrupted button response when the press never applied reports discarded-edge wording and maps pause evidence plus coordinates.
         /// </summary>
         [Test]
         public void InterruptedButtonResult_WithMultiplePausePointHits_MapsPauseEvidenceAndButtonPosition()
@@ -45,7 +45,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             SimulateMouseInputResponse response = MouseInputSimulationResponseFactory.InterruptedButtonResult(
                 UnityCliLoopMouseInputAction.Click,
                 "Left",
-                inputPosition);
+                inputPosition,
+                pressWasApplied: false);
 
             Assert.That(response.Success, Is.True);
             Assert.That(
@@ -62,6 +63,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.That(response.PausePointHits, Has.Count.EqualTo(2));
             Assert.That(response.PausePointHits![0].Id, Is.EqualTo("first-hit"));
             Assert.That(response.PausePointHits[1].Id, Is.EqualTo("latest-hit"));
+        }
+
+        /// <summary>
+        /// Verifies an interrupted button response when the press already applied reports delivered-before-pause wording.
+        /// </summary>
+        [Test]
+        public void InterruptedButtonResult_WhenPressWasApplied_ReportsDeliveredBeforePauseMessage()
+        {
+            Vector2 inputPosition = new(12f, 34f);
+
+            SimulateMouseInputResponse response = MouseInputSimulationResponseFactory.InterruptedButtonResult(
+                UnityCliLoopMouseInputAction.LongPress,
+                "Right",
+                inputPosition,
+                pressWasApplied: true);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Mouse input stopped because Unity paused during Pause Point inspection. Button 'Right' press was already delivered to the game before the pause; Unity CLI Loop released it from bookkeeping, so the game may have registered the press."));
+            Assert.That(response.Action, Is.EqualTo(UnityCliLoopMouseInputAction.LongPress.ToString()));
+            Assert.That(response.Button, Is.EqualTo("Right"));
+            Assert.That(response.PositionX, Is.EqualTo(inputPosition.x));
+            Assert.That(response.PositionY, Is.EqualTo(inputPosition.y));
+            Assert.That(response.InterruptedByPausePoint, Is.True);
         }
 
         /// <summary>

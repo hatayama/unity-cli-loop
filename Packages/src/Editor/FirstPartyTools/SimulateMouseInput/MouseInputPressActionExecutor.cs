@@ -131,7 +131,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return MouseInputSimulationResponseFactory.InterruptedButtonResult(
                     UnityCliLoopMouseInputAction.Click,
                     buttonName,
-                    inputPos);
+                    inputPos,
+                    pressWasApplied);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
@@ -261,7 +262,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return MouseInputSimulationResponseFactory.InterruptedButtonResult(
                     UnityCliLoopMouseInputAction.LongPress,
                     buttonName,
-                    inputPos);
+                    inputPos,
+                    pressWasApplied);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
