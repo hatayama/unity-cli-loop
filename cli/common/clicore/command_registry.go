@@ -7,6 +7,7 @@ const (
 	UninstallCommandName            = "uninstall"
 	VersionCommandName              = "version"
 	SkillsCommandName               = "skills"
+	PackageCommandName              = "package"
 	CompileCommandName              = "compile"
 	ExecuteDynamicCodeCommandName   = "execute-dynamic-code"
 	PausePointAwaitCommandName      = "await-pause-point"
@@ -36,6 +37,7 @@ var NativeCommands = []NativeCommandEntry{
 	{Name: PausePointAwaitCommandName, Description: "Wait until a named UloopPausePoint.Pause marker pauses Unity", Owner: RunnerOwned},
 	{Name: PausePointStatusUserCommandName, Description: "Show the state of a named UloopPausePoint.Pause marker", Owner: RunnerOwned},
 	{Name: SkillsCommandName, Description: "List, install, or uninstall agent skills", Owner: DispatcherOwned},
+	{Name: PackageCommandName, Description: "Install or inspect the Unity CLI Loop package in a project", Owner: DispatcherOwned},
 	{Name: CompletionCommand, Description: "Deprecated: shell completion has been removed; this command is now a no-op", Owner: DispatcherOwned},
 	{Name: InstallCommandName, Description: "Configure the global uloop dispatcher binary", Owner: DispatcherOwned},
 	{Name: UpdateCommandName, Description: "Update the global uloop dispatcher binary", Owner: DispatcherOwned},
