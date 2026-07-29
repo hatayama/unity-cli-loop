@@ -23,9 +23,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TearDown]
         public void TearDown()
         {
-            DestroyIfPresent(ref _childGameObject);
-            DestroyIfPresent(ref _rootGameObject);
-            DestroyIfPresent(ref _otherGameObject);
+            if (_childGameObject != null)
+            {
+                Object.DestroyImmediate(_childGameObject);
+                _childGameObject = null;
+            }
+
+            if (_rootGameObject != null)
+            {
+                Object.DestroyImmediate(_rootGameObject);
+                _rootGameObject = null;
+            }
+
+            if (_otherGameObject != null)
+            {
+                Object.DestroyImmediate(_otherGameObject);
+                _otherGameObject = null;
+            }
         }
 
         [Test]
@@ -80,17 +94,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(built, Is.False);
             Assert.That(token, Is.Null);
-        }
-
-        private static void DestroyIfPresent(ref GameObject gameObject)
-        {
-            if (gameObject == null)
-            {
-                return;
-            }
-
-            Object.DestroyImmediate(gameObject);
-            gameObject = null;
         }
     }
 }
