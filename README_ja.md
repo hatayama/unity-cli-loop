@@ -227,7 +227,6 @@ uloop skills install --claude --global
 - `/uloop-find-game-objects` - GameObject検索
 - `/uloop-screenshot` - EditorWindowのキャプチャ
 - `/uloop-pause-point` - 任意の行で実行を止めて変数をキャプチャ
-- `/uloop-raycast` - Game View座標の3D物理ヒット判定
 - `/uloop-set-game-view-size` - Game Viewのカスタム解像度の取得・設定
 - `/uloop-simulate-mouse-ui` - PlayMode UI要素のクリック・長押し・ドラッグシミュレーション
 - `/uloop-simulate-mouse-input` - Input System経由のPlayModeマウス入力シミュレーション
@@ -421,7 +420,7 @@ macOS / Windows Editor上で、Unity Editor ウィンドウを最前面に表示
 3つのマッチングモードをサポート: `exact`（デフォルト）、`prefix`、`contains` - すべて大文字小文字を区別しません。
 
 `CaptureMode: rendering` を指定すると、EditorWindowの見た目ではなくGame Viewのレンダリング結果を直接キャプチャします。PlayMode中のゲーム画面を、Editorのウィンドウ枠やスケーリングの影響を受けずに取得したい場合に使います。
-`AnnotateRaycastGrid: true` を併用すると、キャプチャ画像に座標グリッドが重ねて描画されます。画像を見たAIが `raycast` や `simulate-mouse-input` に渡す座標を決めやすくなります。
+`AnnotateRaycastGrid: true` を併用すると、キャプチャ画像に座標グリッドが重ねて描画されます。画像を見たAIが `simulate-mouse-input` に渡す座標を決めやすくなります。
 
 `uloop set-game-view-size --width 1920 --height 1080` でGame Viewのカスタム解像度を固定できます。`CaptureMode: rendering` の座標系を実行ごとに安定させたいときに使ってください（引数なしで実行すると現在の解像度を取得できます）。
 ```text
@@ -485,20 +484,7 @@ Input System経由でPlayMode中のマウス入力をシミュレーションし
 → simulate-mouse-input (Action: SmoothDelta, DeltaX: 300, DeltaY: 0, Duration: 0.5)
 ```
 
-### 14. raycast - Game View座標の3D物理ヒット判定
-`Camera.main` からGame Viewの座標へレイを飛ばし、3D物理で何にヒットするかを返します。スクリーンショットの座標にゲームプレイのクリックを送る前に、狙った3Dオブジェクトに当たるかを確認したいときに使います。
-
-座標系は `simulate-mouse-ui` と同じ左上原点なので、注釈付きスクリーンショットから得た座標をそのまま渡せます（呼び出し側でY座標を反転させる必要はありません）。レスポンスには、ヒットしたGameObjectの名前とパス、レイヤー、距離、ヒット位置、ヒット法線が含まれます。
-
-ヒットしなかった場合も `CameraName` / `CameraPath` が返ります。想定外の結果になったときは、まずここを確認してください。シーン内の別のカメラに `MainCamera` タグが付いていると、そちらが `Camera.main` の解決に勝ってしまい、意図した視点からレイが飛んでいない場合があります。
-
-```text
-→ screenshot (CaptureMode: rendering, AnnotateRaycastGrid: true)
-→ raycast (X: 960, Y: 540)
-→ simulate-mouse-input (Action: Click, X: 960, Y: 540)
-```
-
-### 15. simulate-keyboard - PlayModeでのキーボード入力シミュレーション
+### 14. simulate-keyboard - PlayModeでのキーボード入力シミュレーション
 Input System経由でPlayMode中のキーボード入力をシミュレーションします。単発のキータップ、長押し、複数キーの同時押し（例：Shift+Wでスプリント）に対応しています。このツールは Input System パッケージ導入時のみ利用可能で、Player SettingsのActive Input Handlingを `Input System Package (New)` または `Both` に設定する必要があります。ゲームコードがInput System API（例: `Keyboard.current[Key.W].isPressed`）で入力を読み取っている必要があり、レガシーの `Input.GetKey()` には対応していません。
 
 3つのアクションに対応: Press（ワンショットタップまたは時間指定ホールド）、KeyDown（キーを押し続ける）、KeyUp（押下中のキーを解放）。`Keyboard.current.spaceKey.wasPressedThisFrame` のような立ち上がり検出には Press を使います。KeyDown は最初の押下エッジを1回だけ発行し、その後は押下状態を保つだけなので、意図的にキーを保持したい場合だけ KeyDown/KeyUp を使います。
@@ -513,7 +499,7 @@ Input System経由でPlayMode中のキーボード入力をシミュレーショ
 → simulate-keyboard (Action: KeyUp, Key: LeftShift)
 ```
 
-### 16. record-input - PlayMode中の入力記録
+### 15. record-input - PlayMode中の入力記録
 PlayMode中のキーボード・マウス入力をフレーム単位でJSONファイルに記録します。Input Systemのデバイス状態差分によりキー押下、マウス移動、クリック、スクロールイベントをキャプチャします。このツールは Input System パッケージ導入時のみ利用可能です。
 
 ```text
@@ -523,7 +509,7 @@ PlayMode中のキーボード・マウス入力をフレーム単位でJSONフ�
 → JSONファイルが .uloop/outputs/InputRecordings/ に保存される
 ```
 
-### 17. replay-input - 記録された入力のPlayMode再生
+### 16. replay-input - 記録された入力のPlayMode再生
 記録されたキーボード・マウス入力をPlayMode中に再生します。JSON記録を読み込み、Input System経由でフレーム単位で入力を注入します。ループ再生と進捗モニタリングに対応しています。このツールは Input System パッケージ導入時のみ利用可能です。
 
 ```text
