@@ -39,13 +39,6 @@ https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 
 # Installation
 
-> [!WARNING]
-> The following software is required
->
-> - **Unity 2022.3 or later**
->
-> The CLI is distributed as a native binary, so **Node.js is not required.**
-
 This section installs the Unity package. The CLI itself (a native binary) is installed after the package, in [Quickstart Step 1](#step-1-install-the-cli). A terminal-only way to install the CLI without going through Unity is folded into the same step.
 
 ## Via Unity Package Manager
