@@ -20,6 +20,10 @@ uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seco
 
 Digit keys are `Digit0`-`Digit9` or `Numpad0`-`Numpad9` — bare `0`-`9` is rejected.
 
+## Clear Before Scenario Setup
+
+`clear-pause-point --all` (and clearing the marker that owns the current pause) resumes Play Mode when the pause came from a pause-point hit. Run clear **before** arranging the board or other scenario setup; otherwise the resume lets the game consume your setup mid-flight. If you still need to build state after clear, re-freeze with `control-play-mode --action Pause` first, then arrange, then arm with `--resume-play`.
+
 ## --resume-play Semantics
 
 `--resume-play` runs after the marker's arming is confirmed and before `--trigger` is dispatched: it resumes PlayMode only when PlayMode is actually paused, and reports what it did in `ResumePlayResult` (`WasPaused` / `Resumed` / `Error`; an abandoned wait adds `Repaused` / `RepauseError`). If the resume fails, the trigger is not dispatched and `TriggerResult.Error` says so. If the trigger itself is rejected before it runs, the wait is abandoned and the resume is undone: `Repaused: true` (or `RepauseError`) reports PlayMode being paused again, so gameplay cannot consume the preserved marker while the trigger value is being fixed. When the game reaches the line on its own after resuming (gravity, physics), omit `--trigger` and keep `--resume-play`.
