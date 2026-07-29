@@ -63,6 +63,8 @@ Capturing a deep copy at hit time was deliberately not adopted: it would cost ho
 
 ## Raw Capture API While Paused
 
+Add `using io.github.hatayama.UnityCliLoop.Runtime;` in `execute-dynamic-code` snippets before calling `UloopPausePoint.TryGetCapturedValue` / `GetCapturedNames` / `GetCapturedPausePointId`.
+
 While Unity is paused on a hit, `execute-dynamic-code` can read live captured references through `UloopPausePoint`:
 
 - `TryGetCapturedValue(string name)` returns `(bool Found, object Value)` for the latest hit only. When multiple captured variables share the same name, the last one wins.
