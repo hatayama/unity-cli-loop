@@ -232,7 +232,7 @@ uloop skills install --claude --global
 
 
 <details>
-<summary>バンドルされている全19個のSkills一覧</summary>
+<summary>バンドルされている全18個のSkills一覧</summary>
 
 - `/uloop-launch` - 正しいバージョンでUnityを起動
 - `/uloop-compile` - コンパイルの実行
