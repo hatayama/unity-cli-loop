@@ -230,7 +230,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "-nostdlib+",
                 "-target:library",
                 "-optimize+",
-                "-debug-",
+                // Why portable: one-shot csc fallback must emit a PDB so Assembly.Load can map
+                // runtime exceptions back to user-snippet.cs lines (same as the shared worker).
+                "-debug:portable",
                 allowUnsafeCode ? "-unsafe+" : "-unsafe-",
                 QuoteResponseFileArgument("-out:", dllPath)
             };

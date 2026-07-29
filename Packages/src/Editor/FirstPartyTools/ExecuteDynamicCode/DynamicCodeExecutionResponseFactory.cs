@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -101,6 +102,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 ApplyExceptionResponseDetails(response, result.Exception);
             }
+            else
+            {
+                // Why also scan Logs: CommandRunner puts runtime stacks into Logs without setting
+                // ExecutionResult.Exception, so ApplyExceptionResponseDetails alone would miss them.
+                PrependUserSnippetExceptionLine(response, null);
+            }
 
             if (result.AutoInjectedNamespaces != null && result.AutoInjectedNamespaces.Count > 0)
             {
@@ -158,11 +165,65 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Exception exception)
         {
             response.Logs ??= new List<string>();
+            PrependUserSnippetExceptionLine(response, exception);
             response.Logs.Add($"Exception: {exception.Message}");
             if (!string.IsNullOrEmpty(exception.StackTrace))
             {
                 response.Logs.Add($"Stack Trace: {exception.StackTrace}");
             }
+        }
+
+        // Why prepend: agents scan Logs top-down; the raw stack still follows for detail.
+        private static void PrependUserSnippetExceptionLine(
+            ExecuteDynamicCodeResponse response,
+            Exception exception)
+        {
+            response.Logs ??= new List<string>();
+            string stackHaystack = exception?.StackTrace;
+            if (string.IsNullOrEmpty(stackHaystack))
+            {
+                stackHaystack = string.Join("\n", response.Logs);
+            }
+
+            if (!TryExtractUserSnippetLineNumber(stackHaystack, out int userSnippetLine))
+            {
+                return;
+            }
+
+            string message = exception?.Message;
+            if (string.IsNullOrEmpty(message))
+            {
+                message = response.ErrorMessage ?? string.Empty;
+            }
+
+            string header = $"Exception at user snippet line {userSnippetLine}: {message}";
+            if (response.Logs.Count > 0 && string.Equals(response.Logs[0], header, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            response.Logs.Insert(0, header);
+        }
+
+        // Why string parse only: wrapper already emits #line 1 "user-snippet.cs", so a portable
+        // PDB records user lines directly — no wrapper-to-user conversion table.
+        // Why both formats: .NET uses "user-snippet.cs:line N"; Unity/Mono often uses
+        // "…/user-snippet.cs:N" without the "line" keyword.
+        internal static bool TryExtractUserSnippetLineNumber(string stackTrace, out int lineNumber)
+        {
+            lineNumber = 0;
+            if (string.IsNullOrEmpty(stackTrace))
+            {
+                return false;
+            }
+
+            Match match = Regex.Match(stackTrace, @"user-snippet\.cs:(?:line )?(\d+)");
+            if (!match.Success)
+            {
+                return false;
+            }
+
+            return int.TryParse(match.Groups[1].Value, out lineNumber) && lineNumber > 0;
         }
 
         private static void AddAutoInjectedNamespaceHint(
