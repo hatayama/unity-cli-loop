@@ -1,5 +1,33 @@
 # Changelog
 
+## [3.0.0-beta.63](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.62...uloop-project-runner-v3.0.0-beta.63) (2026-07-29)
+
+
+### Features
+
+* address pause point round 13-14 leftover improvements ([#2065](https://github.com/hatayama/unity-cli-loop/issues/2065)) ([ce21b4f](https://github.com/hatayama/unity-cli-loop/commit/ce21b4f5d1d3693cb9837288da15f4b43102fabe))
+
+## [3.0.0-beta.62](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.61...uloop-project-runner-v3.0.0-beta.62) (2026-07-29)
+
+
+### Features
+
+* address pause point round 13-14 verification feedback ([#2059](https://github.com/hatayama/unity-cli-loop/issues/2059)) ([62db173](https://github.com/hatayama/unity-cli-loop/commit/62db17327b467ab44250d1ca59f8b136129251ae))
+
+## [3.0.0-beta.61](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.60...uloop-project-runner-v3.0.0-beta.61) (2026-07-28)
+
+
+### Features
+
+* configurable compile wait timeout and working timeout recovery ([#2036](https://github.com/hatayama/unity-cli-loop/issues/2036)) ([fc867c3](https://github.com/hatayama/unity-cli-loop/commit/fc867c3914f979dbc8f31f26be4c5753f66e1c36))
+
+## [3.0.0-beta.60](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.59...uloop-project-runner-v3.0.0-beta.60) (2026-07-27)
+
+
+### Bug Fixes
+
+* Background Unity editors no longer pop over other windows and keep serving commands ([#2029](https://github.com/hatayama/unity-cli-loop/issues/2029)) ([55d7c37](https://github.com/hatayama/unity-cli-loop/commit/55d7c3732b66f6d55a15163cea1916719a1a1459))
+
 ## [3.0.0-beta.59](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.58...uloop-project-runner-v3.0.0-beta.59) (2026-07-27)
 
 

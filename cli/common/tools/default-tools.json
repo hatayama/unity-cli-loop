@@ -19,6 +19,11 @@
             "type": "boolean",
             "description": "Stop before compilation if open Scene files changed externally instead of auto-reloading them",
             "default": true
+          },
+          "CompileWaitTimeoutSeconds": {
+            "type": "integer",
+            "description": "Maximum seconds the CLI waits for the compile to finish before returning COMPILE_WAIT_TIMEOUT (default 600). Values above 1200 exceed the Unity-side result retention window (20 minutes) and weaken post-timeout recovery.",
+            "default": 600
           }
         }
       }
@@ -257,10 +262,11 @@
           },
           "CaptureMode": {
             "type": "string",
-            "description": "window - capture EditorWindow including toolbar, rendering - capture game rendering only (PlayMode required). Rendering screenshots return ScreenshotToInputFormula for converting raw image pixels before calling simulate-mouse-input or raycast.",
+            "description": "window - capture EditorWindow including toolbar, rendering - capture game rendering only (PlayMode required), GameView - alias for rendering. Rendering screenshots return ScreenshotToInputFormula for converting raw image pixels before calling simulate-mouse-input (including --dry-run) or simulate-mouse-ui.",
             "enum": [
               "window",
-              "rendering"
+              "rendering",
+              "GameView"
             ],
             "default": "window"
           },
@@ -506,7 +512,7 @@
           },
           "Duration": {
             "type": "number",
-            "description": "Hold duration in seconds for LongPress action.",
+            "description": "Hold duration in seconds for LongPress action (max 30).",
             "default": 0.5
           },
           "Button": {
@@ -539,7 +545,7 @@
     },
     {
       "name": "simulate-mouse-input",
-      "description": "Simulate Mouse.current input in PlayMode through Unity Input System. Use for gameplay mouse clicks, long-press (LongPress), movement delta (MoveDelta/SmoothDelta), or scroll. Use simulate-mouse-ui for UI. Requires the Input System package and Active Input Handling set to 'Input System Package (New)' or 'Both'.",
+      "description": "Simulate Mouse.current input in PlayMode through Unity Input System. Use for gameplay mouse clicks, long-press (LongPress), movement delta (MoveDelta/SmoothDelta), or scroll. Use --dry-run to check what a Game View coordinate hits in 3D physics before clicking (works in EditMode; no Input System required). Use simulate-mouse-ui for UI. Requires the Input System package and Active Input Handling set to 'Input System Package (New)' or 'Both' (except --dry-run).",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -557,12 +563,12 @@
           },
           "X": {
             "type": "number",
-            "description": "Target X position in Game View pixels (origin: top-left). Used by Click and LongPress. Use AnnotatedElements[].SimX, or raw image pixels converted with ScreenshotToInputFormula.",
+            "description": "Target X position in Game View pixels (origin: top-left). Used by Click, LongPress, and --dry-run. Use AnnotatedElements[].SimX, or raw image pixels converted with ScreenshotToInputFormula.",
             "default": 0
           },
           "Y": {
             "type": "number",
-            "description": "Target Y position in Game View pixels (origin: top-left). Used by Click and LongPress. Use AnnotatedElements[].SimY, or raw image pixels converted with ScreenshotToInputFormula.",
+            "description": "Target Y position in Game View pixels (origin: top-left). Used by Click, LongPress, and --dry-run. Use AnnotatedElements[].SimY, or raw image pixels converted with ScreenshotToInputFormula.",
             "default": 0
           },
           "Button": {
@@ -577,7 +583,7 @@
           },
           "Duration": {
             "type": "number",
-            "description": "Hold duration for LongPress, or interpolation duration for SmoothDelta (seconds). For Click, 0 = one-shot tap.",
+            "description": "Hold duration for LongPress, or interpolation duration for SmoothDelta (seconds, max 30). For Click, 0 = one-shot tap.",
             "default": 0
           },
           "DeltaX": {
@@ -599,6 +605,21 @@
             "type": "number",
             "description": "Vertical scroll delta for Scroll action. Positive = up, negative = down. Typically 120 per notch.",
             "default": 0
+          },
+          "DryRun": {
+            "type": "boolean",
+            "description": "Query 3D physics at --x/--y without injecting mouse input. Works in EditMode and without the Input System package. Skips PlayMode / Input System preflight.",
+            "default": false
+          },
+          "LayerMask": {
+            "type": "integer",
+            "description": "Physics layer mask used by the raycast. Effective only with --dry-run.",
+            "default": -5
+          },
+          "MaxDistance": {
+            "type": "number",
+            "description": "Maximum raycast distance in world units. Effective only with --dry-run.",
+            "default": 1000
           }
         }
       }
@@ -626,7 +647,7 @@
           },
           "Duration": {
             "type": "number",
-            "description": "Hold duration in seconds for Press action (0 = one-shot tap). Ignored by KeyDown/KeyUp/ReleaseAll.",
+            "description": "Hold duration in seconds for Press action (0 = one-shot tap, max 30). Ignored by KeyDown/KeyUp/ReleaseAll.",
             "default": 0
           }
         }
@@ -700,35 +721,6 @@
             "type": "boolean",
             "description": "Loop continuously",
             "default": false
-          }
-        }
-      }
-    },
-    {
-      "name": "raycast",
-      "description": "Raycast from Camera.main through a Game View coordinate. Use when you need to check what a screenshot coordinate would hit in 3D physics before clicking or long-pressing with simulate-mouse-ui.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "X": {
-            "type": "number",
-            "description": "Target X position in Game View pixels (origin: top-left).",
-            "default": 0
-          },
-          "Y": {
-            "type": "number",
-            "description": "Target Y position in Game View pixels (origin: top-left).",
-            "default": 0
-          },
-          "LayerMask": {
-            "type": "integer",
-            "description": "Physics layer mask used by the raycast.",
-            "default": -5
-          },
-          "MaxDistance": {
-            "type": "number",
-            "description": "Maximum raycast distance in world units.",
-            "default": 1000
           }
         }
       }

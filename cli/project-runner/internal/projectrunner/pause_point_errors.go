@@ -14,6 +14,7 @@ func pausePointWaitError(
 	options waitForPausePointOptions,
 	response pausePointStatusResponse,
 	state pausePointWaitState,
+	hasNewHitBaseline bool,
 ) clierrors.CLIError {
 	response = normalizePausePointStatusResponse(response)
 
@@ -73,7 +74,7 @@ func pausePointWaitError(
 			options,
 			response,
 			true)
-		hint := pausePointTimeoutHint(response)
+		hint := pausePointTimeoutHint(response, hasNewHitBaseline)
 		if hint != "" {
 			timeoutError.Details["Hint"] = hint
 		}
@@ -110,6 +111,12 @@ const (
 	pausePointHintPlayModeNotRunning  = "PlayMode is not running. Start PlayMode (or trigger the marker code path in Edit Mode), then wait again."
 	pausePointHintEditorAlreadyPaused = "Unity is already paused, so gameplay cannot reach the marker. Resume PlayMode before waiting again."
 
+	// Returned when await timed out while waiting for a new hit on an already-hit continuous/trace
+	// marker. Why not reuse pausePointHintEditorAlreadyPaused: that hint diagnoses a marker that
+	// never fired, whereas here the marker already hit and the wait needs Play resumed so a later
+	// sequence can occur.
+	pausePointHintAlreadyHitWaitingForNew = "The marker had already hit and Unity may still be paused by that hit; pass --resume-play or resume Play Mode so a new hit can occur."
+
 	// Shared by both pausePointTimeoutHint and pausePointExpiredHint: patterns where the method
 	// body genuinely ran (or was invoked) yet the marker never fired — a physics/message callback
 	// missing a pre-existing GameObject, a pre-bound delegate bypassing the patch, or control flow
@@ -123,7 +130,10 @@ const (
 
 // pausePointTimeoutHint maps the final probed status to a deterministic diagnosis,
 // because timeouts are where agents struggle to tell a missed code path from Editor state.
-func pausePointTimeoutHint(response pausePointStatusResponse) string {
+func pausePointTimeoutHint(response pausePointStatusResponse, hasNewHitBaseline bool) string {
+	if hasNewHitBaseline {
+		return pausePointHintAlreadyHitWaitingForNew
+	}
 	if !response.EditorState.IsPlaying {
 		return pausePointHintPlayModeNotRunning
 	}

@@ -35,13 +35,13 @@ type pausePointMatchingLogsResult struct {
 
 // pausePointWaitResult extends the hit response with marker-matching logs so
 // agents do not need a separate get-logs call while Unity is paused. Warning
-// carries the only actionable signal that used to live inside a now-removed
-// EvidenceSummary; everything else in that summary duplicated fields already
-// present on pausePointStatusResponse or MatchingLogs.
+// carries hit-time diagnosis only; enable-time patch warnings live in
+// EnableTimeWarning so a successful hit is not contradicted by "may not hit" text.
 type pausePointWaitResult struct {
 	pausePointStatusResponse
-	MatchingLogs []pausePointMatchingLog `json:"MatchingLogs"`
-	Warning      string                  `json:"Warning,omitempty"`
+	MatchingLogs      []pausePointMatchingLog `json:"MatchingLogs"`
+	Warning           string                  `json:"Warning,omitempty"`
+	EnableTimeWarning string                  `json:"EnableTimeWarning,omitempty"`
 
 	// Expectations and AllExpectationsPassed are populated only when --expect was passed, so a
 	// caller that never used --expect sees neither field rather than a vacuous
@@ -64,9 +64,12 @@ type pausePointHitPayloadInputs struct {
 	logs    pausePointMatchingLogsResult
 	logsErr error
 
-	// unityWarning is Unity's own warning for this hit: the status response's on the plain await
-	// path, the enable response's on the enable --await path.
+	// unityWarning is the status-poll warning for this hit (plain await or enable --await).
+	// Enable-time patch warnings must not be folded in here — they go to enableTimeWarning.
 	unityWarning string
+
+	// enableTimeWarning is the enable-pause-point patch diagnostic. Empty on plain await.
+	enableTimeWarning string
 
 	triggerResult       *pausePointTriggerResult
 	awaitedPausePointID string
@@ -86,11 +89,13 @@ func buildPausePointHitPayload(inputs pausePointHitPayloadInputs) any {
 		return struct {
 			pausePointStatusResponse
 			Warning               string                        `json:"Warning,omitempty"`
+			EnableTimeWarning     string                        `json:"EnableTimeWarning,omitempty"`
 			Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
 			AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
 		}{
 			pausePointStatusResponse: response,
 			Warning:                  joinPausePointWarnings(inputs.unityWarning, triggerWarning),
+			EnableTimeWarning:        inputs.enableTimeWarning,
 			Expectations:             inputs.expectations,
 			AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(inputs.expectations),
 		}
@@ -103,6 +108,7 @@ func buildPausePointHitPayload(inputs pausePointHitPayloadInputs) any {
 			inputs.unityWarning,
 			buildPausePointWarning(inputs.logs, response.HitCount),
 			triggerWarning),
+		EnableTimeWarning:     inputs.enableTimeWarning,
 		Expectations:          inputs.expectations,
 		AllExpectationsPassed: pausePointAllExpectationsPassedPointer(inputs.expectations),
 	}

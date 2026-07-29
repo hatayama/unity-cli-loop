@@ -27,13 +27,15 @@ type pausePointStatusResponse struct {
 	RecommendedNextAction           string                           `json:"RecommendedNextAction"`
 	CapturedVariables               []pausePointCapturedVariable     `json:"CapturedVariables"`
 	CapturedVariablesTruncated      bool                             `json:"CapturedVariablesTruncated"`
+	TruncatedVariableNames          []string                         `json:"TruncatedVariableNames"`
+	TruncatedVariableCount          int                              `json:"TruncatedVariableCount"`
 	ClearedReason                   string                           `json:"ClearedReason"`
 	StatusBeforeClear               string                           `json:"StatusBeforeClear"`
 	LateHitDiscardedAfterClear      bool                             `json:"LateHitDiscardedAfterClear"`
 
-	// Warning carries the enable-time diagnostic (for example the physics-callback cached
-	// message dispatch warning) that PausePointResponse always includes on the Unity side, but
-	// which only the enable-pause-point --await path (pause_point_enable.go) currently reads.
+	// Warning is set by Unity on enable/clear tool responses when this shared type decodes those
+	// envelopes. The status bridge never sets it. On enable-pause-point --await hits, that enable
+	// response text is exposed as EnableTimeWarning on the wait payload, not as hit-time Warning.
 	Warning string `json:"Warning,omitempty"`
 
 	// ResolvedLine / ResolvedLineText / ResolvedMethod / SnapshotTiming are copied from the
@@ -126,6 +128,7 @@ type pausePointCapturedVariable struct {
 	UnityObjectKind       string  `json:"UnityObjectKind,omitempty"`
 	UnityObjectPath       string  `json:"UnityObjectPath,omitempty"`
 	UnityObjectInstanceId int     `json:"UnityObjectInstanceId,omitempty"`
+	Truncated             bool    `json:"Truncated"`
 }
 
 // pausePointVariableValue returns a pointer to value for use in pausePointCapturedVariable

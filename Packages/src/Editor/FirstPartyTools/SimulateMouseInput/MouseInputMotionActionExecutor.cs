@@ -113,6 +113,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
+            if (request.Duration > SimulateInputConstants.MaxDurationSeconds)
+            {
+                return new SimulateMouseInputResponse
+                {
+                    Success = false,
+                    Message =
+                        $"Duration must be {SimulateInputConstants.MaxDurationSeconds} seconds or less, got: {request.Duration}. The unit is seconds, not milliseconds.",
+                    Action = UnityCliLoopMouseInputAction.SmoothDelta.ToString()
+                };
+            }
+
             Vector2 totalDelta = new(request.DeltaX, request.DeltaY);
             float duration = request.Duration;
             float startTime = Time.realtimeSinceStartup;

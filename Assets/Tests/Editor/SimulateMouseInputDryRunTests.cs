@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -12,9 +11,9 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Test fixture that verifies Raycast Tool behavior.
+    /// Verifies simulate-mouse-input --dry-run physics hit reporting (folded from the former raycast tool).
     /// </summary>
-    public class RaycastToolTests
+    public class SimulateMouseInputDryRunTests
     {
         private GameObject? _cameraObject;
         private GameObject? _cubeObject;
@@ -73,13 +72,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
             Vector2 inputPosition = new Vector2(gameViewSize.x / 2f, gameViewSize.y / 2f);
 
-            RaycastResponse response = await ExecuteRaycast(inputPosition);
+            SimulateMouseInputResponse response = await ExecuteDryRun(inputPosition);
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.Hit, Is.True);
-            Assert.That(response.HitGameObjectName, Is.EqualTo("RaycastToolTestsCube"));
-            Assert.That(response.CameraName, Is.EqualTo("RaycastToolTestsCamera"));
-            Assert.That(response.CameraPath, Does.Contain("RaycastToolTestsCamera"));
+            Assert.That(response.HitGameObjectName, Is.EqualTo("SimulateMouseInputDryRunTestsCube"));
+            Assert.That(response.CameraName, Is.EqualTo("SimulateMouseInputDryRunTestsCamera"));
+            Assert.That(response.CameraPath, Does.Contain("SimulateMouseInputDryRunTestsCamera"));
             Assert.That(response.InputCoordinateSystem, Is.EqualTo(UnityCliLoopConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW));
             Assert.That(response.UnityCoordinateSystem, Is.EqualTo(UnityCliLoopConstants.COORDINATE_SYSTEM_BOTTOM_LEFT_GAME_VIEW));
             Assert.That(response.CoordinateConversionFormula, Is.EqualTo(UnityCliLoopConstants.COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY));
@@ -96,7 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CreateRaycastScene();
             Vector2 inputPosition = new Vector2(0f, 0f);
 
-            RaycastResponse response = await ExecuteRaycast(inputPosition);
+            SimulateMouseInputResponse response = await ExecuteDryRun(inputPosition);
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.Hit, Is.False);
@@ -111,40 +110,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CreateRaycastScene();
             Vector2 inputPosition = new Vector2(0f, 0f);
 
-            RaycastResponse response = await ExecuteRaycast(inputPosition);
+            SimulateMouseInputResponse response = await ExecuteDryRun(inputPosition);
 
             Assert.That(response.Hit, Is.False);
-            Assert.That(response.CameraName, Is.EqualTo("RaycastToolTestsCamera"));
-            Assert.That(response.CameraPath, Does.Contain("RaycastToolTestsCamera"));
+            Assert.That(response.CameraName, Is.EqualTo("SimulateMouseInputDryRunTestsCamera"));
+            Assert.That(response.CameraPath, Does.Contain("SimulateMouseInputDryRunTestsCamera"));
         }
 
         [Test]
-        public async Task ExecuteAsync_WhenCoordinateIntersectsCollider_EmitsRaycastExecutedVibeLog()
+        public async Task ExecuteAsync_WhenCoordinateIntersectsCollider_EmitsDryRunVibeLog()
         {
-            // Verifies a raycast records a raycast_executed observability event with camera/hit context.
+            // Verifies dry-run records a simulate_mouse_input_dry_run observability event with camera/hit context.
             CreateRaycastScene();
             Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
             Vector2 inputPosition = new Vector2(gameViewSize.x / 2f, gameViewSize.y / 2f);
             VibeLogger.ClearMemoryLogs();
 
-            await ExecuteRaycast(inputPosition);
+            await ExecuteDryRun(inputPosition);
 
-            string logs = VibeLogger.GetLogsForAi("raycast_executed");
-            Assert.That(logs, Does.Contain("raycast_executed"));
-            Assert.That(logs, Does.Contain("\"CameraName\": \"RaycastToolTestsCamera\""));
+            string logs = VibeLogger.GetLogsForAi("simulate_mouse_input_dry_run");
+            Assert.That(logs, Does.Contain("simulate_mouse_input_dry_run"));
+            Assert.That(logs, Does.Contain("\"CameraName\": \"SimulateMouseInputDryRunTestsCamera\""));
             Assert.That(logs, Does.Contain("\"Hit\": true"));
-            Assert.That(logs, Does.Contain("\"HitGameObjectName\": \"RaycastToolTestsCube\""));
+            Assert.That(logs, Does.Contain("\"HitGameObjectName\": \"SimulateMouseInputDryRunTestsCube\""));
         }
 
         [Test]
         public async Task ExecuteAsync_WhenCameraIsMissing_ShouldReturnConversionMetadata()
         {
-            // Tests that a missing Camera.main fails the raycast but still returns coordinate conversion metadata.
+            // Tests that a missing Camera.main fails dry-run but still returns coordinate conversion metadata.
             RetagExistingMainCameras();
             Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
             Vector2 inputPosition = new Vector2(gameViewSize.x / 2f, gameViewSize.y / 2f);
 
-            RaycastResponse response = await ExecuteRaycast(inputPosition);
+            SimulateMouseInputResponse response = await ExecuteDryRun(inputPosition);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Does.Contain("Camera.main"));
@@ -171,7 +170,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
             Vector2 inputPosition = new Vector2(gameViewSize.x / 2f, gameViewSize.y / 2f);
 
-            RaycastResponse response = await ExecuteRaycast(inputPosition);
+            SimulateMouseInputResponse response = await ExecuteDryRun(inputPosition);
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.Hit, Is.False);
@@ -180,7 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public async Task ExecuteAsync_WhenAutoSyncTransformsIsDisabled_ShouldRaycastAgainstLatestTransform()
         {
-            // Tests that the raycast syncs physics transforms itself even when Physics.autoSyncTransforms is disabled.
+            // Tests that dry-run syncs physics transforms itself even when Physics.autoSyncTransforms is disabled.
             Physics.autoSyncTransforms = false;
             CreateRaycastScene();
             if (_cubeObject == null)
@@ -193,7 +192,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
             Vector2 inputPosition = new Vector2(gameViewSize.x / 2f, gameViewSize.y / 2f);
 
-            RaycastResponse response = await ExecuteRaycast(inputPosition);
+            SimulateMouseInputResponse response = await ExecuteDryRun(inputPosition);
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.Hit, Is.False);
@@ -204,7 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RetagExistingMainCameras();
             DisableAmbientColliders();
 
-            _cameraObject = new GameObject("RaycastToolTestsCamera");
+            _cameraObject = new GameObject("SimulateMouseInputDryRunTestsCamera");
             Camera camera = _cameraObject.AddComponent<Camera>();
             _cameraObject.tag = "MainCamera";
             _cameraObject.transform.position = new Vector3(0f, 0f, -10f);
@@ -213,7 +212,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             camera.farClipPlane = 100f;
 
             _cubeObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            _cubeObject.name = "RaycastToolTestsCube";
+            _cubeObject.name = "SimulateMouseInputDryRunTestsCube";
             _cubeObject.transform.position = Vector3.zero;
         }
 
@@ -249,17 +248,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
-        private static async Task<RaycastResponse> ExecuteRaycast(Vector2 inputPosition)
+        private static async Task<SimulateMouseInputResponse> ExecuteDryRun(Vector2 inputPosition)
         {
-            RaycastTool tool = new RaycastTool();
-            JObject parameters = new JObject
+            SimulateMouseInputUseCase useCase = new SimulateMouseInputUseCase();
+            SimulateMouseInputSchema parameters = new SimulateMouseInputSchema
             {
-                ["x"] = inputPosition.x,
-                ["y"] = inputPosition.y
+                DryRun = true,
+                X = inputPosition.x,
+                Y = inputPosition.y
             };
 
-            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(parameters, CancellationToken.None);
-            return (RaycastResponse)baseResponse;
+            return await useCase.ExecuteAsync(parameters, CancellationToken.None);
         }
     }
 }

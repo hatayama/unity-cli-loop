@@ -469,22 +469,44 @@ func TestWriteToolFailureClassifiesAcceptedResponseTimeout(t *testing.T) {
 	}
 }
 
-func TestUnknownCommandErrorIncludesAvailableCommands(t *testing.T) {
+// Verifies unknown-command details expose at most five closest suggestions, with typos ranked first.
+func TestUnknownCommandErrorIncludesSuggestedCommands(t *testing.T) {
+	available := []string{
+		"clear-console",
+		"compile",
+		"control-play-mode",
+		"execute-dynamic-code",
+		"find-game-objects",
+		"focus-window",
+		"get-hierarchy",
+		"get-logs",
+		"launch",
+		"list",
+		"run-tests",
+		"screenshot",
+		"sync",
+	}
 	cliErr := UnknownCommandError(
-		"missing",
-		[]string{"launch", "compile"},
+		"compil",
+		available,
 		ErrorContext{ProjectRoot: "/tmp/MyProject"},
 	)
 
 	if cliErr.ErrorCode != ErrorCodeUnknownCommand {
 		t.Fatalf("error code mismatch: %#v", cliErr)
 	}
-	available, ok := cliErr.Details["AvailableCommands"].([]string)
+	suggested, ok := cliErr.Details["SuggestedCommands"].([]string)
 	if !ok {
-		t.Fatalf("available commands missing: %#v", cliErr.Details)
+		t.Fatalf("suggested commands missing: %#v", cliErr.Details)
 	}
-	if len(available) == 0 || available[len(available)-1] != "compile" {
-		t.Fatalf("available commands mismatch: %#v", available)
+	if len(suggested) == 0 || len(suggested) > maxCommandSuggestions {
+		t.Fatalf("suggested commands length out of range: %#v", suggested)
+	}
+	if suggested[0] != "compile" {
+		t.Fatalf("expected compile first for typo compil, got %#v", suggested)
+	}
+	if _, hasAvailable := cliErr.Details["AvailableCommands"]; hasAvailable {
+		t.Fatalf("AvailableCommands should be removed: %#v", cliErr.Details)
 	}
 }
 

@@ -87,6 +87,12 @@ func dispatcherV2ProjectDetectedError(projectRoot string, v2Project dispatcherV2
 	}
 }
 
+// dispatcherV2ModeNotice builds the stderr notice announcing delegation to the V2 CLI.
+// Why: delegation happens implicitly, so the executed CLI generation and version are otherwise invisible to the caller.
+func dispatcherV2ModeNotice(version string) string {
+	return "uloop: executing in V2 mode (" + dispatcherV2CLIPackageName + "@" + version + ")\n"
+}
+
 // runDispatcherV2CLI installs and executes the V2 CLI while preserving the original command arguments.
 // Why: the dispatcher must select the CLI generation before command parsing can change user-supplied arguments.
 func runDispatcherV2CLI(ctx context.Context, version string, args []string, stdout io.Writer, stderr io.Writer) (int, error) {
@@ -106,7 +112,7 @@ func runDispatcherV2CLI(ctx context.Context, version string, args []string, stdo
 	if err != nil {
 		return 0, err
 	}
-	_, err = io.WriteString(stderr, "uloop: executing in V2 mode\n")
+	_, err = io.WriteString(stderr, dispatcherV2ModeNotice(version))
 	if err != nil {
 		return 0, err
 	}

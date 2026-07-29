@@ -221,8 +221,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Collect_WhenCountCapReachedBeforeThis_OmitsThisAndReportsTruncated()
         {
-            // Verifies that when locals already fill the count cap, the "this" entry is dropped and
-            // truncation is reported per the existing TryAppendEntry contract.
+            // Verifies that when locals already fill the count cap, the "this" entry is dropped from
+            // Entries but still counted in TruncatedVariableNames / TruncatedVariableCount.
             int localCount = SourcePausePointConstants.MaxCapturedVariableCount;
             object[] locals = new object[localCount * 2];
             for (int i = 0; i < localCount; i++)
@@ -239,6 +239,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(frame.Entries.Count, Is.EqualTo(SourcePausePointConstants.MaxCapturedVariableCount));
             Assert.That(frame.Entries.Any(entry => entry.Name == "this"), Is.False);
             Assert.That(frame.Truncated, Is.True);
+            Assert.That(frame.TruncatedVariableCount, Is.GreaterThan(0));
+            Assert.That(frame.TruncatedVariableNames, Does.Contain("this"));
+        }
+
+        [Test]
+        public void Collect_WhenVariableCountExceedsCap_ReportsTruncatedNamesUpToLimitAndExactCount()
+        {
+            // Verifies count-cap overflow keeps collecting names (capped at 20) with an exact total.
+            int discarded = SourcePausePointConstants.MaxTruncatedVariableNamesReported + 5;
+            int localCount = SourcePausePointConstants.MaxCapturedVariableCount + discarded;
+            object[] locals = new object[localCount * 2];
+            for (int i = 0; i < localCount; i++)
+            {
+                locals[i * 2] = $"local{i}";
+                locals[i * 2 + 1] = i;
+            }
+
+            UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(frame.Entries.Count, Is.EqualTo(SourcePausePointConstants.MaxCapturedVariableCount));
+            Assert.That(frame.Truncated, Is.True);
+            Assert.That(frame.TruncatedVariableCount, Is.EqualTo(discarded));
+            Assert.That(frame.TruncatedVariableNames.Count, Is.EqualTo(SourcePausePointConstants.MaxTruncatedVariableNamesReported));
+            Assert.That(frame.TruncatedVariableNames[0], Is.EqualTo($"local{SourcePausePointConstants.MaxCapturedVariableCount}"));
+        }
+
+        [Test]
+        public void Collect_WhenUnderCountCap_ReportsEmptyTruncatedNames()
+        {
+            // Verifies no truncation metadata when every variable fits under the count cap.
+            object[] locals = { "speed", 5, "damage", 3 };
+
+            UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
+                null, Array.Empty<object>(), locals);
+
+            Assert.That(frame.Truncated, Is.False);
+            Assert.That(frame.TruncatedVariableCount, Is.EqualTo(0));
+            Assert.That(frame.TruncatedVariableNames, Is.Empty);
         }
 
         [Test]

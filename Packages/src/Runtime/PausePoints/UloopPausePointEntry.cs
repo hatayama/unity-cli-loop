@@ -31,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             IsEnabled = true;
             Message = "Pause point enabled.";
             CapturedVariables = Array.Empty<UloopCapturedVariable>();
+            TruncatedVariableNames = Array.Empty<string>();
             _capturedVariableHistory = new Queue<UloopPausePointCapturedHistoryFrame>(maxHistory);
         }
 
@@ -54,6 +55,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string Message { get; private set; }
         public IReadOnlyList<UloopCapturedVariable> CapturedVariables { get; private set; }
         public bool CapturedVariablesTruncated { get; private set; }
+        public IReadOnlyList<string> TruncatedVariableNames { get; private set; }
+        public int TruncatedVariableCount { get; private set; }
         public int HistoryDroppedCount { get; private set; }
         public string ClearedReason { get; private set; } = string.Empty;
         public string StatusBeforeClear { get; private set; } = string.Empty;
@@ -169,10 +172,14 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int hitSequence,
             int frameCount,
             IReadOnlyList<UloopCapturedVariable> capturedVariables,
-            bool capturedVariablesTruncated)
+            bool capturedVariablesTruncated,
+            IReadOnlyList<string> truncatedVariableNames,
+            int truncatedVariableCount)
         {
             Debug.Assert(hitSequence > 0, "hitSequence must be greater than zero");
             Debug.Assert(capturedVariables != null, "capturedVariables must not be null");
+            Debug.Assert(truncatedVariableNames != null, "truncatedVariableNames must not be null");
+            Debug.Assert(truncatedVariableCount >= 0, "truncatedVariableCount must not be negative");
 
             if (HitCount == 0)
             {
@@ -192,6 +199,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 : "Pause point hit; Unity pause was requested.";
             CapturedVariables = capturedVariables;
             CapturedVariablesTruncated = capturedVariablesTruncated;
+            TruncatedVariableNames = truncatedVariableNames;
+            TruncatedVariableCount = truncatedVariableCount;
 
             if (_capturedVariableHistory.Count == MaxHistory)
             {
@@ -254,6 +263,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 recommendedNextAction,
                 CapturedVariables,
                 CapturedVariablesTruncated,
+                TruncatedVariableNames,
+                TruncatedVariableCount,
                 ClearedReason,
                 StatusBeforeClear,
                 LateHitDiscardedAfterClear);

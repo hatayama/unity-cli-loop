@@ -16,7 +16,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Value has not changed across the last {0} evaluations. Watch values only refresh " +
             "when the Editor is paused on a changed frame, so confirm the linked pause point has " +
             "been hit again if you expect this value to be different (a marker on a conditional " +
-            "line freezes after its first hit).";
+            "line freezes after its first hit). A custom ToString() that omits changing fields " +
+            "can also make a changing value appear frozen; in that case watch a more specific " +
+            "field or property instead.";
+
+        private const string TruncatedPreviewFreezeHintSuffix =
+            " Note: the compared values are truncated previews - changes beyond the element or " +
+            "length cap are invisible to this comparison.";
 
         public static string EvaluateFreezeHint(IReadOnlyList<WatchHistoryResponse> history)
         {
@@ -35,9 +41,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string firstValue = recent[0].Value;
             bool allIdentical = recent.All(entry => entry.Value == firstValue);
-            return allIdentical
-                ? string.Format(FreezeHintMessageFormat, MinIdenticalEvaluationsForHint)
-                : string.Empty;
+            if (!allIdentical)
+            {
+                return string.Empty;
+            }
+
+            string hint = string.Format(FreezeHintMessageFormat, MinIdenticalEvaluationsForHint);
+            // Why: truncated previews can stay identical while elements beyond the cap change,
+            // so the freeze hint would otherwise blame a missed pause-point hit incorrectly.
+            if (recent.Any(entry => entry.Truncated))
+            {
+                return hint + TruncatedPreviewFreezeHintSuffix;
+            }
+
+            return hint;
         }
     }
 }

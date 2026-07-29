@@ -22,6 +22,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Keeps a single hit's payload small enough for the CLI response and for the console-like
         // pause-point evidence to stay skimmable, mirroring the truncation-by-cap pattern MatchingLogs uses.
         public const int MaxCapturedVariableCount = 50;
+        // How many discarded variable names to surface when the count cap drops extras. The exact
+        // discarded count is still reported in full via TruncatedVariableCount.
+        public const int MaxTruncatedVariableNamesReported = 20;
         public const int MaxCapturedVariableValueLength = 256;
         // Mirrors UloopPausePointRegistry.DefaultMaxPreviewElements (the Runtime-owned per-marker
         // default enforced at Enable time) instead of a second independent literal, so the two
@@ -135,5 +138,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Enabling a pause point by file and line requires Debug code optimization. The project "
             + "is currently set to Release; switch the Editor's Code Optimization mode to Debug "
             + "(the bug icon in the main toolbar) and recompile, then retry.";
+
+        // Machine-readable failure codes for enable/clear validation responses. Callers branch on
+        // these instead of English Message substrings; names follow the existing PAUSE_POINT_*
+        // vocabulary used by the CLI error envelope.
+        public const string ErrorCodeInvalidArgument = "INVALID_ARGUMENT";
+        public const string ErrorCodeReleaseCodeOptimization = "PAUSE_POINT_RELEASE_CODE_OPTIMIZATION";
+        public const string ErrorCodeResolveFailed = "PAUSE_POINT_RESOLVE_FAILED";
+        public const string ErrorCodePatchFailed = "PAUSE_POINT_PATCH_FAILED";
+
+        // Why: Debug mode is lost on every Editor restart (including uloop launch -r), so the
+        // recovery steps must remind callers to re-switch after restart rather than only once.
+        public const string ReleaseCodeOptimizationRecommendedNextAction =
+            "Switch the Editor to Debug code optimization, recompile, then re-run the same enable "
+            + "command: (1) uloop execute-dynamic-code --code \"UnityEditor.Compilation.CompilationPipeline.codeOptimization "
+            + "= UnityEditor.Compilation.CodeOptimization.Debug; return UnityEditor.Compilation.CompilationPipeline"
+            + ".codeOptimization.ToString();\" (2) uloop compile. Note: the Debug setting reverts to the "
+            + "'Code Optimization On Startup' preference whenever the Editor restarts, including uloop launch -r.";
+
+        // Why: resolve failures have several distinct root causes (wrong path form, non-executable
+        // line, stale PDBs after a Code Optimization switch); the skill troubleshooting reference
+        // covers the patterns so this next-action stays short and stable.
+        public const string ResolveFailedRecommendedNextAction =
+            "Check that --file is the project-relative path Unity shows (Assets/... or Packages/<package-id>/...) "
+            + "and that --line is on or after an executable statement inside a method body. After a code edit "
+            + "or a Code Optimization switch, run uloop compile and retry. See the pause-point skill's "
+            + "troubleshooting reference for specific failure patterns.";
     }
 }

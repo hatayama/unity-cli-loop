@@ -63,6 +63,21 @@ func TestFilterPausePointCapturedVariablesByName(t *testing.T) {
 		if !result.CapturedVariableNameFilterNoMatch {
 			t.Fatal("expected CapturedVariableNameFilterNoMatch to be true when nothing matches")
 		}
+		const wantWarning = "No captured variable matched the requested names; the hit captured other variables. Check CapturedVariableNamesNotFound for the names that were absent."
+		if result.Warning != wantWarning {
+			t.Fatalf("expected human-readable Warning for no-match filter: %q", result.Warning)
+		}
+	})
+
+	t.Run("empty pre-filter snapshot keeps no-match flag but skips Warning", func(t *testing.T) {
+		// Verifies an unhit status (no variables yet) does not blame the requested names.
+		result := filterPausePointCapturedVariablesByName(pausePointStatusResponse{}, []string{"velocity"})
+		if !result.CapturedVariableNameFilterNoMatch {
+			t.Fatal("expected CapturedVariableNameFilterNoMatch to stay true on an empty snapshot")
+		}
+		if result.Warning != "" {
+			t.Fatalf("expected no Warning when the snapshot had no variables before filtering: %q", result.Warning)
+		}
 	})
 
 	t.Run("composes with captured-variables names mode: filter first, then strip values", func(t *testing.T) {

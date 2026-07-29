@@ -26,6 +26,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ReloadExternalSceneChanges { get; set; } = true;
 
         /// <summary>
+        /// How long the CLI waits for compilation to complete, in seconds.
+        /// Unity ignores this value; it is consumed by the CLI.
+        /// Why no [Description]: first-party schema properties must keep long-form agent guidance
+        /// in skill files (see FirstPartyToolSchemaMetadataTests), not runtime metadata.
+        /// </summary>
+        public int CompileWaitTimeoutSeconds { get; set; } = 600;
+
+        /// <summary>
         /// Internal request identifier used for delayed result recovery across domain reload.
         /// </summary>
         [Browsable(false)]

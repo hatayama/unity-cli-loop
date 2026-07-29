@@ -42,18 +42,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             public byte[] AssemblyBytes { get; }
 
+            public byte[] PdbBytes { get; }
+
             public BuildAttemptResult(
                 string updatedSource,
                 CompilerDiagnostics diagnostics,
                 Dictionary<string, List<string>> ambiguousTypeCandidates,
                 List<string> autoInjectedNamespaces,
-                byte[] assemblyBytes)
+                byte[] assemblyBytes,
+                byte[] pdbBytes)
             {
                 UpdatedSource = updatedSource;
                 Diagnostics = diagnostics;
                 AmbiguousTypeCandidates = ambiguousTypeCandidates;
                 AutoInjectedNamespaces = autoInjectedNamespaces;
                 AssemblyBytes = assemblyBytes;
+                PdbBytes = pdbBytes;
             }
         }
 
@@ -135,6 +139,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     attemptResult.AmbiguousTypeCandidates,
                     attemptResult.AutoInjectedNamespaces,
                     attemptResult.AssemblyBytes,
+                    attemptResult.PdbBytes,
                     referenceResolutionMilliseconds,
                     buildMilliseconds,
                     buildCount,
@@ -210,9 +215,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         autoResult);
 
                     byte[] assemblyBytes = null;
+                    byte[] pdbBytes = null;
                     if (diagnostics.Errors.Count == 0)
                     {
                         assemblyBytes = File.ReadAllBytes(dllPath);
+                        // Why read before delete: portable PDB is required for Assembly.Load to
+                        // attach sequence points; the temp file is deleted with the dll below.
+                        string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
+                        if (File.Exists(pdbPath))
+                        {
+                            pdbBytes = File.ReadAllBytes(pdbPath);
+                        }
                     }
 
                     return new BuildAttemptResult(
@@ -220,7 +233,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         diagnostics,
                         autoResult.AmbiguousTypeCandidates,
                         autoInjectedNamespaces,
-                        assemblyBytes);
+                        assemblyBytes,
+                        pdbBytes);
                 }
             }
             finally

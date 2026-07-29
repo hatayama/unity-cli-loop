@@ -341,6 +341,7 @@ func runEnablePausePointAndAwait(
 		triggerArgs:           triggerArgs,
 		startPath:             startPath,
 		resumePlay:            resumePlay,
+		markerJustEnabled:     true,
 	}
 
 	return runPausePointWaitAfterEnable(
@@ -382,7 +383,7 @@ func runPausePointWaitAfterEnable(
 	stderr io.Writer,
 ) int {
 	spinner := clicore.NewToolSpinner(stderr, pausePointEnableCommandName)
-	response, state, triggerResult, resumeResult, err := waitForPausePoint(ctx, connection, options)
+	response, state, triggerResult, resumeResult, hasNewHitBaseline, err := waitForPausePoint(ctx, connection, options)
 	spinner.Stop()
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
@@ -409,13 +410,15 @@ func runPausePointWaitAfterEnable(
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
-		// Unity's warning can come from either the enable response or the status poll that observed
-		// the hit, so both are passed; the join drops the repeat when they carry the same text.
+		// Why not join enableFields.Warning into Warning: that text is an enable-time patch
+		// diagnostic (for example "may not hit on pre-existing GameObjects") and contradicts a
+		// successful hit when folded into the hit-time Warning. It is exposed separately.
 		payload := buildPausePointHitPayload(pausePointHitPayloadInputs{
 			response:            response,
 			logs:                logs,
 			logsErr:             logsErr,
-			unityWarning:        joinPausePointWarnings(enableFields.Warning, response.Warning),
+			unityWarning:        response.Warning,
+			enableTimeWarning:   enableFields.Warning,
 			triggerResult:       triggerResult,
 			awaitedPausePointID: options.id,
 			expectations:        expectations,
@@ -432,11 +435,14 @@ func runPausePointWaitAfterEnable(
 		return 0
 	}
 
-	if state == pausePointWaitStateTimeout {
+	// Why skip clear when hasNewHitBaseline: the continuous/trace marker is still armed, and the
+	// timeout hint tells the caller to await again (with --resume-play). Clearing here would disarm
+	// it and discard the raw capture holder, making that recovery path impossible.
+	if state == pausePointWaitStateTimeout && !hasNewHitBaseline {
 		clearPausePointAfterWaitTimeout(ctx, connection, options.id)
 	}
 
-	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state)
+	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state, hasNewHitBaseline)
 	waitErr.Command = pausePointEnableCommandName
 	if enableFields.Warning != "" {
 		waitErr.Details["EnableWarning"] = enableFields.Warning
@@ -461,10 +467,9 @@ func runPausePointWaitAfterEnable(
 	return 1
 }
 
-// joinPausePointWarnings concatenates the warnings that apply to one response, dropping empty ones
-// and repeats. Repeats are possible because the same text can reach a hit payload from two sources —
-// the enable response and the status poll that observed the hit — and printing it twice reads as two
-// separate problems.
+// joinPausePointWarnings concatenates hit-time warnings for one response, dropping empty ones and
+// repeats. Inputs are status-poll text (usually empty), matching-logs diagnosis, and trigger-refusal
+// text — enable-time patch diagnostics are not joined here; they use EnableTimeWarning.
 func joinPausePointWarnings(warnings ...string) string {
 	unique := make([]string, 0, len(warnings))
 	for _, warning := range warnings {

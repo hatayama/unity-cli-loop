@@ -49,6 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                                 EvaluatedAtUtc = "2026-06-03T00:00:01.0000000Z",
                                 Success = true,
                                 Value = "3",
+                                Truncated = false,
                                 ErrorTypeName = "",
                                 ErrorMessage = ""
                             }

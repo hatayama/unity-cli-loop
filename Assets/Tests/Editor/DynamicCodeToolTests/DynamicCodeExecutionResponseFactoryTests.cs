@@ -192,6 +192,120 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// Verifies a stack frame naming user-snippet.cs prepends the user-snippet line log.
+        /// </summary>
+        [Test]
+        public void ConvertExecutionResultToResponse_WhenExceptionStackHasUserSnippet_PrependsLineLog()
+        {
+            DynamicCodeExecutionResponseFactory factory = new();
+            Exception exception = ExceptionWithStackTrace(
+                new NullReferenceException("Object reference not set to an instance of an object."),
+                "  at DynamicCode.GeneratedClass.Execute () [0x00000] in user-snippet.cs:line 3\n"
+                + "  at io.github.hatayama.UnityCliLoop.FirstPartyTools.CommandRunner.Run ()");
+            ExecutionResult result = new()
+            {
+                Success = false,
+                ErrorMessage = "Runtime exception",
+                Exception = exception,
+                Logs = new List<string> { "prior" }
+            };
+
+            ExecuteDynamicCodeResponse response = factory.ConvertExecutionResultToResponse(result);
+
+            Assert.That(response.Logs[0], Is.EqualTo(
+                "Exception at user snippet line 3: Object reference not set to an instance of an object."));
+            Assert.That(response.Logs, Contains.Item("Exception: Object reference not set to an instance of an object."));
+        }
+
+        /// <summary>
+        /// Verifies CommandRunner-style Logs (no Exception field) still get a snippet-line header.
+        /// </summary>
+        [Test]
+        public void ConvertExecutionResultToResponse_WhenLogsContainUnitySnippetFrame_PrependsLineLog()
+        {
+            DynamicCodeExecutionResponseFactory factory = new();
+            ExecutionResult result = new()
+            {
+                Success = false,
+                ErrorMessage = "Object reference not set to an instance of an object",
+                Logs = new List<string>
+                {
+                    "Execution exception: Object reference not set to an instance of an object",
+                    "Stack trace:   at UnityCliLoop.Dynamic.DynamicCommand.ExecuteAsync () "
+                    + "[0x00017] in /tmp/UnityCliLoopCompilation/user-snippet.cs:3 "
+                }
+            };
+
+            ExecuteDynamicCodeResponse response = factory.ConvertExecutionResultToResponse(result);
+
+            Assert.That(response.Logs[0], Is.EqualTo(
+                "Exception at user snippet line 3: Object reference not set to an instance of an object"));
+        }
+
+        /// <summary>
+        /// Verifies stacks without user-snippet.cs leave Logs without a snippet-line header.
+        /// </summary>
+        [Test]
+        public void TryExtractUserSnippetLineNumber_WhenStackHasNoUserSnippet_ReturnsFalse()
+        {
+            bool extracted = DynamicCodeExecutionResponseFactory.TryExtractUserSnippetLineNumber(
+                "  at System.String.ToString ()\n  at Some.Other.Type.Method ()",
+                out int lineNumber);
+
+            Assert.That(extracted, Is.False);
+            Assert.That(lineNumber, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies the first user-snippet.cs:line N frame is extracted from a stack string.
+        /// </summary>
+        [Test]
+        public void TryExtractUserSnippetLineNumber_WhenStackContainsUserSnippet_ReturnsLine()
+        {
+            bool extracted = DynamicCodeExecutionResponseFactory.TryExtractUserSnippetLineNumber(
+                "  at Foo.Bar () in /tmp/wrapper.cs:line 40\n"
+                + "  at DynamicCode.GeneratedClass.Execute () in user-snippet.cs:line 3\n"
+                + "  at DynamicCode.GeneratedClass.Execute () in user-snippet.cs:line 7",
+                out int lineNumber);
+
+            Assert.That(extracted, Is.True);
+            Assert.That(lineNumber, Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// Verifies Unity/Mono frames that omit the "line" keyword still extract the snippet line.
+        /// </summary>
+        [Test]
+        public void TryExtractUserSnippetLineNumber_WhenUnityFormatOmitsLineKeyword_ReturnsLine()
+        {
+            bool extracted = DynamicCodeExecutionResponseFactory.TryExtractUserSnippetLineNumber(
+                "  at UnityCliLoop.Dynamic.DynamicCommand.ExecuteAsync () "
+                + "[0x00017] in /tmp/UnityCliLoopCompilation/user-snippet.cs:3 ",
+                out int lineNumber);
+
+            Assert.That(extracted, Is.True);
+            Assert.That(lineNumber, Is.EqualTo(3));
+        }
+
+        private static Exception ExceptionWithStackTrace(Exception exception, string stackTrace)
+        {
+            return new StackTraceOverrideException(exception.Message, stackTrace);
+        }
+
+        private sealed class StackTraceOverrideException : Exception
+        {
+            private readonly string _stackTrace;
+
+            public StackTraceOverrideException(string message, string stackTrace)
+                : base(message)
+            {
+                _stackTrace = stackTrace;
+            }
+
+            public override string StackTrace => _stackTrace;
+        }
+
+        /// <summary>
         /// Verifies cancelled results are recognized and mapped to the neutral cancellation response.
         /// </summary>
         [Test]

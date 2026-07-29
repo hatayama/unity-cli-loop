@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
+	"github.com/hatayama/unity-cli-loop/common/vibelog"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
@@ -183,7 +185,7 @@ func TestWaitForCompileCompletionReturnsReadyStatusResult(t *testing.T) {
 		return compileStatusResponse{Ready: true, HasResult: true, Result: json.RawMessage(`{"Success":true}`)}, nil
 	})
 
-	result, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+	result, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:   connection,
 		requestID:    requestID,
 		timeout:      time.Second,
@@ -224,7 +226,7 @@ func TestWaitForCompileCompletionWritesPollLifecycleVibeLogs(t *testing.T) {
 		}, nil
 	})
 
-	result, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+	result, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:   connection,
 		requestID:    requestID,
 		timeout:      time.Second,
@@ -274,7 +276,7 @@ func TestWaitForCompileCompletionForceCompileWaitsForStoredResult(t *testing.T) 
 		}, nil
 	})
 
-	result, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+	result, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:     connection,
 		requestID:      requestID,
 		forceRecompile: true,
@@ -315,7 +317,7 @@ func TestWaitForCompileCompletionForceCompileTimesOutWithoutStoredResult(t *test
 		return compileStatusResponse{Ready: true, HasResult: false}, nil
 	})
 
-	_, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+	_, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:     connection,
 		requestID:      requestID,
 		forceRecompile: true,
@@ -339,7 +341,7 @@ func TestWaitForCompileCompletionWritesTimeoutVibeLog(t *testing.T) {
 		return compileStatusResponse{Ready: false, IsCompiling: true, Message: "Compiling"}, nil
 	})
 
-	_, completed, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+	_, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
 		connection:   connection,
 		requestID:    requestID,
 		timeout:      20 * time.Millisecond,
@@ -378,7 +380,7 @@ func TestWaitForCompileCompletionWritesCancellationVibeLog(t *testing.T) {
 		return compileStatusResponse{Ready: false, IsDomainReloadInProgress: true}, nil
 	})
 
-	_, completed, err := waitForCompileCompletionWithDeps(ctx, compileCompletionOptions{
+	_, completed, _, err := waitForCompileCompletionWithDeps(ctx, compileCompletionOptions{
 		connection:   connection,
 		requestID:    requestID,
 		timeout:      time.Second,
@@ -411,42 +413,7 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 	}
 
 	enableCliVibeLog(t)
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
-	defer func() {
-		_ = listener.Close()
-	}()
-
-	serverErr := make(chan error, 1)
-	go func() {
-		conn, err := listener.Accept()
-		if err != nil {
-			serverErr <- err
-			return
-		}
-		defer func() {
-			_ = conn.Close()
-		}()
-
-		if _, err := unityipc.Read(bufio.NewReader(conn)); err != nil {
-			serverErr <- err
-			return
-		}
-
-		accepted := []byte(`{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`)
-		if err := unityipc.Write(conn, accepted); err != nil {
-			serverErr <- err
-			return
-		}
-
-		final := []byte(`{"jsonrpc":"2.0","result":{"Accepted":true},"id":1}`)
-		if err := unityipc.Write(conn, final); err != nil {
-			serverErr <- err
-			return
-		}
-	}()
+	endpoint, serverErr := startCompileAcceptOnceServer(t)
 
 	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
 		return compileStatusResponse{
@@ -458,10 +425,7 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 
 	projectRoot := t.TempDir()
 	connection := unityipc.Connection{
-		Endpoint: unityipc.Endpoint{
-			Network: "tcp",
-			Address: listener.Addr().String(),
-		},
+		Endpoint:    endpoint,
 		ProjectRoot: projectRoot,
 	}
 	params := map[string]any{
@@ -487,6 +451,7 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 		`"response_received":true`,
 		`"force_recompile":true`,
 		`"reload_external_scene_changes":false`,
+		`"timeout_ms":600000`,
 	} {
 		if !strings.Contains(logContent, expected) {
 			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
@@ -498,6 +463,184 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 		t.Fatalf("server failed: %v", err)
 	default:
 	}
+}
+
+// Verifies runCompileWithDomainReloadWaitWithDeps wires CompileWaitTimeoutSeconds into
+// the wait deadline and COMPILE_WAIT_TIMEOUT message (not only the wait helper itself).
+func TestRunCompileWithDomainReloadWaitUsesConfiguredTimeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	enableCliVibeLog(t)
+	endpoint, serverErr := startCompileAcceptOnceServer(t)
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		return compileStatusResponse{Ready: false, IsCompiling: true, Message: "Compiling"}, nil
+	})
+
+	projectRoot := t.TempDir()
+	connection := unityipc.Connection{
+		Endpoint:    endpoint,
+		ProjectRoot: projectRoot,
+	}
+	params := map[string]any{
+		compileWaitTimeoutParam: 1,
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, params, &stdout, &stderr, deps)
+	if code != 1 {
+		t.Fatalf("expected timeout exit 1: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Compile status wait timed out after 1000ms") {
+		t.Fatalf("timeout message missing configured duration: %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), `"ErrorCode": "COMPILE_WAIT_TIMEOUT"`) &&
+		!strings.Contains(stderr.String(), `"ErrorCode":"COMPILE_WAIT_TIMEOUT"`) {
+		t.Fatalf("expected COMPILE_WAIT_TIMEOUT envelope: %s", stderr.String())
+	}
+	assertCompileWaitTimeoutEnvelopeDetails(t, stderr.Bytes(), true)
+
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	if !strings.Contains(logContent, `"timeout_ms":1000`) {
+		t.Fatalf("prepared vibe log should record configured timeout_ms=1000:\n%s", logContent)
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
+
+// Verifies invalid CompileWaitTimeoutSeconds fails before a compile request is dispatched.
+func TestRunCompileWithDomainReloadWaitRejectsNonPositiveTimeout(t *testing.T) {
+	enableCliVibeLog(t)
+	projectRoot := t.TempDir()
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: "127.0.0.1:1",
+		},
+		ProjectRoot: projectRoot,
+	}
+	params := map[string]any{
+		compileWaitTimeoutParam: 0,
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	queryCalls := 0
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		queryCalls++
+		return compileStatusResponse{}, nil
+	})
+
+	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, params, &stdout, &stderr, deps)
+	if code != 1 {
+		t.Fatalf("expected invalid timeout exit 1: code=%d stderr=%s", code, stderr.String())
+	}
+	if queryCalls != 0 {
+		t.Fatalf("compile status must not be queried for invalid timeout: calls=%d", queryCalls)
+	}
+	logFiles, err := filepath.Glob(filepath.Join(projectRoot, vibelog.CLIVibeLogDirectory, vibelog.CLIVibeLogPrefix+"_*.json"))
+	if err != nil {
+		t.Fatalf("failed to glob CLI Vibe logs: %v", err)
+	}
+	if len(logFiles) != 0 {
+		t.Fatalf("compile request must not write vibe logs for invalid timeout: %#v", logFiles)
+	}
+	if !strings.Contains(stderr.String(), "positive integer") {
+		t.Fatalf("expected positive integer validation error: %s", stderr.String())
+	}
+}
+
+// Verifies timeouts above the Unity result retention window warn on stderr before compile proceeds.
+func TestRunCompileWithDomainReloadWaitWarnsWhenTimeoutExceedsRetention(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	endpoint, serverErr := startCompileAcceptOnceServer(t)
+	// Why Success:false: Success:true triggers post-compile warmup against a live Editor
+	// and would hang this unit test. The warning is emitted before send/wait.
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		return compileStatusResponse{
+			Ready:     true,
+			HasResult: true,
+			Result:    json.RawMessage(`{"Success":false,"ErrorCount":1,"WarningCount":0}`),
+		}, nil
+	})
+
+	connection := unityipc.Connection{
+		Endpoint:    endpoint,
+		ProjectRoot: t.TempDir(),
+	}
+	params := map[string]any{
+		compileWaitTimeoutParam: compileWaitTimeoutRetentionWarningSeconds + 1,
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, params, &stdout, &stderr, deps)
+	if code != 1 {
+		t.Fatalf("expected failed compile envelope exit 1: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "exceeds the Unity-side compile result retention window (20 minutes)") {
+		t.Fatalf("expected retention warning on stderr: %s", stderr.String())
+	}
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server failed: %v", err)
+	default:
+	}
+}
+
+// startCompileAcceptOnceServer accepts one compile IPC session and returns accepted + final responses.
+func startCompileAcceptOnceServer(t *testing.T) (unityipc.Endpoint, <-chan error) {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = listener.Close()
+	})
+
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverErr <- acceptErr
+			return
+		}
+		defer func() {
+			_ = conn.Close()
+		}()
+
+		if _, readErr := unityipc.Read(bufio.NewReader(conn)); readErr != nil {
+			serverErr <- readErr
+			return
+		}
+
+		accepted := []byte(`{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`)
+		if writeErr := unityipc.Write(conn, accepted); writeErr != nil {
+			serverErr <- writeErr
+			return
+		}
+
+		final := []byte(`{"jsonrpc":"2.0","result":{"Accepted":true},"id":1}`)
+		if writeErr := unityipc.Write(conn, final); writeErr != nil {
+			serverErr <- writeErr
+			return
+		}
+	}()
+
+	return unityipc.Endpoint{
+		Network: "tcp",
+		Address: listener.Addr().String(),
+	}, serverErr
 }
 
 func TestShouldWaitForCompileStatusRequiresDispatchedTransportError(t *testing.T) {
@@ -552,11 +695,127 @@ func TestWritePostCompileWarmupWarningReportsNonFatalFailure(t *testing.T) {
 	}
 }
 
+// Verifies CompileWaitTimeoutSeconds is parsed from tool params with the default
+// kept when absent and non-positive or non-integer values rejected.
+func TestCompileWaitTimeoutFromParams(t *testing.T) {
+	cases := []struct {
+		name    string
+		params  map[string]any
+		want    time.Duration
+		wantErr bool
+	}{
+		{
+			name:   "missing uses default",
+			params: map[string]any{},
+			want:   compileWaitTimeout,
+		},
+		{
+			name:   "nil value uses default",
+			params: map[string]any{compileWaitTimeoutParam: nil},
+			want:   compileWaitTimeout,
+		},
+		{
+			name:   "int value",
+			params: map[string]any{compileWaitTimeoutParam: 90},
+			want:   90 * time.Second,
+		},
+		{
+			name:   "float64 whole number",
+			params: map[string]any{compileWaitTimeoutParam: float64(120)},
+			want:   120 * time.Second,
+		},
+		{
+			name:   "json.Number",
+			params: map[string]any{compileWaitTimeoutParam: json.Number("45")},
+			want:   45 * time.Second,
+		},
+		{
+			name:    "zero is rejected",
+			params:  map[string]any{compileWaitTimeoutParam: 0},
+			wantErr: true,
+		},
+		{
+			name:    "negative is rejected",
+			params:  map[string]any{compileWaitTimeoutParam: -1},
+			wantErr: true,
+		},
+		{
+			name:    "non-integer float is rejected",
+			params:  map[string]any{compileWaitTimeoutParam: 1.5},
+			wantErr: true,
+		},
+		{
+			name:   "max representable duration is accepted",
+			params: map[string]any{compileWaitTimeoutParam: compileWaitTimeoutMaxSeconds},
+			want:   time.Duration(compileWaitTimeoutMaxSeconds) * time.Second,
+		},
+		{
+			name:    "overflowing duration is rejected",
+			params:  map[string]any{compileWaitTimeoutParam: compileWaitTimeoutMaxSeconds + 1},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := compileWaitTimeoutFromParams(tc.params)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("timeout mismatch: got %v want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// Verifies waitForCompileCompletionWithDeps stops when the configured timeout elapses
+// instead of waiting for the default compileWaitTimeout.
+func TestWaitForCompileCompletionRespectsConfiguredTimeout(t *testing.T) {
+	connection := compileWaitTestConnection(t)
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		return compileStatusResponse{Ready: false, IsCompiling: true}, nil
+	})
+
+	startedAt := time.Now()
+	_, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+		connection:   connection,
+		requestID:    "compile_configured_timeout",
+		timeout:      40 * time.Millisecond,
+		pollInterval: 5 * time.Millisecond,
+	}, deps)
+	elapsed := time.Since(startedAt)
+	if err != nil {
+		t.Fatalf("waitForCompileCompletion failed: %v", err)
+	}
+	if completed {
+		t.Fatal("compile wait should time out while still compiling")
+	}
+	if elapsed < 40*time.Millisecond {
+		t.Fatalf("timed out too early: %v", elapsed)
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("timed out too late for a 40ms deadline: %v", elapsed)
+	}
+}
+
 // Tests that compile wait timeout guidance teaches the caller to verify Editor
 // responsiveness instead of assuming a freeze, because agents have terminated
 // whole sessions after misreading this timeout as a frozen Editor.
 func TestCompileWaitTimeoutError(t *testing.T) {
-	cliErr := compileWaitTimeoutError("/tmp/MyProject")
+	cliErr := compileWaitTimeoutError(
+		"/tmp/MyProject",
+		90*time.Second,
+		nil,
+		90*time.Second,
+		compilePendingRecordLifetime-90*time.Second,
+	)
 
 	if cliErr.ErrorCode != clierrors.ErrorCodeCompileWaitTimeout {
 		t.Fatalf("error code mismatch: %#v", cliErr)
@@ -567,13 +826,13 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 	if cliErr.ProjectRoot != "/tmp/MyProject" {
 		t.Fatalf("project root mismatch: %#v", cliErr)
 	}
-	expectedMessage := "Compile status wait timed out after 600000ms. This does not mean the Unity Editor is frozen; the compile may simply still be running."
+	expectedMessage := "Compile status wait timed out after 90000ms. This does not mean the Unity Editor is frozen; the compile may simply still be running."
 	if cliErr.Message != expectedMessage {
 		t.Fatalf("message mismatch: %#v", cliErr.Message)
 	}
 	expectedActions := []string{
 		"Run a light command such as `uloop get-logs --max-count 1` to check whether Unity is responsive before treating this as a freeze.",
-		"Unity-side compile continues after this timeout; retry `uloop compile` — the result remains retrievable for about 10 more minutes without `uloop launch -r`.",
+		"Unity keeps compiling and refuses other commands with UNITY_SERVER_BUSY until it finishes. Re-run `uloop compile`: it will reattach to the in-flight compile and wait for its result instead of starting a new one. The result stays retrievable for roughly 18 more minutes.",
 		clierrors.ApiUpdateConsentModalNextAction,
 		"Only if Unity does not respond to any command, restart it with `uloop launch -r`.",
 	}
@@ -582,8 +841,151 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 	}
 	for i, expected := range expectedActions {
 		if cliErr.NextActions[i] != expected {
-			t.Fatalf("next action %d mismatch: %#v", i, cliErr.NextActions)
+			t.Fatalf("next action %d mismatch:\n got: %#v\nwant: %#v", i, cliErr.NextActions[i], expected)
 		}
+	}
+}
+
+// Verifies a wait that consumes the full retention window omits the remaining-minutes sentence.
+func TestCompileWaitTimeoutErrorOmitsRemainingMinutesWhenNoneLeft(t *testing.T) {
+	cliErr := compileWaitTimeoutError(
+		"/tmp/MyProject",
+		compilePendingRecordLifetime,
+		nil,
+		compilePendingRecordLifetime,
+		0,
+	)
+	reattach := cliErr.NextActions[1]
+	if strings.Contains(reattach, "retrievable for roughly") {
+		t.Fatalf("remaining-minutes sentence should be omitted: %#v", reattach)
+	}
+	if !strings.Contains(reattach, "reattach to the in-flight compile") {
+		t.Fatalf("reattach guidance missing: %#v", reattach)
+	}
+}
+
+// Verifies NextActions use the caller-supplied retentionRemaining instead of (TTL - timeout).
+func TestCompileWaitTimeoutErrorUsesCallerRetentionRemaining(t *testing.T) {
+	cliErr := compileWaitTimeoutError(
+		"/tmp/MyProject",
+		10*time.Minute,
+		nil,
+		10*time.Minute,
+		time.Minute,
+	)
+	reattach := cliErr.NextActions[1]
+	if strings.Contains(reattach, "roughly 10 more minutes") {
+		t.Fatalf("must not derive remaining from wait timeout: %#v", reattach)
+	}
+	if !strings.Contains(reattach, "roughly 1 more minutes") {
+		t.Fatalf("must use caller retentionRemaining: %#v", reattach)
+	}
+}
+
+// Verifies COMPILE_WAIT_TIMEOUT Details include the last observed status flags and WaitedMs.
+func TestCompileWaitTimeoutErrorIncludesLastObservedStatusDetails(t *testing.T) {
+	lastStatus := &compileStatusResponse{
+		IsCompiling:              true,
+		IsUpdating:               false,
+		IsDomainReloadInProgress: true,
+	}
+	cliErr := compileWaitTimeoutError(
+		"/tmp/MyProject",
+		time.Second,
+		lastStatus,
+		1234*time.Millisecond,
+		compilePendingRecordLifetime-time.Second,
+	)
+	if cliErr.Details["WaitedMs"] != int64(1234) {
+		t.Fatalf("WaitedMs mismatch: %#v", cliErr.Details["WaitedMs"])
+	}
+	if cliErr.Details["IsCompiling"] != true {
+		t.Fatalf("IsCompiling mismatch: %#v", cliErr.Details)
+	}
+	if cliErr.Details["IsUpdating"] != false {
+		t.Fatalf("IsUpdating mismatch: %#v", cliErr.Details)
+	}
+	if cliErr.Details["IsDomainReloadInProgress"] != true {
+		t.Fatalf("IsDomainReloadInProgress mismatch: %#v", cliErr.Details)
+	}
+}
+
+// Verifies timeout Details omit status flags when no compile status was observed.
+func TestCompileWaitTimeoutErrorOmitsStatusDetailsWhenUnobserved(t *testing.T) {
+	cliErr := compileWaitTimeoutError(
+		"/tmp/MyProject",
+		time.Second,
+		nil,
+		time.Second,
+		compilePendingRecordLifetime-time.Second,
+	)
+	if _, ok := cliErr.Details["IsCompiling"]; ok {
+		t.Fatalf("IsCompiling should be omitted without an observation: %#v", cliErr.Details)
+	}
+	if cliErr.Details["WaitedMs"] != int64(1000) {
+		t.Fatalf("WaitedMs mismatch: %#v", cliErr.Details["WaitedMs"])
+	}
+}
+
+// Verifies the wait helper returns the last successful status observation on timeout.
+func TestWaitForCompileCompletionReturnsLastStatusOnTimeout(t *testing.T) {
+	connection := compileWaitTestConnection(t)
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		return compileStatusResponse{
+			Ready:                    false,
+			IsCompiling:              true,
+			IsDomainReloadInProgress: true,
+		}, nil
+	})
+
+	_, completed, lastStatus, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+		connection:   connection,
+		requestID:    "compile_last_status",
+		timeout:      30 * time.Millisecond,
+		pollInterval: 5 * time.Millisecond,
+	}, deps)
+	if err != nil {
+		t.Fatalf("waitForCompileCompletion failed: %v", err)
+	}
+	if completed {
+		t.Fatal("expected timeout")
+	}
+	if lastStatus == nil {
+		t.Fatal("expected last observed status")
+	}
+	if !lastStatus.IsCompiling || !lastStatus.IsDomainReloadInProgress {
+		t.Fatalf("last status mismatch: %#v", lastStatus)
+	}
+}
+
+// assertCompileWaitTimeoutEnvelopeDetails checks the run/attach wiring that passes
+// lastStatus and WaitedMs into the COMPILE_WAIT_TIMEOUT stderr envelope.
+func assertCompileWaitTimeoutEnvelopeDetails(t *testing.T, stderr []byte, wantCompiling bool) {
+	t.Helper()
+	jsonStart := bytes.IndexByte(stderr, '{')
+	if jsonStart < 0 {
+		t.Fatalf("stderr has no JSON envelope: %s", string(stderr))
+	}
+	var envelope clierrors.CLIErrorEnvelope
+	if err := json.Unmarshal(stderr[jsonStart:], &envelope); err != nil {
+		t.Fatalf("stderr is not a JSON error envelope: %v\n%s", err, string(stderr))
+	}
+	if envelope.Error.ErrorCode != clierrors.ErrorCodeCompileWaitTimeout {
+		t.Fatalf("error code mismatch: %#v", envelope.Error.ErrorCode)
+	}
+	details := envelope.Error.Details
+	if details == nil {
+		t.Fatal("COMPILE_WAIT_TIMEOUT Details missing")
+	}
+	if details["IsCompiling"] != wantCompiling {
+		t.Fatalf("IsCompiling mismatch: %#v", details["IsCompiling"])
+	}
+	waitedMs, ok := details["WaitedMs"].(float64)
+	if !ok {
+		t.Fatalf("WaitedMs missing or wrong type: %#v", details["WaitedMs"])
+	}
+	if waitedMs < 1000 {
+		t.Fatalf("WaitedMs should cover the configured 1s wait: %#v", waitedMs)
 	}
 }
 
@@ -602,6 +1004,9 @@ func compileWaitTestDeps(
 	replacement func(context.Context, unityipc.Connection, string) (compileStatusResponse, error),
 ) compileWaitDeps {
 	return compileWaitDeps{
-		queryCompileStatus: replacement,
+		queryCompileStatus:     replacement,
+		attachProbeTimeout:     40 * time.Millisecond,
+		attachProbeInterval:    5 * time.Millisecond,
+		attachWaitPollInterval: 5 * time.Millisecond,
 	}
 }

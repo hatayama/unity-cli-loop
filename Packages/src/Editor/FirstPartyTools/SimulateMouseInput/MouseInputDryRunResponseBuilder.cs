@@ -1,6 +1,4 @@
 #nullable enable
-using System.Threading;
-using System.Threading.Tasks;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -8,56 +6,55 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Checks what a screenshot-compatible Game View coordinate hits in 3D physics.
+    /// Builds simulate-mouse-input dry-run responses from Game View physics raycast results.
+    /// Kept outside ULOOP_HAS_INPUT_SYSTEM guards so dry-run works without the Input System package.
     /// </summary>
-    [UnityCliLoopTool]
-    public class RaycastTool : UnityCliLoopTool<RaycastSchema, RaycastResponse>
+    internal static class MouseInputDryRunResponseBuilder
     {
-        public override string ToolName => "raycast";
-
-        protected override Task<RaycastResponse> ExecuteAsync(RaycastSchema parameters, CancellationToken ct)
+        internal static SimulateMouseInputResponse Build(
+            Vector2 inputPosition,
+            float maxDistance,
+            int layerMask)
         {
-            ct.ThrowIfCancellationRequested();
-
-            if (parameters.MaxDistance <= 0f || float.IsNaN(parameters.MaxDistance) || float.IsInfinity(parameters.MaxDistance))
+            if (maxDistance <= 0f || float.IsNaN(maxDistance) || float.IsInfinity(maxDistance))
             {
-                return Task.FromResult(new RaycastResponse
+                return new SimulateMouseInputResponse
                 {
                     Success = false,
-                    Message = $"MaxDistance must be positive and finite, got: {parameters.MaxDistance}"
-                });
+                    Message = $"MaxDistance must be positive and finite, got: {maxDistance}"
+                };
             }
 
-            Vector2 inputPosition = new Vector2(parameters.X, parameters.Y);
             GameViewRaycastResult raycastResult = GameViewRaycastUtility.RaycastFromInputPosition(
                 inputPosition,
-                parameters.MaxDistance,
-                parameters.LayerMask,
+                maxDistance,
+                layerMask,
                 true);
 
             if (!raycastResult.CameraFound)
             {
-                RaycastResponse noCameraResponse = CreateBaseResponse(raycastResult.Conversion);
+                SimulateMouseInputResponse noCameraResponse = CreateBaseResponse(raycastResult.Conversion);
                 noCameraResponse.Success = false;
-                noCameraResponse.Message = "Camera.main was not found. Add an active camera tagged MainCamera before using raycast.";
-                LogRaycastExecuted(inputPosition, noCameraResponse);
-                return Task.FromResult(noCameraResponse);
+                noCameraResponse.Message =
+                    "Camera.main was not found. Add an active camera tagged MainCamera before using simulate-mouse-input --dry-run.";
+                LogDryRunExecuted(inputPosition, noCameraResponse);
+                return noCameraResponse;
             }
 
             if (raycastResult.Hits.Length == 0)
             {
-                RaycastResponse noHitResponse = CreateBaseResponse(raycastResult.Conversion);
+                SimulateMouseInputResponse noHitResponse = CreateBaseResponse(raycastResult.Conversion);
                 noHitResponse.Success = true;
                 noHitResponse.Hit = false;
                 noHitResponse.Message = $"No physics hit at ({inputPosition.x:F1}, {inputPosition.y:F1}).";
                 noHitResponse.CameraName = raycastResult.Camera.name;
                 noHitResponse.CameraPath = GameObjectPathUtility.GetFullPath(raycastResult.Camera.gameObject);
-                LogRaycastExecuted(inputPosition, noHitResponse);
-                return Task.FromResult(noHitResponse);
+                LogDryRunExecuted(inputPosition, noHitResponse);
+                return noHitResponse;
             }
 
             RaycastHit nearestHit = raycastResult.Hits[0];
-            RaycastResponse response = CreateBaseResponse(raycastResult.Conversion);
+            SimulateMouseInputResponse response = CreateBaseResponse(raycastResult.Conversion);
             response.Success = true;
             response.Hit = true;
             response.Message = $"Hit {nearestHit.collider.gameObject.name} at ({inputPosition.x:F1}, {inputPosition.y:F1}).";
@@ -74,15 +71,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.HitNormalX = nearestHit.normal.x;
             response.HitNormalY = nearestHit.normal.y;
             response.HitNormalZ = nearestHit.normal.z;
-            LogRaycastExecuted(inputPosition, response);
-            return Task.FromResult(response);
+            LogDryRunExecuted(inputPosition, response);
+            return response;
         }
 
-        private static void LogRaycastExecuted(Vector2 inputPosition, RaycastResponse response)
+        private static void LogDryRunExecuted(Vector2 inputPosition, SimulateMouseInputResponse response)
         {
             VibeLogger.LogInfo(
-                "raycast_executed",
-                $"Raycast executed at ({inputPosition.x:F1}, {inputPosition.y:F1})",
+                "simulate_mouse_input_dry_run",
+                $"simulate-mouse-input dry-run executed at ({inputPosition.x:F1}, {inputPosition.y:F1})",
                 new
                 {
                     CameraName = response.CameraName,
@@ -93,9 +90,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 });
         }
 
-        private static RaycastResponse CreateBaseResponse(GameViewCoordinateConversion conversion)
+        private static SimulateMouseInputResponse CreateBaseResponse(GameViewCoordinateConversion conversion)
         {
-            return new RaycastResponse
+            return new SimulateMouseInputResponse
             {
                 InputCoordinateSystem = UnityCliLoopConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW,
                 UnityCoordinateSystem = UnityCliLoopConstants.COORDINATE_SYSTEM_BOTTOM_LEFT_GAME_VIEW,

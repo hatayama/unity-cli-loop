@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -271,7 +272,7 @@ func TestWaitForPausePointJoinsTriggerResult(t *testing.T) {
 			return 0
 		}
 
-		_, _, triggerResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		_, _, triggerResult, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 			id:             "jump",
 			timeoutSeconds: 1,
 			timeout:        time.Second,
@@ -307,7 +308,7 @@ func TestWaitForPausePointJoinsTriggerResult(t *testing.T) {
 			return 0
 		}
 
-		_, _, triggerResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		_, _, triggerResult, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 			id:             "jump",
 			timeoutSeconds: 1,
 			timeout:        time.Second,
@@ -362,7 +363,7 @@ func TestWaitForPausePointSkipsTriggerWhenNotArmed(t *testing.T) {
 		return 0
 	}
 
-	_, state, triggerResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	_, state, triggerResult, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "does-not-exist",
 		timeoutSeconds: 1,
 		timeout:        time.Second,
@@ -462,6 +463,98 @@ func TestRunWaitForPausePointEmbedsTriggerResultOnTimeout(t *testing.T) {
 	}
 	if triggerResult["Completed"] != true {
 		t.Fatalf("TriggerResult should report Completed=true: %#v", triggerResult)
+	}
+}
+
+// Verifies a --trigger result is embedded in the expired error envelope's Details after the
+// trigger was actually dispatched (arm confirmed Enabled first; later polls return Expired).
+func TestRunWaitForPausePointEmbedsTriggerResultOnExpired(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalClear := clearPausePointStatus
+	originalDispatch := dispatchPausePointTriggerCommand
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	defer func() {
+		queryPausePointStatus = originalQuery
+		clearPausePointStatus = originalClear
+		dispatchPausePointTriggerCommand = originalDispatch
+		pausePointStatusPoll = originalPoll
+	}()
+
+	// Why stateful: an unconditional Expired on the first query makes arm confirmation fail, so
+	// the trigger is never dispatched and only a "not dispatched" placeholder TriggerResult appears.
+	statusQueryCount := 0
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		statusQueryCount++
+		if statusQueryCount == 1 {
+			return pausePointStatusResponse{
+				Id:          id,
+				Status:      pausePointStatusEnabled,
+				IsEnabled:   true,
+				EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+			}, nil
+		}
+		return pausePointStatusResponse{
+			Id:          id,
+			Status:      pausePointStatusExpired,
+			Expired:     true,
+			IsEnabled:   false,
+			EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		}, nil
+	}
+	clearPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusCleared}, nil
+	}
+	dispatchPausePointTriggerCommand = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		command string,
+		commandArgs []string,
+		startPath string,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		_, _ = stdout.Write([]byte(`{"Success":true}`))
+		return 0
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+		timeout:        50 * time.Millisecond,
+		triggerCommand: "simulate-keyboard",
+		triggerArgs:    []string{"--action", "Press"},
+	}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected expired failure, got %d with stdout %s stderr %s", code, stdout.String(), stderr.String())
+	}
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
+	if envelope.Error.ErrorCode != clierrors.ErrorCodePausePointExpired {
+		t.Fatalf("error code mismatch: %#v", envelope.Error)
+	}
+	triggerResult, ok := envelope.Error.Details["TriggerResult"].(map[string]any)
+	if !ok {
+		t.Fatalf("TriggerResult detail missing or wrong shape: %#v", envelope.Error.Details)
+	}
+	if triggerResult["Command"] != "simulate-keyboard --action Press" {
+		t.Fatalf("TriggerResult command mismatch: %#v", triggerResult)
+	}
+	if triggerResult["Completed"] != true {
+		t.Fatalf("TriggerResult should report Completed=true after dispatch: %#v", triggerResult)
+	}
+	if errorText, _ := triggerResult["Error"].(string); errorText != "" {
+		t.Fatalf("TriggerResult Error should be empty after a successful dispatch: %#v", triggerResult)
 	}
 }
 

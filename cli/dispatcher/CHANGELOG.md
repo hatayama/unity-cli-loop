@@ -1,5 +1,33 @@
 # Changelog
 
+## [3.0.0-beta.27](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.26...dispatcher-v3.0.0-beta.27) (2026-07-29)
+
+
+### Features
+
+* address pause point round 13-14 leftover improvements ([#2065](https://github.com/hatayama/unity-cli-loop/issues/2065)) ([ce21b4f](https://github.com/hatayama/unity-cli-loop/commit/ce21b4f5d1d3693cb9837288da15f4b43102fabe))
+
+## [3.0.0-beta.26](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.25...dispatcher-v3.0.0-beta.26) (2026-07-29)
+
+
+### Features
+
+* address pause point round 13-14 verification feedback ([#2059](https://github.com/hatayama/unity-cli-loop/issues/2059)) ([62db173](https://github.com/hatayama/unity-cli-loop/commit/62db17327b467ab44250d1ca59f8b136129251ae))
+
+## [3.0.0-beta.25](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.24...dispatcher-v3.0.0-beta.25) (2026-07-28)
+
+
+### Features
+
+* configurable compile wait timeout and working timeout recovery ([#2036](https://github.com/hatayama/unity-cli-loop/issues/2036)) ([fc867c3](https://github.com/hatayama/unity-cli-loop/commit/fc867c3914f979dbc8f31f26be4c5753f66e1c36))
+
+## [3.0.0-beta.24](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.23...dispatcher-v3.0.0-beta.24) (2026-07-27)
+
+
+### Bug Fixes
+
+* V2 delegation notice now names the V2 CLI version that ran ([#2027](https://github.com/hatayama/unity-cli-loop/issues/2027)) ([5ed982d](https://github.com/hatayama/unity-cli-loop/commit/5ed982d6d523714355f33b7fe8856f773079afeb))
+
 ## [3.0.0-beta.23](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.22...dispatcher-v3.0.0-beta.23) (2026-07-27)
 
 
