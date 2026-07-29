@@ -1,6 +1,6 @@
 # What's New in V3
 
-[日本語](whats-new-v3_ja.md)
+English | [日本語](whats-new-v3_ja.md)
 
 V3 replaces the npm-distributed CLI with a native Go binary and moves the transport from TCP port management to OS-native IPC. Driving Unity from an AI agent no longer needs a Node.js setup or any port management.
 
