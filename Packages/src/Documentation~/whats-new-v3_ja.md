@@ -37,17 +37,6 @@ uloop pause-point-status --id "Assets/Scripts/Enemy.cs:42"
 uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"
 ```
 
-### `raycast` — Game View座標に何が当たるかを調べる
-
-`raycast` は `Camera.main` からGame Viewの座標へレイを飛ばし、3D物理で何にヒットするかを返します。座標系は `simulate-mouse-ui` と同じ左上原点なので、注釈付きスクリーンショットの座標をそのまま渡して、クリックする前に対象を確認できます。レスポンスには、ヒットしたGameObjectの名前とパス、レイヤー、距離、ヒット位置、ヒット法線が含まれます。
-
-ヒットした場合もしなかった場合も `CameraName` と `CameraPath` が返るので、想定外の `No physics hit` を診断するときはここを最初に見るのが近道です。シーン内の別のカメラに `MainCamera` タグが付いていると、そちらが `Camera.main` の解決に勝ってしまい、意図した視点からレイが飛んでいない場合があります。なお、これはUnity Physicsのレイキャストであり、UI EventSystemのレイキャストではありません。
-
-```bash
-uloop raycast --x 960 --y 540
-uloop raycast --x 960 --y 540 --layer-mask 1
-```
-
 > `set-game-view-size` もV3で追加されました。Game Viewのカスタム解像度を取得・設定でき（`uloop set-game-view-size --width 1920 --height 1080`）、`screenshot --capture-mode rendering` の座標系を実行ごとに安定させたいときに使えます。
 
 ## CLI・配布方法の変更
@@ -56,7 +45,7 @@ uloop raycast --x 960 --y 540 --layer-mask 1
 - **2層構成** — `PATH` 上に置かれるグローバルな `uloop` dispatcherが1つあり、プロジェクトごとの `uloop-project-runner` に処理を委譲します。runnerのバージョンは各プロジェクトの `.uloop/project-runner-pin.json` から決まり、バージョン別のユーザーキャッシュへ自動的にダウンロードされます。そのため、あるプロジェクトを更新しても他のプロジェクトには影響しません。
 - **インストーラの真正性検証** — リリース成果物にはsigstoreのattestationが付いています。ドキュメント化されたインストール手順では、インストーラを実行する前に `gh attestation verify` で署名ワークフローとリリースタグのコミットに対して検証します。
 - **ランタイム出力の上限** — `.uloop/outputs/` の各サブフォルダは20ファイルまでに制限され、古いものから削除されます。スクリーンショット・テスト結果・ヒエラルキーダンプが無制限に溜まり続けることはなくなりました。
-- **V2プロジェクトへの自動委譲** — V3 dispatcherは、プロジェクトがまだV2パッケージに解決されていることを検出すると、対応するV2 `uloop-cli` リリースをバージョン別キャッシュへ導入し、コマンドを転送します。V2とV3のプロジェクトを併用する場合は、V3 dispatcherをインストールしたままにしておくのが正しい運用です。ただし委譲そのものはnpmを経由するため、Node.js 22以降が必要です。
+- **V2プロジェクトへの自動委譲** — V3 dispatcherは、プロジェクトがまだV2パッケージに解決されていることを検出すると、対応するV2 `uloop-cli` リリースをバージョン別キャッシュへ導入し、コマンドを転送します。V2とV3のプロジェクトを併用する場合は、V3 dispatcherをインストールしたままにしておくのが正しい運用です。ただし、**V2プロジェクトを使い続ける場合に限り**、委譲がnpmを経由するためNode.js 22以降が必要です。V3プロジェクトだけになれば、Node.jsは一切不要です。
 
 ## V3で削除されたもの
 

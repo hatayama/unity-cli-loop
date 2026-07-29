@@ -37,17 +37,6 @@ uloop pause-point-status --id "Assets/Scripts/Enemy.cs:42"
 uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"
 ```
 
-### `raycast` — check what a Game View coordinate hits
-
-`raycast` casts a ray from `Camera.main` through a Game View coordinate and reports what 3D physics hits. It takes the same top-left coordinate system as `simulate-mouse-ui`, so you can feed it a coordinate straight from an annotated screenshot and confirm the target before clicking. The response names the hit GameObject and its path, layer, distance, hit point, and hit normal.
-
-Both hit and no-hit responses report `CameraName` and `CameraPath`, which is the fastest way to diagnose a surprising `No physics hit` result — another camera tagged `MainCamera` can silently win the `Camera.main` resolution, so the ray may not start from the viewpoint you assumed. Note that this uses Unity Physics raycasts, not UI EventSystem raycasts.
-
-```bash
-uloop raycast --x 960 --y 540
-uloop raycast --x 960 --y 540 --layer-mask 1
-```
-
 > `set-game-view-size` also arrives in V3: it reads and sets the Game View custom rendering resolution (`uloop set-game-view-size --width 1920 --height 1080`), which is useful for keeping the coordinate space of `screenshot --capture-mode rendering` stable across runs.
 
 ## CLI and Distribution Changes
@@ -56,7 +45,7 @@ uloop raycast --x 960 --y 540 --layer-mask 1
 - **Two-layer architecture** — a single global `uloop` dispatcher lives on your `PATH` and delegates to a per-project `uloop-project-runner`. The runner version comes from `.uloop/project-runner-pin.json` in each project and is downloaded into a per-version user cache automatically, so upgrading one project does not disturb another.
 - **Installer authenticity verification** — release assets carry sigstore attestations. The documented install flow verifies them with `gh attestation verify` against the signing workflow and the release tag's commit before running the installer.
 - **Bounded runtime output** — each subfolder under `.uloop/outputs/` is capped at 20 files, with the oldest removed first, so screenshots, test results, and hierarchy dumps no longer accumulate without limit.
-- **Automatic delegation to V2 projects** — when the V3 dispatcher detects that a project still resolves to the V2 package, it installs the matching V2 `uloop-cli` release into a per-version cache and forwards the command. Keeping the V3 dispatcher installed is the supported way to work across V2 and V3 projects at the same time. Delegation itself still needs Node.js 22+, since it goes through npm.
+- **Automatic delegation to V2 projects** — when the V3 dispatcher detects that a project still resolves to the V2 package, it installs the matching V2 `uloop-cli` release into a per-version cache and forwards the command. Keeping the V3 dispatcher installed is the supported way to work across V2 and V3 projects at the same time. Note that Node.js 22+ is needed **only if you keep using V2 projects**, because delegation goes through npm; once everything is on V3, Node.js is not needed at all.
 
 ## Removed in V3
 
