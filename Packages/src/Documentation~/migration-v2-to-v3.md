@@ -22,7 +22,7 @@ Before you begin, **commit your work or take a backup**. The wizard rewrites mat
 
 ## Step 1: Start Unity on V3 and decline Safe Mode
 
-This guide picks up at the moment **the Unity Editor starts with the updated V3 package**. How you get there depends on how you updated the package:
+As a precondition, the steps below start from **the Unity Editor starting up with the updated V3 package**. How you get there depends on how you updated the package:
 
 - **If you edited `Packages/manifest.json` directly while Unity was closed** — just start Unity. No restart is needed; this launch is already the first startup on V3.
 - **If you updated from Package Manager while Unity was running** — close Unity and reopen it. The dialog that asks whether to enter Safe Mode only appears while the Editor is starting up, so a running session never shows it and you cannot follow the rest of this guide.
