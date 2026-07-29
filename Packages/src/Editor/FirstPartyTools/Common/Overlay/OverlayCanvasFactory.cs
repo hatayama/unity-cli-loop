@@ -30,19 +30,61 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _instance = null;
         }
 
+        // Why no create: screenshot must hide an already-visible overlay without spawning one.
+        public GameObject TryGetExisting()
+        {
+            ReclaimExistingInstance();
+            if (_instance == null)
+            {
+                return null;
+            }
+
+            return _instance.gameObject;
+        }
+
         public void EnsureExists()
+        {
+            if (_instance != null)
+            {
+                // Why reactivate: screenshot hide leaves the canvas inactive; the next simulate-*
+                // call must bring it back without instantiating a second DontDestroyOnLoad copy.
+                EnsureActive(_instance.gameObject);
+                return;
+            }
+
+            ReclaimExistingInstance();
+            if (_instance != null)
+            {
+                EnsureActive(_instance.gameObject);
+                return;
+            }
+
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(CANVAS_PREFAB_PATH);
+            Debug.Assert(prefab != null, $"InputVisualizationCanvas prefab not found at {CANVAS_PREFAB_PATH}");
+
+            GameObject go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            Object.DontDestroyOnLoad(go);
+            _instance = go.GetComponent<InputVisualizationCanvas>();
+            Debug.Assert(_instance != null, "InputVisualizationCanvas component not found on prefab");
+        }
+
+        // Domain Reload resets _instance but DontDestroyOnLoad objects survive; reclaim one and destroy duplicates.
+        private void ReclaimExistingInstance()
         {
             if (_instance != null)
             {
                 return;
             }
 
-            // Domain Reload resets _instance but DontDestroyOnLoad objects survive; reclaim one and destroy duplicates
+            // Why include inactive: screenshot SetActive(false) would otherwise hide the only canvas
+            // from default FindObjectsByType and make EnsureExists spawn a duplicate.
 #if UNITY_6000_4_OR_NEWER
-            InputVisualizationCanvas[] existing = Object.FindObjectsByType<InputVisualizationCanvas>();
+            InputVisualizationCanvas[] existing = Object.FindObjectsByType<InputVisualizationCanvas>(
+                FindObjectsInactive.Include);
 #else
-            InputVisualizationCanvas[] existing =
-                Object.FindObjectsByType<InputVisualizationCanvas>(FindObjectsSortMode.None);
+            InputVisualizationCanvas[] existing = Object.FindObjectsByType<InputVisualizationCanvas>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.None);
 #endif
             for (int i = 0; i < existing.Length; i++)
             {
@@ -55,18 +97,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     Object.DestroyImmediate(existing[i].gameObject);
                 }
             }
-            if (_instance != null)
+        }
+
+        private static void EnsureActive(GameObject overlayRoot)
+        {
+            // Why Canvas too: screenshot hide disables Canvas.enabled as well as the GameObject.
+            // Recovering only activeSelf leaves badges permanently invisible while looking active.
+            Canvas overlayCanvas = overlayRoot.GetComponent<Canvas>();
+            if (overlayCanvas != null && !overlayCanvas.enabled)
             {
-                return;
+                overlayCanvas.enabled = true;
             }
 
-            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(CANVAS_PREFAB_PATH);
-            Debug.Assert(prefab != null, $"InputVisualizationCanvas prefab not found at {CANVAS_PREFAB_PATH}");
-
-            GameObject go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
-            Object.DontDestroyOnLoad(go);
-            _instance = go.GetComponent<InputVisualizationCanvas>();
-            Debug.Assert(_instance != null, "InputVisualizationCanvas component not found on prefab");
+            if (!overlayRoot.activeSelf)
+            {
+                overlayRoot.SetActive(true);
+            }
         }
     }
 
@@ -88,6 +134,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static void EnsureExists()
         {
             ServiceValue.EnsureExists();
+        }
+
+        public static GameObject TryGetExisting()
+        {
+            return ServiceValue.TryGetExisting();
         }
     }
 }

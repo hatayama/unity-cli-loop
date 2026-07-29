@@ -39,6 +39,42 @@ namespace io.github.hatayama.UnityCliLoop.InternalAPIBridge
         }
 
         /// <summary>
+        /// Requests a Play Mode view redraw so m_TargetTexture drops Screen Space Overlay canvases
+        /// that were just deactivated.
+        /// </summary>
+        public static void RepaintMainPlayModeView()
+        {
+            EnsureMembersResolved();
+
+            EditorWindow playModeView = FindMainPlayModeView();
+            if (playModeView == null)
+            {
+                return;
+            }
+
+            playModeView.Repaint();
+        }
+
+        /// <summary>
+        /// Clears the Play Mode view RT immediately after overlay hide.
+        /// Why: scenes with no camera never rewrite m_TargetTexture, so a deactivated Screen Space
+        /// Overlay leaves its last composite in the RT forever.
+        /// </summary>
+        public static void ClearMainPlayModeViewRenderTexture()
+        {
+            RenderTexture renderTexture = GetRenderTexture();
+            if (renderTexture == null)
+            {
+                return;
+            }
+
+            RenderTexture previousActive = RenderTexture.active;
+            RenderTexture.active = renderTexture;
+            GL.Clear(true, true, Color.black);
+            RenderTexture.active = previousActive;
+        }
+
+        /// <summary>
         /// Resolve m_TargetTexture on the PlayModeView declaring type.
         /// Must not use a derived Type: GetField does not return private fields declared on base types.
         /// </summary>
