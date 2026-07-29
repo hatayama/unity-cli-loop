@@ -102,6 +102,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
+            if (parameters.Duration > SimulateInputConstants.MaxDurationSeconds)
+            {
+                return new SimulateMouseUiResponse
+                {
+                    Success = false,
+                    Message =
+                        $"Duration must be {SimulateInputConstants.MaxDurationSeconds} seconds or less, got: {parameters.Duration}. The unit is seconds, not milliseconds.",
+                    Action = MouseAction.LongPress.ToString()
+                };
+            }
+
             Vector2 inputPos = new(parameters.X, parameters.Y);
             Vector2 screenPos = MouseUiCoordinateConverter.InputToScreen(inputPos);
             PointerEventData pointerData = MouseUiPointerTargetResolver.CreatePointerPressData(eventSystem, screenPos, parameters.Button);

@@ -512,7 +512,7 @@
           },
           "Duration": {
             "type": "number",
-            "description": "Hold duration in seconds for LongPress action.",
+            "description": "Hold duration in seconds for LongPress action (max 30).",
             "default": 0.5
           },
           "Button": {
@@ -583,7 +583,7 @@
           },
           "Duration": {
             "type": "number",
-            "description": "Hold duration for LongPress, or interpolation duration for SmoothDelta (seconds). For Click, 0 = one-shot tap.",
+            "description": "Hold duration for LongPress, or interpolation duration for SmoothDelta (seconds, max 30). For Click, 0 = one-shot tap.",
             "default": 0
           },
           "DeltaX": {
@@ -632,7 +632,7 @@
           },
           "Duration": {
             "type": "number",
-            "description": "Hold duration in seconds for Press action (0 = one-shot tap). Ignored by KeyDown/KeyUp/ReleaseAll.",
+            "description": "Hold duration in seconds for Press action (0 = one-shot tap, max 30). Ignored by KeyDown/KeyUp/ReleaseAll.",
             "default": 0
           }
         }
