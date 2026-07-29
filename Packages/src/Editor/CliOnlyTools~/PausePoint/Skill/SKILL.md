@@ -172,7 +172,7 @@ If a `simulate-*` command instead returns a failure whose message says PlayMode 
 
 ## Timeout Checks
 
-If this command times out, the patched line was not reached while the command waited. Read `Error.Details.Hint` first: it names the most likely cause when PlayMode is not running, Unity is already paused, or the marker was enabled but never hit. A `PAUSE_POINT_EXPIRED` error means the marker's own `enable-pause-point --timeout-seconds` window (measured from enable, not from wait) ran out first — clear and re-enable the pause point using the returned `Id` and `TimeoutSeconds`. The countdown freezes while a hit holds the Editor paused; a manual pause without a hit does not stop it.
+If this command times out, the patched line was not reached while the command waited. Read `Error.Details.Hint` first: it names the most likely cause when PlayMode is not running, Unity is already paused, or the marker was enabled but never hit. A `PAUSE_POINT_EXPIRED` error means the marker's own `enable-pause-point --timeout-seconds` window (measured from enable, not from wait) ran out first — clear and re-enable the pause point using the returned `Id` and `TimeoutSeconds`. When `--trigger` was passed, the expired envelope also carries `Error.Details.TriggerResult` (with `Completed: false` and no `Error` field when the trigger's outcome was still unknown at expiry). The countdown freezes while a hit holds the Editor paused; a manual pause without a hit does not stop it.
 
 Use `uloop pause-point-status --id "Assets/Scripts/Enemy.cs:42"` only when you need to confirm the marker is armed or inspect the current hit state.
 

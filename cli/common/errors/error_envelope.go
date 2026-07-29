@@ -272,7 +272,7 @@ func UnknownCommandError(command string, availableCommands []string, context Err
 			"Run `uloop sync` if the local tool cache may be stale.",
 		},
 		Details: map[string]any{
-			"AvailableCommands": availableCommands,
+			"SuggestedCommands": suggestCommands(command, availableCommands),
 		},
 	}
 }

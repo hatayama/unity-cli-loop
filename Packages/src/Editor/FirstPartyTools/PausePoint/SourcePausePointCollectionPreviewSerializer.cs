@@ -95,6 +95,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return JValue.CreateNull();
             }
 
+            // Why: Collision2D's internal fields are raw instance IDs; prefer the property-based
+            // preview that exposes collider hierarchy paths when main-thread Classify is available.
+            // Why remainingDepth: without this gate a nested Collision2D would bypass the same
+            // MaxCollectionPreviewDepth cutoff that BuildObjectFieldsToken already enforces.
+            if (remainingDepth > 0
+                && SourcePausePointCollision2DPreviewBuilder.TryBuildToken(value, out JToken collision2DToken))
+            {
+                return collision2DToken;
+            }
+
             if (value is UnityEngine.Object unityObject)
             {
                 return new JValue(FormatUnityObjectElement(unityObject));
