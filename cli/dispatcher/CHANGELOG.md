@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.28](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.27...dispatcher-v3.0.0-beta.28) (2026-07-29)
+
+
+### Features
+
+* check 3D physics hits with simulate-mouse-input --dry-run ([#2072](https://github.com/hatayama/unity-cli-loop/issues/2072)) ([24225f6](https://github.com/hatayama/unity-cli-loop/commit/24225f65af305fdb486ac80b36d3c0d01bb30d01))
+
 ## [3.0.0-beta.27](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.26...dispatcher-v3.0.0-beta.27) (2026-07-29)
 
 
