@@ -21,7 +21,7 @@ Let an AI agent compile, test, and operate your Unity project from popular LLM t
 Designed to keep AI-driven development loops running autonomously inside your existing Unity projects.
 
 > [!IMPORTANT]
-> - **[What's New in V3](Packages/src/Documentation~/whats-new-v3.md)** — what changed since V2: the move to a native Go CLI, the end of port management, the new `pause-point` tool, and more
+> - **[What's New in V3](Packages/src/Documentation~/whats-new-v3.md)** — what changed since V2: the move to a native Go CLI, the end of port management, the new `pause-point` tool, and connections that stay stable with Unity in the background or several Editors running in parallel
 > - **[Migrating Custom Tools and Skills to V3](Packages/src/Documentation~/migration-v2-to-v3.md)** — for anyone with C# custom tools or hand-written skills/scripts that invoke `uloop`. Everyone else migrates just by updating the package and the CLI
 
 # Concept

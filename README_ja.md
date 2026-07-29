@@ -21,7 +21,7 @@ CLIを通じて、AIエージェントがUnityプロジェクトのコンパイ�
 AI駆動の開発ループを既存のUnityプロジェクト内で自律的に回し続けるために設計されています。
 
 > [!IMPORTANT]
-> - **[V3の新機能](Packages/src/Documentation~/whats-new-v3_ja.md)** — ネイティブGo CLIへの移行、ポート管理の廃止、`pause-point` の追加など、V2からの変更点
+> - **[V3の新機能](Packages/src/Documentation~/whats-new-v3_ja.md)** — ネイティブGo CLIへの移行、ポート管理の廃止、`pause-point` の追加、Unityがバックグラウンドにあっても複数のUnityを並列で動かしても接続が安定し続ける信頼性の向上など、V2からの変更点
 > - **[カスタムツール／スキルのV3移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md)** — C#カスタムツールや、`uloop` を呼び出す自作スキル／スクリプトを持っている人向け。それ以外の人は、パッケージとCLIを更新するだけで移行できます
 
 # コンセプト
