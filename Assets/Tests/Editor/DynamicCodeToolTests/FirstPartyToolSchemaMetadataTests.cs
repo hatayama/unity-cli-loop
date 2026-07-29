@@ -47,9 +47,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             // Tests that every enum a first-party schema exposes can be resolved by its ordinal.
             // The schema cache stores an enum default as a number while listing the members by name,
-            // so the CLI recovers the name shown in `--help` by indexing the name list with that
-            // number. Same-value aliases are allowed after the canonical name; gaps, negative
-            // values, and a [Flags] enum would make the CLI print a different member's name.
+            // so the CLI recovers the name shown in `--help` / `uloop list` by indexing that name
+            // list (Go enumValueAtIndex). Same-value aliases are allowed only after the canonical
+            // name: names[ordinal] must be the first declaration of that value (MetadataToken
+            // order). Gaps, negative values, and a [Flags] enum would make the CLI print the wrong
+            // default member name.
             Type[] schemaTypes = FirstPartySchemaTypes();
 
             Assert.That(schemaTypes, Is.Not.Empty);
@@ -77,21 +79,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                         Is.Null,
                         $"{location} is a [Flags] enum, which cannot be resolved by ordinal");
 
-                    // Why allow same-value aliases: CaptureMode.GameView shares rendering's
-                    // ordinal so agents can pass GameView. CLI default lookup still indexes the
-                    // name list by the numeric default, so the canonical name must stay at that
-                    // index and aliases must be declared after it.
+                    // Why MetadataToken order: GetFields does not guarantee declaration order, and
+                    // the CLI indexes Enum.GetNames by the numeric default. The first same-value
+                    // member in declaration order is the canonical name that must occupy that index.
+                    FieldInfo[] memberFields = propertyType.GetFields(
+                            BindingFlags.Public | BindingFlags.Static)
+                        .OrderBy(field => field.MetadataToken)
+                        .ToArray();
+
                     string[] names = Enum.GetNames(propertyType);
+                    Dictionary<long, string> canonicalNamesByValue = new();
                     HashSet<long> distinctValues = new();
                     long maxValue = -1;
-                    foreach (object member in Enum.GetValues(propertyType))
+                    foreach (FieldInfo memberField in memberFields)
                     {
-                        long value = Convert.ToInt64(member);
+                        long value = Convert.ToInt64(memberField.GetRawConstantValue());
                         Assert.That(
                             value,
                             Is.GreaterThanOrEqualTo(0),
                             $"{location} has a negative member value {value}");
                         distinctValues.Add(value);
+                        if (!canonicalNamesByValue.ContainsKey(value))
+                        {
+                            canonicalNamesByValue[value] = memberField.Name;
+                        }
+
                         if (value > maxValue)
                         {
                             maxValue = value;
@@ -109,11 +121,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                             names.Length,
                             Is.GreaterThan((int)value),
                             $"{location} is missing a canonical name at index {value}");
-                        long nameValue = Convert.ToInt64(Enum.Parse(propertyType, names[value]));
+                        string canonicalName = canonicalNamesByValue[value];
                         Assert.That(
-                            nameValue,
-                            Is.EqualTo(value),
-                            $"{location} canonical name at index {value} is '{names[value]}' with value {nameValue}");
+                            names[value],
+                            Is.EqualTo(canonicalName),
+                            $"{location} names[{value}] is '{names[value]}' but canonical is '{canonicalName}'");
                     }
 
                     checkedEnumPropertyCount++;
