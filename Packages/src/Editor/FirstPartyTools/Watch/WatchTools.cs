@@ -96,30 +96,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string EvaluatedAtUtc { get; set; } = string.Empty;
         public bool Success { get; set; }
         public string Value { get; set; } = string.Empty;
+        public bool Truncated { get; set; }
         public string ErrorTypeName { get; set; } = string.Empty;
         public string ErrorMessage { get; set; } = string.Empty;
 
         internal static WatchHistoryResponse FromEntry(WatchExpressionHistoryEntry entry)
         {
             WatchEvaluationResult result = entry.Result;
+            (string value, bool truncated) = result.Success
+                ? FormatSuccessfulValue(result.Value)
+                : (string.Empty, false);
             return new WatchHistoryResponse
             {
                 FrameCount = entry.FrameCount,
                 EvaluatedAtUtc = entry.EvaluatedAtUtc.ToString("O"),
                 Success = result.Success,
-                Value = result.Success ? FormatSuccessfulValue(result.Value) : string.Empty,
+                Value = value,
+                Truncated = truncated,
                 ErrorTypeName = result.ErrorTypeName,
                 ErrorMessage = result.ErrorMessage
             };
         }
 
         // Why: watch Value used plain ToString(), so collections collapsed to type names and
-        // looked frozen even when contents changed; reuse CapturedVariables preview rules.
-        private static string FormatSuccessfulValue(object value)
+        // looked frozen even when contents changed; reuse CapturedVariables preview rules,
+        // including element/length caps so freeze-hint comparison is not silently blind.
+        private static (string Value, bool Truncated) FormatSuccessfulValue(object value)
         {
             if (value == null)
             {
-                return "null";
+                return ("null", false);
             }
 
             bool truncated = false;
@@ -129,10 +135,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ref truncated,
                     out string preview))
             {
-                return preview;
+                // Why: capture always applies MaxCollectionPreviewValueLength; without it watch
+                // previews can grow unbounded across --max-history entries.
+                string cappedPreview = SourcePausePointVariableFormatter.ApplyValueLengthCap(
+                    preview,
+                    SourcePausePointConstants.MaxCollectionPreviewValueLength,
+                    ref truncated);
+                return (cappedPreview, truncated);
             }
 
-            return value.ToString();
+            // Why: ToString fallback keeps pre-preview scalar behavior; capping it would change
+            // ordinary watch outputs outside this PR's serializer-unification scope.
+            return (value.ToString(), false);
         }
     }
 

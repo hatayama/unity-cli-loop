@@ -26,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.Value, Is.EqualTo("[0,1,2]"));
+            Assert.That(response.Truncated, Is.False);
         }
 
         [Test]
@@ -43,6 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.Value, Is.EqualTo("[\"(9, 3)\",\"(9, 2)\"]"));
+            Assert.That(response.Truncated, Is.False);
         }
 
         [Test]
@@ -56,6 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.Value, Is.EqualTo(value.ToString()));
+            Assert.That(response.Truncated, Is.False);
         }
 
         [Test]
@@ -68,6 +71,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.Value, Is.EqualTo("null"));
+            Assert.That(response.Truncated, Is.False);
+        }
+
+        [Test]
+        public void FromEntry_WithListExceedingElementCap_TruncatesAndSetsTruncated()
+        {
+            // Verifies a 15-element list keeps only the first 10 preview elements and sets Truncated.
+            List<int> value = new List<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };
+            WatchExpressionHistoryEntry entry = CreateSuccessfulEntry(value);
+
+            WatchHistoryResponse response = WatchHistoryResponse.FromEntry(entry);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Value, Is.EqualTo("[0,1,2,3,4,5,6,7,8,9]"));
+            Assert.That(response.Truncated, Is.True);
         }
 
         private static WatchExpressionHistoryEntry CreateSuccessfulEntry(object value)
