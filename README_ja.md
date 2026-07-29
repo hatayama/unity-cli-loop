@@ -11,8 +11,8 @@
 ![GitHubCopilot](https://img.shields.io/badge/GitHub_Copilot-111?logo=githubcopilot)
 
 <p align="center">
-    <img height="450" alt="logo-black-bg" src="https://github.com/user-attachments/assets/fca3047f-9042-4bf9-83bd-58b03f061082" /><br>
-    <sub>(Logo inspired by Daft Punk's <i>Discovery</i> album art)</sub>  
+    <img height="450" alt="logo-black-bg" src="Packages/src/Documentation~/images/logo.png" /><br>
+    <sub>(Logo inspired by Daft Punk's <i>Human After All</i> album art)</sub>  
 </p>
   
 
