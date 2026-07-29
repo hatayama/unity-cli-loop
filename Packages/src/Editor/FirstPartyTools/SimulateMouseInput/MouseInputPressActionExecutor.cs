@@ -37,6 +37,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
+            if (request.Duration > SimulateInputConstants.MaxDurationSeconds)
+            {
+                return new SimulateMouseInputResponse
+                {
+                    Success = false,
+                    Message =
+                        $"Duration must be {SimulateInputConstants.MaxDurationSeconds} seconds or less, got: {request.Duration}. The unit is seconds, not milliseconds.",
+                    Action = UnityCliLoopMouseInputAction.Click.ToString()
+                };
+            }
+
             Vector2 inputPos = new(request.X, request.Y);
             GameViewCoordinateConversion conversion = ConvertInputToUnity(inputPos);
             RuntimeMouseButton button = ToRuntimeMouseButton(request.Button);
@@ -149,6 +160,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Success = false,
                     Message = $"Duration must be positive for LongPress, got: {request.Duration}",
+                    Action = UnityCliLoopMouseInputAction.LongPress.ToString()
+                };
+            }
+
+            if (request.Duration > SimulateInputConstants.MaxDurationSeconds)
+            {
+                return new SimulateMouseInputResponse
+                {
+                    Success = false,
+                    Message =
+                        $"Duration must be {SimulateInputConstants.MaxDurationSeconds} seconds or less, got: {request.Duration}. The unit is seconds, not milliseconds.",
                     Action = UnityCliLoopMouseInputAction.LongPress.ToString()
                 };
             }

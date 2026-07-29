@@ -30,6 +30,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
+            if (duration > SimulateInputConstants.MaxDurationSeconds)
+            {
+                return new SimulateKeyboardResponse
+                {
+                    Success = false,
+                    Message =
+                        $"Duration must be {SimulateInputConstants.MaxDurationSeconds} seconds or less, got: {duration}. The unit is seconds, not milliseconds.",
+                    Action = UnityCliLoopKeyboardAction.Press.ToString(),
+                    KeyName = key.ToString()
+                };
+            }
+
             string keyName = key.ToString();
             if (KeyboardKeyState.IsKeyHeld(key))
             {
