@@ -61,6 +61,11 @@ type waitForPausePointOptions struct {
 	// (if paused) before dispatching --trigger so a paused-arm workflow can fire input triggers
 	// in one CLI call.
 	resumePlay bool
+
+	// markerJustEnabled is set only by enable-pause-point --await. Why: enable finishes before the
+	// first status query, and a real hit can race into that window on continuous/trace markers.
+	// Baselining that hit would demand a later sequence that never comes (continuous pauses on hit).
+	markerJustEnabled bool
 }
 
 type pausePointStatusOptions struct {
@@ -259,9 +264,12 @@ func runWaitForPausePoint(
 		return 0
 	}
 
-	if state == pausePointWaitStateTimeout {
+	if state == pausePointWaitStateTimeout && !hasNewHitBaseline {
 		clearPausePointAfterWaitTimeout(ctx, connection, options.id)
 	}
+	// Why skip clear when hasNewHitBaseline: the continuous/trace marker is still armed, and the
+	// timeout hint tells the caller to await again (with --resume-play). Clearing here would disarm
+	// it and discard the raw capture holder, making that recovery path impossible.
 
 	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state, hasNewHitBaseline)
 	if triggerResult != nil {

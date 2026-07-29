@@ -108,10 +108,13 @@ func startPausePointWaitSideEffects(
 				Error:   "trigger was not dispatched: the marker could not be confirmed armed at wait start",
 			}
 		}
-		return nil, skippedTriggerResult, resumeResult, -1, false, true
+		// Why baselineDecided=false: a transient arm-query failure is also reported as not armed.
+		// Leaving baseline undecided lets the first successful poll establish it, so a stale
+		// continuous Hit cannot slip through as an immediate wait success.
+		return nil, skippedTriggerResult, resumeResult, -1, false, false
 	}
 
-	baselineSequence, hasBaseline := pausePointNewHitBaseline(armResponse)
+	baselineSequence, hasBaseline, baselineDecided := decidePausePointNewHitBaseline(armResponse, options.markerJustEnabled)
 
 	var resumeResult *pausePointResumePlayResult
 	if options.resumePlay {
@@ -119,21 +122,21 @@ func startPausePointWaitSideEffects(
 		resumeResult = &result
 		if result.Error != "" {
 			if options.triggerCommand == "" {
-				return nil, nil, resumeResult, baselineSequence, hasBaseline, true
+				return nil, nil, resumeResult, baselineSequence, hasBaseline, baselineDecided
 			}
 			return nil, &pausePointTriggerResult{
 				Command: pausePointTriggerCommandString(options.triggerCommand, options.triggerArgs),
 				Error:   "trigger was not dispatched: --resume-play failed to resume play mode",
-			}, resumeResult, baselineSequence, hasBaseline, true
+			}, resumeResult, baselineSequence, hasBaseline, baselineDecided
 		}
 	}
 
 	if options.triggerCommand == "" {
-		return nil, nil, resumeResult, baselineSequence, hasBaseline, true
+		return nil, nil, resumeResult, baselineSequence, hasBaseline, baselineDecided
 	}
 
 	handle := startPausePointTrigger(ctx, connection, options.startPath, options.triggerCommand, options.triggerArgs)
-	return handle, nil, resumeResult, baselineSequence, hasBaseline, true
+	return handle, nil, resumeResult, baselineSequence, hasBaseline, baselineDecided
 }
 
 // queryPausePointArmStatus reports whether the marker is enabled or already hit. A query failure is
@@ -180,8 +183,8 @@ func waitForPausePointStatus(
 			// (enable --await). Re-baselining on that first mid-wait Hit would demand a second
 			// sequence bump and never return.
 			if !baselineDecided {
-				baselineSequence, hasBaseline = pausePointNewHitBaseline(response)
-				baselineDecided = true
+				baselineSequence, hasBaseline, baselineDecided = decidePausePointNewHitBaseline(
+					response, options.markerJustEnabled)
 			}
 			state := pausePointWaitStateForPolledStatus(response, baselineSequence, hasBaseline)
 			if state != "" {
@@ -208,7 +211,8 @@ func waitForPausePointStatus(
 				lastResponse = finalResponse
 				hasResponse = true
 				if !baselineDecided {
-					baselineSequence, hasBaseline = pausePointNewHitBaseline(finalResponse)
+					baselineSequence, hasBaseline, _ = decidePausePointNewHitBaseline(
+						finalResponse, options.markerJustEnabled)
 					finalState = pausePointWaitStateForPolledStatus(finalResponse, baselineSequence, hasBaseline)
 				}
 				if finalState != "" {
@@ -277,6 +281,20 @@ func queryPausePointStatusAtTimeout(
 	}
 
 	return response, pausePointWaitStateForPolledStatus(response, baselineSequence, hasBaseline), true, nil
+}
+
+// decidePausePointNewHitBaseline returns (sequence, hasBaseline, decided) for the wait-start
+// snapshot. markerJustEnabled forces no baseline: any Hit during enable --await is the success
+// itself, including a race where the first status query already observes sequence 1.
+func decidePausePointNewHitBaseline(
+	response pausePointStatusResponse,
+	markerJustEnabled bool,
+) (int, bool, bool) {
+	if markerJustEnabled {
+		return -1, false, true
+	}
+	sequence, hasBaseline := pausePointNewHitBaseline(response)
+	return sequence, hasBaseline, true
 }
 
 // pausePointNewHitBaseline records LastHitSequence when await starts against an already-hit
