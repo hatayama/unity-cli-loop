@@ -307,18 +307,6 @@ Claude Codeはシェルコマンドをサンドボックス内で実行し、サ
 
 このパターンは**入力されたコマンド文字列**に対して照合されるため、`uloop` で始まる呼び出しが対象外になります。詳細と検証結果は [docs/claude-code-sandbox.md](/docs/claude-code-sandbox.md) を参照してください。
 
-## プロジェクトパス指定
-
-`--project-path` を省略した場合は、カレントディレクトリから Unity プロジェクトを検出して接続します。
-
-一つのLLMツールから複数のUnityインスタンスを操作したい場合、プロジェクトパスを明示的に指定します：
-
-```bash
-# プロジェクトパスで指定（絶対パス・相対パスどちらも可）
-uloop compile --project-path /Users/foo/my-unity-project
-uloop compile --project-path ../other-project
-```
-
 # 仕組み
 
 `uloop` コマンドがUnity Editorに届くまでの流れは次のとおりです。

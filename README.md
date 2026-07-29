@@ -307,18 +307,6 @@ Add `uloop *` to `sandbox.excludedCommands` in `~/.claude/settings.json` to excl
 
 The pattern is matched against **the command string as typed**, so invocations starting with `uloop` are excluded. See [docs/claude-code-sandbox.md](/docs/claude-code-sandbox.md) for details and measured results.
 
-## Project Path Specification
-
-If `--project-path` is omitted, the Unity project is detected from the current directory and connected to.
-
-To operate multiple Unity instances from a single LLM tool, explicitly specify a project path:
-
-```bash
-# Specify by project path (absolute or relative)
-uloop compile --project-path /Users/foo/my-unity-project
-uloop compile --project-path ../other-project
-```
-
 # How It Works
 
 A `uloop` command reaches the Unity Editor through the following chain:
