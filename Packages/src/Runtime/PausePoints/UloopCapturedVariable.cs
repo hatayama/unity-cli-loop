@@ -17,7 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             string value,
             string unityObjectKind,
             string unityObjectPath,
-            int unityObjectInstanceId)
+            int unityObjectInstanceId,
+            bool truncated)
         {
             Debug.Assert(!string.IsNullOrEmpty(name), "name must not be null or empty");
             Debug.Assert(!string.IsNullOrEmpty(scope), "scope must not be null or empty");
@@ -29,6 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             UnityObjectKind = unityObjectKind ?? string.Empty;
             UnityObjectPath = unityObjectPath ?? string.Empty;
             UnityObjectInstanceId = unityObjectInstanceId;
+            Truncated = truncated;
         }
 
         public string Name { get; }
@@ -38,6 +40,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string UnityObjectKind { get; }
         public string UnityObjectPath { get; }
         public int UnityObjectInstanceId { get; }
+
+        // True when this variable's value/preview was clipped (length, collection elements, or
+        // preview depth). Distinct from the response-level CapturedVariablesTruncated OR.
+        public bool Truncated { get; }
     }
 }
 #endif

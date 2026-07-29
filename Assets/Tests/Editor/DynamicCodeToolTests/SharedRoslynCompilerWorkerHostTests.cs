@@ -581,6 +581,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(programSource, Does.Not.Contain("{{"));
         }
 
+        /// <summary>
+        /// Verifies the shared worker template still emits portable PDB debug information.
+        /// </summary>
+        [Test]
+        public void CreateProgramSource_IncludesPortablePdbEmitOptions()
+        {
+            string programSource = SharedRoslynCompilerWorkerProtocol.CreateProgramSource();
+
+            Assert.That(programSource, Does.Contain("DebugInformationFormat.PortablePdb"));
+        }
+
         [Test]
         public void CreateProgramSource_WhenRequestPathPrefixHasLeadingGarbage_ShouldDecodeEncodedPath()
         {

@@ -38,18 +38,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool truncated = frame.Truncated;
             foreach (UloopPausePointCapturedVariableEntry entry in frame.Entries)
             {
-                results.Add(FormatVariable(entry.Name, entry.Scope, entry.Value, maxCollectionPreviewElementCount, ref truncated));
+                UloopCapturedVariable variable = FormatVariable(
+                    entry.Name, entry.Scope, entry.Value, maxCollectionPreviewElementCount);
+                results.Add(variable);
+                truncated |= variable.Truncated;
             }
 
             return (results, truncated);
         }
 
         private static UloopCapturedVariable FormatVariable(
-            string name, string scope, object rawValue, int maxCollectionPreviewElementCount, ref bool truncated)
+            string name, string scope, object rawValue, int maxCollectionPreviewElementCount)
         {
             if (rawValue == null)
             {
-                return new UloopCapturedVariable(name, scope, string.Empty, "null", string.Empty, string.Empty, 0);
+                return new UloopCapturedVariable(
+                    name, scope, string.Empty, "null", string.Empty, string.Empty, 0, truncated: false);
             }
 
             string typeName = rawValue.GetType().FullName;
@@ -58,8 +62,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return FormatUnityObjectVariable(name, scope, typeName, unityObjectCandidate);
             }
 
+            // Why a per-variable flag: overall CapturedVariablesTruncated alone cannot tell which
+            // value was clipped after a name filter narrows the list.
+            bool variableTruncated = false;
             if (SourcePausePointCollectionPreviewSerializer.TrySerialize(
-                    rawValue, maxCollectionPreviewElementCount, ref truncated, out string collectionPreview))
+                    rawValue, maxCollectionPreviewElementCount, ref variableTruncated, out string collectionPreview))
             {
                 // Why scale: a per-marker element-count override that raises the element cap
                 // without also raising the byte budget would still get clipped by the fixed
@@ -69,13 +76,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // the default (10 elements, 1024 chars) already implies.
                 int scaledValueLengthCap = SourcePausePointConstants.MaxCollectionPreviewValueLength
                     * maxCollectionPreviewElementCount / UloopPausePointRegistry.DefaultMaxPreviewElements;
-                string cappedPreview = ApplyValueLengthCap(collectionPreview, scaledValueLengthCap, ref truncated);
-                return new UloopCapturedVariable(name, scope, typeName, cappedPreview, string.Empty, string.Empty, 0);
+                string cappedPreview = ApplyValueLengthCap(collectionPreview, scaledValueLengthCap, ref variableTruncated);
+                return new UloopCapturedVariable(
+                    name, scope, typeName, cappedPreview, string.Empty, string.Empty, 0, variableTruncated);
             }
 
             string value = ApplyValueLengthCap(
-                SafeToString(rawValue), SourcePausePointConstants.MaxCapturedVariableValueLength, ref truncated);
-            return new UloopCapturedVariable(name, scope, typeName, value, string.Empty, string.Empty, 0);
+                SafeToString(rawValue), SourcePausePointConstants.MaxCapturedVariableValueLength, ref variableTruncated);
+            return new UloopCapturedVariable(
+                name, scope, typeName, value, string.Empty, string.Empty, 0, variableTruncated);
         }
 
         private static UloopCapturedVariable FormatUnityObjectVariable(
@@ -83,21 +92,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (!MainThreadSwitcher.IsMainThread)
             {
-                return new UloopCapturedVariable(name, scope, typeName, OffMainThreadValue, string.Empty, string.Empty, 0);
+                return new UloopCapturedVariable(
+                    name, scope, typeName, OffMainThreadValue, string.Empty, string.Empty, 0, truncated: false);
             }
 
             if (unityObjectCandidate == null)
             {
                 return new UloopCapturedVariable(
                     name, scope, typeName, DestroyedValue,
-                    UloopCapturedVariableUnityObjectKind.Destroyed, string.Empty, UnityObjectIdentifier.GetInstanceId(unityObjectCandidate));
+                    UloopCapturedVariableUnityObjectKind.Destroyed, string.Empty,
+                    UnityObjectIdentifier.GetInstanceId(unityObjectCandidate), truncated: false);
             }
 
             SourcePausePointUnityObjectClassifier.Classification classification =
                 SourcePausePointUnityObjectClassifier.Classify(unityObjectCandidate);
             return new UloopCapturedVariable(
                 name, scope, typeName, unityObjectCandidate.name,
-                classification.Kind, classification.Path, classification.InstanceId);
+                classification.Kind, classification.Path, classification.InstanceId, truncated: false);
         }
 
         private static string ApplyValueLengthCap(string value, int maxLength, ref bool truncated)

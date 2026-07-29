@@ -888,7 +888,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
             UloopCapturedVariable[] capturedVariables =
             {
-                new("speed", UloopCapturedVariableScope.Local, "System.Int32", "5", string.Empty, string.Empty, 0)
+                new("speed", UloopCapturedVariableScope.Local, "System.Int32", "5", string.Empty, string.Empty, 0, false)
             };
             UloopPausePointRegistry.HitWithCapturedVariables("jump", capturedVariables, true);
             JObject parameters = new() { ["id"] = "jump" };
@@ -1004,7 +1004,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
             UloopCapturedVariable[] capturedVariables =
             {
-                new("speed", UloopCapturedVariableScope.Local, "System.Int32", "5", string.Empty, string.Empty, 0)
+                new("speed", UloopCapturedVariableScope.Local, "System.Int32", "5", string.Empty, string.Empty, 0, false)
             };
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.HitWithCapturedVariables(
@@ -1027,10 +1027,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     new UloopPausePointCapturedVariableEntry("scores", UloopCapturedVariableScope.Local, scores),
                     new UloopPausePointCapturedVariableEntry("empty", UloopCapturedVariableScope.Local, null)
                 },
-                false);
+                false,
+                System.Array.Empty<string>(),
+                0);
             UloopCapturedVariable[] capturedVariables =
             {
-                new("scores", UloopCapturedVariableScope.Local, "System.Collections.Generic.List`1[System.Int32]", "[10,20,30]", string.Empty, string.Empty, 0)
+                new("scores", UloopCapturedVariableScope.Local, "System.Collections.Generic.List`1[System.Int32]", "[10,20,30]", string.Empty, string.Empty, 0, false)
             };
 
             UloopPausePointRegistry.HitWithCapturedFrame("jump", frame, capturedVariables, false);
@@ -1056,7 +1058,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePointCapturedVariableFrame frame = new(
                 new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 5) },
-                false);
+                false,
+                System.Array.Empty<string>(),
+                0);
             UloopPausePointRegistry.HitWithCapturedFrame(
                 "jump", frame, Array.Empty<UloopCapturedVariable>(), false);
 
@@ -1076,10 +1080,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("land", 30);
             UloopPausePointCapturedVariableFrame jumpFrame = new(
                 new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 1) },
-                false);
+                false,
+                System.Array.Empty<string>(),
+                0);
             UloopPausePointCapturedVariableFrame landFrame = new(
                 new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 2) },
-                false);
+                false,
+                System.Array.Empty<string>(),
+                0);
 
             UloopPausePointRegistry.HitWithCapturedFrame("jump", jumpFrame, Array.Empty<UloopCapturedVariable>(), false);
             UloopPausePointRegistry.HitWithCapturedFrame("land", landFrame, Array.Empty<UloopCapturedVariable>(), false);
@@ -1098,7 +1106,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("land", 30);
             UloopPausePointCapturedVariableFrame landFrame = new(
                 new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 7) },
-                false);
+                false,
+                System.Array.Empty<string>(),
+                0);
             UloopPausePointRegistry.HitWithCapturedFrame("land", landFrame, Array.Empty<UloopCapturedVariable>(), false);
 
             UloopPausePointRegistry.Clear("jump");
@@ -1117,7 +1127,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePointCapturedVariableFrame frame = new(
                 new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 1) },
-                false);
+                false,
+                System.Array.Empty<string>(),
+                0);
             UloopPausePointRegistry.HitWithCapturedFrame("jump", frame, Array.Empty<UloopCapturedVariable>(), false);
 
             UloopPausePointRegistry.Enable("jump", 30);
@@ -1136,7 +1148,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePointCapturedVariableFrame frame = new(
                 new[] { new UloopPausePointCapturedVariableEntry("speed", UloopCapturedVariableScope.Local, 1) },
-                false);
+                false,
+                System.Array.Empty<string>(),
+                0);
             UloopPausePointRegistry.HitWithCapturedFrame("jump", frame, Array.Empty<UloopCapturedVariable>(), false);
 
             UloopPausePointRegistry.Enable("jump", 30);

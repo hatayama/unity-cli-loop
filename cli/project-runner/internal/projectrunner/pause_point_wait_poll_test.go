@@ -76,7 +76,7 @@ func TestWaitForPausePointAbortsWhenTheConnectIsRefused(t *testing.T) {
 	}
 
 	startedAt := time.Now()
-	_, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	_, _, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 60,
 		timeout:        10 * time.Second,
@@ -128,7 +128,7 @@ func TestWaitForPausePointAbortsWhenTriggerRejectsArguments(t *testing.T) {
 	}
 
 	startedAt := time.Now()
-	_, state, triggerResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	_, state, triggerResult, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 60,
 		timeout:        10 * time.Second,
@@ -363,7 +363,7 @@ func TestWaitForPausePointDoesNotAbortWhenTriggerSucceeds(t *testing.T) {
 		return 0
 	}
 
-	_, state, triggerResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	_, state, triggerResult, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 60,
 		timeout:        50 * time.Millisecond,
@@ -430,7 +430,7 @@ func TestWaitForPausePointReportsHitRacingATriggerRejection(t *testing.T) {
 		return 1
 	}
 
-	response, state, triggerResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	response, state, triggerResult, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 60,
 		timeout:        10 * time.Second,
@@ -677,7 +677,7 @@ func TestWaitForPausePointDoesNotRepauseWhenResumeWasANoOp(t *testing.T) {
 		return 1
 	}
 
-	_, state, _, resumeResult, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	_, state, _, resumeResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 60,
 		timeout:        10 * time.Second,
@@ -742,7 +742,7 @@ func TestWaitForPausePointDoesNotRepauseWhenItDidNotResume(t *testing.T) {
 		return 1
 	}
 
-	_, state, _, resumeResult, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+	_, state, _, resumeResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 60,
 		timeout:        10 * time.Second,

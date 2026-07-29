@@ -18,7 +18,7 @@ Mono can inline very small target methods into callers, and the pause point then
 
 ## Physics Message Methods and One-Hop Helpers
 
-Physical Unity message methods (`OnCollisionEnter2D`, `OnTriggerEnter2D`, and similar callbacks) can silently miss: a GameObject that already existed at enable time may keep calling the pre-patch code, so `HitCount` stays `0` even though the method body runs. The condition is environment-dependent, and the response `Warning` flags such lines at enable time. The same applies one hop out — a helper called from a physics message method in the same compiled assembly; deeper call chains or callers in other assemblies are not detected by the warning but can fail the same way.
+Physical Unity message methods (`OnCollisionEnter2D`, `OnTriggerEnter2D`, and similar callbacks) can silently miss: a GameObject that already existed at enable time may keep calling the pre-patch code, so `HitCount` stays `0` even though the method body runs. The condition is environment-dependent. On `enable-pause-point --await`, that enable-time patch diagnostic appears as top-level `EnableTimeWarning` (omitted when empty) — it is independent of whether the marker later hits, and it is not folded into hit-time `Warning`. On a non-hit failure, the same text is under `Error.Details.EnableWarning`. The same applies one hop out — a helper called from a physics message method in the same compiled assembly; deeper call chains or callers in other assemblies are not detected by the warning but can fail the same way.
 
 Recovery order:
 

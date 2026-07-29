@@ -36,6 +36,11 @@ func filterPausePointCapturedVariablesByName(
 		return response
 	}
 
+	// Why before filtering: pause-point-status runs this filter without a hit gate. An unhit
+	// marker has empty CapturedVariables/history, which would otherwise look like a name miss
+	// and a Warning blaming the requested names would misdiagnose "not hit yet".
+	hadCapturedVariables := pausePointResponseHasCapturedVariables(response)
+
 	nameSet := make(map[string]struct{}, len(names))
 	for _, name := range names {
 		nameSet[name] = struct{}{}
@@ -60,7 +65,29 @@ func filterPausePointCapturedVariablesByName(
 
 	response.CapturedVariableNameFilterNoMatch = totalMatchCount == 0
 	response.CapturedVariableNamesNotFound = unmatchedCapturedVariableNames(names, matchedNames)
+	// Why Warning only when hadCapturedVariables: machine-readable flags still fire on empty
+	// snapshots (unchanged), but a human Warning must not claim a name miss when the hit has
+	// not produced any variables yet.
+	if hadCapturedVariables && response.CapturedVariableNameFilterNoMatch {
+		response.Warning = joinPausePointWarnings(
+			response.Warning,
+			"No captured variable matched the requested names; the hit captured other variables. Check CapturedVariableNamesNotFound for the names that were absent.")
+	}
 	return response
+}
+
+// pausePointResponseHasCapturedVariables reports whether the snapshot already holds any
+// captured variable (current or history) before a name filter runs.
+func pausePointResponseHasCapturedVariables(response pausePointStatusResponse) bool {
+	if len(response.CapturedVariables) > 0 {
+		return true
+	}
+	for _, frame := range response.CapturedVariableHistory {
+		if len(frame.CapturedVariables) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // unmatchedCapturedVariableNames lists the requested names that matched nothing, keeping the order

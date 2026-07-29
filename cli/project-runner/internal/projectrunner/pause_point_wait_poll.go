@@ -38,14 +38,19 @@ const (
 // on it. Once confirmed armed (or already hit), optional resume runs synchronously, then the
 // trigger races the status poll loop and is joined once the wait itself settles, so a slow trigger
 // cannot delay reporting a pause-point hit.
+//
+// hasNewHitBaseline is true when the wait started against an already-hit continuous/trace marker
+// and must observe a later LastHitSequence before succeeding. Callers pass it into timeout error
+// construction so the hint can explain why a still-Hit marker did not count as a wait success.
 func waitForPausePoint(
 	ctx context.Context,
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
-) (pausePointStatusResponse, pausePointWaitState, *pausePointTriggerResult, *pausePointResumePlayResult, error) {
-	triggerHandle, skippedTriggerResult, resumeResult := startPausePointWaitSideEffects(ctx, connection, options)
+) (pausePointStatusResponse, pausePointWaitState, *pausePointTriggerResult, *pausePointResumePlayResult, bool, error) {
+	triggerHandle, skippedTriggerResult, resumeResult, baselineSequence, hasBaseline, baselineDecided := startPausePointWaitSideEffects(ctx, connection, options)
 
-	response, state, polledTriggerResult, err := waitForPausePointStatus(ctx, connection, options, triggerHandle)
+	response, state, polledTriggerResult, hasBaseline, err := waitForPausePointStatus(
+		ctx, connection, options, triggerHandle, baselineSequence, hasBaseline, baselineDecided)
 
 	if state == pausePointWaitStateTriggerFailed && resumeResult != nil && resumeResult.Resumed {
 		repaused := repausePlayModeAfterAbandonedWait(ctx, connection, *resumeResult)
@@ -53,32 +58,36 @@ func waitForPausePoint(
 	}
 
 	if skippedTriggerResult != nil {
-		return response, state, skippedTriggerResult, resumeResult, err
+		return response, state, skippedTriggerResult, resumeResult, hasBaseline, err
 	}
 	// The trigger goroutine's buffered channel yields exactly one value, so a result already
 	// received by the poll loop must be reused here instead of joining again — a second receive
 	// would block for the whole grace window and then report Completed:false over a real result.
 	if polledTriggerResult != nil {
-		return response, state, polledTriggerResult, resumeResult, err
+		return response, state, polledTriggerResult, resumeResult, hasBaseline, err
 	}
 	if triggerHandle != nil {
-		return response, state, triggerHandle.join(), resumeResult, err
+		return response, state, triggerHandle.join(), resumeResult, hasBaseline, err
 	}
-	return response, state, nil, resumeResult, err
+	return response, state, nil, resumeResult, hasBaseline, err
 }
 
 // startPausePointWaitSideEffects performs the pre-wait --resume-play / --trigger work, returning
 // either a live trigger handle or the fixed TriggerResult explaining why the trigger was skipped.
+// When it queries status to confirm arming, that response is the wait-start snapshot for the
+// new-hit baseline (decided before --resume-play), so a post-resume hit advances LastHitSequence
+// past the baseline. baselineDecided is false only when no arming query ran (plain await).
 func startPausePointWaitSideEffects(
 	ctx context.Context,
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
-) (*pausePointTriggerHandle, *pausePointTriggerResult, *pausePointResumePlayResult) {
+) (*pausePointTriggerHandle, *pausePointTriggerResult, *pausePointResumePlayResult, int, bool, bool) {
 	if options.triggerCommand == "" && !options.resumePlay {
-		return nil, nil, nil
+		return nil, nil, nil, -1, false, false
 	}
 
-	if !pausePointIsArmed(ctx, connection, options.id) {
+	armResponse, armed := queryPausePointArmStatus(ctx, connection, options.id)
+	if !armed {
 		var resumeResult *pausePointResumePlayResult
 		var skippedTriggerResult *pausePointTriggerResult
 		if options.resumePlay {
@@ -99,8 +108,13 @@ func startPausePointWaitSideEffects(
 				Error:   "trigger was not dispatched: the marker could not be confirmed armed at wait start",
 			}
 		}
-		return nil, skippedTriggerResult, resumeResult
+		// Why baselineDecided=false: a transient arm-query failure is also reported as not armed.
+		// Leaving baseline undecided lets the first successful poll establish it, so a stale
+		// continuous Hit cannot slip through as an immediate wait success.
+		return nil, skippedTriggerResult, resumeResult, -1, false, false
 	}
+
+	baselineSequence, hasBaseline, baselineDecided := decidePausePointNewHitBaseline(armResponse, options.markerJustEnabled)
 
 	var resumeResult *pausePointResumePlayResult
 	if options.resumePlay {
@@ -108,33 +122,37 @@ func startPausePointWaitSideEffects(
 		resumeResult = &result
 		if result.Error != "" {
 			if options.triggerCommand == "" {
-				return nil, nil, resumeResult
+				return nil, nil, resumeResult, baselineSequence, hasBaseline, baselineDecided
 			}
 			return nil, &pausePointTriggerResult{
 				Command: pausePointTriggerCommandString(options.triggerCommand, options.triggerArgs),
 				Error:   "trigger was not dispatched: --resume-play failed to resume play mode",
-			}, resumeResult
+			}, resumeResult, baselineSequence, hasBaseline, baselineDecided
 		}
 	}
 
 	if options.triggerCommand == "" {
-		return nil, nil, resumeResult
+		return nil, nil, resumeResult, baselineSequence, hasBaseline, baselineDecided
 	}
 
 	handle := startPausePointTrigger(ctx, connection, options.startPath, options.triggerCommand, options.triggerArgs)
-	return handle, nil, resumeResult
+	return handle, nil, resumeResult, baselineSequence, hasBaseline, baselineDecided
 }
 
-// pausePointIsArmed reports whether the marker is enabled or already hit. A query failure is
+// queryPausePointArmStatus reports whether the marker is enabled or already hit. A query failure is
 // treated as not armed: dispatching a --trigger command against a marker this CLI cannot even
 // confirm exists would inject the trigger's action into the game with no corresponding wait.
-func pausePointIsArmed(ctx context.Context, connection unityipc.Connection, id string) bool {
+func queryPausePointArmStatus(
+	ctx context.Context,
+	connection unityipc.Connection,
+	id string,
+) (pausePointStatusResponse, bool) {
 	response, err := queryPausePointStatus(ctx, connection, id)
 	if err != nil {
-		return false
+		return pausePointStatusResponse{}, false
 	}
 	state := pausePointWaitStateForStatus(response.Status)
-	return state == "" || state == pausePointWaitStateHit
+	return response, state == "" || state == pausePointWaitStateHit
 }
 
 func waitForPausePointStatus(
@@ -142,7 +160,10 @@ func waitForPausePointStatus(
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
 	triggerHandle *pausePointTriggerHandle,
-) (pausePointStatusResponse, pausePointWaitState, *pausePointTriggerResult, error) {
+	baselineSequence int,
+	hasBaseline bool,
+	baselineDecided bool,
+) (pausePointStatusResponse, pausePointWaitState, *pausePointTriggerResult, bool, error) {
 	waitContext, cancel := context.WithTimeout(ctx, options.timeout)
 	defer cancel()
 
@@ -158,16 +179,23 @@ func waitForPausePointStatus(
 		if err == nil {
 			lastResponse = response
 			hasResponse = true
-			state := pausePointWaitStateForStatus(response.Status)
+			// Why only once: a later Enabled→Hit transition is the await success itself
+			// (enable --await). Re-baselining on that first mid-wait Hit would demand a second
+			// sequence bump and never return.
+			if !baselineDecided {
+				baselineSequence, hasBaseline, baselineDecided = decidePausePointNewHitBaseline(
+					response, options.markerJustEnabled)
+			}
+			state := pausePointWaitStateForPolledStatus(response, baselineSequence, hasBaseline)
 			if state != "" {
-				return response, state, triggerResult, nil
+				return response, state, triggerResult, hasBaseline, nil
 			}
 		} else {
 			// Why abort: every poll dials again, so a connect the operating system refused
 			// permanently keeps failing for the whole --timeout and the refusal is reported only
 			// after that wait is spent.
 			if clierrors.IsPermanentConnectError(err) {
-				return lastResponse, "", triggerResult, err
+				return lastResponse, "", triggerResult, hasBaseline, err
 			}
 			lastErr = err
 		}
@@ -175,25 +203,31 @@ func waitForPausePointStatus(
 		select {
 		case <-waitContext.Done():
 			if ctx.Err() != nil {
-				return lastResponse, "", triggerResult, ctx.Err()
+				return lastResponse, "", triggerResult, hasBaseline, ctx.Err()
 			}
-			finalResponse, finalState, hasFinalResponse, finalErr := queryPausePointStatusAtTimeout(ctx, connection, options.id)
+			finalResponse, finalState, hasFinalResponse, finalErr := queryPausePointStatusAtTimeout(
+				ctx, connection, options.id, baselineSequence, hasBaseline)
 			if hasFinalResponse {
 				lastResponse = finalResponse
 				hasResponse = true
+				if !baselineDecided {
+					baselineSequence, hasBaseline, _ = decidePausePointNewHitBaseline(
+						finalResponse, options.markerJustEnabled)
+					finalState = pausePointWaitStateForPolledStatus(finalResponse, baselineSequence, hasBaseline)
+				}
 				if finalState != "" {
-					return finalResponse, finalState, triggerResult, nil
+					return finalResponse, finalState, triggerResult, hasBaseline, nil
 				}
 			} else if lastErr == nil {
 				lastErr = finalErr
 			}
 			if hasResponse {
-				return lastResponse, pausePointWaitStateTimeout, triggerResult, nil
+				return lastResponse, pausePointWaitStateTimeout, triggerResult, hasBaseline, nil
 			}
 			if lastErr != nil {
-				return lastResponse, "", triggerResult, fmt.Errorf("timed out waiting for pause point status: %w", lastErr)
+				return lastResponse, "", triggerResult, hasBaseline, fmt.Errorf("timed out waiting for pause point status: %w", lastErr)
 			}
-			return lastResponse, pausePointWaitStateTimeout, triggerResult, nil
+			return lastResponse, pausePointWaitStateTimeout, triggerResult, hasBaseline, nil
 		case result := <-triggerDone:
 			// Nil the channel so this case can never fire twice: the handle's channel holds a single
 			// buffered value, and the caller reuses the result received here instead of joining.
@@ -201,8 +235,8 @@ func waitForPausePointStatus(
 			triggerDone = nil
 			if pausePointTriggerRejectedBeforeExecution(result) {
 				abortResponse, abortState := abortPausePointWaitAfterTriggerRejection(
-					ctx, connection, options.id, lastResponse)
-				return abortResponse, abortState, triggerResult, nil
+					ctx, connection, options.id, lastResponse, baselineSequence, hasBaseline)
+				return abortResponse, abortState, triggerResult, hasBaseline, nil
 			}
 		case <-ticker.C:
 		}
@@ -217,8 +251,11 @@ func abortPausePointWaitAfterTriggerRejection(
 	connection unityipc.Connection,
 	id string,
 	lastResponse pausePointStatusResponse,
+	baselineSequence int,
+	hasBaseline bool,
 ) (pausePointStatusResponse, pausePointWaitState) {
-	response, state, hasResponse, _ := queryPausePointStatusAtTimeout(ctx, connection, id)
+	response, state, hasResponse, _ := queryPausePointStatusAtTimeout(
+		ctx, connection, id, baselineSequence, hasBaseline)
 	if !hasResponse {
 		return lastResponse, pausePointWaitStateTriggerFailed
 	}
@@ -232,6 +269,8 @@ func queryPausePointStatusAtTimeout(
 	ctx context.Context,
 	connection unityipc.Connection,
 	id string,
+	baselineSequence int,
+	hasBaseline bool,
 ) (pausePointStatusResponse, pausePointWaitState, bool, error) {
 	finalContext, cancel := context.WithTimeout(ctx, pausePointFinalStatusProbeTimeout)
 	defer cancel()
@@ -241,7 +280,50 @@ func queryPausePointStatusAtTimeout(
 		return pausePointStatusResponse{}, "", false, err
 	}
 
-	return response, pausePointWaitStateForStatus(response.Status), true, nil
+	return response, pausePointWaitStateForPolledStatus(response, baselineSequence, hasBaseline), true, nil
+}
+
+// decidePausePointNewHitBaseline returns (sequence, hasBaseline, decided) for the wait-start
+// snapshot. markerJustEnabled forces no baseline: any Hit during enable --await is the success
+// itself, including a race where the first status query already observes sequence 1.
+func decidePausePointNewHitBaseline(
+	response pausePointStatusResponse,
+	markerJustEnabled bool,
+) (int, bool, bool) {
+	if markerJustEnabled {
+		return -1, false, true
+	}
+	sequence, hasBaseline := pausePointNewHitBaseline(response)
+	return sequence, hasBaseline, true
+}
+
+// pausePointNewHitBaseline records LastHitSequence when await starts against an already-hit
+// continuous/trace marker. Mode is allowlisted (never `!= "single-shot"`): an empty Mode is the
+// old-package skew case and must keep the historical immediate-Hit success path.
+func pausePointNewHitBaseline(response pausePointStatusResponse) (int, bool) {
+	if response.Status != pausePointStatusHit {
+		return -1, false
+	}
+	if response.Mode != pausePointModeContinuous && response.Mode != pausePointModeTrace {
+		return -1, false
+	}
+	return response.LastHitSequence, true
+}
+
+// pausePointWaitStateForPolledStatus maps a polled status to a terminal wait state, treating an
+// already-hit continuous/trace marker as non-terminal until LastHitSequence advances past baseline.
+func pausePointWaitStateForPolledStatus(
+	response pausePointStatusResponse,
+	baselineSequence int,
+	hasBaseline bool,
+) pausePointWaitState {
+	if response.Status == pausePointStatusHit {
+		if !hasBaseline || response.LastHitSequence > baselineSequence {
+			return pausePointWaitStateHit
+		}
+		return ""
+	}
+	return pausePointWaitStateForStatus(response.Status)
 }
 
 func pausePointWaitStateForStatus(status string) pausePointWaitState {

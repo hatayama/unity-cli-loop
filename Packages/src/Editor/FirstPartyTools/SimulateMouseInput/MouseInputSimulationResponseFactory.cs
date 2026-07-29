@@ -42,15 +42,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
+        // Why branch on pressWasApplied: Paused has two sources. (a) TryDiscardForPause before
+        // apply leaves pressWasApplied=false — the queued edge never reached the game.
+        // (b) WaitForPressLifetime after a successful apply leaves pressWasApplied=true — the press
+        // already landed (including when that press itself fired the pause point). Claiming
+        // "discarded" in (b) inverts the diagnosis this message exists to prevent.
         internal static SimulateMouseInputResponse InterruptedButtonResult(
             UnityCliLoopMouseInputAction action,
             string buttonName,
-            Vector2 inputPos)
+            Vector2 inputPos,
+            bool pressWasApplied)
         {
-            SimulateMouseInputResponse result = InterruptedActionResult(action);
-            result.Button = buttonName;
-            result.PositionX = inputPos.x;
-            result.PositionY = inputPos.y;
+            string message = pressWasApplied
+                ? $"Mouse input stopped because Unity paused during Pause Point inspection. Button '{buttonName}' press was already delivered to the game before the pause; Unity CLI Loop released it from bookkeeping, so the game may have registered the press."
+                : $"Mouse input stopped because Unity paused during Pause Point inspection. Button '{buttonName}' was released from Unity CLI Loop bookkeeping; the queued input edge was discarded.";
+            SimulateMouseInputResponse result = new()
+            {
+                Success = true,
+                Message = message,
+                Action = action.ToString(),
+                Button = buttonName,
+                PositionX = inputPos.x,
+                PositionY = inputPos.y,
+                InterruptedByPausePoint = true
+            };
+            AttachPausePointHit(result);
             return result;
         }
 

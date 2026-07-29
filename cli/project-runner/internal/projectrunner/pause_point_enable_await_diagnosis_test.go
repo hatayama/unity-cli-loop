@@ -61,8 +61,8 @@ func TestRunPausePointWaitAfterEnableWarnsWhenTheTriggerWasRefusedByThisMarker(t
 	}
 }
 
-// Verifies the enable-time warning survives next to the CLI's refusal warning, and that the
-// refusal warning also survives a failed matching-log fetch.
+// Verifies the enable-time warning is exposed as EnableTimeWarning (not folded into Warning) next
+// to the CLI's refusal warning, and that both survive a failed matching-log fetch.
 func TestRunPausePointWaitAfterEnableKeepsEnableWarningWithTheRefusalWarning(t *testing.T) {
 	stubPausePointHit(t, "")
 	stubPausePointMatchingLogs(t, errors.New("unity busy"))
@@ -74,25 +74,13 @@ func TestRunPausePointWaitAfterEnableKeepsEnableWarningWithTheRefusalWarning(t *
 		t.Errorf("a failed fetch must omit MatchingLogs entirely: %s", output)
 	}
 	result := decodePausePointWaitResult(t, output)
-	if !strings.Contains(result.Warning, "Enable-time warning.") {
-		t.Errorf("the enable-time warning was dropped: %q", result.Warning)
+	if result.EnableTimeWarning != "Enable-time warning." {
+		t.Errorf("enable-time warning mismatch: %q", result.EnableTimeWarning)
+	}
+	if strings.Contains(result.Warning, "Enable-time warning.") {
+		t.Errorf("enable-time warning must not be folded into Warning: %q", result.Warning)
 	}
 	if !strings.Contains(result.Warning, "refused") {
 		t.Errorf("the refusal warning was dropped: %q", result.Warning)
-	}
-}
-
-// Verifies a warning reported by both the enable response and the status poll is printed once:
-// repeating identical text reads as two separate problems.
-func TestRunPausePointWaitAfterEnableReportsARepeatedUnityWarningOnce(t *testing.T) {
-	stubPausePointHit(t, "Same Unity warning.")
-	stubPausePointMatchingLogs(t, nil)
-	stubPausePointTriggerDispatch(t, `{"Success":true}`)
-
-	_, output := runEnableAwaitWithStubbedTrigger(t, "Same Unity warning.")
-
-	result := decodePausePointWaitResult(t, output)
-	if strings.Count(result.Warning, "Same Unity warning.") != 1 {
-		t.Errorf("expected the repeated warning exactly once: %q", result.Warning)
 	}
 }

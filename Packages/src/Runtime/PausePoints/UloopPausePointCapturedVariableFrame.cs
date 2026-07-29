@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System;
 using System.Collections.Generic;
 
 namespace io.github.hatayama.UnityCliLoop.Runtime
@@ -9,14 +10,25 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
     internal sealed class UloopPausePointCapturedVariableFrame
     {
         public UloopPausePointCapturedVariableFrame(
-            IReadOnlyList<UloopPausePointCapturedVariableEntry> entries, bool truncated)
+            IReadOnlyList<UloopPausePointCapturedVariableEntry> entries,
+            bool truncated,
+            IReadOnlyList<string> truncatedVariableNames,
+            int truncatedVariableCount)
         {
             Entries = entries;
             Truncated = truncated;
+            TruncatedVariableNames = truncatedVariableNames ?? Array.Empty<string>();
+            TruncatedVariableCount = truncatedVariableCount;
         }
 
         public IReadOnlyList<UloopPausePointCapturedVariableEntry> Entries { get; }
         public bool Truncated { get; }
+
+        // Names dropped by the variable-count cap (at most MaxTruncatedVariableNamesReported).
+        public IReadOnlyList<string> TruncatedVariableNames { get; }
+
+        // Exact number of variables dropped by the count cap (not capped at the names list length).
+        public int TruncatedVariableCount { get; }
     }
 }
 #endif
