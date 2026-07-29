@@ -99,6 +99,51 @@ func TestPackageInstallWithVersionSkipsRegistryLookup(t *testing.T) {
 	}
 }
 
+// Verifies install appends the package scope to an existing OpenUPM registry without duplicating it.
+func TestPackageInstallAppendsScopeToExistingOpenUPMRegistry(t *testing.T) {
+	manifest := `{
+  "dependencies": {
+    "com.unity.modules.ai": "1.0.0"
+  },
+  "scopedRegistries": [
+    {
+      "name": "package.openupm.com",
+      "url": "https://package.openupm.com",
+      "scopes": [
+        "com.other.openupm"
+      ]
+    }
+  ]
+}
+`
+	projectRoot := createPackageTestProject(t, manifest)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunDispatcher(
+		context.Background(),
+		[]string{"package", "install", "--version", "1.2.3", "--project-path", projectRoot},
+		&stdout,
+		&stderr,
+	)
+	if code != 0 {
+		t.Fatalf("package install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	content := readPackageManifest(t, projectRoot)
+	if strings.Count(content, `"url": "https://package.openupm.com"`) != 1 {
+		t.Fatalf("expected one OpenUPM registry entry:\n%s", content)
+	}
+	if !strings.Contains(content, `"com.other.openupm"`) {
+		t.Fatalf("existing scope missing:\n%s", content)
+	}
+	assertManifestHasOpenUPMRegistry(t, []byte(content))
+	if !strings.Contains(content, `"`+dispatcherUnityPackageName+`": "1.2.3"`) {
+		t.Fatalf("dependency missing from manifest:\n%s", content)
+	}
+	if !strings.Contains(stdout.String(), "Added scoped registry") {
+		t.Fatalf("expected scoped registry message:\n%s", stdout.String())
+	}
+}
+
 // Verifies a second install reports already installed and leaves the manifest unchanged.
 func TestPackageInstallIsIdempotent(t *testing.T) {
 	projectRoot := createPackageTestProject(t, barePackageManifest())

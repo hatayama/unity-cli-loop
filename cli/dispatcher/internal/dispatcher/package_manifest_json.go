@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -53,6 +54,9 @@ func parseOrderedJSONObjectBytes(data []byte) (orderedJSONObject, error) {
 	if closingDelim, ok := closing.(json.Delim); !ok || closingDelim != '}' {
 		return orderedJSONObject{}, fmt.Errorf("expected end of JSON object")
 	}
+	if err := ensureJSONDecoderFullyConsumed(dec); err != nil {
+		return orderedJSONObject{}, err
+	}
 	return object, nil
 }
 
@@ -82,7 +86,24 @@ func parseJSONRawArray(data []byte) ([]json.RawMessage, error) {
 	if closingDelim, ok := closing.(json.Delim); !ok || closingDelim != ']' {
 		return nil, fmt.Errorf("expected end of JSON array")
 	}
+	if err := ensureJSONDecoderFullyConsumed(dec); err != nil {
+		return nil, err
+	}
 	return elements, nil
+}
+
+// ensureJSONDecoderFullyConsumed rejects trailing tokens after a complete JSON
+// value so malformed manifests with garbage after the closing delimiter fail
+// instead of being silently rewritten without that garbage.
+func ensureJSONDecoderFullyConsumed(dec *json.Decoder) error {
+	token, err := dec.Token()
+	if err == io.EOF {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("unexpected trailing JSON token: %v", token)
 }
 
 func emitOrderedJSONObject(object orderedJSONObject, depth int) (json.RawMessage, error) {

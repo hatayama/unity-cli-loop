@@ -101,9 +101,7 @@ func TestMergePackageManifestAppendsScopeToExistingOpenUPMRegistry(t *testing.T)
 	if !strings.Contains(string(result.Content), `"com.other.openupm"`) {
 		t.Fatalf("existing scope missing:\n%s", result.Content)
 	}
-	if !strings.Contains(string(result.Content), `"`+dispatcherUnityPackageName+`"`) {
-		t.Fatalf("package scope missing:\n%s", result.Content)
-	}
+	assertManifestHasOpenUPMRegistry(t, result.Content)
 	assertManifestHasDependency(t, result.Content, dispatcherUnityPackageName, "1.2.3")
 }
 
@@ -253,6 +251,14 @@ func TestMergePackageManifestRejectsMalformedJSON(t *testing.T) {
 	}
 }
 
+// Verifies trailing garbage after a complete JSON object is rejected.
+func TestMergePackageManifestRejectsTrailingGarbage(t *testing.T) {
+	_, err := mergePackageManifest([]byte("{\n  \"dependencies\": {}\n}\n trailing"), "1.2.3")
+	if err == nil {
+		t.Fatal("expected error for trailing garbage after JSON object")
+	}
+}
+
 // Verifies scopedRegistries is inserted immediately after dependencies when absent.
 func TestMergePackageManifestInsertsScopedRegistriesAfterDependencies(t *testing.T) {
 	input := []byte(`{
@@ -307,12 +313,47 @@ func assertManifestHasDependency(t *testing.T, content []byte, name string, vers
 
 func assertManifestHasOpenUPMRegistry(t *testing.T, content []byte) {
 	t.Helper()
-	if !strings.Contains(string(content), `"url": "https://package.openupm.com"`) {
-		t.Fatalf("OpenUPM registry missing:\n%s", content)
+	top := parseOrderedJSONObject(t, content)
+	rawRegistries, ok := top.values["scopedRegistries"]
+	if !ok {
+		t.Fatalf("scopedRegistries missing:\n%s", content)
 	}
-	if !strings.Contains(string(content), `"`+dispatcherUnityPackageName+`"`) {
-		t.Fatalf("OpenUPM scope missing:\n%s", content)
+	elements, err := parseJSONRawArray(rawRegistries)
+	if err != nil {
+		t.Fatalf("parse scopedRegistries failed: %v", err)
 	}
+	for _, element := range elements {
+		entry, parseErr := parseOrderedJSONObjectBytes(element)
+		if parseErr != nil {
+			t.Fatalf("parse registry entry failed: %v", parseErr)
+		}
+		urlRaw, hasURL := entry.values["url"]
+		if !hasURL {
+			continue
+		}
+		var url string
+		if unmarshalErr := json.Unmarshal(urlRaw, &url); unmarshalErr != nil {
+			t.Fatalf("url decode failed: %v", unmarshalErr)
+		}
+		if url != openUPMRegistryURL {
+			continue
+		}
+		rawScopes, hasScopes := entry.values["scopes"]
+		if !hasScopes {
+			t.Fatalf("OpenUPM registry missing scopes:\n%s", content)
+		}
+		var scopes []string
+		if unmarshalErr := json.Unmarshal(rawScopes, &scopes); unmarshalErr != nil {
+			t.Fatalf("scopes decode failed: %v", unmarshalErr)
+		}
+		for _, scope := range scopes {
+			if scope == dispatcherUnityPackageName {
+				return
+			}
+		}
+		t.Fatalf("OpenUPM scopes missing %s: %#v\n%s", dispatcherUnityPackageName, scopes, content)
+	}
+	t.Fatalf("OpenUPM registry missing:\n%s", content)
 }
 
 func decodeOrderedObjectField(t *testing.T, content []byte, field string) orderedJSONObject {
