@@ -2,6 +2,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using UnityEngine;
 #if ULOOP_HAS_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -35,6 +36,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             ct.ThrowIfCancellationRequested();
+
+            // Dry-run only queries 3D physics; it must work in EditMode and without the Input System package.
+            if (parameters.DryRun)
+            {
+                return MouseInputDryRunResponseBuilder.Build(
+                    new Vector2(parameters.X, parameters.Y),
+                    parameters.MaxDistance,
+                    parameters.LayerMask);
+            }
 
 #if !ULOOP_HAS_INPUT_SYSTEM
             return new SimulateMouseInputResponse

@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.ReplayInput.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.Screenshot.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.SimulateMouseUi.Editor")]
+[assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.SimulateMouseInput.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.Raycast.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.PlayMode")]
