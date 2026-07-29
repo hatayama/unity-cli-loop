@@ -176,3 +176,4 @@ tests (especially anything touching async execution, cancellation, threads, or d
 runtime paths), read `docs/unity-editmode-test-guardrails.md` and follow its rules. If a new
 test makes `uloop run-tests` stall, remove or disable it instead of retrying the suite. If
 Unity freezes or stops responding to `uloop`, restart the Editor with `uloop launch -r`.
+CI runs the full EditMode suite only on a schedule or a manual `workflow_dispatch` of `unity-editmode-tests.yml` — pull-request CI never runs it, so full-suite EditMode verification before a merge has to happen locally with `uloop run-tests`.
