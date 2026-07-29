@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.0-beta.68](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.67...v3.0.0-beta.68) (2026-07-29)
+
+
+### Features
+
+* add ErrorCode and RecommendedNextAction to pause point failure responses ([#2048](https://github.com/hatayama/unity-cli-loop/issues/2048)) ([5ab8f71](https://github.com/hatayama/unity-cli-loop/commit/5ab8f712fa6cfcd5489fee8f3afd75b2e930d159))
+* address pause point round 13-14 verification feedback ([#2059](https://github.com/hatayama/unity-cli-loop/issues/2059)) ([62db173](https://github.com/hatayama/unity-cli-loop/commit/62db17327b467ab44250d1ca59f8b136129251ae))
+
 ## [3.0.0-beta.67](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.66...v3.0.0-beta.67) (2026-07-28)
 
 
