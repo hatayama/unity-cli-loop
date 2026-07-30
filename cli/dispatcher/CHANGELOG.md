@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.30](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.29...dispatcher-v3.0.0-beta.30) (2026-07-30)
+
+
+### Bug Fixes
+
+* terminal install works with curl alone by trusting the repository pin ([#2081](https://github.com/hatayama/unity-cli-loop/issues/2081)) ([58ec443](https://github.com/hatayama/unity-cli-loop/commit/58ec44303d69e1aa3e620f3c27b293218f4b5cc3))
+
 ## [3.0.0-beta.29](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.28...dispatcher-v3.0.0-beta.29) (2026-07-29)
 
 
