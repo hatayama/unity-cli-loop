@@ -2,7 +2,7 @@
 Verifies install.ps1 pin-manifest helpers via AST extraction: document parse,
 manifest format (including uppercase hex), ref format, and Resolve-UloopManifestFromPin
 with Get-UloopPinJson shadowed for success / fetch-failure / version-mismatch.
-Windows PowerShell 5.1 compatible — no ternary, null-coalescing, or ForEach -Parallel.
+Windows PowerShell 5.1 compatible - no ternary, null-coalescing, or ForEach -Parallel.
 #>
 
 Set-StrictMode -Version Latest
@@ -58,7 +58,7 @@ function Assert-True {
 
     & $Script
     if (-not $?) {
-        throw "FAIL: $Label — expected success"
+        throw "FAIL: $Label - expected success"
     }
 }
 
@@ -77,7 +77,7 @@ function Assert-Throws {
         $Threw = $true
     }
     if (-not $Threw) {
-        throw "FAIL: $Label — expected failure"
+        throw "FAIL: $Label - expected failure"
     }
 }
 
@@ -163,7 +163,7 @@ function Get-UloopPinJson {
 $env:ULOOP_ARCHIVE_MANIFEST = $null
 Remove-Item Env:ULOOP_ARCHIVE_MANIFEST -ErrorAction SilentlyContinue
 
-# Success: latest → pin tag, ResolvedArchiveManifest populated.
+# Success: latest -> pin tag, ResolvedArchiveManifest populated.
 $script:MockPinFetchFail = $false
 $script:MockPinJsonText = $PinJson
 $Version = "latest"
