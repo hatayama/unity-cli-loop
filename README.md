@@ -172,19 +172,19 @@ uloop --version
 </details>
 
 
-<img width="700" alt="The Settings window with the CLI not yet installed, showing the Install CLI button" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
+<img width="350" alt="The Settings window with the CLI not yet installed, showing the Install CLI button" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
 
 The Settings window shows whether the global `uloop` command is detected.
 
 If you see the following display, the installation was successful.
 
-<img width="700" alt="The Settings window after successful CLI detection, showing a green indicator and the CLI version" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
+<img width="350" alt="The Settings window after successful CLI detection, showing a green indicator and the CLI version" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
 
 ## Step 2: Install Skills
 
 Select your target (Claude Code, Codex, etc.) and press the **Install Skills** button.
 
-<img width="700" alt="The Skills section of the Settings window, with a target selected and the Install Skills button ready" src="Packages/src/Documentation~/images/settings-skills-install.png" />
+<img width="350" alt="The Skills section of the Settings window, with a target selected and the Install Skills button ready" src="Packages/src/Documentation~/images/settings-skills-install.png" />
 
 
 <details> 
