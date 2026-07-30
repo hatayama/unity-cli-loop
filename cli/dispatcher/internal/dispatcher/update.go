@@ -112,6 +112,10 @@ func runUpdateCommand(ctx context.Context, updateCommand update.Command, stdout 
 	command.Stdout = stdout
 	command.Stderr = stderr
 	env := append(os.Environ(), updateCommand.Env...)
+	// Why: installer scripts now fall back to the repository pin when this env
+	// var is absent; self-update MUST keep passing the Sigstore-derived
+	// manifest explicitly so the update installs the requested release tag
+	// rather than the pinned one.
 	env = append(env, updateArchiveManifestEnvName+"="+manifest)
 	command.Env = env
 	return command.Run()

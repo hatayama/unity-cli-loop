@@ -6,6 +6,8 @@ INSTALL_DIR="${ULOOP_INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="${ULOOP_VERSION:-latest}"
 LATEST_VERSION="latest"
 LATEST_BETA_VERSION="latest-beta"
+DEFAULT_PIN_REF="main"
+PIN_REF="${ULOOP_REF:-$DEFAULT_PIN_REF}"
 
 # Why: install.sh interpolates $VERSION into
 # "https://github.com/$REPOSITORY/releases/download/$VERSION/..." without
@@ -359,6 +361,122 @@ set_download_urls() {
   checksum_url="$download_url.sha256"
 }
 
+# Why: ULOOP_REF is interpolated into a raw.githubusercontent.com URL. Reject
+# empty values, path traversal (`..`), and any character outside the ref
+# alphabet so a hostile env cannot break out of the intended pin path.
+validate_uloop_ref() {
+  candidate=$1
+  case $candidate in
+    ''|*..*|*[!0-9A-Za-z._/-]*)
+      echo "Invalid ULOOP_REF: $candidate" >&2
+      echo "Expected a git ref such as 'main' or 'v3-beta'." >&2
+      exit 1
+      ;;
+  esac
+}
+
+fetch_pin_json() {
+  curl -fsSL "https://raw.githubusercontent.com/$REPOSITORY/$PIN_REF/Packages/src/project-runner-pin.json"
+}
+
+# Why: the pin is pretty-printed with one key per physical line and the
+# manifest value keeps JSON `\n` escapes. Extract the raw (still-escaped)
+# string so unescape_pin_manifest can fail closed on unexpected escapes.
+extract_pin_string_field() {
+  printf '%s\n' "$pin_json" | awk -v key="$1" '
+    {
+      prefix = "\"" key "\": \""
+      i = index($0, prefix)
+      if (i == 0) next
+      value = substr($0, i + length(prefix))
+      if (value !~ /",?[[:space:]]*$/) exit 1
+      sub(/",?[[:space:]]*$/, "", value)
+      print value
+      found = 1
+      exit
+    }
+    END { if (!found) exit 1 }
+  '
+}
+
+# Why: only `\n` is a legitimate escape in dispatcherArchiveManifest. Any
+# other backslash residue means the pin shape drifted or was tampered with.
+unescape_pin_manifest() {
+  printf '%s\n' "$1" | awk '
+    {
+      residue = $0
+      gsub(/\\n/, "", residue)
+      if (residue ~ /\\/) exit 1
+      line = $0
+      gsub(/\\n/, "\n", line)
+      print line
+    }
+  '
+}
+
+# Why: keep the installer symmetric with CliPinReaderService — 64 hex digits
+# (A-F accepted), exactly two spaces, no whitespace in the filename, no CR,
+# no duplicates, and at least one line.
+validate_pin_manifest() {
+  printf '%s\n' "$1" | awk '
+    BEGIN { count = 0 }
+    {
+      if ($0 ~ /\r/) exit 1
+      if ($0 == "") next
+      if ($0 !~ /^[0-9a-fA-F]{64}  [^ \t]+$/) exit 1
+      name = $2
+      if (seen[name]++) exit 1
+      count++
+    }
+    END { if (count == 0) exit 1 }
+  '
+}
+
+resolve_manifest_from_pin_if_needed() {
+  if [ -n "${ULOOP_ARCHIVE_MANIFEST:-}" ]; then
+    return 0
+  fi
+
+  validate_uloop_ref "$PIN_REF"
+
+  pin_json=$(fetch_pin_json) || {
+    echo "Could not fetch project-runner pin from https://raw.githubusercontent.com/$REPOSITORY/$PIN_REF/Packages/src/project-runner-pin.json" >&2
+    echo "Set ULOOP_ARCHIVE_MANIFEST from a verified attestation (see README), or fix ULOOP_REF." >&2
+    exit 1
+  }
+
+  pin_tag=$(extract_pin_string_field dispatcherReleaseTag) || {
+    echo "project-runner pin is missing dispatcherReleaseTag" >&2
+    exit 1
+  }
+  raw=$(extract_pin_string_field dispatcherArchiveManifest) || {
+    echo "project-runner pin is missing dispatcherArchiveManifest" >&2
+    exit 1
+  }
+  pin_manifest=$(unescape_pin_manifest "$raw") || {
+    echo "project-runner pin dispatcherArchiveManifest has an unexpected escape sequence" >&2
+    exit 1
+  }
+  validate_pin_manifest "$pin_manifest" || {
+    echo "project-runner pin dispatcherArchiveManifest failed format validation" >&2
+    exit 1
+  }
+  validate_uloop_version "$pin_tag"
+
+  if [ "$VERSION" = "$LATEST_VERSION" ] || [ "$VERSION" = "$LATEST_BETA_VERSION" ]; then
+    VERSION=$pin_tag
+    echo "Using dispatcher release $VERSION pinned at $PIN_REF"
+  elif [ "$VERSION" = "$pin_tag" ]; then
+    :
+  else
+    echo "ULOOP_VERSION ($VERSION) does not match the pin dispatcherReleaseTag ($pin_tag) at $PIN_REF." >&2
+    echo "Unset ULOOP_VERSION, or supply ULOOP_ARCHIVE_MANIFEST from a verified attestation (see README)." >&2
+    exit 1
+  fi
+
+  ULOOP_ARCHIVE_MANIFEST=$pin_manifest
+}
+
 extract_asset() {
   case "$asset_name" in
     *.zip)
@@ -447,6 +565,7 @@ if is_legacy_npm_uloop_path "$legacy_uloop_before_install"; then
 fi
 download_url=""
 checksum_url=""
+resolve_manifest_from_pin_if_needed
 set_download_urls
 
 tmp_dir=$(mktemp -d)
