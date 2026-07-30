@@ -163,6 +163,28 @@ function Get-UloopPinJson {
 $env:ULOOP_ARCHIVE_MANIFEST = $null
 Remove-Item Env:ULOOP_ARCHIVE_MANIFEST -ErrorAction SilentlyContinue
 
+# Explicit manifest: early return without fetching pin or rewriting Version.
+# Why: Windows self-update must keep the requested tag (via env manifest) and
+# must not replace it with the repository pin. MockPinFetchFail=true would throw
+# if Resolve incorrectly called Get-UloopPinJson.
+$script:MockPinFetchFail = $true
+$script:MockPinJsonText = $PinJson
+$Version = "latest"
+$ResolvedArchiveManifest = $null
+$PinRef = "main"
+$env:ULOOP_ARCHIVE_MANIFEST = "$Hex64Lower  uloop-dispatcher-windows-amd64.zip"
+try {
+    Resolve-UloopManifestFromPin
+    if ($Version -ne "latest") {
+        throw "FAIL: explicit manifest must leave Version unchanged, got $Version"
+    }
+    if ($null -ne $ResolvedArchiveManifest) {
+        throw "FAIL: explicit manifest must leave ResolvedArchiveManifest null"
+    }
+} finally {
+    Remove-Item Env:ULOOP_ARCHIVE_MANIFEST -ErrorAction SilentlyContinue
+}
+
 # Success: latest -> pin tag, ResolvedArchiveManifest populated.
 $script:MockPinFetchFail = $false
 $script:MockPinJsonText = $PinJson
