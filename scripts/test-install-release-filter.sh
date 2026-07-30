@@ -139,17 +139,27 @@ esac
 printf '%s\n' "$url" >> "$CURL_LOG"
 
 case "$url" in
+  */Packages/src/project-runner-pin.json)
+    # Why: pin URL handling must sit after CURL_LOG recording so tests can
+    # assert whether the pin fallback path was taken. Returning before the
+    # log (like the releases API case) would make "pin URL absent" vacuous.
+    if [ "${MOCK_PIN_FETCH_FAIL:-0}" = "1" ]; then
+      exit 22
+    fi
+    cat "$PIN_JSON"
+    exit 0
+    ;;
   *dispatcher-v2.0.0/uloop-dispatcher-darwin-arm64.tar.gz)
     : > "$output_file"
     ;;
   *dispatcher-v2.0.0/uloop-dispatcher-darwin-arm64.tar.gz.sha256)
-    printf 'fakehash  uloop-dispatcher-darwin-arm64.tar.gz\n' > "$output_file"
+    printf '%s  uloop-dispatcher-darwin-arm64.tar.gz\n' "${MOCK_ASSET_DIGEST:-fakehash}" > "$output_file"
     ;;
   *dispatcher-v2.0.0/uloop-dispatcher-windows-amd64.zip)
     : > "$output_file"
     ;;
   *dispatcher-v2.0.0/uloop-dispatcher-windows-amd64.zip.sha256)
-    printf 'fakehash  uloop-dispatcher-windows-amd64.zip\n' > "$output_file"
+    printf '%s  uloop-dispatcher-windows-amd64.zip\n' "${MOCK_ASSET_DIGEST:-fakehash}" > "$output_file"
     ;;
   *dispatcher-v3.0.0-beta.2/uloop-dispatcher-darwin-arm64.tar.gz)
     if [ "${ULOOP_VERSION:-}" != "latest-beta" ]; then
@@ -163,7 +173,7 @@ case "$url" in
       echo "Prerelease checksum should not be downloaded: $url" >&2
       exit 1
     fi
-    printf 'fakehash  uloop-dispatcher-darwin-arm64.tar.gz\n' > "$output_file"
+    printf '%s  uloop-dispatcher-darwin-arm64.tar.gz\n' "${MOCK_ASSET_DIGEST:-fakehash}" > "$output_file"
     ;;
   *dispatcher-v3.0.0-beta.2/uloop-dispatcher-windows-amd64.zip)
     if [ "${ULOOP_VERSION:-}" != "latest-beta" ]; then
@@ -177,7 +187,7 @@ case "$url" in
       echo "Prerelease checksum should not be downloaded: $url" >&2
       exit 1
     fi
-    printf 'fakehash  uloop-dispatcher-windows-amd64.zip\n' > "$output_file"
+    printf '%s  uloop-dispatcher-windows-amd64.zip\n' "${MOCK_ASSET_DIGEST:-fakehash}" > "$output_file"
     ;;
   *)
     echo "unexpected curl url: $url" >&2
@@ -196,12 +206,11 @@ fi
 
 # install.sh now computes the digest with `sha256sum <path>` and compares
 # against the parsed .sha256 file so the same hash string is available for
-# both the same-origin check and the attestation-manifest cross-check. The
-# .sha256 fixtures written above use the literal "fakehash", so emit that
-# whenever a single-file digest is requested. Any other invocation shape is
-# unexpected and should fail loud.
+# both the same-origin check and the attestation-manifest cross-check. Default
+# digest stays "fakehash" for existing fixtures; pin-fallback cases override
+# MOCK_ASSET_DIGEST to a 64-digit hex that validate_pin_manifest accepts.
 if [ "$#" -ge 1 ] && [ -f "$1" ]; then
-  printf 'fakehash  %s\n' "$1"
+  printf '%s  %s\n' "${MOCK_ASSET_DIGEST:-fakehash}" "$1"
   exit 0
 fi
 
@@ -327,6 +336,24 @@ exit 1
 MOCK_NPM
 
   chmod +x "$mock_bin/uname" "$mock_bin/curl" "$mock_bin/sha256sum" "$mock_bin/tar" "$mock_bin/unzip" "$mock_bin/npm"
+}
+
+# Builds a pretty-print pin JSON whose dispatcherArchiveManifest digests come
+# from PIN_ASSET_DIGEST (or MOCK_ASSET_DIGEST). Tag is always dispatcher-v2.0.0
+# so pin-driven installs hit the mocked stable asset URLs.
+write_pin_json() {
+  output_path=$1
+  digest=${PIN_ASSET_DIGEST:-${MOCK_ASSET_DIGEST:-fakehash}}
+  asset_name=${PIN_ASSET_NAME:-uloop-dispatcher-darwin-arm64.tar.gz}
+
+  cat > "$output_path" <<PIN
+{
+  "dispatcherArchiveManifest": "${digest}  ${asset_name}\\n${digest}  install.sh",
+  "dispatcherReleaseTag": "dispatcher-v2.0.0",
+  "minimumDispatcherVersion": "3.0.0-beta.19",
+  "projectRunnerVersion": "3.0.0-beta.64"
+}
+PIN
 }
 
 write_legacy_npm_uloop_shim() {
@@ -905,6 +932,10 @@ test_powershell_latest_skips_prerelease_assets() {
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-UloopNativeInstall -UloopPath $FinalUloopPath -Directory $InstallDir'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'Set-CurrentPathWithInstallDirectoryFirst -Directory $InstallDir'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-CompatibilityWindowsInstall -Directory $InstallDir -ExpectedUloopPath $FinalUloopPath'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Resolve-UloopManifestFromPin'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Test-UloopPinManifestFormat'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'raw.githubusercontent.com/$Repository/$PinRef/Packages/src/project-runner-pin.json'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '$DefaultPinRef = "main"'
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "ULOOP_REMOVE_LEGACY"
 }
 
@@ -974,6 +1005,236 @@ test_powershell_reports_persisted_path_shadowing() {
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" '$RemovedAll'
 }
 
+PIN_TEST_DIGEST="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+PIN_MISMATCH_DIGEST="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+# (a) Explicit ULOOP_ARCHIVE_MANIFEST must not fetch the repository pin.
+test_posix_explicit_manifest_skips_pin_fetch() {
+  work_dir="$TMP_DIR/posix-explicit-manifest-skips-pin"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  pin_json="$work_dir/pin.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  mkdir -p "$work_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  write_releases_json "$releases_json"
+  write_pin_json "$pin_json"
+  write_mock_commands "$mock_bin"
+
+  PATH="$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    PIN_JSON="$pin_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+
+  assert_not_contains "$curl_log" "Packages/src/project-runner-pin.json"
+}
+
+# (b) Empty env + pin → install succeeds via pin tag and pin URL.
+test_posix_pin_fallback_installs_pinned_release() {
+  work_dir="$TMP_DIR/posix-pin-fallback-success"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  pin_json="$work_dir/pin.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  mkdir -p "$work_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  write_releases_json "$releases_json"
+  MOCK_ASSET_DIGEST="$PIN_TEST_DIGEST" write_pin_json "$pin_json"
+  write_mock_commands "$mock_bin"
+
+  set +e
+  PATH="$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    env -u ULOOP_ARCHIVE_MANIFEST \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    PIN_JSON="$pin_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    MOCK_ASSET_DIGEST="$PIN_TEST_DIGEST" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+  status=$?
+  set -e
+  if [ "$status" -ne 0 ]; then
+    echo "Expected pin-fallback install to succeed" >&2
+    cat "$work_dir/stderr.txt" >&2
+    exit 1
+  fi
+
+  assert_contains "$curl_log" "Packages/src/project-runner-pin.json"
+  assert_contains "$curl_log" "dispatcher-v2.0.0/uloop-dispatcher-darwin-arm64.tar.gz"
+  assert_contains "$work_dir/output.txt" "pinned at"
+}
+
+# (c) Pin fetch failure must mention ULOOP_ARCHIVE_MANIFEST.
+test_posix_pin_fetch_failure_mentions_manifest_env() {
+  work_dir="$TMP_DIR/posix-pin-fetch-fail"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  pin_json="$work_dir/pin.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  mkdir -p "$work_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  write_releases_json "$releases_json"
+  MOCK_ASSET_DIGEST="$PIN_TEST_DIGEST" write_pin_json "$pin_json"
+  write_mock_commands "$mock_bin"
+
+  set +e
+  PATH="$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    env -u ULOOP_ARCHIVE_MANIFEST \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    PIN_JSON="$pin_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    MOCK_PIN_FETCH_FAIL=1 \
+    MOCK_ASSET_DIGEST="$PIN_TEST_DIGEST" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+  status=$?
+  set -e
+  if [ "$status" -eq 0 ]; then
+    echo "Expected pin fetch failure to abort install" >&2
+    exit 1
+  fi
+  assert_contains "$work_dir/stderr.txt" "ULOOP_ARCHIVE_MANIFEST"
+}
+
+# (d) Pin digest that does not match the computed archive hash must fail.
+test_posix_pin_digest_mismatch_fails() {
+  work_dir="$TMP_DIR/posix-pin-digest-mismatch"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  pin_json="$work_dir/pin.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  mkdir -p "$work_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  write_releases_json "$releases_json"
+  PIN_ASSET_DIGEST="$PIN_MISMATCH_DIGEST" MOCK_ASSET_DIGEST="$PIN_TEST_DIGEST" write_pin_json "$pin_json"
+  write_mock_commands "$mock_bin"
+
+  set +e
+  PATH="$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    env -u ULOOP_ARCHIVE_MANIFEST \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    PIN_JSON="$pin_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    MOCK_ASSET_DIGEST="$PIN_TEST_DIGEST" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+  status=$?
+  set -e
+  if [ "$status" -eq 0 ]; then
+    echo "Expected pin digest mismatch to abort install" >&2
+    exit 1
+  fi
+}
+
+# (e) Explicit ULOOP_VERSION that disagrees with the pin tag must fail.
+test_posix_pin_version_mismatch_fails() {
+  work_dir="$TMP_DIR/posix-pin-version-mismatch"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  pin_json="$work_dir/pin.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  mkdir -p "$work_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  write_releases_json "$releases_json"
+  MOCK_ASSET_DIGEST="$PIN_TEST_DIGEST" write_pin_json "$pin_json"
+  write_mock_commands "$mock_bin"
+
+  set +e
+  PATH="$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    env -u ULOOP_ARCHIVE_MANIFEST \
+    ULOOP_VERSION=dispatcher-v9.9.9 \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    PIN_JSON="$pin_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    MOCK_ASSET_DIGEST="$PIN_TEST_DIGEST" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+  status=$?
+  set -e
+  if [ "$status" -eq 0 ]; then
+    echo "Expected pin tag mismatch to abort install" >&2
+    exit 1
+  fi
+  assert_contains "$work_dir/stderr.txt" "ULOOP_VERSION"
+  assert_contains "$work_dir/stderr.txt" "ULOOP_ARCHIVE_MANIFEST"
+}
+
+# (f) ULOOP_REF must appear in the pin raw URL.
+test_posix_uloop_ref_appears_in_pin_url() {
+  work_dir="$TMP_DIR/posix-uloop-ref-in-pin-url"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  pin_json="$work_dir/pin.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  mkdir -p "$work_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  write_releases_json "$releases_json"
+  MOCK_ASSET_DIGEST="$PIN_TEST_DIGEST" write_pin_json "$pin_json"
+  write_mock_commands "$mock_bin"
+
+  set +e
+  PATH="$mock_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    env -u ULOOP_ARCHIVE_MANIFEST \
+    ULOOP_VERSION=latest \
+    ULOOP_REF=custom-ref \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    PIN_JSON="$pin_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    MOCK_ASSET_DIGEST="$PIN_TEST_DIGEST" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+  status=$?
+  set -e
+  if [ "$status" -ne 0 ]; then
+    echo "Expected custom-ref pin-fallback install to succeed" >&2
+    cat "$work_dir/stderr.txt" >&2
+    exit 1
+  fi
+  assert_contains "$curl_log" "raw.githubusercontent.com/hatayama/unity-cli-loop/custom-ref/Packages/src/project-runner-pin.json"
+}
+
 test_posix_latest_skips_prerelease_assets
 test_posix_latest_beta_selects_prerelease_assets
 test_posix_invokes_native_install_setup
@@ -995,3 +1256,9 @@ test_powershell_installer_avoids_optional_archive_cmdlets
 test_powershell_installer_uses_non_installer_staged_executable_name
 test_powershell_native_probe_restores_error_action_preference
 test_powershell_reports_persisted_path_shadowing
+test_posix_explicit_manifest_skips_pin_fetch
+test_posix_pin_fallback_installs_pinned_release
+test_posix_pin_fetch_failure_mentions_manifest_env
+test_posix_pin_digest_mismatch_fails
+test_posix_pin_version_mismatch_fails
+test_posix_uloop_ref_appears_in_pin_url

@@ -17,33 +17,30 @@ When reporting a vulnerability, please include:
 
 ### First-install provenance decision
 
-The repository owner approved the following first-install trust model.
+The repository owner approved the following first-install trust model
+(issue #2080 replaces the earlier decision that CLI-only install required `gh`
+and forbade a mutable-branch `curl | sh` / `irm | iex` path).
 
-- CLI-only installation requires a preinstalled GitHub CLI (`gh`) obtained
-  through the user's operating-system or package channel. The installer never
-  downloads or bootstraps `gh`. The README bootstrap downloads the installer
-  script and its Sigstore bundle from an immutable dispatcher Release, verifies
-  the script with `gh attestation verify`, and only then executes it. The
-  verified installer verifies the selected archive and its bundle before
-  extraction or execution. A missing `gh` is a hard failure.
-- Unity installation treats the already-installed Unity package as its trust
-  root. Package-release automation verifies the dispatcher Release attestation
-  and stamps its verified subject digests into the package pin. The device
-  enforces those digests by SHA-256 pinning before it executes a downloaded
-  installer script, so Unity installation does not require external `gh` or an
-  embedded verifier.
-- CLI-only verification enforces the exact repository, signer workflow
-  `.github/workflows/dispatcher-publish.yml`, an allowed source ref of
-  `refs/heads/main` or `refs/heads/v3-beta`, an attested source digest equal to
-  the resolved immutable Release tag commit, and a subject digest equal to the
-  downloaded installer or archive. Package-release automation verifies that
-  same policy before it stamps Unity's pinned subject digests. A same-origin
-  checksum provides integrity only and is never authentication.
-- Offline first installation is unsupported. Network or GitHub API failure,
-  missing verifier, missing or malformed bundle, identity mismatch, tag
-  mismatch, and digest mismatch all fail closed before script or binary
-  execution. There is no checksum-only fallback and no mutable-branch
-  `curl | sh` or `irm | iex` path.
+- The default CLI-only install trusts the repository pin
+  (`Packages/src/project-runner-pin.json` → `dispatcherArchiveManifest`).
+  Release automation stamps that digest list after verifying the published
+  release's attestation subjects, and CI requires an exact match. The
+  installer fetches the pin over TLS from `raw.githubusercontent.com` on a
+  protected branch (default `main`; override with `ULOOP_REF`) and enforces
+  those digests by SHA-256 before extraction.
+- An explicit `ULOOP_ARCHIVE_MANIFEST` (typically from a Sigstore-verified
+  attestation) always takes precedence over the pin. The README's
+  `gh attestation verify` + `jq` flow remains available as a hardened option
+  when choosing a release tag other than the pin.
+- Unity installation uses the same pin fields from the already-installed
+  package, so terminal and GUI share one trust root. Remaining gaps (Sigstore
+  chains to the signing workflow; repository trust chains to branch
+  protection) are identical across those paths — this change introduces no
+  new regression relative to the Unity GUI install.
+- Offline first installation is unsupported. Network failure, a missing or
+  malformed pin, an invalid `ULOOP_REF`, a tag/`ULOOP_VERSION` mismatch, and
+  digest mismatch all fail closed before script or binary execution. There is
+  no checksum-only fallback.
 
 OS-native signing remains a later defense-in-depth release improvement; it is
 not a prerequisite for this bootstrap verification work.

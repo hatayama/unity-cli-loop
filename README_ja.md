@@ -109,11 +109,27 @@ v2への委譲には、初回コマンドでcacheを作成するnpmを含むNode
 <summary>CLIだけをterminalからinstallする場合はこちら</summary>
 
 Unity Package の setup を開かず、standalone の global CLI だけを入れたい場合に使ってください。
+インストーラは `Packages/src/project-runner-pin.json` の digest 一覧でアーカイブを検証します（Unity の **Install CLI** ボタンと同じ pin）。
+任意の環境変数: `ULOOP_REF`（pin を取る git ref。既定は `main`）、`ULOOP_INSTALL_DIR`。
+`ULOOP_VERSION` は pin の `dispatcherReleaseTag` と一致する場合のみ有効です。
 
 > [!NOTE]
-> このコマンドが冗長なのはセキュリティのためです。ダウンロードしたインストーラと成果物が、このリポジトリのCIが実際にビルドしたものと一致することをsigstore attestationで検証してから実行します。UnityのGUI（**Install CLI** ボタン）も同じ検証済みdigestとの照合を行っていますが、そちらはCIがリリース時に検証した結果をパッケージ内に持っているため、`gh` や `jq` は不要です。
->
-> 冗長ですが、下記のブロックはコピペしてそのまま一気に実行できます。
+> terminal install も Unity GUI と同じ repository pin を信頼源にします。明示的に
+> `ULOOP_ARCHIVE_MANIFEST`（Sigstore 検証由来）を渡す手動フローは、任意の release tag を選ぶ hardened option として残っています。
+
+macOS、Windows Git Bash の場合:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
+```
+
+Windows PowerShell の場合:
+
+```powershell
+irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+```
+
+### 手動の attestation 検証付き install（release tag を自分で選ぶ）
 
 最初にOSまたはパッケージ管理経由で`gh`（ログイン済み）と`jq`を導入してください。以下のコマンドはこの2つを自動では導入せず、代替手段にもフォールバックしません。最新のdispatcher Release tagは自動で解決されます。特定のバージョンを入れたい場合は、`RELEASE_TAG`にimmutableなタグ（例: `dispatcher-v3.0.0`）を直接指定してください。
 

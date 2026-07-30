@@ -15,7 +15,11 @@ for cross-component version requirements. Its required fields:
   release used for first installation and its verified asset hashes. Stamped by automation
   against a published release; never edit by hand — `VerifyDispatcherPinSubjects` requires the
   manifest to match the published release's verified subjects exactly, so a hand-written value
-  cannot pass CI (see `docs/dispatcher-pin-release-order.md`).
+  cannot pass CI (see `docs/dispatcher-pin-release-order.md`). Consumers: Unity's **Install CLI**
+  path (via `CliPinReader` / `NativeCliCommandBuilder`) and the terminal installers
+  (`scripts/install.sh` / `scripts/install.ps1`) when `ULOOP_ARCHIVE_MANIFEST` is unset — they
+  fetch this pin and use `dispatcherReleaseTag` as the install target plus
+  `dispatcherArchiveManifest` as the attestation digest list.
 
 There is no dispatcher⇄package integer contract generation; the pin's semver
 floor is the only dispatcher gate. The IPC `protocolVersion` pair (see
