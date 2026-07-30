@@ -129,7 +129,7 @@ Windows PowerShell の場合:
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
 ```
 
-#### 手動の attestation 検証付き install（release tag を自分で選ぶ）
+### 手動の attestation 検証付き install（release tag を自分で選ぶ）
 
 最初にOSまたはパッケージ管理経由で`gh`（ログイン済み）と`jq`を導入してください。以下のコマンドはこの2つを自動では導入せず、代替手段にもフォールバックしません。最新のdispatcher Release tagは自動で解決されます。特定のバージョンを入れたい場合は、`RELEASE_TAG`にimmutableなタグ（例: `dispatcher-v3.0.0`）を直接指定してください。
 

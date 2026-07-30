@@ -112,7 +112,7 @@ On Windows PowerShell:
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
 ```
 
-#### Manual attestation-verified install (choose your own release tag)
+### Manual attestation-verified install (choose your own release tag)
 
 Install `gh` and `jq` through your operating-system or package channel first. The bootstrap does not install
 or fall back from `gh`. Select the immutable dispatcher Release tag and its source branch; use
