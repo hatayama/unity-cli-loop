@@ -165,6 +165,7 @@ jobs:
           $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-simulate-mouse-demo.ps1))
           $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 Assets/Tests/Demo/scripts/verify-replay-via-cli.ps1))
           $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-powershell51-native-argument-escaping.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-install-pin-resolution.ps1))
 
       - name: Test release installer smoke helper
         shell: powershell
@@ -173,6 +174,10 @@ jobs:
       - name: Test Windows PowerShell native argument escaping
         shell: powershell
         run: .\scripts\test-powershell51-native-argument-escaping.ps1
+
+      - name: Test install pin resolution in Windows PowerShell
+        shell: powershell
+        run: .\scripts\test-install-pin-resolution.ps1
 
   test-unity-package:
     runs-on: ubuntu-latest

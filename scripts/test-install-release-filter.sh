@@ -932,6 +932,10 @@ test_powershell_latest_skips_prerelease_assets() {
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-UloopNativeInstall -UloopPath $FinalUloopPath -Directory $InstallDir'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'Set-CurrentPathWithInstallDirectoryFirst -Directory $InstallDir'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-CompatibilityWindowsInstall -Directory $InstallDir -ExpectedUloopPath $FinalUloopPath'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Resolve-UloopManifestFromPin'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Test-UloopPinManifestFormat'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'raw.githubusercontent.com/$Repository/$PinRef/Packages/src/project-runner-pin.json'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '$DefaultPinRef = "main"'
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" "ULOOP_REMOVE_LEGACY"
 }
 

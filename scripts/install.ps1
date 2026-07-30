@@ -4,6 +4,9 @@ $Repository = "hatayama/unity-cli-loop"
 $Version = if ($env:ULOOP_VERSION) { $env:ULOOP_VERSION } else { "latest" }
 $LatestVersion = "latest"
 $LatestBetaVersion = "latest-beta"
+$DefaultPinRef = "main"
+$PinRef = if ($env:ULOOP_REF) { $env:ULOOP_REF } else { $DefaultPinRef }
+$ResolvedArchiveManifest = $null
 $InstallDir = if ($env:ULOOP_INSTALL_DIR) {
     $env:ULOOP_INSTALL_DIR
 } else {
@@ -72,6 +75,110 @@ function Find-LatestAssetUrl {
         $Page += 1
     }
 }
+
+# Why: ULOOP_REF is interpolated into a raw.githubusercontent.com URL. Reject
+# empty values, path traversal (`..`), and characters outside the ref alphabet
+# so a hostile env cannot break out of the intended pin path.
+function Test-UloopRefFormat {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$Candidate
+    )
+
+    if ([string]::IsNullOrEmpty($Candidate) -or $Candidate.Contains("..") -or ($Candidate -notmatch '^[0-9A-Za-z._/-]+$')) {
+        throw "Invalid ULOOP_REF: $Candidate. Expected a git ref such as 'main' or 'v3-beta'."
+    }
+}
+
+function Get-UloopPinJson {
+    $PinUrl = "https://raw.githubusercontent.com/$Repository/$PinRef/Packages/src/project-runner-pin.json"
+    return (Invoke-WebRequest -UseBasicParsing -Uri $PinUrl).Content
+}
+
+function ConvertFrom-UloopPinDocument {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$JsonText
+    )
+
+    return ($JsonText | ConvertFrom-Json)
+}
+
+# Why: ConvertFrom-Json already expands JSON escapes, so fail-closed validation
+# of the expanded manifest is the PowerShell-side counterpart to install.sh's
+# unescape + validate pair. Accept A-F to stay symmetric with CliPinReaderService.
+function Test-UloopPinManifestFormat {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$Manifest
+    )
+
+    if ($Manifest.Contains("`r")) {
+        throw "project-runner pin dispatcherArchiveManifest must not contain CR"
+    }
+
+    $Seen = @{}
+    $Count = 0
+    foreach ($Line in ($Manifest -split "`n")) {
+        if ([string]::IsNullOrEmpty($Line)) {
+            continue
+        }
+        if ($Line -notmatch '^[0-9a-fA-F]{64}  \S+$') {
+            throw "project-runner pin dispatcherArchiveManifest has an invalid line"
+        }
+        $Name = ($Line -split "  ", 2)[1]
+        if ($Seen.ContainsKey($Name)) {
+            throw "project-runner pin dispatcherArchiveManifest has a duplicate filename"
+        }
+        $Seen[$Name] = $true
+        $Count += 1
+    }
+    if ($Count -eq 0) {
+        throw "project-runner pin dispatcherArchiveManifest is empty"
+    }
+}
+
+function Resolve-UloopManifestFromPin {
+    $ExistingManifest = [Environment]::GetEnvironmentVariable("ULOOP_ARCHIVE_MANIFEST")
+    if (-not [string]::IsNullOrEmpty($ExistingManifest)) {
+        return
+    }
+
+    Test-UloopRefFormat -Candidate $PinRef
+
+    $PinUrl = "https://raw.githubusercontent.com/$Repository/$PinRef/Packages/src/project-runner-pin.json"
+    try {
+        $PinJsonText = Get-UloopPinJson
+    } catch {
+        throw "Could not fetch project-runner pin from $PinUrl. Set ULOOP_ARCHIVE_MANIFEST from a verified attestation (see README), or fix ULOOP_REF."
+    }
+
+    $PinDocument = ConvertFrom-UloopPinDocument -JsonText $PinJsonText
+    if ([string]::IsNullOrEmpty([string]$PinDocument.dispatcherReleaseTag)) {
+        throw "project-runner pin is missing dispatcherReleaseTag"
+    }
+    if ([string]::IsNullOrEmpty([string]$PinDocument.dispatcherArchiveManifest)) {
+        throw "project-runner pin is missing dispatcherArchiveManifest"
+    }
+
+    $PinTag = [string]$PinDocument.dispatcherReleaseTag
+    $PinManifest = [string]$PinDocument.dispatcherArchiveManifest
+    Test-UloopPinManifestFormat -Manifest $PinManifest
+    Test-UloopVersionFormat -Candidate $PinTag
+
+    if ($Version -eq $LatestVersion -or $Version -eq $LatestBetaVersion) {
+        $script:Version = $PinTag
+        Write-Host "Using dispatcher release $($script:Version) pinned at $PinRef"
+    } elseif ($Version -ne $PinTag) {
+        throw "ULOOP_VERSION ($Version) does not match the pin dispatcherReleaseTag ($PinTag) at $PinRef. Unset ULOOP_VERSION, or supply ULOOP_ARCHIVE_MANIFEST from a verified attestation (see README)."
+    }
+
+    $script:ResolvedArchiveManifest = $PinManifest
+}
+
+Resolve-UloopManifestFromPin
 
 if ($Version -eq $LatestVersion -or $Version -eq $LatestBetaVersion) {
     $ReleaseChannel = if ($Version -eq $LatestBetaVersion) { "beta" } else { "stable" }
@@ -517,7 +624,10 @@ try {
     # Enforcing the manifest entry stops a swapped archive from being blessed by
     # a compromised same-origin .sha256. Missing env must fail before archive
     # extraction because same-origin checksums are not authentication.
-    $Manifest = [Environment]::GetEnvironmentVariable("ULOOP_ARCHIVE_MANIFEST")
+    $Manifest = $ResolvedArchiveManifest
+    if ([string]::IsNullOrEmpty($Manifest)) {
+        $Manifest = [Environment]::GetEnvironmentVariable("ULOOP_ARCHIVE_MANIFEST")
+    }
     if ([string]::IsNullOrEmpty($Manifest)) {
         throw "Attestation manifest is required"
     }
