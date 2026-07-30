@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.29](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.28...dispatcher-v3.0.0-beta.29) (2026-07-29)
+
+
+### Features
+
+* install the Unity package from the terminal with uloop package install ([#2078](https://github.com/hatayama/unity-cli-loop/issues/2078)) ([5e62a86](https://github.com/hatayama/unity-cli-loop/commit/5e62a86d880d05f15eb246ed5adbfa7ad5db74f7))
+
 ## [3.0.0-beta.28](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.27...dispatcher-v3.0.0-beta.28) (2026-07-29)
 
 
