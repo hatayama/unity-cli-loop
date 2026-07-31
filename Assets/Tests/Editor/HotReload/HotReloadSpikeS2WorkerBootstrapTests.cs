@@ -196,7 +196,13 @@ public static class SpikeWorkerProgram
             Task completedTask = await Task.WhenAny(waitForExitTask, Task.Delay(timeout));
             if (completedTask != waitForExitTask)
             {
-                process.Kill();
+                // HasExited guard: the process may exit between the timeout firing and the
+                // kill, and Kill on an exited process throws, masking the timeout failure.
+                if (!process.HasExited)
+                {
+                    process.Kill();
+                }
+
                 Assert.Fail($"Process timed out after {timeout.TotalSeconds}s: {fileName} {arguments}");
             }
 

@@ -169,6 +169,7 @@ namespace System.Runtime.CompilerServices
         public void TearDown()
         {
             new Harmony(HarmonyId).UnpatchAll(HarmonyId);
+            _transplantSourceMethod = null;
         }
 
         /// <summary>
