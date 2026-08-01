@@ -22,8 +22,8 @@ This harness makes a trap's repro steps a permanent, re-runnable asset instead.
 
 These scenarios require a running Unity Editor with the trap scene open, so
 they are not part of automated CI. Run them manually (or via an agent) before
-merging a PR that touches the pause-point or simulate-keyboard code paths the
-scenario covers.
+merging a PR that touches the pause-point, simulate-keyboard, or hot-reload
+code paths the scenario covers.
 
 ## Existing scenarios
 
@@ -33,6 +33,7 @@ scenario covers.
 | `await-pause-point --trigger` hits within the marker timeout instead of waiting out the triggered command's full duration | `Assets/RegressionHarness/KeyStateAfterPauseInterruption/` (reused) | `scripts/regression-harness-pause-point-trigger.sh` |
 | `enable-pause-point --await --resume-play --trigger` resumes a manually paused PlayMode before firing the input trigger and hits within the marker timeout | `Assets/RegressionHarness/KeyStateAfterPauseInterruption/` (reused) | `scripts/regression-harness-resume-play-paused-arm.sh` |
 | A pause point armed on a physics message method (or a method called one hop from one) can miss a GameObject that already existed before arming. The miss itself is environment-dependent and does not reproduce deterministically (see below) -- the harness runs three scenarios (direct/OnCollisionEnter2D, indirect callee with priming, and OnTriggerEnter2D), each triggering a fresh contact after arming and classifying the result from the component's own hit counter plus `IsHit` | `Assets/RegressionHarness/PhysicsCallbackExistingInstance/` | `scripts/regression-harness-physics-callback-existing-instance.sh` |
+| Hot reload of an in-body string literal in `Update` changes PlayMode console output without a domain reload, then `--revert-all` restores the previous body. Sed targets a method-body literal only (a class-level `const` or field initializer is outside hot-reload scope and would silently leave behavior unchanged despite `Success`) | `Assets/RegressionHarness/HotReload/` | `scripts/regression-harness-hot-reload.sh` |
 
 ### Physics-callback existing-instance miss: environment-dependent, not deterministic
 

@@ -46,6 +46,8 @@ Only ordinary method declarations are scanned. Property and indexer accessors, c
 finalizers, operators, and event accessors are never scanned: edits to them produce **no
 per-method entry at all** and are silently not applied — use `uloop compile` for those.
 
+Edits outside method bodies never take effect: changing a `const` value, a field initializer, or any declaration other than a method body leaves runtime behavior unchanged even though the response reports `Success` — shims resolve those symbols against the already-compiled assembly, and C# bakes `const` values into IL at compile time. Use `uloop compile` for such edits.
+
 ### Skipped — reported per method, never flips `Success`
 
 | Condition | Why |
