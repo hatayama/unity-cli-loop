@@ -139,6 +139,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _callback();
         }
 
+        // Receiver-qualified private delegate invoke (`this._callback()`) — same FieldRef shape.
+        public async Task AsyncInvokePrivateDelegateOnThis()
+        {
+            await Task.Yield();
+            this._callback();
+        }
+
+        // Parameter-receiver private delegate invoke (`other._callback()`) — FieldRef on other.
+        public async Task AsyncInvokePrivateDelegateOnOther(HotReloadE2EFixture other)
+        {
+            await Task.Yield();
+            other._callback();
+        }
+
         // Private property ??= — worker must skip (no conditional-write rewrite shape).
         public async Task AsyncNullCoalesceAssignPrivateProperty()
         {

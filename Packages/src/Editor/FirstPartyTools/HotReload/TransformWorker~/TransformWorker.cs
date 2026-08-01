@@ -1571,10 +1571,17 @@ internal static class AccessorEligibility
 
         if (node is MemberAccessExpressionSyntax memberAccess)
         {
+            // Method-group invocation targets are owned by the invocation branch; delegate-typed
+            // field invokes (`this._cb()` / `other._cb()`) register as field reads here.
             if (memberAccess.Parent is InvocationExpressionSyntax parentInvocation
                 && parentInvocation.Expression == memberAccess)
             {
-                return false;
+                ISymbol invocationTarget = semanticModel.GetSymbolInfo(memberAccess).Symbol
+                    ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol;
+                if (invocationTarget is IMethodSymbol)
+                {
+                    return false;
+                }
             }
 
             if (memberAccess.Parent is AssignmentExpressionSyntax parentAssignment
@@ -2140,7 +2147,14 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitMemberAccessExpression(node);
         }
 
-        if (node.Parent is InvocationExpressionSyntax invocation && invocation.Expression == node)
+        ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol
+            ?? _semanticModel.GetSymbolInfo(node.Name).Symbol;
+
+        // Method-group invocation targets stay with VisitInvocationExpression; field/property
+        // delegate invokes (`this._cb()`) must rewrite here so the call becomes `__F__(recv)()`.
+        if (node.Parent is InvocationExpressionSyntax invocation
+            && invocation.Expression == node
+            && symbol is IMethodSymbol)
         {
             return base.VisitMemberAccessExpression(node);
         }
@@ -2150,8 +2164,6 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitMemberAccessExpression(node);
         }
 
-        ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol
-            ?? _semanticModel.GetSymbolInfo(node.Name).Symbol;
         ExpressionSyntax rewritten = TryRewriteInaccessibleRead(symbol, node.Expression, node);
         if (rewritten != null)
         {
