@@ -40,12 +40,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private int _secret = 10;
         private Action _callback;
         private int? Score { get; set; }
+        private int Value { get; set; }
 
         public int SecretForAssert => _secret;
 
         public int Counter;
 
         public HotReloadE2EFixture Next;
+
+        // Property getter receiver — compound writes must not double-evaluate this.
+        public HotReloadE2EFixture Current
+        {
+            get { return this; }
+        }
 
         private int this[int index] => _secret + index;
 
@@ -158,6 +165,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             await Task.Yield();
             Score ??= 5;
+        }
+
+        // Compound write through a property getter receiver — worker must skip (double-eval).
+        public async Task AsyncCompoundWriteViaPropertyReceiver()
+        {
+            await Task.Yield();
+            Current.Value += 1;
         }
     }
 }

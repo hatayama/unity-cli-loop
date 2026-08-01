@@ -1671,6 +1671,7 @@ internal static class AccessorEligibility
         if (leftSymbol is IPropertySymbol propertySymbol)
         {
             return TryRegisterPropertyWrite(
+                semanticModel,
                 assignment,
                 propertySymbol,
                 plan,
@@ -1857,6 +1858,7 @@ internal static class AccessorEligibility
     }
 
     private static bool TryRegisterPropertyWrite(
+        SemanticModel semanticModel,
         AssignmentExpressionSyntax assignment,
         IPropertySymbol propertySymbol,
         AccessorPlan plan,
@@ -1911,7 +1913,7 @@ internal static class AccessorEligibility
         }
 
         // Compound/get+set rewrite embeds the receiver twice; reject side-effecting receivers.
-        if (needsGetter && !IsSideEffectFreeAssignmentReceiver(assignment.Left))
+        if (needsGetter && !IsSideEffectFreeAssignmentReceiver(semanticModel, assignment.Left))
         {
             rejectReason =
                 "receiver with possible side effects would be evaluated twice (condition b).";
@@ -1979,10 +1981,13 @@ internal static class AccessorEligibility
     }
 
     /// <summary>
-    /// What: whether an assignment left's receiver is limited to this/identifier/member-access
-    /// chains (no invocations, element access, conditionals, etc.).
+    /// What: whether an assignment left's receiver chain is free of re-evaluable members
+    /// (properties/methods). Only this/locals/parameters/fields (and type/namespace qualifiers)
+    /// are allowed — FieldRef re-reads the same storage, so field links are idempotent.
     /// </summary>
-    private static bool IsSideEffectFreeAssignmentReceiver(ExpressionSyntax left)
+    private static bool IsSideEffectFreeAssignmentReceiver(
+        SemanticModel semanticModel,
+        ExpressionSyntax left)
     {
         ExpressionSyntax receiver = left is MemberAccessExpressionSyntax memberAccess
             ? memberAccess.Expression
@@ -1996,12 +2001,40 @@ internal static class AccessorEligibility
         ExpressionSyntax current = receiver;
         while (current is MemberAccessExpressionSyntax nested)
         {
+            ISymbol linkSymbol = semanticModel.GetSymbolInfo(nested.Name).Symbol
+                ?? semanticModel.GetSymbolInfo(nested).Symbol;
+            if (!IsSideEffectFreeReceiverLink(linkSymbol))
+            {
+                return false;
+            }
+
             current = nested.Expression;
         }
 
-        return current is IdentifierNameSyntax
-            || current is ThisExpressionSyntax
-            || current is BaseExpressionSyntax;
+        if (current is ThisExpressionSyntax || current is BaseExpressionSyntax)
+        {
+            return true;
+        }
+
+        if (current is IdentifierNameSyntax)
+        {
+            ISymbol headSymbol = semanticModel.GetSymbolInfo(current).Symbol;
+            return headSymbol is ILocalSymbol
+                || headSymbol is IParameterSymbol
+                || headSymbol is IFieldSymbol
+                || headSymbol is ITypeSymbol
+                || headSymbol is INamespaceSymbol;
+        }
+
+        return false;
+    }
+
+    private static bool IsSideEffectFreeReceiverLink(ISymbol linkSymbol)
+    {
+        // Fields re-read the same storage; type/namespace qualifiers are not evaluated.
+        return linkSymbol is IFieldSymbol
+            || linkSymbol is ITypeSymbol
+            || linkSymbol is INamespaceSymbol;
     }
 
     public static bool IsNameHandledByParent(SimpleNameSyntax node)
