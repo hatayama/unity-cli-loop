@@ -1,0 +1,124 @@
+using System;
+using System.IO;
+
+using Mono.Cecil;
+
+using UnityEngine;
+
+using CecilFieldAttributes = Mono.Cecil.FieldAttributes;
+using CecilMethodAttributes = Mono.Cecil.MethodAttributes;
+using CecilTypeAttributes = Mono.Cecil.TypeAttributes;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Produces a Cecil visibility rewrite of a project script assembly so external csc can
+    /// compile shim sources that reference private/internal members. Publicize is a compile-time
+    /// aid only — Editor Mono still enforces accessibility at JIT time.
+    /// </summary>
+    internal static class ReferencePublicizer
+    {
+        /// <summary>
+        /// Returns the path of a cached publicized copy for <paramref name="sourceDllPath"/>,
+        /// writing it on first use. Only <c>Library/ScriptAssemblies/</c> DLLs are accepted —
+        /// engine and system assemblies must not be rewritten.
+        /// </summary>
+        public static string GetOrCreatePublicizedCopy(string sourceDllPath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(sourceDllPath), "sourceDllPath must not be null or empty.");
+
+            string fullSourceDllPath = Path.GetFullPath(sourceDllPath);
+            Debug.Assert(File.Exists(fullSourceDllPath), "sourceDllPath must point to an existing DLL.");
+            AssertIsScriptAssemblyPath(fullSourceDllPath);
+
+            // InMemory: the source DLL is the currently loaded script assembly; keep no file handle.
+            ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
+            using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(fullSourceDllPath, readerParameters);
+
+            string assemblyName = assemblyDefinition.Name.Name;
+            string mvid = assemblyDefinition.MainModule.Mvid.ToString("N");
+            string outputDirectory = ResolvePublicizedRefsDirectory();
+            Directory.CreateDirectory(outputDirectory);
+
+            string outputDllPath = Path.Combine(
+                outputDirectory,
+                assemblyName + "-" + mvid + HotReloadConstants.CompiledAssemblyExtension);
+            if (File.Exists(outputDllPath))
+            {
+                return outputDllPath;
+            }
+
+            foreach (ModuleDefinition module in assemblyDefinition.Modules)
+            {
+                foreach (TypeDefinition type in module.GetTypes())
+                {
+                    // <Module> is a metadata artifact; rewriting its visibility breaks the module.
+                    if (type.Name == "<Module>")
+                    {
+                        continue;
+                    }
+
+                    PublicizeType(type);
+                }
+            }
+
+            assemblyDefinition.Write(outputDllPath);
+            return outputDllPath;
+        }
+
+        private static void AssertIsScriptAssemblyPath(string fullSourceDllPath)
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string scriptAssembliesDirectory = Path.GetFullPath(
+                Path.Combine(projectRoot, HotReloadConstants.ScriptAssembliesRelativeDirectory));
+
+            string normalizedSource = NormalizePathForComparison(fullSourceDllPath);
+            string normalizedDirectory = NormalizePathForComparison(scriptAssembliesDirectory);
+            // Windows paths are case-insensitive; separators are normalized to '/' above.
+            StringComparison comparison = Application.platform == RuntimePlatform.WindowsEditor
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            bool underScriptAssemblies = normalizedSource.StartsWith(normalizedDirectory + "/", comparison);
+
+            Debug.Assert(
+                underScriptAssemblies,
+                "ReferencePublicizer only accepts DLLs under Library/ScriptAssemblies/.");
+        }
+
+        private static string ResolvePublicizedRefsDirectory()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            return Path.Combine(projectRoot, HotReloadConstants.PublicizedRefsRelativeDirectory);
+        }
+
+        private static void PublicizeType(TypeDefinition type)
+        {
+            // Preserve non-visibility flags (abstract, sealed, interface, …); only swap the
+            // visibility bits so the rewrite stays a pure accessibility change.
+            if (type.IsNested)
+            {
+                type.Attributes = (type.Attributes & ~CecilTypeAttributes.VisibilityMask) | CecilTypeAttributes.NestedPublic;
+            }
+            else
+            {
+                type.Attributes = (type.Attributes & ~CecilTypeAttributes.VisibilityMask) | CecilTypeAttributes.Public;
+            }
+
+            foreach (FieldDefinition field in type.Fields)
+            {
+                field.Attributes = (field.Attributes & ~CecilFieldAttributes.FieldAccessMask) | CecilFieldAttributes.Public;
+            }
+
+            // Property/event accessors are MethodDefinitions on the type, so this loop covers them.
+            foreach (MethodDefinition method in type.Methods)
+            {
+                method.Attributes = (method.Attributes & ~CecilMethodAttributes.MemberAccessMask) | CecilMethodAttributes.Public;
+            }
+        }
+
+        private static string NormalizePathForComparison(string path)
+        {
+            return path.Replace('\\', '/');
+        }
+    }
+}
