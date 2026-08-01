@@ -1,11 +1,8 @@
 {
-    "name": "UnityCLILoop.Tests.Editor.HotReload",
-    "rootNamespace": "io.github.hatayama.UnityCliLoop.Tests.Editor",
+    "name": "UnityCLILoop.FirstPartyTools.HotReload.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
     "references": [
-        "GUID:0acc523941302664db1f4e527237feb3",
-        "GUID:27619889b8ba8c24980f49ee34dbb44a",
-        "GUID:afe86dd49995e46baa33e099a4d2ee1d",
-        "GUID:774ab7841db34070bf18932c90cf9ea6"
+        "GUID:afe86dd49995e46baa33e099a4d2ee1d"
     ],
     "includePlatforms": [
         "Editor"
@@ -15,7 +12,8 @@
     "overrideReferences": true,
     "precompiledReferences": [
         "UnityCliLoop.0Harmony.dll",
-        "Mono.Cecil.dll"
+        "Mono.Cecil.dll",
+        "Newtonsoft.Json.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [],
