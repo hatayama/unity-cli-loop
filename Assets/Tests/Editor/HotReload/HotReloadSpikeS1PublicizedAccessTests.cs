@@ -38,7 +38,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
     /// </summary>
     public class HotReloadSpikeS1PublicizedAccessTests
     {
-        private const string HarmonyId = "io.github.hatayama.uloop.hot-reload";
+        // Test-scoped id: sharing the production hot reload id would let this suite's
+        // UnpatchAll remove real hot reload patches from the Editor domain.
+        private const string HarmonyId = "io.github.hatayama.uloop.hot-reload-spike-s1";
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
         private const string FixtureTypeFullName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikePrivateAccessFixture";
@@ -144,9 +146,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
 
         // The runtime would match IgnoresAccessChecksToAttribute by full name if it supported
         // it, so the snippet declares it locally; a pinned test below shows this Mono ignores it.
-        private const string IgnoresAccessChecksToPreamble = @"using System.Runtime.CompilerServices;
+        private static readonly string IgnoresAccessChecksToPreamble = @"using System.Runtime.CompilerServices;
 
-[assembly: IgnoresAccessChecksTo(""UnityCLILoop.Tests.Editor.HotReload"")]
+[assembly: IgnoresAccessChecksTo(""" + TestAssemblyName + @""")]
 
 namespace System.Runtime.CompilerServices
 {

@@ -196,13 +196,25 @@ public static class SpikeWorkerProgram
             Task completedTask = await Task.WhenAny(waitForExitTask, Task.Delay(timeout));
             if (completedTask != waitForExitTask)
             {
-                // HasExited guard: the process may exit between the timeout firing and the
-                // kill, and Kill on an exited process throws, masking the timeout failure.
                 if (!process.HasExited)
                 {
-                    process.Kill();
+                    try
+                    {
+                        process.Kill();
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // The process can still exit between the HasExited check and Kill; the
+                        // kill exists only for cleanup, so the expected race is swallowed and
+                        // the Assert.Fail below stays the single reported diagnosis.
+                    }
                 }
 
+                // Observe the redirected-stream tasks so a fault during teardown cannot
+                // surface later as an unobserved task exception in the Editor.
+                _ = Task.WhenAll(stdoutTask, stderrTask).ContinueWith(
+                    static task => _ = task.Exception,
+                    TaskContinuationOptions.OnlyOnFaulted);
                 Assert.Fail($"Process timed out after {timeout.TotalSeconds}s: {fileName} {arguments}");
             }
 

@@ -17,7 +17,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
     /// </summary>
     public class HotReloadSpikeS3PrefixDelegationTests
     {
-        private const string HarmonyId = "io.github.hatayama.uloop.hot-reload";
+        // Test-scoped id: sharing the production hot reload id would let this suite's
+        // UnpatchAll remove real hot reload patches from the Editor domain.
+        private const string HarmonyId = "io.github.hatayama.uloop.hot-reload-spike-s3";
 
         private class SpikeDelegationTarget
         {

@@ -16,7 +16,7 @@ Editor-only. Players (Mono or IL2CPP) are out of scope.
 
 ## Pipeline Overview
 
-```
+```text
 edited .cs file
   │ (1) resolve owning assembly, defines, and references via CompilationPipeline
   ▼
@@ -141,7 +141,12 @@ semantic model):
   same reason: their bodies compile into closure methods of the shim assembly, which
   JIT-compile normally when the delegate is invoked.
 
-### v2: accessor delegation for async, iterator, and closure bodies
+### v2 (planned): accessor delegation for async, iterator, and closure bodies
+
+Status: committed follow-up stage, not yet implemented. The async case is pinned by the S1
+spike tests (method-delegate accessor and delegation transpiler); iterator and closure bodies
+ride the same JIT-legality mechanism and must be verified by that stage's end-to-end tests
+before being documented as supported.
 
 v2 lifts the two v1 boundaries above by rewriting the inaccessible accesses instead of
 transplanting the IL. For a method that v1 would skip only because its async/iterator/closure
