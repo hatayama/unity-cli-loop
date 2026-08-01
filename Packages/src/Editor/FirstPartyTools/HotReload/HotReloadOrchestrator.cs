@@ -237,7 +237,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string methodLabel = entry.typeMetadataName + "." + entry.methodName;
 
             // Only "delegation" takes the skip branch; null/empty/anything else is transplant.
-            if (entry.patchKind == "delegation")
+            if (entry.patchKind == HotReloadConstants.PatchKindDelegation)
             {
                 return HotReloadMethodOutcome.Skipped(
                     methodLabel,
@@ -403,7 +403,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             foreach (TransformWorkerEntryDto entry in entries)
             {
-                if (entry.patchKind == "delegation")
+                if (entry.patchKind == HotReloadConstants.PatchKindDelegation)
                 {
                     return true;
                 }

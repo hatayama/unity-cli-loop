@@ -51,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 if (entry.methodName == nameof(HotReloadE2EFixture.QueryPrivate))
                 {
                     foundQueryPrivateDelegation = true;
-                    Assert.That(entry.patchKind, Is.EqualTo("delegation"));
+                    Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
                     Assert.That(result.Output.shimSource, Does.Contain("__BindAccessors"));
                 }
 
