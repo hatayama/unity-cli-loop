@@ -34,14 +34,14 @@ consume exactly one value token.
 ## How it works
 
 1. Resolves each file to its compiled assembly via `CompilationPipeline`.
-2. Rewrites each editable method body into a static shim in an out-of-process Roslyn worker.
-3. Compiles the shims against publicized reference copies and loads the result into the Editor domain.
-4. Transplants each shim's IL into the original method with a Harmony transpiler (ID `io.github.hatayama.uloop.hot-reload`).
+2. Rewrites each editable method body into a static shim in an out-of-process Roslyn worker. When an async, iterator, lambda, local-function, or LINQ-query body touches private/internal members, those accesses are rewritten to accessor delegates so the body can compile and run from the shim assembly (the delegation shape below).
+3. Compiles the shims against publicized reference copies, loads the result into the Editor domain, and binds every shim type's accessor delegates (`__BindAccessors`) before any patch is applied.
+4. Patches each original method with a Harmony transpiler (ID `io.github.hatayama.uloop.hot-reload`) in one of two shapes: transplant copies the shim's IL into the original method, while delegation rewrites the original to forward its arguments to the shim, which runs as normally compiled code.
 
 Re-running on the same method replaces its previous patch; `ActivePatchTotal` tracks the
 ledger across runs.
 
-## Scope and limits (v1)
+## Scope and limits
 
 Only ordinary method declarations are scanned. Property and indexer accessors, constructors,
 finalizers, operators, and event accessors are never scanned: edits to them produce **no
@@ -54,7 +54,7 @@ Edits outside method bodies never take effect: changing a `const` value, a field
 | Condition | Why |
 |-----------|-----|
 | Method on a `partial` type (including a type nested inside a partial outer type) | A single file cannot provide a complete semantic model |
-| Method on a struct (value type) | Value-type transplant is out of v1 scope |
+| Method on a struct (value type) | Value-type patching is out of scope |
 | Generic method, or method on a generic type | Harmony cannot safely patch open generics |
 | Explicit interface implementation | Dotted metadata names cannot be expressed as shim identifiers |
 | No body (`abstract` / `extern`) | Nothing to transplant |
