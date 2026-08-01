@@ -597,6 +597,21 @@ public static class TransformWorkerProgram
             return symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol);
         }
 
+        if (node is MemberBindingExpressionSyntax memberBinding)
+        {
+            // ?.Member — visibility of the bound member (not the receiver).
+            ISymbol bound = semanticModel.GetSymbolInfo(memberBinding.Name).Symbol;
+            if (bound is IPropertySymbol propertySymbol)
+            {
+                return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
+            }
+
+            return bound != null
+                && bound is not INamespaceSymbol
+                && bound is not ITypeSymbol
+                && AccessibilityRules.IsInaccessibleFromExternalAssembly(bound);
+        }
+
         if (node is IdentifierNameSyntax or GenericNameSyntax)
         {
             SimpleNameSyntax name = (SimpleNameSyntax)node;
@@ -609,6 +624,18 @@ public static class TransformWorkerProgram
                 && parentAssignment.Left == name)
             {
                 return false;
+            }
+
+            // Invocation-target exclusion applies only to method groups; delegate-typed fields
+            // invoked as `_cb()` must be detected as field reads.
+            if (name.Parent is InvocationExpressionSyntax parentInvocation
+                && parentInvocation.Expression == name)
+            {
+                ISymbol invocationTarget = semanticModel.GetSymbolInfo(name).Symbol;
+                if (invocationTarget is IMethodSymbol)
+                {
+                    return false;
+                }
             }
 
             ISymbol symbol = semanticModel.GetSymbolInfo(name).Symbol;
@@ -625,7 +652,12 @@ public static class TransformWorkerProgram
             if (memberAccess.Parent is InvocationExpressionSyntax parentInvocation
                 && parentInvocation.Expression == memberAccess)
             {
-                return false;
+                ISymbol invocationTarget = semanticModel.GetSymbolInfo(memberAccess).Symbol
+                    ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol;
+                if (invocationTarget is IMethodSymbol)
+                {
+                    return false;
+                }
             }
 
             if (memberAccess.Parent is AssignmentExpressionSyntax parentAssignment
@@ -773,8 +805,9 @@ internal static class AccessibilityRules
                 return true;
             }
 
+            // Recurse through nested containing types (same rule as the type-symbol branch).
             if (symbol.ContainingType != null
-                && HasInaccessibleAccessibility(symbol.ContainingType.DeclaredAccessibility))
+                && IsInaccessibleFromExternalAssembly(symbol.ContainingType))
             {
                 return true;
             }
@@ -1217,10 +1250,15 @@ internal sealed class AccessorEntry
         string declaringType = TypeDisplay(methodSymbol.ContainingType);
         string delegateType = BuildFuncOrActionType(methodSymbol);
         string typeArray = BuildTypeArrayLiteral(methodSymbol);
+        // virtualCall must stay true for virtual/override/abstract instance members so a derived
+        // override is dispatched; non-virtual private/internal targets keep false (exact method).
+        bool virtualCall = !methodSymbol.IsStatic
+            && (methodSymbol.IsVirtual || methodSymbol.IsOverride || methodSymbol.IsAbstract);
+        string virtualCallLiteral = virtualCall ? "true" : "false";
         return DelegateFieldName + " = global::HarmonyLib.AccessTools.MethodDelegate<"
             + delegateType + ">(global::HarmonyLib.AccessTools.Method(typeof("
             + declaringType + "), \"" + EscapeStringLiteral(metadataName) + "\", "
-            + typeArray + "), null, false, null);";
+            + typeArray + "), null, " + virtualCallLiteral + ", null);";
     }
 
     private static string BuildTypeArrayLiteral(IMethodSymbol methodSymbol)
@@ -1566,6 +1604,18 @@ internal static class AccessorEligibility
                 return false;
             }
 
+            // Method-group invocation targets are owned by the invocation branch; delegate-typed
+            // field invokes (`_cb()`) register as field reads here.
+            if (name.Parent is InvocationExpressionSyntax parentInvocation
+                && parentInvocation.Expression == name)
+            {
+                ISymbol invocationTarget = semanticModel.GetSymbolInfo(name).Symbol;
+                if (invocationTarget is IMethodSymbol)
+                {
+                    return false;
+                }
+            }
+
             return TryRegisterPropertyOrFieldRead(
                 semanticModel.GetSymbolInfo(name).Symbol,
                 plan,
@@ -1614,8 +1664,8 @@ internal static class AccessorEligibility
         if (leftSymbol is IPropertySymbol propertySymbol)
         {
             return TryRegisterPropertyWrite(
+                assignment,
                 propertySymbol,
-                needsGetter: !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression),
                 plan,
                 out rejectReason);
         }
@@ -1800,12 +1850,13 @@ internal static class AccessorEligibility
     }
 
     private static bool TryRegisterPropertyWrite(
+        AssignmentExpressionSyntax assignment,
         IPropertySymbol propertySymbol,
-        bool needsGetter,
         AccessorPlan plan,
         out string rejectReason)
     {
         rejectReason = null;
+        bool needsGetter = !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression);
 
         // Why accessibility first: shape gates (indexer/static/ref-return) must not reject fully
         // public writes such as dict[key]=value or Time.timeScale=0f. The read-side path already
@@ -1819,6 +1870,21 @@ internal static class AccessorEligibility
             return false;
         }
 
+        if (assignment.IsKind(SyntaxKind.CoalesceAssignmentExpression))
+        {
+            rejectReason =
+                "null-coalescing assignment writes conditionally and has no accessor rewrite shape "
+                + "(condition b).";
+            return false;
+        }
+
+        if (needsGetter && !IsSupportedCompoundAssignmentKind(assignment.Kind()))
+        {
+            rejectReason =
+                "unsupported compound assignment kind has no accessor rewrite shape (condition b).";
+            return false;
+        }
+
         // Compound assignment with a private getter and a public setter has no rewrite shape:
         // RewritePropertyAssignment only fires when the setter is inaccessible.
         if (getterInaccessible && !setterInaccessible)
@@ -1826,6 +1892,22 @@ internal static class AccessorEligibility
             rejectReason =
                 "compound assignment reading an inaccessible getter with an accessible setter "
                 + "has no accessor rewrite shape (condition b).";
+            return false;
+        }
+
+        // Setter delegates are void — consuming the assignment expression value cannot compile.
+        if (assignment.Parent is not ExpressionStatementSyntax)
+        {
+            rejectReason =
+                "assignment value is consumed; the setter delegate returns void (condition b).";
+            return false;
+        }
+
+        // Compound/get+set rewrite embeds the receiver twice; reject side-effecting receivers.
+        if (needsGetter && !IsSideEffectFreeAssignmentReceiver(assignment.Left))
+        {
+            rejectReason =
+                "receiver with possible side effects would be evaluated twice (condition b).";
             return false;
         }
 
@@ -1874,6 +1956,47 @@ internal static class AccessorEligibility
         return true;
     }
 
+    private static bool IsSupportedCompoundAssignmentKind(SyntaxKind kind)
+    {
+        return kind == SyntaxKind.AddAssignmentExpression
+            || kind == SyntaxKind.SubtractAssignmentExpression
+            || kind == SyntaxKind.MultiplyAssignmentExpression
+            || kind == SyntaxKind.DivideAssignmentExpression
+            || kind == SyntaxKind.ModuloAssignmentExpression
+            || kind == SyntaxKind.AndAssignmentExpression
+            || kind == SyntaxKind.ExclusiveOrAssignmentExpression
+            || kind == SyntaxKind.OrAssignmentExpression
+            || kind == SyntaxKind.LeftShiftAssignmentExpression
+            || kind == SyntaxKind.RightShiftAssignmentExpression
+            || kind == SyntaxKind.UnsignedRightShiftAssignmentExpression;
+    }
+
+    /// <summary>
+    /// What: whether an assignment left's receiver is limited to this/identifier/member-access
+    /// chains (no invocations, element access, conditionals, etc.).
+    /// </summary>
+    private static bool IsSideEffectFreeAssignmentReceiver(ExpressionSyntax left)
+    {
+        ExpressionSyntax receiver = left is MemberAccessExpressionSyntax memberAccess
+            ? memberAccess.Expression
+            : null;
+        if (receiver == null)
+        {
+            // Bare member — implicit this.
+            return true;
+        }
+
+        ExpressionSyntax current = receiver;
+        while (current is MemberAccessExpressionSyntax nested)
+        {
+            current = nested.Expression;
+        }
+
+        return current is IdentifierNameSyntax
+            || current is ThisExpressionSyntax
+            || current is BaseExpressionSyntax;
+    }
+
     public static bool IsNameHandledByParent(SimpleNameSyntax node)
     {
         if (node.Parent is MemberAccessExpressionSyntax memberAccess && memberAccess.Name == node)
@@ -1891,11 +2014,8 @@ internal static class AccessorEligibility
             return true;
         }
 
-        if (node.Parent is InvocationExpressionSyntax invocation && invocation.Expression == node)
-        {
-            return true;
-        }
-
+        // Invocation targets are NOT handled here: method groups are skipped by the caller after
+        // a symbol check; delegate-typed field invokes must reach the field-read path.
         return false;
     }
 }
@@ -2046,14 +2166,21 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         if (IsMemberAccessNameSide(node)
             || IsQualifiedNameRightSide(node)
             || IsMemberBindingName(node)
-            || IsObjectOrCollectionInitializerMemberName(node)
-            || IsInvocationTarget(node))
+            || IsObjectOrCollectionInitializerMemberName(node))
         {
             return original;
         }
 
         ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol;
         if (symbol == null)
+        {
+            return original;
+        }
+
+        // Local/anonymous functions are emitted into the shim assembly — keep bare calls.
+        if (symbol is IMethodSymbol methodSymbol
+            && (methodSymbol.MethodKind == MethodKind.LocalFunction
+                || methodSymbol.MethodKind == MethodKind.AnonymousFunction))
         {
             return original;
         }
@@ -2173,7 +2300,10 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             SyntaxKind.OrAssignmentExpression => SyntaxKind.BitwiseOrExpression,
             SyntaxKind.LeftShiftAssignmentExpression => SyntaxKind.LeftShiftExpression,
             SyntaxKind.RightShiftAssignmentExpression => SyntaxKind.RightShiftExpression,
-            _ => SyntaxKind.AddExpression
+            SyntaxKind.UnsignedRightShiftAssignmentExpression => SyntaxKind.UnsignedRightShiftExpression,
+            // Eligibility must reject unsupported compounds (including ??=) before rewrite.
+            _ => throw new System.InvalidOperationException(
+                "Unsupported compound assignment kind reached property rewrite: " + assignmentKind)
         };
     }
 
@@ -2287,12 +2417,6 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
     {
         return node.Parent is MemberBindingExpressionSyntax memberBinding
             && memberBinding.Name == node;
-    }
-
-    private static bool IsInvocationTarget(SimpleNameSyntax node)
-    {
-        return node.Parent is InvocationExpressionSyntax invocation
-            && invocation.Expression == node;
     }
 
     // `new T { _field = 1 }` must keep the bare member name; qualifying to instance._field is
