@@ -1,0 +1,197 @@
+#!/bin/sh
+set -e
+# Regression harness for the HotReload trap:
+# PlayMode logs a string literal from Update each frame. The driver sed-edits that
+# in-body literal on disk, applies uloop hot-reload (no domain reload), asserts
+# get-logs shows the new value, restores the source, reverts patches, and asserts
+# the old value returns. Sed must target a method-body literal — not a class-level
+# const or field initializer (those resolve from the stale compiled assembly).
+# See docs/regression-harness.md.
+#
+# Usage: sh scripts/regression-harness-hot-reload.sh [--project-path <path>]
+#
+# Prerequisites:
+#   - Assets/RegressionHarness/HotReload/HotReload.unity must be open in a running Unity Editor
+#   - dist/<platform>/uloop must be built (this checkout's development binary)
+#   - jq must be installed
+
+PROJECT_PATH=""
+# Why: reject malformed argv before cleanup can touch the wrong Unity project.
+if [ "$#" -eq 0 ]; then
+    :
+elif [ "$#" -eq 2 ] && [ "$1" = "--project-path" ] && [ -n "$2" ]; then
+    PROJECT_PATH="$2"
+else
+    printf '%s\n' "Usage: $0 [--project-path <path>]" >&2
+    exit 2
+fi
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+case "$(uname -s)" in
+    Darwin)
+        case "$(uname -m)" in
+            arm64) ULOOP_BIN="$REPO_ROOT/dist/darwin-arm64/uloop" ;;
+            *) ULOOP_BIN="$REPO_ROOT/dist/darwin-amd64/uloop" ;;
+        esac
+        ;;
+    Linux)
+        case "$(uname -m)" in
+            aarch64|arm64) ULOOP_BIN="$REPO_ROOT/dist/linux-arm64/uloop" ;;
+            *) ULOOP_BIN="$REPO_ROOT/dist/linux-amd64/uloop" ;;
+        esac
+        ;;
+    MINGW*|MSYS*|CYGWIN*)
+        ULOOP_BIN="$REPO_ROOT/dist/windows-amd64/uloop.exe"
+        ;;
+    *)
+        printf '%s\n' "Unsupported platform: $(uname -s)" >&2
+        exit 2
+        ;;
+esac
+
+if [ ! -x "$ULOOP_BIN" ]; then
+    printf '%s\n' "uloop binary not found or not executable: $ULOOP_BIN" >&2
+    printf '%s\n' "Build with scripts/build-go-cli.sh first." >&2
+    exit 2
+fi
+
+SOURCE_FILE="Assets/RegressionHarness/HotReload/HotReloadMarkerLogger.cs"
+SOURCE_ABS="$REPO_ROOT/$SOURCE_FILE"
+OLD_LITERAL="marker=111"
+NEW_LITERAL="marker=222"
+OLD_MARKER="[HotReloadHarness] ${OLD_LITERAL}"
+NEW_MARKER="[HotReloadHarness] ${NEW_LITERAL}"
+RESULT_FILE="$(mktemp)"
+LOG_FILE="$(mktemp)"
+SOURCE_BACKUP="$(mktemp)"
+AUTO_REFRESH_DISALLOWED="0"
+SOURCE_DIRTY="0"
+
+# Why copy-then-restore: sed mutates a tracked Assets file; any early exit must leave the
+# working tree clean, so the pristine bytes are snapshotted before the first edit.
+cp "$SOURCE_ABS" "$SOURCE_BACKUP"
+
+run_uloop() {
+    if [ -n "$PROJECT_PATH" ]; then
+        "$ULOOP_BIN" "$@" --project-path "$PROJECT_PATH"
+    else
+        "$ULOOP_BIN" "$@" --project-path "$REPO_ROOT"
+    fi
+}
+
+log() {
+    printf "\033[36m[hot-reload]\033[0m %s\n" "$1"
+}
+
+restore_source() {
+    if [ "$SOURCE_DIRTY" = "1" ]; then
+        cp "$SOURCE_BACKUP" "$SOURCE_ABS"
+        SOURCE_DIRTY="0"
+        log "Restored $SOURCE_FILE from backup."
+    fi
+}
+
+allow_auto_refresh() {
+    if [ "$AUTO_REFRESH_DISALLOWED" = "1" ]; then
+        # Why best-effort: cleanup must not fail the harness after assertions already passed.
+        run_uloop execute-dynamic-code --code "
+using UnityEditor;
+AssetDatabase.AllowAutoRefresh();
+return \"AllowAutoRefresh\";
+" > /dev/null 2>&1 || true
+        AUTO_REFRESH_DISALLOWED="0"
+    fi
+}
+
+cleanup() {
+    restore_source
+    run_uloop hot-reload --revert-all > /dev/null 2>&1 || true
+    allow_auto_refresh
+    run_uloop control-play-mode --action Stop > /dev/null 2>&1 || true
+    rm -f "$RESULT_FILE" "$LOG_FILE" "$SOURCE_BACKUP"
+}
+trap cleanup EXIT
+
+disallow_auto_refresh() {
+    # Why: sed writes under Assets/; without this hold Unity may import + domain-reload mid-run
+    # and erase the hot-reload patches (or race the Mvid guard) before get-logs can assert.
+    run_uloop execute-dynamic-code --code "
+using UnityEditor;
+AssetDatabase.DisallowAutoRefresh();
+return \"DisallowAutoRefresh\";
+" > /dev/null
+    AUTO_REFRESH_DISALLOWED="1"
+}
+
+await_marker_in_logs() {
+    expected_marker="$1"
+    attempt=1
+    max_attempts=10
+    while [ "$attempt" -le "$max_attempts" ]; do
+        run_uloop clear-console > /dev/null
+        # Why sleep: Update logs once per frame; give PlayMode a beat to emit after clear.
+        sleep 1
+        run_uloop get-logs --log-type Log --max-count 50 --search-text "$expected_marker" > "$LOG_FILE"
+        displayed="$(jq -r '.DisplayedCount // 0' "$LOG_FILE")"
+        if [ "$displayed" -gt 0 ]; then
+            return 0
+        fi
+        attempt=$((attempt + 1))
+    done
+    log "FAIL: did not observe log marker within ${max_attempts}s: $expected_marker"
+    cat "$LOG_FILE"
+    return 1
+}
+
+log "Disallowing AssetDatabase auto-refresh for the sed window..."
+disallow_auto_refresh
+
+log "Stopping any existing Play Mode session..."
+run_uloop control-play-mode --action Stop > /dev/null
+
+log "Starting Play Mode..."
+run_uloop control-play-mode --action Play > /dev/null
+
+log "Asserting baseline ${OLD_LITERAL} before hot-reload..."
+await_marker_in_logs "$OLD_MARKER"
+
+log "Sed-editing in-body literal ${OLD_LITERAL} -> ${NEW_LITERAL} in $SOURCE_FILE..."
+# Why POSIX sed -i requires a backup suffix on macOS BSD sed; use a temp and mv instead.
+sed "s/${OLD_LITERAL}/${NEW_LITERAL}/" "$SOURCE_ABS" > "${SOURCE_ABS}.tmp"
+mv "${SOURCE_ABS}.tmp" "$SOURCE_ABS"
+SOURCE_DIRTY="1"
+if ! grep -q "$NEW_LITERAL" "$SOURCE_ABS"; then
+    log "FAIL: sed did not rewrite literal to ${NEW_LITERAL}"
+    exit 1
+fi
+
+log "Applying hot-reload to $SOURCE_FILE..."
+run_uloop hot-reload --files "$SOURCE_FILE" > "$RESULT_FILE"
+success="$(jq -r '.Success' "$RESULT_FILE")"
+patched_total="$(jq -r '.PatchedTotal // 0' "$RESULT_FILE")"
+if [ "$success" != "true" ] || [ "$patched_total" -lt 1 ]; then
+    log "FAIL: expected Success=true and PatchedTotal>=1"
+    cat "$RESULT_FILE"
+    exit 1
+fi
+log "hot-reload applied (PatchedTotal=${patched_total})."
+
+log "Asserting ${NEW_LITERAL} after hot-reload..."
+await_marker_in_logs "$NEW_MARKER"
+
+log "Restoring source and reverting all hot-reload patches..."
+restore_source
+run_uloop hot-reload --revert-all > "$RESULT_FILE"
+revert_success="$(jq -r '.Success' "$RESULT_FILE")"
+if [ "$revert_success" != "true" ]; then
+    log "FAIL: --revert-all did not succeed"
+    cat "$RESULT_FILE"
+    exit 1
+fi
+
+log "Asserting ${OLD_LITERAL} after revert-all..."
+await_marker_in_logs "$OLD_MARKER"
+
+log "PASS: hot-reload changed PlayMode logs and revert-all restored the previous body."
+exit 0
