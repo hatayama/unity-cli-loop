@@ -9,8 +9,9 @@ description: "Apply method-body hot reload to edited C# sources in a running Uni
 Replaces method bodies in the running Editor (EditMode or PlayMode) directly from edited
 project source files — no domain reload, no attributes, no source markers. Private/internal
 member access, static methods, return values, async methods, and iterators all work within
-the v1 limits below. Methods that cannot be patched are reported per method as `Skipped` or
-`Failed`; one unpatchable method never aborts the rest of the run.
+the limits below — including private access inside async, iterator, lambda, local-function,
+and LINQ-query bodies. Methods that cannot be patched are reported per method as `Skipped`
+or `Failed`; one unpatchable method never aborts the rest of the run.
 
 ## Usage
 
@@ -28,19 +29,19 @@ consume exactly one value token.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--files` | array | - | Project-relative `.cs` paths whose method bodies should be hot-reloaded. Required when `--revert-all` is not set |
-| `--revert-all` | flag | - | Remove every active hot-reload transplant and clear the patch ledger. When set, `--files` is ignored |
+| `--revert-all` | flag | - | Remove every active hot-reload patch and clear the patch ledger. When set, `--files` is ignored |
 
 ## How it works
 
 1. Resolves each file to its compiled assembly via `CompilationPipeline`.
-2. Rewrites each editable method body into a static shim in an out-of-process Roslyn worker.
-3. Compiles the shims against publicized reference copies and loads the result into the Editor domain.
-4. Transplants each shim's IL into the original method with a Harmony transpiler (ID `io.github.hatayama.uloop.hot-reload`).
+2. Rewrites each editable method body into a static shim in an out-of-process Roslyn worker. When an async, iterator, lambda, local-function, or LINQ-query body touches private/internal members, those accesses are rewritten to accessor delegates so the body can compile and run from the shim assembly (the delegation shape below).
+3. Compiles the shims against publicized reference copies, loads the result into the Editor domain, and binds every shim type's accessor delegates (`__BindAccessors`) before any patch is applied.
+4. Patches each original method with a Harmony transpiler (ID `io.github.hatayama.uloop.hot-reload`) in one of two shapes: transplant copies the shim's IL into the original method, while delegation rewrites the original to forward its arguments to the shim, which runs as normally compiled code.
 
 Re-running on the same method replaces its previous patch; `ActivePatchTotal` tracks the
 ledger across runs.
 
-## Scope and limits (v1)
+## Scope and limits
 
 Only ordinary method declarations are scanned. Property and indexer accessors, constructors,
 finalizers, operators, and event accessors are never scanned: edits to them produce **no
@@ -53,13 +54,13 @@ Edits outside method bodies never take effect: changing a `const` value, a field
 | Condition | Why |
 |-----------|-----|
 | Method on a `partial` type (including a type nested inside a partial outer type) | A single file cannot provide a complete semantic model |
-| Method on a struct (value type) | Value-type transplant is out of v1 scope |
+| Method on a struct (value type) | Value-type patching is out of scope |
 | Generic method, or method on a generic type | Harmony cannot safely patch open generics |
 | Explicit interface implementation | Dotted metadata names cannot be expressed as shim identifiers |
 | No body (`abstract` / `extern`) | Nothing to transplant |
 | Body contains a `base.` call | `base` cannot be expressed from outside the type |
-| Lambda, local function, or LINQ query in the body accesses private/internal members | Closure bodies run from the shim assembly, where that access fails runtime accessibility checks; only the named method's IL is transplanted |
-| `async` or iterator body accesses private/internal members | Same as above — the state machine's `MoveNext` runs from the shim assembly |
+| Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates |
+| An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
 
 ### Failed — flips `Success` to `false`
 
@@ -71,6 +72,7 @@ Edits outside method bodies never take effect: changing a `const` value, a field
 | Method signature not found in the loaded assembly | New, renamed, or re-signatured members need `uloop compile` |
 | Shim compile error (e.g. the body calls a member that does not exist yet) | Response carries the compiler error and a hint to run `uloop compile` |
 | Patch rejected at apply time (e.g. `[BurstCompile]`) | Not patchable by Harmony transplant |
+| Accessor binding failed for a shim type | The source references a member the compiled assembly does not have yet; every delegation-patched method in that shim type reports the binder error — run `uloop compile` and retry |
 
 ## Convergence and lifecycle
 
@@ -84,10 +86,11 @@ Edits outside method bodies never take effect: changing a `const` value, a field
 
 ## Pause point interaction
 
-A hot-reload transplant discards the original IL and any prior transpiler output on that
-method, so a source pause point on a hot-reloaded method stops firing until the patch is
-reverted (`--revert-all`) or a domain reload restores the original IL. Apply responses
-include this as a `Warnings` entry whenever any method was patched.
+Both patch shapes discard the original IL and any prior transpiler output on the patched
+method — delegation replaces the body with a forward to the shim — so a source pause point
+on a hot-reloaded method stops firing until the patch is reverted (`--revert-all`) or a
+domain reload restores the original IL. Apply responses include this as a `Warnings` entry
+whenever any method was patched.
 
 ## Output
 

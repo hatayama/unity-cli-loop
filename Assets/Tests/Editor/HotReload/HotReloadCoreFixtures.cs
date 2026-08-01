@@ -1,3 +1,5 @@
+using System.Threading.Tasks;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
@@ -8,6 +10,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadCoreFixture
     {
         public int VoidHits;
+
+        // Public surface the JIT-legal delegation shim may touch (no private/internal access).
+        public int PublicSeed = 10;
 
         public int Add(int left, int right)
         {
@@ -32,6 +37,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Sentinel return proves the original body ran before a transplant replaces it.
         public int ReplaceableCompute(int delta)
         {
+            return -1 * delta;
+        }
+
+        // Delegation target: sentinel proves the original async body ran before forwarding.
+        public async Task<int> ReplaceableComputeAsync(int delta)
+        {
+            await Task.Yield();
             return -1 * delta;
         }
     }
@@ -61,6 +73,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public static int ReplaceableCompute__shim1(HotReloadCoreFixture instance, int delta)
         {
             return delta + 99;
+        }
+
+        // JIT-legal async shim: touches only public fixture members so normal JIT succeeds.
+        public static async Task<int> ReplaceableComputeAsync__shim0(
+            HotReloadCoreFixture instance,
+            int delta)
+        {
+            await Task.Yield();
+            return instance.PublicSeed + delta + 1;
         }
     }
 }

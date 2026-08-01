@@ -208,6 +208,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Harmony Patch/Unpatch and method resolution against loaded modules require main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
+            Dictionary<string, string> bindFailureReasonByShimTypeName =
+                BindShimAccessors(compileResult.Assembly);
             int patchedCount = 0;
             foreach (TransformWorkerEntryDto entry in workerOutput.entries)
             {
@@ -215,6 +217,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     entry,
                     assemblyName,
                     compileResult.Assembly,
+                    bindFailureReasonByShimTypeName,
                     assemblyResolvePath,
                     warnings);
                 outcomes.Add(outcome);
@@ -231,18 +234,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerEntryDto entry,
             string assemblyName,
             Assembly shimAssembly,
+            IReadOnlyDictionary<string, string> bindFailureReasonByShimTypeName,
             string filePath,
             List<string> warnings)
         {
             string methodLabel = entry.typeMetadataName + "." + entry.methodName;
 
-            // Only "delegation" takes the skip branch; null/empty/anything else is transplant.
-            if (entry.patchKind == HotReloadConstants.PatchKindDelegation)
+            // Only "delegation" selects the forwarding patch; null/empty/anything else is transplant.
+            HotReloadPatchShape patchShape = entry.patchKind == HotReloadConstants.PatchKindDelegation
+                ? HotReloadPatchShape.Delegation
+                : HotReloadPatchShape.Transplant;
+
+            // Transplant entries never read accessor delegates, so a sibling bind failure in the
+            // same shim type must not take them down; only delegation entries depend on the bind.
+            if (patchShape == HotReloadPatchShape.Delegation
+                && bindFailureReasonByShimTypeName.TryGetValue(entry.shimTypeName ?? string.Empty, out string bindFailureReason))
             {
-                return HotReloadMethodOutcome.Skipped(
-                    methodLabel,
-                    HotReloadConstants.DelegationPatchNotWiredSkipReason,
-                    filePath);
+                return HotReloadMethodOutcome.Failed(methodLabel, bindFailureReason, filePath);
             }
 
             string[] parameterTypeFullNames = entry.parameterTypeFullNames ?? Array.Empty<string>();
@@ -286,7 +294,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     filePath);
             }
 
-            HotReloadPatchResult patchResult = HotReloadPatcher.Apply(matchResult.Method, shimMethod);
+            HotReloadPatchResult patchResult = HotReloadPatcher.Apply(matchResult.Method, shimMethod, patchShape);
             if (!patchResult.Success)
             {
                 return HotReloadMethodOutcome.Failed(methodLabel, patchResult.ErrorMessage, filePath);
@@ -298,6 +306,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return HotReloadMethodOutcome.Patched(methodLabel, filePath, patchResult.Warning);
+        }
+
+        /// <summary>
+        /// Invokes each shim type's binder (emitted when the type carries at least one accessor
+        /// delegate) once, before any patch is applied, so no delegation shim can run with
+        /// unbound accessor delegates. Returns bind failures keyed by shim type name; every
+        /// delegation entry in a failed type becomes Failed instead of being patched.
+        /// Internal so tests can pin the failure contract directly — an end-to-end bind failure
+        /// cannot be fabricated once shim compilation has succeeded against the same assembly.
+        /// </summary>
+        internal static Dictionary<string, string> BindShimAccessors(Assembly shimAssembly)
+        {
+            Debug.Assert(shimAssembly != null, "shimAssembly must not be null.");
+
+            Dictionary<string, string> failureReasonByShimTypeName = new Dictionary<string, string>();
+            foreach (Type shimType in shimAssembly.GetTypes())
+            {
+                MethodInfo bindMethod = shimType.GetMethod(
+                    HotReloadConstants.ShimBindAccessorsMethodName,
+                    BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly,
+                    null,
+                    Type.EmptyTypes,
+                    null);
+                if (bindMethod == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    bindMethod.Invoke(null, null);
+                }
+                catch (TargetInvocationException invocationException)
+                {
+                    // Approved deviation from the no-try-catch rule: a bind failure (the source
+                    // references a member the compiled assembly does not have yet) is an expected
+                    // per-type outcome that must fail that type's methods with a remediation hint,
+                    // not crash the whole hot-reload run. Nothing is swallowed — the cause becomes
+                    // the Failed reason for every affected method.
+                    Exception cause = invocationException.InnerException ?? invocationException;
+                    failureReasonByShimTypeName[shimType.Name] =
+                        "Accessor binding failed for shim type '" + shimType.Name + "': "
+                        + cause.Message + " Run 'uloop compile' and retry.";
+                }
+            }
+
+            return failureReasonByShimTypeName;
         }
 
         private static Type FindShimType(Assembly shimAssembly, string shimTypeName)

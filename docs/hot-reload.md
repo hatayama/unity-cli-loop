@@ -141,30 +141,39 @@ semantic model):
   same reason: their bodies compile into closure methods of the shim assembly, which
   JIT-compile normally when the delegate is invoked.
 
-### v2 (planned): accessor delegation for async, iterator, and closure bodies
+### v2: accessor delegation for async, iterator, and closure bodies
 
-Status: committed follow-up stage, not yet implemented. The async case is pinned by the S1
-spike tests (method-delegate accessor and delegation transpiler); iterator and closure bodies
-ride the same JIT-legality mechanism and must be verified by that stage's end-to-end tests
-before being documented as supported.
+Status: implemented. The worker rewrite path (PR-6) and the orchestrator bind + delegation
+patch path (PR-7) are wired; EditMode e2e covers async, iterator, lambda-capture, and private
+property round-trips, plus the internal-type skip.
 
 v2 lifts the two v1 boundaries above by rewriting the inaccessible accesses instead of
 transplanting the IL. For a method that v1 would skip only because its async/iterator/closure
 body touches inaccessible members, the worker rewrites each such access into a call through a
 generated accessor delegate field (`AccessTools.FieldRef` for fields; open-instance delegates
 for methods and property accessors). The rewritten shim is JIT-legal, so the original method
-is patched with the delegation transpiler instead of the transplant transpiler.
+is patched with the **delegation** transpiler: discard the original body and emit
+"load every argument slot → `Call` the shim → `Ret`". The shim itself JIT-compiles normally;
+its accessor delegates reach members the shim assembly boundary would otherwise forbid.
 
-- The shim self-binds: a generated `__BindAccessors()` method assigns the delegate fields via
-  Harmony's string-based `AccessTools` lookups, and the loader invokes it once after
-  `Assembly.Load`, before patching. The binding code only references public Harmony APIs,
-  `typeof` of accessible types, and string literals, so it JIT-compiles legally.
+Wire details:
+
+- Manifest `patchKind` is `"delegation"` when the worker applied accessor rewrite, otherwise
+  `"transplant"` (or absent — treated as transplant).
+- After `Assembly.Load` of the shim assembly and **before** any Harmony patch is applied, the
+  orchestrator reflects over each shim type and invokes `__BindAccessors()` once when present
+  (parameterless `public static`). Types with no accessor delegates simply have no binder.
+- Bind failure (for example the source names a member the compiled assembly does not have yet)
+  fails **only that shim type's delegation entries** with a remediation hint to run
+  `uloop compile`. Transplant entries that share the same shim type are not taken down —
+  they never read accessor delegates.
 - Scope constraint: the rewrite applies only when the containing type and every type
   appearing in an accessor signature (instance type, field type, parameter and return types)
   is accessible to a foreign assembly. Inaccessible member *names* are fine; inaccessible
   *types as types* (locals, casts, `new`, signatures) are not rewritable and keep the skip.
-- Still skipped in v2: bodies using internal types as types (above), private callees with
-  `ref`/`out` parameters, and event add/remove on inaccessible events.
+- Still skipped in v2: bodies using internal types as types (above), private accesses with no
+  accessor-delegate shape (conditional access, indexers, static field writes, and the other
+  condition-b cases in the skill), and event add/remove on inaccessible events.
 
 ## Convergence and Lifecycle
 
