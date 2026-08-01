@@ -494,7 +494,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             foreach (string warning in result.Warnings)
             {
                 if (warning.Contains("TuningConst")
-                    && warning.Contains("is 4 in the edited source but 3 in the compiled assembly"))
+                    && warning.Contains("is 4 in the edited source but 3 in the compiled assembly")
+                    && warning.Contains("uloop compile"))
                 {
                     foundDrift = true;
                 }
@@ -563,7 +564,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             foreach (string warning in result.Warnings)
             {
                 if (warning.Contains("HotReloadE2EMode.Active")
-                    && warning.Contains("is 2 in the edited source but 1 in the compiled assembly"))
+                    && warning.Contains("is 2 in the edited source but 1 in the compiled assembly")
+                    && warning.Contains("uloop compile"))
                 {
                     foundDrift = true;
                 }
@@ -606,7 +608,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             foreach (string warning in result.Warnings)
             {
                 if (warning.Contains("TuningConst")
-                    && warning.Contains("is 5 in the edited source but 3 in the compiled assembly"))
+                    && warning.Contains("is 5 in the edited source but 3 in the compiled assembly")
+                    && warning.Contains("uloop compile"))
                 {
                     foundDrift = true;
                 }
