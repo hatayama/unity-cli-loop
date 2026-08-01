@@ -31,7 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
     /// are proven here: (1) transplanting the shim method's IL into the original method's
     /// Harmony replacement via a transpiler, so the shim itself is never JIT-compiled, and
     /// (2) rewriting private accesses to Harmony AccessTools accessor delegates, which keeps
-    /// the shim IL JIT-legal — including inside async state machine bodies.
+    /// the shim IL JIT-legal — including inside async state machine bodies, for private field
+    /// access (FieldRef delegates) and private method calls (open-instance method delegates).
+    /// A delegation transpiler (load arguments, call the shim, return) routes a patched
+    /// original method to such a JIT-legal shim.
     /// </summary>
     public class HotReloadSpikeS1PublicizedAccessTests
     {
@@ -93,6 +96,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
     {
         await System.Threading.Tasks.Task.Yield();
         CounterRef(instance) = CounterRef(instance) + delta;
+        return CounterRef(instance);
+    }
+}
+";
+
+        // Accessor rewrite covering a private METHOD call in an async body: the field access
+        // rides a FieldRef delegate and the method call an open-instance delegate, so the
+        // compiler-generated MoveNext body stays JIT-legal. This is the load-bearing shape of
+        // the v2 accessor stage.
+        private const string AsyncMethodAccessorSnippetSource = @"public static class SpikeS1AsyncMethodAccessorSnippet
+{
+    public static global::HarmonyLib.AccessTools.FieldRef<
+        io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikePrivateAccessFixture, int> CounterRef;
+
+    public static System.Action<
+        io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikePrivateAccessFixture> BumpByOneCall;
+
+    public static async System.Threading.Tasks.Task<int> PokeViaAccessorsAsync(
+        io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikePrivateAccessFixture instance,
+        int delta)
+    {
+        await System.Threading.Tasks.Task.Yield();
+        CounterRef(instance) = CounterRef(instance) + delta;
+        BumpByOneCall(instance);
         return CounterRef(instance);
     }
 }
@@ -251,6 +278,55 @@ namespace System.Runtime.CompilerServices
         }
 
         /// <summary>
+        /// What: the accessor rewrite extends to private METHOD calls — an open-instance
+        /// delegate built by AccessTools.MethodDelegate invokes the private method from inside
+        /// an async state machine body without tripping JIT accessibility checks. This is the
+        /// load-bearing assumption of the v2 accessor stage.
+        /// </summary>
+        [Test]
+        public async Task AsyncSnippet_UsingMethodDelegateAccessor_CallsPrivateMethodAtRuntime()
+        {
+            Type snippetType = await CompileAndLoadAsyncMethodAccessorSnippetAsync("S1-accessor-async-method");
+
+            MethodInfo pokeAsyncMethod = snippetType.GetMethod("PokeViaAccessorsAsync", BindingFlags.Public | BindingFlags.Static);
+            Assert.That(pokeAsyncMethod, Is.Not.Null, "PokeViaAccessorsAsync not found.");
+            Func<SpikePrivateAccessFixture, int, Task<int>> pokeAsync =
+                (Func<SpikePrivateAccessFixture, int, Task<int>>)pokeAsyncMethod.CreateDelegate(typeof(Func<SpikePrivateAccessFixture, int, Task<int>>));
+
+            SpikePrivateAccessFixture fixture = new();
+            int returnedValue = await pokeAsync(fixture, 5);
+            Assert.That(returnedValue, Is.EqualTo(16), "Accessor snippet must observe 10 (initial) + 5 (delta) + 1 (BumpByOne).");
+            Assert.That(fixture.CounterForAssert, Is.EqualTo(16), "The original instance must observe the writes made through the accessors.");
+        }
+
+        /// <summary>
+        /// What: patching an original async method with a transpiler that replaces its body
+        /// with "load arguments, call the accessor-rewritten async shim, return" routes calls
+        /// to the shim, whose state machine JIT-compiles legally thanks to the accessor
+        /// rewrite. This is the v2 patch shape for methods whose shims are JIT-legal.
+        /// </summary>
+        [Test]
+        public async Task AsyncOriginal_PatchedWithDelegationToAccessorShim_RunsShimBody()
+        {
+            Type snippetType = await CompileAndLoadAsyncMethodAccessorSnippetAsync("S1-delegation-async");
+            MethodInfo pokeAsyncMethod = snippetType.GetMethod("PokeViaAccessorsAsync", BindingFlags.Public | BindingFlags.Static);
+            Assert.That(pokeAsyncMethod, Is.Not.Null, "PokeViaAccessorsAsync not found.");
+
+            _transplantSourceMethod = pokeAsyncMethod;
+            MethodInfo originalMethod = AccessTools.Method(
+                typeof(SpikePrivateAccessFixture), nameof(SpikePrivateAccessFixture.ReplaceableComputeAsync));
+            MethodInfo transpilerMethod = typeof(HotReloadSpikeS1PublicizedAccessTests).GetMethod(
+                nameof(ReplaceWithDelegationToTransplantSourceTranspiler), BindingFlags.Public | BindingFlags.Static);
+            Harmony harmony = new(HarmonyId);
+            harmony.Patch(originalMethod, transpiler: new HarmonyMethod(transpilerMethod));
+
+            SpikePrivateAccessFixture fixture = new();
+            int returnedValue = await fixture.ReplaceableComputeAsync(5);
+            Assert.That(returnedValue, Is.EqualTo(16), "Delegated body must observe 10 (initial) + 5 (delta) + 1 (BumpByOne).");
+            Assert.That(fixture.CounterForAssert, Is.EqualTo(16), "The original instance must observe the writes made by the shim.");
+        }
+
+        /// <summary>
         /// What: an async snippet with DIRECT private accesses fails with FieldAccessException
         /// when its compiler-generated MoveNext body is JIT-compiled on first execution —
         /// pinning why async bodies need the accessor rewrite.
@@ -357,6 +433,24 @@ namespace System.Runtime.CompilerServices
         }
 
         /// <summary>
+        /// Transpiler that discards the original instructions and emits a plain call to the
+        /// transplant source method instead (load every argument slot, call, return). Used for
+        /// JIT-legal shims (accessor-rewritten async bodies), where the goal is to execute the
+        /// shim method itself rather than to transplant its IL.
+        /// </summary>
+        public static IEnumerable<CodeInstruction> ReplaceWithDelegationToTransplantSourceTranspiler(
+            IEnumerable<CodeInstruction> instructions)
+        {
+            return new List<CodeInstruction>
+            {
+                new CodeInstruction(OpCodes.Ldarg_0),
+                new CodeInstruction(OpCodes.Ldarg_1),
+                new CodeInstruction(OpCodes.Call, _transplantSourceMethod),
+                new CodeInstruction(OpCodes.Ret)
+            };
+        }
+
+        /// <summary>
         /// Plays the role of the hot reload infrastructure wiring accessor delegates into a
         /// freshly loaded shim assembly: binds the snippet's CounterRef field to a Harmony
         /// FieldRef for the fixture's private _counter field.
@@ -366,6 +460,29 @@ namespace System.Runtime.CompilerServices
             FieldInfo counterRefField = snippetType.GetField("CounterRef", BindingFlags.Public | BindingFlags.Static);
             Assert.That(counterRefField, Is.Not.Null, "CounterRef field not found in the accessor snippet.");
             counterRefField.SetValue(null, AccessTools.FieldRefAccess<SpikePrivateAccessFixture, int>("_counter"));
+        }
+
+        /// <summary>
+        /// Compiles the async method-accessor snippet and binds both accessor delegate fields:
+        /// CounterRef to a Harmony FieldRef for the private _counter field, and BumpByOneCall
+        /// to an open-instance delegate for the private BumpByOne method (virtualCall false —
+        /// the exact private method must be called, not a virtual slot).
+        /// </summary>
+        private static async Task<Type> CompileAndLoadAsyncMethodAccessorSnippetAsync(string workSubdirectoryName)
+        {
+            List<string> harmonyReference = new() { typeof(Harmony).Assembly.Location };
+            Type snippetType = await CompileAndLoadSnippetAsync(
+                workSubdirectoryName, AsyncMethodAccessorSnippetSource, "SpikeS1AsyncMethodAccessorSnippet", harmonyReference);
+            BindAccessorField(snippetType);
+
+            FieldInfo bumpByOneCallField = snippetType.GetField("BumpByOneCall", BindingFlags.Public | BindingFlags.Static);
+            Assert.That(bumpByOneCallField, Is.Not.Null, "BumpByOneCall field not found in the accessor snippet.");
+            MethodInfo bumpByOneMethod = AccessTools.Method(typeof(SpikePrivateAccessFixture), "BumpByOne");
+            Assert.That(bumpByOneMethod, Is.Not.Null, "BumpByOne method not found on the fixture.");
+            bumpByOneCallField.SetValue(
+                null,
+                AccessTools.MethodDelegate<Action<SpikePrivateAccessFixture>>(bumpByOneMethod, null, false, null));
+            return snippetType;
         }
 
         /// <summary>

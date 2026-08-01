@@ -76,10 +76,15 @@ What the spike **proved**:
   and internal type access all succeed. The shim method itself is never JIT-compiled; its IL
   is only read as data. Argument slots line up because an instance method `(this, args…)`
   and its static shim `(instance, args…)` occupy identical slots.
-- **Accessor mechanism (proven alternative).** Rewriting private accesses to Harmony
-  `AccessTools.FieldRefAccess` delegate fields keeps the shim IL JIT-legal; this works even
-  inside async state machine bodies (verified). Retained as the documented fallback should
-  transplant coverage prove insufficient; not part of v1.
+- **Accessor mechanism (proven; committed as the v2 stage).** Rewriting private accesses to
+  Harmony accessor delegate fields keeps the shim IL JIT-legal; this works even inside async
+  state machine bodies. Verified for private field access (`AccessTools.FieldRefAccess`
+  delegates) and for private method calls (open-instance delegates built by
+  `AccessTools.MethodDelegate`).
+- **Delegation transpiler (proven; the v2 patch shape).** Patching an original async method
+  with a transpiler that replaces its body with "load arguments, call the accessor-rewritten
+  shim, return" routes calls to the shim, whose state machine JIT-compiles legally. Verified
+  end-to-end on an async original.
 
 ### S2 — transform worker bootstrap
 
@@ -128,13 +133,33 @@ Why transplant over the accessor rewrite:
 Boundaries the mechanism imposes (enforced as per-method skips, detected by the worker's
 semantic model):
 
-- **Async/iterator bodies that touch inaccessible members are skipped.** The transplant
+- **Async/iterator bodies that touch inaccessible members are skipped in v1.** The transplant
   replaces the visible method (the async/iterator stub); the shim's compiler-generated
   `MoveNext` body still JIT-compiles normally and would throw (pinned by the S1 async test).
   Async/iterator methods whose bodies only touch accessible members are supported.
-- **Lambdas and local functions that touch inaccessible members are skipped** for the same
-  reason: their bodies compile into closure methods of the shim assembly, which JIT-compile
-  normally when the delegate is invoked.
+- **Lambdas and local functions that touch inaccessible members are skipped in v1** for the
+  same reason: their bodies compile into closure methods of the shim assembly, which
+  JIT-compile normally when the delegate is invoked.
+
+### v2: accessor delegation for async, iterator, and closure bodies
+
+v2 lifts the two v1 boundaries above by rewriting the inaccessible accesses instead of
+transplanting the IL. For a method that v1 would skip only because its async/iterator/closure
+body touches inaccessible members, the worker rewrites each such access into a call through a
+generated accessor delegate field (`AccessTools.FieldRef` for fields; open-instance delegates
+for methods and property accessors). The rewritten shim is JIT-legal, so the original method
+is patched with the delegation transpiler instead of the transplant transpiler.
+
+- The shim self-binds: a generated `__BindAccessors()` method assigns the delegate fields via
+  Harmony's string-based `AccessTools` lookups, and the loader invokes it once after
+  `Assembly.Load`, before patching. The binding code only references public Harmony APIs,
+  `typeof` of accessible types, and string literals, so it JIT-compiles legally.
+- Scope constraint: the rewrite applies only when the containing type and every type
+  appearing in an accessor signature (instance type, field type, parameter and return types)
+  is accessible to a foreign assembly. Inaccessible member *names* are fine; inaccessible
+  *types as types* (locals, casts, `new`, signatures) are not rewritable and keep the skip.
+- Still skipped in v2: bodies using internal types as types (above), private callees with
+  `ref`/`out` parameters, and event add/remove on inaccessible events.
 
 ## Convergence and Lifecycle
 
