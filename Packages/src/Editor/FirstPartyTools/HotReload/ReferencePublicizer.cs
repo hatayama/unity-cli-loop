@@ -76,12 +76,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string currentOutputDllPath)
         {
             string searchPattern = assemblyName + "-*" + HotReloadConstants.CompiledAssemblyExtension;
+            string currentOutputFullPath = Path.GetFullPath(currentOutputDllPath);
             foreach (string candidatePath in Directory.GetFiles(outputDirectory, searchPattern))
             {
                 if (string.Equals(
                         Path.GetFullPath(candidatePath),
-                        Path.GetFullPath(currentOutputDllPath),
+                        currentOutputFullPath,
                         StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                // The glob is a prefix match, so hyphenated siblings such as
+                // Assembly-CSharp-Editor-<mvid>.dll also match Assembly-CSharp-*.dll.
+                // Only delete when the suffix after "<assemblyName>-" is exactly an Mvid in "N"
+                // format — never a longer sibling assembly name.
+                string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(candidatePath);
+                if (fileNameWithoutExtension.Length <= assemblyName.Length + 1)
+                {
+                    continue;
+                }
+
+                string mvidCandidate = fileNameWithoutExtension.Substring(assemblyName.Length + 1);
+                if (!Guid.TryParseExact(mvidCandidate, "N", out Guid _))
                 {
                     continue;
                 }

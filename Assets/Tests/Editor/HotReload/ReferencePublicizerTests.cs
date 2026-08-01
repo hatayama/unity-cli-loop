@@ -77,6 +77,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoNonPublicTypesOrMembersRemain(publicizedAssembly);
         }
 
+        /// <summary>
+        /// What: pruning stale publicized copies does not delete hyphenated sibling assembly
+        /// caches that share a prefix (e.g. Assembly-CSharp vs Assembly-CSharp-Editor).
+        /// </summary>
+        [Test]
+        public void GetOrCreatePublicizedCopy_DoesNotDeleteHyphenatedSiblingAssemblyCaches()
+        {
+            string projectRootPath = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string outputDirectory = Path.Combine(projectRootPath, "Library", "UloopHotReload", "PublicizedRefs");
+            Directory.CreateDirectory(outputDirectory);
+
+            // Force the write+prune path: remove existing exact-mvid caches for this assembly.
+            DeleteExactMvidCachesForAssembly(outputDirectory, TestAssemblyName);
+
+            string siblingCachePath = Path.Combine(
+                outputDirectory,
+                TestAssemblyName + "-Sibling-" + Guid.NewGuid().ToString("N") + ".dll");
+            File.WriteAllBytes(siblingCachePath, new byte[] { 0x4D, 0x5A });
+
+            string staleSameAssemblyPath = Path.Combine(
+                outputDirectory,
+                TestAssemblyName + "-" + Guid.NewGuid().ToString("N") + ".dll");
+            File.WriteAllBytes(staleSameAssemblyPath, new byte[] { 0x4D, 0x5A });
+
+            string publicizedPath = ReferencePublicizer.GetOrCreatePublicizedCopy(ResolveTestAssemblyDllPath());
+
+            Assert.That(File.Exists(publicizedPath), Is.True, "Current-mvid publicized copy must be written.");
+            Assert.That(
+                File.Exists(siblingCachePath),
+                Is.True,
+                "Hyphenated sibling assembly caches must survive prune (prefix glob alone is insufficient).");
+            Assert.That(
+                File.Exists(staleSameAssemblyPath),
+                Is.False,
+                "A true stale same-assembly cache (name-<mvid>.dll) must still be pruned.");
+        }
+
+        private static void DeleteExactMvidCachesForAssembly(string outputDirectory, string assemblyName)
+        {
+            foreach (string candidatePath in Directory.GetFiles(outputDirectory, assemblyName + "-*.dll"))
+            {
+                string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(candidatePath);
+                if (fileNameWithoutExtension.Length <= assemblyName.Length + 1)
+                {
+                    continue;
+                }
+
+                string mvidCandidate = fileNameWithoutExtension.Substring(assemblyName.Length + 1);
+                if (Guid.TryParseExact(mvidCandidate, "N", out Guid _))
+                {
+                    File.Delete(candidatePath);
+                }
+            }
+        }
+
         private static void AssertNoNonPublicTypesOrMembersRemain(AssemblyDefinition assemblyDefinition)
         {
             foreach (TypeDefinition type in assemblyDefinition.MainModule.GetTypes())
