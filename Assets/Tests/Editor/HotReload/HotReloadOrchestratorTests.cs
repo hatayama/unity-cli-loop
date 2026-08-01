@@ -198,6 +198,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a mixed transplant+delegation fixture compiles the shim (Harmony ref present),
+        /// transplants the sync private-access method, and reports delegation entries as Skipped
+        /// with the not-wired reason (delegation patcher lands in a later change).
+        /// </summary>
+        [Test]
+        public async Task Run_MixedTransplantAndDelegationFile_PatchesSyncAndSkipsDelegation()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "MixedTransplantDelegation.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(10 + 5 + 100));
+
+            bool foundDelegationSkip = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Method.Contains(nameof(HotReloadE2EFixture.QueryPrivate))
+                    && outcome.Reason == HotReloadConstants.DelegationPatchNotWiredSkipReason)
+                {
+                    foundDelegationSkip = true;
+                }
+            }
+
+            Assert.That(
+                foundDelegationSkip,
+                Is.True,
+                "Expected QueryPrivate to be Skipped with the delegation-not-wired reason.\n"
+                + FormatOutcomes(result));
+        }
+
+        /// <summary>
         /// What: an edited body that calls a non-existent helper fails shim compile with the
         /// new-member hint (Failed, not a silent skip).
         /// </summary>

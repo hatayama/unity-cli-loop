@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -37,12 +38,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadE2EFixture : HotReloadE2EBase, IHotReloadE2EMarker
     {
         private int _secret = 10;
+        private Action _callback;
+        private int? Score { get; set; }
+        private int Value { get; set; }
 
         public int SecretForAssert => _secret;
 
         public int Counter;
 
+        public HotReloadE2EFixture Next;
+
+        // Property getter receiver — compound writes must not double-evaluate this.
+        public HotReloadE2EFixture Current
+        {
+            get { return this; }
+        }
+
         private int this[int index] => _secret + index;
+
+        public int VisibleSibling()
+        {
+            return 1;
+        }
+
+        public static int VisibleStaticSibling()
+        {
+            return 2;
+        }
 
         // Sentinel body: hot reload must replace this with a private-touching shim that returns
         // _secret + delta + 100.
@@ -70,15 +92,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return _secret;
         }
 
-        // Sync method + query syntax referencing a private field — must be Skipped (query clauses
-        // become display-class methods that JIT accessibility-check).
+        // Sync method + query syntax referencing a private field — worker emits a delegation
+        // entry (accessor rewrite); orchestrator leaves it unpatched until the delegation pass.
         public int QueryPrivate()
         {
             int[] values = { 1, 2, 3 };
             return (from value in values where value < _secret select value).Count();
         }
 
-        // Async body reading a private indexer — must be Skipped (MoveNext JIT-checks).
+        // Async body reading a private indexer — still Skipped at the worker (no rewrite shape).
         public async Task<int> AsyncReadPrivateIndexer()
         {
             await Task.Yield();
@@ -95,6 +117,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int CountEnumerator(List<int>.Enumerator enumerator)
         {
             return 0;
+        }
+
+        // Bare instance/static sibling calls — the transplant shim must qualify receivers.
+        public int CallsBareSiblings()
+        {
+            return VisibleSibling() + VisibleStaticSibling();
+        }
+
+        // Private field read plus bare visible sibling — delegation entry with qualified sibling.
+        public async Task<int> AsyncPrivateAndBareSibling()
+        {
+            await Task.Yield();
+            return _secret + VisibleSibling();
+        }
+
+        // ?. over an inaccessible member — worker must skip (condition b).
+        public async Task<int> AsyncConditionalPrivateField()
+        {
+            await Task.Yield();
+            return Next?._secret ?? 0;
+        }
+
+        // Private delegate field invoke — delegation with FieldRef read then invoke.
+        public async Task AsyncInvokePrivateDelegate()
+        {
+            await Task.Yield();
+            _callback();
+        }
+
+        // Receiver-qualified private delegate invoke (`this._callback()`) — same FieldRef shape.
+        public async Task AsyncInvokePrivateDelegateOnThis()
+        {
+            await Task.Yield();
+            this._callback();
+        }
+
+        // Parameter-receiver private delegate invoke (`other._callback()`) — FieldRef on other.
+        public async Task AsyncInvokePrivateDelegateOnOther(HotReloadE2EFixture other)
+        {
+            await Task.Yield();
+            other._callback();
+        }
+
+        // Private property ??= — worker must skip (no conditional-write rewrite shape).
+        public async Task AsyncNullCoalesceAssignPrivateProperty()
+        {
+            await Task.Yield();
+            Score ??= 5;
+        }
+
+        // Compound write through a property getter receiver — worker must skip (double-eval).
+        public async Task AsyncCompoundWriteViaPropertyReceiver()
+        {
+            await Task.Yield();
+            Current.Value += 1;
         }
     }
 }

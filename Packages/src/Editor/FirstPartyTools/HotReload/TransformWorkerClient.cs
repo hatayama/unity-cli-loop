@@ -92,6 +92,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 output.skipped ??= Array.Empty<TransformWorkerSkippedDto>();
                 output.parseErrors ??= Array.Empty<string>();
                 output.shimSource ??= string.Empty;
+                foreach (TransformWorkerEntryDto entry in output.entries)
+                {
+                    entry.patchKind ??= string.Empty;
+                }
+
                 return TransformWorkerClientResult.SuccessResult(output);
             }
             finally
