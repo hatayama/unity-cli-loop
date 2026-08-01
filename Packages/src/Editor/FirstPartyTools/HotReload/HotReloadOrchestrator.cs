@@ -318,6 +318,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal static Dictionary<string, string> BindShimAccessors(Assembly shimAssembly)
         {
+            Debug.Assert(shimAssembly != null, "shimAssembly must not be null.");
+
             Dictionary<string, string> failureReasonByShimTypeName = new Dictionary<string, string>();
             foreach (Type shimType in shimAssembly.GetTypes())
             {
