@@ -176,6 +176,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
+            if (workerOutput.declarationDriftWarnings != null)
+            {
+                // Surfaced before the empty-entries early return so const drift still reaches
+                // the response when every method in the file is skipped or unchanged.
+                foreach (string driftWarning in workerOutput.declarationDriftWarnings)
+                {
+                    warnings.Add(driftWarning);
+                }
+            }
+
             if (string.IsNullOrEmpty(workerOutput.shimSource)
                 || workerOutput.entries == null
                 || workerOutput.entries.Length == 0)

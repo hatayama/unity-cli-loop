@@ -39,6 +39,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadE2EFixture : HotReloadE2EBase, IHotReloadE2EMarker
     {
         private int _secret = 10;
+        // Const drift e2e: the test template pairs this with an injectable declaration so a
+        // test can change only the value.
+        private const int TuningConst = 3;
         private Action _callback;
         private int? Score { get; set; }
         private int Value { get; set; }

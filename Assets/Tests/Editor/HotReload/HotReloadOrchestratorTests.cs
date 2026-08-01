@@ -466,6 +466,76 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + FormatOutcomes(result));
         }
 
+        /// <summary>
+        /// What: editing a const value emits a drift warning naming both values while the run
+        /// itself stays successful (methods still patch).
+        /// </summary>
+        [Test]
+        public async Task Run_EditedConstValue_WarnsConstDrift()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "ConstDrift.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    tuningConstDeclaration:
+                    "private const int TuningConst = 4;"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            bool foundDrift = false;
+            foreach (string warning in result.Warnings)
+            {
+                if (warning.Contains("TuningConst")
+                    && warning.Contains("is 4 in the edited source but 3 in the compiled assembly"))
+                {
+                    foundDrift = true;
+                }
+            }
+
+            Assert.That(
+                foundDrift,
+                Is.True,
+                "Expected a const drift warning for TuningConst.\n"
+                + string.Join("\n", result.Warnings));
+        }
+
+        /// <summary>
+        /// What: an unchanged const produces no drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedConst_HasNoDriftWarning()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "ConstUnchanged.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+
+            foreach (string warning in result.Warnings)
+            {
+                Assert.That(
+                    warning.Contains("TuningConst"),
+                    Is.False,
+                    "Unexpected drift warning: " + warning);
+            }
+        }
+
         private static void AssertNoFileLevelFailure(HotReloadOrchestratorResult result)
         {
             foreach (HotReloadMethodOutcome outcome in result.Methods)
@@ -536,7 +606,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string iteratePrivateMethod = null,
             string lambdaPrivateMethod = null,
             string propertyPrivateRoundTripMethod = null,
-            string asyncUsesInternalTypeMethod = null)
+            string asyncUsesInternalTypeMethod = null,
+            string tuningConstDeclaration = null)
         {
             string sumGrid = sumGridMethod ??
                 "public int SumGrid(int[,] grid)\n        {\n            return -1;\n        }";
@@ -570,6 +641,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "            HotReloadE2EInternalToken token = new HotReloadE2EInternalToken { N = 1 };\n"
                 + "            return token.N;\n"
                 + "        }";
+            string tuningConst = tuningConstDeclaration ??
+                "private const int TuningConst = 3;";
 
             return @"using System.Collections;
 using System.Collections.Generic;
@@ -599,6 +672,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadE2EFixture : HotReloadE2EBase, IHotReloadE2EMarker
     {
         private int _secret = 10;
+        " + tuningConst + @"
 
         public int SecretForAssert => _secret;
 
