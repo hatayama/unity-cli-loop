@@ -56,8 +56,23 @@ if [ ! -x "$ULOOP_BIN" ]; then
     exit 2
 fi
 
+# Why sed and uloop must share one root: --project-path selects the Unity project whose
+# Assets file we mutate; resolving SOURCE_ABS from the script checkout alone would edit one
+# tree while hot-reloading another.
+if [ -n "$PROJECT_PATH" ]; then
+    EFFECTIVE_ROOT=$(CDPATH= cd -- "$PROJECT_PATH" && pwd)
+else
+    EFFECTIVE_ROOT="$REPO_ROOT"
+fi
+
 SOURCE_FILE="Assets/RegressionHarness/HotReload/HotReloadMarkerLogger.cs"
-SOURCE_ABS="$REPO_ROOT/$SOURCE_FILE"
+SOURCE_ABS="$EFFECTIVE_ROOT/$SOURCE_FILE"
+if [ ! -f "$SOURCE_ABS" ]; then
+    printf '%s\n' "Harness source not found: $SOURCE_ABS" >&2
+    printf '%s\n' "--project-path must point at a checkout that contains $SOURCE_FILE" >&2
+    exit 2
+fi
+
 OLD_LITERAL="marker=111"
 NEW_LITERAL="marker=222"
 OLD_MARKER="[HotReloadHarness] ${OLD_LITERAL}"
@@ -67,17 +82,14 @@ LOG_FILE="$(mktemp)"
 SOURCE_BACKUP="$(mktemp)"
 AUTO_REFRESH_DISALLOWED="0"
 SOURCE_DIRTY="0"
+CLEANED_UP="0"
 
 # Why copy-then-restore: sed mutates a tracked Assets file; any early exit must leave the
 # working tree clean, so the pristine bytes are snapshotted before the first edit.
 cp "$SOURCE_ABS" "$SOURCE_BACKUP"
 
 run_uloop() {
-    if [ -n "$PROJECT_PATH" ]; then
-        "$ULOOP_BIN" "$@" --project-path "$PROJECT_PATH"
-    else
-        "$ULOOP_BIN" "$@" --project-path "$REPO_ROOT"
-    fi
+    "$ULOOP_BIN" "$@" --project-path "$EFFECTIVE_ROOT"
 }
 
 log() {
@@ -95,23 +107,35 @@ restore_source() {
 allow_auto_refresh() {
     if [ "$AUTO_REFRESH_DISALLOWED" = "1" ]; then
         # Why best-effort: cleanup must not fail the harness after assertions already passed.
-        run_uloop execute-dynamic-code --code "
+        if ! run_uloop execute-dynamic-code --code "
 using UnityEditor;
 AssetDatabase.AllowAutoRefresh();
 return \"AllowAutoRefresh\";
-" > /dev/null 2>&1 || true
+" > /dev/null 2>&1; then
+            log "WARN: AllowAutoRefresh failed; re-enable auto refresh in the Editor manually."
+        fi
         AUTO_REFRESH_DISALLOWED="0"
     fi
 }
 
 cleanup() {
+    # Why re-entry guard: INT/TERM handlers also trigger EXIT, and must not double-restore.
+    if [ "$CLEANED_UP" = "1" ]; then
+        return
+    fi
+    CLEANED_UP="1"
     restore_source
     run_uloop hot-reload --revert-all > /dev/null 2>&1 || true
     allow_auto_refresh
     run_uloop control-play-mode --action Stop > /dev/null 2>&1 || true
     rm -f "$RESULT_FILE" "$LOG_FILE" "$SOURCE_BACKUP"
 }
+# Why INT/TERM/HUP too: EXIT alone misses Ctrl-C / kill mid-sed and would leave Assets dirty.
+# EXIT still runs after the signal traps call exit; CLEANED_UP prevents a second pass.
 trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
+trap 'cleanup; exit 129' HUP
 
 disallow_auto_refresh() {
     # Why: sed writes under Assets/; without this hold Unity may import + domain-reload mid-run
@@ -127,7 +151,8 @@ return \"DisallowAutoRefresh\";
 await_marker_in_logs() {
     expected_marker="$1"
     attempt=1
-    max_attempts=10
+    # Why 30s: cold PlayMode entry (import / domain reload) can exceed 10s before the first Update.
+    max_attempts=30
     while [ "$attempt" -le "$max_attempts" ]; do
         run_uloop clear-console > /dev/null
         # Why sleep: Update logs once per frame; give PlayMode a beat to emit after clear.

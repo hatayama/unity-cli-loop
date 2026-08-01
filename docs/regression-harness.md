@@ -22,8 +22,8 @@ This harness makes a trap's repro steps a permanent, re-runnable asset instead.
 
 These scenarios require a running Unity Editor with the trap scene open, so
 they are not part of automated CI. Run them manually (or via an agent) before
-merging a PR that touches the pause-point or simulate-keyboard code paths the
-scenario covers.
+merging a PR that touches the pause-point, simulate-keyboard, or hot-reload
+code paths the scenario covers.
 
 ## Existing scenarios
 
