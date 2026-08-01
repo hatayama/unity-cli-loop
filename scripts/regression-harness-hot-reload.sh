@@ -77,6 +77,15 @@ OLD_LITERAL="marker=111"
 NEW_LITERAL="marker=222"
 OLD_MARKER="[HotReloadHarness] ${OLD_LITERAL}"
 NEW_MARKER="[HotReloadHarness] ${NEW_LITERAL}"
+
+# Why fail-fast on a dirty tree: a prior kill -9 can leave marker=222 on disk; backing that
+# up would let the run PASS and then restore the dirty bytes, leaving 222 behind.
+if ! grep -q "$OLD_LITERAL" "$SOURCE_ABS"; then
+    printf '%s\n' "Harness source is not pristine (expected ${OLD_LITERAL}): $SOURCE_ABS" >&2
+    printf '%s\n' "Restore it (git restore ${SOURCE_FILE}) before running." >&2
+    exit 2
+fi
+
 RESULT_FILE="$(mktemp)"
 LOG_FILE="$(mktemp)"
 SOURCE_BACKUP="$(mktemp)"
@@ -128,7 +137,9 @@ cleanup() {
     run_uloop hot-reload --revert-all > /dev/null 2>&1 || true
     allow_auto_refresh
     run_uloop control-play-mode --action Stop > /dev/null 2>&1 || true
-    rm -f "$RESULT_FILE" "$LOG_FILE" "$SOURCE_BACKUP"
+    # Why: a killed sed→mv window can leave SOURCE_ABS.tmp; Unity may then create .tmp.meta
+    # which is not gitignored.
+    rm -f "$RESULT_FILE" "$LOG_FILE" "$SOURCE_BACKUP" "${SOURCE_ABS}.tmp"
 }
 # Why INT/TERM/HUP too: EXIT alone misses Ctrl-C / kill mid-sed and would leave Assets dirty.
 # EXIT still runs after the signal traps call exit; CLEANED_UP prevents a second pass.
@@ -182,10 +193,11 @@ log "Asserting baseline ${OLD_LITERAL} before hot-reload..."
 await_marker_in_logs "$OLD_MARKER"
 
 log "Sed-editing in-body literal ${OLD_LITERAL} -> ${NEW_LITERAL} in $SOURCE_FILE..."
-# Why POSIX sed -i requires a backup suffix on macOS BSD sed; use a temp and mv instead.
+# Why before sed: a signal between mv and a later flag would skip restore and leave marker=222.
+SOURCE_DIRTY="1"
+# Why temp+mv instead of sed -i: -i is not POSIX, and BSD sed's -i demands a backup suffix.
 sed "s/${OLD_LITERAL}/${NEW_LITERAL}/" "$SOURCE_ABS" > "${SOURCE_ABS}.tmp"
 mv "${SOURCE_ABS}.tmp" "$SOURCE_ABS"
-SOURCE_DIRTY="1"
 if ! grep -q "$NEW_LITERAL" "$SOURCE_ABS"; then
     log "FAIL: sed did not rewrite literal to ${NEW_LITERAL}"
     exit 1
