@@ -8,6 +8,8 @@ using UnityEditor.Compilation;
 
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 using Assembly = System.Reflection.Assembly;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -33,6 +35,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(shimSource), "shimSource must not be empty.");
             Debug.Assert(referencePaths != null, "referencePaths must not be null.");
             Debug.Assert(defineSymbols != null, "defineSymbols must not be null.");
+
+            // Resolver and Application.dataPath (CreateWorkDirectory) need the Unity main thread.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
 
             ExternalCompilerPaths externalCompilerPaths = ExternalCompilerPathResolver.Resolve();
             if (externalCompilerPaths == null)
@@ -65,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ct,
                     markBuildStarted: static () => { },
                     markBuildFinished: static () => { },
-                    incrementBuildCount: static () => { }).ConfigureAwait(true);
+                    incrementBuildCount: static () => { }).ConfigureAwait(false);
 
                 List<string> errors = CollectErrors(backendResult.CompilerMessages);
                 if (errors.Count > 0)

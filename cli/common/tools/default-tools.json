@@ -741,6 +741,26 @@
           }
         }
       }
+    },
+    {
+      "name": "hot-reload",
+      "description": "Apply method-body hot reload to edited C# sources in a running Unity Editor without domain reload. Use after small method edits when you need PlayMode/EditMode feedback without uloop compile.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Files": {
+            "type": "array",
+            "description": "Project-relative .cs paths whose method bodies should be hot-reloaded. Required when --revert-all is not set",
+            "items": {
+              "type": "string"
+            }
+          },
+          "RevertAll": {
+            "type": "boolean",
+            "description": "Remove every active hot-reload transplant and clear the patch ledger. When set, --files is ignored"
+          }
+        }
+      }
     }
   ]
 }

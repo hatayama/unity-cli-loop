@@ -41,7 +41,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // and drain before throwing; otherwise the child keeps writing cache/temp files.
             Task waitForExitTask = Task.Run(() => process.WaitForExit());
             Task delayTask = Task.Delay(timeout, ct);
-            Task completedTask = await Task.WhenAny(waitForExitTask, delayTask).ConfigureAwait(true);
+            // No Unity APIs here — ConfigureAwait(false) is required so a paused Play Mode
+            // SynchronizationContext cannot strand these process waits.
+            Task completedTask = await Task.WhenAny(waitForExitTask, delayTask).ConfigureAwait(false);
 
             if (completedTask != waitForExitTask)
             {
@@ -52,8 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 // Drain redirected streams before disposing the process so a late ObjectDisposedException
                 // cannot surface as an unobserved task fault in the Editor.
-                string timedOutStdout = await stdoutTask.ConfigureAwait(true);
-                string timedOutStderr = await stderrTask.ConfigureAwait(true);
+                string timedOutStdout = await stdoutTask.ConfigureAwait(false);
+                string timedOutStderr = await stderrTask.ConfigureAwait(false);
                 ct.ThrowIfCancellationRequested();
                 return (
                     -1,
@@ -63,8 +65,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Process finished; return its result even if ct fired at the same moment.
             process.WaitForExit();
-            string standardOutput = await stdoutTask.ConfigureAwait(true);
-            string standardError = await stderrTask.ConfigureAwait(true);
+            string standardOutput = await stdoutTask.ConfigureAwait(false);
+            string standardError = await stderrTask.ConfigureAwait(false);
             return (process.ExitCode, standardOutput, standardError);
         }
     }
