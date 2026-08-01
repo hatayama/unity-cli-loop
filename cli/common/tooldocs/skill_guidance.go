@@ -22,6 +22,7 @@ var commandSkillNames = map[string]string{
 	"simulate-keyboard":    "uloop-simulate-keyboard",
 	"simulate-mouse-input": "uloop-simulate-mouse-input",
 	"simulate-mouse-ui":    "uloop-simulate-mouse-ui",
+	"hot-reload":           "uloop-hot-reload",
 
 	"launch": "uloop-launch",
 

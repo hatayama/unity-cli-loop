@@ -133,3 +133,27 @@ a pause point, represented by `UloopCapturedVariable` internally and exposed as
 `UnityObjectPath`, and `UnityObjectInstanceId`. The snapshot is taken before the resolved
 line executes, and `CapturedVariablesTruncated` reports whether the length or count cap
 clipped any evidence.
+
+### Hot reload
+
+The first-party tool `hot-reload` that replaces method bodies in a running Unity Editor
+from edited project source files without a domain reload. It transforms each editable
+method into a static shim, compiles that shim against publicized references, loads the
+shim assembly, and transplants the shim IL into the original method via a Harmony
+transpiler (`io.github.hatayama.uloop.hot-reload`). Patches are static Editor state and
+disappear on domain reload by design; a later `uloop compile` converges to the same
+source behavior.
+
+### Shim
+
+A generated static method that mirrors an edited user method body for hot reload. For an
+instance method, the shim is a static method whose first parameter is the original
+instance (`instance`) so IL argument slots match the original method and the body can be
+transplanted without rewriting call/load slots. Prefix wrappers are not generated.
+
+### Publicized reference
+
+A Cecil-rewritten copy of a project assembly under `Library/UloopHotReload/PublicizedRefs/`
+in which every type and member is public. Hot reload uses these copies only as compile-time
+references for shim compilation so private/internal member access type-checks; they are
+never loaded into the Editor domain as the runtime identity of the target types.
