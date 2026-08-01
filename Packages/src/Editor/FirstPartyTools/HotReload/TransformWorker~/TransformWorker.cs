@@ -251,17 +251,18 @@ public static class TransformWorkerProgram
                 string shimMethodName = methodSymbol.Name + "__shim" + globalShimMethodCounter;
                 globalShimMethodCounter++;
 
+                // Eligibility uses a disposable plan; the rewriter lazily GetOrAdd-s into the
+                // shim-type-level plan so AllocateName stays unique across methods in the type.
+                AccessorPlan rewritePlan = decision.UsesDelegation
+                    ? currentShimType.AccessorPlan
+                    : null;
                 MethodDeclarationSyntax rewrittenMethod = RewriteMethodBody(
                     methodDeclaration,
                     methodSymbol,
                     typeSymbol,
                     semanticModel,
-                    decision.AccessorPlan);
+                    rewritePlan);
                 currentShimType.AddMethod(rewrittenMethod, shimMethodName);
-                if (decision.AccessorPlan != null)
-                {
-                    currentShimType.MergeAccessors(decision.AccessorPlan);
-                }
 
                 entries.Add(new WorkerEntry
                 {
@@ -350,14 +351,21 @@ public static class TransformWorkerProgram
                 methodSymbol,
                 typeSymbol,
                 bodyNode,
-                out AccessorPlan accessorPlan,
+                out AccessorPlan disposablePlan,
                 out string accessorRejectReason))
         {
             return MethodTransformDecision.Skip(
                 v1Reason + " Accessor rewrite unavailable: " + accessorRejectReason);
         }
 
-        return MethodTransformDecision.Delegation(accessorPlan);
+        // Safety net: detection said "needs accessors" but eligibility found nothing to rewrite
+        // (e.g. local-function-only async body). Transplant is correct — the body is unchanged.
+        if (disposablePlan.Entries.Count == 0)
+        {
+            return MethodTransformDecision.Transplant();
+        }
+
+        return MethodTransformDecision.Delegation();
     }
 
     private static string EvaluateHardSkipReason(
@@ -485,13 +493,12 @@ public static class TransformWorkerProgram
 
             foreach (SyntaxNode node in root.DescendantNodesAndSelf())
             {
-                if (!IsInaccessibleAccessCandidateNode(node))
+                if (NameofRules.IsInsideNameofArgument(node))
                 {
                     continue;
                 }
 
-                ISymbol symbol = semanticModel.GetSymbolInfo(node).Symbol;
-                if (symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol))
+                if (HasInaccessibleAccessAtNode(semanticModel, node))
                 {
                     return true;
                 }
@@ -501,13 +508,169 @@ public static class TransformWorkerProgram
         return false;
     }
 
-    private static bool IsInaccessibleAccessCandidateNode(SyntaxNode node)
+    /// <summary>
+    /// What: site-aware inaccessible access detection (property get vs set, ctor, etc.).
+    /// </summary>
+    private static bool HasInaccessibleAccessAtNode(SemanticModel semanticModel, SyntaxNode node)
     {
-        return node is IdentifierNameSyntax
-            || node is GenericNameSyntax
-            || node is ElementAccessExpressionSyntax
-            || node is ObjectCreationExpressionSyntax
-            || node is ImplicitObjectCreationExpressionSyntax;
+        if (node is AssignmentExpressionSyntax assignment)
+        {
+            if (assignment.Parent is InitializerExpressionSyntax)
+            {
+                ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+                return initializerSymbol != null
+                    && AccessibilityRules.IsInaccessibleFromExternalAssembly(initializerSymbol);
+            }
+
+            ISymbol leftSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+            if (leftSymbol is IPropertySymbol propertySymbol)
+            {
+                bool needsGetter = !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression);
+                if (needsGetter && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod))
+                {
+                    return true;
+                }
+
+                return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
+            }
+
+            return leftSymbol != null
+                && AccessibilityRules.IsInaccessibleFromExternalAssembly(leftSymbol);
+        }
+
+        if (node is PostfixUnaryExpressionSyntax postfix
+            && (postfix.IsKind(SyntaxKind.PostIncrementExpression)
+                || postfix.IsKind(SyntaxKind.PostDecrementExpression)))
+        {
+            return IsInaccessibleIncrementOperand(semanticModel, postfix.Operand);
+        }
+
+        if (node is PrefixUnaryExpressionSyntax prefix
+            && (prefix.IsKind(SyntaxKind.PreIncrementExpression)
+                || prefix.IsKind(SyntaxKind.PreDecrementExpression)))
+        {
+            return IsInaccessibleIncrementOperand(semanticModel, prefix.Operand);
+        }
+
+        if (node is ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax)
+        {
+            ISymbol ctorSymbol = semanticModel.GetSymbolInfo(node).Symbol;
+            return ctorSymbol != null
+                && AccessibilityRules.IsInaccessibleFromExternalAssembly(ctorSymbol);
+        }
+
+        if (node is InvocationExpressionSyntax invocation)
+        {
+            if (NameofRules.IsNameofInvocation(invocation))
+            {
+                return false;
+            }
+
+            ISymbol symbol = semanticModel.GetSymbolInfo(invocation).Symbol;
+            return symbol is IMethodSymbol methodSymbol
+                && methodSymbol.MethodKind == MethodKind.Ordinary
+                && AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol);
+        }
+
+        if (node is ElementAccessExpressionSyntax elementAccess)
+        {
+            ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
+            if (symbol is IPropertySymbol indexer)
+            {
+                return AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod)
+                    || AccessibilityRules.IsInaccessibleAccessor(indexer.SetMethod);
+            }
+
+            return symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol);
+        }
+
+        if (node is IdentifierNameSyntax or GenericNameSyntax)
+        {
+            SimpleNameSyntax name = (SimpleNameSyntax)node;
+            if (AccessorEligibility.IsNameHandledByParent(name))
+            {
+                return false;
+            }
+
+            if (name.Parent is AssignmentExpressionSyntax parentAssignment
+                && parentAssignment.Left == name)
+            {
+                return false;
+            }
+
+            ISymbol symbol = semanticModel.GetSymbolInfo(name).Symbol;
+            if (symbol is IPropertySymbol propertySymbol)
+            {
+                return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
+            }
+
+            return symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol);
+        }
+
+        if (node is MemberAccessExpressionSyntax memberAccess)
+        {
+            if (memberAccess.Parent is InvocationExpressionSyntax parentInvocation
+                && parentInvocation.Expression == memberAccess)
+            {
+                return false;
+            }
+
+            if (memberAccess.Parent is AssignmentExpressionSyntax parentAssignment
+                && parentAssignment.Left == memberAccess)
+            {
+                return false;
+            }
+
+            ISymbol symbol = semanticModel.GetSymbolInfo(memberAccess).Symbol
+                ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol;
+            if (symbol is IPropertySymbol propertySymbol)
+            {
+                return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
+            }
+
+            return symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol);
+        }
+
+        return false;
+    }
+
+    private static bool IsInaccessibleIncrementOperand(
+        SemanticModel semanticModel,
+        ExpressionSyntax operand)
+    {
+        ISymbol symbol = semanticModel.GetSymbolInfo(operand).Symbol;
+        if (symbol is IPropertySymbol propertySymbol)
+        {
+            return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod)
+                || AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
+        }
+
+        return symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol);
+    }
+
+    internal static class NameofRules
+    {
+        public static bool IsNameofInvocation(InvocationExpressionSyntax invocation)
+        {
+            return invocation.Expression is IdentifierNameSyntax identifier
+                && identifier.Identifier.ValueText == "nameof";
+        }
+
+        public static bool IsInsideNameofArgument(SyntaxNode node)
+        {
+            for (SyntaxNode current = node; current != null; current = current.Parent)
+            {
+                if (current is ArgumentSyntax
+                    && current.Parent is ArgumentListSyntax argumentList
+                    && argumentList.Parent is InvocationExpressionSyntax invocation
+                    && IsNameofInvocation(invocation))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 
     private static MethodDeclarationSyntax RewriteMethodBody(
@@ -526,7 +689,7 @@ public static class TransformWorkerProgram
 
     private static string FormatMethodLabel(INamedTypeSymbol typeSymbol, IMethodSymbol methodSymbol)
     {
-        return typeSymbol.ToDisplayString(FullyQualifiedTypeFormat) + "." + methodSymbol.Name;
+        return AccessorPlan.BuildMemberKey(methodSymbol);
     }
 
     private static List<UsingDirectiveSyntax> CollectUsingsForType(
@@ -569,6 +732,15 @@ internal static class AccessibilityRules
             return false;
         }
 
+        // Local functions / lambdas are emitted into the shim assembly itself, so they have no
+        // cross-assembly accessibility problem and must not be treated as accessor targets.
+        if (symbol is IMethodSymbol methodKindSymbol
+            && (methodKindSymbol.MethodKind == MethodKind.LocalFunction
+                || methodKindSymbol.MethodKind == MethodKind.AnonymousFunction))
+        {
+            return false;
+        }
+
         if (symbol is ITypeSymbol typeSymbol)
         {
             return HasInaccessibleAccessibility(typeSymbol.DeclaredAccessibility)
@@ -594,6 +766,20 @@ internal static class AccessibilityRules
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// What: accessibility of a property get/set accessor method (not the property declaration).
+    /// Missing accessors are treated as inaccessible so write-only/read-only misuse fails closed.
+    /// </summary>
+    public static bool IsInaccessibleAccessor(IMethodSymbol accessorMethod)
+    {
+        if (accessorMethod == null)
+        {
+            return true;
+        }
+
+        return IsInaccessibleFromExternalAssembly(accessorMethod);
     }
 
     private static bool HasInaccessibleAccessibility(Accessibility accessibility)
@@ -666,14 +852,14 @@ internal sealed class AccessorPlan
 
     public AccessorEntry GetOrAddField(IFieldSymbol fieldSymbol)
     {
-        string key = "F:" + MemberKey(fieldSymbol);
+        string key = "F:" + BuildMemberKey(fieldSymbol);
         if (_byKey.TryGetValue(key, out AccessorEntry existing))
         {
             return existing;
         }
 
         string fieldName = AllocateName("__F_" + SanitizeIdentifier(fieldSymbol.Name));
-        AccessorEntry entry = AccessorEntry.ForField(fieldSymbol, fieldName);
+        AccessorEntry entry = AccessorEntry.ForField(fieldSymbol, fieldName, key);
         _byKey[key] = entry;
         _entries.Add(entry);
         return entry;
@@ -681,14 +867,14 @@ internal sealed class AccessorPlan
 
     public AccessorEntry GetOrAddMethod(IMethodSymbol methodSymbol)
     {
-        string key = "M:" + MemberKey(methodSymbol);
+        string key = "M:" + BuildMemberKey(methodSymbol);
         if (_byKey.TryGetValue(key, out AccessorEntry existing))
         {
             return existing;
         }
 
         string fieldName = AllocateName("__M_" + SanitizeIdentifier(methodSymbol.Name));
-        AccessorEntry entry = AccessorEntry.ForMethod(methodSymbol, fieldName);
+        AccessorEntry entry = AccessorEntry.ForMethod(methodSymbol, fieldName, key);
         _byKey[key] = entry;
         _entries.Add(entry);
         return entry;
@@ -696,14 +882,14 @@ internal sealed class AccessorPlan
 
     public AccessorEntry GetOrAddPropertyGetter(IPropertySymbol propertySymbol)
     {
-        string key = "PG:" + MemberKey(propertySymbol);
+        string key = "PG:" + BuildMemberKey(propertySymbol);
         if (_byKey.TryGetValue(key, out AccessorEntry existing))
         {
             return existing;
         }
 
         string fieldName = AllocateName("__P_get_" + SanitizeIdentifier(propertySymbol.Name));
-        AccessorEntry entry = AccessorEntry.ForPropertyGetter(propertySymbol, fieldName);
+        AccessorEntry entry = AccessorEntry.ForPropertyGetter(propertySymbol, fieldName, key);
         _byKey[key] = entry;
         _entries.Add(entry);
         return entry;
@@ -711,31 +897,17 @@ internal sealed class AccessorPlan
 
     public AccessorEntry GetOrAddPropertySetter(IPropertySymbol propertySymbol)
     {
-        string key = "PS:" + MemberKey(propertySymbol);
+        string key = "PS:" + BuildMemberKey(propertySymbol);
         if (_byKey.TryGetValue(key, out AccessorEntry existing))
         {
             return existing;
         }
 
         string fieldName = AllocateName("__P_set_" + SanitizeIdentifier(propertySymbol.Name));
-        AccessorEntry entry = AccessorEntry.ForPropertySetter(propertySymbol, fieldName);
+        AccessorEntry entry = AccessorEntry.ForPropertySetter(propertySymbol, fieldName, key);
         _byKey[key] = entry;
         _entries.Add(entry);
         return entry;
-    }
-
-    public void MergeFrom(AccessorPlan other)
-    {
-        foreach (AccessorEntry entry in other._entries)
-        {
-            if (_byKey.ContainsKey(entry.RegistryKey))
-            {
-                continue;
-            }
-
-            _byKey[entry.RegistryKey] = entry;
-            _entries.Add(entry);
-        }
     }
 
     private string AllocateName(string preferred)
@@ -754,9 +926,36 @@ internal sealed class AccessorPlan
         return preferred + suffix;
     }
 
-    private static string MemberKey(ISymbol symbol)
+    /// <summary>
+    /// What: stable identity for a member across overloads and same-named members on different
+    /// types — containing type FQ + name + (parameter type FQs).
+    /// </summary>
+    public static string BuildMemberKey(ISymbol symbol)
     {
-        return symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        string typePart = symbol.ContainingType == null
+            ? string.Empty
+            : symbol.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        string name = symbol.Name;
+
+        if (symbol is IMethodSymbol methodSymbol)
+        {
+            string args = string.Join(
+                ",",
+                methodSymbol.Parameters.Select(
+                    parameter => parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+            return typePart + "." + name + "(" + args + ")";
+        }
+
+        if (symbol is IPropertySymbol propertySymbol)
+        {
+            string args = string.Join(
+                ",",
+                propertySymbol.Parameters.Select(
+                    parameter => parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+            return typePart + "." + name + "(" + args + ")";
+        }
+
+        return typePart + "." + name + "()";
     }
 
     private static string SanitizeIdentifier(string name)
@@ -808,45 +1007,57 @@ internal sealed class AccessorEntry
 
     public IPropertySymbol PropertySymbol { get; private set; }
 
-    public static AccessorEntry ForField(IFieldSymbol fieldSymbol, string delegateFieldName)
+    public static AccessorEntry ForField(
+        IFieldSymbol fieldSymbol,
+        string delegateFieldName,
+        string registryKey)
     {
         return new AccessorEntry
         {
             Kind = AccessorKind.FieldRef,
-            RegistryKey = "F:" + fieldSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            RegistryKey = registryKey,
             DelegateFieldName = delegateFieldName,
             FieldSymbol = fieldSymbol
         };
     }
 
-    public static AccessorEntry ForMethod(IMethodSymbol methodSymbol, string delegateFieldName)
+    public static AccessorEntry ForMethod(
+        IMethodSymbol methodSymbol,
+        string delegateFieldName,
+        string registryKey)
     {
         return new AccessorEntry
         {
             Kind = AccessorKind.MethodDelegate,
-            RegistryKey = "M:" + methodSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            RegistryKey = registryKey,
             DelegateFieldName = delegateFieldName,
             MethodSymbol = methodSymbol
         };
     }
 
-    public static AccessorEntry ForPropertyGetter(IPropertySymbol propertySymbol, string delegateFieldName)
+    public static AccessorEntry ForPropertyGetter(
+        IPropertySymbol propertySymbol,
+        string delegateFieldName,
+        string registryKey)
     {
         return new AccessorEntry
         {
             Kind = AccessorKind.PropertyGetter,
-            RegistryKey = "PG:" + propertySymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            RegistryKey = registryKey,
             DelegateFieldName = delegateFieldName,
             PropertySymbol = propertySymbol
         };
     }
 
-    public static AccessorEntry ForPropertySetter(IPropertySymbol propertySymbol, string delegateFieldName)
+    public static AccessorEntry ForPropertySetter(
+        IPropertySymbol propertySymbol,
+        string delegateFieldName,
+        string registryKey)
     {
         return new AccessorEntry
         {
             Kind = AccessorKind.PropertySetter,
-            RegistryKey = "PS:" + propertySymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            RegistryKey = registryKey,
             DelegateFieldName = delegateFieldName,
             PropertySymbol = propertySymbol
         };
@@ -870,6 +1081,7 @@ internal sealed class AccessorEntry
 
     public IEnumerable<ITypeSymbol> EnumerateSignatureTypes()
     {
+        // Bind statements always emit typeof(ContainingType), including for static members.
         switch (Kind)
         {
             case AccessorKind.FieldRef:
@@ -877,11 +1089,7 @@ internal sealed class AccessorEntry
                 yield return FieldSymbol.Type;
                 yield break;
             case AccessorKind.MethodDelegate:
-                if (!MethodSymbol.IsStatic)
-                {
-                    yield return MethodSymbol.ContainingType;
-                }
-
+                yield return MethodSymbol.ContainingType;
                 foreach (IParameterSymbol parameter in MethodSymbol.Parameters)
                 {
                     yield return parameter.Type;
@@ -895,11 +1103,7 @@ internal sealed class AccessorEntry
                 yield break;
             case AccessorKind.PropertyGetter:
             case AccessorKind.PropertySetter:
-                if (!PropertySymbol.IsStatic)
-                {
-                    yield return PropertySymbol.ContainingType;
-                }
-
+                yield return PropertySymbol.ContainingType;
                 yield return PropertySymbol.Type;
                 yield break;
         }
@@ -1064,6 +1268,11 @@ internal static class AccessorEligibility
         AccessorPlan built = new AccessorPlan();
         foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
         {
+            if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+            {
+                continue;
+            }
+
             if (!TryRegisterInaccessibleAccess(semanticModel, node, built, out rejectReason))
             {
                 if (rejectReason != null)
@@ -1123,6 +1332,11 @@ internal static class AccessorEligibility
     {
         foreach (SyntaxNode node in methodDeclaration.DescendantNodesAndSelf())
         {
+            if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+            {
+                continue;
+            }
+
             ITypeSymbol typeSymbol = null;
             if (node is TypeSyntax typeSyntax)
             {
@@ -1132,7 +1346,6 @@ internal static class AccessorEligibility
             else if (node is VariableDeclarationSyntax variableDeclaration
                 && variableDeclaration.Type.IsVar)
             {
-                // var locals still materialize a type in the shim; an internal inferred type fails (c).
                 typeSymbol = semanticModel.GetTypeInfo(variableDeclaration.Type).Type;
             }
             else if (node is ImplicitObjectCreationExpressionSyntax implicitObjectCreation)
@@ -1162,8 +1375,15 @@ internal static class AccessorEligibility
     {
         foreach (SyntaxNode node in bodyNode.DescendantNodes())
         {
+            if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+            {
+                continue;
+            }
+
             ExpressionSyntax operand = null;
-            if (node is PostfixUnaryExpressionSyntax postfix)
+            if (node is PostfixUnaryExpressionSyntax postfix
+                && (postfix.IsKind(SyntaxKind.PostIncrementExpression)
+                    || postfix.IsKind(SyntaxKind.PostDecrementExpression)))
             {
                 operand = postfix.Operand;
             }
@@ -1181,7 +1401,8 @@ internal static class AccessorEligibility
 
             ISymbol symbol = semanticModel.GetSymbolInfo(operand).Symbol;
             if (symbol is IPropertySymbol propertySymbol
-                && AccessibilityRules.IsInaccessibleFromExternalAssembly(propertySymbol))
+                && (AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod)
+                    || AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod)))
             {
                 return true;
             }
@@ -1203,6 +1424,35 @@ internal static class AccessorEligibility
     {
         rejectReason = null;
 
+        if (node is ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax)
+        {
+            ISymbol ctorSymbol = semanticModel.GetSymbolInfo(node).Symbol;
+            if (ctorSymbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(ctorSymbol))
+            {
+                rejectReason =
+                    "inaccessible constructor call has no accessor rewrite shape (condition b).";
+                return false;
+            }
+
+            return false;
+        }
+
+        if (node is AssignmentExpressionSyntax assignment
+            && assignment.Parent is InitializerExpressionSyntax)
+        {
+            ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+            if (initializerSymbol != null
+                && AccessibilityRules.IsInaccessibleFromExternalAssembly(initializerSymbol))
+            {
+                rejectReason =
+                    "inaccessible member assignment in an object/collection initializer has no "
+                    + "accessor rewrite shape (condition b).";
+                return false;
+            }
+
+            return false;
+        }
+
         if (node is InvocationExpressionSyntax invocation)
         {
             return TryRegisterInvocation(semanticModel, invocation, plan, out rejectReason);
@@ -1211,7 +1461,17 @@ internal static class AccessorEligibility
         if (node is ElementAccessExpressionSyntax elementAccess)
         {
             ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
-            if (symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol))
+            if (symbol is IPropertySymbol indexer && indexer.IsIndexer)
+            {
+                if (AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod)
+                    || AccessibilityRules.IsInaccessibleAccessor(indexer.SetMethod))
+                {
+                    rejectReason =
+                        "inaccessible indexer access has no accessor rewrite shape (condition b).";
+                    return false;
+                }
+            }
+            else if (symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol))
             {
                 rejectReason = "inaccessible indexer access has no accessor rewrite shape (condition b).";
                 return false;
@@ -1220,28 +1480,29 @@ internal static class AccessorEligibility
             return false;
         }
 
-        if (node is MemberBindingExpressionSyntax
-            || node is ConditionalAccessExpressionSyntax)
+        if (node is MemberBindingExpressionSyntax memberBinding)
         {
-            // ?. chains are not in the rewrite shapes; only fail when they touch inaccessible members.
-            foreach (SyntaxNode child in node.DescendantNodesAndSelf())
+            ISymbol bound = semanticModel.GetSymbolInfo(memberBinding.Name).Symbol;
+            if (bound != null
+                && bound is not INamespaceSymbol
+                && bound is not ITypeSymbol
+                && IsInaccessibleBindingTarget(bound))
             {
-                if (child is not SimpleNameSyntax)
-                {
-                    continue;
-                }
-
-                ISymbol bound = semanticModel.GetSymbolInfo(child).Symbol;
-                if (bound != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(bound)
-                    && bound is not INamespaceSymbol && bound is not ITypeSymbol)
-                {
-                    rejectReason =
-                        "inaccessible member access via conditional access has no rewrite shape (condition b).";
-                    return false;
-                }
+                rejectReason =
+                    "inaccessible member access via conditional access has no rewrite shape (condition b).";
+                return false;
             }
 
             return false;
+        }
+
+        if (node is AssignmentExpressionSyntax propertyOrFieldAssignment)
+        {
+            return TryRegisterAssignment(
+                semanticModel,
+                propertyOrFieldAssignment,
+                plan,
+                out rejectReason);
         }
 
         if (node is MemberAccessExpressionSyntax memberAccess)
@@ -1252,7 +1513,13 @@ internal static class AccessorEligibility
                 return false;
             }
 
-            return TryRegisterMemberSymbol(
+            if (memberAccess.Parent is AssignmentExpressionSyntax parentAssignment
+                && parentAssignment.Left == memberAccess)
+            {
+                return false;
+            }
+
+            return TryRegisterPropertyOrFieldRead(
                 semanticModel.GetSymbolInfo(memberAccess).Symbol
                 ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol,
                 plan,
@@ -1267,10 +1534,70 @@ internal static class AccessorEligibility
                 return false;
             }
 
-            return TryRegisterMemberSymbol(
+            if (name.Parent is AssignmentExpressionSyntax parentAssignment
+                && parentAssignment.Left == name)
+            {
+                return false;
+            }
+
+            return TryRegisterPropertyOrFieldRead(
                 semanticModel.GetSymbolInfo(name).Symbol,
                 plan,
                 out rejectReason);
+        }
+
+        return false;
+    }
+
+    private static bool IsInaccessibleBindingTarget(ISymbol bound)
+    {
+        if (bound is IPropertySymbol propertySymbol)
+        {
+            return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod)
+                || AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
+        }
+
+        return AccessibilityRules.IsInaccessibleFromExternalAssembly(bound);
+    }
+
+    private static bool TryRegisterAssignment(
+        SemanticModel semanticModel,
+        AssignmentExpressionSyntax assignment,
+        AccessorPlan plan,
+        out string rejectReason)
+    {
+        rejectReason = null;
+        ISymbol leftSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+        if (leftSymbol is IFieldSymbol fieldSymbol)
+        {
+            if (!AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
+            {
+                return false;
+            }
+
+            if (fieldSymbol.IsStatic)
+            {
+                rejectReason = "inaccessible static field access has no accessor rewrite shape (condition b).";
+                return false;
+            }
+
+            plan.GetOrAddField(fieldSymbol);
+            return true;
+        }
+
+        if (leftSymbol is IPropertySymbol propertySymbol)
+        {
+            return TryRegisterPropertyWrite(
+                propertySymbol,
+                needsGetter: !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression),
+                plan,
+                out rejectReason);
+        }
+
+        if (leftSymbol is IEventSymbol)
+        {
+            rejectReason = "inaccessible event add/remove is out of scope for accessor rewrite (condition b).";
+            return false;
         }
 
         return false;
@@ -1283,16 +1610,18 @@ internal static class AccessorEligibility
         out string rejectReason)
     {
         rejectReason = null;
+        if (TransformWorkerProgram.NameofRules.IsNameofInvocation(invocation))
+        {
+            return false;
+        }
+
         ISymbol symbol = semanticModel.GetSymbolInfo(invocation).Symbol;
         if (symbol is not IMethodSymbol methodSymbol)
         {
             return false;
         }
 
-        if (methodSymbol.MethodKind == MethodKind.PropertyGet
-            || methodSymbol.MethodKind == MethodKind.PropertySet
-            || methodSymbol.MethodKind == MethodKind.EventAdd
-            || methodSymbol.MethodKind == MethodKind.EventRemove)
+        if (methodSymbol.MethodKind != MethodKind.Ordinary)
         {
             return false;
         }
@@ -1308,33 +1637,64 @@ internal static class AccessorEligibility
             return false;
         }
 
+        if (methodSymbol.IsGenericMethod)
+        {
+            rejectReason = "inaccessible generic method calls are not rewritten (condition b).";
+            return false;
+        }
+
+        if (methodSymbol.ReturnsByRef || methodSymbol.ReturnsByRefReadonly)
+        {
+            rejectReason =
+                "inaccessible methods that return by ref have no accessor rewrite shape (condition b).";
+            return false;
+        }
+
         foreach (IParameterSymbol parameter in methodSymbol.Parameters)
         {
-            if (parameter.RefKind == RefKind.Ref || parameter.RefKind == RefKind.Out)
+            if (parameter.RefKind != RefKind.None)
             {
                 rejectReason =
-                    "inaccessible method calls with ref/out parameters are not rewritten (condition b).";
+                    "inaccessible method calls with ref/out/in parameters are not rewritten (condition b).";
                 return false;
             }
+        }
+
+        foreach (ArgumentSyntax argument in invocation.ArgumentList.Arguments)
+        {
+            if (argument.NameColon != null)
+            {
+                rejectReason =
+                    "inaccessible method calls with named arguments are not rewritten (condition b).";
+                return false;
+            }
+        }
+
+        if (invocation.ArgumentList.Arguments.Count != methodSymbol.Parameters.Length)
+        {
+            rejectReason =
+                "inaccessible method calls with omitted optional or expanded params arguments "
+                + "are not rewritten (condition b).";
+            return false;
         }
 
         plan.GetOrAddMethod(methodSymbol);
         return true;
     }
 
-    private static bool TryRegisterMemberSymbol(
+    private static bool TryRegisterPropertyOrFieldRead(
         ISymbol symbol,
         AccessorPlan plan,
         out string rejectReason)
     {
         rejectReason = null;
-        if (symbol == null || !AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol))
-        {
-            return false;
-        }
-
         if (symbol is IFieldSymbol fieldSymbol)
         {
+            if (!AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
+            {
+                return false;
+            }
+
             if (fieldSymbol.IsStatic)
             {
                 rejectReason = "inaccessible static field access has no accessor rewrite shape (condition b).";
@@ -1347,38 +1707,12 @@ internal static class AccessorEligibility
 
         if (symbol is IPropertySymbol propertySymbol)
         {
-            if (propertySymbol.IsIndexer)
+            if (!AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod))
             {
-                rejectReason = "inaccessible indexer access has no accessor rewrite shape (condition b).";
                 return false;
             }
 
-            if (propertySymbol.IsStatic)
-            {
-                rejectReason =
-                    "inaccessible static property access has no accessor rewrite shape (condition b).";
-                return false;
-            }
-
-            // Reads and writes are registered by the rewriter as needed; eligibility requires that
-            // both accessors exist when the property is used, so register both when present.
-            if (propertySymbol.GetMethod != null)
-            {
-                plan.GetOrAddPropertyGetter(propertySymbol);
-            }
-
-            if (propertySymbol.SetMethod != null)
-            {
-                plan.GetOrAddPropertySetter(propertySymbol);
-            }
-
-            if (propertySymbol.GetMethod == null && propertySymbol.SetMethod == null)
-            {
-                rejectReason = "inaccessible property has no getter or setter to bind (condition b).";
-                return false;
-            }
-
-            return true;
+            return TryRegisterPropertyRead(propertySymbol, plan, out rejectReason);
         }
 
         if (symbol is IEventSymbol)
@@ -1387,19 +1721,119 @@ internal static class AccessorEligibility
             return false;
         }
 
-        if (symbol is IMethodSymbol)
+        if (symbol is IMethodSymbol methodSymbol
+            && AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol))
         {
-            // Method group without invocation (e.g. assigned to a delegate) has no rewrite shape.
             rejectReason =
                 "inaccessible method group (non-invocation) has no accessor rewrite shape (condition b).";
             return false;
         }
 
-        rejectReason = "inaccessible member kind is not field/method/property access (condition b).";
+        if (symbol != null
+            && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol)
+            && symbol is not INamespaceSymbol
+            && symbol is not ITypeSymbol
+            && symbol is not ILocalSymbol
+            && symbol is not IParameterSymbol)
+        {
+            rejectReason = "inaccessible member kind is not field/method/property access (condition b).";
+            return false;
+        }
+
         return false;
     }
 
-    private static bool IsNameHandledByParent(SimpleNameSyntax node)
+    private static bool TryRegisterPropertyRead(
+        IPropertySymbol propertySymbol,
+        AccessorPlan plan,
+        out string rejectReason)
+    {
+        rejectReason = null;
+        if (propertySymbol.IsIndexer)
+        {
+            rejectReason = "inaccessible indexer access has no accessor rewrite shape (condition b).";
+            return false;
+        }
+
+        if (propertySymbol.IsStatic)
+        {
+            rejectReason =
+                "inaccessible static property access has no accessor rewrite shape (condition b).";
+            return false;
+        }
+
+        if (propertySymbol.ReturnsByRef || propertySymbol.ReturnsByRefReadonly)
+        {
+            rejectReason =
+                "inaccessible ref-returning properties have no accessor rewrite shape (condition b).";
+            return false;
+        }
+
+        plan.GetOrAddPropertyGetter(propertySymbol);
+        return true;
+    }
+
+    private static bool TryRegisterPropertyWrite(
+        IPropertySymbol propertySymbol,
+        bool needsGetter,
+        AccessorPlan plan,
+        out string rejectReason)
+    {
+        rejectReason = null;
+        if (propertySymbol.IsIndexer)
+        {
+            rejectReason = "inaccessible indexer access has no accessor rewrite shape (condition b).";
+            return false;
+        }
+
+        if (propertySymbol.IsStatic)
+        {
+            rejectReason =
+                "inaccessible static property access has no accessor rewrite shape (condition b).";
+            return false;
+        }
+
+        if (propertySymbol.ReturnsByRef || propertySymbol.ReturnsByRefReadonly)
+        {
+            rejectReason =
+                "inaccessible ref-returning properties have no accessor rewrite shape (condition b).";
+            return false;
+        }
+
+        bool setterInaccessible = AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
+        bool getterInaccessible = needsGetter
+            && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
+        if (!setterInaccessible && !getterInaccessible)
+        {
+            return false;
+        }
+
+        if (setterInaccessible)
+        {
+            if (propertySymbol.SetMethod == null)
+            {
+                rejectReason = "inaccessible property has no setter to bind (condition b).";
+                return false;
+            }
+
+            plan.GetOrAddPropertySetter(propertySymbol);
+        }
+
+        if (getterInaccessible)
+        {
+            if (propertySymbol.GetMethod == null)
+            {
+                rejectReason = "inaccessible property has no getter to bind (condition b).";
+                return false;
+            }
+
+            plan.GetOrAddPropertyGetter(propertySymbol);
+        }
+
+        return true;
+    }
+
+    public static bool IsNameHandledByParent(SimpleNameSyntax node)
     {
         if (node.Parent is MemberAccessExpressionSyntax memberAccess && memberAccess.Name == node)
         {
@@ -1417,13 +1851,6 @@ internal static class AccessorEligibility
         }
 
         if (node.Parent is InvocationExpressionSyntax invocation && invocation.Expression == node)
-        {
-            return true;
-        }
-
-        if (node.Parent is AssignmentExpressionSyntax assignment
-            && assignment.Left == node
-            && assignment.Parent is InitializerExpressionSyntax)
         {
             return true;
         }
@@ -1470,7 +1897,9 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
     {
-        if (_accessorPlan == null)
+        if (_accessorPlan == null
+            || TransformWorkerProgram.NameofRules.IsNameofInvocation(node)
+            || TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
         {
             return base.VisitInvocationExpression(node);
         }
@@ -1505,16 +1934,22 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     public override SyntaxNode VisitAssignmentExpression(AssignmentExpressionSyntax node)
     {
-        if (_accessorPlan == null)
+        // Object/collection initializer member names must stay bare identifiers.
+        if (node.Parent is InitializerExpressionSyntax)
+        {
+            return base.VisitAssignmentExpression(node);
+        }
+
+        if (_accessorPlan == null || TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
         {
             return base.VisitAssignmentExpression(node);
         }
 
         ISymbol leftSymbol = _semanticModel.GetSymbolInfo(node.Left).Symbol;
         if (leftSymbol is IPropertySymbol propertySymbol
-            && AccessibilityRules.IsInaccessibleFromExternalAssembly(propertySymbol)
             && !propertySymbol.IsIndexer
-            && !propertySymbol.IsStatic)
+            && !propertySymbol.IsStatic
+            && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod))
         {
             return RewritePropertyAssignment(node, propertySymbol);
         }
@@ -1539,7 +1974,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
     {
-        if (_accessorPlan == null)
+        if (_accessorPlan == null || TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
         {
             return base.VisitMemberAccessExpression(node);
         }
@@ -1582,7 +2017,9 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return original;
         }
 
-        if (_accessorPlan != null)
+        // nameof(...) must keep a member reference shape (qualify only; never accessor calls).
+        bool insideNameof = TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node);
+        if (_accessorPlan != null && !insideNameof)
         {
             ExpressionSyntax accessorRead = TryRewriteInaccessibleRead(
                 symbol,
@@ -1635,10 +2072,9 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         }
 
         if (symbol is IPropertySymbol propertySymbol
-            && AccessibilityRules.IsInaccessibleFromExternalAssembly(propertySymbol)
             && !propertySymbol.IsIndexer
             && !propertySymbol.IsStatic
-            && propertySymbol.GetMethod != null)
+            && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod))
         {
             AccessorEntry entry = _accessorPlan.GetOrAddPropertyGetter(propertySymbol);
             return CreateDelegateInvocation(
@@ -1896,7 +2332,6 @@ internal static class ShimMethodFactory
 internal sealed class ShimTypeBuilder
 {
     private readonly List<MethodDeclarationSyntax> _methods = new List<MethodDeclarationSyntax>();
-    private readonly AccessorPlan _accessors = new AccessorPlan();
 
     public ShimTypeBuilder(
         string shimTypeName,
@@ -1906,6 +2341,7 @@ internal sealed class ShimTypeBuilder
         ShimTypeName = shimTypeName;
         NamespaceName = namespaceName ?? string.Empty;
         Usings = usings ?? new List<UsingDirectiveSyntax>();
+        AccessorPlan = new AccessorPlan();
     }
 
     public string ShimTypeName { get; }
@@ -1914,29 +2350,28 @@ internal sealed class ShimTypeBuilder
 
     public List<UsingDirectiveSyntax> Usings { get; }
 
+    /// <summary>
+    /// Shim-type-level accessor registry — shared across all delegation methods in this type so
+    /// AllocateName stays unique and overloads cannot collide after a per-method merge.
+    /// </summary>
+    public AccessorPlan AccessorPlan { get; }
+
     public void AddMethod(MethodDeclarationSyntax shimMethod, string shimMethodName)
     {
         MethodDeclarationSyntax named = shimMethod.WithIdentifier(SyntaxFactory.Identifier(shimMethodName));
         _methods.Add(named);
     }
 
-    public void MergeAccessors(AccessorPlan plan)
-    {
-        _accessors.MergeFrom(plan);
-    }
-
     public IReadOnlyList<MethodDeclarationSyntax> Methods => _methods;
-
-    public IReadOnlyList<AccessorEntry> Accessors => _accessors.Entries;
 
     public IEnumerable<MemberDeclarationSyntax> EmitMembers()
     {
-        foreach (AccessorEntry accessor in _accessors.Entries)
+        foreach (AccessorEntry accessor in AccessorPlan.Entries)
         {
             yield return accessor.EmitFieldDeclaration();
         }
 
-        if (_accessors.Entries.Count > 0)
+        if (AccessorPlan.Entries.Count > 0)
         {
             yield return EmitBindAccessorsMethod();
         }
@@ -1950,7 +2385,7 @@ internal sealed class ShimTypeBuilder
     private MethodDeclarationSyntax EmitBindAccessorsMethod()
     {
         List<StatementSyntax> statements = new List<StatementSyntax>();
-        foreach (AccessorEntry accessor in _accessors.Entries)
+        foreach (AccessorEntry accessor in AccessorPlan.Entries)
         {
             statements.Add(accessor.EmitBindStatement());
         }
@@ -2160,7 +2595,7 @@ internal sealed class MethodTransformDecision
 
     public string PatchKind { get; private set; }
 
-    public AccessorPlan AccessorPlan { get; private set; }
+    public bool UsesDelegation => PatchKind == PatchKinds.Delegation;
 
     public static MethodTransformDecision Skip(string reason)
     {
@@ -2172,13 +2607,9 @@ internal sealed class MethodTransformDecision
         return new MethodTransformDecision { PatchKind = PatchKinds.Transplant };
     }
 
-    public static MethodTransformDecision Delegation(AccessorPlan accessorPlan)
+    public static MethodTransformDecision Delegation()
     {
-        return new MethodTransformDecision
-        {
-            PatchKind = PatchKinds.Delegation,
-            AccessorPlan = accessorPlan
-        };
+        return new MethodTransformDecision { PatchKind = PatchKinds.Delegation };
     }
 }
 
