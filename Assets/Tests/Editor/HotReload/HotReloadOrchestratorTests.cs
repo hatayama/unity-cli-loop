@@ -406,6 +406,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: BindShimAccessors invokes each type's public static parameterless
+        /// __BindAccessors, skips types without one, and records a throwing binder as a failure
+        /// keyed by the shim type's short name with the cause message and a compile-and-retry
+        /// hint.
+        /// </summary>
+        [Test]
+        public void BindShimAccessors_ThrowingBinder_IsReportedByShimTypeName()
+        {
+            int callsBefore = HotReloadBindProbeShim.BindCalls;
+
+            Dictionary<string, string> failures = HotReloadOrchestrator.BindShimAccessors(
+                typeof(HotReloadBindFailShim).Assembly);
+
+            Assert.That(HotReloadBindProbeShim.BindCalls, Is.EqualTo(callsBefore + 1));
+            Assert.That(failures.Count, Is.EqualTo(1));
+            Assert.That(failures.ContainsKey(nameof(HotReloadBindFailShim)), Is.True);
+            Assert.That(failures[nameof(HotReloadBindFailShim)], Does.Contain("no such member"));
+            Assert.That(
+                failures[nameof(HotReloadBindFailShim)],
+                Does.Contain("Run 'uloop compile' and retry."));
+        }
+
+        /// <summary>
         /// What: an edited body that calls a non-existent helper fails shim compile with the
         /// new-member hint (Failed, not a silent skip).
         /// </summary>
@@ -636,6 +659,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 }
 ";
+        }
+    }
+
+    /// <summary>
+    /// Shim-shaped fixture whose binder throws, so the BindShimAccessors failure path can be
+    /// pinned without fabricating a shim assembly that compiles but fails to bind.
+    /// </summary>
+    internal static class HotReloadBindFailShim
+    {
+        public static void __BindAccessors()
+        {
+            throw new System.MissingMethodException("no such member");
+        }
+    }
+
+    /// <summary>
+    /// Shim-shaped fixture whose binder succeeds; counts invocations so the test can prove a
+    /// healthy binder is invoked and leaves no failure entry.
+    /// </summary>
+    internal static class HotReloadBindProbeShim
+    {
+        public static int BindCalls;
+
+        public static void __BindAccessors()
+        {
+            BindCalls++;
         }
     }
 }

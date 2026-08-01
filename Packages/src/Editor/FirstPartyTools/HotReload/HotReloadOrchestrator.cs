@@ -313,8 +313,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// delegate) once, before any patch is applied, so no delegation shim can run with
         /// unbound accessor delegates. Returns bind failures keyed by shim type name; every
         /// delegation entry in a failed type becomes Failed instead of being patched.
+        /// Internal so tests can pin the failure contract directly — an end-to-end bind failure
+        /// cannot be fabricated once shim compilation has succeeded against the same assembly.
         /// </summary>
-        private static Dictionary<string, string> BindShimAccessors(Assembly shimAssembly)
+        internal static Dictionary<string, string> BindShimAccessors(Assembly shimAssembly)
         {
             Dictionary<string, string> failureReasonByShimTypeName = new Dictionary<string, string>();
             foreach (Type shimType in shimAssembly.GetTypes())
