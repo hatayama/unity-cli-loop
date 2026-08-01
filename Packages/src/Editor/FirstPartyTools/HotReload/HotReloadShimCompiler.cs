@@ -43,47 +43,62 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string workDirectory = CreateWorkDirectory();
-            string sourcePath = Path.Combine(workDirectory, "HotReloadShim.cs");
-            string dllPath = Path.Combine(workDirectory, "HotReloadShim.dll");
-            string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
-            File.WriteAllText(sourcePath, shimSource);
-
-            List<string> references = new List<string>(referencePaths.Count);
-            foreach (string referencePath in referencePaths)
+            try
             {
-                references.Add(referencePath);
+                string sourcePath = Path.Combine(workDirectory, "HotReloadShim.cs");
+                string dllPath = Path.Combine(workDirectory, "HotReloadShim.dll");
+                string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
+                File.WriteAllText(sourcePath, shimSource);
+
+                List<string> references = new List<string>(referencePaths.Count);
+                foreach (string referencePath in referencePaths)
+                {
+                    references.Add(referencePath);
+                }
+
+                RoslynCompilerOptions compilerOptions = new RoslynCompilerOptions(defineSymbols, allowUnsafeCode: false);
+                DynamicCompilationBackendResult backendResult = await RoslynCompilerBackend.CompileAsync(
+                    sourcePath,
+                    dllPath,
+                    references,
+                    externalCompilerPaths,
+                    compilerOptions,
+                    ct,
+                    markBuildStarted: static () => { },
+                    markBuildFinished: static () => { },
+                    incrementBuildCount: static () => { }).ConfigureAwait(true);
+
+                List<string> errors = CollectErrors(backendResult.CompilerMessages);
+                if (errors.Count > 0)
+                {
+                    string message = string.Join("\n", errors);
+                    return HotReloadShimCompileResult.Failure(
+                        message + "\n" + HotReloadConstants.NewMemberCompileHint);
+                }
+
+                if (!File.Exists(dllPath))
+                {
+                    return HotReloadShimCompileResult.Failure("Shim dll was not produced: " + dllPath);
+                }
+
+                byte[] assemblyBytes = File.ReadAllBytes(dllPath);
+                byte[] pdbBytes = File.Exists(pdbPath) ? File.ReadAllBytes(pdbPath) : null;
+                CompiledAssemblyLoadResult loadResult = CompiledAssemblyLoader.Load(assemblyBytes, pdbBytes);
+                if (!loadResult.Success || loadResult.CompiledAssembly == null)
+                {
+                    return HotReloadShimCompileResult.Failure(
+                        "Shim assembly compiled but failed to load: " + dllPath);
+                }
+
+                return HotReloadShimCompileResult.SuccessResult(loadResult.CompiledAssembly);
             }
-
-            RoslynCompilerOptions compilerOptions = new RoslynCompilerOptions(defineSymbols, allowUnsafeCode: false);
-            DynamicCompilationBackendResult backendResult = await RoslynCompilerBackend.CompileAsync(
-                sourcePath,
-                dllPath,
-                references,
-                externalCompilerPaths,
-                compilerOptions,
-                ct,
-                markBuildStarted: static () => { },
-                markBuildFinished: static () => { },
-                incrementBuildCount: static () => { }).ConfigureAwait(true);
-
-            List<string> errors = CollectErrors(backendResult.CompilerMessages);
-            if (errors.Count > 0)
+            finally
             {
-                string message = string.Join("\n", errors);
-                return HotReloadShimCompileResult.Failure(
-                    message + "\n" + HotReloadConstants.NewMemberCompileHint);
+                if (Directory.Exists(workDirectory))
+                {
+                    Directory.Delete(workDirectory, recursive: true);
+                }
             }
-
-            if (!File.Exists(dllPath))
-            {
-                return HotReloadShimCompileResult.Failure("Shim dll was not produced: " + dllPath);
-            }
-
-            byte[] assemblyBytes = File.ReadAllBytes(dllPath);
-            byte[] pdbBytes = File.Exists(pdbPath) ? File.ReadAllBytes(pdbPath) : null;
-            CompiledAssemblyLoadResult loadResult = CompiledAssemblyLoader.Load(assemblyBytes, pdbBytes);
-            Debug.Assert(loadResult.Success, "CompiledAssemblyLoader must succeed for valid dll bytes.");
-            return HotReloadShimCompileResult.SuccessResult(loadResult.CompiledAssembly);
         }
 
         private static List<string> CollectErrors(CompilerMessage[] compilerMessages)

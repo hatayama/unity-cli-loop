@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 using UnityEditor.PackageManager;
@@ -22,9 +22,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         /// <summary>
         /// Ensures a worker.dll matching the current worker source exists under
-        /// <c>Library/UloopHotReload/Worker/&lt;sha256&gt;/</c> and returns that directory.
+        /// <c>Library/UloopHotReload/Worker/&lt;hash&gt;/</c> and returns that directory.
         /// </summary>
-        public static async Task<TransformWorkerBootstrapResult> EnsureWorkerAsync()
+        public static async Task<TransformWorkerBootstrapResult> EnsureWorkerAsync(CancellationToken ct)
         {
             ExternalCompilerPaths paths = ExternalCompilerPathResolver.Resolve();
             if (paths == null)
@@ -40,8 +40,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Transform worker source not found: " + workerSourcePath);
             }
 
-            string sourceHash = ComputeSha256Hex(workerSourcePath);
-            string cacheDirectory = Path.Combine(ResolveWorkerCacheRoot(), sourceHash);
+            // Include toolchain paths so a Unity Editor upgrade cannot reuse a stale sidecar that
+            // points at a removed Roslyn directory under Library/.
+            string cacheKey = ComputeCacheKey(workerSourcePath, paths);
+            string cacheDirectory = Path.Combine(ResolveWorkerCacheRoot(), cacheKey);
             string workerDllPath = Path.Combine(cacheDirectory, HotReloadConstants.WorkerDllFileName);
             string runtimeConfigPath = Path.Combine(cacheDirectory, HotReloadConstants.WorkerRuntimeConfigFileName);
             string roslynSidecarPath = Path.Combine(
@@ -58,7 +60,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 paths,
                 workerSourcePath,
                 workerDllPath,
-                cacheDirectory).ConfigureAwait(true);
+                cacheDirectory,
+                ct).ConfigureAwait(true);
             if (!compileResult.Success)
             {
                 return compileResult;
@@ -94,16 +97,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ExternalCompilerPaths paths,
             string workerSourcePath,
             string workerDllPath,
-            string cacheDirectory)
+            string cacheDirectory,
+            CancellationToken ct)
         {
             string responseFilePath = Path.Combine(cacheDirectory, HotReloadConstants.WorkerResponseFileName);
             WriteWorkerResponseFile(responseFilePath, workerSourcePath, workerDllPath, paths);
 
-            (int exitCode, string standardOutput, string standardError) = await RunProcessAsync(
+            (int exitCode, string standardOutput, string standardError) = await HotReloadProcessRunner.RunAsync(
                 paths.DotnetHostPath,
                 "\"" + paths.CompilerDllPath + "\" @\"" + responseFilePath + "\"",
                 cacheDirectory,
-                TimeSpan.FromMilliseconds(HotReloadConstants.WorkerProcessTimeoutMilliseconds)).ConfigureAwait(true);
+                TimeSpan.FromMilliseconds(HotReloadConstants.WorkerProcessTimeoutMilliseconds),
+                ct).ConfigureAwait(true);
 
             if (exitCode != 0)
             {
@@ -141,55 +146,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             File.WriteAllLines(responseFilePath, lines);
         }
 
-        private static async Task<(int exitCode, string standardOutput, string standardError)> RunProcessAsync(
-            string fileName,
-            string arguments,
-            string workingDirectoryPath,
-            TimeSpan timeout)
-        {
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                FileName = fileName,
-                Arguments = arguments,
-                WorkingDirectory = workingDirectoryPath,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-
-            using Process process = Process.Start(startInfo);
-            Debug.Assert(process != null, "Failed to start process: " + fileName);
-
-            Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
-            Task<string> stderrTask = process.StandardError.ReadToEndAsync();
-            // Task.Run around WaitForExit mirrors RoslynCompilerBackend / spike S2 — Process has
-            // no awaitable wait on this runtime.
-            Task waitForExitTask = Task.Run(() => process.WaitForExit());
-            Task completedTask = await Task.WhenAny(waitForExitTask, Task.Delay(timeout)).ConfigureAwait(true);
-            if (completedTask != waitForExitTask)
-            {
-                if (!process.HasExited)
-                {
-                    process.Kill();
-                }
-
-                return (-1, string.Empty, "Process timed out after " + timeout.TotalSeconds + "s.");
-            }
-
-            process.WaitForExit();
-            string standardOutput = await stdoutTask.ConfigureAwait(true);
-            string standardError = await stderrTask.ConfigureAwait(true);
-            return (process.ExitCode, standardOutput, standardError);
-        }
-
-        private static string ComputeSha256Hex(string filePath)
+        private static string ComputeCacheKey(string workerSourcePath, ExternalCompilerPaths paths)
         {
             using SHA256 sha256 = SHA256.Create();
-            using FileStream stream = File.OpenRead(filePath);
-            byte[] hash = sha256.ComputeHash(stream);
-            StringBuilder builder = new StringBuilder(hash.Length * 2);
-            foreach (byte value in hash)
+            using FileStream sourceStream = File.OpenRead(workerSourcePath);
+            byte[] sourceHash = sha256.ComputeHash(sourceStream);
+
+            string toolchainIdentity = string.Join(
+                "|",
+                paths.CompilerDllPath ?? string.Empty,
+                paths.CompilerRuntimeConfigPath ?? string.Empty,
+                paths.DotnetHostPath ?? string.Empty,
+                paths.CodeAnalysisDllPath ?? string.Empty,
+                paths.CodeAnalysisCSharpDllPath ?? string.Empty);
+            byte[] toolchainBytes = Encoding.UTF8.GetBytes(toolchainIdentity);
+            byte[] toolchainHash = sha256.ComputeHash(toolchainBytes);
+
+            byte[] combined = new byte[sourceHash.Length + toolchainHash.Length];
+            Buffer.BlockCopy(sourceHash, 0, combined, 0, sourceHash.Length);
+            Buffer.BlockCopy(toolchainHash, 0, combined, sourceHash.Length, toolchainHash.Length);
+            byte[] finalHash = sha256.ComputeHash(combined);
+
+            StringBuilder builder = new StringBuilder(finalHash.Length * 2);
+            foreach (byte value in finalHash)
             {
                 builder.Append(value.ToString("x2"));
             }

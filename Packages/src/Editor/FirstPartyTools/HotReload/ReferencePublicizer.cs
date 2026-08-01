@@ -146,6 +146,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             DefaultAssemblyResolver resolver = new DefaultAssemblyResolver();
             resolver.AddSearchDirectory(Path.GetDirectoryName(sourceDllPath));
 
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            resolver.AddSearchDirectory(
+                Path.Combine(projectRoot, HotReloadConstants.ScriptAssembliesRelativeDirectory));
+
             string contentsPath = EditorApplication.applicationContentsPath;
             if (!string.IsNullOrEmpty(contentsPath))
             {
@@ -153,6 +157,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolver.AddSearchDirectory(Path.Combine(contentsPath, "Managed", "UnityEngine"));
                 resolver.AddSearchDirectory(Path.Combine(contentsPath, "UnityReferenceAssemblies", "unity-4.8-api"));
             }
+
+            // Why not: walk AppDomain assemblies for extra search dirs — Assembly.Load(byte[])
+            // shims throw NotSupportedException on .Location, and hot reload loads those shims into
+            // the same domain. ScriptAssemblies + Editor Managed cover the project/engine refs
+            // publicize needs for Write.
 
             return resolver;
         }

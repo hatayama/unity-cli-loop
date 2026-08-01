@@ -1,4 +1,5 @@
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 using NUnit.Framework;
@@ -54,7 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 targetTypesAssemblyPath = targetDllPath
             };
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(input);
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(input, CancellationToken.None);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output, Is.Not.Null);
             Assert.That(result.Output.entries, Is.Not.Null);
@@ -74,6 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(foundCompute, Is.True, "ComputeWithPrivate entry missing from worker output.");
 
+            Assert.That(result.Output.skipped, Is.Not.Null, "Expected a skipped list from the worker.");
             bool foundBaseSkip = false;
             foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
             {

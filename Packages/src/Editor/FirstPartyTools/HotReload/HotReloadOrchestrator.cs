@@ -134,7 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
 
             TransformWorkerClientResult workerResult =
-                await TransformWorkerClient.RunAsync(workerInput).ConfigureAwait(true);
+                await TransformWorkerClient.RunAsync(workerInput, ct).ConfigureAwait(true);
             if (!workerResult.Success)
             {
                 outcomes.Add(
@@ -226,7 +226,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadMethodOutcome.Failed(methodLabel, matchResult.ErrorMessage, filePath);
             }
 
-            Type shimType = shimAssembly.GetType(entry.shimTypeName);
+            Type shimType = FindShimType(shimAssembly, entry.shimTypeName);
             if (shimType == null)
             {
                 return HotReloadMethodOutcome.Failed(
@@ -267,6 +267,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return HotReloadMethodOutcome.Patched(methodLabel, filePath, patchResult.Warning);
+        }
+
+        private static Type FindShimType(Assembly shimAssembly, string shimTypeName)
+        {
+            if (string.IsNullOrEmpty(shimTypeName))
+            {
+                return null;
+            }
+
+            // Prefer the short-name lookup used when shims are in the global namespace; fall back
+            // to scanning because production emits shims into the original type's namespace.
+            Type direct = shimAssembly.GetType(shimTypeName);
+            if (direct != null)
+            {
+                return direct;
+            }
+
+            foreach (Type candidate in shimAssembly.GetTypes())
+            {
+                if (candidate.Name == shimTypeName)
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
         }
 
         private static UnityCompilationAssembly FindCompilationAssembly(string assemblyName)

@@ -1,7 +1,7 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 using Newtonsoft.Json;
@@ -19,13 +19,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Bootstraps the worker if needed, writes <paramref name="input"/> to a temp JSON file,
         /// runs <c>dotnet worker.dll &lt;in&gt; &lt;out&gt;</c>, and deserializes the output.
         /// </summary>
-        public static async Task<TransformWorkerClientResult> RunAsync(TransformWorkerInputDto input)
+        public static async Task<TransformWorkerClientResult> RunAsync(
+            TransformWorkerInputDto input,
+            CancellationToken ct)
         {
             Debug.Assert(input != null, "input must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(input.sourcePath), "sourcePath must not be empty.");
 
             TransformWorkerBootstrapResult bootstrapResult =
-                await TransformWorkerBootstrap.EnsureWorkerAsync().ConfigureAwait(true);
+                await TransformWorkerBootstrap.EnsureWorkerAsync(ct).ConfigureAwait(true);
             if (!bootstrapResult.Success)
             {
                 return TransformWorkerClientResult.Failure(bootstrapResult.ErrorMessage);
@@ -51,11 +53,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     bootstrapResult.WorkerDirectory,
                     HotReloadConstants.WorkerDllFileName);
                 string arguments = "\"" + workerDllPath + "\" \"" + inputJsonPath + "\" \"" + outputJsonPath + "\"";
-                (int exitCode, string standardOutput, string standardError) = await RunProcessAsync(
+                (int exitCode, string standardOutput, string standardError) = await HotReloadProcessRunner.RunAsync(
                     paths.DotnetHostPath,
                     arguments,
                     bootstrapResult.WorkerDirectory,
-                    TimeSpan.FromMilliseconds(HotReloadConstants.WorkerProcessTimeoutMilliseconds)).ConfigureAwait(true);
+                    TimeSpan.FromMilliseconds(HotReloadConstants.WorkerProcessTimeoutMilliseconds),
+                    ct).ConfigureAwait(true);
 
                 if (exitCode != 0)
                 {
@@ -99,48 +102,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void WriteUtf8NoBom(string path, string contents)
         {
             File.WriteAllText(path, contents, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        }
-
-        private static async Task<(int exitCode, string standardOutput, string standardError)> RunProcessAsync(
-            string fileName,
-            string arguments,
-            string workingDirectoryPath,
-            TimeSpan timeout)
-        {
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                FileName = fileName,
-                Arguments = arguments,
-                WorkingDirectory = workingDirectoryPath,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-
-            using Process process = Process.Start(startInfo);
-            Debug.Assert(process != null, "Failed to start process: " + fileName);
-
-            Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
-            Task<string> stderrTask = process.StandardError.ReadToEndAsync();
-            // Task.Run around WaitForExit mirrors RoslynCompilerBackend / spike S2 — Process has
-            // no awaitable wait on this runtime.
-            Task waitForExitTask = Task.Run(() => process.WaitForExit());
-            Task completedTask = await Task.WhenAny(waitForExitTask, Task.Delay(timeout)).ConfigureAwait(true);
-            if (completedTask != waitForExitTask)
-            {
-                if (!process.HasExited)
-                {
-                    process.Kill();
-                }
-
-                return (-1, string.Empty, "Process timed out after " + timeout.TotalSeconds + "s.");
-            }
-
-            process.WaitForExit();
-            string standardOutput = await stdoutTask.ConfigureAwait(true);
-            string standardError = await stderrTask.ConfigureAwait(true);
-            return (process.ExitCode, standardOutput, standardError);
         }
     }
 

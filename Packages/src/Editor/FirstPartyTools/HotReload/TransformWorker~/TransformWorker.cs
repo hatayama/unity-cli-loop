@@ -237,7 +237,14 @@ public static class TransformWorkerProgram
                 {
                     string shimTypeName = typeSymbol.Name + "_UloopHotReloadShims_" + shimTypeCounter;
                     shimTypeCounter++;
-                    currentShimType = new ShimTypeBuilder(shimTypeName, typeSymbol);
+                    string namespaceName = typeSymbol.ContainingNamespace == null
+                        || typeSymbol.ContainingNamespace.IsGlobalNamespace
+                        ? string.Empty
+                        : typeSymbol.ContainingNamespace.ToDisplayString();
+                    currentShimType = new ShimTypeBuilder(
+                        shimTypeName,
+                        namespaceName,
+                        CollectUsingsForType(root, typeDeclaration));
                     shimTypes.Add(currentShimType);
                 }
 
@@ -249,7 +256,7 @@ public static class TransformWorkerProgram
                     methodSymbol,
                     typeSymbol,
                     semanticModel);
-                currentShimType.AddMethod(rewrittenMethod, methodSymbol, shimMethodName);
+                currentShimType.AddMethod(rewrittenMethod, shimMethodName);
 
                 entries.Add(new WorkerEntry
                 {
@@ -291,9 +298,15 @@ public static class TransformWorkerProgram
         IMethodSymbol methodSymbol,
         SemanticModel semanticModel)
     {
-        if (typeDeclaration.Modifiers.Any(static modifier => modifier.IsKind(SyntaxKind.PartialKeyword)))
+        // A nested type inside a partial outer type still has an incomplete single-file model.
+        for (TypeDeclarationSyntax declaration = typeDeclaration;
+             declaration != null;
+             declaration = declaration.Parent as TypeDeclarationSyntax)
         {
-            return "Partial types are skipped because a single file cannot provide a complete semantic model.";
+            if (declaration.Modifiers.Any(static modifier => modifier.IsKind(SyntaxKind.PartialKeyword)))
+            {
+                return "Partial types are skipped because a single file cannot provide a complete semantic model.";
+            }
         }
 
         if (typeSymbol.TypeKind == TypeKind.Struct || typeSymbol.IsValueType)
@@ -423,6 +436,30 @@ public static class TransformWorkerProgram
     {
         return typeSymbol.ToDisplayString(FullyQualifiedTypeFormat) + "." + methodSymbol.Name;
     }
+
+    private static List<UsingDirectiveSyntax> CollectUsingsForType(
+        CompilationUnitSyntax root,
+        TypeDeclarationSyntax typeDeclaration)
+    {
+        List<UsingDirectiveSyntax> usings = new List<UsingDirectiveSyntax>();
+        foreach (UsingDirectiveSyntax usingDirective in root.Usings)
+        {
+            usings.Add(usingDirective.WithoutTrivia());
+        }
+
+        for (SyntaxNode node = typeDeclaration.Parent; node != null; node = node.Parent)
+        {
+            if (node is BaseNamespaceDeclarationSyntax namespaceDeclaration)
+            {
+                foreach (UsingDirectiveSyntax usingDirective in namespaceDeclaration.Usings)
+                {
+                    usings.Add(usingDirective.WithoutTrivia());
+                }
+            }
+        }
+
+        return usings;
+    }
 }
 
 internal static class AccessibilityRules
@@ -511,7 +548,8 @@ internal sealed class InstanceMemberQualifier : CSharpSyntaxRewriter
     {
         if (IsMemberAccessNameSide(node)
             || IsQualifiedNameRightSide(node)
-            || IsMemberBindingName(node))
+            || IsMemberBindingName(node)
+            || IsObjectOrCollectionInitializerMemberName(node))
         {
             return original;
         }
@@ -619,6 +657,18 @@ internal sealed class InstanceMemberQualifier : CSharpSyntaxRewriter
         return node.Parent is MemberBindingExpressionSyntax memberBinding
             && memberBinding.Name == node;
     }
+
+    // `new T { _field = 1 }` must keep the bare member name; qualifying to instance._field is
+    // invalid inside an object/collection initializer.
+    private static bool IsObjectOrCollectionInitializerMemberName(SimpleNameSyntax node)
+    {
+        if (node.Parent is not AssignmentExpressionSyntax assignment || assignment.Left != node)
+        {
+            return false;
+        }
+
+        return assignment.Parent is InitializerExpressionSyntax;
+    }
 }
 
 // Nested access to the instance parameter name without exposing TransformWorkerProgram fields
@@ -648,15 +698,19 @@ internal static class ShimMethodFactory
         }
 
         SeparatedSyntaxList<ParameterSyntax> parameters = BuildShimParameters(rewrittenOriginal, methodSymbol);
-        return rewrittenOriginal
+        MethodDeclarationSyntax shim = rewrittenOriginal
             .WithAttributeLists(default)
             .WithModifiers(modifiers)
             .WithReturnType(returnType)
             .WithParameterList(SyntaxFactory.ParameterList(parameters))
             .WithExplicitInterfaceSpecifier(null)
             .WithConstraintClauses(default)
-            .WithSemicolonToken(default)
             .WithTriviaFrom(rewrittenOriginal);
+
+        // Expression-bodied methods must keep their terminating semicolon; block bodies must not.
+        return rewrittenOriginal.ExpressionBody != null
+            ? shim.WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken))
+            : shim.WithSemicolonToken(default);
     }
 
     private static SeparatedSyntaxList<ParameterSyntax> BuildShimParameters(
@@ -685,26 +739,27 @@ internal static class ShimMethodFactory
 internal sealed class ShimTypeBuilder
 {
     private readonly List<MethodDeclarationSyntax> _methods = new List<MethodDeclarationSyntax>();
-    private readonly List<string> _shimMethodNames = new List<string>();
 
-    public ShimTypeBuilder(string shimTypeName, INamedTypeSymbol targetType)
+    public ShimTypeBuilder(
+        string shimTypeName,
+        string namespaceName,
+        List<UsingDirectiveSyntax> usings)
     {
         ShimTypeName = shimTypeName;
-        TargetType = targetType;
+        NamespaceName = namespaceName ?? string.Empty;
+        Usings = usings ?? new List<UsingDirectiveSyntax>();
     }
 
     public string ShimTypeName { get; }
 
-    public INamedTypeSymbol TargetType { get; }
+    public string NamespaceName { get; }
 
-    public void AddMethod(
-        MethodDeclarationSyntax shimMethod,
-        IMethodSymbol originalMethod,
-        string shimMethodName)
+    public List<UsingDirectiveSyntax> Usings { get; }
+
+    public void AddMethod(MethodDeclarationSyntax shimMethod, string shimMethodName)
     {
         MethodDeclarationSyntax named = shimMethod.WithIdentifier(SyntaxFactory.Identifier(shimMethodName));
         _methods.Add(named);
-        _shimMethodNames.Add(shimMethodName);
     }
 
     public IReadOnlyList<MethodDeclarationSyntax> Methods => _methods;
@@ -719,14 +774,10 @@ internal static class ShimSourceEmitter
             return string.Empty;
         }
 
+        // Emit each shim type in the original type's namespace (and with that type's usings) so
+        // unqualified sibling-type references in transplanted bodies still resolve. Manifest
+        // shimTypeName stays the short name; orchestrator resolves by Type.Name.
         CompilationUnitSyntax unit = SyntaxFactory.CompilationUnit();
-        foreach (UsingDirectiveSyntax usingDirective in originalRoot.Usings)
-        {
-            unit = unit.AddUsings(usingDirective.WithoutTrivia());
-        }
-
-        // Emit shim types in the global namespace so Assembly.GetType(shimTypeName) resolves
-        // with the short name recorded in the manifest (matches the plan's shape).
         foreach (ShimTypeBuilder shimType in shimTypes)
         {
             ClassDeclarationSyntax classDeclaration = SyntaxFactory.ClassDeclaration(shimType.ShimTypeName)
@@ -735,7 +786,25 @@ internal static class ShimSourceEmitter
                         SyntaxFactory.Token(SyntaxKind.PublicKeyword),
                         SyntaxFactory.Token(SyntaxKind.StaticKeyword)))
                 .WithMembers(SyntaxFactory.List<MemberDeclarationSyntax>(shimType.Methods));
-            unit = unit.AddMembers(classDeclaration);
+
+            if (string.IsNullOrEmpty(shimType.NamespaceName))
+            {
+                foreach (UsingDirectiveSyntax usingDirective in shimType.Usings)
+                {
+                    unit = unit.AddUsings(usingDirective);
+                }
+
+                unit = unit.AddMembers(classDeclaration);
+            }
+            else
+            {
+                NamespaceDeclarationSyntax namespaceDeclaration = SyntaxFactory.NamespaceDeclaration(
+                        SyntaxFactory.ParseName(shimType.NamespaceName))
+                    .WithUsings(SyntaxFactory.List(shimType.Usings))
+                    .WithMembers(
+                        SyntaxFactory.SingletonList<MemberDeclarationSyntax>(classDeclaration));
+                unit = unit.AddMembers(namespaceDeclaration);
+            }
         }
 
         unit = unit.NormalizeWhitespace();
