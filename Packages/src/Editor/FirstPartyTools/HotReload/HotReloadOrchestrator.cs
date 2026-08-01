@@ -5,6 +5,8 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
+using HarmonyLib;
+
 using Mono.Cecil;
 
 using UnityEditor.Compilation;
@@ -183,7 +185,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // BuildShimReferencePaths reads Application.dataPath / platform; stay on main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            List<string> shimReferences = BuildShimReferencePaths(compilationAssembly, targetDllPath);
+            bool includeHarmonyReference = HasDelegationEntry(workerOutput.entries);
+            List<string> shimReferences = BuildShimReferencePaths(
+                compilationAssembly,
+                targetDllPath,
+                includeHarmonyReference);
             HotReloadShimCompileResult compileResult = await HotReloadShimCompiler.CompileAndLoadAsync(
                 workerOutput.shimSource,
                 shimReferences,
@@ -229,6 +235,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> warnings)
         {
             string methodLabel = entry.typeMetadataName + "." + entry.methodName;
+
+            // Only "delegation" takes the skip branch; null/empty/anything else is transplant.
+            if (entry.patchKind == "delegation")
+            {
+                return HotReloadMethodOutcome.Skipped(
+                    methodLabel,
+                    HotReloadConstants.DelegationPatchNotWiredSkipReason,
+                    filePath);
+            }
+
             string[] parameterTypeFullNames = entry.parameterTypeFullNames ?? Array.Empty<string>();
 
             HotReloadMethodMatchResult matchResult = HotReloadMethodMatcher.Resolve(
@@ -383,13 +399,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return paths.ToArray();
         }
 
+        private static bool HasDelegationEntry(TransformWorkerEntryDto[] entries)
+        {
+            foreach (TransformWorkerEntryDto entry in entries)
+            {
+                if (entry.patchKind == "delegation")
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         /// <summary>
         /// Publicize ScriptAssemblies references; leave engine/system DLLs untouched. Never include
-        /// the original (non-publicized) target assembly.
+        /// the original (non-publicized) target assembly. Harmony is added only when the worker
+        /// emitted at least one delegation entry so transplant-only compiles stay byte-identical.
         /// </summary>
         private static List<string> BuildShimReferencePaths(
             UnityCompilationAssembly compilationAssembly,
-            string targetDllPath)
+            string targetDllPath,
+            bool includeHarmonyReference)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string scriptAssembliesDirectory = Path.GetFullPath(
@@ -398,6 +429,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> references = new List<string>();
             string publicizedTarget = ReferencePublicizer.GetOrCreatePublicizedCopy(targetDllPath);
             references.Add(publicizedTarget);
+
+            if (includeHarmonyReference)
+            {
+                references.Add(typeof(Harmony).Assembly.Location);
+            }
 
             if (compilationAssembly.allReferences == null)
             {

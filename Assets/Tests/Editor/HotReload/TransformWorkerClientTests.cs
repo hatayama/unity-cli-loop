@@ -36,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Output.shimSource, Is.Not.Null.And.Not.Empty);
 
             bool foundCompute = false;
+            bool foundQueryPrivateDelegation = false;
             bool foundListEnumeratorFullName = false;
             foreach (TransformWorkerEntryDto entry in result.Output.entries)
             {
@@ -44,6 +45,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     foundCompute = true;
                     Assert.That(entry.shimMethodName, Does.Contain("__shim"));
                     Assert.That(entry.shimTypeName, Does.Contain("UloopHotReloadShims"));
+                    Assert.That(entry.patchKind, Is.EqualTo("transplant"));
+                }
+
+                if (entry.methodName == nameof(HotReloadE2EFixture.QueryPrivate))
+                {
+                    foundQueryPrivateDelegation = true;
+                    Assert.That(entry.patchKind, Is.EqualTo("delegation"));
+                    Assert.That(result.Output.shimSource, Does.Contain("__BindAccessors"));
                 }
 
                 if (entry.methodName == nameof(HotReloadE2EFixture.CountEnumerator)
@@ -57,6 +66,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(foundCompute, Is.True, "ComputeWithPrivate entry missing from worker output.");
             Assert.That(
+                foundQueryPrivateDelegation,
+                Is.True,
+                "QueryPrivate must be a delegation entry (accessor rewrite), not a worker skip.");
+            Assert.That(
                 foundListEnumeratorFullName,
                 Is.True,
                 "CountEnumerator parameterTypeFullNames must use Cecil nested-generic FullName: "
@@ -65,7 +78,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Output.skipped, Is.Not.Null, "Expected a skipped list from the worker.");
             AssertHasSkip(result, nameof(HotReloadE2EFixture.CallsBase), "base");
             AssertHasSkip(result, "ExplicitPing", "Explicit interface");
-            AssertHasSkip(result, nameof(HotReloadE2EFixture.QueryPrivate), "query");
             AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncReadPrivateIndexer), "private/internal");
         }
 

@@ -70,15 +70,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return _secret;
         }
 
-        // Sync method + query syntax referencing a private field — must be Skipped (query clauses
-        // become display-class methods that JIT accessibility-check).
+        // Sync method + query syntax referencing a private field — worker emits a delegation
+        // entry (accessor rewrite); orchestrator leaves it unpatched until the delegation pass.
         public int QueryPrivate()
         {
             int[] values = { 1, 2, 3 };
             return (from value in values where value < _secret select value).Count();
         }
 
-        // Async body reading a private indexer — must be Skipped (MoveNext JIT-checks).
+        // Async body reading a private indexer — still Skipped at the worker (no rewrite shape).
         public async Task<int> AsyncReadPrivateIndexer()
         {
             await Task.Yield();
