@@ -227,7 +227,7 @@ public static class TransformWorkerProgram
                 {
                     skipped.Add(new WorkerSkipped
                     {
-                        Method = FormatMethodLabel(typeSymbol, methodSymbol),
+                        Method = FormatMethodLabel(methodSymbol),
                         Reason = decision.SkipReason
                     });
                     continue;
@@ -517,7 +517,13 @@ public static class TransformWorkerProgram
         {
             if (assignment.Parent is InitializerExpressionSyntax)
             {
+                // Initializer assignments are always writes (including ImplicitElementAccess indexers).
                 ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+                if (initializerSymbol is IPropertySymbol initializerProperty)
+                {
+                    return AccessibilityRules.IsInaccessibleAccessor(initializerProperty.SetMethod);
+                }
+
                 return initializerSymbol != null
                     && AccessibilityRules.IsInaccessibleFromExternalAssembly(initializerSymbol);
             }
@@ -574,11 +580,18 @@ public static class TransformWorkerProgram
 
         if (node is ElementAccessExpressionSyntax elementAccess)
         {
+            // Assignment-left ElementAccess is owned by the assignment branch (write context).
+            if (elementAccess.Parent is AssignmentExpressionSyntax parentAssignment
+                && parentAssignment.Left == elementAccess)
+            {
+                return false;
+            }
+
             ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
             if (symbol is IPropertySymbol indexer)
             {
-                return AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod)
-                    || AccessibilityRules.IsInaccessibleAccessor(indexer.SetMethod);
+                // Standalone ElementAccess is a read.
+                return AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod);
             }
 
             return symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol);
@@ -650,6 +663,8 @@ public static class TransformWorkerProgram
 
     internal static class NameofRules
     {
+        // Why text-only: nameof is a language keyword with a null symbol; a user-defined method
+        // literally named "nameof" would also match, but that pathological case is ignored in practice.
         public static bool IsNameofInvocation(InvocationExpressionSyntax invocation)
         {
             return invocation.Expression is IdentifierNameSyntax identifier
@@ -687,7 +702,7 @@ public static class TransformWorkerProgram
         return ShimMethodFactory.ToShimMethod(rewritten, methodSymbol);
     }
 
-    private static string FormatMethodLabel(INamedTypeSymbol typeSymbol, IMethodSymbol methodSymbol)
+    private static string FormatMethodLabel(IMethodSymbol methodSymbol)
     {
         return AccessorPlan.BuildMemberKey(methodSymbol);
     }
@@ -1440,9 +1455,13 @@ internal static class AccessorEligibility
         if (node is AssignmentExpressionSyntax assignment
             && assignment.Parent is InitializerExpressionSyntax)
         {
+            // Initializer assignments are always writes (including ImplicitElementAccess indexers).
             ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
-            if (initializerSymbol != null
-                && AccessibilityRules.IsInaccessibleFromExternalAssembly(initializerSymbol))
+            bool inaccessibleWrite = initializerSymbol is IPropertySymbol initializerProperty
+                ? AccessibilityRules.IsInaccessibleAccessor(initializerProperty.SetMethod)
+                : initializerSymbol != null
+                    && AccessibilityRules.IsInaccessibleFromExternalAssembly(initializerSymbol);
+            if (inaccessibleWrite)
             {
                 rejectReason =
                     "inaccessible member assignment in an object/collection initializer has no "
@@ -1460,11 +1479,18 @@ internal static class AccessorEligibility
 
         if (node is ElementAccessExpressionSyntax elementAccess)
         {
+            // Assignment-left ElementAccess is owned by the assignment branch (write context).
+            if (elementAccess.Parent is AssignmentExpressionSyntax parentElementAssignment
+                && parentElementAssignment.Left == elementAccess)
+            {
+                return false;
+            }
+
             ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
             if (symbol is IPropertySymbol indexer && indexer.IsIndexer)
             {
-                if (AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod)
-                    || AccessibilityRules.IsInaccessibleAccessor(indexer.SetMethod))
+                // Standalone ElementAccess is a read — only the getter matters.
+                if (AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod))
                 {
                     rejectReason =
                         "inaccessible indexer access has no accessor rewrite shape (condition b).";
@@ -1551,10 +1577,10 @@ internal static class AccessorEligibility
 
     private static bool IsInaccessibleBindingTarget(ISymbol bound)
     {
+        // Member binding only appears in read/invoke contexts (x?.P = v is not valid C#).
         if (bound is IPropertySymbol propertySymbol)
         {
-            return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod)
-                || AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
+            return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
         }
 
         return AccessibilityRules.IsInaccessibleFromExternalAssembly(bound);
@@ -1780,6 +1806,29 @@ internal static class AccessorEligibility
         out string rejectReason)
     {
         rejectReason = null;
+
+        // Why accessibility first: shape gates (indexer/static/ref-return) must not reject fully
+        // public writes such as dict[key]=value or Time.timeScale=0f. The read-side path already
+        // pre-filters with IsInaccessibleAccessor/IsInaccessibleFromExternalAssembly before shape
+        // checks — keep that order here for symmetry.
+        bool setterInaccessible = AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
+        bool getterInaccessible = needsGetter
+            && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
+        if (!setterInaccessible && !getterInaccessible)
+        {
+            return false;
+        }
+
+        // Compound assignment with a private getter and a public setter has no rewrite shape:
+        // RewritePropertyAssignment only fires when the setter is inaccessible.
+        if (getterInaccessible && !setterInaccessible)
+        {
+            rejectReason =
+                "compound assignment reading an inaccessible getter with an accessible setter "
+                + "has no accessor rewrite shape (condition b).";
+            return false;
+        }
+
         if (propertySymbol.IsIndexer)
         {
             rejectReason = "inaccessible indexer access has no accessor rewrite shape (condition b).";
@@ -1797,14 +1846,6 @@ internal static class AccessorEligibility
         {
             rejectReason =
                 "inaccessible ref-returning properties have no accessor rewrite shape (condition b).";
-            return false;
-        }
-
-        bool setterInaccessible = AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
-        bool getterInaccessible = needsGetter
-            && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
-        if (!setterInaccessible && !getterInaccessible)
-        {
             return false;
         }
 
@@ -2017,9 +2058,12 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return original;
         }
 
-        // nameof(...) must keep a member reference shape (qualify only; never accessor calls).
-        bool insideNameof = TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node);
-        if (_accessorPlan != null && !insideNameof)
+        // nameof(...) and assignment left sides must keep a member-reference shape: qualify only,
+        // never rewrite to an accessor read (Func<> call results are not assignable).
+        bool suppressAccessorRead = TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node)
+            || (node.Parent is AssignmentExpressionSyntax assignmentLeft
+                && assignmentLeft.Left == node);
+        if (_accessorPlan != null && !suppressAccessorRead)
         {
             ExpressionSyntax accessorRead = TryRewriteInaccessibleRead(
                 symbol,
