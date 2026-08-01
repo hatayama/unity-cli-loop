@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 
 using Newtonsoft.Json;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 using Debug = UnityEngine.Debug;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -27,12 +29,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(input.sourcePath), "sourcePath must not be empty.");
 
             TransformWorkerBootstrapResult bootstrapResult =
-                await TransformWorkerBootstrap.EnsureWorkerAsync(ct).ConfigureAwait(true);
+                await TransformWorkerBootstrap.EnsureWorkerAsync(ct).ConfigureAwait(false);
             if (!bootstrapResult.Success)
             {
                 return TransformWorkerClientResult.Failure(bootstrapResult.ErrorMessage);
             }
 
+            // ExternalCompilerPathResolver reads EditorApplication.applicationPath.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
             ExternalCompilerPaths paths = ExternalCompilerPathResolver.Resolve();
             if (paths == null)
             {
@@ -58,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     arguments,
                     bootstrapResult.WorkerDirectory,
                     TimeSpan.FromMilliseconds(HotReloadConstants.WorkerProcessTimeoutMilliseconds),
-                    ct).ConfigureAwait(true);
+                    ct).ConfigureAwait(false);
 
                 if (exitCode != 0)
                 {

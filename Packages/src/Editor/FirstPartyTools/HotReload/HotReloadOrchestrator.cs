@@ -11,6 +11,8 @@ using UnityEditor.Compilation;
 
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 using Assembly = System.Reflection.Assembly;
 using UnityCompilationAssembly = UnityEditor.Compilation.Assembly;
 
@@ -47,21 +49,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ? filePath
                     : contentPathOverride;
 
-                // Why ConfigureAwait(true): continuations must resume on the Unity main thread
-                // because the pipeline calls main-thread-only editor APIs (CompilationPipeline,
-                // Application.dataPath, EditorApplication.applicationContentsPath) and applies
-                // Harmony patches between awaits. The tool layer's ConfigureAwait(false) only
-                // moves BuildApplyResponse off-thread; it does not detach this pipeline.
+                // Why ConfigureAwait(false): UnityCliLoopTool forbids capturing Unity's
+                // SynchronizationContext across awaits — while Play Mode is paused that context
+                // does not run continuations, so a true resume would hang the tool forever.
+                // ProcessFileAsync switches back via MainThreadSwitcher (EditorApplication.update
+                // queue) before any main-thread-only editor API or Harmony patch.
                 HotReloadFileProcessResult fileResult = await ProcessFileAsync(
                     filePath,
                     workerSourcePath,
-                    ct).ConfigureAwait(true);
+                    ct).ConfigureAwait(false);
 
                 outcomes.AddRange(fileResult.Outcomes);
                 warnings.AddRange(fileResult.Warnings);
                 patchedTotal += fileResult.PatchedCount;
             }
 
+            await MainThreadSwitcher.SwitchToMainThread(ct);
             return new HotReloadOrchestratorResult(
                 outcomes,
                 warnings,
@@ -76,6 +79,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
+
+            // CompilationPipeline / Application.dataPath require the Unity main thread.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
 
             // CompilationPipeline.GetAssemblyNameFromScriptPath expects a project-relative path
             // (Assets/... or Packages/...) and returns a file name that already includes ".dll".
@@ -139,7 +145,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
 
             TransformWorkerClientResult workerResult =
-                await TransformWorkerClient.RunAsync(workerInput, ct).ConfigureAwait(true);
+                await TransformWorkerClient.RunAsync(workerInput, ct).ConfigureAwait(false);
             if (!workerResult.Success)
             {
                 outcomes.Add(
@@ -175,12 +181,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new HotReloadFileProcessResult(outcomes, warnings, 0);
             }
 
+            // BuildShimReferencePaths reads Application.dataPath / platform; stay on main thread.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
             List<string> shimReferences = BuildShimReferencePaths(compilationAssembly, targetDllPath);
             HotReloadShimCompileResult compileResult = await HotReloadShimCompiler.CompileAndLoadAsync(
                 workerOutput.shimSource,
                 shimReferences,
                 defines,
-                ct).ConfigureAwait(true);
+                ct).ConfigureAwait(false);
 
             if (!compileResult.Success)
             {
@@ -192,6 +200,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new HotReloadFileProcessResult(outcomes, warnings, 0);
             }
 
+            // Harmony Patch/Unpatch and method resolution against loaded modules require main thread.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
             int patchedCount = 0;
             foreach (TransformWorkerEntryDto entry in workerOutput.entries)
             {

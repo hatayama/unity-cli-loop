@@ -104,7 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // Returns an error message when apply-mode arguments are invalid, or null when valid.
-        private static string ValidateApplyParameters(HotReloadSchema parameters)
+        internal static string ValidateApplyParameters(HotReloadSchema parameters)
         {
             if (parameters.Files == null || parameters.Files.Length == 0)
             {
@@ -122,7 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        private static HotReloadResponse BuildApplyResponse(HotReloadOrchestratorResult result)
+        internal static HotReloadResponse BuildApplyResponse(HotReloadOrchestratorResult result)
         {
             Debug.Assert(result != null, "result must not be null.");
 

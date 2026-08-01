@@ -6,17 +6,22 @@ description: "Apply method-body hot reload to edited C# sources in a running Uni
 
 # uloop hot-reload
 
-DRAFT — prose wording will be finalized by the Fable session. Parameter table below must stay aligned with the implemented schema.
-
-Reload method bodies from edited project source files into the running Editor (EditMode or PlayMode) without a domain reload. No `[HotReload]` attribute is required. Private/internal access, static methods, return values, async, and iterators are supported within v1 skip rules. Methods that cannot be patched are reported as Skipped with a reason (not as a hard tool failure for that method alone).
+Replaces method bodies in the running Editor (EditMode or PlayMode) directly from edited
+project source files — no domain reload, no attributes, no source markers. Private/internal
+member access, static methods, return values, async methods, and iterators all work within
+the v1 limits below. Methods that cannot be patched are reported per method as `Skipped` or
+`Failed`; one unpatchable method never aborts the rest of the run.
 
 ## Usage
 
 ```bash
 uloop hot-reload --files Assets/Scripts/Enemy.cs
-uloop hot-reload --files Assets/Scripts/Enemy.cs Assets/Scripts/Boss.cs
+uloop hot-reload --files Assets/Scripts/Enemy.cs,Assets/Scripts/Boss.cs
 uloop hot-reload --revert-all
 ```
+
+Multiple files are passed as one comma-separated value (or a JSON array); array options
+consume exactly one value token.
 
 ## Parameters
 
@@ -25,45 +30,70 @@ uloop hot-reload --revert-all
 | `--files` | array | - | Project-relative `.cs` paths whose method bodies should be hot-reloaded. Required when `--revert-all` is not set |
 | `--revert-all` | flag | - | Remove every active hot-reload transplant and clear the patch ledger. When set, `--files` is ignored |
 
-## What it does
+## How it works
 
 1. Resolves each file to its compiled assembly via `CompilationPipeline`.
-2. Transforms edited method bodies into static shim methods in an out-of-process worker.
-3. Compiles shims against publicized reference assemblies and loads them into the Editor domain.
-4. Transplants each shim's IL into the original method with Harmony (ID `io.github.hatayama.uloop.hot-reload`).
+2. Rewrites each editable method body into a static shim in an out-of-process Roslyn worker.
+3. Compiles the shims against publicized reference copies and loads the result into the Editor domain.
+4. Transplants each shim's IL into the original method with a Harmony transpiler (ID `io.github.hatayama.uloop.hot-reload`).
 
-## v1 skip conditions
+Re-running on the same method replaces its previous patch; `ActivePatchTotal` tracks the
+ledger across runs.
 
-| Condition | Reason (summary) |
-|-----------|------------------|
-| Body contains `base.` call | Cannot express `base` from outside the type |
-| Method on a `partial` type | Single-file semantic model is incomplete |
-| Generic method or method on a generic type | Harmony cannot safely patch these |
-| Method on a struct (value type) | Value-type transplant semantics are out of v1 scope |
-| Property/indexer accessor, constructor, finalizer, operator | v1 covers ordinary methods only |
-| Async/iterator body with private/internal access | State machine `MoveNext` is normally JIT-checked |
-| Lambda/local-function body with private/internal access | Closure methods are normally JIT-checked |
-| Signature missing from the loaded assembly | New/renamed/changed members need `uloop compile` |
-| abstract / extern / `[BurstCompile]` | Not patchable |
-| Shim compile error (e.g. calling a newly added helper) | Needs `uloop compile`; response includes the csc error and hint |
+## Scope and limits (v1)
+
+Only ordinary method declarations are scanned. Property and indexer accessors, constructors,
+finalizers, operators, and event accessors are never scanned: edits to them produce **no
+per-method entry at all** and are silently not applied — use `uloop compile` for those.
+
+### Skipped — reported per method, never flips `Success`
+
+| Condition | Why |
+|-----------|-----|
+| Method on a `partial` type (including a type nested inside a partial outer type) | A single file cannot provide a complete semantic model |
+| Method on a struct (value type) | Value-type transplant is out of v1 scope |
+| Generic method, or method on a generic type | Harmony cannot safely patch open generics |
+| Explicit interface implementation | Dotted metadata names cannot be expressed as shim identifiers |
+| No body (`abstract` / `extern`) | Nothing to transplant |
+| Body contains a `base.` call | `base` cannot be expressed from outside the type |
+| Lambda, local function, or LINQ query in the body accesses private/internal members | Closure bodies run from the shim assembly, where that access fails runtime accessibility checks; only the named method's IL is transplanted |
+| `async` or iterator body accesses private/internal members | Same as above — the state machine's `MoveNext` runs from the shim assembly |
+
+### Failed — flips `Success` to `false`
+
+| Condition | Notes |
+|-----------|-------|
+| File does not belong to any compiled assembly | Per-file entry with `Method` = `(file)`; only `Assets/` and `Packages/` sources resolve |
+| Loaded assembly differs from the one on disk (pending compile) | Run `uloop compile` first, then retry |
+| Source file fails to parse | Per-file entry carrying the parse errors |
+| Method signature not found in the loaded assembly | New, renamed, or re-signatured members need `uloop compile` |
+| Shim compile error (e.g. the body calls a member that does not exist yet) | Response carries the compiler error and a hint to run `uloop compile` |
+| Patch rejected at apply time (e.g. `[BurstCompile]`) | Not patchable by Harmony transplant |
 
 ## Convergence and lifecycle
 
-- Input is the real project source file. A later `uloop compile` (real compile + domain reload) converges to the same behavior as the patch.
-- Active Harmony patches and loaded shim assemblies are static state and disappear on domain reload by design. There is no persistence or automatic re-apply.
-- Field additions, field initializers, and new types are never reflected by hot reload.
+- The input is the real project source file, so a later `uloop compile` (real compile +
+  domain reload) lands the exact same edit permanently. There is nothing to undo first;
+  behavior converges by construction.
+- Patches and loaded shim assemblies are static Editor state and disappear on the next
+  domain reload. There is no persistence and no automatic re-apply.
+- Never reflected by hot reload: new fields, field initializer changes, new types, and
+  signature changes. Those always need `uloop compile`.
 
 ## Pause point interaction
 
-Hot-reload transplant discards the original IL and any prior transpiler output on that method. A source pause point on a hot-reloaded method will not fire until the patch is reverted (`--revert-all` or a later revert of that method) or a domain reload restores the original IL. Apply responses include this as a `Warnings` entry when any method was patched.
+A hot-reload transplant discards the original IL and any prior transpiler output on that
+method, so a source pause point on a hot-reloaded method stops firing until the patch is
+reverted (`--revert-all`) or a domain reload restores the original IL. Apply responses
+include this as a `Warnings` entry whenever any method was patched.
 
 ## Output
 
 Returns JSON with:
 
-- `Success` (boolean): `false` on validation failure or when any method outcome is `Failed`; skips alone do not force failure
+- `Success` (boolean): `false` on parameter validation failure or when any method outcome is `Failed`. `Skipped` outcomes alone never force `false`
 - `Methods` (array): Per-method `{ Kind, Method, Reason, FilePath }` where `Kind` is `Patched`, `Skipped`, or `Failed`
-- `Warnings` (array): Inlining risk, pause-point interaction, and other non-fatal notes
+- `Warnings` (array): Non-fatal notes — a patched method that is small enough to have been JIT-inlined into existing callers (the change may not show at those call sites), and the pause-point interaction above
 - `PatchedTotal` (number): Methods patched in this run
 - `ActivePatchTotal` (number): Methods still patched after this run
 - `ClearedCount` (number): Patches removed by `--revert-all` (0 on apply)

@@ -10,6 +10,8 @@ using UnityEditor.PackageManager;
 
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 using Debug = UnityEngine.Debug;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -26,6 +28,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public static async Task<TransformWorkerBootstrapResult> EnsureWorkerAsync(CancellationToken ct)
         {
+            // Resolver / PackageInfo / Application.dataPath all require the Unity main thread.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+
             ExternalCompilerPaths paths = ExternalCompilerPathResolver.Resolve();
             if (paths == null)
             {
@@ -61,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerSourcePath,
                 workerDllPath,
                 cacheDirectory,
-                ct).ConfigureAwait(true);
+                ct).ConfigureAwait(false);
             if (!compileResult.Success)
             {
                 return compileResult;
@@ -108,7 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "\"" + paths.CompilerDllPath + "\" @\"" + responseFilePath + "\"",
                 cacheDirectory,
                 TimeSpan.FromMilliseconds(HotReloadConstants.WorkerProcessTimeoutMilliseconds),
-                ct).ConfigureAwait(true);
+                ct).ConfigureAwait(false);
 
             if (exitCode != 0)
             {
