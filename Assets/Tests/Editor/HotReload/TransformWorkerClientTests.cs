@@ -23,7 +23,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: bootstrap compiles (or reuses a cached) worker.dll, then running the worker on the
-        /// e2e fixture source returns shim entries and the expected skip reasons.
+        /// e2e fixture source returns shim entries and the expected skip reasons — including bare
+        /// sibling qualify (F-1), conditional-access skip (F-2a), private delegate invoke (F-2b),
+        /// and null-coalescing assignment skip (F-3).
         /// </summary>
         [Test]
         public async Task BootstrapAndRun_OnE2EFixture_ReturnsEntriesAndExpectedSkips()
@@ -38,6 +40,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             bool foundCompute = false;
             bool foundQueryPrivateDelegation = false;
             bool foundListEnumeratorFullName = false;
+            bool foundCallsBareSiblings = false;
+            bool foundAsyncPrivateAndBareSibling = false;
+            bool foundAsyncInvokePrivateDelegate = false;
             foreach (TransformWorkerEntryDto entry in result.Output.entries)
             {
                 if (entry.methodName == nameof(HotReloadE2EFixture.ComputeWithPrivate))
@@ -55,6 +60,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Assert.That(result.Output.shimSource, Does.Contain("__BindAccessors"));
                 }
 
+                if (entry.methodName == nameof(HotReloadE2EFixture.CallsBareSiblings))
+                {
+                    foundCallsBareSiblings = true;
+                    Assert.That(entry.patchKind, Is.EqualTo("transplant"));
+                    Assert.That(result.Output.shimSource, Does.Contain("instance.VisibleSibling()"));
+                    Assert.That(
+                        result.Output.shimSource,
+                        Does.Contain(".VisibleStaticSibling()"));
+                }
+
+                if (entry.methodName == nameof(HotReloadE2EFixture.AsyncPrivateAndBareSibling))
+                {
+                    foundAsyncPrivateAndBareSibling = true;
+                    Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
+                    Assert.That(result.Output.shimSource, Does.Contain("instance.VisibleSibling()"));
+                }
+
+                if (entry.methodName == nameof(HotReloadE2EFixture.AsyncInvokePrivateDelegate))
+                {
+                    foundAsyncInvokePrivateDelegate = true;
+                    Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
+                    Assert.That(result.Output.shimSource, Does.Contain("__F__callback(instance)()"));
+                }
+
                 if (entry.methodName == nameof(HotReloadE2EFixture.CountEnumerator)
                     && entry.parameterTypeFullNames != null
                     && entry.parameterTypeFullNames.Length == 1
@@ -70,6 +99,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "QueryPrivate must be a delegation entry (accessor rewrite), not a worker skip.");
             Assert.That(
+                foundCallsBareSiblings,
+                Is.True,
+                "CallsBareSiblings must transplant with qualified bare sibling calls.");
+            Assert.That(
+                foundAsyncPrivateAndBareSibling,
+                Is.True,
+                "AsyncPrivateAndBareSibling must be a delegation entry.");
+            Assert.That(
+                foundAsyncInvokePrivateDelegate,
+                Is.True,
+                "AsyncInvokePrivateDelegate must be a delegation entry with FieldRef invoke.");
+            Assert.That(
                 foundListEnumeratorFullName,
                 Is.True,
                 "CountEnumerator parameterTypeFullNames must use Cecil nested-generic FullName: "
@@ -79,6 +120,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkip(result, nameof(HotReloadE2EFixture.CallsBase), "base");
             AssertHasSkip(result, "ExplicitPing", "Explicit interface");
             AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncReadPrivateIndexer), "private/internal");
+            AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncConditionalPrivateField), "conditional access");
+            AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncNullCoalesceAssignPrivateProperty), "null-coalescing");
         }
 
         private static void AssertHasSkip(

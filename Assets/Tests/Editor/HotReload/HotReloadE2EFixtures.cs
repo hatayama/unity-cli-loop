@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -37,12 +38,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadE2EFixture : HotReloadE2EBase, IHotReloadE2EMarker
     {
         private int _secret = 10;
+        private Action _callback;
+        private int? Score { get; set; }
 
         public int SecretForAssert => _secret;
 
         public int Counter;
 
+        public HotReloadE2EFixture Next;
+
         private int this[int index] => _secret + index;
+
+        public int VisibleSibling()
+        {
+            return 1;
+        }
+
+        public static int VisibleStaticSibling()
+        {
+            return 2;
+        }
 
         // Sentinel body: hot reload must replace this with a private-touching shim that returns
         // _secret + delta + 100.
@@ -95,6 +110,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int CountEnumerator(List<int>.Enumerator enumerator)
         {
             return 0;
+        }
+
+        // F-1: bare instance/static sibling calls — transplant shim must qualify receivers.
+        public int CallsBareSiblings()
+        {
+            return VisibleSibling() + VisibleStaticSibling();
+        }
+
+        // F-1: private field read plus bare visible sibling — delegation entry with qualified sibling.
+        public async Task<int> AsyncPrivateAndBareSibling()
+        {
+            await Task.Yield();
+            return _secret + VisibleSibling();
+        }
+
+        // F-2a: ?. over an inaccessible member — worker must skip (condition b).
+        public async Task<int> AsyncConditionalPrivateField()
+        {
+            await Task.Yield();
+            return Next?._secret ?? 0;
+        }
+
+        // F-2b: private delegate field invoke — delegation with FieldRef read then invoke.
+        public async Task AsyncInvokePrivateDelegate()
+        {
+            await Task.Yield();
+            _callback();
+        }
+
+        // F-3: private property ??= — worker must skip (no conditional-write rewrite shape).
+        public async Task AsyncNullCoalesceAssignPrivateProperty()
+        {
+            await Task.Yield();
+            Score ??= 5;
         }
     }
 }
