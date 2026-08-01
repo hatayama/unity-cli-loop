@@ -47,7 +47,7 @@ Only ordinary method declarations are scanned. Property and indexer accessors, c
 finalizers, operators, and event accessors are never scanned: edits to them produce **no
 per-method entry at all** and are silently not applied — use `uloop compile` for those.
 
-Edits outside method bodies never take effect: changing a `const` value, a field initializer, or any declaration other than a method body leaves runtime behavior unchanged even though the response reports `Success` — shims resolve those symbols against the already-compiled assembly, and C# bakes `const` values into IL at compile time. Use `uloop compile` for such edits.
+Edits outside method bodies never take effect: changing a `const` value, a field initializer, or any declaration other than a method body leaves runtime behavior unchanged even though the response reports `Success` — shims resolve those symbols against the already-compiled assembly, and C# bakes `const` values into IL at compile time. Changed `const` values (including enum member values) are detected and reported as a `Warnings` entry naming the constant and both values; other outside-body edits stay silent. Use `uloop compile` for such edits.
 
 ### Skipped — reported per method, never flips `Success`
 
@@ -98,7 +98,7 @@ Returns JSON with:
 
 - `Success` (boolean): `false` on parameter validation failure or when any method outcome is `Failed`. `Skipped` outcomes alone never force `false`
 - `Methods` (array): Per-method `{ Kind, Method, Reason, FilePath }` where `Kind` is `Patched`, `Skipped`, or `Failed`
-- `Warnings` (array): Non-fatal notes — a patched method that is small enough to have been JIT-inlined into existing callers (the change may not show at those call sites), and the pause-point interaction above
+- `Warnings` (array): Non-fatal notes — a patched method that is small enough to have been JIT-inlined into existing callers (the change may not show at those call sites), the pause-point interaction above, and const drift entries described in "Scope and limits"
 - `PatchedTotal` (number): Methods patched in this run
 - `ActivePatchTotal` (number): Methods still patched after this run
 - `ClearedCount` (number): Patches removed by `--revert-all` (0 on apply)

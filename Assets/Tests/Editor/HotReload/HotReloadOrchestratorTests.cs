@@ -466,6 +466,207 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + FormatOutcomes(result));
         }
 
+        /// <summary>
+        /// What: editing a const value emits a drift warning naming both values while the run
+        /// itself stays successful (methods still patch).
+        /// </summary>
+        [Test]
+        public async Task Run_EditedConstValue_WarnsConstDrift()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "ConstDrift.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    tuningConstDeclaration:
+                    "private const int TuningConst = 4;"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            bool foundDrift = false;
+            foreach (string warning in result.Warnings)
+            {
+                if (warning.Contains("TuningConst")
+                    && warning.Contains("is 4 in the edited source but 3 in the compiled assembly")
+                    && warning.Contains("uloop compile"))
+                {
+                    foundDrift = true;
+                }
+            }
+
+            Assert.That(
+                foundDrift,
+                Is.True,
+                "Expected a const drift warning for TuningConst.\n"
+                + string.Join("\n", result.Warnings));
+        }
+
+        /// <summary>
+        /// What: an unchanged const produces no drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedConst_HasNoDriftWarning()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "ConstUnchanged.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+
+            foreach (string warning in result.Warnings)
+            {
+                Assert.That(
+                    warning.Contains("TuningConst"),
+                    Is.False,
+                    "Unexpected drift warning: " + warning);
+            }
+        }
+
+        /// <summary>
+        /// What: editing an enum member value emits a drift warning naming both values; enum
+        /// members ride the same const drift detection as class consts.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedEnumMemberValue_WarnsConstDrift()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "EnumDrift.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    modeEnumDeclaration:
+                    "public enum HotReloadE2EMode\n    {\n        Idle = 0,\n        Active = 2\n    }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+
+            bool foundDrift = false;
+            foreach (string warning in result.Warnings)
+            {
+                if (warning.Contains("HotReloadE2EMode.Active")
+                    && warning.Contains("is 2 in the edited source but 1 in the compiled assembly")
+                    && warning.Contains("uloop compile"))
+                {
+                    foundDrift = true;
+                }
+            }
+
+            Assert.That(
+                foundDrift,
+                Is.True,
+                "Expected an enum member drift warning for HotReloadE2EMode.Active.\n"
+                + string.Join("\n", result.Warnings));
+        }
+
+        /// <summary>
+        /// What: a const-only edited source (no method bodies, so no shim and no entries) still
+        /// surfaces the drift warning through the empty-entries early return.
+        /// </summary>
+        [Test]
+        public async Task Run_ConstOnlyEditedSource_StillWarnsConstDrift()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "ConstOnlyDrift.cs",
+                "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n"
+                + "{\n"
+                + "    public class HotReloadE2EFixture\n"
+                + "    {\n"
+                + "        private const int TuningConst = 5;\n"
+                + "    }\n"
+                + "}\n");
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            Assert.That(result.PatchedTotal, Is.EqualTo(0));
+
+            bool foundDrift = false;
+            foreach (string warning in result.Warnings)
+            {
+                if (warning.Contains("TuningConst")
+                    && warning.Contains("is 5 in the edited source but 3 in the compiled assembly")
+                    && warning.Contains("uloop compile"))
+                {
+                    foundDrift = true;
+                }
+            }
+
+            Assert.That(
+                foundDrift,
+                Is.True,
+                "Expected a const drift warning from the const-only early-return path.\n"
+                + string.Join("\n", result.Warnings));
+        }
+
+        /// <summary>
+        /// What: partial declarations of one type in a single edited file produce exactly one
+        /// drift warning per const, not one per declaration.
+        /// </summary>
+        [Test]
+        public async Task Run_PartialTypeConst_WarnsOnce()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "PartialConstDrift.cs",
+                "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n"
+                + "{\n"
+                + "    public partial class HotReloadE2EFixture\n"
+                + "    {\n"
+                + "        private const int TuningConst = 6;\n"
+                + "    }\n"
+                + "\n"
+                + "    public partial class HotReloadE2EFixture\n"
+                + "    {\n"
+                + "    }\n"
+                + "}\n");
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+
+            int driftCount = 0;
+            foreach (string warning in result.Warnings)
+            {
+                if (warning.Contains("TuningConst"))
+                {
+                    driftCount++;
+                }
+            }
+
+            Assert.That(
+                driftCount,
+                Is.EqualTo(1),
+                "Expected exactly one drift warning for TuningConst.\n"
+                + string.Join("\n", result.Warnings));
+        }
+
         private static void AssertNoFileLevelFailure(HotReloadOrchestratorResult result)
         {
             foreach (HotReloadMethodOutcome outcome in result.Methods)
@@ -536,7 +737,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string iteratePrivateMethod = null,
             string lambdaPrivateMethod = null,
             string propertyPrivateRoundTripMethod = null,
-            string asyncUsesInternalTypeMethod = null)
+            string asyncUsesInternalTypeMethod = null,
+            string tuningConstDeclaration = null,
+            string modeEnumDeclaration = null)
         {
             string sumGrid = sumGridMethod ??
                 "public int SumGrid(int[,] grid)\n        {\n            return -1;\n        }";
@@ -570,6 +773,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "            HotReloadE2EInternalToken token = new HotReloadE2EInternalToken { N = 1 };\n"
                 + "            return token.N;\n"
                 + "        }";
+            string tuningConst = tuningConstDeclaration ??
+                "private const int TuningConst = 3;";
+            string modeEnum = modeEnumDeclaration ??
+                "public enum HotReloadE2EMode\n    {\n        Idle = 0,\n        Active = 1\n    }";
 
             return @"using System.Collections;
 using System.Collections.Generic;
@@ -578,6 +785,8 @@ using System.Threading.Tasks;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
+    " + modeEnum + @"
+
     public class HotReloadE2EBase
     {
         protected int BaseSeed()
@@ -599,6 +808,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadE2EFixture : HotReloadE2EBase, IHotReloadE2EMarker
     {
         private int _secret = 10;
+        " + tuningConst + @"
 
         public int SecretForAssert => _secret;
 

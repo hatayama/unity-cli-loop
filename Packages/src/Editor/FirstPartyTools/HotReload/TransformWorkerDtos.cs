@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public TransformWorkerEntryDto[] entries;
         public TransformWorkerSkippedDto[] skipped;
         public string[] parseErrors;
+        public string[] declarationDriftWarnings;
     }
 
     [Serializable]
