@@ -392,8 +392,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
                     && outcome.Method.Contains(nameof(HotReloadE2EFixture.AsyncUsesInternalType))
-                    && (outcome.Reason.Contains("not visible")
-                        || outcome.Reason.Contains("condition c")))
+                    && outcome.Reason.Contains("not visible"))
                 {
                     found = true;
                 }

@@ -86,10 +86,11 @@ Edits outside method bodies never take effect: changing a `const` value, a field
 
 ## Pause point interaction
 
-A hot-reload transplant discards the original IL and any prior transpiler output on that
-method, so a source pause point on a hot-reloaded method stops firing until the patch is
-reverted (`--revert-all`) or a domain reload restores the original IL. Apply responses
-include this as a `Warnings` entry whenever any method was patched.
+Both patch shapes discard the original IL and any prior transpiler output on the patched
+method — delegation replaces the body with a forward to the shim — so a source pause point
+on a hot-reloaded method stops firing until the patch is reverted (`--revert-all`) or a
+domain reload restores the original IL. Apply responses include this as a `Warnings` entry
+whenever any method was patched.
 
 ## Output
 
