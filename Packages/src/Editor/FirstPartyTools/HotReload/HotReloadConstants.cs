@@ -42,11 +42,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // accesses into accessor delegates.
         public const string PatchKindDelegation = "delegation";
 
-        // The delegation patcher is not wired yet: delegation shims compile and load so the
-        // wiring change only needs to bind accessors and patch. Keep a single present-tense
-        // reason so that change can replace this constant and branch wholesale.
-        public const string DelegationPatchNotWiredSkipReason =
-            "Rewritten for delegation patching, which is not wired yet; method left unpatched.";
+        // Name of the parameterless public static binder the worker emits into delegation shim
+        // types. Wire contract with TransformWorker's EmitBindAccessorsMethod — the worker is a
+        // standalone source file that cannot reference this constant, so keep both in sync.
+        public const string ShimBindAccessorsMethodName = "__BindAccessors";
 
         /// <summary>
         /// Returns whether a ScriptAssemblies DLL is a project assembly that may be publicized.
@@ -93,11 +92,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "The target assembly is not currently loaded in this AppDomain. Ensure the code path "
             + "that loads it has run, then retry.";
 
-        // Transplant discards the original IL and any prior transpiler output on that method,
-        // so a source pause point on a hot-reloaded method stops firing until domain reload
-        // (or until the method is reverted and re-armed).
+        // Both patch shapes discard the original IL and any prior transpiler output on that
+        // method (delegation replaces the body with a forward to the shim), so a source pause
+        // point on a hot-reloaded method stops firing until domain reload (or until the method
+        // is reverted and re-armed).
         public const string PausePointInteractionWarning =
-            "Hot reload transplant replaces the method body and discards other transpilers on "
+            "A hot-reload patch replaces the method body and discards other transpilers on "
             + "that method; a pause point on a hot-reloaded method will not fire until the patch "
             + "is reverted or a domain reload restores the original IL.";
     }

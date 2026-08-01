@@ -149,7 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> warnings = new List<string>(result.Warnings);
             if (result.PatchedTotal > 0)
             {
-                // Always surface the pause-point interaction when any transplant was applied.
+                // Always surface the pause-point interaction when any patch was applied.
                 warnings.Add(HotReloadConstants.PausePointInteractionWarning);
             }
 

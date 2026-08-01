@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -198,19 +199,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a mixed transplant+delegation fixture compiles the shim (Harmony ref present),
-        /// transplants the sync private-access method, and reports delegation entries as Skipped
-        /// with the not-wired reason (delegation patcher lands in a later change).
+        /// What: a mixed transplant+delegation fixture patches both the sync private-access
+        /// method (transplant) and the LINQ private-access method (delegation).
         /// </summary>
         [Test]
-        public async Task Run_MixedTransplantAndDelegationFile_PatchesSyncAndSkipsDelegation()
+        public async Task Run_MixedTransplantAndDelegationFile_PatchesBoth()
         {
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
                 "MixedTransplantDelegation.cs",
                 BuildFixtureSource(
                     computeWithPrivateMethod:
-                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
+                    queryPrivateMethod:
+                    "public int QueryPrivate()\n        {\n            int[] values = { 1, 2, 3 };\n"
+                    + "            return (from value in values where value < _secret select value).Count() + 100;\n        }"));
 
             HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                 new[] { fixturePath },
@@ -219,26 +222,210 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertNoFileLevelFailure(result);
             AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.QueryPrivate));
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(10 + 5 + 100));
+            Assert.That(fixture.QueryPrivate(), Is.EqualTo(3 + 100));
+        }
 
-            bool foundDelegationSkip = false;
+        /// <summary>
+        /// What: hot-reloading an async body that writes a private field and calls a private
+        /// method applies a delegation patch and changes the await result.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedAsyncPrivateFieldAndMethod_PatchesBehavior()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "AsyncPrivateFieldAndMethod.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    asyncPrivateFieldAndMethod:
+                    "public async Task<int> AsyncPrivateFieldAndMethod(int delta)\n        {\n"
+                    + "            await Task.Yield();\n"
+                    + "            _secret += delta;\n"
+                    + "            BumpSecretBy(1);\n"
+                    + "            return _secret;\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.AsyncPrivateFieldAndMethod));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(await fixture.AsyncPrivateFieldAndMethod(5), Is.EqualTo(10 + 5 + 1));
+            Assert.That(fixture.SecretForAssert, Is.EqualTo(10 + 5 + 1));
+        }
+
+        /// <summary>
+        /// What: hot-reloading an iterator body with private field write + private method call
+        /// applies a delegation patch and changes the yielded value.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedIteratorPrivateAccess_PatchesBehavior()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "IteratePrivate.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    iteratePrivateMethod:
+                    "public IEnumerator IteratePrivate(int delta)\n        {\n"
+                    + "            _secret += delta;\n"
+                    + "            BumpSecretBy(1);\n"
+                    + "            yield return _secret;\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.IteratePrivate));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            IEnumerator enumerator = fixture.IteratePrivate(5);
+            Assert.That(enumerator.MoveNext(), Is.True);
+            Assert.That(enumerator.Current, Is.EqualTo(10 + 5 + 1));
+            Assert.That(fixture.SecretForAssert, Is.EqualTo(10 + 5 + 1));
+        }
+
+        /// <summary>
+        /// What: hot-reloading a method whose lambda captures a private field applies a
+        /// delegation patch and changes the returned value.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedLambdaPrivateCapture_PatchesBehavior()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "LambdaPrivate.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    lambdaPrivateMethod:
+                    "public int LambdaPrivate(int threshold)\n        {\n"
+                    + "            System.Func<int, bool> pred = v => v < (_secret + 100);\n"
+                    + "            return pred(threshold) ? 7 : 0;\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.LambdaPrivate));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.LambdaPrivate(5), Is.EqualTo(7));
+        }
+
+        /// <summary>
+        /// What: hot-reloading a method that reads/writes a private property applies a
+        /// delegation patch and changes the round-trip result.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedPrivatePropertyRoundTrip_PatchesBehavior()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "PropertyPrivateRoundTrip.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    propertyPrivateRoundTripMethod:
+                    "public int PropertyPrivateRoundTrip(int value)\n        {\n"
+                    + "            HiddenScore = value + 100;\n"
+                    + "            return HiddenScore;\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.PropertyPrivateRoundTrip));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.PropertyPrivateRoundTrip(5), Is.EqualTo(105));
+        }
+
+        /// <summary>
+        /// What: an async body that names an internal type as a local stays Skipped with a
+        /// type-visibility reason (accessor delegates cannot rescue type mentions).
+        /// </summary>
+        [Test]
+        public async Task Run_AsyncUsesInternalType_IsSkippedWithTypeVisibilityReason()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "AsyncUsesInternalType.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    asyncUsesInternalTypeMethod:
+                    "public async Task<int> AsyncUsesInternalType()\n        {\n"
+                    + "            await Task.Yield();\n"
+                    + "            HotReloadE2EInternalToken token = new HotReloadE2EInternalToken { N = 99 };\n"
+                    + "            return token.N;\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+
+            bool found = false;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
             {
                 if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
-                    && outcome.Method.Contains(nameof(HotReloadE2EFixture.QueryPrivate))
-                    && outcome.Reason == HotReloadConstants.DelegationPatchNotWiredSkipReason)
+                    && outcome.Method.Contains(nameof(HotReloadE2EFixture.AsyncUsesInternalType))
+                    && outcome.Reason.Contains("not visible"))
                 {
-                    foundDelegationSkip = true;
+                    found = true;
                 }
             }
 
             Assert.That(
-                foundDelegationSkip,
+                found,
                 Is.True,
-                "Expected QueryPrivate to be Skipped with the delegation-not-wired reason.\n"
+                "Expected AsyncUsesInternalType to be Skipped for an inaccessible type mention.\n"
                 + FormatOutcomes(result));
+        }
+
+        /// <summary>
+        /// What: BindShimAccessors invokes each type's public static parameterless
+        /// __BindAccessors, skips types without one, and records a throwing binder as a failure
+        /// keyed by the shim type's short name with the cause message and a compile-and-retry
+        /// hint.
+        /// </summary>
+        [Test]
+        public void BindShimAccessors_ThrowingBinder_IsReportedByShimTypeName()
+        {
+            int callsBefore = HotReloadBindProbeShim.BindCalls;
+
+            Dictionary<string, string> failures = HotReloadOrchestrator.BindShimAccessors(
+                typeof(HotReloadBindFailShim).Assembly);
+
+            Assert.That(HotReloadBindProbeShim.BindCalls, Is.EqualTo(callsBefore + 1));
+            Assert.That(failures.Count, Is.EqualTo(1));
+            Assert.That(failures.ContainsKey(nameof(HotReloadBindFailShim)), Is.True);
+            Assert.That(failures[nameof(HotReloadBindFailShim)], Does.Contain("no such member"));
+            Assert.That(
+                failures[nameof(HotReloadBindFailShim)],
+                Does.Contain("Run 'uloop compile' and retry."));
         }
 
         /// <summary>
@@ -343,14 +530,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static string BuildFixtureSource(
             string computeWithPrivateMethod,
             string sumGridMethod = null,
-            string callsMissingHelperMethod = null)
+            string callsMissingHelperMethod = null,
+            string queryPrivateMethod = null,
+            string asyncPrivateFieldAndMethod = null,
+            string iteratePrivateMethod = null,
+            string lambdaPrivateMethod = null,
+            string propertyPrivateRoundTripMethod = null,
+            string asyncUsesInternalTypeMethod = null)
         {
             string sumGrid = sumGridMethod ??
                 "public int SumGrid(int[,] grid)\n        {\n            return -1;\n        }";
             string callsMissingHelper = callsMissingHelperMethod ??
                 "public int CallsMissingHelper(int value)\n        {\n            return value;\n        }";
+            string queryPrivate = queryPrivateMethod ??
+                "public int QueryPrivate()\n        {\n            int[] values = { 1, 2, 3 };\n"
+                + "            return (from value in values where value < _secret select value).Count();\n        }";
+            string asyncPrivate = asyncPrivateFieldAndMethod ??
+                "public async Task<int> AsyncPrivateFieldAndMethod(int delta)\n        {\n"
+                + "            await Task.Yield();\n"
+                + "            return _secret + delta;\n"
+                + "        }";
+            string iteratePrivate = iteratePrivateMethod ??
+                "public IEnumerator IteratePrivate(int delta)\n        {\n"
+                + "            yield return _secret + delta;\n"
+                + "        }";
+            string lambdaPrivate = lambdaPrivateMethod ??
+                "public int LambdaPrivate(int threshold)\n        {\n"
+                + "            System.Func<int, bool> pred = v => v < _secret;\n"
+                + "            return pred(threshold) ? 1 : 0;\n"
+                + "        }";
+            string propertyPrivate = propertyPrivateRoundTripMethod ??
+                "public int PropertyPrivateRoundTrip(int value)\n        {\n"
+                + "            HiddenScore = value;\n"
+                + "            return HiddenScore;\n"
+                + "        }";
+            string asyncInternal = asyncUsesInternalTypeMethod ??
+                "public async Task<int> AsyncUsesInternalType()\n        {\n"
+                + "            await Task.Yield();\n"
+                + "            HotReloadE2EInternalToken token = new HotReloadE2EInternalToken { N = 1 };\n"
+                + "            return token.N;\n"
+                + "        }";
 
-            return @"using System.Collections.Generic;
+            return @"using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -384,6 +606,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private int this[int index] => _secret + index;
 
+        private int HiddenScore { get; set; } = 3;
+
+        private void BumpSecretBy(int amount)
+        {
+            _secret += amount;
+        }
+
         " + computeWithPrivateMethod + @"
 
         public int CallsBase()
@@ -398,11 +627,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return _secret;
         }
 
-        public int QueryPrivate()
-        {
-            int[] values = { 1, 2, 3 };
-            return (from value in values where value < _secret select value).Count();
-        }
+        " + queryPrivate + @"
 
         public async Task<int> AsyncReadPrivateIndexer()
         {
@@ -416,9 +641,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return 0;
         }
+
+        " + asyncPrivate + @"
+
+        " + iteratePrivate + @"
+
+        " + lambdaPrivate + @"
+
+        " + propertyPrivate + @"
+
+        " + asyncInternal + @"
+    }
+
+    internal class HotReloadE2EInternalToken
+    {
+        public int N;
     }
 }
 ";
+        }
+    }
+
+    /// <summary>
+    /// Shim-shaped fixture whose binder throws, so the BindShimAccessors failure path can be
+    /// pinned without fabricating a shim assembly that compiles but fails to bind.
+    /// </summary>
+    internal static class HotReloadBindFailShim
+    {
+        public static void __BindAccessors()
+        {
+            throw new System.MissingMethodException("no such member");
+        }
+    }
+
+    /// <summary>
+    /// Shim-shaped fixture whose binder succeeds; counts invocations so the test can prove a
+    /// healthy binder is invoked and leaves no failure entry.
+    /// </summary>
+    internal static class HotReloadBindProbeShim
+    {
+        public static int BindCalls;
+
+        public static void __BindAccessors()
+        {
+            BindCalls++;
         }
     }
 }

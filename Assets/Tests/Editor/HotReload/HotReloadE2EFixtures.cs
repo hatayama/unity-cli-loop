@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -173,5 +174,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await Task.Yield();
             Current.Value += 1;
         }
+
+        private void BumpSecretBy(int amount)
+        {
+            _secret += amount;
+        }
+
+        private int HiddenScore { get; set; } = 3;
+
+        // v2 e2e (1): async body with private field write + private method call.
+        public async Task<int> AsyncPrivateFieldAndMethod(int delta)
+        {
+            await Task.Yield();
+            return _secret + delta;
+        }
+
+        // v2 e2e (2): iterator body with the same private accesses.
+        public IEnumerator IteratePrivate(int delta)
+        {
+            yield return _secret + delta;
+        }
+
+        // v2 e2e (3): lambda capture reading a private field.
+        public int LambdaPrivate(int threshold)
+        {
+            Func<int, bool> pred = v => v < _secret;
+            return pred(threshold) ? 1 : 0;
+        }
+
+        // v2 e2e (4): private property read/write round-trip.
+        public int PropertyPrivateRoundTrip(int value)
+        {
+            HiddenScore = value;
+            return HiddenScore;
+        }
+
+        // v2 e2e (5): async body that names an internal type — must stay Skipped (condition c).
+        public async Task<int> AsyncUsesInternalType()
+        {
+            await Task.Yield();
+            HotReloadE2EInternalToken token = new HotReloadE2EInternalToken { N = 1 };
+            return token.N;
+        }
+    }
+
+    /// <summary>
+    /// Internal type used only by <see cref="HotReloadE2EFixture.AsyncUsesInternalType"/> to
+    /// pin the v2 "type as type" skip (accessor delegates cannot rescue type mentions).
+    /// </summary>
+    internal class HotReloadE2EInternalToken
+    {
+        public int N;
     }
 }

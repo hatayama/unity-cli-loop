@@ -10,8 +10,10 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Applies Harmony transplant patches that discard a target method's IL and emit a shim
-    /// method's IL instead, so the body runs inside Harmony's skip-visibility DynamicMethod.
+    /// Applies Harmony patches that replace a target method's body. Transplant copies a shim
+    /// method's IL so it runs inside Harmony's skip-visibility DynamicMethod; delegation
+    /// forwards every argument to a normally-JIT-compiled shim whose inaccessible accesses
+    /// were rewritten to accessor delegates.
     /// </summary>
     internal static class HotReloadPatcher
     {
@@ -20,22 +22,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             typeof(HotReloadPatcher).GetMethod(
                 nameof(ReplaceWithTransplantSourceTranspiler),
                 BindingFlags.NonPublic | BindingFlags.Static);
+        private static readonly MethodInfo DelegationTranspilerMethodInfo =
+            typeof(HotReloadPatcher).GetMethod(
+                nameof(ReplaceWithDelegationTranspiler),
+                BindingFlags.NonPublic | BindingFlags.Static);
 
-        // key = patched original method, value = transplant source shim.
+        // Ledger: key = patched original method, value = the shim whose call replaced it.
         private static readonly Dictionary<MethodBase, MethodInfo> ShimByMethod =
             new Dictionary<MethodBase, MethodInfo>();
 
-        // Harmony resolves transpilers as static methods, so the transplant source cannot be a
-        // parameter. Production looks up the target method in the ledger; the apply path also
-        // stashes the pending shim here so the first Patch call can read it before the ledger
-        // entry exists (Patch invokes the transpiler synchronously on the main thread).
-        private static MethodInfo _pendingTransplantSourceMethod;
+        // Harmony resolves transpilers as static methods, so the shim cannot be a parameter.
+        // Production looks up the target method in the ledger; the apply path also stashes the
+        // pending shim here so the first Patch call can read it before the ledger entry
+        // exists (Patch invokes the transpiler synchronously on the main thread).
+        private static MethodInfo _pendingShimMethod;
 
         /// <summary>
-        /// Transplants <paramref name="shimMethodInfo"/>'s IL into <paramref name="method"/>.
-        /// Re-applying the same method Unpatches the previous transpiler first so patches do not stack.
+        /// Patches <paramref name="method"/> with <paramref name="shimMethodInfo"/> using
+        /// <paramref name="patchShape"/>. Re-applying the same method Unpatches the previous
+        /// transpiler first so patches do not stack.
         /// </summary>
-        public static HotReloadPatchResult Apply(MethodBase method, MethodInfo shimMethodInfo)
+        public static HotReloadPatchResult Apply(
+            MethodBase method,
+            MethodInfo shimMethodInfo,
+            HotReloadPatchShape patchShape)
         {
             if (method == null)
             {
@@ -59,25 +69,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (ShimByMethod.ContainsKey(method))
             {
-                // A second hot reload of the same method must replace the previous transplant;
+                // A second hot reload of the same method must replace the previous patch;
                 // leaving it in place would stack transpilers and run discarded IL chains.
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
                 ShimByMethod.Remove(method);
             }
 
+            MethodInfo transpilerMethodInfo = patchShape == HotReloadPatchShape.Delegation
+                ? DelegationTranspilerMethodInfo
+                : TransplantTranspilerMethodInfo;
+
             // Ledger is updated after Patch succeeds. During Patch the transpiler reads the
-            // pending field because Harmony resolves transpilers statically (no MethodInfo arg).
-            _pendingTransplantSourceMethod = shimMethodInfo;
+            // pending shim because Harmony resolves transpilers statically (no MethodInfo arg).
+            _pendingShimMethod = shimMethodInfo;
             try
             {
                 HarmonyInstance.Patch(
                     method,
-                    transpiler: new HarmonyMethod(TransplantTranspilerMethodInfo));
+                    transpiler: new HarmonyMethod(transpilerMethodInfo));
                 ShimByMethod[method] = shimMethodInfo;
             }
             finally
             {
-                _pendingTransplantSourceMethod = null;
+                _pendingShimMethod = null;
             }
 
             string warning = IsLikelyJitInlined(method)
@@ -87,17 +101,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Removes every hot-reload transplant owned by this patcher and clears the ledger.
+        /// Removes every hot-reload patch owned by this patcher and clears the ledger.
         /// </summary>
         public static void RevertAll()
         {
             HarmonyInstance.UnpatchAll(HotReloadConstants.HarmonyId);
             ShimByMethod.Clear();
-            _pendingTransplantSourceMethod = null;
+            _pendingShimMethod = null;
         }
 
         /// <summary>
-        /// How many methods currently have an active transplant recorded in the ledger.
+        /// How many methods currently have an active patch recorded in the ledger.
         /// </summary>
         public static int ActivePatchCount => ShimByMethod.Count;
 
@@ -106,8 +120,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ILGenerator generator,
             MethodBase original)
         {
-            MethodInfo shimMethod = ResolveTransplantSource(original);
-            Debug.Assert(shimMethod != null, "Transplant source must be registered before Patch runs.");
+            MethodInfo shimMethod = ResolveShimMethod(original);
+            Debug.Assert(shimMethod != null, "Shim must be registered before Patch runs.");
             // Discard the original (and any prior transpiler) instructions entirely — the shim IL
             // is the whole replacement body.
             // Read shim IL without letting MethodBodyReader declare locals on a throwaway path, then
@@ -118,6 +132,113 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new List<CodeInstruction>(PatchProcessor.GetOriginalInstructions(shimMethod));
             RebindShortFormLocals(shimMethod, generator, transplanted);
             return transplanted;
+        }
+
+        // Why discard the original instructions: the delegation body is a plain forward — load
+        // every argument slot (slot 0 is `this` for instance methods), call the shim, return its
+        // result. The shim was compiled without skip-visibility, so it JIT-compiles normally and
+        // its accessor delegates reach the members this assembly boundary would otherwise forbid.
+        private static IEnumerable<CodeInstruction> ReplaceWithDelegationTranspiler(
+            IEnumerable<CodeInstruction> instructions,
+            MethodBase original)
+        {
+            MethodInfo shimMethod = ResolveShimMethod(original);
+            Debug.Assert(shimMethod != null, "Shim must be registered before Patch runs.");
+
+            int argumentSlotCount = original.GetParameters().Length + (original.IsStatic ? 0 : 1);
+            Debug.Assert(
+                argumentSlotCount == shimMethod.GetParameters().Length,
+                "Shim parameter count must equal the original's argument slots (instance receiver included).");
+
+            List<CodeInstruction> forwarding = new List<CodeInstruction>(argumentSlotCount + 2);
+            for (int slot = 0; slot < argumentSlotCount; slot++)
+            {
+                forwarding.Add(CreateLoadArgumentInstruction(slot));
+            }
+
+            forwarding.Add(new CodeInstruction(OpCodes.Call, shimMethod));
+            forwarding.Add(new CodeInstruction(OpCodes.Ret));
+            return forwarding;
+        }
+
+        private static CodeInstruction CreateLoadArgumentInstruction(int slot)
+        {
+            Debug.Assert(
+                slot >= 0 && slot <= byte.MaxValue,
+                "Argument slot must fit Ldarg_S's byte operand.");
+
+            if (slot == 0)
+            {
+                return new CodeInstruction(OpCodes.Ldarg_0);
+            }
+
+            if (slot == 1)
+            {
+                return new CodeInstruction(OpCodes.Ldarg_1);
+            }
+
+            if (slot == 2)
+            {
+                return new CodeInstruction(OpCodes.Ldarg_2);
+            }
+
+            if (slot == 3)
+            {
+                return new CodeInstruction(OpCodes.Ldarg_3);
+            }
+
+            return new CodeInstruction(OpCodes.Ldarg_S, (byte)slot);
+        }
+
+        private static MethodInfo ResolveShimMethod(MethodBase original)
+        {
+            if (ShimByMethod.TryGetValue(original, out MethodInfo shimMethod))
+            {
+                return shimMethod;
+            }
+
+            return _pendingShimMethod;
+        }
+
+        private static HotReloadPatchResult CheckPatchable(MethodBase method)
+        {
+            if (method.IsAbstract)
+            {
+                return HotReloadPatchResult.Failure(
+                    HotReloadPatchFailureReason.UnpatchableAbstract,
+                    $"'{method}' is abstract and has no method body to patch.");
+            }
+
+            if (method.GetMethodBody() == null)
+            {
+                return HotReloadPatchResult.Failure(
+                    HotReloadPatchFailureReason.UnpatchableExtern,
+                    $"'{method}' has no IL method body (extern or an internal call) and cannot be patched.");
+            }
+
+            if (method.ContainsGenericParameters)
+            {
+                return HotReloadPatchResult.Failure(
+                    HotReloadPatchFailureReason.UnpatchableOpenGeneric,
+                    $"'{method}' is declared with unresolved generic type parameters and cannot be safely patched.");
+            }
+
+            if (HasBurstCompileAttribute(method) || HasBurstCompileAttribute(method.DeclaringType))
+            {
+                return HotReloadPatchResult.Failure(
+                    HotReloadPatchFailureReason.UnpatchableBurstCompiled,
+                    $"'{method}' (or its declaring type) is marked [BurstCompile] and cannot be patched.");
+            }
+
+            // Value-type instance transplant needs byref `this` semantics that v1 has not validated.
+            if (method.DeclaringType != null && method.DeclaringType.IsValueType)
+            {
+                return HotReloadPatchResult.Failure(
+                    HotReloadPatchFailureReason.UnpatchableValueType,
+                    $"'{method}' is declared on a value type; struct method transplant is out of scope for v1.");
+            }
+
+            return HotReloadPatchResult.SuccessResult();
         }
 
         private static void RebindShortFormLocals(
@@ -251,57 +372,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return -1;
-        }
-
-        private static MethodInfo ResolveTransplantSource(MethodBase original)
-        {
-            if (ShimByMethod.TryGetValue(original, out MethodInfo shimMethod))
-            {
-                return shimMethod;
-            }
-
-            return _pendingTransplantSourceMethod;
-        }
-
-        private static HotReloadPatchResult CheckPatchable(MethodBase method)
-        {
-            if (method.IsAbstract)
-            {
-                return HotReloadPatchResult.Failure(
-                    HotReloadPatchFailureReason.UnpatchableAbstract,
-                    $"'{method}' is abstract and has no method body to patch.");
-            }
-
-            if (method.GetMethodBody() == null)
-            {
-                return HotReloadPatchResult.Failure(
-                    HotReloadPatchFailureReason.UnpatchableExtern,
-                    $"'{method}' has no IL method body (extern or an internal call) and cannot be patched.");
-            }
-
-            if (method.ContainsGenericParameters)
-            {
-                return HotReloadPatchResult.Failure(
-                    HotReloadPatchFailureReason.UnpatchableOpenGeneric,
-                    $"'{method}' is declared with unresolved generic type parameters and cannot be safely patched.");
-            }
-
-            if (HasBurstCompileAttribute(method) || HasBurstCompileAttribute(method.DeclaringType))
-            {
-                return HotReloadPatchResult.Failure(
-                    HotReloadPatchFailureReason.UnpatchableBurstCompiled,
-                    $"'{method}' (or its declaring type) is marked [BurstCompile] and cannot be patched.");
-            }
-
-            // Value-type instance transplant needs byref `this` semantics that v1 has not validated.
-            if (method.DeclaringType != null && method.DeclaringType.IsValueType)
-            {
-                return HotReloadPatchResult.Failure(
-                    HotReloadPatchFailureReason.UnpatchableValueType,
-                    $"'{method}' is declared on a value type; struct method transplant is out of scope for v1.");
-            }
-
-            return HotReloadPatchResult.SuccessResult();
         }
 
         private static bool HasBurstCompileAttribute(MemberInfo member)
