@@ -105,7 +105,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        private static HotReloadMethodMatchResult ResolveLoadedMethod(
+        // internal so EditMode tests can exercise the Mvid guard without rewriting ScriptAssemblies.
+        internal static HotReloadMethodMatchResult ResolveLoadedMethod(
             string assemblyName,
             string compiledMvid,
             int metadataToken)

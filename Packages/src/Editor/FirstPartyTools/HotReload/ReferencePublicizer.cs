@@ -48,6 +48,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return outputDllPath;
             }
 
+            // An Mvid change means the assembly already reloaded; no in-flight compile can still
+            // need the previous publicized copy, so drop stale siblings before writing the new one.
+            DeleteStalePublicizedCopies(outputDirectory, assemblyName, outputDllPath);
+
             foreach (ModuleDefinition module in assemblyDefinition.Modules)
             {
                 foreach (TypeDefinition type in module.GetTypes())
@@ -64,6 +68,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             assemblyDefinition.Write(outputDllPath);
             return outputDllPath;
+        }
+
+        private static void DeleteStalePublicizedCopies(
+            string outputDirectory,
+            string assemblyName,
+            string currentOutputDllPath)
+        {
+            string searchPattern = assemblyName + "-*" + HotReloadConstants.CompiledAssemblyExtension;
+            foreach (string candidatePath in Directory.GetFiles(outputDirectory, searchPattern))
+            {
+                if (string.Equals(
+                        Path.GetFullPath(candidatePath),
+                        Path.GetFullPath(currentOutputDllPath),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                File.Delete(candidatePath);
+            }
         }
 
         private static void AssertIsScriptAssemblyPath(string fullSourceDllPath)

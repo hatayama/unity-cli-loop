@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Linq;
 
@@ -10,7 +11,7 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using CecilFieldAttributes = Mono.Cecil.FieldAttributes;
 using CecilMethodAttributes = Mono.Cecil.MethodAttributes;
 
-namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
     /// EditMode coverage for <see cref="ReferencePublicizer"/> cache path and visibility rewrite.
@@ -22,17 +23,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikePrivateAccessFixture";
 
         /// <summary>
-        /// What: publicizing the test assembly exposes private fields/methods and caches the copy
-        /// under Library/UloopHotReload/PublicizedRefs/&lt;name&gt;-&lt;mvid&gt;.dll.
+        /// What: publicizing the test assembly exposes private fields/methods and reuses the
+        /// cached copy on a second call (same path; last-write time stays at a planted marker).
         /// </summary>
         [Test]
         public void GetOrCreatePublicizedCopy_RewritesPrivateMembersAndCachesByMvid()
         {
             string sourceDllPath = ResolveTestAssemblyDllPath();
             string firstPath = ReferencePublicizer.GetOrCreatePublicizedCopy(sourceDllPath);
+
+            // Plant a distinctive mtime: a cache hit must leave it alone, while a regenerate
+            // would rewrite the file and replace this marker with "now". Avoids Thread.Sleep
+            // (banned on the EditMode main thread) while still proving the early-return path.
+            DateTime markerWriteTimeUtc = new DateTime(2001, 2, 3, 4, 5, 6, DateTimeKind.Utc);
+            File.SetLastWriteTimeUtc(firstPath, markerWriteTimeUtc);
+
             string secondPath = ReferencePublicizer.GetOrCreatePublicizedCopy(sourceDllPath);
 
             Assert.That(firstPath, Is.EqualTo(secondPath), "Second call must reuse the cached publicized copy.");
+            Assert.That(
+                File.GetLastWriteTimeUtc(secondPath),
+                Is.EqualTo(markerWriteTimeUtc),
+                "Cache hit must not rewrite the file (LastWriteTimeUtc would leave the planted marker).");
             Assert.That(File.Exists(firstPath), Is.True, "Cached publicized DLL must exist on disk.");
             Assert.That(
                 firstPath.Replace('\\', '/'),

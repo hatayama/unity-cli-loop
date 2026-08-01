@@ -1,4 +1,4 @@
-namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
     /// Known methods used by PR-2 matcher / patcher EditMode tests. Overloads exist so the
@@ -43,16 +43,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
     /// </summary>
     public static class HotReloadHandwrittenShims
     {
-        public static int Add__shim0(HotReloadCoreFixture instance, int left, int right)
-        {
-            return left + right + 100;
-        }
-
-        public static int AddThree__shim0(HotReloadCoreFixture instance, int left, int right, int extra)
-        {
-            return left + right + extra + 1000;
-        }
-
         public static string StaticPing__shim0()
         {
             return "patched";

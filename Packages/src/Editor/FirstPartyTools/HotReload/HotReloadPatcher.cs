@@ -15,25 +15,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadPatcher
     {
-        private sealed class PatchRecord
-        {
-            public MethodInfo ShimMethod { get; }
-            public Assembly ShimAssembly { get; }
-
-            public PatchRecord(MethodInfo shimMethod, Assembly shimAssembly)
-            {
-                ShimMethod = shimMethod;
-                ShimAssembly = shimAssembly;
-            }
-        }
-
         private static readonly Harmony HarmonyInstance = new Harmony(HotReloadConstants.HarmonyId);
         private static readonly MethodInfo TransplantTranspilerMethodInfo =
             typeof(HotReloadPatcher).GetMethod(
                 nameof(ReplaceWithTransplantSourceTranspiler),
                 BindingFlags.NonPublic | BindingFlags.Static);
-        private static readonly Dictionary<MethodBase, PatchRecord> RecordsByMethod =
-            new Dictionary<MethodBase, PatchRecord>();
+
+        // key = patched original method, value = transplant source shim.
+        private static readonly Dictionary<MethodBase, MethodInfo> ShimByMethod =
+            new Dictionary<MethodBase, MethodInfo>();
 
         // Harmony resolves transpilers as static methods, so the transplant source cannot be a
         // parameter. Production looks up the target method in the ledger; the apply path also
@@ -67,12 +57,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return patchability;
             }
 
-            if (RecordsByMethod.ContainsKey(method))
+            if (ShimByMethod.ContainsKey(method))
             {
                 // A second hot reload of the same method must replace the previous transplant;
                 // leaving it in place would stack transpilers and run discarded IL chains.
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
-                RecordsByMethod.Remove(method);
+                ShimByMethod.Remove(method);
             }
 
             // Ledger is updated after Patch succeeds. During Patch the transpiler reads the
@@ -83,7 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HarmonyInstance.Patch(
                     method,
                     transpiler: new HarmonyMethod(TransplantTranspilerMethodInfo));
-                RecordsByMethod[method] = new PatchRecord(shimMethodInfo, shimMethodInfo.DeclaringType.Assembly);
+                ShimByMethod[method] = shimMethodInfo;
             }
             finally
             {
@@ -102,14 +92,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static void RevertAll()
         {
             HarmonyInstance.UnpatchAll(HotReloadConstants.HarmonyId);
-            RecordsByMethod.Clear();
+            ShimByMethod.Clear();
             _pendingTransplantSourceMethod = null;
         }
 
         /// <summary>
         /// How many methods currently have an active transplant recorded in the ledger.
         /// </summary>
-        public static int ActivePatchCount => RecordsByMethod.Count;
+        public static int ActivePatchCount => ShimByMethod.Count;
 
         private static IEnumerable<CodeInstruction> ReplaceWithTransplantSourceTranspiler(
             IEnumerable<CodeInstruction> instructions,
@@ -125,9 +115,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static MethodInfo ResolveTransplantSource(MethodBase original)
         {
-            if (RecordsByMethod.TryGetValue(original, out PatchRecord record))
+            if (ShimByMethod.TryGetValue(original, out MethodInfo shimMethod))
             {
-                return record.ShimMethod;
+                return shimMethod;
             }
 
             return _pendingTransplantSourceMethod;

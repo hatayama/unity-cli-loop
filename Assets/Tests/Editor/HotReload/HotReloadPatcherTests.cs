@@ -6,7 +6,7 @@ using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
-namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
     /// EditMode coverage for <see cref="HotReloadPatcher"/> transplant apply / revert / re-apply.
