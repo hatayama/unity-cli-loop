@@ -28,17 +28,13 @@ fi
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+# Why no Linux arm: scripts/build-go-cli.sh only emits darwin-arm64, darwin-amd64, and
+# windows-amd64 — advertising dist/linux-* would be an unreachable fiction.
 case "$(uname -s)" in
     Darwin)
         case "$(uname -m)" in
             arm64) ULOOP_BIN="$REPO_ROOT/dist/darwin-arm64/uloop" ;;
             *) ULOOP_BIN="$REPO_ROOT/dist/darwin-amd64/uloop" ;;
-        esac
-        ;;
-    Linux)
-        case "$(uname -m)" in
-            aarch64|arm64) ULOOP_BIN="$REPO_ROOT/dist/linux-arm64/uloop" ;;
-            *) ULOOP_BIN="$REPO_ROOT/dist/linux-amd64/uloop" ;;
         esac
         ;;
     MINGW*|MSYS*|CYGWIN*)
