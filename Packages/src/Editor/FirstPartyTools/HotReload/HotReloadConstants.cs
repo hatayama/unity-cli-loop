@@ -82,5 +82,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string AssemblyNotLoadedHint =
             "The target assembly is not currently loaded in this AppDomain. Ensure the code path "
             + "that loads it has run, then retry.";
+
+        // Transplant discards the original IL and any prior transpiler output on that method,
+        // so a source pause point on a hot-reloaded method stops firing until domain reload
+        // (or until the method is reverted and re-armed).
+        public const string PausePointInteractionWarning =
+            "Hot reload transplant replaces the method body and discards other transpilers on "
+            + "that method; a pause point on a hot-reloaded method will not fire until the patch "
+            + "is reverted or a domain reload restores the original IL.";
     }
 }
