@@ -27,15 +27,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 nameof(ReplaceWithDelegationTranspiler),
                 BindingFlags.NonPublic | BindingFlags.Static);
 
-        // Ledger: key = patched original method, value = the shim and how it was applied.
-        private static readonly Dictionary<MethodBase, PatchRecord> RecordByMethod =
-            new Dictionary<MethodBase, PatchRecord>();
+        // Ledger: key = patched original method, value = the shim whose call replaced it.
+        private static readonly Dictionary<MethodBase, MethodInfo> ShimByMethod =
+            new Dictionary<MethodBase, MethodInfo>();
 
         // Harmony resolves transpilers as static methods, so the shim cannot be a parameter.
         // Production looks up the target method in the ledger; the apply path also stashes the
-        // pending record here so the first Patch call can read it before the ledger entry
+        // pending shim here so the first Patch call can read it before the ledger entry
         // exists (Patch invokes the transpiler synchronously on the main thread).
-        private static PatchRecord _pendingRecord;
+        private static MethodInfo _pendingShimMethod;
 
         /// <summary>
         /// Patches <paramref name="method"/> with <paramref name="shimMethodInfo"/> using
@@ -67,12 +67,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return patchability;
             }
 
-            if (RecordByMethod.ContainsKey(method))
+            if (ShimByMethod.ContainsKey(method))
             {
                 // A second hot reload of the same method must replace the previous patch;
                 // leaving it in place would stack transpilers and run discarded IL chains.
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
-                RecordByMethod.Remove(method);
+                ShimByMethod.Remove(method);
             }
 
             MethodInfo transpilerMethodInfo = patchShape == HotReloadPatchShape.Delegation
@@ -80,18 +80,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 : TransplantTranspilerMethodInfo;
 
             // Ledger is updated after Patch succeeds. During Patch the transpiler reads the
-            // pending record because Harmony resolves transpilers statically (no MethodInfo arg).
-            _pendingRecord = new PatchRecord(shimMethodInfo, patchShape);
+            // pending shim because Harmony resolves transpilers statically (no MethodInfo arg).
+            _pendingShimMethod = shimMethodInfo;
             try
             {
                 HarmonyInstance.Patch(
                     method,
                     transpiler: new HarmonyMethod(transpilerMethodInfo));
-                RecordByMethod[method] = new PatchRecord(shimMethodInfo, patchShape);
+                ShimByMethod[method] = shimMethodInfo;
             }
             finally
             {
-                _pendingRecord = default;
+                _pendingShimMethod = null;
             }
 
             string warning = IsLikelyJitInlined(method)
@@ -106,14 +106,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static void RevertAll()
         {
             HarmonyInstance.UnpatchAll(HotReloadConstants.HarmonyId);
-            RecordByMethod.Clear();
-            _pendingRecord = default;
+            ShimByMethod.Clear();
+            _pendingShimMethod = null;
         }
 
         /// <summary>
         /// How many methods currently have an active patch recorded in the ledger.
         /// </summary>
-        public static int ActivePatchCount => RecordByMethod.Count;
+        public static int ActivePatchCount => ShimByMethod.Count;
 
         private static IEnumerable<CodeInstruction> ReplaceWithTransplantSourceTranspiler(
             IEnumerable<CodeInstruction> instructions,
@@ -192,24 +192,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static MethodInfo ResolveShimMethod(MethodBase original)
         {
-            if (RecordByMethod.TryGetValue(original, out PatchRecord record))
+            if (ShimByMethod.TryGetValue(original, out MethodInfo shimMethod))
             {
-                return record.ShimMethod;
+                return shimMethod;
             }
 
-            return _pendingRecord.ShimMethod;
-        }
-
-        private readonly struct PatchRecord
-        {
-            public MethodInfo ShimMethod { get; }
-            public HotReloadPatchShape Shape { get; }
-
-            public PatchRecord(MethodInfo shimMethod, HotReloadPatchShape shape)
-            {
-                ShimMethod = shimMethod;
-                Shape = shape;
-            }
+            return _pendingShimMethod;
         }
 
         private static HotReloadPatchResult CheckPatchable(MethodBase method)
