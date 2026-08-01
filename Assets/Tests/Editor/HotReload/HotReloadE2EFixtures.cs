@@ -32,6 +32,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Const drift e2e enum: the test template pairs this with an injectable declaration so a
+    /// test can change only a member value.
+    /// </summary>
+    public enum HotReloadE2EMode
+    {
+        Idle = 0,
+        Active = 1
+    }
+
+    /// <summary>
     /// Compiled fixture whose on-disk source path is passed as <c>files[]</c> to the
     /// orchestrator. Edited copies for worker input live under
     /// <c>Library/UloopHotReload/TestSources/</c> (never under Assets).
@@ -39,6 +49,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadE2EFixture : HotReloadE2EBase, IHotReloadE2EMarker
     {
         private int _secret = 10;
+        // Const drift e2e: the test template pairs this with an injectable declaration so a
+        // test can change only the value.
+        private const int TuningConst = 3;
         private Action _callback;
         private int? Score { get; set; }
         private int Value { get; set; }
