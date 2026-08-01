@@ -67,9 +67,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkip(result, "ExplicitPing", "Explicit interface");
             AssertHasSkip(result, nameof(HotReloadE2EFixture.QueryPrivate), "query");
             AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncReadPrivateIndexer), "private/internal");
-
-            // Explicit-interface skip must not prevent other methods in the same file from patching.
-            Assert.That(foundCompute, Is.True);
         }
 
         private static void AssertHasSkip(

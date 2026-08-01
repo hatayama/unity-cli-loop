@@ -106,6 +106,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: 5+ locals force short-form ldloc.s/stloc.s so the LocalBuilder rebind path is
+        /// exercised (ldloc.0–3 alone would not cover ReadLocalIndexOperand).
+        /// </summary>
+        [Test]
+        public async Task Run_EditedBodyWithFiveLocals_PatchesBehavior()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "FiveLocals.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n"
+                    + "            int a = delta + 1;\n"
+                    + "            int b = a + delta;\n"
+                    + "            int c = b + a;\n"
+                    + "            int d = c + b;\n"
+                    + "            int e = d + c;\n"
+                    + "            return _secret + a + b + c + d + e + (a * b) + (c * d) + (e * a);\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(
+                fixture.ComputeWithPrivate(5),
+                Is.EqualTo(10 + 6 + 11 + 17 + 28 + 45 + (6 * 11) + (17 * 28) + (45 * 6)));
+        }
+
+        /// <summary>
         /// What: a method with a multidimensional array parameter patches successfully (Cecil
         /// FullName uses [0...,0...] and must match the worker manifest).
         /// </summary>
