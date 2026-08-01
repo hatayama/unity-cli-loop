@@ -178,23 +178,28 @@ public static class TransformWorkerProgram
             references.Add(targetTypesReference);
         }
 
-        // MetadataImportOptions.All imports non-public members from metadata references; the
-        // default (Public) would hide private and internal consts in the compiled target
-        // assembly from the drift comparison. Shims compile against publicized references, so
-        // the wider view also matches what shim compilation sees.
         CSharpCompilation compilation = CSharpCompilation.Create(
             assemblyName: "UloopHotReloadTransformWorkerCompilation",
             syntaxTrees: new[] { syntaxTree },
             references: references,
-            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
-                .WithMetadataImportOptions(MetadataImportOptions.All));
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
         SemanticModel semanticModel = compilation.GetSemanticModel(syntaxTree, ignoreAccessibility: true);
         CompilationUnitSyntax root = syntaxTree.GetCompilationUnitRoot();
 
-        IAssemblySymbol targetTypesAssemblySymbol = targetTypesReference == null
-            ? null
-            : compilation.GetAssemblyOrModuleSymbol(targetTypesReference) as IAssemblySymbol;
+        // The drift comparison must see private and internal consts in the compiled target
+        // assembly, which the default MetadataImportOptions (Public) hides. Widening the main
+        // compilation would also widen what every classification query can bind to, so the
+        // wider import is confined to a throwaway compilation used only for this lookup.
+        IAssemblySymbol targetTypesAssemblySymbol = null;
+        if (targetTypesReference != null)
+        {
+            CSharpCompilation driftCompilation = compilation.WithOptions(
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+                    .WithMetadataImportOptions(MetadataImportOptions.All));
+            targetTypesAssemblySymbol =
+                driftCompilation.GetAssemblyOrModuleSymbol(targetTypesReference) as IAssemblySymbol;
+        }
         List<string> declarationDriftWarnings = CollectConstDriftWarnings(
             root,
             semanticModel,
