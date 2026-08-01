@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,7 +24,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: bootstrap compiles (or reuses a cached) worker.dll, then running the worker on the
-        /// e2e fixture source returns shim entries and the expected skip reasons.
+        /// e2e fixture source returns shim entries and the expected skip reasons — including bare
+        /// sibling qualify, conditional-access skip, private delegate invoke (bare / this / other),
+        /// null-coalescing assignment skip, and property-receiver compound-write skip.
         /// </summary>
         [Test]
         public async Task BootstrapAndRun_OnE2EFixture_ReturnsEntriesAndExpectedSkips()
@@ -36,7 +39,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Output.shimSource, Is.Not.Null.And.Not.Empty);
 
             bool foundCompute = false;
+            bool foundQueryPrivateDelegation = false;
             bool foundListEnumeratorFullName = false;
+            bool foundCallsBareSiblings = false;
+            bool foundAsyncPrivateAndBareSibling = false;
+            bool foundAsyncInvokePrivateDelegate = false;
+            bool foundAsyncInvokePrivateDelegateOnThis = false;
+            bool foundAsyncInvokePrivateDelegateOnOther = false;
             foreach (TransformWorkerEntryDto entry in result.Output.entries)
             {
                 if (entry.methodName == nameof(HotReloadE2EFixture.ComputeWithPrivate))
@@ -44,6 +53,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     foundCompute = true;
                     Assert.That(entry.shimMethodName, Does.Contain("__shim"));
                     Assert.That(entry.shimTypeName, Does.Contain("UloopHotReloadShims"));
+                    Assert.That(entry.patchKind, Is.EqualTo("transplant"));
+                }
+
+                if (entry.methodName == nameof(HotReloadE2EFixture.QueryPrivate))
+                {
+                    foundQueryPrivateDelegation = true;
+                    Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
+                    Assert.That(result.Output.shimSource, Does.Contain("__BindAccessors"));
+                }
+
+                if (entry.methodName == nameof(HotReloadE2EFixture.CallsBareSiblings))
+                {
+                    foundCallsBareSiblings = true;
+                    Assert.That(entry.patchKind, Is.EqualTo("transplant"));
+                    string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
+                    Assert.That(slice, Does.Contain("instance.VisibleSibling()"));
+                    Assert.That(slice, Does.Contain(".VisibleStaticSibling()"));
+                }
+
+                if (entry.methodName == nameof(HotReloadE2EFixture.AsyncPrivateAndBareSibling))
+                {
+                    foundAsyncPrivateAndBareSibling = true;
+                    Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
+                    string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
+                    Assert.That(slice, Does.Contain("instance.VisibleSibling()"));
+                }
+
+                if (entry.methodName == nameof(HotReloadE2EFixture.AsyncInvokePrivateDelegate))
+                {
+                    foundAsyncInvokePrivateDelegate = true;
+                    Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
+                    string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
+                    Assert.That(slice, Does.Contain("__F__callback(instance)()"));
+                }
+
+                if (entry.methodName == nameof(HotReloadE2EFixture.AsyncInvokePrivateDelegateOnThis))
+                {
+                    foundAsyncInvokePrivateDelegateOnThis = true;
+                    Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
+                    string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
+                    Assert.That(slice, Does.Contain("__F__callback(instance)()"));
+                }
+
+                if (entry.methodName == nameof(HotReloadE2EFixture.AsyncInvokePrivateDelegateOnOther))
+                {
+                    foundAsyncInvokePrivateDelegateOnOther = true;
+                    Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
+                    string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
+                    Assert.That(slice, Does.Contain("__F__callback(other)()"));
                 }
 
                 if (entry.methodName == nameof(HotReloadE2EFixture.CountEnumerator)
@@ -57,6 +115,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(foundCompute, Is.True, "ComputeWithPrivate entry missing from worker output.");
             Assert.That(
+                foundQueryPrivateDelegation,
+                Is.True,
+                "QueryPrivate must be a delegation entry (accessor rewrite), not a worker skip.");
+            Assert.That(
+                foundCallsBareSiblings,
+                Is.True,
+                "CallsBareSiblings must transplant with qualified bare sibling calls.");
+            Assert.That(
+                foundAsyncPrivateAndBareSibling,
+                Is.True,
+                "AsyncPrivateAndBareSibling must be a delegation entry.");
+            Assert.That(
+                foundAsyncInvokePrivateDelegate,
+                Is.True,
+                "AsyncInvokePrivateDelegate must be a delegation entry with FieldRef invoke.");
+            Assert.That(
+                foundAsyncInvokePrivateDelegateOnThis,
+                Is.True,
+                "AsyncInvokePrivateDelegateOnThis must be a delegation entry with FieldRef invoke.");
+            Assert.That(
+                foundAsyncInvokePrivateDelegateOnOther,
+                Is.True,
+                "AsyncInvokePrivateDelegateOnOther must be a delegation entry with FieldRef on other.");
+            Assert.That(
                 foundListEnumeratorFullName,
                 Is.True,
                 "CountEnumerator parameterTypeFullNames must use Cecil nested-generic FullName: "
@@ -65,8 +147,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Output.skipped, Is.Not.Null, "Expected a skipped list from the worker.");
             AssertHasSkip(result, nameof(HotReloadE2EFixture.CallsBase), "base");
             AssertHasSkip(result, "ExplicitPing", "Explicit interface");
-            AssertHasSkip(result, nameof(HotReloadE2EFixture.QueryPrivate), "query");
             AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncReadPrivateIndexer), "private/internal");
+            AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncConditionalPrivateField), "conditional access");
+            AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncNullCoalesceAssignPrivateProperty), "null-coalescing");
+            AssertHasSkip(
+                result,
+                nameof(HotReloadE2EFixture.AsyncCompoundWriteViaPropertyReceiver),
+                "receiver with possible side effects would be evaluated twice");
+        }
+
+        /// <summary>
+        /// What: extracts one shim method declaration from the aggregated shimSource so Contains
+        /// asserts cannot pass via text belonging to a different entry.
+        /// </summary>
+        private static string SliceShimMethod(string shimSource, string shimMethodName)
+        {
+            Assert.That(shimMethodName, Is.Not.Null.And.Not.Empty);
+            int nameIndex = shimSource.IndexOf(shimMethodName, StringComparison.Ordinal);
+            Assert.That(
+                nameIndex,
+                Is.GreaterThanOrEqualTo(0),
+                "shimMethodName not found in shimSource: " + shimMethodName);
+
+            int declarationStart = shimSource.LastIndexOf(
+                "public static",
+                nameIndex,
+                StringComparison.Ordinal);
+            Assert.That(
+                declarationStart,
+                Is.GreaterThanOrEqualTo(0),
+                "shim method declaration start not found for: " + shimMethodName);
+
+            int openBrace = shimSource.IndexOf('{', nameIndex);
+            Assert.That(
+                openBrace,
+                Is.GreaterThanOrEqualTo(0),
+                "shim method body not found for: " + shimMethodName);
+
+            int depth = 0;
+            for (int index = openBrace; index < shimSource.Length; index++)
+            {
+                char character = shimSource[index];
+                if (character == '{')
+                {
+                    depth++;
+                }
+                else if (character == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return shimSource.Substring(declarationStart, index - declarationStart + 1);
+                    }
+                }
+            }
+
+            Assert.Fail("Unbalanced braces while slicing shim method: " + shimMethodName);
+            return null;
         }
 
         private static void AssertHasSkip(

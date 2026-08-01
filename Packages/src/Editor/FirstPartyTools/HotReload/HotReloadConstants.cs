@@ -38,6 +38,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string NewMemberCompileHint =
             "Adding new members requires a real compile (uloop compile); hot reload only replaces existing method bodies.";
 
+        // Wire value for TransformWorkerEntryDto.patchKind when the worker rewrote inaccessible
+        // accesses into accessor delegates.
+        public const string PatchKindDelegation = "delegation";
+
+        // The delegation patcher is not wired yet: delegation shims compile and load so the
+        // wiring change only needs to bind accessors and patch. Keep a single present-tense
+        // reason so that change can replace this constant and branch wholesale.
+        public const string DelegationPatchNotWiredSkipReason =
+            "Rewritten for delegation patching, which is not wired yet; method left unpatched.";
+
         /// <summary>
         /// Returns whether a ScriptAssemblies DLL is a project assembly that may be publicized.
         /// Engine / test-runner / system assemblies under ScriptAssemblies must stay untouched —

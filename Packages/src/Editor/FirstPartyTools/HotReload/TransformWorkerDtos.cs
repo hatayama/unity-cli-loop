@@ -34,6 +34,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string[] parameterTypeFullNames;
         public string shimTypeName;
         public string shimMethodName;
+
+        // "transplant" | "delegation". Null/empty is treated as transplant by the orchestrator.
+        public string patchKind;
     }
 
     [Serializable]
