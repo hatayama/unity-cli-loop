@@ -320,6 +320,14 @@ public static class TransformWorkerProgram
             return "Generic methods and methods inside generic types cannot be safely patched with Harmony.";
         }
 
+        // Explicit interface implementations have dotted metadata names (e.g. IFoo.Bar) that are
+        // not valid C# identifiers for shim method names; sanitizing would also desync the
+        // matcher (Cecil MethodDefinition.Name). v1 skips them with an explicit reason.
+        if (methodDeclaration.ExplicitInterfaceSpecifier != null)
+        {
+            return "Explicit interface implementations are skipped in v1.";
+        }
+
         SyntaxNode bodyNode = (SyntaxNode)methodDeclaration.Body ?? methodDeclaration.ExpressionBody;
         if (bodyNode == null)
         {
@@ -331,10 +339,10 @@ public static class TransformWorkerProgram
             return "Methods that call base. members are skipped; C# cannot express base calls outside the type.";
         }
 
-        if (SubtreeHasInaccessibleMemberAccess(semanticModel, FindLambdaAndLocalFunctionBodies(bodyNode)))
+        if (SubtreeHasInaccessibleMemberAccess(semanticModel, FindClosureBodies(bodyNode)))
         {
-            return "Lambda or local-function bodies that access private/internal members are skipped in v1 "
-                + "(closure methods JIT-compile normally and fail accessibility checks).";
+            return "Lambda, local-function, or query-expression bodies that access private/internal members "
+                + "are skipped in v1 (closure methods JIT-compile normally and fail accessibility checks).";
         }
 
         if (IsAsyncOrIterator(methodDeclaration, bodyNode)
@@ -359,10 +367,32 @@ public static class TransformWorkerProgram
             return true;
         }
 
-        return bodyNode.DescendantNodes().OfType<YieldStatementSyntax>().Any();
+        // Yields inside local functions do not make the outer method an iterator.
+        foreach (YieldStatementSyntax yieldStatement in bodyNode.DescendantNodes().OfType<YieldStatementSyntax>())
+        {
+            if (!IsInsideLocalFunction(yieldStatement, bodyNode))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
-    private static List<SyntaxNode> FindLambdaAndLocalFunctionBodies(SyntaxNode bodyNode)
+    private static bool IsInsideLocalFunction(SyntaxNode node, SyntaxNode stopAt)
+    {
+        for (SyntaxNode current = node.Parent; current != null && current != stopAt; current = current.Parent)
+        {
+            if (current is LocalFunctionStatementSyntax)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static List<SyntaxNode> FindClosureBodies(SyntaxNode bodyNode)
     {
         List<SyntaxNode> bodies = new List<SyntaxNode>();
         foreach (SyntaxNode node in bodyNode.DescendantNodes())
@@ -387,6 +417,12 @@ public static class TransformWorkerProgram
                     bodies.Add(localBody);
                 }
             }
+            else if (node is QueryExpressionSyntax queryExpression)
+            {
+                // Query clauses compile to display-class methods that JIT normally; treat the
+                // whole query (including the source expression) as a closure body for v1.
+                bodies.Add(queryExpression);
+            }
         }
 
         return bodies;
@@ -405,7 +441,7 @@ public static class TransformWorkerProgram
 
             foreach (SyntaxNode node in root.DescendantNodesAndSelf())
             {
-                if (node is not IdentifierNameSyntax && node is not GenericNameSyntax)
+                if (!IsInaccessibleAccessCandidateNode(node))
                 {
                     continue;
                 }
@@ -419,6 +455,15 @@ public static class TransformWorkerProgram
         }
 
         return false;
+    }
+
+    private static bool IsInaccessibleAccessCandidateNode(SyntaxNode node)
+    {
+        return node is IdentifierNameSyntax
+            || node is GenericNameSyntax
+            || node is ElementAccessExpressionSyntax
+            || node is ObjectCreationExpressionSyntax
+            || node is ImplicitObjectCreationExpressionSyntax;
     }
 
     private static MethodDeclarationSyntax RewriteMethodBody(
@@ -560,15 +605,16 @@ internal sealed class InstanceMemberQualifier : CSharpSyntaxRewriter
             return original;
         }
 
-        if (!IsOwnedMember(symbol, out bool isStatic, out INamedTypeSymbol containingType))
+        (bool owned, bool isStatic, INamedTypeSymbol containingType) ownership = ResolveOwnedMember(symbol);
+        if (!ownership.owned)
         {
             return original;
         }
 
-        if (isStatic)
+        if (ownership.isStatic)
         {
             TypeSyntax typeSyntax = SyntaxFactory.ParseTypeName(
-                containingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                ownership.containingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
             return SyntaxFactory.MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
                     typeSyntax,
@@ -583,17 +629,17 @@ internal sealed class InstanceMemberQualifier : CSharpSyntaxRewriter
             .WithTriviaFrom(node);
     }
 
-    private bool IsOwnedMember(ISymbol symbol, out bool isStatic, out INamedTypeSymbol containingType)
+    private (bool owned, bool isStatic, INamedTypeSymbol containingType) ResolveOwnedMember(ISymbol symbol)
     {
-        isStatic = false;
-        containingType = null;
+        INamedTypeSymbol containingType;
+        bool isStatic;
 
         if (symbol is IMethodSymbol methodSymbol)
         {
             // Extension methods live on unrelated static classes; leave them alone.
             if (methodSymbol.IsExtensionMethod)
             {
-                return false;
+                return (false, false, null);
             }
 
             containingType = methodSymbol.ContainingType;
@@ -616,15 +662,20 @@ internal sealed class InstanceMemberQualifier : CSharpSyntaxRewriter
         }
         else
         {
-            return false;
+            return (false, false, null);
         }
 
         if (containingType == null)
         {
-            return false;
+            return (false, false, null);
         }
 
-        return IsInInheritanceHierarchy(_targetType, containingType);
+        if (!IsInInheritanceHierarchy(_targetType, containingType))
+        {
+            return (false, false, null);
+        }
+
+        return (true, isStatic, containingType);
     }
 
     private static bool IsInInheritanceHierarchy(INamedTypeSymbol derived, INamedTypeSymbol candidate)
@@ -861,24 +912,51 @@ internal static class CecilTypeNames
                 return elementName + "[]";
             }
 
-            return elementName + "[" + new string(',', arrayType.Rank - 1) + "]";
+            // Cecil ArrayType.FullName for non-vector arrays uses "[0...,0...]" (lower bounds),
+            // not the C# syntactic "[,]".
+            string[] dimensionMarks = new string[arrayType.Rank];
+            for (int index = 0; index < arrayType.Rank; index++)
+            {
+                dimensionMarks[index] = "0...";
+            }
+
+            return elementName + "[" + string.Join(",", dimensionMarks) + "]";
         }
 
         if (typeSymbol is INamedTypeSymbol namedType)
         {
-            if (namedType.IsGenericType && !namedType.IsUnboundGenericType)
+            // Cecil nests constructed generics as Outer/Inner<all-args-outer-to-inner>, so collect
+            // TypeArguments from the containment chain rather than only the leaf type.
+            List<ITypeSymbol> typeArguments = new List<ITypeSymbol>();
+            CollectConstructedTypeArgumentsOuterToInner(namedType, typeArguments);
+            string head = ToMetadataName(namedType.OriginalDefinition);
+            if (typeArguments.Count == 0)
             {
-                string head = ToMetadataName(namedType.OriginalDefinition);
-                string args = string.Join(",", namedType.TypeArguments.Select(ToCecilFullName));
-                return head + "<" + args + ">";
+                return head;
             }
 
-            return ToMetadataName(namedType);
+            string args = string.Join(",", typeArguments.Select(ToCecilFullName));
+            return head + "<" + args + ">";
         }
 
         return typeSymbol.ToDisplayString(
             new SymbolDisplayFormat(
                 typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces));
+    }
+
+    private static void CollectConstructedTypeArgumentsOuterToInner(
+        INamedTypeSymbol namedType,
+        List<ITypeSymbol> typeArguments)
+    {
+        if (namedType.ContainingType != null)
+        {
+            CollectConstructedTypeArgumentsOuterToInner(namedType.ContainingType, typeArguments);
+        }
+
+        if (namedType.IsGenericType && !namedType.IsUnboundGenericType)
+        {
+            typeArguments.AddRange(namedType.TypeArguments);
+        }
     }
 }
 

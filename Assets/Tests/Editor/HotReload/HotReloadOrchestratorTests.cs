@@ -33,7 +33,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
                 "ComputeWithPrivate.cs",
-                BuildFixtureSourceWithComputeBody("return _secret + delta + 100;"));
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
 
             HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                 new[] { fixturePath },
@@ -45,6 +47,90 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(10 + 5 + 100));
+        }
+
+        /// <summary>
+        /// What: expression-bodied edited methods keep a terminating semicolon in generated shims
+        /// and still transplant successfully.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExpressionBodiedMethod_PatchesBehavior()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "ComputeWithPrivateExpression.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta) => _secret + delta + 100;"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(10 + 5 + 100));
+        }
+
+        /// <summary>
+        /// What: bare sibling-type references and owned members inside object initializers both
+        /// compile in generated shims (namespace emission + initializer non-qualification).
+        /// </summary>
+        [Test]
+        public async Task Run_EditedBodyWithSiblingTypeAndObjectInitializer_PatchesBehavior()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "SiblingAndInitializer.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n"
+                    + "            HotReloadE2ESibling s = new HotReloadE2ESibling { Value = delta };\n"
+                    + "            HotReloadE2EFixture other = new HotReloadE2EFixture { Counter = delta };\n"
+                    + "            return _secret + s.Value + other.Counter + 100;\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(10 + 5 + 5 + 100));
+        }
+
+        /// <summary>
+        /// What: a method with a multidimensional array parameter patches successfully (Cecil
+        /// FullName uses [0...,0...] and must match the worker manifest).
+        /// </summary>
+        [Test]
+        public async Task Run_EditedMultidimensionalArrayParameterMethod_PatchesBehavior()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "SumGrid.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    sumGridMethod:
+                    "public int SumGrid(int[,] grid)\n        {\n            return 42;\n        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.SumGrid));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.SumGrid(new int[1, 1]), Is.EqualTo(42));
         }
 
         /// <summary>
@@ -86,7 +172,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
                 "MissingHelper.cs",
-                BuildFixtureSourceWithMissingHelperCall());
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    callsMissingHelperMethod:
+                    "public int CallsMissingHelper(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }"));
 
             HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                 new[] { fixturePath },
@@ -171,9 +261,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return path;
         }
 
-        private static string BuildFixtureSourceWithComputeBody(string computeBodyExpression)
+        private static string BuildFixtureSource(
+            string computeWithPrivateMethod,
+            string sumGridMethod = null,
+            string callsMissingHelperMethod = null)
         {
-            return @"namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+            string sumGrid = sumGridMethod ??
+                "public int SumGrid(int[,] grid)\n        {\n            return -1;\n        }";
+            string callsMissingHelper = callsMissingHelperMethod ??
+                "public int CallsMissingHelper(int value)\n        {\n            return value;\n        }";
+
+            return @"using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     public class HotReloadE2EBase
     {
@@ -183,62 +285,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
     }
 
-    public class HotReloadE2EFixture : HotReloadE2EBase
+    public class HotReloadE2ESibling
+    {
+        public int Value;
+    }
+
+    public interface IHotReloadE2EMarker
+    {
+        int ExplicitPing();
+    }
+
+    public class HotReloadE2EFixture : HotReloadE2EBase, IHotReloadE2EMarker
     {
         private int _secret = 10;
 
         public int SecretForAssert => _secret;
 
-        public int ComputeWithPrivate(int delta)
-        {
-            " + computeBodyExpression + @"
-        }
+        public int Counter;
+
+        private int this[int index] => _secret + index;
+
+        " + computeWithPrivateMethod + @"
 
         public int CallsBase()
         {
             return base.BaseSeed() + 1;
         }
 
-        public int CallsMissingHelper(int value)
+        " + callsMissingHelper + @"
+
+        int IHotReloadE2EMarker.ExplicitPing()
         {
-            return value;
-        }
-    }
-}
-";
+            return _secret;
         }
 
-        private static string BuildFixtureSourceWithMissingHelperCall()
+        public int QueryPrivate()
         {
-            return @"namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
-{
-    public class HotReloadE2EBase
-    {
-        protected int BaseSeed()
-        {
-            return 1;
-        }
-    }
-
-    public class HotReloadE2EFixture : HotReloadE2EBase
-    {
-        private int _secret = 10;
-
-        public int SecretForAssert => _secret;
-
-        public int ComputeWithPrivate(int delta)
-        {
-            return _secret + delta;
+            int[] values = { 1, 2, 3 };
+            return (from value in values where value < _secret select value).Count();
         }
 
-        public int CallsBase()
+        public async Task<int> AsyncReadPrivateIndexer()
         {
-            return base.BaseSeed() + 1;
+            await Task.Yield();
+            return this[0];
         }
 
-        public int CallsMissingHelper(int value)
+        " + sumGrid + @"
+
+        public int CountEnumerator(List<int>.Enumerator enumerator)
         {
-            return MissingHelperAddedByEdit(value);
+            return 0;
         }
     }
 }

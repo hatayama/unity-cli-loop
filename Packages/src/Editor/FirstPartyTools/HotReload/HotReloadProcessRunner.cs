@@ -3,8 +3,6 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
-using UnityEngine;
-
 using Debug = UnityEngine.Debug;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -39,12 +37,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
             Task<string> stderrTask = process.StandardError.ReadToEndAsync();
-            // Task.Run around WaitForExit mirrors RoslynCompilerBackend / spike S2 — Process has
-            // no awaitable wait on this runtime.
-            Task waitForExitTask = Task.Run(() => process.WaitForExit(), ct);
+            // Do not pass ct to WaitForExit — cancel must take the timeout branch so we can kill
+            // and drain before throwing; otherwise the child keeps writing cache/temp files.
+            Task waitForExitTask = Task.Run(() => process.WaitForExit());
             Task delayTask = Task.Delay(timeout, ct);
             Task completedTask = await Task.WhenAny(waitForExitTask, delayTask).ConfigureAwait(true);
-            ct.ThrowIfCancellationRequested();
 
             if (completedTask != waitForExitTask)
             {
@@ -57,12 +54,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // cannot surface as an unobserved task fault in the Editor.
                 string timedOutStdout = await stdoutTask.ConfigureAwait(true);
                 string timedOutStderr = await stderrTask.ConfigureAwait(true);
+                ct.ThrowIfCancellationRequested();
                 return (
                     -1,
                     timedOutStdout,
                     "Process timed out after " + timeout.TotalSeconds + "s.\n" + timedOutStderr);
             }
 
+            // Process finished; return its result even if ct fired at the same moment.
             process.WaitForExit();
             string standardOutput = await stdoutTask.ConfigureAwait(true);
             string standardError = await stderrTask.ConfigureAwait(true);

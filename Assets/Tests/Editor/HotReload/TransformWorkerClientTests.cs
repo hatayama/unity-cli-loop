@@ -13,18 +13,87 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// EditMode coverage for transform-worker bootstrap and a smoke invocation that returns entries.
+    /// EditMode coverage for transform-worker bootstrap and skip/manifest smoke checks.
     /// </summary>
     public class TransformWorkerClientTests
     {
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
+        private const string ExpectedListEnumeratorFullName =
+            "System.Collections.Generic.List`1/Enumerator<System.Int32>";
 
         /// <summary>
         /// What: bootstrap compiles (or reuses a cached) worker.dll, then running the worker on the
-        /// e2e fixture source returns at least one shim entry.
+        /// e2e fixture source returns shim entries and the expected skip reasons.
         /// </summary>
         [Test]
-        public async Task BootstrapAndRun_OnE2EFixture_ReturnsEntries()
+        public async Task BootstrapAndRun_OnE2EFixture_ReturnsEntriesAndExpectedSkips()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnE2EFixtureAsync();
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output, Is.Not.Null);
+            Assert.That(result.Output.entries, Is.Not.Null);
+            Assert.That(result.Output.entries.Length, Is.GreaterThan(0), "Expected at least one shim entry.");
+            Assert.That(result.Output.shimSource, Is.Not.Null.And.Not.Empty);
+
+            bool foundCompute = false;
+            bool foundListEnumeratorFullName = false;
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == nameof(HotReloadE2EFixture.ComputeWithPrivate))
+                {
+                    foundCompute = true;
+                    Assert.That(entry.shimMethodName, Does.Contain("__shim"));
+                    Assert.That(entry.shimTypeName, Does.Contain("UloopHotReloadShims"));
+                }
+
+                if (entry.methodName == nameof(HotReloadE2EFixture.CountEnumerator)
+                    && entry.parameterTypeFullNames != null
+                    && entry.parameterTypeFullNames.Length == 1
+                    && entry.parameterTypeFullNames[0] == ExpectedListEnumeratorFullName)
+                {
+                    foundListEnumeratorFullName = true;
+                }
+            }
+
+            Assert.That(foundCompute, Is.True, "ComputeWithPrivate entry missing from worker output.");
+            Assert.That(
+                foundListEnumeratorFullName,
+                Is.True,
+                "CountEnumerator parameterTypeFullNames must use Cecil nested-generic FullName: "
+                + ExpectedListEnumeratorFullName);
+
+            Assert.That(result.Output.skipped, Is.Not.Null, "Expected a skipped list from the worker.");
+            AssertHasSkip(result, nameof(HotReloadE2EFixture.CallsBase), "base");
+            AssertHasSkip(result, "ExplicitPing", "Explicit interface");
+            AssertHasSkip(result, nameof(HotReloadE2EFixture.QueryPrivate), "query");
+            AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncReadPrivateIndexer), "private/internal");
+
+            // Explicit-interface skip must not prevent other methods in the same file from patching.
+            Assert.That(foundCompute, Is.True);
+        }
+
+        private static void AssertHasSkip(
+            TransformWorkerClientResult result,
+            string methodNameFragment,
+            string reasonFragment)
+        {
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null
+                    && skipped.method.Contains(methodNameFragment)
+                    && skipped.reason != null
+                    && skipped.reason.Contains(reasonFragment))
+                {
+                    return;
+                }
+            }
+
+            Assert.Fail(
+                "Expected skip for '" + methodNameFragment + "' with reason containing '"
+                + reasonFragment + "'.");
+        }
+
+        private static async Task<TransformWorkerClientResult> RunWorkerOnE2EFixtureAsync()
         {
             string fixturePath = ResolveE2EFixturePath();
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
@@ -55,40 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 targetTypesAssemblyPath = targetDllPath
             };
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(input, CancellationToken.None);
-            Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output, Is.Not.Null);
-            Assert.That(result.Output.entries, Is.Not.Null);
-            Assert.That(result.Output.entries.Length, Is.GreaterThan(0), "Expected at least one shim entry.");
-            Assert.That(result.Output.shimSource, Is.Not.Null.And.Not.Empty);
-
-            bool foundCompute = false;
-            foreach (TransformWorkerEntryDto entry in result.Output.entries)
-            {
-                if (entry.methodName == nameof(HotReloadE2EFixture.ComputeWithPrivate))
-                {
-                    foundCompute = true;
-                    Assert.That(entry.shimMethodName, Does.Contain("__shim"));
-                    Assert.That(entry.shimTypeName, Does.Contain("UloopHotReloadShims"));
-                }
-            }
-
-            Assert.That(foundCompute, Is.True, "ComputeWithPrivate entry missing from worker output.");
-
-            Assert.That(result.Output.skipped, Is.Not.Null, "Expected a skipped list from the worker.");
-            bool foundBaseSkip = false;
-            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
-            {
-                if (skipped.method != null
-                    && skipped.method.Contains(nameof(HotReloadE2EFixture.CallsBase))
-                    && skipped.reason != null
-                    && skipped.reason.Contains("base"))
-                {
-                    foundBaseSkip = true;
-                }
-            }
-
-            Assert.That(foundBaseSkip, Is.True, "CallsBase should be skipped for base. usage.");
+            return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
         }
 
         private static string ResolveE2EFixturePath()
