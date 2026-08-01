@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 
 using HarmonyLib;
 using NUnit.Framework;
@@ -33,7 +34,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(-5), "Precondition: original sentinel body.");
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(original, shim);
+            HotReloadPatchResult result = HotReloadPatcher.Apply(
+                original, shim, HotReloadPatchShape.Transplant);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
         }
@@ -50,7 +52,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.StaticPing__shim0));
 
             Assert.That(HotReloadCoreFixture.StaticPing(), Is.EqualTo("original"));
-            HotReloadPatchResult result = HotReloadPatcher.Apply(original, shim);
+            HotReloadPatchResult result = HotReloadPatcher.Apply(
+                original, shim, HotReloadPatchShape.Transplant);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(HotReloadCoreFixture.StaticPing(), Is.EqualTo("patched"));
         }
@@ -70,7 +73,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             fixture.VoidBump();
             Assert.That(fixture.VoidHits, Is.EqualTo(-1), "Precondition: original void body.");
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(original, shim);
+            HotReloadPatchResult result = HotReloadPatcher.Apply(
+                original, shim, HotReloadPatchShape.Transplant);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             fixture.VoidBump();
             Assert.That(fixture.VoidHits, Is.EqualTo(7));
@@ -88,7 +92,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
 
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
-            Assert.That(HotReloadPatcher.Apply(original, shim).Success, Is.True);
+            Assert.That(
+                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant).Success,
+                Is.True);
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
 
             HotReloadPatcher.RevertAll();
@@ -110,10 +116,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim1));
 
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
-            Assert.That(HotReloadPatcher.Apply(original, shim0).Success, Is.True);
+            Assert.That(
+                HotReloadPatcher.Apply(original, shim0, HotReloadPatchShape.Transplant).Success,
+                Is.True);
             Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(43));
 
-            Assert.That(HotReloadPatcher.Apply(original, shim1).Success, Is.True);
+            Assert.That(
+                HotReloadPatcher.Apply(original, shim1, HotReloadPatchShape.Transplant).Success,
+                Is.True);
             Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(100));
 
             Patches patchInfo = Harmony.GetPatchInfo(original);
@@ -135,9 +145,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo shim = AccessTools.Method(
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
 
-            HotReloadPatchResult result = HotReloadPatcher.Apply(original, shim);
+            HotReloadPatchResult result = HotReloadPatcher.Apply(
+                original, shim, HotReloadPatchShape.Transplant);
             Assert.That(result.Success, Is.False);
             Assert.That(result.FailureReason, Is.EqualTo(HotReloadPatchFailureReason.UnpatchableValueType));
+        }
+
+        /// <summary>
+        /// What: a JIT-legal async shim applied via Delegation changes the await result, and
+        /// RevertAll restores the original sentinel body.
+        /// </summary>
+        [Test]
+        public async Task Apply_DelegationAsyncShim_ChangesBehaviorAndReverts()
+        {
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableComputeAsync));
+            MethodInfo shim = AccessTools.Method(
+                typeof(HotReloadHandwrittenShims),
+                nameof(HotReloadHandwrittenShims.ReplaceableComputeAsync__shim0));
+
+            HotReloadCoreFixture fixture = new HotReloadCoreFixture();
+            Assert.That(
+                await fixture.ReplaceableComputeAsync(5),
+                Is.EqualTo(-5),
+                "Precondition: original async sentinel body.");
+
+            HotReloadPatchResult result = HotReloadPatcher.Apply(
+                original, shim, HotReloadPatchShape.Delegation);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(await fixture.ReplaceableComputeAsync(5), Is.EqualTo(10 + 5 + 1));
+
+            HotReloadPatcher.RevertAll();
+            Assert.That(HotReloadPatcher.ActivePatchCount, Is.EqualTo(0));
+            Assert.That(await fixture.ReplaceableComputeAsync(5), Is.EqualTo(-5));
         }
     }
 

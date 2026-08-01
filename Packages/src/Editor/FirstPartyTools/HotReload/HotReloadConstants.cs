@@ -42,11 +42,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // accesses into accessor delegates.
         public const string PatchKindDelegation = "delegation";
 
-        // The delegation patcher is not wired yet: delegation shims compile and load so the
-        // wiring change only needs to bind accessors and patch. Keep a single present-tense
-        // reason so that change can replace this constant and branch wholesale.
-        public const string DelegationPatchNotWiredSkipReason =
-            "Rewritten for delegation patching, which is not wired yet; method left unpatched.";
+        // Name of the parameterless public static binder the worker emits into delegation shim
+        // types. Wire contract with TransformWorker's EmitBindAccessorsMethod — the worker is a
+        // standalone source file that cannot reference this constant, so keep both in sync.
+        public const string ShimBindAccessorsMethodName = "__BindAccessors";
 
         /// <summary>
         /// Returns whether a ScriptAssemblies DLL is a project assembly that may be publicized.

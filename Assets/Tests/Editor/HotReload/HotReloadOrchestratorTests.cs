@@ -198,19 +198,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a mixed transplant+delegation fixture compiles the shim (Harmony ref present),
-        /// transplants the sync private-access method, and reports delegation entries as Skipped
-        /// with the not-wired reason (delegation patcher lands in a later change).
+        /// What: a mixed transplant+delegation fixture patches both the sync private-access
+        /// method (transplant) and the LINQ private-access method (delegation).
         /// </summary>
         [Test]
-        public async Task Run_MixedTransplantAndDelegationFile_PatchesSyncAndSkipsDelegation()
+        public async Task Run_MixedTransplantAndDelegationFile_PatchesBoth()
         {
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
                 "MixedTransplantDelegation.cs",
                 BuildFixtureSource(
                     computeWithPrivateMethod:
-                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
+                    queryPrivateMethod:
+                    "public int QueryPrivate()\n        {\n            int[] values = { 1, 2, 3 };\n"
+                    + "            return (from value in values where value < _secret select value).Count() + 100;\n        }"));
 
             HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                 new[] { fixturePath },
@@ -219,26 +221,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertNoFileLevelFailure(result);
             AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.QueryPrivate));
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(10 + 5 + 100));
-
-            bool foundDelegationSkip = false;
-            foreach (HotReloadMethodOutcome outcome in result.Methods)
-            {
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
-                    && outcome.Method.Contains(nameof(HotReloadE2EFixture.QueryPrivate))
-                    && outcome.Reason == HotReloadConstants.DelegationPatchNotWiredSkipReason)
-                {
-                    foundDelegationSkip = true;
-                }
-            }
-
-            Assert.That(
-                foundDelegationSkip,
-                Is.True,
-                "Expected QueryPrivate to be Skipped with the delegation-not-wired reason.\n"
-                + FormatOutcomes(result));
+            Assert.That(fixture.QueryPrivate(), Is.EqualTo(3 + 100));
         }
 
         /// <summary>
@@ -343,12 +330,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static string BuildFixtureSource(
             string computeWithPrivateMethod,
             string sumGridMethod = null,
-            string callsMissingHelperMethod = null)
+            string callsMissingHelperMethod = null,
+            string queryPrivateMethod = null)
         {
             string sumGrid = sumGridMethod ??
                 "public int SumGrid(int[,] grid)\n        {\n            return -1;\n        }";
             string callsMissingHelper = callsMissingHelperMethod ??
                 "public int CallsMissingHelper(int value)\n        {\n            return value;\n        }";
+            string queryPrivate = queryPrivateMethod ??
+                "public int QueryPrivate()\n        {\n            int[] values = { 1, 2, 3 };\n"
+                + "            return (from value in values where value < _secret select value).Count();\n        }";
 
             return @"using System.Collections.Generic;
 using System.Linq;
@@ -398,11 +389,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return _secret;
         }
 
-        public int QueryPrivate()
-        {
-            int[] values = { 1, 2, 3 };
-            return (from value in values where value < _secret select value).Count();
-        }
+        " + queryPrivate + @"
 
         public async Task<int> AsyncReadPrivateIndexer()
         {
