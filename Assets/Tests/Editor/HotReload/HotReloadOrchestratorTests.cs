@@ -619,6 +619,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + string.Join("\n", result.Warnings));
         }
 
+        /// <summary>
+        /// What: partial declarations of one type in a single edited file produce exactly one
+        /// drift warning per const, not one per declaration.
+        /// </summary>
+        [Test]
+        public async Task Run_PartialTypeConst_WarnsOnce()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "PartialConstDrift.cs",
+                "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n"
+                + "{\n"
+                + "    public partial class HotReloadE2EFixture\n"
+                + "    {\n"
+                + "        private const int TuningConst = 6;\n"
+                + "    }\n"
+                + "\n"
+                + "    public partial class HotReloadE2EFixture\n"
+                + "    {\n"
+                + "    }\n"
+                + "}\n");
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+
+            int driftCount = 0;
+            foreach (string warning in result.Warnings)
+            {
+                if (warning.Contains("TuningConst"))
+                {
+                    driftCount++;
+                }
+            }
+
+            Assert.That(
+                driftCount,
+                Is.EqualTo(1),
+                "Expected exactly one drift warning for TuningConst.\n"
+                + string.Join("\n", result.Warnings));
+        }
+
         private static void AssertNoFileLevelFailure(HotReloadOrchestratorResult result)
         {
             foreach (HotReloadMethodOutcome outcome in result.Methods)

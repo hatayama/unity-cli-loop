@@ -325,6 +325,7 @@ public static class TransformWorkerProgram
             return warnings;
         }
 
+        HashSet<string> seenTypeMetadataNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (BaseTypeDeclarationSyntax typeDeclaration
             in root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
         {
@@ -334,8 +335,16 @@ public static class TransformWorkerProgram
                 continue;
             }
 
+            // Partial declarations in one file resolve to the same merged type symbol, and
+            // comparing its members once per declaration would duplicate every warning.
+            string typeMetadataName = ToReflectionMetadataName(sourceType);
+            if (!seenTypeMetadataNames.Add(typeMetadataName))
+            {
+                continue;
+            }
+
             INamedTypeSymbol compiledType = targetTypesAssemblySymbol.GetTypeByMetadataName(
-                ToReflectionMetadataName(sourceType));
+                typeMetadataName);
             if (compiledType == null)
             {
                 continue;
@@ -404,8 +413,8 @@ public static class TransformWorkerProgram
     }
 
     /// <summary>
-    /// Renders a const value for the drift warning: quoted for strings, "null" for null,
-    /// invariant-culture text otherwise.
+    /// Renders a const value for the drift warning: quoted for strings and chars, "null" for
+    /// null, invariant-culture text otherwise.
     /// </summary>
     private static string FormatConstValue(object value)
     {
@@ -417,6 +426,13 @@ public static class TransformWorkerProgram
         if (value is string text)
         {
             return "\"" + text + "\"";
+        }
+
+        if (value is char character)
+        {
+            // A bare char (especially whitespace) is invisible inside the warning sentence;
+            // quote it the way C# source spells it.
+            return "'" + character + "'";
         }
 
         return Convert.ToString(value, CultureInfo.InvariantCulture);
