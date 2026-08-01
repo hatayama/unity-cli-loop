@@ -47,6 +47,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ? filePath
                     : contentPathOverride;
 
+                // Why ConfigureAwait(true): continuations must resume on the Unity main thread
+                // because the pipeline calls main-thread-only editor APIs (CompilationPipeline,
+                // Application.dataPath, EditorApplication.applicationContentsPath) and applies
+                // Harmony patches between awaits. The tool layer's ConfigureAwait(false) only
+                // moves BuildApplyResponse off-thread; it does not detach this pipeline.
                 HotReloadFileProcessResult fileResult = await ProcessFileAsync(
                     filePath,
                     workerSourcePath,
