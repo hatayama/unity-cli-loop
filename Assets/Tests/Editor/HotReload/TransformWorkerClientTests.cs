@@ -24,8 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: bootstrap compiles (or reuses a cached) worker.dll, then running the worker on the
         /// e2e fixture source returns shim entries and the expected skip reasons — including bare
-        /// sibling qualify (F-1), conditional-access skip (F-2a), private delegate invoke (F-2b),
-        /// and null-coalescing assignment skip (F-3).
+        /// sibling qualify, conditional-access skip, private delegate invoke, and null-coalescing
+        /// assignment skip.
         /// </summary>
         [Test]
         public async Task BootstrapAndRun_OnE2EFixture_ReturnsEntriesAndExpectedSkips()

@@ -112,34 +112,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return 0;
         }
 
-        // F-1: bare instance/static sibling calls — transplant shim must qualify receivers.
+        // Bare instance/static sibling calls — the transplant shim must qualify receivers.
         public int CallsBareSiblings()
         {
             return VisibleSibling() + VisibleStaticSibling();
         }
 
-        // F-1: private field read plus bare visible sibling — delegation entry with qualified sibling.
+        // Private field read plus bare visible sibling — delegation entry with qualified sibling.
         public async Task<int> AsyncPrivateAndBareSibling()
         {
             await Task.Yield();
             return _secret + VisibleSibling();
         }
 
-        // F-2a: ?. over an inaccessible member — worker must skip (condition b).
+        // ?. over an inaccessible member — worker must skip (condition b).
         public async Task<int> AsyncConditionalPrivateField()
         {
             await Task.Yield();
             return Next?._secret ?? 0;
         }
 
-        // F-2b: private delegate field invoke — delegation with FieldRef read then invoke.
+        // Private delegate field invoke — delegation with FieldRef read then invoke.
         public async Task AsyncInvokePrivateDelegate()
         {
             await Task.Yield();
             _callback();
         }
 
-        // F-3: private property ??= — worker must skip (no conditional-write rewrite shape).
+        // Private property ??= — worker must skip (no conditional-write rewrite shape).
         public async Task AsyncNullCoalesceAssignPrivateProperty()
         {
             await Task.Yield();
