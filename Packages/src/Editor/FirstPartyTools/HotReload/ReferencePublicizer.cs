@@ -3,6 +3,8 @@ using System.IO;
 
 using Mono.Cecil;
 
+using UnityEditor;
+
 using UnityEngine;
 
 using CecilFieldAttributes = Mono.Cecil.FieldAttributes;
@@ -32,7 +34,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AssertIsScriptAssemblyPath(fullSourceDllPath);
 
             // InMemory: the source DLL is the currently loaded script assembly; keep no file handle.
-            ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
+            // A search-path resolver is required so Cecil can satisfy assembly refs while rewriting
+            // (missing mscorlib/netstandard otherwise throws AssemblyResolutionException on Write).
+            using DefaultAssemblyResolver assemblyResolver = CreateAssemblyResolver(fullSourceDllPath);
+            ReaderParameters readerParameters = new ReaderParameters
+            {
+                InMemory = true,
+                AssemblyResolver = assemblyResolver
+            };
             using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(fullSourceDllPath, readerParameters);
 
             string assemblyName = assemblyDefinition.Name.Name;
@@ -130,6 +139,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             return Path.Combine(projectRoot, HotReloadConstants.PublicizedRefsRelativeDirectory);
+        }
+
+        private static DefaultAssemblyResolver CreateAssemblyResolver(string sourceDllPath)
+        {
+            DefaultAssemblyResolver resolver = new DefaultAssemblyResolver();
+            resolver.AddSearchDirectory(Path.GetDirectoryName(sourceDllPath));
+
+            string contentsPath = EditorApplication.applicationContentsPath;
+            if (!string.IsNullOrEmpty(contentsPath))
+            {
+                resolver.AddSearchDirectory(Path.Combine(contentsPath, "Managed"));
+                resolver.AddSearchDirectory(Path.Combine(contentsPath, "Managed", "UnityEngine"));
+                resolver.AddSearchDirectory(Path.Combine(contentsPath, "UnityReferenceAssemblies", "unity-4.8-api"));
+            }
+
+            return resolver;
         }
 
         private static void PublicizeType(TypeDefinition type)

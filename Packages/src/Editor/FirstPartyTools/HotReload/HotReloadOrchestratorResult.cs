@@ -1,0 +1,84 @@
+using System.Collections.Generic;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Aggregated outcome of a hot-reload orchestrator run across one or more files.
+    /// </summary>
+    internal sealed class HotReloadOrchestratorResult
+    {
+        public IReadOnlyList<HotReloadMethodOutcome> Methods { get; }
+        public IReadOnlyList<string> Warnings { get; }
+        public int PatchedTotal { get; }
+        public int ActivePatchTotal { get; }
+
+        public HotReloadOrchestratorResult(
+            IReadOnlyList<HotReloadMethodOutcome> methods,
+            IReadOnlyList<string> warnings,
+            int patchedTotal,
+            int activePatchTotal)
+        {
+            Methods = methods;
+            Warnings = warnings;
+            PatchedTotal = patchedTotal;
+            ActivePatchTotal = activePatchTotal;
+        }
+    }
+
+    /// <summary>
+    /// Per-method outcome: Patched, Skipped, or Failed.
+    /// </summary>
+    internal sealed class HotReloadMethodOutcome
+    {
+        public HotReloadMethodOutcomeKind Kind { get; }
+        public string Method { get; }
+        public string Reason { get; }
+        public string FilePath { get; }
+
+        private HotReloadMethodOutcome(
+            HotReloadMethodOutcomeKind kind,
+            string method,
+            string reason,
+            string filePath)
+        {
+            Kind = kind;
+            Method = method;
+            Reason = reason;
+            FilePath = filePath;
+        }
+
+        public static HotReloadMethodOutcome Patched(string method, string filePath, string warning = "")
+        {
+            return new HotReloadMethodOutcome(
+                HotReloadMethodOutcomeKind.Patched,
+                method,
+                warning ?? string.Empty,
+                filePath);
+        }
+
+        public static HotReloadMethodOutcome Skipped(string method, string reason, string filePath)
+        {
+            return new HotReloadMethodOutcome(
+                HotReloadMethodOutcomeKind.Skipped,
+                method,
+                reason,
+                filePath);
+        }
+
+        public static HotReloadMethodOutcome Failed(string method, string reason, string filePath)
+        {
+            return new HotReloadMethodOutcome(
+                HotReloadMethodOutcomeKind.Failed,
+                method,
+                reason,
+                filePath);
+        }
+    }
+
+    internal enum HotReloadMethodOutcomeKind
+    {
+        Patched = 0,
+        Skipped = 1,
+        Failed = 2
+    }
+}

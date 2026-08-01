@@ -1,0 +1,148 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
+
+using UnityEditor.Compilation;
+
+using UnityEngine;
+
+using Assembly = System.Reflection.Assembly;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Compiles worker-emitted shim source against publicized ScriptAssemblies references via
+    /// <see cref="RoslynCompilerBackend"/> (not <c>IDynamicCompilationService</c> — that path
+    /// cannot inject publicized copies or caller-supplied defines).
+    /// </summary>
+    internal static class HotReloadShimCompiler
+    {
+        /// <summary>
+        /// Compiles <paramref name="shimSource"/> and loads the resulting assembly into the
+        /// Editor domain. The original (non-publicized) target assembly must not appear in
+        /// <paramref name="referencePaths"/>.
+        /// </summary>
+        public static async Task<HotReloadShimCompileResult> CompileAndLoadAsync(
+            string shimSource,
+            IReadOnlyList<string> referencePaths,
+            IReadOnlyList<string> defineSymbols,
+            CancellationToken ct)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(shimSource), "shimSource must not be empty.");
+            Debug.Assert(referencePaths != null, "referencePaths must not be null.");
+            Debug.Assert(defineSymbols != null, "defineSymbols must not be null.");
+
+            ExternalCompilerPaths externalCompilerPaths = ExternalCompilerPathResolver.Resolve();
+            if (externalCompilerPaths == null)
+            {
+                return HotReloadShimCompileResult.Failure(
+                    "External compiler paths could not be resolved for this Unity installation.");
+            }
+
+            string workDirectory = CreateWorkDirectory();
+            string sourcePath = Path.Combine(workDirectory, "HotReloadShim.cs");
+            string dllPath = Path.Combine(workDirectory, "HotReloadShim.dll");
+            string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
+            File.WriteAllText(sourcePath, shimSource);
+
+            List<string> references = new List<string>(referencePaths.Count);
+            foreach (string referencePath in referencePaths)
+            {
+                references.Add(referencePath);
+            }
+
+            RoslynCompilerOptions compilerOptions = new RoslynCompilerOptions(defineSymbols, allowUnsafeCode: false);
+            DynamicCompilationBackendResult backendResult = await RoslynCompilerBackend.CompileAsync(
+                sourcePath,
+                dllPath,
+                references,
+                externalCompilerPaths,
+                compilerOptions,
+                ct,
+                markBuildStarted: static () => { },
+                markBuildFinished: static () => { },
+                incrementBuildCount: static () => { }).ConfigureAwait(true);
+
+            List<string> errors = CollectErrors(backendResult.CompilerMessages);
+            if (errors.Count > 0)
+            {
+                string message = string.Join("\n", errors);
+                return HotReloadShimCompileResult.Failure(
+                    message + "\n" + HotReloadConstants.NewMemberCompileHint);
+            }
+
+            if (!File.Exists(dllPath))
+            {
+                return HotReloadShimCompileResult.Failure("Shim dll was not produced: " + dllPath);
+            }
+
+            byte[] assemblyBytes = File.ReadAllBytes(dllPath);
+            byte[] pdbBytes = File.Exists(pdbPath) ? File.ReadAllBytes(pdbPath) : null;
+            CompiledAssemblyLoadResult loadResult = CompiledAssemblyLoader.Load(assemblyBytes, pdbBytes);
+            Debug.Assert(loadResult.Success, "CompiledAssemblyLoader must succeed for valid dll bytes.");
+            return HotReloadShimCompileResult.SuccessResult(loadResult.CompiledAssembly);
+        }
+
+        private static List<string> CollectErrors(CompilerMessage[] compilerMessages)
+        {
+            List<string> errors = new List<string>();
+            if (compilerMessages == null)
+            {
+                return errors;
+            }
+
+            foreach (CompilerMessage compilerMessage in compilerMessages)
+            {
+                if (compilerMessage.type == CompilerMessageType.Error)
+                {
+                    errors.Add(compilerMessage.message);
+                }
+            }
+
+            return errors;
+        }
+
+        private static string CreateWorkDirectory()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string workDirectory = Path.Combine(
+                projectRoot,
+                "Library",
+                "UloopHotReload",
+                "ShimCompile",
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(workDirectory);
+            return workDirectory;
+        }
+    }
+
+    /// <summary>
+    /// Outcome of compiling and loading a hot-reload shim assembly.
+    /// </summary>
+    internal sealed class HotReloadShimCompileResult
+    {
+        public bool Success { get; }
+        public Assembly Assembly { get; }
+        public string ErrorMessage { get; }
+
+        private HotReloadShimCompileResult(bool success, Assembly assembly, string errorMessage)
+        {
+            Success = success;
+            Assembly = assembly;
+            ErrorMessage = errorMessage;
+        }
+
+        public static HotReloadShimCompileResult SuccessResult(Assembly assembly)
+        {
+            return new HotReloadShimCompileResult(true, assembly, string.Empty);
+        }
+
+        public static HotReloadShimCompileResult Failure(string errorMessage)
+        {
+            return new HotReloadShimCompileResult(false, null, errorMessage);
+        }
+    }
+}

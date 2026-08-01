@@ -1,3 +1,5 @@
+using System;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -14,7 +16,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // never reuses a stale visibility rewrite.
         public const string PublicizedRefsRelativeDirectory = "Library/UloopHotReload/PublicizedRefs";
 
+        // Worker binaries are keyed by SHA256 of the TransformWorker~/TransformWorker.cs source.
+        public const string WorkerCacheRelativeDirectory = "Library/UloopHotReload/Worker";
+
+        // EditMode e2e tests place edited source copies here so AssetDatabase is never provoked.
+        public const string TestSourcesRelativeDirectory = "Library/UloopHotReload/TestSources";
+
+        // Package-relative path of the out-of-process transform worker source (tilde dir = Unity-ignored).
+        public const string WorkerSourcePackageRelativePath =
+            "Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs";
+
+        public const string WorkerDllFileName = "worker.dll";
+        public const string WorkerRuntimeConfigFileName = "worker.runtimeconfig.json";
+        public const string WorkerRoslynDirectorySidecarFileName = "roslyn-directory.txt";
+        public const string WorkerResponseFileName = "worker.rsp";
+
+        public const int WorkerProcessTimeoutMilliseconds = 120_000;
+
         public const string BurstCompileAttributeFullName = "Unity.Burst.BurstCompileAttribute";
+
+        public const string NewMemberCompileHint =
+            "Adding new members requires a real compile (uloop compile); hot reload only replaces existing method bodies.";
+
+        /// <summary>
+        /// Returns whether a ScriptAssemblies DLL is a project assembly that may be publicized.
+        /// Engine / test-runner / system assemblies under ScriptAssemblies must stay untouched —
+        /// some are not rewriteable managed images.
+        /// </summary>
+        public static bool IsPublicizableProjectAssemblyFileName(string fileNameWithoutExtension)
+        {
+            if (string.IsNullOrEmpty(fileNameWithoutExtension))
+            {
+                return false;
+            }
+
+            if (fileNameWithoutExtension.StartsWith("UnityEngine", StringComparison.Ordinal)
+                || fileNameWithoutExtension.StartsWith("UnityEditor", StringComparison.Ordinal)
+                || fileNameWithoutExtension.StartsWith("Unity.", StringComparison.Ordinal)
+                || fileNameWithoutExtension.StartsWith("System.", StringComparison.Ordinal)
+                || fileNameWithoutExtension == "System"
+                || fileNameWithoutExtension == "mscorlib"
+                || fileNameWithoutExtension == "netstandard"
+                || fileNameWithoutExtension == "Mono.Security")
+            {
+                return false;
+            }
+
+            return true;
+        }
 
         // Same heuristic threshold as pause point: small IL bodies may already be inlined by Mono,
         // in which case a Harmony detour on the original method will not reach existing call sites.
