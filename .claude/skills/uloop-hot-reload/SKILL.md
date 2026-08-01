@@ -9,8 +9,9 @@ description: "Apply method-body hot reload to edited C# sources in a running Uni
 Replaces method bodies in the running Editor (EditMode or PlayMode) directly from edited
 project source files — no domain reload, no attributes, no source markers. Private/internal
 member access, static methods, return values, async methods, and iterators all work within
-the v1 limits below. Methods that cannot be patched are reported per method as `Skipped` or
-`Failed`; one unpatchable method never aborts the rest of the run.
+the limits below — including private access inside async, iterator, lambda, local-function,
+and LINQ-query bodies. Methods that cannot be patched are reported per method as `Skipped`
+or `Failed`; one unpatchable method never aborts the rest of the run.
 
 ## Usage
 
@@ -28,7 +29,7 @@ consume exactly one value token.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--files` | array | - | Project-relative `.cs` paths whose method bodies should be hot-reloaded. Required when `--revert-all` is not set |
-| `--revert-all` | flag | - | Remove every active hot-reload transplant and clear the patch ledger. When set, `--files` is ignored |
+| `--revert-all` | flag | - | Remove every active hot-reload patch and clear the patch ledger. When set, `--files` is ignored |
 
 ## How it works
 
@@ -58,8 +59,8 @@ Edits outside method bodies never take effect: changing a `const` value, a field
 | Explicit interface implementation | Dotted metadata names cannot be expressed as shim identifiers |
 | No body (`abstract` / `extern`) | Nothing to transplant |
 | Body contains a `base.` call | `base` cannot be expressed from outside the type |
-| Lambda, local function, or LINQ query in the body accesses private/internal members | Closure bodies run from the shim assembly, where that access fails runtime accessibility checks; only the named method's IL is transplanted |
-| `async` or iterator body accesses private/internal members | Same as above — the state machine's `MoveNext` runs from the shim assembly |
+| Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates |
+| An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
 
 ### Failed — flips `Success` to `false`
 
@@ -71,6 +72,7 @@ Edits outside method bodies never take effect: changing a `const` value, a field
 | Method signature not found in the loaded assembly | New, renamed, or re-signatured members need `uloop compile` |
 | Shim compile error (e.g. the body calls a member that does not exist yet) | Response carries the compiler error and a hint to run `uloop compile` |
 | Patch rejected at apply time (e.g. `[BurstCompile]`) | Not patchable by Harmony transplant |
+| Accessor binding failed for a shim type | The source references a member the compiled assembly does not have yet; every delegation-patched method in that shim type reports the binder error — run `uloop compile` and retry |
 
 ## Convergence and lifecycle
 

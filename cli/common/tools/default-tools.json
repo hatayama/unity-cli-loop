@@ -757,7 +757,7 @@
           },
           "RevertAll": {
             "type": "boolean",
-            "description": "Remove every active hot-reload transplant and clear the patch ledger. When set, --files is ignored"
+            "description": "Remove every active hot-reload patch and clear the patch ledger. When set, --files is ignored"
           }
         }
       }
