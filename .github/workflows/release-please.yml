@@ -55,7 +55,7 @@ jobs:
       # so build-and-test.yml cannot handle this — must rebuild here.
       - name: 🔧 Setup Node.js for bundle rebuild
         if: ${{ steps.release.outputs.pr != '' }}
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
 
