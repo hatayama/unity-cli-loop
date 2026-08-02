@@ -73,6 +73,9 @@ func tryHandlePreConnectionRequestWithDeps(
 	if handled, code := tryHandleSkillsRequest(remainingArgs, startPath, projectPath, stdout, stderr); handled {
 		return true, code
 	}
+	if handled, code := tryHandlePackageRequest(ctx, remainingArgs, startPath, projectPath, stdout, stderr); handled {
+		return true, code
+	}
 	if handled, code := tryHandleVersionRequest(remainingArgs, stdout, stderr); handled {
 		return true, code
 	}

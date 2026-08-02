@@ -27,6 +27,7 @@ func TestPrintDispatcherHelpListsNativeCommandsAndLiveToolGuidance(t *testing.T)
 		"  focus-window",
 		"  list",
 		"  skills",
+		"  package",
 		"  uninstall",
 		"  version",
 		"Unity tool commands are project-specific.",

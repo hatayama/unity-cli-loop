@@ -54,7 +54,17 @@ https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
 
 ## Via OpenUPM (Recommended)
 
-## Using Scoped registry in Unity Package Manager
+After the global `uloop` CLI is on PATH, install the Unity package from a terminal at the project root (or pass `--project-path`):
+
+```bash
+uloop package install
+uloop package status
+```
+
+`uloop package install` writes the OpenUPM scoped registry and the `io.github.hatayama.uloopmcp` dependency into `Packages/manifest.json`. Pass `--version <x.y.z>` to pin a specific package version instead of OpenUPM `dist-tags.latest`. Use `uloop package status` to confirm the registry and dependency are present.
+
+### Manual setup in Unity Package Manager
+
 1. Open Project Settings window and go to Package Manager page
 2. Add the following entry to the Scoped Registries list:
 ```text
@@ -85,30 +95,38 @@ V2 delegation requires Node.js 22 or later, including npm for the first command 
 </details>
 
 <details>
-<summary>To install only the CLI from a terminal</summary>
+<summary>CLI-only terminal install</summary>
 
 Use this only when you want to install the standalone global CLI without opening Unity package setup.
+The installer verifies the downloaded archive against the digest list in
+`Packages/src/project-runner-pin.json` (same pin Unity's **Install CLI** button uses).
+Optional env: `ULOOP_REF` (git ref for the pin; default `main`), `ULOOP_INSTALL_DIR`.
+`ULOOP_VERSION` is accepted only when it matches the pin's `dispatcherReleaseTag`.
 
-> [!NOTE]
-> This command is verbose for a security reason: it verifies with sigstore attestations that the downloaded installer and assets match what this repository's CI actually built, before anything runs. Unity's GUI (the **Install CLI** button) performs the same check against verified digests, but it ships those CI-verified digests inside the package, which is why it does not need `gh` or `jq`.
+On macOS or Windows Git Bash:
 
-Install `gh` (logged in) and `jq` through your operating system or package channel first. The commands below neither install these two tools nor fall back to alternatives. The latest dispatcher Release tag is resolved automatically. To install a specific version instead, assign an immutable tag (e.g. `dispatcher-v3.0.0`) to `RELEASE_TAG` directly.
+```sh
+curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
+```
 
-The command performs these five steps in order:
+On Windows PowerShell:
 
-1. Resolve the latest dispatcher Release tag (`RELEASE_TAG`)
-2. Download the installer and its signing information (the sigstore attestation bundle) from the Release (`gh release download`)
-3. Verify that the installer was built by this repository's CI from the tag's commit (`gh attestation verify`)
-4. Extract the verified hash list for the CLI archives from the signing information (`jq`)
-5. Run the installer with the hash list. If an archive does not match the list, the installer aborts before executing anything
+```powershell
+irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+```
 
-On macOS or Windows Git Bash, copy and paste the whole block below as-is and run it. There is no need to execute it line by line.
+### Manual attestation-verified install (choose your own release tag)
 
-<!-- Do not add # comments to this block. Pasted into plain zsh (interactivecomments disabled), comment lines error out and break the && chaining that stops execution when verification fails. Put explanations in the list above. -->
+Install `gh` and `jq` through your operating-system or package channel first. The bootstrap does not install
+or fall back from `gh`. Select the immutable dispatcher Release tag and its source branch; use
+`refs/heads/main` for a main release or `refs/heads/v3-beta` for a v3-beta release.
+
+On macOS or Windows Git Bash:
+
 ```bash
 REPOSITORY=hatayama/unity-cli-loop
-RELEASE_TAG=$(gh api "repos/$REPOSITORY/releases?per_page=100" --jq '[.[] | select(.tag_name | startswith("dispatcher-v"))][0].tag_name')
-SOURCE_REF=refs/heads/main
+RELEASE_TAG=dispatcher-v<RELEASE_VERSION>
+SOURCE_REF=refs/heads/v3-beta
 tmp_dir=$(mktemp -d)
 gh release download "$RELEASE_TAG" --repo "$REPOSITORY" --pattern 'install.sh' --pattern 'install.sh.sigstore.json' --dir "$tmp_dir" && \
 tag_sha=$(gh api "repos/$REPOSITORY/commits/$RELEASE_TAG" --jq .sha) && \
@@ -117,28 +135,22 @@ manifest=$(jq -r '.dsseEnvelope.payload | @base64d | fromjson | .subject[] | "\(
 ULOOP_VERSION="$RELEASE_TAG" ULOOP_ARCHIVE_MANIFEST="$manifest" sh "$tmp_dir/install.sh"
 ```
 
-On Windows PowerShell, likewise copy and paste the whole block below as-is and run it.
+On Windows PowerShell:
 
 ```powershell
 $repository = 'hatayama/unity-cli-loop'
-# Resolve the latest dispatcher Release tag (assign a tag string directly to pin a version)
-$releaseTag = (gh api "repos/$repository/releases?per_page=100" | ConvertFrom-Json | Where-Object { $_.tag_name -like 'dispatcher-v*' } | Select-Object -First 1).tag_name
-if (-not $releaseTag) { throw 'No dispatcher release found.' }
-$sourceRef = 'refs/heads/main'
+$releaseTag = 'dispatcher-v<RELEASE_VERSION>'
+$sourceRef = 'refs/heads/v3-beta'
 $temporaryDirectory = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
-# Download the installer and its signing information (sigstore attestation bundle) from the Release
 gh release download $releaseTag --repo $repository --pattern 'install.ps1' --pattern 'install.ps1.sigstore.json' --dir $temporaryDirectory.FullName
 if ($LASTEXITCODE -ne 0) { throw 'Installer download failed.' }
 $tagSha = gh api "repos/$repository/commits/$releaseTag" --jq .sha
 if ($LASTEXITCODE -ne 0) { throw 'Release tag resolution failed.' }
-# Verify that the installer was built by this repository's CI from the tag's commit
 gh attestation verify (Join-Path $temporaryDirectory.FullName 'install.ps1') --bundle (Join-Path $temporaryDirectory.FullName 'install.ps1.sigstore.json') --repo $repository --signer-workflow "$repository/.github/workflows/dispatcher-publish.yml" --source-ref $sourceRef --source-digest $tagSha
 if ($LASTEXITCODE -ne 0) { throw 'Installer attestation verification failed.' }
-# Extract the verified hash list for the CLI archives from the signing information
 $bundle = Get-Content -Raw -Encoding UTF8 (Join-Path $temporaryDirectory.FullName 'install.ps1.sigstore.json') | ConvertFrom-Json
 $statement = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($bundle.dsseEnvelope.payload)) | ConvertFrom-Json
 $manifest = [string]::Join("`n", @($statement.subject | ForEach-Object { "$($_.digest.sha256)  $($_.name)" } | Sort-Object))
-# Run the installer with the hash list (it aborts before executing if an archive does not match)
 $env:ULOOP_VERSION = $releaseTag
 $env:ULOOP_ARCHIVE_MANIFEST = $manifest
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $temporaryDirectory.FullName 'install.ps1')
