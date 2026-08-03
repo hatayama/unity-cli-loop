@@ -159,6 +159,14 @@ public static class SpikeWorkerProgram
 
             foreach (string referencePath in Directory.GetFiles(paths.NetCoreRuntimeSharedDirectoryPath, "*.dll"))
             {
+                // Why: on Windows the bundled shared framework also ships native PE images
+                // (ucrtbase.dll, coreclr.dll, api-ms-win-crt-*.dll, ...); passing those to csc
+                // as references fails the worker build with CS0009.
+                if (!ManagedAssemblyDetector.IsManagedAssembly(referencePath))
+                {
+                    continue;
+                }
+
                 lines.Add($"-r:\"{referencePath}\"");
             }
 

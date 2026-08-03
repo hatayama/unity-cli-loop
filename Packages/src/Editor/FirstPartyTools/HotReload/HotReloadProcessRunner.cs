@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -21,16 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(!string.IsNullOrEmpty(fileName), "fileName must not be empty.");
 
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                FileName = fileName,
-                Arguments = arguments,
-                WorkingDirectory = workingDirectoryPath,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
+            ProcessStartInfo startInfo = CreateStartInfo(fileName, arguments, workingDirectoryPath);
 
             using Process process = Process.Start(startInfo);
             Debug.Assert(process != null, "Failed to start process: " + fileName);
@@ -68,6 +60,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string standardOutput = await stdoutTask.ConfigureAwait(false);
             string standardError = await stderrTask.ConfigureAwait(false);
             return (process.ExitCode, standardOutput, standardError);
+        }
+
+        // Why: both worker processes (csc and the transform worker) run on the bundled .NET
+        // host, which writes redirected console output as UTF-8, so both streams are decoded
+        // as UTF-8 instead of the platform default, which mojibakes non-ASCII output such as
+        // localized compiler diagnostics on Windows.
+        internal static ProcessStartInfo CreateStartInfo(
+            string fileName,
+            string arguments,
+            string workingDirectoryPath)
+        {
+            return new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                WorkingDirectory = workingDirectoryPath,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
+                CreateNoWindow = true
+            };
         }
     }
 }

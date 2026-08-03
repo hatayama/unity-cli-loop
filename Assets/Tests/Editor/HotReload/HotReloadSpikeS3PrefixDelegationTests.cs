@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using HarmonyLib;
 using NUnit.Framework;
@@ -26,27 +27,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
             public int Offset = 3;
             public List<string> CallLog = new();
 
+            // Why NoInlining on every patch target below: these tests verify detour mechanics,
+            // and without the attribute the x64 Mono JIT can inline the tiny original bodies
+            // into a test method that was JIT-compiled before the patch was applied, so the
+            // assertions would measure JIT inlining instead of patching.
+            [MethodImpl(MethodImplOptions.NoInlining)]
             public void RecordGreeting()
             {
                 CallLog.Add("original");
             }
 
+            [MethodImpl(MethodImplOptions.NoInlining)]
             public int AddOffset(int value)
             {
                 return value + Offset;
             }
 
+            [MethodImpl(MethodImplOptions.NoInlining)]
             public static int StaticDouble(int value)
             {
                 return value * 2;
             }
 
+            [MethodImpl(MethodImplOptions.NoInlining)]
             public async Task<int> ComputeAsync()
             {
                 await Task.Yield();
                 return 1;
             }
 
+            [MethodImpl(MethodImplOptions.NoInlining)]
             public IEnumerable<int> EnumerateNumbers()
             {
                 yield return 1;
@@ -58,6 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
                 return SecretNumber();
             }
 
+            [MethodImpl(MethodImplOptions.NoInlining)]
             private int SecretNumber()
             {
                 return 5;

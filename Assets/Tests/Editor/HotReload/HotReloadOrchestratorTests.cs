@@ -781,6 +781,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return @"using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
@@ -823,6 +824,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _secret += amount;
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         " + computeWithPrivateMethod + @"
 
         public int CallsBase()
@@ -837,6 +839,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return _secret;
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         " + queryPrivate + @"
 
         public async Task<int> AsyncReadPrivateIndexer()
@@ -845,6 +848,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return this[0];
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         " + sumGrid + @"
 
         public int CountEnumerator(List<int>.Enumerator enumerator)
@@ -852,12 +856,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return 0;
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         " + asyncPrivate + @"
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         " + iteratePrivate + @"
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         " + lambdaPrivate + @"
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         " + propertyPrivate + @"
 
         " + asyncInternal + @"
