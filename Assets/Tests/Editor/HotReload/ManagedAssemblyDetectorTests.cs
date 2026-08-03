@@ -121,8 +121,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             image[DosHeaderSize] = 0x50;
             image[DosHeaderSize + 1] = 0x45;
 
-            // COFF header: machine (x64), one section, SizeOfOptionalHeader, characteristics.
-            WriteUInt16(image, CoffHeaderStart, 0x8664);
+            // COFF header: machine (AMD64 for PE32+, I386 for PE32), one section,
+            // SizeOfOptionalHeader, characteristics.
+            WriteUInt16(
+                image,
+                CoffHeaderStart,
+                isPe32Plus ? (ushort)0x8664 : (ushort)0x14C);
             WriteUInt16(image, CoffHeaderStart + 2, 1);
             WriteUInt16(image, CoffHeaderStart + 16, optionalHeaderSize);
             WriteUInt16(image, CoffHeaderStart + 18, 0x2022);
