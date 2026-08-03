@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
@@ -24,23 +25,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return left + right + extra;
         }
 
+        // Why NoInlining on every patch target below: these fixtures verify detour mechanics,
+        // and without the attribute the x64 Mono JIT can inline the tiny original bodies into
+        // a test method that was JIT-compiled before the patch was applied, so the assertions
+        // would measure JIT inlining instead of patching.
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public static string StaticPing()
         {
             return "original";
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public void VoidBump()
         {
             VoidHits = -1;
         }
 
         // Sentinel return proves the original body ran before a transplant replaces it.
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ReplaceableCompute(int delta)
         {
             return -1 * delta;
         }
 
         // Delegation target: sentinel proves the original async body ran before forwarding.
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public async Task<int> ReplaceableComputeAsync(int delta)
         {
             await Task.Yield();
