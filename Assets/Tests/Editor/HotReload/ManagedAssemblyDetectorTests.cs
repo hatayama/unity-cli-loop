@@ -30,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string filePath = WriteTempFile(
                 "managed-pe32plus.dll",
-                CreatePeImage(true, 0x2008u));
+                CreatePeImage(true, 0x2008u, 72u));
             Assert.That(ManagedAssemblyDetector.IsManagedAssembly(filePath), Is.True);
         }
 
@@ -43,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string filePath = WriteTempFile(
                 "managed-pe32.dll",
-                CreatePeImage(false, 0x2008u));
+                CreatePeImage(false, 0x2008u, 72u));
             Assert.That(ManagedAssemblyDetector.IsManagedAssembly(filePath), Is.True);
         }
 
@@ -56,7 +56,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string filePath = WriteTempFile(
                 "native-pe32plus.dll",
-                CreatePeImage(true, 0u));
+                CreatePeImage(true, 0u, 0u));
+            Assert.That(ManagedAssemblyDetector.IsManagedAssembly(filePath), Is.False);
+        }
+
+        /// <summary>
+        /// What: a PE32+ image whose CLR runtime header directory has a non-zero RVA but a
+        /// zero size is rejected as malformed instead of being treated as managed.
+        /// </summary>
+        [Test]
+        public void IsManagedAssembly_ClrDirectoryWithZeroSize_ReturnsFalse()
+        {
+            string filePath = WriteTempFile(
+                "zero-size-clr-pe32plus.dll",
+                CreatePeImage(true, 0x2008u, 0u));
             Assert.That(ManagedAssemblyDetector.IsManagedAssembly(filePath), Is.False);
         }
 
@@ -90,7 +103,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // Builds a minimal PE image: DOS header, PE signature, COFF header, and an optional
         // header with 16 data directories where only the CLR runtime header entry varies.
-        private static byte[] CreatePeImage(bool isPe32Plus, uint clrRuntimeHeaderRva)
+        private static byte[] CreatePeImage(
+            bool isPe32Plus,
+            uint clrRuntimeHeaderRva,
+            uint clrRuntimeHeaderSize)
         {
             ushort optionalHeaderMagic = isPe32Plus ? (ushort)0x20B : (ushort)0x10B;
             int rvaCountOffset = isPe32Plus ? 108 : 92;
@@ -117,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             int clrDirectoryOffset =
                 OptionalHeaderStart + dataDirectoriesOffset + ClrRuntimeHeaderDirectoryIndex * 8;
             WriteInt32(image, clrDirectoryOffset, (int)clrRuntimeHeaderRva);
-            WriteInt32(image, clrDirectoryOffset + 4, clrRuntimeHeaderRva == 0 ? 0 : 72);
+            WriteInt32(image, clrDirectoryOffset + 4, (int)clrRuntimeHeaderSize);
 
             return image;
         }

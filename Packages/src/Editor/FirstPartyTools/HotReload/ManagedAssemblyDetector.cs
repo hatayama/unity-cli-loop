@@ -34,34 +34,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             using FileStream stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             using BinaryReader reader = new BinaryReader(stream);
 
-            if (stream.Length < DosHeaderSize)
+            long coffHeaderStart = ReadCoffHeaderStart(stream, reader);
+            if (coffHeaderStart < 0)
             {
                 return false;
             }
 
-            // DOS header magic 'M','Z'.
-            if (reader.ReadByte() != 0x4D || reader.ReadByte() != 0x5A)
-            {
-                return false;
-            }
-
-            stream.Position = PeSignatureOffsetLocation;
-            int peSignatureOffset = reader.ReadInt32();
-            if (peSignatureOffset < DosHeaderSize
-                || peSignatureOffset > stream.Length - PeSignatureSize - CoffHeaderSize)
-            {
-                return false;
-            }
-
-            // PE signature 'P','E','\0','\0'.
-            stream.Position = peSignatureOffset;
-            if (reader.ReadByte() != 0x50 || reader.ReadByte() != 0x45
-                || reader.ReadByte() != 0 || reader.ReadByte() != 0)
-            {
-                return false;
-            }
-
-            long coffHeaderStart = peSignatureOffset + PeSignatureSize;
             stream.Position = coffHeaderStart + SizeOfOptionalHeaderOffsetInCoff;
             ushort optionalHeaderSize = reader.ReadUInt16();
             long optionalHeaderStart = coffHeaderStart + CoffHeaderSize;
@@ -73,19 +51,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             stream.Position = optionalHeaderStart;
             ushort optionalHeaderMagic = reader.ReadUInt16();
-            int rvaCountOffset;
-            int dataDirectoriesOffset;
-            if (optionalHeaderMagic == Pe32Magic)
-            {
-                rvaCountOffset = Pe32RvaCountOffset;
-                dataDirectoriesOffset = Pe32DataDirectoriesOffset;
-            }
-            else if (optionalHeaderMagic == Pe32PlusMagic)
-            {
-                rvaCountOffset = Pe32PlusRvaCountOffset;
-                dataDirectoriesOffset = Pe32PlusDataDirectoriesOffset;
-            }
-            else
+            int rvaCountOffset = ResolveRvaCountOffset(optionalHeaderMagic);
+            int dataDirectoriesOffset = ResolveDataDirectoriesOffset(optionalHeaderMagic);
+            if (rvaCountOffset < 0 || dataDirectoriesOffset < 0)
             {
                 return false;
             }
@@ -106,7 +74,76 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             stream.Position = optionalHeaderStart + clrDirectoryOffset;
             uint clrRuntimeHeaderRva = reader.ReadUInt32();
-            return clrRuntimeHeaderRva != 0;
+            uint clrRuntimeHeaderSize = reader.ReadUInt32();
+            // A non-zero RVA paired with a zero size is a malformed image (real compilers emit
+            // size 72), so it is rejected per the malformed-returns-false policy.
+            return clrRuntimeHeaderRva != 0 && clrRuntimeHeaderSize != 0;
+        }
+
+        // Validates the DOS header, PE signature offset, and PE signature, and returns the
+        // COFF header start offset; -1 means the preamble is not a well-formed PE image.
+        private static long ReadCoffHeaderStart(FileStream stream, BinaryReader reader)
+        {
+            if (stream.Length < DosHeaderSize)
+            {
+                return -1;
+            }
+
+            // DOS header magic 'M','Z'.
+            if (reader.ReadByte() != 0x4D || reader.ReadByte() != 0x5A)
+            {
+                return -1;
+            }
+
+            stream.Position = PeSignatureOffsetLocation;
+            int peSignatureOffset = reader.ReadInt32();
+            if (peSignatureOffset < DosHeaderSize
+                || peSignatureOffset > stream.Length - PeSignatureSize - CoffHeaderSize)
+            {
+                return -1;
+            }
+
+            // PE signature 'P','E','\0','\0'.
+            stream.Position = peSignatureOffset;
+            if (reader.ReadByte() != 0x50 || reader.ReadByte() != 0x45
+                || reader.ReadByte() != 0 || reader.ReadByte() != 0)
+            {
+                return -1;
+            }
+
+            return peSignatureOffset + PeSignatureSize;
+        }
+
+        // -1 means the optional-header magic is neither PE32 nor PE32+.
+        private static int ResolveRvaCountOffset(ushort optionalHeaderMagic)
+        {
+            if (optionalHeaderMagic == Pe32Magic)
+            {
+                return Pe32RvaCountOffset;
+            }
+
+            if (optionalHeaderMagic == Pe32PlusMagic)
+            {
+                return Pe32PlusRvaCountOffset;
+            }
+
+            return -1;
+        }
+
+        // -1 means the optional-header magic is neither PE32 nor PE32+.
+        private static int ResolveDataDirectoriesOffset(ushort optionalHeaderMagic)
+        {
+            if (optionalHeaderMagic == Pe32Magic)
+            {
+                return Pe32DataDirectoriesOffset;
+            }
+
+            if (optionalHeaderMagic == Pe32PlusMagic)
+            {
+                return Pe32PlusDataDirectoriesOffset;
+            }
+
+            return -1;
         }
     }
 }
