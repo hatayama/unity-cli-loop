@@ -92,7 +92,9 @@ Test file: `HotReloadSpikeS2WorkerBootstrapTests.cs`.
 
 - The Unity-bundled csc (`csc.dll` on the bundled .NET host) compiles a standalone worker
   executable against the bundled shared framework (`-nostdlib+ -target:exe`, references =
-  every dll in `NetCoreRuntimeSharedDirectoryPath` + the two bundled Roslyn assemblies).
+  every managed assembly in `NetCoreRuntimeSharedDirectoryPath` + the two bundled Roslyn
+  assemblies; on Windows that directory also ships native PE images, which are filtered out
+  because csc rejects them with CS0009).
 - The worker resolves `Microsoft.CodeAnalysis*` at runtime from the compiler directory via
   an `AssemblyLoadContext.Default.Resolving` hook registered in `Main` before any Roslyn
   type is touched (Roslyn usage lives in a separate method so `Main`'s JIT does not trigger
