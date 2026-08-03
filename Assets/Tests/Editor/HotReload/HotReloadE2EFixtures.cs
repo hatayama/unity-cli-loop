@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
@@ -80,8 +81,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return 2;
         }
 
+        // Why NoInlining on every patch target below: these fixtures verify detour mechanics,
+        // and without the attribute the x64 Mono JIT can inline the tiny original bodies into
+        // a test method that was JIT-compiled before the patch was applied, so the assertions
+        // would measure JIT inlining instead of patching.
+
         // Sentinel body: hot reload must replace this with a private-touching shim that returns
         // _secret + delta + 100.
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ComputeWithPrivate(int delta)
         {
             return _secret + delta;
@@ -108,6 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // Sync method + query syntax referencing a private field — worker emits a delegation
         // entry (accessor rewrite); orchestrator leaves it unpatched until the delegation pass.
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int QueryPrivate()
         {
             int[] values = { 1, 2, 3 };
@@ -122,6 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // Multidimensional array parameter — exercises Cecil FullName `[0...,0...]` matching.
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int SumGrid(int[,] grid)
         {
             return -1;
@@ -196,6 +205,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private int HiddenScore { get; set; } = 3;
 
         // v2 e2e (1): async body with private field write + private method call.
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public async Task<int> AsyncPrivateFieldAndMethod(int delta)
         {
             await Task.Yield();
@@ -203,12 +213,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // v2 e2e (2): iterator body with the same private accesses.
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public IEnumerator IteratePrivate(int delta)
         {
             yield return _secret + delta;
         }
 
         // v2 e2e (3): lambda capture reading a private field.
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int LambdaPrivate(int threshold)
         {
             Func<int, bool> pred = v => v < _secret;
@@ -216,6 +228,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // v2 e2e (4): private property read/write round-trip.
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int PropertyPrivateRoundTrip(int value)
         {
             HiddenScore = value;
