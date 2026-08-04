@@ -498,11 +498,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Canvas.ForceUpdateCanvases();
-            // Why clear only with no cameras: Screen Space Overlay can leave a permanent badge
-            // composite on the Play Mode RT when nothing rewrites it. With cameras present, the
-            // next Game view redraw overwrites the RT — clearing to black would destroy a valid
-            // frame and yield an all-black PNG if capture runs before that redraw.
-            if (Camera.allCamerasCount == 0)
+            // Why clear only without eligible Game cameras: an eligible camera will overwrite the
+            // Play Mode RT on the next redraw, so clearing to black would destroy a valid frame.
+            // With no eligible camera (including offscreen-only setups), hide the overlay's leftover
+            // badge composite by clearing — same predicate as PlayModeViewRenderWaiter.
+            if (!PlayModeViewRenderWaiter.HasEligibleGameCamera())
             {
                 GameViewBridge.ClearMainPlayModeViewRenderTexture();
             }

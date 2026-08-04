@@ -94,6 +94,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             try
             {
                 System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                // Why sawTick: the inner wait's timeout is the remaining overall budget, so false
+                // usually means that budget expired — not that editor ticks are stalled. Only treat
+                // the first wait failure (no successful tick yet) as TicksStalled.
+                bool sawTick = false;
                 while (stopwatch.ElapsedMilliseconds < timeoutMilliseconds)
                 {
                     // Why SwitchTo: WaitFramesOrTimeoutAsync continuations leave the main thread,
@@ -117,9 +121,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ct).ConfigureAwait(false);
                     if (!tick)
                     {
-                        return PlayModeViewRenderWaitResult.TicksStalled;
+                        return sawTick
+                            ? PlayModeViewRenderWaitResult.NotRendered
+                            : PlayModeViewRenderWaitResult.TicksStalled;
                     }
 
+                    sawTick = true;
                     if (gameCameraRendered)
                     {
                         return PlayModeViewRenderWaitResult.Rendered;
@@ -149,9 +156,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// True when at least one eligible Game camera exists in Camera.allCameras.
-        /// Must use the same predicate as the render subscriptions.
+        /// Must use the same predicate as the render subscriptions and the overlay-hide clear guard.
         /// </summary>
-        private static bool HasEligibleGameCamera()
+        internal static bool HasEligibleGameCamera()
         {
             Camera[] cameras = Camera.allCameras;
             for (int i = 0; i < cameras.Length; i++)
