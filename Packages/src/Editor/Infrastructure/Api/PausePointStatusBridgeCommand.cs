@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
@@ -137,6 +138,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public string ClearedReason { get; set; } = string.Empty;
         public string StatusBeforeClear { get; set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; set; }
+        public bool SuppressedByHotReload { get; set; }
+        // Null when unset so the status contract omits Warning (matches Go omitempty).
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string Warning { get; set; }
 
         internal static PausePointStatusResponse FromSnapshot(UloopPausePointSnapshot snapshot)
         {
@@ -180,7 +185,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 TruncatedVariableCount = snapshot.TruncatedVariableCount,
                 ClearedReason = snapshot.ClearedReason,
                 StatusBeforeClear = snapshot.StatusBeforeClear,
-                LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear
+                LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear,
+                SuppressedByHotReload = snapshot.SuppressedByHotReload,
+                Warning = snapshot.SuppressedByHotReload
+                    ? "This method is currently hot-reload patched; the marker's instrumentation was discarded and it will not fire until 'uloop hot-reload --revert-all' or 'uloop compile'."
+                    : null
             };
         }
     }

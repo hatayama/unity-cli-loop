@@ -8,6 +8,7 @@ using HarmonyLib;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -41,6 +42,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             UloopPausePointRegistry.OnCleared = Unpatch;
             UloopPausePointRegistry.OnClearedAll = UnpatchAll;
+            HotReloadPausePointCoordination.GetArmedMarkerIdsOnMethod = GetArmedMarkerIds;
+            HotReloadPausePointCoordination.OnHotReloadPatchStateChanged = HandleHotReloadPatchStateChanged;
+        }
+
+        // What: lets the hot-reload tool list the marker ids it is about to suppress.
+        private static IReadOnlyList<string> GetArmedMarkerIds(MethodBase method)
+        {
+            if (!InjectionsByMethod.TryGetValue(method, out List<SourcePausePointPatchInjection> injections))
+            {
+                return Array.Empty<string>();
+            }
+            return injections.Select(injection => injection.Id).ToList();
+        }
+
+        // What: mirrors the hot-reload patch state onto every marker of the method so
+        // status responses can explain why an armed marker went silent.
+        private static void HandleHotReloadPatchStateChanged(MethodBase method, bool isPatched)
+        {
+            if (!InjectionsByMethod.TryGetValue(method, out List<SourcePausePointPatchInjection> injections))
+            {
+                return;
+            }
+            foreach (SourcePausePointPatchInjection injection in injections)
+            {
+                UloopPausePointRegistry.SetSuppressedByHotReload(injection.Id, isPatched);
+            }
         }
 
         public static SourcePausePointPatchResult Patch(string id, SourcePausePointResolution resolution)
@@ -65,6 +92,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!patchabilityResult.Success)
             {
                 return patchabilityResult;
+            }
+
+            bool patchedByHotReload =
+                HotReloadPausePointCoordination.IsMethodPatchedByHotReload?.Invoke(method) ?? false;
+            if (patchedByHotReload)
+            {
+                return SourcePausePointPatchResult.Failure(
+                    SourcePausePointPatchFailureReason.MethodPatchedByHotReload,
+                    $"'{method.DeclaringType?.Name}.{method.Name}' is currently hot-reload patched; " +
+                    "pause-point instrumentation resolves instruction positions and local slots " +
+                    "against the pre-patch compiled body, which no longer exists at runtime.",
+                    "Run 'uloop hot-reload --revert-all' or 'uloop compile' first, then enable " +
+                    "the marker.");
             }
 
             SourcePausePointPatchInjection injection = new(
@@ -326,6 +366,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return list;
             }
 
+            bool patchedByHotReload =
+                HotReloadPausePointCoordination.IsMethodPatchedByHotReload?.Invoke(original) ?? false;
+            if (patchedByHotReload)
+            {
+                // Injections resolve instruction indexes and local slots against the
+                // pre-patch body; on a hot-reload shim stream they would land at a
+                // meaningless offset, read stale local slots, or run past the end of the
+                // list. Enable already rejects new markers on patched methods; this guard
+                // covers Unpatch of a sibling marker while the method is hot-reload
+                // patched: re-Patching the survivors registers a new transpiler that runs
+                // after the hot-reload one and therefore receives the shim stream. During
+                // the hot-reload apply itself the guard is inert (the ledger is written
+                // after Patch succeeds), which is fine — the hot-reload transpiler
+                // discards prior transpiler output anyway.
+                return list;
+            }
+
             foreach (SourcePausePointPatchInjection injection in injections.OrderByDescending(i => i.InstructionIndex))
             {
                 Label skip = generator.DefineLabel();
@@ -334,6 +391,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // The instruction we insert before may be a branch target or a try/catch/finally
                 // boundary marker; both must move to the new first instruction so control flow and
                 // exception regions still land in the same place, now with our prefix folded in.
+                Debug.Assert(
+                    injection.InstructionIndex < list.Count,
+                    "An injection's index must exist in the current instruction stream.");
                 CodeInstruction displaced = list[injection.InstructionIndex];
                 emitted[0].labels.AddRange(displaced.labels);
                 displaced.labels.Clear();
@@ -365,7 +425,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             AppendInstanceLoad(emitted, injection, method);
 
-            ParameterInfo[] runtimeParameters = method.GetParameters();
+            // Fully qualify: ToolContracts also defines ParameterInfo (tool schema DTO).
+            System.Reflection.ParameterInfo[] runtimeParameters = method.GetParameters();
             int argOffset = injection.IsStatic ? 0 : 1;
             AppendNameValueArray(
                 emitted,

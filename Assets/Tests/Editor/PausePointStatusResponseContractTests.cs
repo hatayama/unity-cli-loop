@@ -83,7 +83,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 TruncatedVariableCount = 1,
                 ClearedReason = "",
                 StatusBeforeClear = "",
-                LateHitDiscardedAfterClear = false
+                LateHitDiscardedAfterClear = false,
+                SuppressedByHotReload = false
             };
             string json = JsonConvert.SerializeObject(
                 response,

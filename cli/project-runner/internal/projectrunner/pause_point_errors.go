@@ -126,11 +126,18 @@ const (
 		"(1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; " +
 		"(2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; " +
 		"(3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran."
+
+	// pausePointHintSuppressedByHotReload short-circuits every other timeout diagnosis:
+	// a suppressed marker cannot fire no matter what the caller does in PlayMode.
+	pausePointHintSuppressedByHotReload = "The marker's method is currently hot-reload patched: the patch discarded the marker's instrumentation, so it cannot fire no matter how often the code path runs. Run `uloop hot-reload --revert-all` (or `uloop compile`) to restore it, then trigger the code path and wait again."
 )
 
 // pausePointTimeoutHint maps the final probed status to a deterministic diagnosis,
 // because timeouts are where agents struggle to tell a missed code path from Editor state.
 func pausePointTimeoutHint(response pausePointStatusResponse, hasNewHitBaseline bool) string {
+	if response.SuppressedByHotReload {
+		return pausePointHintSuppressedByHotReload
+	}
 	if hasNewHitBaseline {
 		return pausePointHintAlreadyHitWaitingForNew
 	}
@@ -154,6 +161,9 @@ func pausePointTimeoutHint(response pausePointStatusResponse, hasNewHitBaseline 
 // whose enable window ends before the wait deadline surfaces as PAUSE_POINT_EXPIRED instead
 // of a timeout and would otherwise carry no hint at all.
 func pausePointExpiredHint(response pausePointStatusResponse) string {
+	if response.SuppressedByHotReload {
+		return pausePointHintSuppressedByHotReload
+	}
 	if !response.EditorState.IsPlaying {
 		return pausePointHintPlayModeNotRunning
 	}
@@ -202,6 +212,7 @@ func pausePointStateError(
 			"RemainingMilliseconds":           pausePointRemainingMilliseconds(options, response),
 			"MarkerMessage":                   response.Message,
 			"RecommendedNextAction":           response.RecommendedNextAction,
+			"SuppressedByHotReload":           response.SuppressedByHotReload,
 		},
 	}
 }

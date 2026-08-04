@@ -146,6 +146,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string ErrorCodeReleaseCodeOptimization = "PAUSE_POINT_RELEASE_CODE_OPTIMIZATION";
         public const string ErrorCodeResolveFailed = "PAUSE_POINT_RESOLVE_FAILED";
         public const string ErrorCodePatchFailed = "PAUSE_POINT_PATCH_FAILED";
+        public const string ErrorCodePausePointPatchedByHotReload = "PAUSE_POINT_PATCHED_BY_HOT_RELOAD";
 
         // Why: Debug mode is lost on every Editor restart (including uloop launch -r), so the
         // recovery steps must remind callers to re-switch after restart rather than only once.

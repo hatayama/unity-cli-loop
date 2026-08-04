@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -11,17 +12,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public IReadOnlyList<string> Warnings { get; }
         public int PatchedTotal { get; }
         public int ActivePatchTotal { get; }
+        public IReadOnlyList<string> SuppressedPausePointIds { get; }
 
         public HotReloadOrchestratorResult(
             IReadOnlyList<HotReloadMethodOutcome> methods,
             IReadOnlyList<string> warnings,
             int patchedTotal,
-            int activePatchTotal)
+            int activePatchTotal,
+            IReadOnlyList<string> suppressedPausePointIds = null)
         {
             Methods = methods;
             Warnings = warnings;
             PatchedTotal = patchedTotal;
             ActivePatchTotal = activePatchTotal;
+            SuppressedPausePointIds = suppressedPausePointIds ?? Array.Empty<string>();
         }
     }
 

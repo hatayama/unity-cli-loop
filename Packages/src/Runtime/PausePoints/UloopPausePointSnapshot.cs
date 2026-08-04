@@ -41,7 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int truncatedVariableCount,
             string clearedReason,
             string statusBeforeClear,
-            bool lateHitDiscardedAfterClear)
+            bool lateHitDiscardedAfterClear,
+            bool suppressedByHotReload)
         {
             Debug.Assert(editorState != null, "editorState must not be null");
 
@@ -75,6 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             ClearedReason = clearedReason ?? string.Empty;
             StatusBeforeClear = statusBeforeClear ?? string.Empty;
             LateHitDiscardedAfterClear = lateHitDiscardedAfterClear;
+            SuppressedByHotReload = suppressedByHotReload;
         }
 
         public string Id { get; }
@@ -107,6 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string ClearedReason { get; }
         public string StatusBeforeClear { get; }
         public bool LateHitDiscardedAfterClear { get; }
+        public bool SuppressedByHotReload { get; }
 
         public static UloopPausePointSnapshot NotEnabled(string id, IUloopPausePointPauseController pauseController)
         {
@@ -144,6 +147,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 0,
                 string.Empty,
                 string.Empty,
+                false,
                 false);
         }
     }

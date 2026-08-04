@@ -206,8 +206,11 @@ Wire details:
 - In-flight async methods and coroutines keep running the old code until re-entered.
 - Callers whose call sites were JIT-inlined may not observe the detour (`IsLikelyJitInlined`
   heuristic produces a warning, as with pause points).
-- A transplanted method discards other transpilers' output on that method; in particular a
-  pause point on a hot-reloaded method stops firing. The response carries a warning.
+- A pause point armed before a hot reload of the same method stops firing. The apply
+  response lists the affected marker ids, `pause-point-status` reports
+  `SuppressedByHotReload: true`, and enabling a new marker on a currently patched
+  method is rejected with `PAUSE_POINT_PATCHED_BY_HOT_RELOAD`. Reverting the patch
+  restores armed markers and clears the flag.
 
 ## Open Questions Tracked for Implementation
 
