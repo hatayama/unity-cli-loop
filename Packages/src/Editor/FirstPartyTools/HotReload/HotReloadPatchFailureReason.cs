@@ -13,5 +13,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         UnpatchableValueType,
         NullMethod,
         NullShimMethod,
+        ApplyFailed,
     }
 }
