@@ -219,6 +219,10 @@ public static class TransformWorkerProgram
                 continue;
             }
 
+            // Accessors are never patched in v1; report each explicit-body accessor as Skipped
+            // so an edited getter/setter never disappears from the response silently.
+            AppendExplicitAccessorSkips(typeDeclaration, semanticModel, skipped);
+
             List<MethodDeclarationSyntax> methods = typeDeclaration.Members
                 .OfType<MethodDeclarationSyntax>()
                 .ToList();
@@ -436,6 +440,112 @@ public static class TransformWorkerProgram
         }
 
         return Convert.ToString(value, CultureInfo.InvariantCulture);
+    }
+
+    private const string ExplicitAccessorSkipReason =
+        "Property and indexer accessors are out of scope for v1; run 'uloop compile' to apply accessor edits.";
+
+    // What: reports each property/indexer accessor that has an explicit body as Skipped.
+    // Auto-properties ({ get; set; }) have no body and are not listed.
+    private static void AppendExplicitAccessorSkips(
+        TypeDeclarationSyntax typeDeclaration,
+        SemanticModel semanticModel,
+        List<WorkerSkipped> skipped)
+    {
+        foreach (MemberDeclarationSyntax member in typeDeclaration.Members)
+        {
+            if (member is PropertyDeclarationSyntax propertyDeclaration)
+            {
+                AppendExplicitAccessorSkipsForProperty(
+                    propertyDeclaration,
+                    semanticModel.GetDeclaredSymbol(propertyDeclaration),
+                    skipped);
+                continue;
+            }
+
+            if (member is IndexerDeclarationSyntax indexerDeclaration)
+            {
+                AppendExplicitAccessorSkipsForProperty(
+                    indexerDeclaration,
+                    semanticModel.GetDeclaredSymbol(indexerDeclaration),
+                    skipped);
+            }
+        }
+    }
+
+    private static void AppendExplicitAccessorSkipsForProperty(
+        BasePropertyDeclarationSyntax propertyDeclaration,
+        IPropertySymbol propertySymbol,
+        List<WorkerSkipped> skipped)
+    {
+        if (propertySymbol == null)
+        {
+            return;
+        }
+
+        // Expression-bodied property/indexer (`=> expr`) is the getter body.
+        bool hasExpressionBody =
+            (propertyDeclaration is PropertyDeclarationSyntax propertyWithExpression
+                && propertyWithExpression.ExpressionBody != null)
+            || (propertyDeclaration is IndexerDeclarationSyntax indexerWithExpression
+                && indexerWithExpression.ExpressionBody != null);
+        if (hasExpressionBody)
+        {
+            if (propertySymbol.GetMethod != null)
+            {
+                skipped.Add(new WorkerSkipped
+                {
+                    Method = FormatMethodLabel(propertySymbol.GetMethod),
+                    Reason = ExplicitAccessorSkipReason
+                });
+            }
+
+            return;
+        }
+
+        if (propertyDeclaration.AccessorList == null)
+        {
+            return;
+        }
+
+        foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
+        {
+            // Auto-properties emit accessors with neither Body nor ExpressionBody.
+            if (accessor.Body == null && accessor.ExpressionBody == null)
+            {
+                continue;
+            }
+
+            IMethodSymbol accessorMethod = ResolveAccessorMethodSymbol(propertySymbol, accessor.Kind());
+            if (accessorMethod == null)
+            {
+                continue;
+            }
+
+            skipped.Add(new WorkerSkipped
+            {
+                Method = FormatMethodLabel(accessorMethod),
+                Reason = ExplicitAccessorSkipReason
+            });
+        }
+    }
+
+    private static IMethodSymbol ResolveAccessorMethodSymbol(
+        IPropertySymbol propertySymbol,
+        SyntaxKind accessorKind)
+    {
+        if (accessorKind == SyntaxKind.GetAccessorDeclaration)
+        {
+            return propertySymbol.GetMethod;
+        }
+
+        if (accessorKind == SyntaxKind.SetAccessorDeclaration
+            || accessorKind == SyntaxKind.InitAccessorDeclaration)
+        {
+            return propertySymbol.SetMethod;
+        }
+
+        return null;
     }
 
     private static IEnumerable<TypeDeclarationSyntax> EnumerateTypeDeclarations(CompilationUnitSyntax root)
