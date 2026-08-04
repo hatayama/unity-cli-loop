@@ -239,6 +239,79 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: one orchestrator run over the fixture reports the explicit-body property getter,
+        /// the explicit-body property setter, and the expression-bodied indexer getter as Skipped
+        /// with the v1 accessor reason, while auto-property accessors stay unlisted.
+        /// </summary>
+        [Test]
+        public async Task Run_ExplicitAccessorsSkipped_AutoPropertyAccessorsUnlisted()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "ExplicitBodyGetter.cs",
+                BuildFixtureSource(
+                    "public int ComputeWithPrivate(int delta)\n"
+                    + "        {\n"
+                    + "            return _secret + delta;\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                contentPathOverride: editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+
+            const string expectedReason =
+                "Property and indexer accessors are out of scope for v1; run 'uloop compile' to apply accessor edits.";
+            bool foundPropertyGetter = false;
+            bool foundIndexerGetter = false;
+            bool foundPropertySetter = false;
+            bool foundAutoPropertyAccessor = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                bool skippedWithAccessorReason = outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Reason == expectedReason;
+                if (skippedWithAccessorReason && outcome.Method.Contains("get_ExplicitBodyGetter"))
+                {
+                    foundPropertyGetter = true;
+                }
+
+                if (skippedWithAccessorReason && outcome.Method.Contains("get_Item"))
+                {
+                    foundIndexerGetter = true;
+                }
+
+                if (skippedWithAccessorReason && outcome.Method.Contains("set_ExplicitBodySetter"))
+                {
+                    foundPropertySetter = true;
+                }
+
+                if (outcome.Method.Contains("get_HiddenScore") || outcome.Method.Contains("set_HiddenScore"))
+                {
+                    foundAutoPropertyAccessor = true;
+                }
+            }
+
+            Assert.That(
+                foundPropertyGetter,
+                Is.True,
+                "Expected get_ExplicitBodyGetter to be Skipped with the accessor out-of-scope reason.");
+            Assert.That(
+                foundIndexerGetter,
+                Is.True,
+                "Expected the expression-bodied indexer getter (get_Item) to be Skipped with the accessor out-of-scope reason.");
+            Assert.That(
+                foundPropertySetter,
+                Is.True,
+                "Expected the explicit-body setter (set_ExplicitBodySetter) to be Skipped with the accessor out-of-scope reason.");
+            Assert.That(
+                foundAutoPropertyAccessor,
+                Is.False,
+                "Auto-property accessors must not be listed; only explicit-body accessors are reported.");
+        }
+
+        /// <summary>
         /// What: a mixed transplant+delegation fixture patches both the sync private-access
         /// method (transplant) and the LINQ private-access method (delegation).
         /// </summary>
@@ -860,6 +933,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         " + tuningConst + @"
 
         public int SecretForAssert => _secret;
+
+        // Explicit-body getter — worker must report get_ExplicitBodyGetter as Skipped (not silent).
+        public int ExplicitBodyGetter
+        {
+            get { return _secret; }
+        }
+
+        // Explicit-body setter — worker must report set_ExplicitBodySetter as Skipped (not silent).
+        public int ExplicitBodySetter
+        {
+            set { _secret = value; }
+        }
 
         public int Counter;
 
