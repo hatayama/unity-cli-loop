@@ -77,17 +77,15 @@ Edits outside method bodies never take effect: changing a `const` value, a field
 ## When a patch reports `Patched` but behavior does not change
 
 `Patched` means the method body was replaced, not that the method ran. Before suspecting
-the patch, confirm the method is actually reached: arm
-`uloop enable-pause-point --mode trace` on the method's first line, then drive the game
-and check the hit count — zero hits means the calling path never reached the method,
-which no patch can fix. Arm the marker after the hot-reload run, not before — and if the
-same marker already existed, clear it and enable it again, because re-enabling an
-existing marker re-arms its hit counter without re-injecting the discarded
-instrumentation. Note that enabling a pause point on a currently patched method is rejected with
-`PAUSE_POINT_PATCHED_BY_HOT_RELOAD` (see the pause point interaction below); compile or
-revert first. To chase an early return inside the method, revert or `uloop compile` first. The
-other known cause is JIT inlining of tiny methods, which the response already flags with
-a per-method warning.
+the patch, confirm the method is actually reached. A currently patched method rejects new
+pause points with `PAUSE_POINT_PATCHED_BY_HOT_RELOAD` (see the pause point interaction
+below), so run `uloop compile` first — it makes the edits real and its domain reload
+clears every patch — then arm `uloop enable-pause-point --mode trace` on the method's
+first line, drive the game, and check the hit count: zero hits means the calling path
+never reached the method, which no patch (or compile) can fix. To chase an early return
+inside the method, arm a second marker on the suspected early-return line. The other
+known cause is JIT inlining of tiny methods, which the response already flags with a
+per-method warning.
 
 ## Convergence and lifecycle
 
