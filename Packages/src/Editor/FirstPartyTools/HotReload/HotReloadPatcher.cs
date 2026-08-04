@@ -89,6 +89,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     transpiler: new HarmonyMethod(transpilerMethodInfo));
                 ShimByMethod[method] = shimMethodInfo;
             }
+            catch (Exception exception)
+            {
+                // User-approved exception to the no-try-catch policy: Harmony emit/JIT
+                // failures cannot be pre-validated (the IL shape is only known inside
+                // Harmony), and an escaping exception would abort the whole run while
+                // silently leaving previously patched methods active. Contain it as this
+                // method's Failed outcome so the per-method contract holds. Unpatch scrubs
+                // the transpiler Harmony may have registered before the wrapper update
+                // failed (a no-op when nothing was registered).
+                HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
+                return HotReloadPatchResult.Failure(
+                    HotReloadPatchFailureReason.ApplyFailed,
+                    $"Applying the patch to '{method}' failed: " +
+                    $"{exception.GetType().Name}: {exception.Message} " +
+                    "Other methods in this run are unaffected.");
+            }
             finally
             {
                 _pendingShimMethod = null;
