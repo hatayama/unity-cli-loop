@@ -71,19 +71,21 @@ Edits outside method bodies never take effect: changing a `const` value, a field
 | Source file fails to parse | Per-file entry carrying the parse errors |
 | Method signature not found in the loaded assembly | New, renamed, or re-signatured members need `uloop compile` |
 | Shim compile error (e.g. the body calls a member that does not exist yet) | Response carries the compiler error and a hint to run `uloop compile` |
-| Patch rejected or crashed at apply time (e.g. `[BurstCompile]`, a patch-engine emit failure) | The entry carries the underlying engine error; other methods in the run still apply |
+| Patch rejected or crashed at apply time (e.g. `[BurstCompile]`, a patch-engine emit failure) | The entry carries the rejection reason or the underlying engine error; other methods in the run still apply |
 | Accessor binding failed for a shim type | The source references a member the compiled assembly does not have yet; every delegation-patched method in that shim type reports the binder error — run `uloop compile` and retry |
 
 ## When a patch reports `Patched` but behavior does not change
 
 `Patched` means the method body was replaced, not that the method ran. Before suspecting
 the patch, confirm the method is actually reached: arm
-`uloop enable-pause-point --mode trace` on the method's first line (and, when an early
-return is plausible, a second marker on the line whose effect you expect), then drive the
-game and compare hit counts — zero hits means the calling path never reached the method,
-which no patch can fix. Arm such markers after the hot-reload run, not before (see the
-pause point interaction below). The other known cause is JIT inlining of tiny methods,
-which the response already flags with a per-method warning.
+`uloop enable-pause-point --mode trace` on the method's first line, then drive the game
+and check the hit count — zero hits means the calling path never reached the method,
+which no patch can fix. Arm the marker after the hot-reload run, not before, and keep it
+on the first line: on a currently patched method, deeper lines and local capture resolve
+against the pre-patch compiled body and are not reliable (see the pause point interaction
+below). To chase an early return inside the method, revert or `uloop compile` first. The
+other known cause is JIT inlining of tiny methods, which the response already flags with
+a per-method warning.
 
 ## Convergence and lifecycle
 
@@ -105,13 +107,17 @@ source pause points is therefore order-dependent:
   its instrumentation was part of the discarded IL. `pause-point-status` still reports
   `Enabled` with nothing hinting at the cause. Apply responses include a `Warnings` entry
   whenever any method was patched.
-- A pause point armed (or re-armed) **after** the hot reload fires normally on the
-  patched method.
+- A pause point armed (or re-armed) **after** the hot reload fires on the method's
+  first line and captures parameters and `this` fields normally. Markers on deeper
+  lines — and captured method locals — resolve against the pre-patch compiled body,
+  so they may land on the wrong instruction or read stale slots; treat them as
+  unreliable until the patch is reverted or compiled for real.
 - `--revert-all` (or a domain reload) restores the original IL, and previously armed
   pause points fire again.
 
-So hot reload and pause points do compose: after each `uloop hot-reload` run, re-arm any
-pause point that targets a patched method.
+So hot reload and pause points do compose for reachability checks: after each
+`uloop hot-reload` run, re-arm first-line markers on patched methods, and defer
+deeper markers until `--revert-all` or a real `uloop compile`.
 
 ## Output
 

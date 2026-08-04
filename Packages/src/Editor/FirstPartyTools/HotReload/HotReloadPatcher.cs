@@ -41,6 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Patches <paramref name="method"/> with <paramref name="shimMethodInfo"/> using
         /// <paramref name="patchShape"/>. Re-applying the same method Unpatches the previous
         /// transpiler first so patches do not stack.
+        /// Engine failures during apply never throw; they are contained as an
+        /// <see cref="HotReloadPatchFailureReason.ApplyFailed"/> result for that method only.
         /// </summary>
         public static HotReloadPatchResult Apply(
             MethodBase method,
@@ -95,14 +97,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // failures cannot be pre-validated (the IL shape is only known inside
                 // Harmony), and an escaping exception would abort the whole run while
                 // silently leaving previously patched methods active. Contain it as this
-                // method's Failed outcome so the per-method contract holds. Unpatch scrubs
-                // the transpiler Harmony may have registered before the wrapper update
-                // failed (a no-op when nothing was registered).
+                // method's Failed outcome so the per-method contract holds. Unpatch removes
+                // the transpiler this call registered before failing and rebuilds the
+                // wrapper, restoring the original body (verified by the extern-shim test).
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
+                Exception rootCause = exception;
+                while (rootCause.InnerException != null)
+                {
+                    rootCause = rootCause.InnerException;
+                }
+
+                string rootCauseSuffix = ReferenceEquals(rootCause, exception)
+                    ? string.Empty
+                    : $" (root cause: {rootCause.GetType().Name}: {rootCause.Message})";
                 return HotReloadPatchResult.Failure(
                     HotReloadPatchFailureReason.ApplyFailed,
                     $"Applying the patch to '{method}' failed: " +
-                    $"{exception.GetType().Name}: {exception.Message} " +
+                    $"{exception.GetType().Name}: {exception.Message}{rootCauseSuffix} " +
                     "Other methods in this run are unaffected.");
             }
             finally
@@ -314,6 +325,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // collide with labels it did define.
         private static void RebindLabels(ILGenerator generator, List<CodeInstruction> instructions)
         {
+            Debug.Assert(generator != null, "RebindLabels requires the patch method ILGenerator.");
+            Debug.Assert(instructions != null, "RebindLabels requires the transplanted instructions.");
+
             Dictionary<Label, Label> ownedLabelByForeign = new Dictionary<Label, Label>();
 
             for (int instructionIndex = 0; instructionIndex < instructions.Count; instructionIndex++)

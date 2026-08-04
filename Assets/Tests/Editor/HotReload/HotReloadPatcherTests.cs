@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 using HarmonyLib;
@@ -180,7 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(await fixture.ReplaceableComputeAsync(5), Is.EqualTo(-5));
         }
 
-        [System.Runtime.InteropServices.DllImport("__Internal")]
+        [DllImport("__Internal")]
         private static extern int ExternShimStub(int value);
 
         /// <summary>

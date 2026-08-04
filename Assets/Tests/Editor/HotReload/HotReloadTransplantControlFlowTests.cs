@@ -87,6 +87,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return center;
         }
 
+        public static Vector3 ShimToCenterTryFinally(Vector3Int position)
+        {
+            Vector3 center = Vector3.zero;
+            try
+            {
+                center.x = position.x + 0.5f;
+                center.y = position.y + 0.5f;
+            }
+            finally
+            {
+                center.z = position.z + 0.5f;
+            }
+
+            return center;
+        }
+
         private static Vector3 ApplyAndInvoke(string shimName)
         {
             MethodInfo original = AccessTools.Method(
@@ -126,8 +142,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a single forward branch (debug-build return jump) lands on the correct
-        /// target — pins against silent mis-branching when label indices happen to collide.
+        /// What: a single forward branch (debug-build return jump) still lands on the correct
+        /// target after rebinding — the shape that passed only by label-index collision before
+        /// the fix.
         /// </summary>
         [Test]
         public void Apply_StructCtorReassignShim_TransplantsAndComputes()
@@ -146,6 +163,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             Assert.That(
                 ApplyAndInvoke(nameof(ShimToCenterSwitch)),
+                Is.EqualTo(new Vector3(1.5f, 2.5f, 3.5f)));
+        }
+
+        /// <summary>
+        /// What: a shim containing try/finally transplants — exception-block marks survive
+        /// the label rebind and the leave target still lands on the correct instruction.
+        /// </summary>
+        [Test]
+        public void Apply_StructTryFinallyShim_TransplantsAndComputes()
+        {
+            Assert.That(
+                ApplyAndInvoke(nameof(ShimToCenterTryFinally)),
                 Is.EqualTo(new Vector3(1.5f, 2.5f, 3.5f)));
         }
     }
