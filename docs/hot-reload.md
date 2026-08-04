@@ -120,6 +120,13 @@ of a prefix).
 **Transplant-primary.** Stage (5) applies a Harmony transpiler per patched method that
 replaces the original instructions with the shim method's instructions.
 
+The transpiler reads the shim body without the patch `ILGenerator`, so both `LocalBuilder`
+operands and branch `Label`s arrive owned by a throwaway generator; the patcher re-declares
+the locals and re-defines the labels on the real generator and rebinds every reference
+(including `switch` target arrays and instruction label marks) before emitting. A foreign
+label otherwise NREs at emit, or silently branches to the wrong target when indices happen
+to collide.
+
 Why transplant over the accessor rewrite:
 
 - The worker-side transform stays exactly the qualification rewrite stage (2) already needs

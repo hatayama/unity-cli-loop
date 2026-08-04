@@ -71,8 +71,19 @@ Edits outside method bodies never take effect: changing a `const` value, a field
 | Source file fails to parse | Per-file entry carrying the parse errors |
 | Method signature not found in the loaded assembly | New, renamed, or re-signatured members need `uloop compile` |
 | Shim compile error (e.g. the body calls a member that does not exist yet) | Response carries the compiler error and a hint to run `uloop compile` |
-| Patch rejected at apply time (e.g. `[BurstCompile]`) | Not patchable by Harmony transplant |
+| Patch rejected or crashed at apply time (e.g. `[BurstCompile]`, a patch-engine emit failure) | The entry carries the underlying engine error; other methods in the run still apply |
 | Accessor binding failed for a shim type | The source references a member the compiled assembly does not have yet; every delegation-patched method in that shim type reports the binder error — run `uloop compile` and retry |
+
+## When a patch reports `Patched` but behavior does not change
+
+`Patched` means the method body was replaced, not that the method ran. Before suspecting
+the patch, confirm the method is actually reached: arm
+`uloop enable-pause-point --mode trace` on the method's first line (and, when an early
+return is plausible, a second marker on the line whose effect you expect), then drive the
+game and compare hit counts — zero hits means the calling path never reached the method,
+which no patch can fix. Arm such markers after the hot-reload run, not before (see the
+pause point interaction below). The other known cause is JIT inlining of tiny methods,
+which the response already flags with a per-method warning.
 
 ## Convergence and lifecycle
 
@@ -87,10 +98,20 @@ Edits outside method bodies never take effect: changing a `const` value, a field
 ## Pause point interaction
 
 Both patch shapes discard the original IL and any prior transpiler output on the patched
-method — delegation replaces the body with a forward to the shim — so a source pause point
-on a hot-reloaded method stops firing until the patch is reverted (`--revert-all`) or a
-domain reload restores the original IL. Apply responses include this as a `Warnings` entry
-whenever any method was patched.
+method — delegation replaces the body with a forward to the shim. The interaction with
+source pause points is therefore order-dependent:
+
+- A pause point armed **before** a hot reload of the same method silently stops firing —
+  its instrumentation was part of the discarded IL. `pause-point-status` still reports
+  `Enabled` with nothing hinting at the cause. Apply responses include a `Warnings` entry
+  whenever any method was patched.
+- A pause point armed (or re-armed) **after** the hot reload fires normally on the
+  patched method.
+- `--revert-all` (or a domain reload) restores the original IL, and previously armed
+  pause points fire again.
+
+So hot reload and pause points do compose: after each `uloop hot-reload` run, re-arm any
+pause point that targets a patched method.
 
 ## Output
 
