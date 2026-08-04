@@ -142,6 +142,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: Unpatching one of two armed markers while the method is hot-reload patched
+        /// does not re-instrument the surviving marker into the shim stream (and does not throw).
+        /// </summary>
+        [Test]
+        public void Unpatch_SiblingMarker_WhileHotReloadPatched_DoesNotReinstrumentSurvivors()
+        {
+            const string id1 = "contract-sibling-unpatch-a";
+            const string id2 = "contract-sibling-unpatch-b";
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadPausePointDeepFixture),
+                nameof(HotReloadPausePointDeepFixture.DeepStatements));
+            MethodInfo shim = AccessTools.Method(
+                typeof(HotReloadPausePointContractShims),
+                nameof(HotReloadPausePointContractShims.DeepStatements__shim0));
+
+            UloopPausePointRegistry.Enable(id1, 30);
+            Assert.That(
+                SourcePausePointPatcher.Patch(id1, BuildSyntheticResolution(original, instructionIndex: 0)).Success,
+                Is.True);
+            UloopPausePointRegistry.Enable(id2, 30);
+            Assert.That(
+                SourcePausePointPatcher.Patch(id2, BuildSyntheticResolution(original, instructionIndex: 10)).Success,
+                Is.True);
+
+            Assert.That(
+                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Delegation).Success,
+                Is.True);
+
+            Assert.DoesNotThrow(() => SourcePausePointPatcher.Unpatch(id1));
+
+            HotReloadPausePointDeepFixture fixture = new HotReloadPausePointDeepFixture();
+            Assert.That(fixture.DeepStatements(), Is.EqualTo(99));
+            Assert.That(UloopPausePointRegistry.GetStatus(id2).IsHit, Is.False);
+        }
+
+        /// <summary>
         /// What: RevertAll restores armed-marker instrumentation so invoking the fixture
         /// records a hit again (regression for ledger-clear-before-UnpatchAll ordering).
         /// </summary>

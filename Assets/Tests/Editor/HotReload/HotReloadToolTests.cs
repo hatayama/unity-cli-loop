@@ -107,6 +107,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.Not.Contain(HotReloadConstants.PausePointInteractionWarning));
         }
 
+        /// <summary>
+        /// What: BuildApplyResponse lists suppressed pause-point marker ids in Warnings
+        /// when the orchestrator collected any during the apply.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithSuppressedPausePointIds_AddsAggregatedWarning()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                suppressedPausePointIds: new List<string>
+                {
+                    "Assets/Scripts/A.cs:10",
+                    "Assets/Scripts/B.cs:20"
+                });
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Warnings,
+                Does.Contain(
+                    "Armed pause points on the patched methods will not fire until the patch is reverted or compiled for real: Assets/Scripts/A.cs:10, Assets/Scripts/B.cs:20"));
+        }
+
         [Test]
         public async Task ExecuteAsync_RevertAllWithNoActivePatches_ReportsClearedCountZero()
         {

@@ -373,9 +373,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Injections resolve instruction indexes and local slots against the
                 // pre-patch body; on a hot-reload shim stream they would land at a
                 // meaningless offset, read stale local slots, or run past the end of the
-                // list. Enable already rejects new markers on patched methods; this guards
-                // the re-patch paths (the hot-reload apply itself, and Unpatch of a sibling
-                // marker re-applying the survivors after the hot-reload transpiler).
+                // list. Enable already rejects new markers on patched methods; this guard
+                // covers Unpatch of a sibling marker while the method is hot-reload
+                // patched: re-Patching the survivors registers a new transpiler that runs
+                // after the hot-reload one and therefore receives the shim stream. During
+                // the hot-reload apply itself the guard is inert (the ledger is written
+                // after Patch succeeds), which is fine — the hot-reload transpiler
+                // discards prior transpiler output anyway.
                 return list;
             }
 
