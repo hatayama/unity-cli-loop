@@ -170,6 +170,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a struct-returning method with a loop transplants through the full pipeline
+        /// (edit → worker → shim compile → transplant) and computes the edited value.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedStructReturnLoopMethod_PatchesBehavior()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "CenterOfCell.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    centerOfCellMethod:
+                    "[MethodImpl(MethodImplOptions.NoInlining)]\n"
+                    + "        public Vector3 CenterOfCell(Vector3Int cell)\n"
+                    + "        {\n"
+                    + "            Vector3 center = Vector3.zero;\n"
+                    + "            for (int i = 0; i < 1; i++)\n"
+                    + "            {\n"
+                    + "                center = new Vector3(cell.x + 0.5f, cell.y + 0.5f, cell.z + 0.5f);\n"
+                    + "            }\n"
+                    + "\n"
+                    + "            return center;\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.CenterOfCell));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(
+                fixture.CenterOfCell(new Vector3Int(1, 2, 3)),
+                Is.EqualTo(new Vector3(1.5f, 2.5f, 3.5f)));
+        }
+
+        /// <summary>
         /// What: a method containing base. is reported as Skipped with an explanatory reason.
         /// </summary>
         [Test]
@@ -739,7 +779,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string propertyPrivateRoundTripMethod = null,
             string asyncUsesInternalTypeMethod = null,
             string tuningConstDeclaration = null,
-            string modeEnumDeclaration = null)
+            string modeEnumDeclaration = null,
+            string centerOfCellMethod = null)
         {
             string sumGrid = sumGridMethod ??
                 "public int SumGrid(int[,] grid)\n        {\n            return -1;\n        }";
@@ -777,12 +818,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "private const int TuningConst = 3;";
             string modeEnum = modeEnumDeclaration ??
                 "public enum HotReloadE2EMode\n    {\n        Idle = 0,\n        Active = 1\n    }";
+            string centerOfCell = centerOfCellMethod ??
+                "[MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public Vector3 CenterOfCell(Vector3Int cell)\n"
+                + "        {\n"
+                + "            return Vector3.zero;\n"
+                + "        }";
 
             return @"using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -850,6 +898,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         " + sumGrid + @"
+
+        " + centerOfCell + @"
 
         public int CountEnumerator(List<int>.Enumerator enumerator)
         {
