@@ -43,11 +43,13 @@ ledger across runs.
 
 ## Scope and limits
 
-Only ordinary method declarations are patched. Constructors, finalizers, operators, and
-event accessors are never scanned: edits to them produce **no per-method entry at all**
-and are silently not applied — use `uloop compile` for those.
+Only ordinary method declarations are patched. Constructors, finalizers, operators, event
+accessors, and `interface` members (including default interface implementations) are never
+scanned: edits to them produce **no per-method entry at all** and are silently not applied —
+use `uloop compile` for those.
 
 Edits outside method bodies never take effect: changing a `const` value, a field initializer, or any declaration other than a method body leaves runtime behavior unchanged even though the response reports `Success` — shims resolve those symbols against the already-compiled assembly, and C# bakes `const` values into IL at compile time. Changed `const` values (including enum member values) are detected and reported as a `Warnings` entry naming the constant and both values; other outside-body edits stay silent. Use `uloop compile` for such edits.
+
 Property and indexer accessors with explicit bodies are reported per-accessor as
 `Skipped`, so an edited getter never disappears from the response silently.
 
@@ -63,6 +65,7 @@ Property and indexer accessors with explicit bodies are reported per-accessor as
 | Body contains a `base.` call | `base` cannot be expressed from outside the type |
 | Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates |
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
+| Property or indexer accessor with an explicit body | Accessor patching is out of scope for v1; `uloop compile` applies accessor edits |
 
 ### Failed — flips `Success` to `false`
 
