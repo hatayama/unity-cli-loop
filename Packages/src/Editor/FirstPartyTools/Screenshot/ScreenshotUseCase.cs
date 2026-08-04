@@ -153,16 +153,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // on CLI disconnect; finally must still restore the overlay.
                 if (inputVisualizationWasActive)
                 {
-                    bool hideFramesReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
-                        ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES,
-                        UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
-                        ct).ConfigureAwait(false);
-                    if (!hideFramesReady)
+                    PlayModeViewRenderWaitResult hideWaitResult =
+                        await PlayModeViewRenderWaiter.WaitForRenderedFrameAsync(
+                            UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                            ct).ConfigureAwait(false);
+                    if (hideWaitResult == PlayModeViewRenderWaitResult.TicksStalled)
                     {
                         return CreateTimedOutResult(
                             "input visualization overlay hide",
                             correlationId,
                             new List<ScreenshotInfo>());
+                    }
+
+                    if (hideWaitResult == PlayModeViewRenderWaitResult.NotRendered)
+                    {
+                        VibeLogger.LogWarning(
+                            "screenshot_render_wait_not_confirmed",
+                            "Timed out waiting for a Game camera render after hiding the input visualization overlay; continuing capture.",
+                            correlationId: correlationId);
                     }
 
                     await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
@@ -179,16 +187,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             request.ResolutionScale);
                         Canvas.ForceUpdateCanvases();
                         // Chained CLI calls can read the previous GameView RT before overlay rendering catches up.
-                        bool overlayFramesReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
-                            ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES,
-                            UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
-                            ct).ConfigureAwait(false);
-                        if (!overlayFramesReady)
+                        PlayModeViewRenderWaitResult overlayWaitResult =
+                            await PlayModeViewRenderWaiter.WaitForRenderedFrameAsync(
+                                UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                                ct).ConfigureAwait(false);
+                        if (overlayWaitResult == PlayModeViewRenderWaitResult.TicksStalled)
                         {
                             return CreateTimedOutResult(
                                 "annotation overlay render",
                                 correlationId,
                                 new List<ScreenshotInfo>());
+                        }
+
+                        if (overlayWaitResult == PlayModeViewRenderWaitResult.NotRendered)
+                        {
+                            VibeLogger.LogWarning(
+                                "screenshot_render_wait_not_confirmed",
+                                "Timed out waiting for a Game camera render after showing the annotation overlay; continuing capture.",
+                                correlationId: correlationId);
                         }
 
                         await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
@@ -482,10 +498,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Canvas.ForceUpdateCanvases();
-            // Why clear: with no camera the Play Mode RT never rewrites itself after a Screen Space
-            // Overlay is hidden, so the last badge composite would stay forever. With cameras, the
-            // caller's frame wait redraws the scene without the overlay.
-            GameViewBridge.ClearMainPlayModeViewRenderTexture();
+            // Why clear only with no cameras: Screen Space Overlay can leave a permanent badge
+            // composite on the Play Mode RT when nothing rewrites it. With cameras present, the
+            // next Game view redraw overwrites the RT — clearing to black would destroy a valid
+            // frame and yield an all-black PNG if capture runs before that redraw.
+            if (Camera.allCamerasCount == 0)
+            {
+                GameViewBridge.ClearMainPlayModeViewRenderTexture();
+            }
             GameViewBridge.RepaintMainPlayModeView();
             return (overlay, true);
         }
