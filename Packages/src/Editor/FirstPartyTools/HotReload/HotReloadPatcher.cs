@@ -165,6 +165,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public static int ActivePatchCount => ShimByMethod.Count;
 
+        /// <summary>
+        /// Returns a sorted list of labels for every method currently recorded in the
+        /// patch ledger, for status reporting without applying or reverting patches.
+        /// </summary>
+        public static IReadOnlyList<string> DescribeActivePatches()
+        {
+            List<string> labels = new List<string>(ShimByMethod.Count);
+            foreach (MethodBase method in ShimByMethod.Keys)
+            {
+                Debug.Assert(method.DeclaringType != null, "Patched methods must have a declaring type.");
+                labels.Add(method.DeclaringType.FullName + "." + method.Name);
+            }
+
+            labels.Sort(StringComparer.Ordinal);
+            return labels;
+        }
+
         private static IEnumerable<CodeInstruction> ReplaceWithTransplantSourceTranspiler(
             IEnumerable<CodeInstruction> instructions,
             ILGenerator generator,
