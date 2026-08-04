@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -101,6 +102,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadPatcher.RevertAll();
             Assert.That(HotReloadPatcher.ActivePatchCount, Is.EqualTo(0));
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(-5));
+        }
+
+        /// <summary>
+        /// What: DescribeActivePatches lists the patched fixture method after Apply and is empty
+        /// after RevertAll.
+        /// </summary>
+        [Test]
+        public void DescribeActivePatches_AfterApply_ListsFixture_AndClearsAfterRevertAll()
+        {
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
+            MethodInfo shim = AccessTools.Method(
+                typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+
+            Assert.That(
+                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant).Success,
+                Is.True);
+
+            IReadOnlyList<string> afterApply = HotReloadPatcher.DescribeActivePatches();
+            Assert.That(afterApply.Count, Is.EqualTo(1));
+            Assert.That(
+                afterApply[0],
+                Does.Contain(nameof(HotReloadCoreFixture)).And.Contain(nameof(HotReloadCoreFixture.ReplaceableCompute)));
+
+            HotReloadPatcher.RevertAll();
+            IReadOnlyList<string> afterRevert = HotReloadPatcher.DescribeActivePatches();
+            Assert.That(afterRevert, Is.Empty);
         }
 
         /// <summary>
