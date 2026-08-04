@@ -43,11 +43,13 @@ ledger across runs.
 
 ## Scope and limits
 
-Only ordinary method declarations are scanned. Property and indexer accessors, constructors,
-finalizers, operators, and event accessors are never scanned: edits to them produce **no
-per-method entry at all** and are silently not applied — use `uloop compile` for those.
+Only ordinary method declarations are patched. Constructors, finalizers, operators, and
+event accessors are never scanned: edits to them produce **no per-method entry at all**
+and are silently not applied — use `uloop compile` for those.
 
 Edits outside method bodies never take effect: changing a `const` value, a field initializer, or any declaration other than a method body leaves runtime behavior unchanged even though the response reports `Success` — shims resolve those symbols against the already-compiled assembly, and C# bakes `const` values into IL at compile time. Changed `const` values (including enum member values) are detected and reported as a `Warnings` entry naming the constant and both values; other outside-body edits stay silent. Use `uloop compile` for such edits.
+Property and indexer accessors with explicit bodies are reported per-accessor as
+`Skipped`, so an edited getter never disappears from the response silently.
 
 ### Skipped — reported per method, never flips `Success`
 
