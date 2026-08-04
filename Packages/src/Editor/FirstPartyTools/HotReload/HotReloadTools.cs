@@ -23,6 +23,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// When true, removes every active hot-reload transplant and ignores Files.
         /// </summary>
         public bool RevertAll { get; set; }
+
+        /// <summary>
+        /// When true, lists the currently patched methods without applying or reverting anything.
+        /// </summary>
+        public bool Status { get; set; }
     }
 
     /// <summary>
@@ -70,6 +75,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ct.ThrowIfCancellationRequested();
             Debug.Assert(parameters != null, "parameters must not be null.");
 
+            if (parameters.Status)
+            {
+                if (parameters.RevertAll
+                    || (parameters.Files != null && parameters.Files.Length > 0))
+                {
+                    return CreateValidationFailure(
+                        "--status cannot be combined with --files or --revert-all.");
+                }
+
+                return ExecuteStatus();
+            }
+
             if (parameters.RevertAll)
             {
                 return ExecuteRevertAll();
@@ -100,6 +117,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Message = clearedCount == 0
                     ? "No active hot-reload patches to revert."
                     : "Reverted all active hot-reload patches."
+            };
+        }
+
+        private static HotReloadResponse ExecuteStatus()
+        {
+            IReadOnlyList<string> active = HotReloadPatcher.DescribeActivePatches();
+            List<HotReloadMethodResult> methods = new List<HotReloadMethodResult>(active.Count);
+            for (int index = 0; index < active.Count; index++)
+            {
+                methods.Add(
+                    new HotReloadMethodResult
+                    {
+                        Kind = "Active",
+                        Method = active[index]
+                    });
+            }
+
+            int count = active.Count;
+            return new HotReloadResponse
+            {
+                Success = true,
+                Methods = methods,
+                ActivePatchTotal = count,
+                Message = $"{count} method(s) currently patched."
             };
         }
 
