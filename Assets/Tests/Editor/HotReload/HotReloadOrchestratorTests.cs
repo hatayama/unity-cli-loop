@@ -239,11 +239,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an explicit-body property getter is reported as Skipped with the v1 accessor
-        /// reason, so an edited getter never disappears from the response silently.
+        /// What: one orchestrator run over the fixture reports the explicit-body property getter
+        /// and the expression-bodied indexer getter as Skipped with the v1 accessor reason, while
+        /// auto-property accessors stay unlisted.
         /// </summary>
         [Test]
-        public async Task Run_ExplicitBodyPropertyGetter_IsSkippedWithAccessorReason()
+        public async Task Run_ExplicitAccessorsSkipped_AutoPropertyAccessorsUnlisted()
         {
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
@@ -263,21 +264,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             const string expectedReason =
                 "Property and indexer accessors are out of scope for v1; run 'uloop compile' to apply accessor edits.";
-            bool found = false;
+            bool foundPropertyGetter = false;
+            bool foundIndexerGetter = false;
+            bool foundAutoPropertyAccessor = false;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
             {
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
-                    && outcome.Method.Contains("get_ExplicitBodyGetter")
-                    && outcome.Reason == expectedReason)
+                bool skippedWithAccessorReason = outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Reason == expectedReason;
+                if (skippedWithAccessorReason && outcome.Method.Contains("get_ExplicitBodyGetter"))
                 {
-                    found = true;
+                    foundPropertyGetter = true;
+                }
+
+                if (skippedWithAccessorReason && outcome.Method.Contains("get_Item"))
+                {
+                    foundIndexerGetter = true;
+                }
+
+                if (outcome.Method.Contains("get_HiddenScore") || outcome.Method.Contains("set_HiddenScore"))
+                {
+                    foundAutoPropertyAccessor = true;
                 }
             }
 
             Assert.That(
-                found,
+                foundPropertyGetter,
                 Is.True,
                 "Expected get_ExplicitBodyGetter to be Skipped with the accessor out-of-scope reason.");
+            Assert.That(
+                foundIndexerGetter,
+                Is.True,
+                "Expected the expression-bodied indexer getter (get_Item) to be Skipped with the accessor out-of-scope reason.");
+            Assert.That(
+                foundAutoPropertyAccessor,
+                Is.False,
+                "Auto-property accessors must not be listed; only explicit-body accessors are reported.");
         }
 
         /// <summary>
