@@ -5,6 +5,8 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
+using UnityEngine;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
@@ -134,6 +136,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int SumGrid(int[,] grid)
         {
             return -1;
+        }
+
+        // Patch target for the struct-return control-flow e2e (foreign-label regression).
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Vector3 CenterOfCell(Vector3Int cell)
+        {
+            return Vector3.zero;
         }
 
         // Nested constructed generic parameter — worker manifest must emit Cecil's FullName shape.

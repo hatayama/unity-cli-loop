@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 using HarmonyLib;
@@ -178,6 +179,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadPatcher.RevertAll();
             Assert.That(HotReloadPatcher.ActivePatchCount, Is.EqualTo(0));
             Assert.That(await fixture.ReplaceableComputeAsync(5), Is.EqualTo(-5));
+        }
+
+        [DllImport("__Internal")]
+        private static extern int ExternShimStub(int value);
+
+        /// <summary>
+        /// What: an apply-time engine failure (here: a body-less extern shim whose
+        /// transplant JIT-compiles to invalid IL) returns a per-method Failure instead
+        /// of throwing, and leaves no ledger entry or active patch behind.
+        /// </summary>
+        [Test]
+        public void Apply_UnreadableShim_ReturnsFailureAndKeepsLedgerClean()
+        {
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
+            MethodInfo shim = AccessTools.Method(
+                typeof(HotReloadPatcherTests), nameof(ExternShimStub));
+
+            HotReloadPatchResult result = HotReloadPatcher.Apply(
+                original, shim, HotReloadPatchShape.Transplant);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.FailureReason, Is.EqualTo(HotReloadPatchFailureReason.ApplyFailed));
+            Assert.That(result.ErrorMessage, Does.Contain("ReplaceableCompute"));
+            Assert.That(HotReloadPatcher.ActivePatchCount, Is.EqualTo(0));
+
+            HotReloadCoreFixture fixture = new HotReloadCoreFixture();
+            Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(-5), "Original body must survive.");
         }
     }
 

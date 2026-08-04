@@ -41,6 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Patches <paramref name="method"/> with <paramref name="shimMethodInfo"/> using
         /// <paramref name="patchShape"/>. Re-applying the same method Unpatches the previous
         /// transpiler first so patches do not stack.
+        /// Engine failures during apply never throw; they are contained as an
+        /// <see cref="HotReloadPatchFailureReason.ApplyFailed"/> result for that method only.
         /// </summary>
         public static HotReloadPatchResult Apply(
             MethodBase method,
@@ -89,6 +91,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     transpiler: new HarmonyMethod(transpilerMethodInfo));
                 ShimByMethod[method] = shimMethodInfo;
             }
+            catch (Exception exception)
+            {
+                // User-approved exception to the no-try-catch policy: Harmony emit/JIT
+                // failures cannot be pre-validated (the IL shape is only known inside
+                // Harmony), and an escaping exception would abort the whole run while
+                // silently leaving previously patched methods active. Contain it as this
+                // method's Failed outcome so the per-method contract holds. Unpatch removes
+                // the transpiler this call registered before failing and rebuilds the
+                // wrapper, restoring the original body (verified by the extern-shim test).
+                HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
+                Exception rootCause = exception;
+                while (rootCause.InnerException != null)
+                {
+                    rootCause = rootCause.InnerException;
+                }
+
+                string rootCauseSuffix = ReferenceEquals(rootCause, exception)
+                    ? string.Empty
+                    : $" (root cause: {rootCause.GetType().Name}: {rootCause.Message})";
+                return HotReloadPatchResult.Failure(
+                    HotReloadPatchFailureReason.ApplyFailed,
+                    $"Applying the patch to '{method}' failed: " +
+                    $"{exception.GetType().Name}: {exception.Message}{rootCauseSuffix} " +
+                    "Other methods in this run are unaffected.");
+            }
             finally
             {
                 _pendingShimMethod = null;
@@ -128,9 +155,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // declare locals on THIS patch ILGenerator and rebind short-form ldloc/stloc onto those
             // LocalBuilders. Numeric short-forms left as-is produce InvalidProgramException after
             // transplant when the shim body has locals (typical for object-initializer locals).
+            // Labels need the same treatment: see RebindLabels below.
             List<CodeInstruction> transplanted =
                 new List<CodeInstruction>(PatchProcessor.GetOriginalInstructions(shimMethod));
             RebindShortFormLocals(shimMethod, generator, transplanted);
+            RebindLabels(generator, transplanted);
             return transplanted;
         }
 
@@ -287,6 +316,60 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     blocks = instruction.blocks
                 };
             }
+        }
+
+        // Labels read from the shim without this patch's ILGenerator belong to a throwaway
+        // generator (same failure family as the LocalBuilder rebinding above): the real
+        // CecilILGenerator resolves Label structs against its own table, so a foreign label
+        // NREs at emit — or silently branches to the wrong target when indices happen to
+        // collide with labels it did define.
+        private static void RebindLabels(ILGenerator generator, List<CodeInstruction> instructions)
+        {
+            Debug.Assert(generator != null, "RebindLabels requires the patch method ILGenerator.");
+            Debug.Assert(instructions != null, "RebindLabels requires the transplanted instructions.");
+
+            Dictionary<Label, Label> ownedLabelByForeign = new Dictionary<Label, Label>();
+
+            for (int instructionIndex = 0; instructionIndex < instructions.Count; instructionIndex++)
+            {
+                CodeInstruction instruction = instructions[instructionIndex];
+                if (instruction.operand is Label foreignTarget)
+                {
+                    instruction.operand = RemapLabel(generator, ownedLabelByForeign, foreignTarget);
+                }
+                else if (instruction.operand is Label[] foreignTargets)
+                {
+                    Label[] ownedTargets = new Label[foreignTargets.Length];
+                    for (int targetIndex = 0; targetIndex < foreignTargets.Length; targetIndex++)
+                    {
+                        ownedTargets[targetIndex] =
+                            RemapLabel(generator, ownedLabelByForeign, foreignTargets[targetIndex]);
+                    }
+
+                    instruction.operand = ownedTargets;
+                }
+
+                for (int labelIndex = 0; labelIndex < instruction.labels.Count; labelIndex++)
+                {
+                    instruction.labels[labelIndex] =
+                        RemapLabel(generator, ownedLabelByForeign, instruction.labels[labelIndex]);
+                }
+            }
+        }
+
+        private static Label RemapLabel(
+            ILGenerator generator,
+            Dictionary<Label, Label> ownedLabelByForeign,
+            Label foreignLabel)
+        {
+            if (ownedLabelByForeign.TryGetValue(foreignLabel, out Label ownedLabel))
+            {
+                return ownedLabel;
+            }
+
+            ownedLabel = generator.DefineLabel();
+            ownedLabelByForeign[foreignLabel] = ownedLabel;
+            return ownedLabel;
         }
 
         private static bool TryGetLocalOpcodeShape(
