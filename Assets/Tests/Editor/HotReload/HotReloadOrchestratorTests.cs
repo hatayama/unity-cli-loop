@@ -312,6 +312,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: patching multiple small methods emits one aggregated inline-risk warning and
+        /// leaves each Patched outcome's Reason empty.
+        /// </summary>
+        [Test]
+        public async Task Run_MultipleSmallPatchedMethods_AggregatesInlineRiskWarningOnce()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "MultipleSmallInlineRisk.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
+                    centerOfCellMethod:
+                    "[MethodImpl(MethodImplOptions.NoInlining)]\n"
+                    + "        public Vector3 CenterOfCell(Vector3Int cell)\n"
+                    + "        {\n"
+                    + "            return new Vector3(cell.x + 0.5f, cell.y + 0.5f, cell.z + 0.5f);\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.CenterOfCell));
+
+            int patchedWithEmptyReason = 0;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind != HotReloadMethodOutcomeKind.Patched)
+                {
+                    continue;
+                }
+
+                Assert.That(outcome.Reason, Is.Empty, "Patched Reason must not carry per-method inline-risk text.");
+                patchedWithEmptyReason++;
+            }
+
+            Assert.That(patchedWithEmptyReason, Is.GreaterThanOrEqualTo(2));
+
+            int aggregatedInlineRiskCount = 0;
+            foreach (string warning in result.Warnings)
+            {
+                if (warning.Contains("patched methods are small")
+                    && warning.Contains(nameof(HotReloadE2EFixture.ComputeWithPrivate))
+                    && warning.Contains(nameof(HotReloadE2EFixture.CenterOfCell)))
+                {
+                    aggregatedInlineRiskCount++;
+                }
+
+                Assert.That(
+                    warning,
+                    Does.Not.Contain(HotReloadConstants.SmallMethodInliningRiskWarning),
+                    "Per-method SmallMethodInliningRiskWarning text must not appear in Warnings.");
+            }
+
+            Assert.That(
+                aggregatedInlineRiskCount,
+                Is.EqualTo(1),
+                "Expected exactly one aggregated inline-risk warning listing the at-risk methods.");
+        }
+
+        /// <summary>
         /// What: a mixed transplant+delegation fixture patches both the sync private-access
         /// method (transplant) and the LINQ private-access method (delegation).
         /// </summary>

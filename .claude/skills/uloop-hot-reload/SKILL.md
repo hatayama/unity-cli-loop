@@ -99,7 +99,7 @@ first line, drive the game, and check the hit count: zero hits means the calling
 never reached the method, which no patch (or compile) can fix. To chase an early return
 inside the method, arm a second marker on the suspected early-return line. The other
 known cause is JIT inlining of tiny methods, which the response already flags with a
-per-method warning.
+single aggregated warning listing the at-risk methods.
 
 ## Convergence and lifecycle
 
