@@ -16,13 +16,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal enum PlayModeViewRenderWaitResult
     {
-        /// <summary>A Game camera rendered after wait started.</summary>
+        /// <summary>An eligible Game camera rendered after wait started.</summary>
         Rendered,
 
-        /// <summary>No cameras; only editor ticks were waited.</summary>
+        /// <summary>
+        /// No eligible Game camera that can drive a display render; only editor ticks were waited.
+        /// </summary>
         NoCamera,
 
-        /// <summary>Editor ticks advanced but no Game camera render was observed.</summary>
+        /// <summary>Editor ticks advanced but no eligible Game camera render was observed.</summary>
         NotRendered,
 
         /// <summary>Editor ticks themselves stalled (legacy timeout).</summary>
@@ -30,14 +32,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Waits until a Game camera actually renders, instead of counting editor update ticks.
+    /// Waits until an eligible Game camera actually renders, instead of counting editor update ticks.
     /// Why not Time.renderedFrameCount: when the Editor is unfocused it can advance with
     /// Time.frameCount even though the Play Mode view RT was not redrawn.
     /// </summary>
     internal static class PlayModeViewRenderWaiter
     {
         /// <summary>
-        /// Waits for a CameraType.Game render within the timeout, or reports why it did not.
+        /// Waits for an eligible Game-camera render within the timeout, or reports why it did not.
         /// Must start on the editor main thread.
         /// </summary>
         internal static async Task<PlayModeViewRenderWaitResult> WaitForRenderedFrameAsync(
@@ -50,9 +52,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SynchronizationContext editorContext =
                 CapturedEditorSynchronizationContext.RequireCurrent("PlayModeViewRenderWaiter");
 
-            if (Camera.allCamerasCount == 0)
+            if (!HasEligibleGameCamera())
             {
-                // Why tick-only: with no cameras a Game render will never arrive.
+                // Why tick-only: without an eligible Game camera a subscribed render will never arrive.
                 bool ready = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(2, timeoutMilliseconds, ct)
                     .ConfigureAwait(false);
                 return ready
@@ -64,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             void OnPostRender(Camera camera)
             {
-                if (camera != null && camera.cameraType == CameraType.Game)
+                if (IsEligibleGameCamera(camera))
                 {
                     gameCameraRendered = true;
                 }
@@ -79,8 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 for (int i = 0; i < cameras.Count; i++)
                 {
-                    Camera camera = cameras[i];
-                    if (camera != null && camera.cameraType == CameraType.Game)
+                    if (IsEligibleGameCamera(cameras[i]))
                     {
                         gameCameraRendered = true;
                         return;
@@ -132,6 +133,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Camera.onPostRender -= OnPostRender;
                 RenderPipelineManager.endContextRendering -= OnEndContextRendering;
             }
+        }
+
+        /// <summary>
+        /// True for a display-bound Game camera (not SceneView / Preview / offscreen RT cameras).
+        /// Why exclude targetTexture: those cameras never refresh the Play Mode view RT, so counting
+        /// them would falsely complete the wait while the screenshot RT stays stale/black.
+        /// </summary>
+        private static bool IsEligibleGameCamera(Camera camera)
+        {
+            return camera != null
+                && camera.cameraType == CameraType.Game
+                && camera.targetTexture == null;
+        }
+
+        /// <summary>
+        /// True when at least one eligible Game camera exists in Camera.allCameras.
+        /// Must use the same predicate as the render subscriptions.
+        /// </summary>
+        private static bool HasEligibleGameCamera()
+        {
+            Camera[] cameras = Camera.allCameras;
+            for (int i = 0; i < cameras.Length; i++)
+            {
+                if (IsEligibleGameCamera(cameras[i]))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }
