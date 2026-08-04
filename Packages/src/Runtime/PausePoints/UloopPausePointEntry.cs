@@ -61,6 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string ClearedReason { get; private set; } = string.Empty;
         public string StatusBeforeClear { get; private set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; private set; }
+        public bool SuppressedByHotReload { get; set; }
 
         public bool ExpireIfNeeded(DateTime nowUtc)
         {
@@ -267,7 +268,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 TruncatedVariableCount,
                 ClearedReason,
                 StatusBeforeClear,
-                LateHitDiscardedAfterClear);
+                LateHitDiscardedAfterClear,
+                SuppressedByHotReload);
         }
 
         private long CalculateRemainingMilliseconds(DateTime nowUtc)

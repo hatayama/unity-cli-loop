@@ -7,6 +7,8 @@ using HarmonyLib;
 
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -36,6 +38,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // pending shim here so the first Patch call can read it before the ledger entry
         // exists (Patch invokes the transpiler synchronously on the main thread).
         private static MethodInfo _pendingShimMethod;
+
+        static HotReloadPatcher()
+        {
+            HotReloadPausePointCoordination.IsMethodPatchedByHotReload = method =>
+                ShimByMethod.ContainsKey(method);
+        }
 
         /// <summary>
         /// Patches <paramref name="method"/> with <paramref name="shimMethodInfo"/> using
@@ -90,6 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     method,
                     transpiler: new HarmonyMethod(transpilerMethodInfo));
                 ShimByMethod[method] = shimMethodInfo;
+                HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, true);
             }
             catch (Exception exception)
             {
@@ -132,9 +141,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public static void RevertAll()
         {
-            HarmonyInstance.UnpatchAll(HotReloadConstants.HarmonyId);
+            // Snapshot and clear the ledger BEFORE UnpatchAll: Harmony rebuilds every
+            // patched method during UnpatchAll, and the pause-point transpiler guard
+            // must see those methods as unpatched so armed markers are re-instrumented
+            // into the restored original IL.
+            List<MethodBase> revertedMethods = new List<MethodBase>(ShimByMethod.Keys);
             ShimByMethod.Clear();
             _pendingShimMethod = null;
+            HarmonyInstance.UnpatchAll(HotReloadConstants.HarmonyId);
+            foreach (MethodBase revertedMethod in revertedMethods)
+            {
+                HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(revertedMethod, false);
+            }
         }
 
         /// <summary>

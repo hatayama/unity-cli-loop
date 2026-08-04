@@ -13,3 +13,5 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.PlayMode")]
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor.SourcePausePointCapture")]
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor.SourcePausePointPatcher")]
+// The hot-reload contract tests patch a fixture with HotReloadPatcher and then drive SourcePausePointPatcher against it.
+[assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor.HotReload")]

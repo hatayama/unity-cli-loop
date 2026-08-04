@@ -54,5 +54,6 @@
   "TruncatedVariableCount": 1,
   "ClearedReason": "",
   "StatusBeforeClear": "",
-  "LateHitDiscardedAfterClear": false
+  "LateHitDiscardedAfterClear": false,
+  "SuppressedByHotReload": false
 }

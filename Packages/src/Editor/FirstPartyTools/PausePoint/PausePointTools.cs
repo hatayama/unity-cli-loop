@@ -84,6 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string ClearedReason { get; set; } = string.Empty;
         public string StatusBeforeClear { get; set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; set; }
+        public bool SuppressedByHotReload { get; set; }
 
         internal static PausePointResponse FromSnapshot(UloopPausePointSnapshot snapshot)
         {
@@ -121,7 +122,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RecommendedNextAction = snapshot.RecommendedNextAction,
                 ClearedReason = snapshot.ClearedReason,
                 StatusBeforeClear = snapshot.StatusBeforeClear,
-                LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear
+                LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear,
+                SuppressedByHotReload = snapshot.SuppressedByHotReload,
+                Warning = snapshot.SuppressedByHotReload
+                    ? "This method is currently hot-reload patched; the marker's instrumentation was discarded and it will not fire until 'uloop hot-reload --revert-all' or 'uloop compile'."
+                    : string.Empty
             };
         }
 
@@ -471,10 +476,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
             if (!patchResult.Success)
             {
+                string errorCode =
+                    patchResult.FailureReason == SourcePausePointPatchFailureReason.MethodPatchedByHotReload
+                        ? SourcePausePointConstants.ErrorCodePausePointPatchedByHotReload
+                        : SourcePausePointConstants.ErrorCodePatchFailed;
                 return new PausePointResponse
                 {
                     Success = false,
-                    ErrorCode = SourcePausePointConstants.ErrorCodePatchFailed,
+                    ErrorCode = errorCode,
                     Message = patchResult.ErrorMessage,
                     RecommendedNextAction = patchResult.Hint
                 };
