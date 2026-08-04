@@ -123,10 +123,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ClearedReason = snapshot.ClearedReason,
                 StatusBeforeClear = snapshot.StatusBeforeClear,
                 LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear,
-                SuppressedByHotReload = snapshot.SuppressedByHotReload,
-                Warning = snapshot.SuppressedByHotReload
-                    ? "This method is currently hot-reload patched; the marker's instrumentation was discarded and it will not fire until 'uloop hot-reload --revert-all' or 'uloop compile'."
-                    : string.Empty
+                SuppressedByHotReload = snapshot.SuppressedByHotReload
             };
         }
 
