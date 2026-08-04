@@ -41,5 +41,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 }
             }
         }
+
+        /// <summary>
+        /// What: WriteCompilerResponseFile requests English diagnostics and UTF-8 compiler output.
+        /// </summary>
+        [Test]
+        public void WriteCompilerResponseFile_IncludesEnglishDiagnosticsAndUtf8OutputOptions()
+        {
+            string responseFilePath = Path.Combine(Path.GetTempPath(), "uloop-roslyn-rsp-" + Path.GetRandomFileName());
+            try
+            {
+                RoslynCompilerBackend.WriteCompilerResponseFile(
+                    responseFilePath,
+                    sourcePath: "snippet.cs",
+                    dllPath: "snippet.dll",
+                    references: new List<string>(),
+                    defineSymbols: new List<string>(),
+                    allowUnsafeCode: false);
+
+                string[] lines = File.ReadAllLines(responseFilePath);
+                Assert.That(lines, Does.Contain("-preferreduilang:en-US"));
+                Assert.That(lines, Does.Contain("-utf8output"));
+            }
+            finally
+            {
+                if (File.Exists(responseFilePath))
+                {
+                    File.Delete(responseFilePath);
+                }
+            }
+        }
     }
 }

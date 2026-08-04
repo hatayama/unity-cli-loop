@@ -196,7 +196,7 @@ public static class Program
                 int column = lineSpan.StartLinePosition.Character + 1;
                 string file = string.IsNullOrEmpty(lineSpan.Path) ? sourcePath : lineSpan.Path;
                 string severity = diagnostic.Severity == DiagnosticSeverity.Warning ? "warning" : "error";
-                diagnosticLines.Add(file + "(" + line + "," + column + "): " + severity + " " + diagnostic.Id + ": " + diagnostic.GetMessage());
+                diagnosticLines.Add(file + "(" + line + "," + column + "): " + severity + " " + diagnostic.Id + ": " + diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture));
             }
 
             return new CompileResponse(exitCode, diagnosticLines);
