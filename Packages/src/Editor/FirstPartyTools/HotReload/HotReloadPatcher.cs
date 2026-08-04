@@ -83,6 +83,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // leaving it in place would stack transpilers and run discarded IL chains.
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
                 ShimByMethod.Remove(method);
+                // Mirror the ledger removal immediately: if the re-Patch below fails, its
+                // contained Unpatch rebuilds the method with markers re-instrumented (the
+                // ledger no longer lists it), and RevertAll can never reach this method
+                // again — leaving the flag stuck at true would make status lie forever.
+                HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
             }
 
             MethodInfo transpilerMethodInfo = patchShape == HotReloadPatchShape.Delegation
