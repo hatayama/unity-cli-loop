@@ -67,6 +67,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             get { return _secret; }
         }
 
+        // Explicit-body setter — worker must report set_ExplicitBodySetter as Skipped (not silent).
+        public int ExplicitBodySetter
+        {
+            set { _secret = value; }
+        }
+
         public int Counter;
 
         public HotReloadE2EFixture Next;

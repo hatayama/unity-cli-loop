@@ -239,9 +239,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: one orchestrator run over the fixture reports the explicit-body property getter
-        /// and the expression-bodied indexer getter as Skipped with the v1 accessor reason, while
-        /// auto-property accessors stay unlisted.
+        /// What: one orchestrator run over the fixture reports the explicit-body property getter,
+        /// the explicit-body property setter, and the expression-bodied indexer getter as Skipped
+        /// with the v1 accessor reason, while auto-property accessors stay unlisted.
         /// </summary>
         [Test]
         public async Task Run_ExplicitAccessorsSkipped_AutoPropertyAccessorsUnlisted()
@@ -266,6 +266,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Property and indexer accessors are out of scope for v1; run 'uloop compile' to apply accessor edits.";
             bool foundPropertyGetter = false;
             bool foundIndexerGetter = false;
+            bool foundPropertySetter = false;
             bool foundAutoPropertyAccessor = false;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
             {
@@ -279,6 +280,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 if (skippedWithAccessorReason && outcome.Method.Contains("get_Item"))
                 {
                     foundIndexerGetter = true;
+                }
+
+                if (skippedWithAccessorReason && outcome.Method.Contains("set_ExplicitBodySetter"))
+                {
+                    foundPropertySetter = true;
                 }
 
                 if (outcome.Method.Contains("get_HiddenScore") || outcome.Method.Contains("set_HiddenScore"))
@@ -295,6 +301,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 foundIndexerGetter,
                 Is.True,
                 "Expected the expression-bodied indexer getter (get_Item) to be Skipped with the accessor out-of-scope reason.");
+            Assert.That(
+                foundPropertySetter,
+                Is.True,
+                "Expected the explicit-body setter (set_ExplicitBodySetter) to be Skipped with the accessor out-of-scope reason.");
             Assert.That(
                 foundAutoPropertyAccessor,
                 Is.False,
@@ -928,6 +938,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int ExplicitBodyGetter
         {
             get { return _secret; }
+        }
+
+        // Explicit-body setter — worker must report set_ExplicitBodySetter as Skipped (not silent).
+        public int ExplicitBodySetter
+        {
+            set { _secret = value; }
         }
 
         public int Counter;
