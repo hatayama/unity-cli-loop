@@ -1,3 +1,4 @@
+using System;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
@@ -103,6 +104,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return center;
         }
 
+        // Written by the finally block of ShimToCenterThrowInTry so the exceptional-path
+        // test can observe that the finally actually ran after the propagated throw.
+        private static int _finallySideEffect;
+
+        public static Vector3 ShimToCenterThrowInTry(Vector3Int position)
+        {
+            Vector3 center = Vector3.zero;
+            try
+            {
+                center.x = position.x + 0.5f;
+                if (position.x > 0)
+                {
+                    throw new InvalidOperationException(
+                        "Exceptional exit through the transplanted try body.");
+                }
+                center.y = position.y + 0.5f;
+            }
+            finally
+            {
+                _finallySideEffect = position.z;
+            }
+
+            return center;
+        }
+
         private static Vector3 ApplyAndInvoke(string shimName)
         {
             MethodInfo original = AccessTools.Method(
@@ -176,6 +202,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 ApplyAndInvoke(nameof(ShimToCenterTryFinally)),
                 Is.EqualTo(new Vector3(1.5f, 2.5f, 3.5f)));
+        }
+
+        /// <summary>
+        /// What: an exception thrown inside a transplanted try body still runs the finally
+        /// and propagates to the caller — the handler region survives the transplant
+        /// semantically, not just structurally.
+        /// </summary>
+        [Test]
+        public void Apply_StructThrowInTryShim_RunsFinallyAndPropagates()
+        {
+            _finallySideEffect = 0;
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadTransplantControlFlowTests), nameof(OriginalToCenter));
+            MethodInfo shim = AccessTools.Method(
+                typeof(HotReloadTransplantControlFlowTests), nameof(ShimToCenterThrowInTry));
+
+            HotReloadPatchResult result = HotReloadPatcher.Apply(
+                original, shim, HotReloadPatchShape.Transplant);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            Assert.Throws<InvalidOperationException>(
+                () => OriginalToCenter(new Vector3Int(1, 2, 3)));
+            Assert.That(_finallySideEffect, Is.EqualTo(3));
         }
     }
 }
