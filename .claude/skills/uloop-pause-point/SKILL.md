@@ -174,6 +174,13 @@ If a `simulate-*` command instead returns a failure whose message says PlayMode 
 
 If this command times out, the patched line was not reached while the command waited. Read `Error.Details.Hint` first: it names the most likely cause when PlayMode is not running, Unity is already paused, or the marker was enabled but never hit. A `PAUSE_POINT_EXPIRED` error means the marker's own `enable-pause-point --timeout-seconds` window (measured from enable, not from wait) ran out first — clear and re-enable the pause point using the returned `Id` and `TimeoutSeconds`. When `--trigger` was passed, the expired envelope also carries `Error.Details.TriggerResult` (with `Completed: false` and no `Error` field when the trigger's outcome was still unknown at expiry). The countdown freezes while a hit holds the Editor paused; a manual pause without a hit does not stop it.
 
+`PAUSE_POINT_PATCHED_BY_HOT_RELOAD` means the target method's body is currently replaced
+by `uloop hot-reload`, so a new marker cannot be trusted anywhere in that method. Run
+`uloop compile` (or `uloop hot-reload --revert-all`) first, then enable the marker.
+Relatedly, `SuppressedByHotReload: true` on a status response means the marker's method
+was hot-reload patched after arming; the marker will not fire until the patch is
+reverted or compiled for real.
+
 Use `uloop pause-point-status --id "Assets/Scripts/Enemy.cs:42"` only when you need to confirm the marker is armed or inspect the current hit state.
 
 For the full diagnosis flow — the `Error.Details` status fields, bisecting with a second marker on the method entry, JIT inlining, physics-callback misses, and delegate bypass — read [references/troubleshooting.md](references/troubleshooting.md).

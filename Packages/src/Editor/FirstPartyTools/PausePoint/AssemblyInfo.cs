@@ -9,3 +9,5 @@ using System.Runtime.CompilerServices;
 // PausePointTests (Tests.Editor) exercises the Resolver/Patcher pipeline end-to-end and needs
 // SourcePausePointPatcher visibility to prove Unpatch actually detaches the ledger entry.
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor")]
+// The hot-reload contract tests patch a fixture with HotReloadPatcher and then drive SourcePausePointPatcher against it.
+[assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor.HotReload")]

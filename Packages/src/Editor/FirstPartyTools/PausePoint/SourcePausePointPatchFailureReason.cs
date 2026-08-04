@@ -12,5 +12,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         UnpatchableExtern,
         UnpatchableOpenGeneric,
         UnpatchableBurstCompiled,
+        MethodPatchedByHotReload,
     }
 }

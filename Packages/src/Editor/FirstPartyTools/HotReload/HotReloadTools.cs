@@ -153,6 +153,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings.Add(HotReloadConstants.PausePointInteractionWarning);
             }
 
+            if (result.SuppressedPausePointIds != null && result.SuppressedPausePointIds.Count > 0)
+            {
+                string ids = string.Join(", ", result.SuppressedPausePointIds);
+                warnings.Add(
+                    $"Armed pause points on the patched methods will not fire until the patch is reverted or compiled for real: {ids}");
+            }
+
             return new HotReloadResponse
             {
                 Success = !hasFailure,

@@ -185,6 +185,20 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         }
 
         /// <summary>
+        /// Marks whether an armed marker's instrumentation was discarded by a hot-reload patch.
+        /// No-op when the id is unknown.
+        /// </summary>
+        public static void SetSuppressedByHotReload(string id, bool value)
+        {
+            if (!Entries.TryGetValue(id, out UloopPausePointEntry entry))
+            {
+                return;
+            }
+
+            entry.SuppressedByHotReload = value;
+        }
+
+        /// <summary>
         /// Extends a marker's capture window to at least minimumRemainingSeconds from now, so a
         /// slow multi-step CLI round trip (enable -&gt; seed state -&gt; await) does not let the marker
         /// expire before await-pause-point even starts observing it. Called once when the wait
