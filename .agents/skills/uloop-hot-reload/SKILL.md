@@ -30,6 +30,14 @@ consume exactly one value token.
 |-----------|------|---------|-------------|
 | `--files` | array | - | Project-relative `.cs` paths whose method bodies should be hot-reloaded. Required when `--revert-all` is not set |
 | `--revert-all` | flag | - | Remove every active hot-reload patch and clear the patch ledger. When set, `--files` is ignored |
+| `--status` | flag | - | Lists the currently patched methods without applying or reverting anything. |
+
+## Checking what is currently patched
+
+`uloop hot-reload --status` lists the methods whose bodies are currently replaced,
+without applying or reverting anything. Patches are static Editor state, so the answer
+is authoritative: after a domain reload it reports zero patched methods, which is
+exactly when an `ActivePatchTotal` remembered from an earlier response has gone stale.
 
 ## How it works
 

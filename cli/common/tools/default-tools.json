@@ -758,6 +758,10 @@
           "RevertAll": {
             "type": "boolean",
             "description": "Remove every active hot-reload patch and clear the patch ledger. When set, --files is ignored"
+          },
+          "Status": {
+            "type": "boolean",
+            "description": "Lists the currently patched methods without applying or reverting anything."
           }
         }
       }
