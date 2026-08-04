@@ -80,8 +80,11 @@ Edits outside method bodies never take effect: changing a `const` value, a field
 the patch, confirm the method is actually reached: arm
 `uloop enable-pause-point --mode trace` on the method's first line, then drive the game
 and check the hit count — zero hits means the calling path never reached the method,
-which no patch can fix. Arm the marker after the hot-reload run, not before, and keep it
-on the first line: on a currently patched method, deeper lines and local capture resolve
+which no patch can fix. Arm the marker after the hot-reload run, not before — and if the
+same marker already existed, clear it and enable it again, because re-enabling an
+existing marker re-arms its hit counter without re-injecting the discarded
+instrumentation. Keep it on the first line: on a currently patched method, deeper lines
+and local capture resolve
 against the pre-patch compiled body and are not reliable (see the pause point interaction
 below). To chase an early return inside the method, revert or `uloop compile` first. The
 other known cause is JIT inlining of tiny methods, which the response already flags with
@@ -107,17 +110,20 @@ source pause points is therefore order-dependent:
   its instrumentation was part of the discarded IL. `pause-point-status` still reports
   `Enabled` with nothing hinting at the cause. Apply responses include a `Warnings` entry
   whenever any method was patched.
-- A pause point armed (or re-armed) **after** the hot reload fires on the method's
-  first line and captures parameters and `this` fields normally. Markers on deeper
-  lines — and captured method locals — resolve against the pre-patch compiled body,
-  so they may land on the wrong instruction or read stale slots; treat them as
+- A pause point enabled fresh **after** the hot reload fires on the method's first
+  line and captures parameters and `this` fields normally. Re-enabling a marker that
+  was already armed before the hot reload does not recover it: the patcher treats a
+  known marker id as a no-op, re-arming the hit counter without re-injecting the
+  discarded instrumentation — clear the marker, then enable it again. Markers on
+  deeper lines — and captured method locals — resolve against the pre-patch compiled
+  body, so they may land on the wrong instruction or read stale slots; treat them as
   unreliable until the patch is reverted or compiled for real.
 - `--revert-all` (or a domain reload) restores the original IL, and previously armed
   pause points fire again.
 
 So hot reload and pause points do compose for reachability checks: after each
-`uloop hot-reload` run, re-arm first-line markers on patched methods, and defer
-deeper markers until `--revert-all` or a real `uloop compile`.
+`uloop hot-reload` run, clear and re-enable first-line markers on patched methods,
+and defer deeper markers until `--revert-all` or a real `uloop compile`.
 
 ## Output
 
