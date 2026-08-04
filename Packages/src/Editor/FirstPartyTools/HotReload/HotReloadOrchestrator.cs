@@ -339,7 +339,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            suppressedPausePointIds.AddRange(armedIds);
+            // The same method can be patched twice in one run (duplicate file inputs,
+            // re-applied edits); the aggregated warning must list each marker id once.
+            foreach (string armedId in armedIds)
+            {
+                if (!suppressedPausePointIds.Contains(armedId))
+                {
+                    suppressedPausePointIds.Add(armedId);
+                }
+            }
         }
 
         /// <summary>
