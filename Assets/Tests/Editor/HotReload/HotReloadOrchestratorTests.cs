@@ -239,6 +239,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an explicit-body property getter is reported as Skipped with the v1 accessor
+        /// reason, so an edited getter never disappears from the response silently.
+        /// </summary>
+        [Test]
+        public async Task Run_ExplicitBodyPropertyGetter_IsSkippedWithAccessorReason()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "ExplicitBodyGetter.cs",
+                BuildFixtureSource(
+                    "public int ComputeWithPrivate(int delta)\n"
+                    + "        {\n"
+                    + "            return _secret + delta;\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                contentPathOverride: editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+
+            const string expectedReason =
+                "Property and indexer accessors are out of scope for v1; run 'uloop compile' to apply accessor edits.";
+            bool found = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Method.Contains("get_ExplicitBodyGetter")
+                    && outcome.Reason == expectedReason)
+                {
+                    found = true;
+                }
+            }
+
+            Assert.That(
+                found,
+                Is.True,
+                "Expected get_ExplicitBodyGetter to be Skipped with the accessor out-of-scope reason.");
+        }
+
+        /// <summary>
         /// What: a mixed transplant+delegation fixture patches both the sync private-access
         /// method (transplant) and the LINQ private-access method (delegation).
         /// </summary>
@@ -860,6 +902,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         " + tuningConst + @"
 
         public int SecretForAssert => _secret;
+
+        // Explicit-body getter — worker must report get_ExplicitBodyGetter as Skipped (not silent).
+        public int ExplicitBodyGetter
+        {
+            get { return _secret; }
+        }
 
         public int Counter;
 

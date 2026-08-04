@@ -61,6 +61,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         public int SecretForAssert => _secret;
 
+        // Explicit-body getter — worker must report get_ExplicitBodyGetter as Skipped (not silent).
+        public int ExplicitBodyGetter
+        {
+            get { return _secret; }
+        }
+
         public int Counter;
 
         public HotReloadE2EFixture Next;
