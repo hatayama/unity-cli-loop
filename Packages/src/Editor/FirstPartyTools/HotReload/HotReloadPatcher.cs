@@ -128,9 +128,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // declare locals on THIS patch ILGenerator and rebind short-form ldloc/stloc onto those
             // LocalBuilders. Numeric short-forms left as-is produce InvalidProgramException after
             // transplant when the shim body has locals (typical for object-initializer locals).
+            // Labels need the same treatment: see RebindLabels below.
             List<CodeInstruction> transplanted =
                 new List<CodeInstruction>(PatchProcessor.GetOriginalInstructions(shimMethod));
             RebindShortFormLocals(shimMethod, generator, transplanted);
+            RebindLabels(generator, transplanted);
             return transplanted;
         }
 
@@ -287,6 +289,57 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     blocks = instruction.blocks
                 };
             }
+        }
+
+        // Labels read from the shim without this patch's ILGenerator belong to a throwaway
+        // generator (same failure family as the LocalBuilder rebinding above): the real
+        // CecilILGenerator resolves Label structs against its own table, so a foreign label
+        // NREs at emit — or silently branches to the wrong target when indices happen to
+        // collide with labels it did define.
+        private static void RebindLabels(ILGenerator generator, List<CodeInstruction> instructions)
+        {
+            Dictionary<Label, Label> ownedLabelByForeign = new Dictionary<Label, Label>();
+
+            for (int instructionIndex = 0; instructionIndex < instructions.Count; instructionIndex++)
+            {
+                CodeInstruction instruction = instructions[instructionIndex];
+                if (instruction.operand is Label foreignTarget)
+                {
+                    instruction.operand = RemapLabel(generator, ownedLabelByForeign, foreignTarget);
+                }
+                else if (instruction.operand is Label[] foreignTargets)
+                {
+                    Label[] ownedTargets = new Label[foreignTargets.Length];
+                    for (int targetIndex = 0; targetIndex < foreignTargets.Length; targetIndex++)
+                    {
+                        ownedTargets[targetIndex] =
+                            RemapLabel(generator, ownedLabelByForeign, foreignTargets[targetIndex]);
+                    }
+
+                    instruction.operand = ownedTargets;
+                }
+
+                for (int labelIndex = 0; labelIndex < instruction.labels.Count; labelIndex++)
+                {
+                    instruction.labels[labelIndex] =
+                        RemapLabel(generator, ownedLabelByForeign, instruction.labels[labelIndex]);
+                }
+            }
+        }
+
+        private static Label RemapLabel(
+            ILGenerator generator,
+            Dictionary<Label, Label> ownedLabelByForeign,
+            Label foreignLabel)
+        {
+            if (ownedLabelByForeign.TryGetValue(foreignLabel, out Label ownedLabel))
+            {
+                return ownedLabel;
+            }
+
+            ownedLabel = generator.DefineLabel();
+            ownedLabelByForeign[foreignLabel] = ownedLabel;
+            return ownedLabel;
         }
 
         private static bool TryGetLocalOpcodeShape(
