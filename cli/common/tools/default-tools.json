@@ -750,7 +750,7 @@
         "properties": {
           "Files": {
             "type": "array",
-            "description": "Project-relative .cs paths whose method bodies should be hot-reloaded. Required when --revert-all is not set",
+            "description": "Project-relative .cs paths whose method bodies should be hot-reloaded. Required when neither --revert-all nor --status is set",
             "items": {
               "type": "string"
             }

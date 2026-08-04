@@ -28,16 +28,17 @@ consume exactly one value token.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--files` | array | - | Project-relative `.cs` paths whose method bodies should be hot-reloaded. Required when `--revert-all` is not set |
+| `--files` | array | - | Project-relative `.cs` paths whose method bodies should be hot-reloaded. Required when neither `--revert-all` nor `--status` is set |
 | `--revert-all` | flag | - | Remove every active hot-reload patch and clear the patch ledger. When set, `--files` is ignored |
 | `--status` | flag | - | Lists the currently patched methods without applying or reverting anything. |
 
 ## Checking what is currently patched
 
 `uloop hot-reload --status` lists the methods whose bodies are currently replaced,
-without applying or reverting anything. Patches are static Editor state, so the answer
-is authoritative: after a domain reload it reports zero patched methods, which is
-exactly when an `ActivePatchTotal` remembered from an earlier response has gone stale.
+without applying or reverting anything. It cannot be combined with `--files` or
+`--revert-all`. Patches are static Editor state, so the answer is authoritative: after
+a domain reload it reports zero patched methods, which is exactly when an
+`ActivePatchTotal` remembered from an earlier response has gone stale.
 
 ## How it works
 
@@ -138,7 +139,7 @@ when you want the on-disk build back without recompiling.
 Returns JSON with:
 
 - `Success` (boolean): `false` on parameter validation failure or when any method outcome is `Failed`. `Skipped` outcomes alone never force `false`
-- `Methods` (array): Per-method `{ Kind, Method, Reason, FilePath }` where `Kind` is `Patched`, `Skipped`, or `Failed`
+- `Methods` (array): Per-method `{ Kind, Method, Reason, FilePath }` where `Kind` is `Patched`, `Skipped`, or `Failed` on apply/revert runs, or `Active` on `--status` runs
 - `Warnings` (array): Non-fatal notes — a patched method that is small enough to have been JIT-inlined into existing callers (the change may not show at those call sites), the pause-point interaction above, and const drift entries described in "Scope and limits"
 - `PatchedTotal` (number): Methods patched in this run
 - `ActivePatchTotal` (number): Methods still patched after this run

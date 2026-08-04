@@ -149,7 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (parameters.Files == null || parameters.Files.Length == 0)
             {
-                return "Files is required when --revert-all is not set.";
+                return "Files is required unless --revert-all or --status is set.";
             }
 
             for (int index = 0; index < parameters.Files.Length; index++)
