@@ -41,6 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
+            List<string> suppressedPausePointIds = new List<string>();
             int patchedTotal = 0;
 
             for (int index = 0; index < files.Count; index++)
@@ -63,6 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 outcomes.AddRange(fileResult.Outcomes);
                 warnings.AddRange(fileResult.Warnings);
+                suppressedPausePointIds.AddRange(fileResult.SuppressedPausePointIds);
                 patchedTotal += fileResult.PatchedCount;
             }
 
@@ -71,7 +73,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 outcomes,
                 warnings,
                 patchedTotal,
-                HotReloadPatcher.ActivePatchCount);
+                HotReloadPatcher.ActivePatchCount,
+                suppressedPausePointIds);
         }
 
         private static async Task<HotReloadFileProcessResult> ProcessFileAsync(
@@ -81,6 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
+            List<string> suppressedPausePointIds = new List<string>();
 
             // CompilationPipeline / Application.dataPath require the Unity main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -229,7 +233,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     compileResult.Assembly,
                     bindFailureReasonByShimTypeName,
                     assemblyResolvePath,
-                    warnings);
+                    warnings,
+                    suppressedPausePointIds);
                 outcomes.Add(outcome);
                 if (outcome.Kind == HotReloadMethodOutcomeKind.Patched)
                 {
@@ -237,7 +242,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            return new HotReloadFileProcessResult(outcomes, warnings, patchedCount);
+            return new HotReloadFileProcessResult(
+                outcomes, warnings, patchedCount, suppressedPausePointIds);
         }
 
         private static HotReloadMethodOutcome ApplyEntry(
@@ -246,7 +252,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Assembly shimAssembly,
             IReadOnlyDictionary<string, string> bindFailureReasonByShimTypeName,
             string filePath,
-            List<string> warnings)
+            List<string> warnings,
+            List<string> suppressedPausePointIds)
         {
             string methodLabel = entry.typeMetadataName + "." + entry.methodName;
 
@@ -310,12 +317,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadMethodOutcome.Failed(methodLabel, patchResult.ErrorMessage, filePath);
             }
 
+            AppendSuppressedPausePointIds(matchResult.Method, suppressedPausePointIds);
+
             if (!string.IsNullOrEmpty(patchResult.Warning))
             {
                 warnings.Add(methodLabel + ": " + patchResult.Warning);
             }
 
             return HotReloadMethodOutcome.Patched(methodLabel, filePath, patchResult.Warning);
+        }
+
+        // What: records armed pause-point marker ids on a method just patched by hot reload.
+        private static void AppendSuppressedPausePointIds(
+            MethodBase method,
+            List<string> suppressedPausePointIds)
+        {
+            IReadOnlyList<string> armedIds =
+                HotReloadPausePointCoordination.GetArmedMarkerIdsOnMethod?.Invoke(method);
+            if (armedIds == null || armedIds.Count == 0)
+            {
+                return;
+            }
+
+            suppressedPausePointIds.AddRange(armedIds);
         }
 
         /// <summary>
@@ -573,15 +597,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public List<HotReloadMethodOutcome> Outcomes { get; }
             public List<string> Warnings { get; }
             public int PatchedCount { get; }
+            public List<string> SuppressedPausePointIds { get; }
 
             public HotReloadFileProcessResult(
                 List<HotReloadMethodOutcome> outcomes,
                 List<string> warnings,
-                int patchedCount)
+                int patchedCount,
+                List<string> suppressedPausePointIds = null)
             {
                 Outcomes = outcomes;
                 Warnings = warnings;
                 PatchedCount = patchedCount;
+                SuppressedPausePointIds = suppressedPausePointIds ?? new List<string>();
             }
         }
     }
