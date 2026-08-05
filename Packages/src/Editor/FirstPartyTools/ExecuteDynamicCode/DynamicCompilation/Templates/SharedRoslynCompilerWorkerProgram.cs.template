@@ -21,6 +21,11 @@ public static class Program
 
     public static int Main()
     {
+        // Diagnostics must reach the host as UTF-8 bytes regardless of the OS default
+        // codepage (Windows defaults to a legacy one); the host pairs this with
+        // ProcessStartInfo.StandardOutputEncoding = Encoding.UTF8.
+        Console.OutputEncoding = Encoding.UTF8;
+
         string requestPath;
         while ((requestPath = Console.ReadLine()) != null)
         {
