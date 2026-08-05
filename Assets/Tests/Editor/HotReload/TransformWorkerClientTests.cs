@@ -68,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     foundCallsBareSiblings = true;
                     Assert.That(entry.patchKind, Is.EqualTo("transplant"));
                     string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
-                    Assert.That(slice, Does.Contain("instance.VisibleSibling()"));
+                    Assert.That(slice, Does.Contain("__uloopInstance.VisibleSibling()"));
                     Assert.That(slice, Does.Contain(".VisibleStaticSibling()"));
                 }
 
@@ -77,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     foundAsyncPrivateAndBareSibling = true;
                     Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
                     string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
-                    Assert.That(slice, Does.Contain("instance.VisibleSibling()"));
+                    Assert.That(slice, Does.Contain("__uloopInstance.VisibleSibling()"));
                 }
 
                 if (entry.methodName == nameof(HotReloadE2EFixture.AsyncInvokePrivateDelegate))
@@ -85,7 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     foundAsyncInvokePrivateDelegate = true;
                     Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
                     string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
-                    Assert.That(slice, Does.Contain("__F__callback(instance)()"));
+                    Assert.That(slice, Does.Contain("__F__callback(__uloopInstance)()"));
                 }
 
                 if (entry.methodName == nameof(HotReloadE2EFixture.AsyncInvokePrivateDelegateOnThis))
@@ -93,7 +93,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     foundAsyncInvokePrivateDelegateOnThis = true;
                     Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
                     string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
-                    Assert.That(slice, Does.Contain("__F__callback(instance)()"));
+                    Assert.That(slice, Does.Contain("__F__callback(__uloopInstance)()"));
                 }
 
                 if (entry.methodName == nameof(HotReloadE2EFixture.AsyncInvokePrivateDelegateOnOther))

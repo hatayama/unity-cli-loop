@@ -52,6 +52,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an edited method whose parameter is named "instance" still hot-reloads; the shim
+        /// receiver parameter must not collide with user identifiers (CS0100).
+        /// </summary>
+        [Test]
+        public async Task Run_EditedMethodWithParameterNamedInstance_Patches()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "InstanceParameterName.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int instance)\n        {\n            return _secret + instance + 100;\n        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(10 + 5 + 100));
+        }
+
+        /// <summary>
         /// What: expression-bodied edited methods keep a terminating semicolon in generated shims
         /// and still transplant successfully.
         /// </summary>
@@ -358,7 +384,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             int aggregatedInlineRiskCount = 0;
             foreach (string warning in result.Warnings)
             {
-                if (warning.Contains("patched methods are small")
+                if (warning.Contains("patched methods had pre-patch bodies")
                     && warning.Contains(nameof(HotReloadE2EFixture.ComputeWithPrivate))
                     && warning.Contains(nameof(HotReloadE2EFixture.CenterOfCell)))
                 {

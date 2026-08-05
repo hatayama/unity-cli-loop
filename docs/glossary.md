@@ -148,7 +148,7 @@ source behavior.
 
 A generated static method that mirrors an edited user method body for hot reload. For an
 instance method, the shim is a static method whose first parameter is the original
-instance (`instance`) so IL argument slots match the original method and the body can be
+instance (`__uloopInstance`) so IL argument slots match the original method and the body can be
 transplanted without rewriting call/load slots. Prefix wrappers are not generated.
 
 ### Publicized reference
