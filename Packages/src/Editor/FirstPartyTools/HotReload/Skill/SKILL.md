@@ -57,6 +57,10 @@ accessors, and `interface` members (including default interface implementations)
 scanned: edits to them produce **no per-method entry at all** and are silently not applied —
 use `uloop compile` for those.
 
+Hot reload never adds members. A refactor that extracts a new helper method cannot be
+applied piecewise — keep iterating inside existing method bodies, then run
+`uloop compile` once to introduce the new member for real.
+
 Edits outside method bodies never take effect: changing a `const` value, a field initializer, or any declaration other than a method body leaves runtime behavior unchanged even though the response reports `Success` — shims resolve those symbols against the already-compiled assembly, and C# bakes `const` values into IL at compile time. Changed `const` values (including enum member values) are detected and reported as a `Warnings` entry naming the constant and both values; other outside-body edits stay silent. Use `uloop compile` for such edits.
 
 Property and indexer accessors with explicit bodies are reported per-accessor as
@@ -84,7 +88,7 @@ Property and indexer accessors with explicit bodies are reported per-accessor as
 | Loaded assembly differs from the one on disk (pending compile) | Run `uloop compile` first, then retry |
 | Source file fails to parse | Per-file entry carrying the parse errors |
 | Method signature not found in the loaded assembly | New, renamed, or re-signatured members need `uloop compile` |
-| Shim compile error (e.g. the body calls a member that does not exist yet) | Response carries the compiler error and a hint to run `uloop compile` |
+| Shim compile error (e.g. the body calls a member that does not exist yet) | Response carries the compiler errors and, when they indicate a member or type the compiled assembly does not have yet, a hint to run `uloop compile` |
 | Patch rejected or crashed at apply time (e.g. `[BurstCompile]`, a patch-engine emit failure) | The entry carries the rejection reason or the underlying engine error; other methods in the run still apply |
 | Accessor binding failed for a shim type | The source references a member the compiled assembly does not have yet; every delegation-patched method in that shim type reports the binder error — run `uloop compile` and retry |
 
@@ -110,6 +114,17 @@ single aggregated warning listing the at-risk methods.
   domain reload. There is no persistence and no automatic re-apply.
 - Never reflected by hot reload: new fields, field initializer changes, new types, and
   signature changes. Those always need `uloop compile`.
+- A run with `Failed` outcomes still applies every other patch — outcomes are
+  per-method and there is no run-level rollback. `Methods` is the authoritative
+  record of which bodies changed.
+
+## Editor-code iteration without PlayMode
+
+Hot reload also patches static methods in Editor assemblies. Combined with
+`uloop execute-dynamic-code` invoking the patched method, this gives a
+compile-free loop for editor tooling: edit the method body, run
+`uloop hot-reload --files <file>`, then re-invoke it via `execute-dynamic-code`
+and read the returned value.
 
 ## Pause point interaction
 
