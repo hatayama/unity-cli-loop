@@ -12,6 +12,8 @@ using NUnit.Framework;
 
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
@@ -53,6 +55,132 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "Document.Hash must equal the hash of the on-disk source bytes (algorithm="
                 + document.HashAlgorithm + ").");
+        }
+
+        /// <summary>
+        /// What: LoadVerifiedSnapshotSource returns the on-disk fixture text when a PDB-validated snapshot exists for the test assembly.
+        /// </summary>
+        [Test]
+        public void LoadVerifiedSnapshotSource_ForCapturedFixture_ReturnsOnDiskText()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string dllPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                TestAssemblyName + HotReloadConstants.CompiledAssemblyExtension);
+            string fixtureAbsolutePath = Path.Combine(projectRoot, FixtureProjectRelativePath);
+
+            string loaded = HotReloadSourceBaseline.LoadVerifiedSnapshotSource(
+                FixtureProjectRelativePath,
+                dllPath);
+            Assert.That(loaded, Is.Not.Null, "Verified snapshot must resolve after domain-reload capture.");
+            Assert.That(loaded, Is.EqualTo(File.ReadAllText(fixtureAbsolutePath)));
+        }
+
+        /// <summary>
+        /// What: a one-byte tamper of the snapshot bytes fails PDB checksum validation and yields null.
+        /// </summary>
+        [Test]
+        public void LoadVerifiedSnapshotSource_WhenSnapshotBytesTampered_ReturnsNull()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string dllPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                TestAssemblyName + HotReloadConstants.CompiledAssemblyExtension);
+
+            string verified = HotReloadSourceBaseline.LoadVerifiedSnapshotSource(
+                FixtureProjectRelativePath,
+                dllPath);
+            Assert.That(verified, Is.Not.Null, "Precondition: a verified snapshot must exist.");
+
+            string mvid;
+            using (Mono.Cecil.AssemblyDefinition assemblyDefinition =
+                   Mono.Cecil.AssemblyDefinition.ReadAssembly(
+                       dllPath,
+                       new Mono.Cecil.ReaderParameters { InMemory = true }))
+            {
+                mvid = assemblyDefinition.MainModule.Mvid.ToString("N");
+            }
+
+            string slashNormalizedRelativePath = FixtureProjectRelativePath.Replace('\\', '/');
+            string snapshotFileName =
+                HotReloadSourceSnapshotter.HashProjectRelativePath(slashNormalizedRelativePath) + ".cs";
+            string realSnapshotPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.SourceSnapshotRelativeDirectory,
+                TestAssemblyName + "-" + mvid,
+                snapshotFileName);
+            Assert.That(File.Exists(realSnapshotPath), Is.True);
+
+            string fakeRoot = Path.Combine(Path.GetTempPath(), "uloop-hot-reload-snapshot-tamper-" + Guid.NewGuid().ToString("N"));
+            string fakeSnapshotDir = Path.Combine(
+                fakeRoot,
+                HotReloadConstants.SourceSnapshotRelativeDirectory,
+                TestAssemblyName + "-" + mvid);
+            Directory.CreateDirectory(fakeSnapshotDir);
+            string fakeSnapshotPath = Path.Combine(fakeSnapshotDir, snapshotFileName);
+            byte[] tampered = File.ReadAllBytes(realSnapshotPath);
+            tampered[0] = (byte)(tampered[0] ^ 0xFF);
+            File.WriteAllBytes(fakeSnapshotPath, tampered);
+
+            try
+            {
+                string loaded = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
+                    fakeRoot,
+                    FixtureProjectRelativePath,
+                    dllPath);
+                Assert.That(loaded, Is.Null);
+            }
+            finally
+            {
+                if (Directory.Exists(fakeRoot))
+                {
+                    Directory.Delete(fakeRoot, recursive: true);
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: path matching tolerates separator differences and absolute-vs-relative document URLs, and on Windows ignores case.
+        /// </summary>
+        [Test]
+        public void PathsReferToSameFile_MatchesRelativeAbsoluteAndSeparatorVariants()
+        {
+            const string relativePath = "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
+
+            Assert.That(
+                HotReloadSourcePathNormalizer.PathsReferToSameFile(relativePath, relativePath),
+                Is.True);
+            Assert.That(
+                HotReloadSourcePathNormalizer.PathsReferToSameFile(
+                    relativePath.Replace('/', '\\'),
+                    relativePath),
+                Is.True);
+            Assert.That(
+                HotReloadSourcePathNormalizer.PathsReferToSameFile(
+                    "/Users/example/project/" + relativePath,
+                    relativePath),
+                Is.True);
+            Assert.That(
+                HotReloadSourcePathNormalizer.PathsReferToSameFile(
+                    "C:/proj/" + relativePath.Replace('/', '\\'),
+                    relativePath),
+                Is.True);
+            Assert.That(
+                HotReloadSourcePathNormalizer.PathsReferToSameFile(
+                    "Assets/Other/File.cs",
+                    relativePath),
+                Is.False);
+
+            if (Path.DirectorySeparatorChar == '\\')
+            {
+                Assert.That(
+                    HotReloadSourcePathNormalizer.PathsReferToSameFile(
+                        relativePath.ToUpperInvariant(),
+                        relativePath),
+                    Is.True);
+            }
         }
 
         private static Document FindDocumentForProjectRelativePath(
