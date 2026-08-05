@@ -125,7 +125,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string error = errors[index];
                 for (int codeIndex = 0; codeIndex < MissingMemberDiagnosticCodes.Length; codeIndex++)
                 {
-                    if (error.Contains(MissingMemberDiagnosticCodes[codeIndex]))
+                    // Match the diagnostic-code prefix ("CS0103: …"), not a bare Contains —
+                    // otherwise a message that merely mentions the code text could append the hint.
+                    if (error.StartsWith(MissingMemberDiagnosticCodes[codeIndex] + ":", StringComparison.Ordinal))
                     {
                         return message + "\n" + HotReloadConstants.NewMemberCompileHint;
                     }

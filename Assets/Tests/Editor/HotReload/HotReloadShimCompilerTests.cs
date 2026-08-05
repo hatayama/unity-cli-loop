@@ -37,5 +37,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(message, Does.Contain(error));
             Assert.That(message, Does.Not.Contain(HotReloadConstants.NewMemberCompileHint));
         }
+
+        /// <summary>
+        /// What: a non-missing-member diagnostic whose text merely mentions CS0103 does not get the hint
+        /// (only a real CS0103: prefix gates the hint).
+        /// </summary>
+        [Test]
+        public void ComposeShimCompileFailureMessage_CodeMentionedInTextOnly_OmitsHint()
+        {
+            string error = "CS0229: Ambiguity between 'A.CS0103' and 'B.CS0103'";
+            string message = HotReloadShimCompiler.ComposeShimCompileFailureMessage(new[] { error });
+
+            Assert.That(message, Does.Contain(error));
+            Assert.That(message, Does.Not.Contain(HotReloadConstants.NewMemberCompileHint));
+        }
     }
 }
