@@ -153,7 +153,9 @@ transplanted without rewriting call/load slots. Prefix wrappers are not generate
 
 ### Publicized reference
 
-A Cecil-rewritten copy of a project assembly under `Library/UloopHotReload/PublicizedRefs/`
-in which every type and member is public. Hot reload uses these copies only as compile-time
+A Cecil-rewritten copy of a project assembly under `Library/UloopHotReload/PublicizedRefs/fmt2/`
+in which every type and member is public — except field-like event backing fields, which stay
+non-public so shim compilation does not see both the event and its same-named backing field
+(CS0229). Hot reload uses these copies only as compile-time
 references for shim compilation so private/internal member access type-checks; they are
 never loaded into the Editor domain as the runtime identity of the target types.

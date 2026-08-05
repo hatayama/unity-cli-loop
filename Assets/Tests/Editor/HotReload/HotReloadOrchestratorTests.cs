@@ -919,8 +919,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a file declaring a field-like event hot-reloads its subscriber/handler methods
-        /// (no CS0229 from the publicized backing field) while the raising method is Skipped
+        /// What: a file declaring a field-like event hot-reloads its subscriber and handler methods
+        /// (no CS0229 from the publicized backing field) — the edited subscriber body (net two
+        /// subscriptions via += / -=) must actually apply (HandledCount == 10, not the original
+        /// body's 5) and EnableCounting must be Patched — while the raising method is Skipped
         /// instead of killing the whole file.
         /// </summary>
         [Test]
@@ -939,6 +941,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertNoFileLevelFailure(result);
             AssertHasPatched(result, nameof(HotReloadEventFixture.HandleScoreChanged));
+            AssertHasPatched(result, nameof(HotReloadEventFixture.EnableCounting));
 
             bool raiserSkipped = false;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
@@ -957,7 +960,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadEventFixture fixture = new HotReloadEventFixture();
             fixture.EnableCounting();
             fixture.RaiseScore();
-            Assert.That(fixture.HandledCount, Is.EqualTo(5));
+            Assert.That(fixture.HandledCount, Is.EqualTo(10));
         }
 
         private static void AssertNoFileLevelFailure(HotReloadOrchestratorResult result)
@@ -1038,7 +1041,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [MethodImpl(MethodImplOptions.NoInlining)]
         public void EnableCounting()
         {
+            // Net two subscriptions: the patched edited body yields HandledCount == 10,
+            // while the original single-subscribe body yields 5, so the assertion can
+            // tell a Patched subscriber from a Skipped one. The -= line additionally
+            // pins the SubtractAssignment exemption in the worker's event gate.
             ScoreChanged += HandleScoreChanged;
+            ScoreChanged += HandleScoreChanged;
+            ScoreChanged += HandleScoreChanged;
+            ScoreChanged -= HandleScoreChanged;
         }
 
         " + handleScoreChangedMethod + @"
