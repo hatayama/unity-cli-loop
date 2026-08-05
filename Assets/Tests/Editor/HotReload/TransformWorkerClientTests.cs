@@ -157,6 +157,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: every worker entry carries a 1-based shim source line range so the orchestrator
+        /// can attribute compile errors per method.
+        /// </summary>
+        [Test]
+        public async Task BootstrapAndRun_OnE2EFixture_EveryEntryHasAValidShimSourceLineRange()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnE2EFixtureAsync();
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.entries, Is.Not.Empty);
+
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                Assert.That(
+                    entry.shimSourceStartLine,
+                    Is.GreaterThanOrEqualTo(1),
+                    "Entry missing a 1-based shim source start line: " + entry.methodName);
+                Assert.That(
+                    entry.shimSourceStartLine,
+                    Is.LessThanOrEqualTo(entry.shimSourceEndLine),
+                    "Entry shim source start line must not be after its end line: " + entry.methodName);
+            }
+        }
+
+        /// <summary>
         /// What: extracts one shim method declaration from the aggregated shimSource so Contains
         /// asserts cannot pass via text belonging to a different entry.
         /// </summary>

@@ -963,6 +963,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(fixture.HandledCount, Is.EqualTo(10));
         }
 
+        /// <summary>
+        /// What: a shim compile error in one method no longer kills the file — the failing method
+        /// reports Failed with its own compiler error (and the new-member hint) while the other
+        /// methods still patch and take effect.
+        /// </summary>
+        [Test]
+        public async Task Run_OneMethodFailingShimCompile_IsolatesFailureAndPatchesRest()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "IsolatedShimFailure.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
+                    callsMissingHelperMethod:
+                    "public int CallsMissingHelper(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            bool missingHelperFailed = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method.Contains(nameof(HotReloadE2EFixture.CallsMissingHelper))
+                    && outcome.Reason.Contains(HotReloadConstants.NewMemberCompileHint))
+                {
+                    missingHelperFailed = true;
+                }
+            }
+
+            Assert.That(missingHelperFailed, Is.True,
+                "CallsMissingHelper must fail per-method with its own compiler error.\n" + FormatOutcomes(result));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
+        }
+
         private static void AssertNoFileLevelFailure(HotReloadOrchestratorResult result)
         {
             foreach (HotReloadMethodOutcome outcome in result.Methods)
