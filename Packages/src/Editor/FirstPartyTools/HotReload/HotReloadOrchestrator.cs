@@ -221,14 +221,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines,
                 ct).ConfigureAwait(false);
 
+            TransformWorkerEntryDto[] entriesToPatch = workerOutput.entries;
             if (!compileResult.Success)
             {
-                outcomes.Add(
-                    HotReloadMethodOutcome.Failed(
-                        "(shim-compile)",
-                        compileResult.ErrorMessage,
-                        assemblyResolvePath));
-                return new HotReloadFileProcessResult(outcomes, warnings, 0);
+                HotReloadShimIsolationResult isolation = await TryIsolateShimCompileFailureAsync(
+                    workerInput,
+                    workerOutput,
+                    compileResult,
+                    compilationAssembly,
+                    targetDllPath,
+                    defines,
+                    assemblyResolvePath,
+                    ct).ConfigureAwait(false);
+                if (isolation == null)
+                {
+                    outcomes.Add(
+                        HotReloadMethodOutcome.Failed(
+                            "(shim-compile)",
+                            compileResult.ErrorMessage,
+                            assemblyResolvePath));
+                    return new HotReloadFileProcessResult(outcomes, warnings, 0);
+                }
+
+                outcomes.AddRange(isolation.FailedMethodOutcomes);
+                if (isolation.RetryEntries.Length == 0)
+                {
+                    return new HotReloadFileProcessResult(
+                        outcomes, warnings, 0, suppressedPausePointIds, new List<string>());
+                }
+
+                entriesToPatch = isolation.RetryEntries;
+                compileResult = isolation.RetryCompileResult;
             }
 
             // Harmony Patch/Unpatch and method resolution against loaded modules require main thread.
@@ -237,7 +260,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 BindShimAccessors(compileResult.Assembly);
             List<string> inlineRiskMethodLabels = new List<string>();
             int patchedCount = 0;
-            foreach (TransformWorkerEntryDto entry in workerOutput.entries)
+            foreach (TransformWorkerEntryDto entry in entriesToPatch)
             {
                 HotReloadMethodOutcome outcome = ApplyEntry(
                     entry,
@@ -549,6 +572,222 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return false;
+        }
+
+        // Keep in sync with TransformWorkerProgram.BuildMethodKey (out-of-process worker side).
+        private static string BuildMethodKey(TransformWorkerEntryDto entry)
+        {
+            return entry.typeMetadataName + "::" + entry.methodName + "("
+                + string.Join(",", entry.parameterTypeFullNames ?? Array.Empty<string>()) + ")";
+        }
+
+        /// <summary>
+        /// Retries the failed shim compile once, excluding the method(s) whose compiler errors can
+        /// be attributed to them, so the rest of the file's methods can still patch. Returns null
+        /// when isolation is not possible (unattributable errors, all/none of the entries failing,
+        /// the retry worker run failing, or the retry compile failing) — the caller then falls back
+        /// to today's whole-file "(shim-compile)" Failed.
+        /// </summary>
+        private static async Task<HotReloadShimIsolationResult> TryIsolateShimCompileFailureAsync(
+            TransformWorkerInputDto workerInput,
+            TransformWorkerOutputDto workerOutput,
+            HotReloadShimCompileResult compileResult,
+            UnityCompilationAssembly compilationAssembly,
+            string targetDllPath,
+            string[] defines,
+            string assemblyResolvePath,
+            CancellationToken ct)
+        {
+            if (compileResult.Errors.Count == 0)
+            {
+                return null;
+            }
+
+            ShimCompileErrorAttribution attribution =
+                AttributeErrorsToEntries(workerOutput.entries, compileResult.Errors);
+            if (attribution == null
+                || attribution.FailedEntries.Count == 0
+                || attribution.FailedEntries.Count == workerOutput.entries.Length)
+            {
+                // Unattributable errors (header/binder/using-level), or isolating everyone / no one
+                // would not narrow the failure at all.
+                return null;
+            }
+
+            List<HotReloadMethodOutcome> failedMethodOutcomes =
+                BuildFailedMethodOutcomes(attribution, assemblyResolvePath);
+            string[] excludedMethodKeys = BuildExcludedMethodKeys(attribution.FailedEntries);
+
+            return await RunIsolationRetryAsync(
+                workerInput,
+                excludedMethodKeys,
+                failedMethodOutcomes,
+                compilationAssembly,
+                targetDllPath,
+                defines,
+                ct).ConfigureAwait(false);
+        }
+
+        private static async Task<HotReloadShimIsolationResult> RunIsolationRetryAsync(
+            TransformWorkerInputDto workerInput,
+            string[] excludedMethodKeys,
+            List<HotReloadMethodOutcome> failedMethodOutcomes,
+            UnityCompilationAssembly compilationAssembly,
+            string targetDllPath,
+            string[] defines,
+            CancellationToken ct)
+        {
+            TransformWorkerInputDto retryInput = new TransformWorkerInputDto
+            {
+                sourcePath = workerInput.sourcePath,
+                defines = workerInput.defines,
+                referencePaths = workerInput.referencePaths,
+                targetTypesAssemblyPath = workerInput.targetTypesAssemblyPath,
+                excludedMethodKeys = excludedMethodKeys
+            };
+
+            TransformWorkerClientResult retryWorkerResult =
+                await TransformWorkerClient.RunAsync(retryInput, ct).ConfigureAwait(false);
+            if (!retryWorkerResult.Success)
+            {
+                return null;
+            }
+
+            // The first run already surfaced parseErrors / skipped / drift warnings; consuming
+            // them again would duplicate every per-file report.
+            TransformWorkerOutputDto retryOutput = retryWorkerResult.Output;
+            if (string.IsNullOrEmpty(retryOutput.shimSource) || retryOutput.entries.Length == 0)
+            {
+                return new HotReloadShimIsolationResult(
+                    failedMethodOutcomes, Array.Empty<TransformWorkerEntryDto>(), null);
+            }
+
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            bool includeHarmonyReference = HasDelegationEntry(retryOutput.entries);
+            List<string> shimReferences = BuildShimReferencePaths(
+                compilationAssembly,
+                targetDllPath,
+                includeHarmonyReference);
+            HotReloadShimCompileResult retryCompileResult = await HotReloadShimCompiler.CompileAndLoadAsync(
+                retryOutput.shimSource,
+                shimReferences,
+                defines,
+                ct).ConfigureAwait(false);
+            if (!retryCompileResult.Success)
+            {
+                return null;
+            }
+
+            return new HotReloadShimIsolationResult(failedMethodOutcomes, retryOutput.entries, retryCompileResult);
+        }
+
+        private static List<HotReloadMethodOutcome> BuildFailedMethodOutcomes(
+            ShimCompileErrorAttribution attribution,
+            string assemblyResolvePath)
+        {
+            List<HotReloadMethodOutcome> failedMethodOutcomes = new List<HotReloadMethodOutcome>();
+            foreach (TransformWorkerEntryDto failedEntry in attribution.FailedEntries)
+            {
+                string methodLabel = failedEntry.typeMetadataName + "." + failedEntry.methodName;
+                List<string> entryErrorMessages = attribution.ErrorMessagesByEntry[failedEntry];
+                failedMethodOutcomes.Add(
+                    HotReloadMethodOutcome.Failed(
+                        methodLabel,
+                        HotReloadShimCompiler.ComposeShimCompileFailureMessage(entryErrorMessages),
+                        assemblyResolvePath));
+            }
+
+            return failedMethodOutcomes;
+        }
+
+        private static string[] BuildExcludedMethodKeys(IReadOnlyList<TransformWorkerEntryDto> failedEntries)
+        {
+            string[] excludedMethodKeys = new string[failedEntries.Count];
+            for (int index = 0; index < failedEntries.Count; index++)
+            {
+                excludedMethodKeys[index] = BuildMethodKey(failedEntries[index]);
+            }
+
+            return excludedMethodKeys;
+        }
+
+        /// <summary>
+        /// Maps each shim compile error to the entry whose [shimSourceStartLine, shimSourceEndLine]
+        /// range contains it. Returns null if any error falls outside every entry's range (a
+        /// header/binder/using-level error, which method isolation cannot fix).
+        /// </summary>
+        private static ShimCompileErrorAttribution AttributeErrorsToEntries(
+            TransformWorkerEntryDto[] entries,
+            IReadOnlyList<HotReloadShimCompileError> errors)
+        {
+            Dictionary<TransformWorkerEntryDto, List<string>> errorMessagesByEntry =
+                new Dictionary<TransformWorkerEntryDto, List<string>>();
+            foreach (HotReloadShimCompileError error in errors)
+            {
+                TransformWorkerEntryDto matchedEntry = FindEntryForLine(entries, error.Line);
+                if (matchedEntry == null)
+                {
+                    return null;
+                }
+
+                if (!errorMessagesByEntry.TryGetValue(matchedEntry, out List<string> messages))
+                {
+                    messages = new List<string>();
+                    errorMessagesByEntry[matchedEntry] = messages;
+                }
+
+                messages.Add(error.Message);
+            }
+
+            return new ShimCompileErrorAttribution(errorMessagesByEntry);
+        }
+
+        private static TransformWorkerEntryDto FindEntryForLine(TransformWorkerEntryDto[] entries, int line)
+        {
+            foreach (TransformWorkerEntryDto entry in entries)
+            {
+                bool hasKnownRange = entry.shimSourceStartLine > 0 && entry.shimSourceEndLine > 0;
+                if (hasKnownRange && line >= entry.shimSourceStartLine && line <= entry.shimSourceEndLine)
+                {
+                    return entry;
+                }
+            }
+
+            return null;
+        }
+
+        private sealed class ShimCompileErrorAttribution
+        {
+            public IReadOnlyDictionary<TransformWorkerEntryDto, List<string>> ErrorMessagesByEntry { get; }
+            public IReadOnlyList<TransformWorkerEntryDto> FailedEntries { get; }
+
+            public ShimCompileErrorAttribution(Dictionary<TransformWorkerEntryDto, List<string>> errorMessagesByEntry)
+            {
+                ErrorMessagesByEntry = errorMessagesByEntry;
+                FailedEntries = new List<TransformWorkerEntryDto>(errorMessagesByEntry.Keys);
+            }
+        }
+
+        /// <summary>
+        /// Outcome of <see cref="TryIsolateShimCompileFailureAsync"/>. <see cref="RetryEntries"/>
+        /// empty means the retry worker run produced nothing to patch (still a valid, non-null
+        /// isolation — only <see cref="FailedMethodOutcomes"/> apply).
+        /// </summary>
+        private sealed class HotReloadShimIsolationResult
+        {
+            public List<HotReloadMethodOutcome> FailedMethodOutcomes { get; }
+            public TransformWorkerEntryDto[] RetryEntries { get; }
+            public HotReloadShimCompileResult RetryCompileResult { get; }
+
+            public HotReloadShimIsolationResult(
+                List<HotReloadMethodOutcome> failedMethodOutcomes,
+                TransformWorkerEntryDto[] retryEntries,
+                HotReloadShimCompileResult retryCompileResult)
+            {
+                FailedMethodOutcomes = failedMethodOutcomes;
+                RetryEntries = retryEntries;
+                RetryCompileResult = retryCompileResult;
+            }
         }
 
         /// <summary>

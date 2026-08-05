@@ -12,6 +12,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string[] defines;
         public string[] referencePaths;
         public string targetTypesAssemblyPath;
+
+        // Method keys (see HotReloadOrchestrator.BuildMethodKey) already reported Failed from a
+        // first compile round; the retry worker run drops these methods entirely.
+        public string[] excludedMethodKeys;
     }
 
     /// <summary>
@@ -38,6 +42,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // "transplant" | "delegation". Null/empty is treated as transplant by the orchestrator.
         public string patchKind;
+
+        // 1-based, both ends inclusive, within TransformWorkerOutputDto.shimSource; 0 when the
+        // shim method declaration could not be located while re-parsing the emitted source.
+        public int shimSourceStartLine;
+        public int shimSourceEndLine;
     }
 
     [Serializable]

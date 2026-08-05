@@ -72,10 +72,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     markBuildFinished: static () => { },
                     incrementBuildCount: static () => { }).ConfigureAwait(false);
 
-                List<string> errors = CollectErrors(backendResult.CompilerMessages);
+                List<HotReloadShimCompileError> errors = CollectErrors(backendResult.CompilerMessages);
                 if (errors.Count > 0)
                 {
-                    return HotReloadShimCompileResult.Failure(ComposeShimCompileFailureMessage(errors));
+                    List<string> errorMessages = new List<string>(errors.Count);
+                    foreach (HotReloadShimCompileError error in errors)
+                    {
+                        errorMessages.Add(error.Message);
+                    }
+
+                    return HotReloadShimCompileResult.Failure(
+                        ComposeShimCompileFailureMessage(errorMessages), errors);
                 }
 
                 if (!File.Exists(dllPath))
@@ -140,9 +147,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return message;
         }
 
-        private static List<string> CollectErrors(CompilerMessage[] compilerMessages)
+        private static List<HotReloadShimCompileError> CollectErrors(CompilerMessage[] compilerMessages)
         {
-            List<string> errors = new List<string>();
+            List<HotReloadShimCompileError> errors = new List<HotReloadShimCompileError>();
             if (compilerMessages == null)
             {
                 return errors;
@@ -152,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (compilerMessage.type == CompilerMessageType.Error)
                 {
-                    errors.Add(compilerMessage.message);
+                    errors.Add(new HotReloadShimCompileError(compilerMessage.line, compilerMessage.message));
                 }
             }
 
@@ -174,29 +181,57 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
+    /// One compiler error from a shim compile, with its 1-based line in the shim source
+    /// (0 when the diagnostic carried no location).
+    /// </summary>
+    internal sealed class HotReloadShimCompileError
+    {
+        public int Line { get; }
+        public string Message { get; }
+
+        public HotReloadShimCompileError(int line, string message)
+        {
+            Line = line;
+            Message = message;
+        }
+    }
+
+    /// <summary>
     /// Outcome of compiling and loading a hot-reload shim assembly.
     /// </summary>
     internal sealed class HotReloadShimCompileResult
     {
+        private static readonly IReadOnlyList<HotReloadShimCompileError> EmptyErrors =
+            Array.Empty<HotReloadShimCompileError>();
+
         public bool Success { get; }
         public Assembly Assembly { get; }
         public string ErrorMessage { get; }
+        public IReadOnlyList<HotReloadShimCompileError> Errors { get; }
 
-        private HotReloadShimCompileResult(bool success, Assembly assembly, string errorMessage)
+        private HotReloadShimCompileResult(
+            bool success,
+            Assembly assembly,
+            string errorMessage,
+            IReadOnlyList<HotReloadShimCompileError> errors)
         {
             Success = success;
             Assembly = assembly;
             ErrorMessage = errorMessage;
+            Errors = errors;
         }
 
         public static HotReloadShimCompileResult SuccessResult(Assembly assembly)
         {
-            return new HotReloadShimCompileResult(true, assembly, string.Empty);
+            return new HotReloadShimCompileResult(true, assembly, string.Empty, EmptyErrors);
         }
 
-        public static HotReloadShimCompileResult Failure(string errorMessage)
+        // errors stays empty for failures that never reached the compiler (e.g. missing external
+        // compiler paths, a dll that failed to load) — only an actual compile failure has any.
+        public static HotReloadShimCompileResult Failure(
+            string errorMessage, IReadOnlyList<HotReloadShimCompileError> errors = null)
         {
-            return new HotReloadShimCompileResult(false, null, errorMessage);
+            return new HotReloadShimCompileResult(false, null, errorMessage, errors ?? EmptyErrors);
         }
     }
 }
