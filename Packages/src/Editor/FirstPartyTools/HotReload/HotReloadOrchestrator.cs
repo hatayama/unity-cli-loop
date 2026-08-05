@@ -351,7 +351,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(methodLabels.Count == atRiskCount, "methodLabels count must match atRiskCount.");
 
             string methods = string.Join(", ", methodLabels);
-            return $"{atRiskCount} of {patchedTotal} patched methods are small (or marked [AggressiveInlining]) and the Mono JIT may already have inlined them into callers compiled before the patch; those call sites keep the old behavior until a real compile: {methods}";
+            return $"{atRiskCount} of {patchedTotal} patched methods had pre-patch bodies small enough (or marked [AggressiveInlining]) that the Mono JIT may already have inlined them into callers compiled before the patch; those call sites keep the old behavior until a real compile: {methods}";
         }
 
         // Duplicate file inputs process the same source twice, producing duplicates across

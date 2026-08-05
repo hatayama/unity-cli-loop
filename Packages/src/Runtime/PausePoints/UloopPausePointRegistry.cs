@@ -62,6 +62,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // referencing it directly.
         public static Action<string, int, string> OnClearResolved { get; set; }
 
+        // Error responses built outside the registry still need a truthful editor state; this
+        // exposes the same controller-backed capture the snapshot paths use.
+        public static UloopPausePointEditorStateSnapshot CaptureEditorState()
+        {
+            return UloopPausePointEditorStateSnapshot.FromController(
+                _pauseController,
+                UloopPausePointEditorStateCapturedAt.Current);
+        }
+
         public static UloopPausePointSnapshot Enable(
             string id,
             int timeoutSeconds,

@@ -1273,6 +1273,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EquivalentTo(new[] { "left", "right", "sum", "this", "Tag" }));
         }
 
+        /// <summary>
+        /// What: an enable failure response carries the live editor state instead of a
+        /// zero-filled default (IsPlaying/CapturedAt must flow from the registry's pause controller).
+        /// </summary>
+        [Test]
+        public void Enable_UnresolvableFile_CarriesLiveEditorState()
+        {
+            PausePointUseCase useCase = new();
+            PausePointResponse response = useCase.Enable(new EnablePausePointSchema
+            {
+                File = "Assets/UloopNoSuchFileForEditorStateTest.cs",
+                Line = 1
+            });
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.EditorState.CapturedAt, Is.EqualTo(UloopPausePointEditorStateCapturedAt.Current),
+                "Error responses must capture the editor state instead of returning the zero-filled default.");
+            Assert.That(response.EditorState.IsPlaying, Is.True,
+                "SetUp's fake controller pins IsPlaying to true, so a zero-filled default (false) is detectable.");
+        }
+
         [Test]
         public async Task Enable_WhenIdAndFileBothProvided_ReturnsValidationFailureResponse()
         {

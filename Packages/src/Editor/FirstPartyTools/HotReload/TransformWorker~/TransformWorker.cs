@@ -2634,7 +2634,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
     }
 
     // Why not Visit synthetic nodes: GetSymbolInfo requires nodes from the original SemanticModel
-    // tree. Bare-member rewrite invents IdentifierName("instance"), which must not be re-visited.
+    // tree. Bare-member rewrite invents IdentifierName(InstanceParameterName), which must not be re-visited.
     private ExpressionSyntax VisitReceiver(ExpressionSyntax receiver)
     {
         if (receiver.SyntaxTree != _semanticModel.SyntaxTree)
@@ -2742,7 +2742,11 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 // of string literals scattered across Visit overrides.
 internal static class TransformWorkerProgramMarker
 {
-    public const string InstanceParameterName = "instance";
+    // Why "__uloopInstance": the shim prepends this receiver parameter to the user's own
+    // parameter list verbatim, so a plain name like "instance" collides (CS0100) with any
+    // user parameter or local of that name. The uloop-prefixed name makes collisions
+    // practically impossible.
+    public const string InstanceParameterName = "__uloopInstance";
 }
 
 internal static class ShimMethodFactory

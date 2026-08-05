@@ -75,9 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 List<string> errors = CollectErrors(backendResult.CompilerMessages);
                 if (errors.Count > 0)
                 {
-                    string message = string.Join("\n", errors);
-                    return HotReloadShimCompileResult.Failure(
-                        message + "\n" + HotReloadConstants.NewMemberCompileHint);
+                    return HotReloadShimCompileResult.Failure(ComposeShimCompileFailureMessage(errors));
                 }
 
                 if (!File.Exists(dllPath))
@@ -103,6 +101,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     Directory.Delete(workDirectory, recursive: true);
                 }
             }
+        }
+
+        // Only these diagnostics indicate a member/type the compiled assembly does not have yet;
+        // appending the "run a real compile" hint to unrelated errors (CS0229 ambiguity, syntax
+        // errors) misdirects the caller. CS1501/CS7036 cover calls whose target signature changed
+        // in the edit but not yet in the compiled assembly.
+        private static readonly string[] MissingMemberDiagnosticCodes =
+        {
+            "CS0103",
+            "CS0117",
+            "CS0246",
+            "CS1061",
+            "CS1501",
+            "CS7036"
+        };
+
+        internal static string ComposeShimCompileFailureMessage(IReadOnlyList<string> errors)
+        {
+            Debug.Assert(errors != null, "errors must not be null.");
+            Debug.Assert(errors.Count > 0, "errors must not be empty.");
+
+            string message = string.Join("\n", errors);
+            for (int index = 0; index < errors.Count; index++)
+            {
+                string error = errors[index];
+                for (int codeIndex = 0; codeIndex < MissingMemberDiagnosticCodes.Length; codeIndex++)
+                {
+                    // Match the diagnostic-code prefix ("CS0103: …"), not a bare Contains —
+                    // otherwise a message that merely mentions the code text could append the hint.
+                    if (error.StartsWith(MissingMemberDiagnosticCodes[codeIndex] + ":", StringComparison.Ordinal))
+                    {
+                        return message + "\n" + HotReloadConstants.NewMemberCompileHint;
+                    }
+                }
+            }
+
+            return message;
         }
 
         private static List<string> CollectErrors(CompilerMessage[] compilerMessages)

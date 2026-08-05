@@ -22,7 +22,7 @@ edited .cs file
   ▼
 transform worker (external process: Unity-bundled Roslyn on the Unity-bundled .NET host)
   │ (2) parse + semantic analysis; convert each eligible method body into a static shim
-  │     method source (bare member references qualified via `instance.` / `global::Type.`),
+  │     method source (bare member references qualified via `__uloopInstance.` / `global::Type.`),
   │     plus a manifest and per-method skip reasons
   ▼
 shim compilation (existing external csc infrastructure, RoslynCompilerBackend)
@@ -75,7 +75,7 @@ What the spike **proved**:
   inside Harmony's skip-visibility DynamicMethod. Private field write, private method call,
   and internal type access all succeed. The shim method itself is never JIT-compiled; its IL
   is only read as data. Argument slots line up because an instance method `(this, args…)`
-  and its static shim `(instance, args…)` occupy identical slots.
+  and its static shim `(__uloopInstance, args…)` occupy identical slots.
 - **Accessor mechanism (proven; committed as the v2 stage).** Rewriting private accesses to
   Harmony accessor delegate fields keeps the shim IL JIT-legal; this works even inside async
   state machine bodies. Verified for private field access (`AccessTools.FieldRefAccess`
@@ -130,7 +130,7 @@ to collide.
 Why transplant over the accessor rewrite:
 
 - The worker-side transform stays exactly the qualification rewrite stage (2) already needs
-  (`this` → `instance`, bare member references qualified); no per-access-kind accessor
+  (`this` → `__uloopInstance`, bare member references qualified); no per-access-kind accessor
   machinery, whose corner cases (compound assignments, ref arguments, internal types in
   locals and signatures, events, object creation of internal types) would each become a skip
   or a bug.
