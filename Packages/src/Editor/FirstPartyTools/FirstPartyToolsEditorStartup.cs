@@ -12,6 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ExternalSceneChangeTracker.Initialize();
             ControlPlayModeEditorStartup.Initialize();
             PausePointEditorStartup.Initialize();
+            HotReloadEditorStartup.Initialize();
             ExecuteDynamicCodeEditorStartup.Initialize();
             GetLogsEditorStartup.Initialize();
             ScreenshotEditorStartup.Initialize();

@@ -26,6 +26,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // EditMode e2e tests place edited source copies here so AssetDatabase is never provoked.
         public const string TestSourcesRelativeDirectory = "Library/UloopHotReload/TestSources";
 
+        // Per-assembly source snapshots keyed by assembly name + Mvid; file names are SHA256 of
+        // the project-relative source path (slash-normalized) so separators and MAX_PATH never
+        // affect the on-disk layout. Adoption is decided at use time by PDB document checksum.
+        public const string SourceSnapshotRelativeDirectory = "Library/UloopHotReload/SourceSnapshot";
+
         // Package-relative path of the out-of-process transform worker source (tilde dir = Unity-ignored).
         public const string WorkerSourcePackageRelativePath =
             "Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs";
