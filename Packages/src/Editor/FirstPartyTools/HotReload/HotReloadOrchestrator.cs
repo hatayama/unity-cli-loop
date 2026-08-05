@@ -65,8 +65,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 outcomes.AddRange(fileResult.Outcomes);
                 warnings.AddRange(fileResult.Warnings);
-                suppressedPausePointIds.AddRange(fileResult.SuppressedPausePointIds);
-                inlineRiskMethodLabels.AddRange(fileResult.InlineRiskMethodLabels);
+                AppendDistinct(suppressedPausePointIds, fileResult.SuppressedPausePointIds);
+                AppendDistinct(inlineRiskMethodLabels, fileResult.InlineRiskMethodLabels);
                 patchedTotal += fileResult.PatchedCount;
             }
 
@@ -352,6 +352,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string methods = string.Join(", ", methodLabels);
             return $"{atRiskCount} of {patchedTotal} patched methods are small (or marked [AggressiveInlining]) and the Mono JIT may already have inlined them into callers compiled before the patch; those call sites keep the old behavior until a real compile: {methods}";
+        }
+
+        // Duplicate file inputs process the same source twice, producing duplicates across
+        // per-file result lists; aggregated warnings must name each pause-point id / method
+        // label once even then. Methods and PatchedTotal keep reflecting raw patch
+        // operations on purpose.
+        private static void AppendDistinct(List<string> target, IReadOnlyList<string> additions)
+        {
+            foreach (string addition in additions)
+            {
+                if (!target.Contains(addition))
+                {
+                    target.Add(addition);
+                }
+            }
         }
 
         // What: records armed pause-point marker ids on a method just patched by hot reload.
