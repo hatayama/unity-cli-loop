@@ -212,11 +212,41 @@ public static class TransformWorkerProgram
             semanticModel,
             targetTypesAssemblySymbol);
 
+        // Syntax-key maps for edited-method detection. Distinct from BuildMethodKey (Cecil names):
+        // same-file old/new comparison only needs syntax keys to stay consistent with each other.
+        bool hasBaseline = false;
+        Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap = null;
+        Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap = null;
+        Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap = null;
+        if (!string.IsNullOrEmpty(input.SnapshotSource))
+        {
+            CompilationUnitSyntax snapshotRoot = CSharpSyntaxTree.ParseText(
+                    SourceText.From(input.SnapshotSource, Encoding.UTF8),
+                    parseOptions)
+                .GetCompilationUnitRoot();
+            if (TryBuildSyntaxMethodMap(snapshotRoot, out Dictionary<string, MethodDeclarationSyntax> snapMethods)
+                && TryBuildSyntaxMethodMap(root, out Dictionary<string, MethodDeclarationSyntax> _))
+            {
+                // Why both maps: a duplicate key on either side makes AreEquivalent matching
+                // ambiguous, so fail closed to no-baseline (patch all) instead of guessing.
+                hasBaseline = true;
+                snapshotMethodMap = snapMethods;
+                TryBuildSyntaxPropertyMap(snapshotRoot, out snapshotPropertyMap);
+                TryBuildSyntaxIndexerMap(snapshotRoot, out snapshotIndexerMap);
+                AppendOutsideMethodBodyDriftWarningIfNeeded(
+                    snapshotRoot,
+                    root,
+                    Path.GetFileName(input.SourcePath),
+                    declarationDriftWarnings);
+            }
+        }
+
         List<WorkerEntry> entries = new List<WorkerEntry>();
         List<WorkerSkipped> skipped = new List<WorkerSkipped>();
         List<ShimTypeBuilder> shimTypes = new List<ShimTypeBuilder>();
         int globalShimMethodCounter = 0;
         int shimTypeCounter = 0;
+        int unchangedMethodCount = 0;
 
         foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
         {
@@ -228,7 +258,12 @@ public static class TransformWorkerProgram
 
             // Accessors are never patched in v1; report each explicit-body accessor as Skipped
             // so an edited getter/setter never disappears from the response silently.
-            AppendExplicitAccessorSkips(typeDeclaration, semanticModel, skipped);
+            AppendExplicitAccessorSkips(
+                typeDeclaration,
+                semanticModel,
+                skipped,
+                hasBaseline ? snapshotPropertyMap : null,
+                hasBaseline ? snapshotIndexerMap : null);
 
             List<MethodDeclarationSyntax> methods = typeDeclaration.Members
                 .OfType<MethodDeclarationSyntax>()
@@ -238,6 +273,7 @@ public static class TransformWorkerProgram
                 continue;
             }
 
+            string typeMetadataNameFromSyntax = BuildTypeMetadataNameFromSyntax(typeDeclaration);
             ShimTypeBuilder currentShimType = null;
             foreach (MethodDeclarationSyntax methodDeclaration in methods)
             {
@@ -258,6 +294,20 @@ public static class TransformWorkerProgram
                 if (input.ExcludedMethodKeys.Contains(methodKey))
                 {
                     continue;
+                }
+
+                // Why after ExcludedMethodKeys: exclusion means "already Failed on first round", so
+                // it must win. Unchanged methods add no per-method signal — skipping them cuts
+                // response noise and avoids pause-point collateral on untouched methods.
+                if (hasBaseline)
+                {
+                    string syntaxMethodKey = BuildSyntaxMethodKey(typeMetadataNameFromSyntax, methodDeclaration);
+                    if (snapshotMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax snapshotDecl)
+                        && SyntaxFactory.AreEquivalent(snapshotDecl, methodDeclaration, topLevel: false))
+                    {
+                        unchangedMethodCount++;
+                        continue;
+                    }
                 }
 
                 MethodTransformDecision decision = DecideMethodTransform(
@@ -327,7 +377,8 @@ public static class TransformWorkerProgram
             Entries = entries.ToArray(),
             Skipped = skipped.ToArray(),
             DeclarationDriftWarnings = declarationDriftWarnings.ToArray(),
-            ParseErrors = parseErrors.ToArray()
+            ParseErrors = parseErrors.ToArray(),
+            UnchangedMethodCount = unchangedMethodCount
         };
     }
 
@@ -490,17 +541,240 @@ public static class TransformWorkerProgram
     private const string ExplicitAccessorSkipReason =
         "Property and indexer accessors are out of scope for v1; run 'uloop compile' to apply accessor edits.";
 
+    private const string OutsideMethodBodyDriftWarningFormat =
+        "Edits outside method bodies in {0} (fields, initializers, attributes, or added/removed members) are not applied by hot reload; run uloop compile to pick them up.";
+
+    // Syntax-based method key for same-file snapshot vs current comparison. Do not mix with
+    // BuildMethodKey (Cecil/metadata names used by the orchestrator exclusion path).
+    private static string BuildSyntaxMethodKey(string typeMetadataName, MethodDeclarationSyntax methodDeclaration)
+    {
+        List<string> parameterKeys = new List<string>();
+        if (methodDeclaration.ParameterList != null)
+        {
+            foreach (ParameterSyntax parameter in methodDeclaration.ParameterList.Parameters)
+            {
+                parameterKeys.Add(BuildSyntaxParameterTypeKey(parameter));
+            }
+        }
+
+        return typeMetadataName + "::" + methodDeclaration.Identifier.Text + "("
+            + string.Join(",", parameterKeys) + ")";
+    }
+
+    private static string BuildSyntaxParameterTypeKey(ParameterSyntax parameter)
+    {
+        string typeText = parameter.Type != null ? parameter.Type.ToString() : string.Empty;
+        if (parameter.Modifiers.Any(SyntaxKind.RefKeyword)
+            || parameter.Modifiers.Any(SyntaxKind.OutKeyword)
+            || parameter.Modifiers.Any(SyntaxKind.InKeyword))
+        {
+            typeText += "&";
+        }
+
+        return typeText;
+    }
+
+    private static string BuildTypeMetadataNameFromSyntax(TypeDeclarationSyntax typeDeclaration)
+    {
+        List<string> nestedNames = new List<string>();
+        TypeDeclarationSyntax current = typeDeclaration;
+        while (current != null)
+        {
+            string simpleName = current.Identifier.Text;
+            if (current.TypeParameterList != null && current.TypeParameterList.Parameters.Count > 0)
+            {
+                simpleName += "`" + current.TypeParameterList.Parameters.Count.ToString(CultureInfo.InvariantCulture);
+            }
+
+            nestedNames.Add(simpleName);
+            current = current.Parent as TypeDeclarationSyntax;
+        }
+
+        nestedNames.Reverse();
+        string typeMetadataName = string.Join("+", nestedNames);
+
+        string namespaceName = GetContainingNamespaceName(typeDeclaration);
+        if (string.IsNullOrEmpty(namespaceName))
+        {
+            return typeMetadataName;
+        }
+
+        return namespaceName + "." + typeMetadataName;
+    }
+
+    private static string GetContainingNamespaceName(SyntaxNode node)
+    {
+        SyntaxNode current = node.Parent;
+        while (current != null)
+        {
+            if (current is NamespaceDeclarationSyntax namespaceDeclaration)
+            {
+                return namespaceDeclaration.Name.ToString();
+            }
+
+            if (current is FileScopedNamespaceDeclarationSyntax fileScopedNamespace)
+            {
+                return fileScopedNamespace.Name.ToString();
+            }
+
+            current = current.Parent;
+        }
+
+        return string.Empty;
+    }
+
+    private static string BuildSyntaxPropertyKey(PropertyDeclarationSyntax propertyDeclaration)
+    {
+        string name = propertyDeclaration.Identifier.Text;
+        if (propertyDeclaration.ExplicitInterfaceSpecifier != null)
+        {
+            return propertyDeclaration.ExplicitInterfaceSpecifier.Name + "." + name;
+        }
+
+        return name;
+    }
+
+    private static string BuildSyntaxIndexerKey(IndexerDeclarationSyntax indexerDeclaration)
+    {
+        List<string> parameterKeys = new List<string>();
+        if (indexerDeclaration.ParameterList != null)
+        {
+            foreach (ParameterSyntax parameter in indexerDeclaration.ParameterList.Parameters)
+            {
+                parameterKeys.Add(BuildSyntaxParameterTypeKey(parameter));
+            }
+        }
+
+        return "this(" + string.Join(",", parameterKeys) + ")";
+    }
+
+    private static bool TryBuildSyntaxMethodMap(
+        CompilationUnitSyntax root,
+        out Dictionary<string, MethodDeclarationSyntax> map)
+    {
+        map = new Dictionary<string, MethodDeclarationSyntax>();
+        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
+        {
+            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
+            foreach (MethodDeclarationSyntax methodDeclaration in typeDeclaration.Members.OfType<MethodDeclarationSyntax>())
+            {
+                string key = BuildSyntaxMethodKey(typeMetadataName, methodDeclaration);
+                if (map.ContainsKey(key))
+                {
+                    map = null;
+                    return false;
+                }
+
+                map[key] = methodDeclaration;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryBuildSyntaxPropertyMap(
+        CompilationUnitSyntax root,
+        out Dictionary<string, PropertyDeclarationSyntax> map)
+    {
+        map = new Dictionary<string, PropertyDeclarationSyntax>();
+        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
+        {
+            foreach (PropertyDeclarationSyntax propertyDeclaration in typeDeclaration.Members.OfType<PropertyDeclarationSyntax>())
+            {
+                string key = BuildSyntaxPropertyKey(propertyDeclaration);
+                if (map.ContainsKey(key))
+                {
+                    map = null;
+                    return false;
+                }
+
+                map[key] = propertyDeclaration;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryBuildSyntaxIndexerMap(
+        CompilationUnitSyntax root,
+        out Dictionary<string, IndexerDeclarationSyntax> map)
+    {
+        map = new Dictionary<string, IndexerDeclarationSyntax>();
+        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
+        {
+            foreach (IndexerDeclarationSyntax indexerDeclaration in typeDeclaration.Members.OfType<IndexerDeclarationSyntax>())
+            {
+                string key = BuildSyntaxIndexerKey(indexerDeclaration);
+                if (map.ContainsKey(key))
+                {
+                    map = null;
+                    return false;
+                }
+
+                map[key] = indexerDeclaration;
+            }
+        }
+
+        return true;
+    }
+
+    private static void AppendOutsideMethodBodyDriftWarningIfNeeded(
+        CompilationUnitSyntax snapshotRoot,
+        CompilationUnitSyntax currentRoot,
+        string fileName,
+        List<string> declarationDriftWarnings)
+    {
+        StripMethodBodiesRewriter rewriter = new StripMethodBodiesRewriter();
+        SyntaxNode strippedSnapshot = rewriter.Visit(snapshotRoot);
+        SyntaxNode strippedCurrent = rewriter.Visit(currentRoot);
+        if (!SyntaxFactory.AreEquivalent(strippedSnapshot, strippedCurrent, topLevel: false))
+        {
+            declarationDriftWarnings.Add(
+                string.Format(CultureInfo.InvariantCulture, OutsideMethodBodyDriftWarningFormat, fileName));
+        }
+    }
+
+    private sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
+    {
+        public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
+        {
+            MethodDeclarationSyntax visited = (MethodDeclarationSyntax)base.VisitMethodDeclaration(node);
+            if (visited.Body == null && visited.ExpressionBody == null)
+            {
+                return visited;
+            }
+
+            return visited
+                .WithExpressionBody(null)
+                .WithSemicolonToken(default(SyntaxToken))
+                .WithBody(SyntaxFactory.Block());
+        }
+    }
+
     // What: reports each property/indexer accessor that has an explicit body as Skipped.
     // Auto-properties ({ get; set; }) have no body and are not listed.
+    // When a verified snapshot declares an equivalent property/indexer, skip rows are omitted
+    // (unchanged accessors must not appear as Skipped noise).
     private static void AppendExplicitAccessorSkips(
         TypeDeclarationSyntax typeDeclaration,
         SemanticModel semanticModel,
-        List<WorkerSkipped> skipped)
+        List<WorkerSkipped> skipped,
+        Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
+        Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap)
     {
         foreach (MemberDeclarationSyntax member in typeDeclaration.Members)
         {
             if (member is PropertyDeclarationSyntax propertyDeclaration)
             {
+                if (snapshotPropertyMap != null
+                    && snapshotPropertyMap.TryGetValue(
+                        BuildSyntaxPropertyKey(propertyDeclaration),
+                        out PropertyDeclarationSyntax snapshotProperty)
+                    && SyntaxFactory.AreEquivalent(snapshotProperty, propertyDeclaration, topLevel: false))
+                {
+                    continue;
+                }
+
                 AppendExplicitAccessorSkipsForProperty(
                     propertyDeclaration,
                     semanticModel.GetDeclaredSymbol(propertyDeclaration),
@@ -510,6 +784,15 @@ public static class TransformWorkerProgram
 
             if (member is IndexerDeclarationSyntax indexerDeclaration)
             {
+                if (snapshotIndexerMap != null
+                    && snapshotIndexerMap.TryGetValue(
+                        BuildSyntaxIndexerKey(indexerDeclaration),
+                        out IndexerDeclarationSyntax snapshotIndexer)
+                    && SyntaxFactory.AreEquivalent(snapshotIndexer, indexerDeclaration, topLevel: false))
+                {
+                    continue;
+                }
+
                 AppendExplicitAccessorSkipsForProperty(
                     indexerDeclaration,
                     semanticModel.GetDeclaredSymbol(indexerDeclaration),
@@ -3132,6 +3415,11 @@ internal sealed class WorkerInput
     // reported Failed from a first compile round; the retry excludes them so it does not fail
     // on the same error again.
     public string[] ExcludedMethodKeys { get; set; }
+
+    // Verified snapshot text for edited-method detection. Null = no baseline, patch all methods.
+    // Why pass text (not a path): avoids an IO race between orchestrator verification and worker
+    // read that would crash the whole file under the no-try-catch policy.
+    public string SnapshotSource { get; set; }
 }
 
 internal sealed class WorkerOutput
@@ -3145,6 +3433,8 @@ internal sealed class WorkerOutput
     public string[] DeclarationDriftWarnings { get; set; }
 
     public string[] ParseErrors { get; set; }
+
+    public int UnchangedMethodCount { get; set; }
 }
 
 internal sealed class WorkerEntry
