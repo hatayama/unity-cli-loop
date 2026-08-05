@@ -66,6 +66,10 @@ Edits outside method bodies never take effect: changing a `const` value, a field
 Property and indexer accessors with explicit bodies are reported per-accessor as
 `Skipped`, so an edited getter never disappears from the response silently.
 
+Subscribing to or unsubscribing from a field-like event (`+=`/`-=`) inside an edited
+body works. Methods that raise the event are reported as `Skipped` (see the table
+below) — raising is only expressible inside the declaring type, which a shim is not.
+
 ### Skipped — reported per method, never flips `Success`
 
 | Condition | Why |
@@ -79,6 +83,7 @@ Property and indexer accessors with explicit bodies are reported per-accessor as
 | Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates |
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
 | Property or indexer accessor with an explicit body | Accessor patching is out of scope for v1; `uloop compile` applies accessor edits |
+| Method raises, invokes, or reads a field-like event (anything beyond `+=`/`-=`) | C# only allows `+=`/`-=` on an event outside its declaring type, so the raising body cannot compile from the shim assembly |
 
 ### Failed — flips `Success` to `false`
 

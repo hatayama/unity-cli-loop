@@ -85,7 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void GetOrCreatePublicizedCopy_DoesNotDeleteHyphenatedSiblingAssemblyCaches()
         {
             string projectRootPath = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string outputDirectory = Path.Combine(projectRootPath, "Library", "UloopHotReload", "PublicizedRefs");
+            string outputDirectory = Path.Combine(projectRootPath, HotReloadConstants.PublicizedRefsRelativeDirectory);
             Directory.CreateDirectory(outputDirectory);
 
             // Force the write+prune path: remove existing exact-mvid caches for this assembly.
@@ -146,6 +146,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
                 foreach (FieldDefinition field in type.Fields)
                 {
+                    bool isEventBackingField = false;
+                    foreach (EventDefinition eventDefinition in type.Events)
+                    {
+                        if (eventDefinition.Name == field.Name)
+                        {
+                            isEventBackingField = true;
+                        }
+                    }
+
+                    if (isEventBackingField)
+                    {
+                        Assert.That(
+                            (field.Attributes & CecilFieldAttributes.FieldAccessMask),
+                            Is.Not.EqualTo(CecilFieldAttributes.Public),
+                            $"Event backing field must stay non-public: {type.FullName}.{field.Name}");
+                        continue;
+                    }
+
                     Assert.That(
                         (field.Attributes & CecilFieldAttributes.FieldAccessMask),
                         Is.EqualTo(CecilFieldAttributes.Public),
@@ -160,6 +178,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         $"Method still non-public: {type.FullName}.{method.Name}");
                 }
             }
+        }
+
+        /// <summary>
+        /// What: publicizing keeps a field-like event's backing field non-public while its
+        /// add/remove accessors become public, so shims can subscribe without CS0229.
+        /// </summary>
+        [Test]
+        public void GetOrCreatePublicizedCopy_KeepsEventBackingFieldNonPublic()
+        {
+            string publicizedPath = ReferencePublicizer.GetOrCreatePublicizedCopy(ResolveTestAssemblyDllPath());
+            using AssemblyDefinition publicizedAssembly = AssemblyDefinition.ReadAssembly(publicizedPath);
+
+            const string eventFixtureTypeFullName =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadEventFixture";
+            TypeDefinition fixtureType = publicizedAssembly.MainModule.GetType(eventFixtureTypeFullName);
+            Assert.That(fixtureType, Is.Not.Null, $"Type not found: {eventFixtureTypeFullName}");
+
+            FieldDefinition scoreChangedField = fixtureType.Fields.First(field => field.Name == "ScoreChanged");
+            Assert.That(
+                (scoreChangedField.Attributes & CecilFieldAttributes.FieldAccessMask),
+                Is.Not.EqualTo(CecilFieldAttributes.Public),
+                "Event backing field ScoreChanged must stay non-public.");
+
+            MethodDefinition addAccessor = fixtureType.Methods.First(method => method.Name == "add_ScoreChanged");
+            MethodDefinition removeAccessor = fixtureType.Methods.First(method => method.Name == "remove_ScoreChanged");
+            Assert.That(
+                (addAccessor.Attributes & CecilMethodAttributes.MemberAccessMask),
+                Is.EqualTo(CecilMethodAttributes.Public),
+                "add_ScoreChanged must be public after publicize.");
+            Assert.That(
+                (removeAccessor.Attributes & CecilMethodAttributes.MemberAccessMask),
+                Is.EqualTo(CecilMethodAttributes.Public),
+                "remove_ScoreChanged must be public after publicize.");
         }
 
         private static string ResolveTestAssemblyDllPath()

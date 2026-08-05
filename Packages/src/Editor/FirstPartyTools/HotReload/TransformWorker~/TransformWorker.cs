@@ -587,6 +587,12 @@ public static class TransformWorkerProgram
                 "Methods that call base. members are skipped; C# cannot express base calls outside the type.");
         }
 
+        string eventUseReason = EvaluateEventUseSkipReason(bodyNode, semanticModel);
+        if (eventUseReason != null)
+        {
+            return MethodTransformDecision.Skip(eventUseReason);
+        }
+
         bool closureInaccessible = SubtreeHasInaccessibleMemberAccess(
             semanticModel,
             FindClosureBodies(bodyNode));
@@ -662,6 +668,51 @@ public static class TransformWorkerProgram
         if (methodDeclaration.ExplicitInterfaceSpecifier != null)
         {
             return "Explicit interface implementations are skipped in v1.";
+        }
+
+        return null;
+    }
+
+    // Why skip event uses beyond +=/-=: outside the declaring type C# only allows those
+    // assignments, so a shim cannot compile Raise/Invoke/read. nameof(ScoreChanged) and
+    // similar non-runtime references are also skipped — Skip is an honest report and safer
+    // than a compile failure.
+    private static string EvaluateEventUseSkipReason(SyntaxNode bodyNode, SemanticModel semanticModel)
+    {
+        foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
+        {
+            if (node is not IdentifierNameSyntax && node is not MemberAccessExpressionSyntax)
+            {
+                continue;
+            }
+
+            IEventSymbol eventSymbol = semanticModel.GetSymbolInfo(node).Symbol as IEventSymbol;
+            if (eventSymbol == null)
+            {
+                continue;
+            }
+
+            // this.E / instance.E resolve the same event on the IdentifierName and the outer
+            // MemberAccess; judge usage on the outer expression only.
+            SyntaxNode effective = node;
+            if (node.Parent is MemberAccessExpressionSyntax parentAccess && parentAccess.Name == node)
+            {
+                effective = parentAccess;
+            }
+
+            // += / -= on the left-hand side are the only event operations C# allows outside the
+            // declaring type.
+            if (effective.Parent is AssignmentExpressionSyntax assignment
+                && (assignment.IsKind(SyntaxKind.AddAssignmentExpression)
+                    || assignment.IsKind(SyntaxKind.SubtractAssignmentExpression))
+                && assignment.Left == effective)
+            {
+                continue;
+            }
+
+            return "Methods that raise, invoke, or read a field-like event are skipped; "
+                + "C# only allows += / -= on an event outside its declaring type, so the "
+                + "shim cannot compile this body. Use uloop compile.";
         }
 
         return null;

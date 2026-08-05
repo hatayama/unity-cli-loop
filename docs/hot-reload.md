@@ -38,7 +38,7 @@ Harmony transpiler transplant  (5) patch the original method with a transpiler t
 ```
 
 Harmony ID: `io.github.hatayama.uloop.hot-reload` (distinct from the pause point's ID).
-Caches: `Library/UloopHotReload/PublicizedRefs/<assemblyName>-<mvid>.dll` and
+Caches: `Library/UloopHotReload/PublicizedRefs/fmt2/<assemblyName>-<mvid>.dll` and
 `Library/UloopHotReload/Worker/<sourceHash>/`.
 
 ## Spike Findings
