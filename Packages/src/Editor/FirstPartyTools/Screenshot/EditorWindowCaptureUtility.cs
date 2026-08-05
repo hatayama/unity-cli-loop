@@ -17,6 +17,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public static class EditorWindowCaptureUtility
     {
+        private const int UNIFORM_COLOR_CAPTURE_ATTEMPTS = 3;
+        private const int WINDOW_UNIFORM_RETRY_WAIT_FRAMES = 2;
+
         /// <summary>
         /// Find all EditorWindows matching the given name (title bar text).
         /// </summary>
@@ -89,7 +92,51 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
-            return (CaptureWindowInternal(window, resolutionScale), false);
+
+            Texture2D? texture = null;
+            Color32? uniformColor = null;
+            for (int attempt = 1; attempt <= UNIFORM_COLOR_CAPTURE_ATTEMPTS; attempt++)
+            {
+                texture = CaptureWindowInternal(window, resolutionScale);
+                if (texture == null)
+                {
+                    return (null, false);
+                }
+
+                uniformColor = UniformColorDetector.DetectUniformColor(texture.GetPixels32());
+                if (!uniformColor.HasValue)
+                {
+                    return (texture, false);
+                }
+
+                if (attempt == UNIFORM_COLOR_CAPTURE_ATTEMPTS)
+                {
+                    break;
+                }
+
+                // Why destroy before retry: keep only the final texture if retries exhaust.
+                UnityEngine.Object.DestroyImmediate(texture);
+                texture = null;
+                window.Repaint();
+                bool retryReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                    WINDOW_UNIFORM_RETRY_WAIT_FRAMES,
+                    frameWaitTimeoutMilliseconds,
+                    ct).ConfigureAwait(false);
+                if (!retryReady)
+                {
+                    return (null, true);
+                }
+
+                await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+            }
+
+            Debug.Assert(texture != null, "Window capture retry loop must leave a texture when exhausted.");
+            Debug.Assert(uniformColor.HasValue, "Exhausted window retries must have observed a uniform color.");
+            Color32 color = uniformColor.GetValueOrDefault();
+            VibeLogger.LogWarning(
+                "screenshot_uniform_color_after_retries",
+                $"Window capture remained uniform color RGBA({color.r},{color.g},{color.b},{color.a}) after {UNIFORM_COLOR_CAPTURE_ATTEMPTS} attempts.");
+            return (texture, false);
         }
 
         /// <summary>
@@ -175,37 +222,96 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             SynchronizationContext editorContext =
                 CapturedEditorSynchronizationContext.RequireCurrent("rendering screenshot capture");
-            // Wait for the game camera to complete at least one full render cycle after any state change
-            bool framesReady = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
-                2,
-                frameWaitTimeoutMilliseconds,
-                ct).ConfigureAwait(false);
-            if (!framesReady)
+            // Why render-wait: editor update ticks can advance without redrawing the Play Mode RT.
+            PlayModeViewRenderWaitResult renderWaitResult =
+                await PlayModeViewRenderWaiter.WaitForRenderedFrameAsync(
+                    frameWaitTimeoutMilliseconds,
+                    ct).ConfigureAwait(false);
+            if (renderWaitResult == PlayModeViewRenderWaitResult.TicksStalled)
             {
                 return (null, default, true);
             }
 
-            await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
-
-            RenderTexture rt = GameViewBridge.GetRenderTexture();
-            if (rt == null)
+            if (renderWaitResult == PlayModeViewRenderWaitResult.NotRendered)
             {
-                Debug.LogWarning("[EditorWindowCaptureUtility] Play Mode view RenderTexture is not available");
-                GameRenderingImageInfo unavailableInfo = renderingImageInfo ??
-                    CreateUnavailableGameRenderingImageInfo(Handles.GetMainGameViewSize());
-                return (null, unavailableInfo, false);
+                VibeLogger.LogWarning(
+                    "screenshot_render_wait_not_confirmed",
+                    "Timed out waiting for a Game camera render before reading the Play Mode view RenderTexture; continuing capture.");
             }
 
-            // Play Mode view RenderTexture can be shorter than the full input area, so raw image Y needs this offset.
-            GameRenderingImageInfo captureInfo = renderingImageInfo ??
-                CreateGameRenderingImageInfo(Handles.GetMainGameViewSize(), rt.width, rt.height);
+            await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
 
-            // RenderTexture uses bottom-left origin; flip vertically for standard top-left image format
+            Texture2D? texture = null;
+            Color32? uniformColor = null;
+            GameRenderingImageInfo captureInfo = default;
+            for (int attempt = 1; attempt <= UNIFORM_COLOR_CAPTURE_ATTEMPTS; attempt++)
+            {
+                RenderTexture rt = GameViewBridge.GetRenderTexture();
+                if (rt == null)
+                {
+                    Debug.LogWarning("[EditorWindowCaptureUtility] Play Mode view RenderTexture is not available");
+                    GameRenderingImageInfo unavailableInfo = renderingImageInfo ??
+                        CreateUnavailableGameRenderingImageInfo(Handles.GetMainGameViewSize());
+                    return (null, unavailableInfo, false);
+                }
+
+                // Play Mode view RenderTexture can be shorter than the full input area, so raw image Y needs this offset.
+                captureInfo = renderingImageInfo ??
+                    CreateGameRenderingImageInfo(Handles.GetMainGameViewSize(), rt.width, rt.height);
+
+                texture = ReadPlayModeViewTexture(rt, resolutionScale);
+                uniformColor = UniformColorDetector.DetectUniformColor(texture.GetPixels32());
+                if (!uniformColor.HasValue)
+                {
+                    return (texture, captureInfo, false);
+                }
+
+                if (attempt == UNIFORM_COLOR_CAPTURE_ATTEMPTS)
+                {
+                    break;
+                }
+
+                // Why destroy before retry: keep only the final texture if retries exhaust.
+                UnityEngine.Object.DestroyImmediate(texture);
+                texture = null;
+
+                PlayModeViewRenderWaitResult retryWaitResult =
+                    await PlayModeViewRenderWaiter.WaitForRenderedFrameAsync(
+                        frameWaitTimeoutMilliseconds,
+                        ct).ConfigureAwait(false);
+                if (retryWaitResult == PlayModeViewRenderWaitResult.TicksStalled)
+                {
+                    return (null, default, true);
+                }
+
+                if (retryWaitResult == PlayModeViewRenderWaitResult.NotRendered)
+                {
+                    VibeLogger.LogWarning(
+                        "screenshot_render_wait_not_confirmed",
+                        "Timed out waiting for a Game camera render before uniform-color capture retry; continuing capture.");
+                }
+
+                await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+            }
+
+            Debug.Assert(texture != null, "Rendering capture retry loop must leave a texture when exhausted.");
+            Debug.Assert(uniformColor.HasValue, "Exhausted rendering retries must have observed a uniform color.");
+            Color32 color = uniformColor.GetValueOrDefault();
+            VibeLogger.LogWarning(
+                "screenshot_uniform_color_after_retries",
+                $"Rendering capture remained uniform color RGBA({color.r},{color.g},{color.b},{color.a}) after {UNIFORM_COLOR_CAPTURE_ATTEMPTS} attempts.");
+            return (texture, captureInfo, false);
+        }
+
+        // Reads and vertically flips the Play Mode view RT into a Texture2D (top-left origin).
+        private static Texture2D ReadPlayModeViewTexture(RenderTexture rt, float resolutionScale)
+        {
             RenderTextureDescriptor flipDescriptor = new(rt.width, rt.height, rt.format, 0);
             if (QualitySettings.activeColorSpace == ColorSpace.Linear)
             {
                 flipDescriptor.sRGB = false;
             }
+
             // Capture the caller's active target before Blit: Blit leaves the destination
             // assigned to RenderTexture.active, so saving afterwards would "restore" the
             // temporary itself and releasing it would warn about an active render texture.
@@ -233,7 +339,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 texture = ApplyResolutionScaling(texture, resolutionScale);
             }
 
-            return (texture, captureInfo, false);
+            return texture;
         }
 
         // Raycast-grid annotations must use the same settled RenderTexture geometry as the PNG capture path.
