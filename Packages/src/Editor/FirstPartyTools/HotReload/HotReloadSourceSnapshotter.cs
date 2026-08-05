@@ -6,10 +6,12 @@ using System.Text;
 using Mono.Cecil;
 
 using UnityEditor.Compilation;
+using UnityEditor.PackageManager;
 
 using UnityEngine;
 
 using UnityCompilationAssembly = UnityEditor.Compilation.Assembly;
+using PackageManagerPackageInfo = UnityEditor.PackageManager.PackageInfo;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -18,8 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadSourceSnapshotter
     {
-        private const string PackageCacheRelativePrefix = "Library/PackageCache/";
         private const string StampFileExtension = ".stamp";
+        private const string IncompleteSnapshotDirectorySuffix = ".tmp";
 
         /// <summary>
         /// Captures snapshots for project assemblies that have adjacent portable PDBs.
@@ -50,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            if (AreAllSourcesUnderPackageCache(projectRoot, sourceFiles))
+            if (ShouldSkipImmutablePackageSources(sourceFiles))
             {
                 return;
             }
@@ -73,7 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why stamp short-circuits Cecil: a false stamp (identical mtime+length with different
             // bytes) is vanishingly rare, and even then LoadVerifiedSnapshotSource rejects via PDB
             // checksum — so stamp lies degrade to fallback, never to a wrong method diff.
-            if (TryReadMatchingStamp(stampPath, dllMtimeTicks, dllByteLength, out string stampedMvid))
+            if (HasMatchingStamp(stampPath, dllMtimeTicks, dllByteLength))
             {
                 return;
             }
@@ -82,48 +84,44 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string assemblySnapshotDirectory = Path.Combine(snapshotRoot, assembly.name + "-" + mvid);
             if (!Directory.Exists(assemblySnapshotDirectory))
             {
-                Directory.CreateDirectory(assemblySnapshotDirectory);
-                foreach (string projectRelativeSourcePath in sourceFiles)
-                {
-                    CopySourceFileByteExact(projectRoot, assemblySnapshotDirectory, projectRelativeSourcePath);
-                }
-
+                CaptureAssemblySourcesAtomically(projectRoot, assemblySnapshotDirectory, sourceFiles);
                 DeleteStaleSnapshotDirectories(snapshotRoot, assembly.name, assemblySnapshotDirectory);
             }
 
             WriteStamp(stampPath, mvid, dllMtimeTicks, dllByteLength);
         }
 
-        private static bool AreAllSourcesUnderPackageCache(string projectRoot, string[] sourceFiles)
+        /// <summary>
+        /// Returns whether an assembly's sources belong to an immutable package and must not be
+        /// snapshotted. Uses Package Manager metadata so Windows (where GetFullPath does not
+        /// resolve package junctions) and macOS behave the same.
+        /// </summary>
+        internal static bool ShouldSkipImmutablePackageSources(string[] sourceFiles)
         {
-            // Why resolve to a real path: CompilationPipeline reports package scripts as
-            // Packages/<id>/... virtual paths, which resolve under Library/PackageCache/ on disk.
-            // Matching the virtual prefix alone never skips immutable package assemblies.
-            string packageCacheRoot = Path.GetFullPath(Path.Combine(projectRoot, PackageCacheRelativePrefix.TrimEnd('/')))
-                .Replace('\\', '/');
-            string packageCachePrefix = packageCacheRoot + "/";
+            Debug.Assert(sourceFiles != null, "sourceFiles must not be null.");
+            Debug.Assert(sourceFiles.Length > 0, "sourceFiles must not be empty.");
 
-            foreach (string sourceFile in sourceFiles)
+            // asmdef boundaries keep one assembly inside one package scope, so the first file
+            // is enough to classify the whole assembly.
+            PackageManagerPackageInfo packageInfo = PackageManagerPackageInfo.FindForAssetPath(sourceFiles[0]);
+            if (packageInfo == null)
             {
-                string absolutePath = Path.GetFullPath(
-                        Path.Combine(projectRoot, sourceFile.Replace('/', Path.DirectorySeparatorChar)))
-                    .Replace('\\', '/');
-                if (!absolutePath.StartsWith(packageCachePrefix, StringComparison.Ordinal))
-                {
-                    return false;
-                }
+                // Assets/ (and other non-package) scripts are editable — capture them.
+                return false;
             }
 
+            if (packageInfo.source == PackageSource.Embedded || packageInfo.source == PackageSource.Local)
+            {
+                // Project-owned packages remain editable via hot reload — capture them.
+                return false;
+            }
+
+            // Registry / BuiltIn / Git / LocalTarball are immutable for hot-reload purposes.
             return true;
         }
 
-        private static bool TryReadMatchingStamp(
-            string stampPath,
-            long dllMtimeTicks,
-            long dllByteLength,
-            out string stampedMvid)
+        internal static bool HasMatchingStamp(string stampPath, long dllMtimeTicks, long dllByteLength)
         {
-            stampedMvid = null;
             if (!File.Exists(stampPath))
             {
                 return false;
@@ -136,19 +134,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
+            if (string.IsNullOrEmpty(parts[0]))
+            {
+                return false;
+            }
+
             if (!long.TryParse(parts[1], out long stampedMtimeTicks)
                 || !long.TryParse(parts[2], out long stampedByteLength))
             {
                 return false;
             }
 
-            if (stampedMtimeTicks != dllMtimeTicks || stampedByteLength != dllByteLength)
-            {
-                return false;
-            }
-
-            stampedMvid = parts[0];
-            return !string.IsNullOrEmpty(stampedMvid);
+            return stampedMtimeTicks == dllMtimeTicks && stampedByteLength == dllByteLength;
         }
 
         private static void WriteStamp(string stampPath, string mvid, long dllMtimeTicks, long dllByteLength)
@@ -161,6 +158,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
             using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(dllPath, readerParameters);
             return assemblyDefinition.MainModule.Mvid.ToString("N");
+        }
+
+        private static void CaptureAssemblySourcesAtomically(
+            string projectRoot,
+            string assemblySnapshotDirectory,
+            string[] sourceFiles)
+        {
+            // Why temp + Move: Directory.Exists is the "complete" signal. Copying into the final
+            // directory first would leave a partial tree on interrupt that later reloads treat as
+            // done and stamp-short-circuit forever. A sibling .tmp only becomes visible as complete
+            // after Move succeeds.
+            string temporaryDirectory = assemblySnapshotDirectory + IncompleteSnapshotDirectorySuffix;
+            if (Directory.Exists(temporaryDirectory))
+            {
+                Directory.Delete(temporaryDirectory, recursive: true);
+            }
+
+            Directory.CreateDirectory(temporaryDirectory);
+            foreach (string projectRelativeSourcePath in sourceFiles)
+            {
+                CopySourceFileByteExact(projectRoot, temporaryDirectory, projectRelativeSourcePath);
+            }
+
+            Directory.Move(temporaryDirectory, assemblySnapshotDirectory);
         }
 
         private static void CopySourceFileByteExact(
@@ -198,7 +219,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return builder.ToString();
         }
 
-        private static void DeleteStaleSnapshotDirectories(
+        internal static void DeleteStaleSnapshotDirectories(
             string snapshotRoot,
             string assemblyName,
             string currentSnapshotDirectory)

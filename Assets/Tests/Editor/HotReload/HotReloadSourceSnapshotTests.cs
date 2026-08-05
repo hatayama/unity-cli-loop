@@ -10,9 +10,13 @@ using Mono.Cecil.Pdb;
 
 using NUnit.Framework;
 
+using UnityEditor.Compilation;
+
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+using UnityCompilationAssembly = UnityEditor.Compilation.Assembly;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -181,6 +185,126 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         relativePath),
                     Is.True);
             }
+        }
+
+        /// <summary>
+        /// What: stale MVID snapshot directories for the same assembly name are pruned, while hyphenated sibling assembly names and non-MVID suffixes are kept.
+        /// </summary>
+        [Test]
+        public void DeleteStaleSnapshotDirectories_RemovesOnlyExactMvidSiblings()
+        {
+            string tempRoot = Path.Combine(
+                Path.GetTempPath(),
+                "uloop-hot-reload-snapshot-prune-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempRoot);
+
+            string mvidA = Guid.NewGuid().ToString("N");
+            string mvidB = Guid.NewGuid().ToString("N");
+            string mvidC = Guid.NewGuid().ToString("N");
+            string currentDir = Path.Combine(tempRoot, "Foo-" + mvidA);
+            string staleDir = Path.Combine(tempRoot, "Foo-" + mvidB);
+            string siblingAssemblyDir = Path.Combine(tempRoot, "Foo-Bar-" + mvidC);
+            string nonMvidDir = Path.Combine(tempRoot, "Foo-notamvid");
+            Directory.CreateDirectory(currentDir);
+            Directory.CreateDirectory(staleDir);
+            Directory.CreateDirectory(siblingAssemblyDir);
+            Directory.CreateDirectory(nonMvidDir);
+
+            try
+            {
+                HotReloadSourceSnapshotter.DeleteStaleSnapshotDirectories(tempRoot, "Foo", currentDir);
+
+                Assert.That(Directory.Exists(currentDir), Is.True);
+                Assert.That(Directory.Exists(staleDir), Is.False);
+                Assert.That(Directory.Exists(siblingAssemblyDir), Is.True);
+                Assert.That(Directory.Exists(nonMvidDir), Is.True);
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                {
+                    Directory.Delete(tempRoot, recursive: true);
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: stamp matching accepts only the exact mvid,mtime,length triple and rejects malformed or mismatched stamps.
+        /// </summary>
+        [Test]
+        public void HasMatchingStamp_AcceptsExactTripleAndRejectsMismatchOrMalformed()
+        {
+            string tempRoot = Path.Combine(
+                Path.GetTempPath(),
+                "uloop-hot-reload-snapshot-stamp-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempRoot);
+            string stampPath = Path.Combine(tempRoot, "Foo.stamp");
+            const long mtimeTicks = 123456789L;
+            const long byteLength = 4096L;
+            string mvid = Guid.NewGuid().ToString("N");
+
+            try
+            {
+                File.WriteAllText(stampPath, mvid + "," + mtimeTicks + "," + byteLength);
+                Assert.That(HotReloadSourceSnapshotter.HasMatchingStamp(stampPath, mtimeTicks, byteLength), Is.True);
+                Assert.That(HotReloadSourceSnapshotter.HasMatchingStamp(stampPath, mtimeTicks + 1, byteLength), Is.False);
+                Assert.That(HotReloadSourceSnapshotter.HasMatchingStamp(stampPath, mtimeTicks, byteLength + 1), Is.False);
+
+                File.WriteAllText(stampPath, mvid + "," + mtimeTicks);
+                Assert.That(HotReloadSourceSnapshotter.HasMatchingStamp(stampPath, mtimeTicks, byteLength), Is.False);
+
+                File.WriteAllText(stampPath, "," + mtimeTicks + "," + byteLength);
+                Assert.That(HotReloadSourceSnapshotter.HasMatchingStamp(stampPath, mtimeTicks, byteLength), Is.False);
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                {
+                    Directory.Delete(tempRoot, recursive: true);
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: immutable registry package sources are skipped while Assets and embedded package sources are captured.
+        /// </summary>
+        [Test]
+        public void ShouldSkipImmutablePackageSources_SkipsRegistryKeepsAssetsAndEmbedded()
+        {
+            Assert.That(
+                HotReloadSourceSnapshotter.ShouldSkipImmutablePackageSources(
+                    new[] { FixtureProjectRelativePath }),
+                Is.False,
+                "Assets scripts must be captured.");
+
+            string embeddedSourcePath = FindSourceFileForAssembly("UnityCLILoop.FirstPartyTools.HotReload.Editor");
+            Assert.That(
+                HotReloadSourceSnapshotter.ShouldSkipImmutablePackageSources(new[] { embeddedSourcePath }),
+                Is.False,
+                "Embedded package scripts must be captured.");
+
+            string registrySourcePath = FindSourceFileForAssembly("Unity.InputSystem");
+            Assert.That(
+                HotReloadSourceSnapshotter.ShouldSkipImmutablePackageSources(new[] { registrySourcePath }),
+                Is.True,
+                "Registry package scripts must be skipped.");
+        }
+
+        private static string FindSourceFileForAssembly(string assemblyName)
+        {
+            foreach (UnityCompilationAssembly assembly in CompilationPipeline.GetAssemblies())
+            {
+                if (assembly.name != assemblyName)
+                {
+                    continue;
+                }
+
+                Assert.That(assembly.sourceFiles, Is.Not.Null.And.Not.Empty);
+                return assembly.sourceFiles[0];
+            }
+
+            Assert.Fail("CompilationPipeline assembly not found: " + assemblyName);
+            return null;
         }
 
         private static Document FindDocumentForProjectRelativePath(
