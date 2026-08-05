@@ -181,6 +181,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (FieldDefinition field in type.Fields)
             {
+                // A field-like event's compiler-generated backing field shares the event's name.
+                // Publicizing it makes both the event (via its publicized accessors) and the field
+                // visible, so every shim touching the event fails with CS0229 (ambiguous reference).
+                // The backing field keeps its original accessibility; shims subscribe through the
+                // public add/remove accessors instead.
+                if (HasEventNamed(type, field.Name))
+                {
+                    continue;
+                }
+
                 field.Attributes = (field.Attributes & ~CecilFieldAttributes.FieldAccessMask) | CecilFieldAttributes.Public;
             }
 
@@ -189,6 +199,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 method.Attributes = (method.Attributes & ~CecilMethodAttributes.MemberAccessMask) | CecilMethodAttributes.Public;
             }
+        }
+
+        private static bool HasEventNamed(TypeDefinition type, string fieldName)
+        {
+            foreach (EventDefinition eventDefinition in type.Events)
+            {
+                if (eventDefinition.Name == fieldName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static string NormalizePathForComparison(string path)

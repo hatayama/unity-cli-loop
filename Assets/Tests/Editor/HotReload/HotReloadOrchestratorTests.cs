@@ -918,6 +918,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + string.Join("\n", result.Warnings));
         }
 
+        /// <summary>
+        /// What: a file declaring a field-like event hot-reloads its subscriber and handler methods
+        /// (no CS0229 from the publicized backing field) — the edited subscriber body (net two
+        /// subscriptions via += / -=) must actually apply (HandledCount == 10, not the original
+        /// body's 5) and EnableCounting must be Patched — while the raising method is Skipped
+        /// instead of killing the whole file.
+        /// </summary>
+        [Test]
+        public async Task Run_FieldLikeEventFile_PatchesHandlerAndSkipsRaiser()
+        {
+            string fixturePath = ResolveEventFixturePath();
+            string editedPath = WriteEditedSource(
+                "EventFixtureEdit.cs",
+                BuildEventFixtureSource(
+                    "[MethodImpl(MethodImplOptions.NoInlining)]\n        public void HandleScoreChanged()\n        {\n            HandledCount = HandledCount + 5;\n        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadEventFixture.HandleScoreChanged));
+            AssertHasPatched(result, nameof(HotReloadEventFixture.EnableCounting));
+
+            bool raiserSkipped = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Method.Contains(nameof(HotReloadEventFixture.RaiseScore))
+                    && outcome.Reason.Contains("event"))
+                {
+                    raiserSkipped = true;
+                }
+            }
+
+            Assert.That(raiserSkipped, Is.True,
+                "RaiseScore must be Skipped with the event-use reason.\n" + FormatOutcomes(result));
+
+            HotReloadEventFixture fixture = new HotReloadEventFixture();
+            fixture.EnableCounting();
+            fixture.RaiseScore();
+            Assert.That(fixture.HandledCount, Is.EqualTo(10));
+        }
+
         private static void AssertNoFileLevelFailure(HotReloadOrchestratorResult result)
         {
             foreach (HotReloadMethodOutcome outcome in result.Methods)
@@ -970,6 +1015,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "HotReloadE2EFixtures.cs");
             Assert.That(File.Exists(path), Is.True, "E2E fixture source missing: " + path);
             return Path.GetFullPath(path);
+        }
+
+        private static string ResolveEventFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath, "Tests", "Editor", "HotReload", "HotReloadEventFixtures.cs");
+            Assert.That(File.Exists(path), Is.True, "Event fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string BuildEventFixtureSource(string handleScoreChangedMethod)
+        {
+            return @"using System;
+using System.Runtime.CompilerServices;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+{
+    public class HotReloadEventFixture
+    {
+        public event Action ScoreChanged;
+
+        public int HandledCount;
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void EnableCounting()
+        {
+            // Net two subscriptions: the patched edited body yields HandledCount == 10,
+            // while the original single-subscribe body yields 5, so the assertion can
+            // tell a Patched subscriber from a Skipped one. The -= line additionally
+            // pins the SubtractAssignment exemption in the worker's event gate.
+            ScoreChanged += HandleScoreChanged;
+            ScoreChanged += HandleScoreChanged;
+            ScoreChanged += HandleScoreChanged;
+            ScoreChanged -= HandleScoreChanged;
+        }
+
+        " + handleScoreChangedMethod + @"
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void RaiseScore()
+        {
+            ScoreChanged?.Invoke();
+        }
+    }
+}
+";
         }
 
         private static string WriteEditedSource(string fileName, string contents)

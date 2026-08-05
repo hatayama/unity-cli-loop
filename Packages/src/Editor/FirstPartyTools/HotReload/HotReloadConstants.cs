@@ -14,7 +14,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Publicized reference copies are keyed by assembly name + Mvid so a recompiled assembly
         // never reuses a stale visibility rewrite.
-        public const string PublicizedRefsRelativeDirectory = "Library/UloopHotReload/PublicizedRefs";
+        // "fmt2" = publicize-format generation. The cache key is assembly name + MVID only, so a
+        // rule change (event backing fields stay non-public since fmt2) must move the directory —
+        // otherwise a cache written under the old rule keeps poisoning shim compiles until the
+        // assembly happens to recompile.
+        public const string PublicizedRefsRelativeDirectory = "Library/UloopHotReload/PublicizedRefs/fmt2";
 
         // Worker binaries are keyed by SHA256 of the TransformWorker~/TransformWorker.cs source.
         public const string WorkerCacheRelativeDirectory = "Library/UloopHotReload/Worker";
