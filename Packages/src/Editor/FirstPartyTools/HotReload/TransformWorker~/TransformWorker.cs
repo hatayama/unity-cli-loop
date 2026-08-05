@@ -99,6 +99,7 @@ public static class TransformWorkerProgram
 
         input.Defines ??= Array.Empty<string>();
         input.ReferencePaths ??= Array.Empty<string>();
+        input.ExcludedMethodKeys ??= Array.Empty<string>();
         return input;
     }
 
@@ -106,6 +107,12 @@ public static class TransformWorkerProgram
     {
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(output, JsonOptions);
         File.WriteAllBytes(outputJsonPath, bytes);
+    }
+
+    // Keep in sync with HotReloadOrchestrator.BuildMethodKey (Unity package side).
+    private static string BuildMethodKey(string typeMetadataName, string methodName, string[] parameterTypeFullNames)
+    {
+        return typeMetadataName + "::" + methodName + "(" + string.Join(",", parameterTypeFullNames ?? Array.Empty<string>()) + ")";
     }
 
     private static WorkerOutput TransformFile(WorkerInput input)
@@ -240,6 +247,19 @@ public static class TransformWorkerProgram
                     continue;
                 }
 
+                string[] parameterTypeFullNames = methodSymbol.Parameters
+                    .Select(CecilTypeNames.ToParameterTypeFullName)
+                    .ToArray();
+
+                // The orchestrator already reported this method as Failed from the first compile
+                // round; re-emitting it would fail the retry compile again.
+                string methodKey = BuildMethodKey(
+                    CecilTypeNames.ToMetadataName(typeSymbol), methodSymbol.Name, parameterTypeFullNames);
+                if (input.ExcludedMethodKeys.Contains(methodKey))
+                {
+                    continue;
+                }
+
                 MethodTransformDecision decision = DecideMethodTransform(
                     typeDeclaration,
                     typeSymbol,
@@ -291,9 +311,7 @@ public static class TransformWorkerProgram
                 {
                     TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
                     MethodName = methodSymbol.Name,
-                    ParameterTypeFullNames = methodSymbol.Parameters
-                        .Select(CecilTypeNames.ToParameterTypeFullName)
-                        .ToArray(),
+                    ParameterTypeFullNames = parameterTypeFullNames,
                     ShimTypeName = currentShimType.ShimTypeName,
                     ShimMethodName = shimMethodName,
                     PatchKind = decision.PatchKind
@@ -302,6 +320,7 @@ public static class TransformWorkerProgram
         }
 
         string shimSource = ShimSourceEmitter.Emit(root, shimTypes);
+        ApplyShimSourceLineRanges(shimSource, entries);
         return new WorkerOutput
         {
             ShimSource = shimSource,
@@ -310,6 +329,32 @@ public static class TransformWorkerProgram
             DeclarationDriftWarnings = declarationDriftWarnings.ToArray(),
             ParseErrors = parseErrors.ToArray()
         };
+    }
+
+    // Shim method names are globally unique within one emitted source (name + global counter),
+    // so re-parsing the exact text csc will compile yields authoritative per-entry line ranges
+    // for error attribution. Members outside the manifest (e.g. __BindAccessors) end up in the
+    // map too but are simply never looked up.
+    private static void ApplyShimSourceLineRanges(string shimSource, List<WorkerEntry> entries)
+    {
+        SyntaxTree emittedTree = CSharpSyntaxTree.ParseText(shimSource);
+        Dictionary<string, (int Start, int End)> lineSpanByShimMethodName =
+            new Dictionary<string, (int Start, int End)>();
+        foreach (MethodDeclarationSyntax method in emittedTree.GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>())
+        {
+            FileLinePositionSpan lineSpan = method.GetLocation().GetLineSpan();
+            lineSpanByShimMethodName[method.Identifier.Text] =
+                (lineSpan.StartLinePosition.Line + 1, lineSpan.EndLinePosition.Line + 1);
+        }
+
+        foreach (WorkerEntry entry in entries)
+        {
+            if (lineSpanByShimMethodName.TryGetValue(entry.ShimMethodName, out (int Start, int End) lineSpan))
+            {
+                entry.ShimSourceStartLine = lineSpan.Start;
+                entry.ShimSourceEndLine = lineSpan.End;
+            }
+        }
     }
 
     /// <summary>
@@ -3082,6 +3127,11 @@ internal sealed class WorkerInput
     public string[] ReferencePaths { get; set; }
 
     public string TargetTypesAssemblyPath { get; set; }
+
+    // Method keys (see TransformWorkerProgram.BuildMethodKey) that the orchestrator already
+    // reported Failed from a first compile round; the retry excludes them so it does not fail
+    // on the same error again.
+    public string[] ExcludedMethodKeys { get; set; }
 }
 
 internal sealed class WorkerOutput
@@ -3111,6 +3161,12 @@ internal sealed class WorkerEntry
 
     // "transplant" | "delegation" — see PatchKinds.
     public string PatchKind { get; set; }
+
+    // 1-based, both ends inclusive, within WorkerOutput.ShimSource; 0 when the shim method
+    // declaration could not be located while re-parsing the emitted source.
+    public int ShimSourceStartLine { get; set; }
+
+    public int ShimSourceEndLine { get; set; }
 }
 
 internal static class PatchKinds
