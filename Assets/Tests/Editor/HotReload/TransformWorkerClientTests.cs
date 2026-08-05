@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -158,7 +159,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: every worker entry carries a 1-based shim source line range so the orchestrator
-        /// can attribute compile errors per method.
+        /// can attribute compile errors per method (end within the emitted source; ranges do not
+        /// overlap).
         /// </summary>
         [Test]
         public async Task BootstrapAndRun_OnE2EFixture_EveryEntryHasAValidShimSourceLineRange()
@@ -167,6 +169,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.entries, Is.Not.Empty);
 
+            int shimSourceLineCount = CountLines(result.Output.shimSource);
+            List<(int Start, int End, string MethodName)> ranges =
+                new List<(int Start, int End, string MethodName)>();
             foreach (TransformWorkerEntryDto entry in result.Output.entries)
             {
                 Assert.That(
@@ -177,7 +182,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     entry.shimSourceStartLine,
                     Is.LessThanOrEqualTo(entry.shimSourceEndLine),
                     "Entry shim source start line must not be after its end line: " + entry.methodName);
+                Assert.That(
+                    entry.shimSourceEndLine,
+                    Is.LessThanOrEqualTo(shimSourceLineCount),
+                    "Entry shim source end line exceeds shimSource line count: " + entry.methodName);
+                ranges.Add((entry.shimSourceStartLine, entry.shimSourceEndLine, entry.methodName));
             }
+
+            ranges.Sort((left, right) => left.Start.CompareTo(right.Start));
+            for (int index = 1; index < ranges.Count; index++)
+            {
+                Assert.That(
+                    ranges[index].Start,
+                    Is.GreaterThan(ranges[index - 1].End),
+                    "Shim source line ranges overlap between "
+                    + ranges[index - 1].MethodName
+                    + " and "
+                    + ranges[index].MethodName);
+            }
+        }
+
+        private static int CountLines(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return 0;
+            }
+
+            int lineCount = 1;
+            for (int index = 0; index < text.Length; index++)
+            {
+                if (text[index] == '\n')
+                {
+                    lineCount++;
+                }
+            }
+
+            return lineCount;
         }
 
         /// <summary>
