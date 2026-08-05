@@ -292,7 +292,146 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + reasonFragment + "'.");
         }
 
-        private static async Task<TransformWorkerClientResult> RunWorkerOnE2EFixtureAsync()
+        /// <summary>
+        /// What: with a snapshot whose ComputeWithPrivate body differs, the worker emits only that edited method and reports a positive unchangedMethodCount for the rest.
+        /// </summary>
+        [Test]
+        public async Task Run_WithSnapshotDifferingOnlyInOneMethod_EmitsOnlyEditedMethod()
+        {
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            string snapshotSource = onDisk.Replace(
+                "return _secret + delta;",
+                "return _secret + delta + 999;",
+                StringComparison.Ordinal);
+            Assert.That(snapshotSource, Is.Not.EqualTo(onDisk), "Precondition: snapshot must differ.");
+
+            TransformWorkerClientResult result = await RunWorkerOnE2EFixtureAsync(snapshotSource);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.unchangedMethodCount, Is.GreaterThan(0));
+
+            bool foundCompute = false;
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                Assert.That(
+                    entry.methodName,
+                    Is.Not.EqualTo(nameof(HotReloadE2EFixture.QueryPrivate)),
+                    "Unedited QueryPrivate must not appear in entries.");
+                if (entry.methodName == nameof(HotReloadE2EFixture.ComputeWithPrivate))
+                {
+                    foundCompute = true;
+                }
+            }
+
+            Assert.That(foundCompute, Is.True, "Edited ComputeWithPrivate must appear in entries.");
+
+            if (result.Output.skipped != null)
+            {
+                foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+                {
+                    Assert.That(
+                        skipped.method,
+                        Does.Not.Contain(nameof(HotReloadE2EFixture.QueryPrivate)),
+                        "Unedited QueryPrivate must not appear in skipped.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: a snapshot that differs only by EOL (LF↔CRLF) treats every method as unchanged — Windows guardrail for line-ending noise.
+        /// </summary>
+        [Test]
+        public async Task Run_WithSnapshotDifferingOnlyByEol_TreatsAllMethodsUnchanged()
+        {
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            string normalizedLf = onDisk.Replace("\r\n", "\n", StringComparison.Ordinal);
+            string snapshotSource = normalizedLf.Contains('\n')
+                ? normalizedLf.Replace("\n", "\r\n", StringComparison.Ordinal)
+                : normalizedLf + "\r\n";
+            Assert.That(snapshotSource, Is.Not.EqualTo(onDisk), "Precondition: EOL-swapped snapshot must differ as raw text.");
+
+            TransformWorkerClientResult result = await RunWorkerOnE2EFixtureAsync(snapshotSource);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.entries, Is.Empty);
+            Assert.That(result.Output.unchangedMethodCount, Is.GreaterThan(0));
+        }
+
+        /// <summary>
+        /// What: a snapshot that changes only a field initializer emits the outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_WithSnapshotFieldInitializerChanged_EmitsOutsideMethodBodyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            string snapshotSource = onDisk.Replace(
+                "private int _secret = 10;",
+                "private int _secret = 11;",
+                StringComparison.Ordinal);
+            Assert.That(snapshotSource, Is.Not.EqualTo(onDisk));
+
+            TransformWorkerClientResult result = await RunWorkerOnE2EFixtureAsync(snapshotSource);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.declarationDriftWarnings, Is.Not.Null);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.Some.Contain("Edits outside method bodies in HotReloadE2EFixtures.cs"));
+        }
+
+        /// <summary>
+        /// What: a snapshot that duplicates a method key falls back to no-baseline behavior (same entries as a null snapshot, unchangedMethodCount 0).
+        /// </summary>
+        [Test]
+        public async Task Run_WithSnapshotDuplicateMethodKey_FallsBackToNoBaseline()
+        {
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            const string queryPrivateBlock =
+                @"        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int QueryPrivate()
+        {
+            int[] values = { 1, 2, 3 };
+            return (from value in values where value < _secret select value).Count();
+        }
+";
+            Assert.That(onDisk, Does.Contain("public int QueryPrivate()"));
+            // Duplicate the method inside HotReloadE2EFixture so BuildSyntaxMethodKey collides.
+            const string classCloseMarker =
+                "            return token.N;\n        }\n    }\n\n    /// <summary>\n    /// Internal type used only by";
+            int markerIndex = onDisk.IndexOf(classCloseMarker, StringComparison.Ordinal);
+            Assert.That(markerIndex, Is.GreaterThan(0), "Could not locate HotReloadE2EFixture class close for duplicate insert.");
+            int insertAt = onDisk.IndexOf("\n    }\n\n    /// <summary>", markerIndex, StringComparison.Ordinal);
+            Assert.That(insertAt, Is.GreaterThan(0));
+            string snapshotSource = onDisk.Insert(insertAt + 1, queryPrivateBlock);
+
+            TransformWorkerClientResult baseline = await RunWorkerOnE2EFixtureAsync();
+            TransformWorkerClientResult withCollision = await RunWorkerOnE2EFixtureAsync(snapshotSource);
+            Assert.That(baseline.Success, Is.True, baseline.ErrorMessage);
+            Assert.That(withCollision.Success, Is.True, withCollision.ErrorMessage);
+            Assert.That(withCollision.Output.unchangedMethodCount, Is.EqualTo(0));
+
+            HashSet<string> baselineKeys = CollectEntryKeys(baseline.Output.entries);
+            HashSet<string> collisionKeys = CollectEntryKeys(withCollision.Output.entries);
+            Assert.That(collisionKeys, Is.EquivalentTo(baselineKeys));
+        }
+
+        private static HashSet<string> CollectEntryKeys(TransformWorkerEntryDto[] entries)
+        {
+            HashSet<string> keys = new HashSet<string>();
+            if (entries == null)
+            {
+                return keys;
+            }
+
+            foreach (TransformWorkerEntryDto entry in entries)
+            {
+                keys.Add(
+                    entry.typeMetadataName + "::" + entry.methodName + "("
+                    + string.Join(",", entry.parameterTypeFullNames ?? Array.Empty<string>()) + ")");
+            }
+
+            return keys;
+        }
+
+        private static async Task<TransformWorkerClientResult> RunWorkerOnE2EFixtureAsync(
+            string snapshotSource = null)
         {
             string fixturePath = ResolveE2EFixturePath();
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
@@ -320,7 +459,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 sourcePath = fixturePath,
                 defines = compilationAssembly.defines ?? System.Array.Empty<string>(),
                 referencePaths = compilationAssembly.allReferences,
-                targetTypesAssemblyPath = targetDllPath
+                targetTypesAssemblyPath = targetDllPath,
+                snapshotSource = snapshotSource
             };
 
             return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
