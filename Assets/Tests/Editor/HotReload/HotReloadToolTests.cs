@@ -156,5 +156,69 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(response.ClearedCount, Is.EqualTo(0));
             Assert.That(response.Message, Is.EqualTo("No active hot-reload patches to revert."));
         }
+
+        /// <summary>
+        /// What: an empty Methods list yields the "no patchable method bodies" message (never "See Methods").
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_EmptyMethods_YieldsNoPatchableBodiesMessage()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Does.Contain("Hot reload found no patchable method bodies in the given files"));
+            Assert.That(response.Message, Does.Not.Contain("See Methods"));
+        }
+
+        /// <summary>
+        /// What: a skipped-only run keeps the existing "See Methods for Skipped reasons." message.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_SkippedOnly_KeepsExistingSkippedMessage()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Skipped("T.M", "reason", "file.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo("Hot reload finished with no methods patched. See Methods for Skipped reasons."));
+        }
+
+        /// <summary>
+        /// What: a failed run keeps the existing failure message.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithFailedOutcome_KeepsExistingFailureMessage()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Failed("T.M", "reason", "file.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo("Hot reload finished with one or more Failed method outcomes. See Methods."));
+        }
     }
 }

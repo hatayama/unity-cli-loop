@@ -384,7 +384,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             int aggregatedInlineRiskCount = 0;
             foreach (string warning in result.Warnings)
             {
-                if (warning.Contains("patched methods are small")
+                if (warning.Contains("patched methods had pre-patch bodies")
                     && warning.Contains(nameof(HotReloadE2EFixture.ComputeWithPrivate))
                     && warning.Contains(nameof(HotReloadE2EFixture.CenterOfCell)))
                 {
