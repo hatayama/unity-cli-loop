@@ -26,6 +26,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a signature-mismatch diagnostic (CS1501) appends the hint (re-signatured members
+        /// need a real compile).
+        /// </summary>
+        [Test]
+        public void ComposeShimCompileFailureMessage_SignatureMismatchDiagnostic_AppendsHint()
+        {
+            string message = HotReloadShimCompiler.ComposeShimCompileFailureMessage(
+                new[]
+                {
+                    "CS1501: No overload for method 'Helper' takes 2 arguments"
+                });
+
+            Assert.That(message, Does.Contain(HotReloadConstants.NewMemberCompileHint));
+            Assert.That(message, Does.Contain("CS1501"));
+        }
+
+        /// <summary>
         /// What: a non-missing-member diagnostic (CS0229) does not get the new-member compile hint.
         /// </summary>
         [Test]

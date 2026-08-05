@@ -105,13 +105,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Only these diagnostics indicate a member/type the compiled assembly does not have yet;
         // appending the "run a real compile" hint to unrelated errors (CS0229 ambiguity, syntax
-        // errors) misdirects the caller.
+        // errors) misdirects the caller. CS1501/CS7036 cover calls whose target signature changed
+        // in the edit but not yet in the compiled assembly.
         private static readonly string[] MissingMemberDiagnosticCodes =
         {
             "CS0103",
             "CS0117",
             "CS0246",
-            "CS1061"
+            "CS1061",
+            "CS1501",
+            "CS7036"
         };
 
         internal static string ComposeShimCompileFailureMessage(IReadOnlyList<string> errors)
