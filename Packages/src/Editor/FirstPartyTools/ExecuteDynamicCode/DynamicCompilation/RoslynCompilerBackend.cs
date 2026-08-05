@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor.Compilation;
@@ -167,7 +168,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
-                    CreateNoWindow = true
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
                 };
 
                 markBuildStarted();
@@ -227,6 +230,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> lines = new()
             {
                 "-nologo",
+                // Diagnostics must be machine-readable by AI agents: English text, UTF-8 bytes.
+                "-preferreduilang:en-US",
+                "-utf8output",
                 "-nostdlib+",
                 "-target:library",
                 "-optimize+",

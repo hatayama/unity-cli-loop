@@ -135,10 +135,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _pendingShimMethod = null;
             }
 
-            string warning = IsLikelyJitInlined(method)
-                ? HotReloadConstants.SmallMethodInliningRiskWarning
-                : string.Empty;
-            return HotReloadPatchResult.SuccessResult(warning);
+            return HotReloadPatchResult.SuccessResult(IsLikelyJitInlined(method));
         }
 
         /// <summary>

@@ -42,6 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
             List<string> suppressedPausePointIds = new List<string>();
+            List<string> inlineRiskMethodLabels = new List<string>();
             int patchedTotal = 0;
 
             for (int index = 0; index < files.Count; index++)
@@ -64,8 +65,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 outcomes.AddRange(fileResult.Outcomes);
                 warnings.AddRange(fileResult.Warnings);
-                suppressedPausePointIds.AddRange(fileResult.SuppressedPausePointIds);
+                AppendDistinct(suppressedPausePointIds, fileResult.SuppressedPausePointIds);
+                AppendDistinct(inlineRiskMethodLabels, fileResult.InlineRiskMethodLabels);
                 patchedTotal += fileResult.PatchedCount;
+            }
+
+            if (inlineRiskMethodLabels.Count > 0)
+            {
+                warnings.Add(
+                    FormatInlineRiskAggregatedWarning(
+                        inlineRiskMethodLabels.Count,
+                        patchedTotal,
+                        inlineRiskMethodLabels));
             }
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -224,6 +235,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await MainThreadSwitcher.SwitchToMainThread(ct);
             Dictionary<string, string> bindFailureReasonByShimTypeName =
                 BindShimAccessors(compileResult.Assembly);
+            List<string> inlineRiskMethodLabels = new List<string>();
             int patchedCount = 0;
             foreach (TransformWorkerEntryDto entry in workerOutput.entries)
             {
@@ -233,7 +245,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     compileResult.Assembly,
                     bindFailureReasonByShimTypeName,
                     assemblyResolvePath,
-                    warnings,
+                    inlineRiskMethodLabels,
                     suppressedPausePointIds);
                 outcomes.Add(outcome);
                 if (outcome.Kind == HotReloadMethodOutcomeKind.Patched)
@@ -243,7 +255,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return new HotReloadFileProcessResult(
-                outcomes, warnings, patchedCount, suppressedPausePointIds);
+                outcomes, warnings, patchedCount, suppressedPausePointIds, inlineRiskMethodLabels);
         }
 
         private static HotReloadMethodOutcome ApplyEntry(
@@ -252,7 +264,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Assembly shimAssembly,
             IReadOnlyDictionary<string, string> bindFailureReasonByShimTypeName,
             string filePath,
-            List<string> warnings,
+            List<string> inlineRiskMethodLabels,
             List<string> suppressedPausePointIds)
         {
             string methodLabel = entry.typeMetadataName + "." + entry.methodName;
@@ -319,12 +331,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             AppendSuppressedPausePointIds(matchResult.Method, suppressedPausePointIds);
 
-            if (!string.IsNullOrEmpty(patchResult.Warning))
+            // Inline risk is flagged per method but reported as one aggregated warning so
+            // Warnings stay readable when many tiny methods are patched together.
+            if (patchResult.InlineRiskDetected)
             {
-                warnings.Add(methodLabel + ": " + patchResult.Warning);
+                inlineRiskMethodLabels.Add(methodLabel);
             }
 
-            return HotReloadMethodOutcome.Patched(methodLabel, filePath, patchResult.Warning);
+            return HotReloadMethodOutcome.Patched(methodLabel, filePath);
+        }
+
+        private static string FormatInlineRiskAggregatedWarning(
+            int atRiskCount,
+            int patchedTotal,
+            IReadOnlyList<string> methodLabels)
+        {
+            Debug.Assert(atRiskCount > 0, "atRiskCount must be positive.");
+            Debug.Assert(methodLabels != null, "methodLabels must not be null.");
+            Debug.Assert(methodLabels.Count == atRiskCount, "methodLabels count must match atRiskCount.");
+
+            string methods = string.Join(", ", methodLabels);
+            return $"{atRiskCount} of {patchedTotal} patched methods are small (or marked [AggressiveInlining]) and the Mono JIT may already have inlined them into callers compiled before the patch; those call sites keep the old behavior until a real compile: {methods}";
+        }
+
+        // Duplicate file inputs process the same source twice, producing duplicates across
+        // per-file result lists; aggregated warnings must name each pause-point id / method
+        // label once even then. Methods and PatchedTotal keep reflecting raw patch
+        // operations on purpose.
+        private static void AppendDistinct(List<string> target, IReadOnlyList<string> additions)
+        {
+            foreach (string addition in additions)
+            {
+                if (!target.Contains(addition))
+                {
+                    target.Add(addition);
+                }
+            }
         }
 
         // What: records armed pause-point marker ids on a method just patched by hot reload.
@@ -606,17 +648,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public List<string> Warnings { get; }
             public int PatchedCount { get; }
             public List<string> SuppressedPausePointIds { get; }
+            public List<string> InlineRiskMethodLabels { get; }
 
             public HotReloadFileProcessResult(
                 List<HotReloadMethodOutcome> outcomes,
                 List<string> warnings,
                 int patchedCount,
-                List<string> suppressedPausePointIds = null)
+                List<string> suppressedPausePointIds = null,
+                List<string> inlineRiskMethodLabels = null)
             {
                 Outcomes = outcomes;
                 Warnings = warnings;
                 PatchedCount = patchedCount;
                 SuppressedPausePointIds = suppressedPausePointIds ?? new List<string>();
+                InlineRiskMethodLabels = inlineRiskMethodLabels ?? new List<string>();
             }
         }
     }

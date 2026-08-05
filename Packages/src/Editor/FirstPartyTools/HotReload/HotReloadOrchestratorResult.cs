@@ -51,12 +51,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             FilePath = filePath;
         }
 
-        public static HotReloadMethodOutcome Patched(string method, string filePath, string warning = "")
+        public static HotReloadMethodOutcome Patched(string method, string filePath)
         {
             return new HotReloadMethodOutcome(
                 HotReloadMethodOutcomeKind.Patched,
                 method,
-                warning ?? string.Empty,
+                string.Empty,
                 filePath);
         }
 
