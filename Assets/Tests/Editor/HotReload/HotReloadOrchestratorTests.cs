@@ -364,10 +364,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     aggregatedInlineRiskCount++;
                 }
 
-                Assert.That(
-                    warning,
-                    Does.Not.Contain(HotReloadConstants.SmallMethodInliningRiskWarning),
-                    "Per-method SmallMethodInliningRiskWarning text must not appear in Warnings.");
+                if (warning.Contains("[AggressiveInlining]"))
+                {
+                    Assert.That(
+                        warning,
+                        Does.Contain("patched methods are small"),
+                        "Inline-risk text in Warnings must be the aggregated line, not a per-method entry.");
+                }
             }
 
             Assert.That(

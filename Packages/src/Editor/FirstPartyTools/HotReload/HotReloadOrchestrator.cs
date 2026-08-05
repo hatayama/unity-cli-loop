@@ -331,14 +331,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             AppendSuppressedPausePointIds(matchResult.Method, suppressedPausePointIds);
 
-            // Per-method inline-risk text is aggregated once for the whole run so Warnings
-            // stay readable when many tiny methods are patched together.
-            if (!string.IsNullOrEmpty(patchResult.Warning))
+            // Inline risk is flagged per method but reported as one aggregated warning so
+            // Warnings stay readable when many tiny methods are patched together.
+            if (patchResult.InlineRiskDetected)
             {
                 inlineRiskMethodLabels.Add(methodLabel);
             }
 
-            return HotReloadMethodOutcome.Patched(methodLabel, filePath, string.Empty);
+            return HotReloadMethodOutcome.Patched(methodLabel, filePath);
         }
 
         private static string FormatInlineRiskAggregatedWarning(
