@@ -21,6 +21,11 @@ public static class Program
 
     public static int Main()
     {
+        // Diagnostics must reach the host as UTF-8 bytes regardless of the OS default
+        // codepage (Windows defaults to a legacy one); the host pairs this with
+        // ProcessStartInfo.StandardOutputEncoding = Encoding.UTF8.
+        Console.OutputEncoding = Encoding.UTF8;
+
         string requestPath;
         while ((requestPath = Console.ReadLine()) != null)
         {
@@ -196,7 +201,7 @@ public static class Program
                 int column = lineSpan.StartLinePosition.Character + 1;
                 string file = string.IsNullOrEmpty(lineSpan.Path) ? sourcePath : lineSpan.Path;
                 string severity = diagnostic.Severity == DiagnosticSeverity.Warning ? "warning" : "error";
-                diagnosticLines.Add(file + "(" + line + "," + column + "): " + severity + " " + diagnostic.Id + ": " + diagnostic.GetMessage());
+                diagnosticLines.Add(file + "(" + line + "," + column + "): " + severity + " " + diagnostic.Id + ": " + diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture));
             }
 
             return new CompileResponse(exitCode, diagnosticLines);

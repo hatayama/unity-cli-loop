@@ -99,7 +99,7 @@ first line, drive the game, and check the hit count: zero hits means the calling
 never reached the method, which no patch (or compile) can fix. To chase an early return
 inside the method, arm a second marker on the suspected early-return line. The other
 known cause is JIT inlining of tiny methods, which the response already flags with a
-per-method warning.
+single aggregated warning listing the at-risk methods.
 
 ## Convergence and lifecycle
 
@@ -140,7 +140,7 @@ Returns JSON with:
 
 - `Success` (boolean): `false` on parameter validation failure or when any method outcome is `Failed`. `Skipped` outcomes alone never force `false`
 - `Methods` (array): Per-method `{ Kind, Method, Reason, FilePath }` where `Kind` is `Patched`, `Skipped`, or `Failed` on apply runs, or `Active` on `--status` runs; empty on `--revert-all` runs
-- `Warnings` (array): Non-fatal notes — a patched method that is small enough to have been JIT-inlined into existing callers (the change may not show at those call sites), the pause-point interaction above, and const drift entries described in "Scope and limits"
+- `Warnings` (array): Non-fatal notes — one aggregated line listing the patched methods small enough to have been JIT-inlined into existing callers (the change may not show at those call sites), the pause-point interaction above, and const drift entries described in "Scope and limits"
 - `PatchedTotal` (number): Methods patched in this run
 - `ActivePatchTotal` (number): Methods still patched after this run
 - `ClearedCount` (number): Patches removed by `--revert-all` (0 on apply)

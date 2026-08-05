@@ -78,11 +78,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // in which case a Harmony detour on the original method will not reach existing call sites.
         public const int SmallMethodInliningRiskThresholdBytes = 32;
 
-        public const string SmallMethodInliningRiskWarning =
-            "This method is small enough (or marked [AggressiveInlining]) that the Mono JIT may "
-            + "already have inlined it into callers; those call sites will keep running the old "
-            + "body until they are recompiled.";
-
         public const string StaleAssemblyHint =
             "The loaded assembly no longer matches the compiled assembly on disk (a script compile "
             + "or domain reload may have happened). Hot reload is not needed — use uloop compile, "

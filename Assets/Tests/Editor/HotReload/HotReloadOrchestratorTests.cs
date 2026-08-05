@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -309,6 +310,117 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 foundAutoPropertyAccessor,
                 Is.False,
                 "Auto-property accessors must not be listed; only explicit-body accessors are reported.");
+        }
+
+        /// <summary>
+        /// What: patching multiple small methods emits one aggregated inline-risk warning and
+        /// leaves each Patched outcome's Reason empty.
+        /// </summary>
+        [Test]
+        public async Task Run_MultipleSmallPatchedMethods_AggregatesInlineRiskWarningOnce()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "MultipleSmallInlineRisk.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
+                    centerOfCellMethod:
+                    "[MethodImpl(MethodImplOptions.NoInlining)]\n"
+                    + "        public Vector3 CenterOfCell(Vector3Int cell)\n"
+                    + "        {\n"
+                    + "            return new Vector3(cell.x + 0.5f, cell.y + 0.5f, cell.z + 0.5f);\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.CenterOfCell));
+
+            int patchedWithEmptyReason = 0;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind != HotReloadMethodOutcomeKind.Patched)
+                {
+                    continue;
+                }
+
+                Assert.That(outcome.Reason, Is.Empty, "Patched Reason must not carry per-method inline-risk text.");
+                patchedWithEmptyReason++;
+            }
+
+            Assert.That(patchedWithEmptyReason, Is.GreaterThanOrEqualTo(2));
+
+            int aggregatedInlineRiskCount = 0;
+            foreach (string warning in result.Warnings)
+            {
+                if (warning.Contains("patched methods are small")
+                    && warning.Contains(nameof(HotReloadE2EFixture.ComputeWithPrivate))
+                    && warning.Contains(nameof(HotReloadE2EFixture.CenterOfCell)))
+                {
+                    aggregatedInlineRiskCount++;
+                }
+            }
+
+            Assert.That(
+                aggregatedInlineRiskCount,
+                Is.EqualTo(1),
+                "Expected exactly one aggregated inline-risk warning listing the at-risk methods.");
+            Assert.That(
+                result.Warnings,
+                Has.Count.EqualTo(1),
+                "This fixture run must emit only the aggregated inline-risk warning; any extra entry means per-method warning text has come back.");
+        }
+
+        /// <summary>
+        /// Verifies duplicate file inputs re-patch the same method yet the aggregated warning lists it once.
+        /// </summary>
+        [Test]
+        public async Task Run_DuplicateFileInputs_ListsEachAtRiskMethodOnceInAggregatedWarning()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "DuplicateInputInlineRisk.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath, fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            // Methods and PatchedTotal keep reflecting raw patch operations on purpose:
+            // the duplicated input re-patches every fixture method once per file entry.
+            int computeWithPrivatePatchedOperations = 0;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    && outcome.Method.Contains(nameof(HotReloadE2EFixture.ComputeWithPrivate)))
+                {
+                    computeWithPrivatePatchedOperations++;
+                }
+            }
+
+            Assert.That(computeWithPrivatePatchedOperations, Is.EqualTo(2));
+
+            Assert.That(
+                result.Warnings,
+                Has.Count.EqualTo(1),
+                "This fixture run must emit only the aggregated inline-risk warning.");
+
+            string aggregatedWarning = result.Warnings[0];
+            Assert.That(
+                CountOccurrences(aggregatedWarning, nameof(HotReloadE2EFixture.ComputeWithPrivate)),
+                Is.EqualTo(1),
+                "The aggregated warning must list a re-patched method once, not once per patch operation.");
         }
 
         /// <summary>
@@ -804,6 +916,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.Fail("Expected Patched outcome for " + methodName + ".\n" + FormatOutcomes(result));
+        }
+
+        private static int CountOccurrences(string text, string token)
+        {
+            return text.Split(new[] { token }, StringSplitOptions.None).Length - 1;
         }
 
         private static string FormatOutcomes(HotReloadOrchestratorResult result)
