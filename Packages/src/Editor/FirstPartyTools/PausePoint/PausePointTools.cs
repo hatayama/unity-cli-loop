@@ -482,7 +482,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     Success = false,
                     ErrorCode = errorCode,
                     Message = patchResult.ErrorMessage,
-                    RecommendedNextAction = patchResult.Hint
+                    RecommendedNextAction = patchResult.Hint,
+                    EditorState = PausePointEditorState.FromSnapshot(UloopPausePointRegistry.CaptureEditorState()),
                 };
             }
 
@@ -665,7 +666,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Success = false,
                 Message = message,
                 ErrorCode = errorCode,
-                RecommendedNextAction = recommendedNextAction
+                RecommendedNextAction = recommendedNextAction,
+                EditorState = PausePointEditorState.FromSnapshot(UloopPausePointRegistry.CaptureEditorState()),
             };
         }
 
