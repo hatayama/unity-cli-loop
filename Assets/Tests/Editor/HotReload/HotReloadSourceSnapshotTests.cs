@@ -188,6 +188,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: on Windows, snapshot filename hashing lowercases the project-relative path so case-only path differences resolve to the same baseline file.
+        /// </summary>
+        [Test]
+        public void HashProjectRelativePath_OnWindows_IgnoresCase()
+        {
+            if (Path.DirectorySeparatorChar != '\\')
+            {
+                Assert.Pass("Case folding applies only on Windows path separators.");
+                return;
+            }
+
+            Assert.That(
+                HotReloadSourceSnapshotter.HashProjectRelativePath("Assets/Foo.cs"),
+                Is.EqualTo(HotReloadSourceSnapshotter.HashProjectRelativePath("assets/foo.cs")));
+        }
+
+        /// <summary>
         /// What: stale MVID snapshot directories for the same assembly name are pruned, while hyphenated sibling assembly names and non-MVID suffixes are kept.
         /// </summary>
         [Test]

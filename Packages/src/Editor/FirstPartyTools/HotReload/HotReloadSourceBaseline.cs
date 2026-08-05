@@ -47,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            string mvid = ReadAssemblyMvid(targetDllPath);
+            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath);
             string assemblyName = Path.GetFileNameWithoutExtension(targetDllPath);
             string slashNormalizedRelativePath = projectRelativeSourcePath.Replace('\\', '/');
             string snapshotFileName = HotReloadSourceSnapshotter.HashProjectRelativePath(slashNormalizedRelativePath) + ".cs";
@@ -79,13 +79,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             using MemoryStream memoryStream = new MemoryStream(snapshotBytes, writable: false);
             using StreamReader reader = new StreamReader(memoryStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
             return reader.ReadToEnd();
-        }
-
-        private static string ReadAssemblyMvid(string dllPath)
-        {
-            ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
-            using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(dllPath, readerParameters);
-            return assemblyDefinition.MainModule.Mvid.ToString("N");
         }
 
         private static Document FindDocumentForProjectRelativePath(

@@ -153,7 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             File.WriteAllText(stampPath, mvid + "," + dllMtimeTicks + "," + dllByteLength);
         }
 
-        private static string ReadAssemblyMvid(string dllPath)
+        internal static string ReadAssemblyMvid(string dllPath)
         {
             ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
             using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(dllPath, readerParameters);
@@ -207,7 +207,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(
                 slashNormalizedProjectRelativePath != null,
                 "slashNormalizedProjectRelativePath must not be null.");
-            byte[] utf8 = Encoding.UTF8.GetBytes(slashNormalizedProjectRelativePath);
+
+            string hashInput = slashNormalizedProjectRelativePath;
+            // Why lowercase only on Windows: PDB document matching is OrdinalIgnoreCase there, so
+            // a case-only path difference must hash to the same snapshot filename. Unix filesystems
+            // can be case-sensitive, so leave the path bytes unchanged on those platforms.
+            if (Path.DirectorySeparatorChar == '\\')
+            {
+                hashInput = hashInput.ToLowerInvariant();
+            }
+
+            byte[] utf8 = Encoding.UTF8.GetBytes(hashInput);
             using SHA256 sha256 = SHA256.Create();
             byte[] hash = sha256.ComputeHash(utf8);
             StringBuilder builder = new StringBuilder(hash.Length * 2);
