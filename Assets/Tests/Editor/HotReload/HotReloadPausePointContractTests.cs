@@ -64,6 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Mode = UloopPausePointCaptureMode.Continuous
             });
             Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
             Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
@@ -318,6 +319,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(enableLine, Is.GreaterThan(0));
 
             await HotReloadFromEditedSourceAsync(editedSource, "ContractAsyncMoveNext.cs");
+
+            HotReloadShimFileLookup lookup =
+                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+            Assert.That(lookup, Is.Not.Null);
+            SourcePausePointShimResolution shimResolution =
+                SourcePausePointShimResolver.Resolve(lookup, FixtureProjectRelativePath, enableLine);
+            Assert.That(
+                shimResolution.Kind,
+                Is.EqualTo(SourcePausePointShimResolveKind.ShimDirect),
+                shimResolution.ErrorMessage);
 
             PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
             {
