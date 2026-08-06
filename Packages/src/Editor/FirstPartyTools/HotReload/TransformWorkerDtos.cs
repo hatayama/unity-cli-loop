@@ -21,6 +21,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why pass text (not a path): avoids an IO race between orchestrator verification and worker
         // read that would crash the whole file under the no-try-catch policy.
         public string snapshotSource;
+
+        // Project-relative forward-slash path baked into #line document names so shim compile
+        // diagnostics map back to the user's file (not the temp HotReloadShim.cs path).
+        public string projectRelativePath;
     }
 
     /// <summary>
@@ -60,10 +64,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // "transplant" | "delegation". Null/empty is treated as transplant by the orchestrator.
         public string patchKind;
 
-        // 1-based, both ends inclusive, within TransformWorkerOutputDto.shimSource; 0 when the
-        // shim method declaration could not be located while re-parsing the emitted source.
-        public int shimSourceStartLine;
-        public int shimSourceEndLine;
+        // 1-based, both ends inclusive, within the original edited source file (not shimSource).
+        // Used to attribute shim compile errors whose #line-mapped locations fall in this method.
+        public int sourceStartLine;
+        public int sourceEndLine;
     }
 
     [Serializable]

@@ -30,11 +30,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string shimSource,
             IReadOnlyList<string> referencePaths,
             IReadOnlyList<string> defineSymbols,
+            string projectRelativePath,
             CancellationToken ct)
         {
             Debug.Assert(!string.IsNullOrEmpty(shimSource), "shimSource must not be empty.");
             Debug.Assert(referencePaths != null, "referencePaths must not be null.");
             Debug.Assert(defineSymbols != null, "defineSymbols must not be null.");
+            Debug.Assert(projectRelativePath != null, "projectRelativePath must not be null.");
 
             // Resolver and Application.dataPath (CreateWorkDirectory) need the Unity main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -78,7 +80,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     List<string> errorMessages = new List<string>(errors.Count);
                     foreach (HotReloadShimCompileError error in errors)
                     {
-                        errorMessages.Add(error.Message);
+                        // Why only user-file mapped lines: scaffold diagnostics (temp HotReloadShim.cs)
+                        // must not grow a fake "(line N)" that looks like the edited source.
+                        errorMessages.Add(FormatErrorMessageWithMappedLine(error, projectRelativePath));
                     }
 
                     return HotReloadShimCompileResult.Failure(
@@ -124,6 +128,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "CS7036"
         };
 
+        /// <summary>
+        /// Appends " (line N)" only when the diagnostic's #line-mapped file refers to the user's
+        /// project-relative path. Scaffold-path errors keep the bare message.
+        /// </summary>
+        private static string FormatErrorMessageWithMappedLine(
+            HotReloadShimCompileError error,
+            string projectRelativePath)
+        {
+            if (error.Line > 0
+                && !string.IsNullOrEmpty(error.File)
+                && HotReloadSourcePathNormalizer.PathsReferToSameFile(error.File, projectRelativePath))
+            {
+                return error.Message + " (line " + error.Line + ")";
+            }
+
+            return error.Message;
+        }
+
         internal static string ComposeShimCompileFailureMessage(IReadOnlyList<string> errors)
         {
             Debug.Assert(errors != null, "errors must not be null.");
@@ -159,7 +181,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (compilerMessage.type == CompilerMessageType.Error)
                 {
-                    errors.Add(new HotReloadShimCompileError(compilerMessage.line, compilerMessage.message));
+                    // Why keep file: #line-mapped diagnostics point at the user's project-relative
+                    // path (or an absolute form of it); attribution matches via suffix-tolerant
+                    // path compare, not exact equality across the three compile backends.
+                    errors.Add(
+                        new HotReloadShimCompileError(
+                            compilerMessage.file ?? string.Empty,
+                            compilerMessage.line,
+                            compilerMessage.message));
                 }
             }
 
@@ -181,16 +210,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// One compiler error from a shim compile, with its 1-based line in the shim source
-    /// (0 when the diagnostic carried no location).
+    /// One compiler error from a shim compile. Line/File are #line-mapped when directives are
+    /// present (original user file + 1-based original line); 0 / empty when the diagnostic
+    /// carried no location.
     /// </summary>
     internal sealed class HotReloadShimCompileError
     {
+        public string File { get; }
         public int Line { get; }
         public string Message { get; }
 
-        public HotReloadShimCompileError(int line, string message)
+        public HotReloadShimCompileError(string file, int line, string message)
         {
+            File = file ?? string.Empty;
             Line = line;
             Message = message;
         }

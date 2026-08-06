@@ -177,7 +177,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines = defines,
                 referencePaths = referencePaths,
                 targetTypesAssemblyPath = Path.GetFullPath(targetDllPath),
-                snapshotSource = snapshotSource
+                snapshotSource = snapshotSource,
+                projectRelativePath = projectRelativePath
             };
 
             TransformWorkerClientResult workerResult =
@@ -248,6 +249,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerOutput.shimSource,
                 shimReferences,
                 defines,
+                projectRelativePath,
                 ct).ConfigureAwait(false);
 
             TransformWorkerEntryDto[] entriesToPatch = workerOutput.entries;
@@ -264,6 +266,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ct).ConfigureAwait(false);
                 if (isolation == null)
                 {
+                    // Why: CompileAndLoadAsync appends "(line N)" only for diagnostics whose
+                    // #line-mapped file matches projectRelativePath — scaffold-only errors stay
+                    // bare. Single-entry failures skip isolation and always take this path.
                     outcomes.Add(
                         HotReloadMethodOutcome.Failed(
                             "(shim-compile)",
@@ -677,14 +682,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            ShimCompileErrorAttribution attribution =
-                AttributeErrorsToEntries(workerOutput.entries, compileResult.Errors);
+            ShimCompileErrorAttribution attribution = AttributeErrorsToEntries(
+                workerOutput.entries,
+                compileResult.Errors,
+                workerInput.projectRelativePath);
             if (attribution == null
                 || attribution.FailedEntries.Count == 0
                 || attribution.FailedEntries.Count == workerOutput.entries.Length)
             {
-                // Unattributable errors (header/binder/using-level), or isolating everyone / no one
-                // would not narrow the failure at all.
+                // Unattributable errors (header/binder/using-level / scaffold path), or isolating
+                // everyone / no one would not narrow the failure at all.
                 return null;
             }
 
@@ -720,7 +727,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 excludedMethodKeys = excludedMethodKeys,
                 // Why copy: omitting snapshotSource would make the retry patch unedited methods
                 // again and diverge the retry entries set from the first-pass isolation baseline.
-                snapshotSource = workerInput.snapshotSource
+                snapshotSource = workerInput.snapshotSource,
+                projectRelativePath = workerInput.projectRelativePath
             };
 
             TransformWorkerClientResult retryWorkerResult =
@@ -749,6 +757,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 retryOutput.shimSource,
                 shimReferences,
                 defines,
+                workerInput.projectRelativePath,
                 ct).ConfigureAwait(false);
             if (!retryCompileResult.Success)
             {
@@ -789,19 +798,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Maps each shim compile error to the entry whose [shimSourceStartLine, shimSourceEndLine]
-        /// range contains it. Returns null if any error falls outside every entry's range (a
-        /// header/binder/using-level error, which method isolation cannot fix).
+        /// Maps each shim compile error to the entry whose original-source [sourceStartLine,
+        /// sourceEndLine] contains its #line-mapped location in the same user file. Returns null
+        /// if any error is unattributable (wrong/empty file, scaffold path, or outside every
+        /// entry range) — method isolation cannot fix those.
         /// </summary>
         private static ShimCompileErrorAttribution AttributeErrorsToEntries(
             TransformWorkerEntryDto[] entries,
-            IReadOnlyList<HotReloadShimCompileError> errors)
+            IReadOnlyList<HotReloadShimCompileError> errors,
+            string projectRelativePath)
         {
             Dictionary<TransformWorkerEntryDto, List<string>> errorMessagesByEntry =
                 new Dictionary<TransformWorkerEntryDto, List<string>>();
             foreach (HotReloadShimCompileError error in errors)
             {
-                TransformWorkerEntryDto matchedEntry = FindEntryForLine(entries, error.Line);
+                TransformWorkerEntryDto matchedEntry =
+                    FindEntryForError(entries, error, projectRelativePath);
                 if (matchedEntry == null)
                 {
                     return null;
@@ -813,24 +825,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     errorMessagesByEntry[matchedEntry] = messages;
                 }
 
-                messages.Add(error.Message);
+                // Why append the mapped line: ComposeShimCompileFailureMessage must still see the
+                // "CSxxxx:" prefix for hint matching, while Failed outcomes need the original-file
+                // line visible to the caller.
+                messages.Add(error.Message + " (line " + error.Line + ")");
             }
 
             return new ShimCompileErrorAttribution(errorMessagesByEntry);
         }
 
-        private static TransformWorkerEntryDto FindEntryForLine(TransformWorkerEntryDto[] entries, int line)
+        private static TransformWorkerEntryDto FindEntryForError(
+            TransformWorkerEntryDto[] entries,
+            HotReloadShimCompileError error,
+            string projectRelativePath)
         {
+            if (string.IsNullOrEmpty(error.File) || string.IsNullOrEmpty(projectRelativePath))
+            {
+                return null;
+            }
+
+            // Why suffix-tolerant compare (not ordinal equality): the three shim-compile backends
+            // report file as #line literal, absolute path, or temp scaffold path depending on the
+            // fallback stage — HotReloadSourcePathNormalizer already encodes that contract.
+            if (!HotReloadSourcePathNormalizer.PathsReferToSameFile(error.File, projectRelativePath))
+            {
+                return null;
+            }
+
+            // Why reject multi-match: original-source ranges can share a line (unlike the old
+            // shim-source ranges, which were structurally disjoint). First-match would exclude the
+            // wrong method on isolation retry — treat ambiguity as unattributable.
+            TransformWorkerEntryDto matchedEntry = null;
+            int matchCount = 0;
             foreach (TransformWorkerEntryDto entry in entries)
             {
-                bool hasKnownRange = entry.shimSourceStartLine > 0 && entry.shimSourceEndLine > 0;
-                if (hasKnownRange && line >= entry.shimSourceStartLine && line <= entry.shimSourceEndLine)
+                bool hasKnownRange = entry.sourceStartLine > 0 && entry.sourceEndLine > 0;
+                if (hasKnownRange && error.Line >= entry.sourceStartLine && error.Line <= entry.sourceEndLine)
                 {
-                    return entry;
+                    matchedEntry = entry;
+                    matchCount++;
+                    if (matchCount > 1)
+                    {
+                        return null;
+                    }
                 }
             }
 
-            return null;
+            return matchedEntry;
         }
 
         private sealed class ShimCompileErrorAttribution
