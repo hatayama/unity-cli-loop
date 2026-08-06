@@ -158,6 +158,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Removes the hot-reload patch on <paramref name="method"/> when one is recorded.
+        /// Returns false when the method was not patched.
+        /// </summary>
+        public static bool Revert(MethodBase method)
+        {
+            Debug.Assert(method != null, "method must not be null.");
+
+            if (!ShimByMethod.Remove(method))
+            {
+                return false;
+            }
+
+            // Why Remove before Unpatch: Harmony rebuilds the method during Unpatch, and the
+            // pause-point transpiler guard reads IsMethodPatchedByHotReload — the ledger must
+            // already show unpatched so armed markers are re-instrumented into the restored IL.
+            HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
+            HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
+            return true;
+        }
+
+        /// <summary>
         /// How many methods currently have an active patch recorded in the ledger.
         /// </summary>
         public static int ActivePatchCount => ShimByMethod.Count;

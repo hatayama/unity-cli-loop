@@ -44,6 +44,8 @@ Harmony ID: `io.github.hatayama.uloop.hot-reload` (distinct from the pause point
 Caches: `Library/UloopHotReload/PublicizedRefs/fmt2/<assemblyName>-<mvid>.dll`,
 `Library/UloopHotReload/Worker/<sourceHash>/`, and
 `Library/UloopHotReload/SourceSnapshot/<assemblyName>-<mvid>/`.
+When a verified snapshot marks a currently patched method as unchanged, the
+orchestrator reverts that patch to the compiled IL instead of re-emitting a shim.
 
 ## Spike Findings
 

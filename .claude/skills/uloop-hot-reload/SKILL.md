@@ -78,7 +78,11 @@ and adopted only once it verifies against the compiled assembly's PDB checksums.
 a baseline, hot reload patches only the methods whose bodies actually changed;
 unchanged methods are left untouched and counted in `UnchangedTotal` (formatting,
 comments, and line-ending differences count as unchanged). A run where every method
-is unchanged succeeds with nothing patched. Without a baseline — for example before
+is unchanged succeeds with nothing patched.
+Convergence works in both directions: a currently patched method whose body matches
+the baseline again is unpatched on that run — the compiled IL comes back,
+`ActivePatchTotal` drops, and its pause-point block lifts.
+Without a baseline — for example before
 the first compile after installing or updating the package — every editable method in
 the file is patched and a `Warnings` line reports the fallback; run `uloop compile`
 to establish the baseline.

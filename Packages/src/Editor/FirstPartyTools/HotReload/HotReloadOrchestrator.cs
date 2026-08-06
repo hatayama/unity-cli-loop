@@ -220,7 +220,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            int unchangedMethodCount = workerOutput.unchangedMethodCount;
+            TransformWorkerUnchangedMethodDto[] unchangedMethods =
+                workerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>();
+            int unchangedMethodCount = unchangedMethods.Length;
+
+            // Why before the empty-entries return: all-unchanged runs exit there, and those are
+            // exactly the runs that must peel leftover patches so behavior converges to compiled IL.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            RevertUnchangedPatches(assemblyName, unchangedMethods);
 
             if (string.IsNullOrEmpty(workerOutput.shimSource)
                 || workerOutput.entries == null
@@ -312,6 +319,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 suppressedPausePointIds,
                 inlineRiskMethodLabels,
                 unchangedMethodCount);
+        }
+
+        // Peels leftover Harmony patches when the source again matches the verified baseline.
+        // Resolve failures are silent: unchanged identities already matched compile-time IL.
+        private static void RevertUnchangedPatches(
+            string assemblyName,
+            TransformWorkerUnchangedMethodDto[] unchangedMethods)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
+            Debug.Assert(unchangedMethods != null, "unchangedMethods must not be null.");
+
+            for (int index = 0; index < unchangedMethods.Length; index++)
+            {
+                TransformWorkerUnchangedMethodDto unchanged = unchangedMethods[index];
+                if (unchanged == null
+                    || string.IsNullOrEmpty(unchanged.typeMetadataName)
+                    || string.IsNullOrEmpty(unchanged.methodName)
+                    || unchanged.parameterTypeFullNames == null)
+                {
+                    continue;
+                }
+
+                HotReloadMethodMatchResult matchResult = HotReloadMethodMatcher.Resolve(
+                    assemblyName,
+                    unchanged.typeMetadataName,
+                    unchanged.methodName,
+                    unchanged.parameterTypeFullNames);
+                if (!matchResult.Success)
+                {
+                    continue;
+                }
+
+                HotReloadPatcher.Revert(matchResult.Method);
+            }
         }
 
         private static HotReloadMethodOutcome ApplyEntry(

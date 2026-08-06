@@ -34,7 +34,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public TransformWorkerSkippedDto[] skipped;
         public string[] parseErrors;
         public string[] declarationDriftWarnings;
-        public int unchangedMethodCount;
+
+        // Identities of methods left untouched because they match the verified snapshot.
+        // Null/empty means none (or no baseline). UnchangedTotal is derived from Length.
+        public TransformWorkerUnchangedMethodDto[] unchangedMethods;
+    }
+
+    [Serializable]
+    internal sealed class TransformWorkerUnchangedMethodDto
+    {
+        public string typeMetadataName;
+        public string methodName;
+        public string[] parameterTypeFullNames;
     }
 
     [Serializable]
