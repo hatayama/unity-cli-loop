@@ -131,6 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string editedSource = BuildEditedComputeWithBoostedLocal();
             int enableLine = FindLineNumber(editedSource, "return boosted;");
+            Assert.That(enableLine, Is.GreaterThan(0));
             await HotReloadFromEditedSourceAsync(editedSource, "ContractTransplantSuppressOnRevert.cs");
 
             PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
@@ -159,6 +160,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string firstEdit = BuildEditedLambdaPrivateDelegation();
             int enableLine = FindLineNumber(firstEdit, "return pred(threshold) ? 7 : 0;");
+            Assert.That(enableLine, Is.GreaterThan(0));
             await HotReloadFromEditedSourceAsync(firstEdit, "ContractDelegationSuppressGen1.cs");
 
             PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
@@ -202,6 +204,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
                 "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
                 StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk));
             await HotReloadFromEditedSourceAsync(editedSource, "ContractReEnableSameLine.cs");
 
             PausePointResponse reEnable = new PausePointUseCase().Enable(new EnablePausePointSchema
