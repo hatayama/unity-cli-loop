@@ -18,12 +18,15 @@ Editor-only. Players (Mono or IL2CPP) are out of scope.
 
 ```text
 edited .cs file
-  │ (1) resolve owning assembly, defines, and references via CompilationPipeline
+  │ (1) resolve owning assembly, defines, and references via CompilationPipeline;
+  │     load a PDB-checksum-verified source snapshot when one exists for the file
   ▼
 transform worker (external process: Unity-bundled Roslyn on the Unity-bundled .NET host)
-  │ (2) parse + semantic analysis; convert each eligible method body into a static shim
-  │     method source (bare member references qualified via `__uloopInstance.` / `global::Type.`),
-  │     plus a manifest and per-method skip reasons
+  │ (2) parse + semantic analysis; when a verified snapshot is available, diff method
+  │     declarations against it and emit shims only for edited methods (unchanged methods
+  │     are counted, not listed); convert each eligible edited method body into a static
+  │     shim method source (bare member references qualified via `__uloopInstance.` /
+  │     `global::Type.`), plus a manifest and per-method skip reasons
   ▼
 shim compilation (existing external csc infrastructure, RoslynCompilerBackend)
   │ (3) compile the shim source against publicized reference assemblies
@@ -38,8 +41,9 @@ Harmony transpiler transplant  (5) patch the original method with a transpiler t
 ```
 
 Harmony ID: `io.github.hatayama.uloop.hot-reload` (distinct from the pause point's ID).
-Caches: `Library/UloopHotReload/PublicizedRefs/fmt2/<assemblyName>-<mvid>.dll` and
-`Library/UloopHotReload/Worker/<sourceHash>/`.
+Caches: `Library/UloopHotReload/PublicizedRefs/fmt2/<assemblyName>-<mvid>.dll`,
+`Library/UloopHotReload/Worker/<sourceHash>/`, and
+`Library/UloopHotReload/SourceSnapshot/<assemblyName>-<mvid>/`.
 
 ## Spike Findings
 

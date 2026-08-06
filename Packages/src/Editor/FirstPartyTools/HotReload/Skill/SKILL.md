@@ -61,10 +61,31 @@ Hot reload never adds members. A refactor that extracts a new helper method cann
 applied piecewise — keep iterating inside existing method bodies, then run
 `uloop compile` once to introduce the new member for real.
 
-Edits outside method bodies never take effect: changing a `const` value, a field initializer, or any declaration other than a method body leaves runtime behavior unchanged even though the response reports `Success` — shims resolve those symbols against the already-compiled assembly, and C# bakes `const` values into IL at compile time. Changed `const` values (including enum member values) are detected and reported as a `Warnings` entry naming the constant and both values; other outside-body edits stay silent. Use `uloop compile` for such edits.
+Edits outside method bodies never take effect: changing a `const` value, a field
+initializer, or any declaration other than a method body leaves runtime behavior
+unchanged even though the response reports `Success` — shims resolve those symbols
+against the already-compiled assembly, and C# bakes `const` values into IL at compile
+time. Changed `const` values (including enum member values) are detected and reported
+as a `Warnings` entry naming the constant and both values. When a verified source
+baseline is available (next paragraph), other outside-body drift — fields,
+initializers, attributes, added or removed members — is reported as a `Warnings`
+entry as well; without a baseline it stays silent. Either way, use `uloop compile`
+for such edits.
+
+Each `uloop compile` also establishes a per-assembly source baseline: a snapshot of
+the sources exactly as they were compiled, captured after the compile's domain reload
+and adopted only once it verifies against the compiled assembly's PDB checksums. With
+a baseline, hot reload patches only the methods whose bodies actually changed;
+unchanged methods are left untouched and counted in `UnchangedTotal` (formatting,
+comments, and line-ending differences count as unchanged). A run where every method
+is unchanged succeeds with nothing patched. Without a baseline — for example before
+the first compile after installing or updating the package — every editable method in
+the file is patched and a `Warnings` line reports the fallback; run `uloop compile`
+to establish the baseline.
 
 Property and indexer accessors with explicit bodies are reported per-accessor as
-`Skipped`, so an edited getter never disappears from the response silently.
+`Skipped`, so an edited getter never disappears from the response silently; with a
+verified baseline, accessors unchanged from it produce no row.
 
 Subscribing to or unsubscribing from a field-like event (`+=`/`-=`) inside an edited
 body works. Methods that raise the event are reported as `Skipped` (see the table
@@ -160,8 +181,9 @@ Returns JSON with:
 
 - `Success` (boolean): `false` on parameter validation failure or when any method outcome is `Failed`. `Skipped` outcomes alone never force `false`
 - `Methods` (array): Per-method `{ Kind, Method, Reason, FilePath }` where `Kind` is `Patched`, `Skipped`, or `Failed` on apply runs, or `Active` on `--status` runs; empty on `--revert-all` runs
-- `Warnings` (array): Non-fatal notes — one aggregated line listing the patched methods whose pre-patch bodies were small enough (or marked `[AggressiveInlining]`) to have been JIT-inlined into existing callers (the change may not show at those call sites), the pause-point interaction above, and const drift entries described in "Scope and limits"
+- `Warnings` (array): Non-fatal notes — one aggregated line listing the patched methods whose pre-patch bodies were small enough (or marked `[AggressiveInlining]`) to have been JIT-inlined into existing callers (the change may not show at those call sites), the pause-point interaction above, and the const drift, outside-body drift, and missing-baseline entries described in "Scope and limits"
 - `PatchedTotal` (number): Methods patched in this run
+- `UnchangedTotal` (number): Methods left untouched because their bodies match the source baseline from the last compile; `0` when no baseline was available
 - `ActivePatchTotal` (number): Methods still patched after this run
 - `ClearedCount` (number): Patches removed by `--revert-all` (0 on apply)
 - `Message` (string): Short summary
