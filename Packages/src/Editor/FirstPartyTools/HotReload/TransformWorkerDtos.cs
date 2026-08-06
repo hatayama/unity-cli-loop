@@ -16,6 +16,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Method keys (see HotReloadOrchestrator.BuildMethodKey) already reported Failed from a
         // first compile round; the retry worker run drops these methods entirely.
         public string[] excludedMethodKeys;
+
+        // Verified snapshot text for edited-method detection. Null = no baseline, patch all methods.
+        // Why pass text (not a path): avoids an IO race between orchestrator verification and worker
+        // read that would crash the whole file under the no-try-catch policy.
+        public string snapshotSource;
     }
 
     /// <summary>
@@ -29,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public TransformWorkerSkippedDto[] skipped;
         public string[] parseErrors;
         public string[] declarationDriftWarnings;
+        public int unchangedMethodCount;
     }
 
     [Serializable]
