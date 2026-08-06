@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 
 using HarmonyLib;
 using UnityEngine;
@@ -33,6 +34,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static readonly Dictionary<MethodBase, List<SourcePausePointPatchInjection>> InjectionsByMethod = new();
         private static readonly Dictionary<string, MethodBase> MethodById = new();
         private static readonly Dictionary<string, MethodBase> LogicalOwnerById = new();
+        // Why store file:line separately: auto-retarget must re-resolve with the original enable
+        // request, and parsing the id string would couple us to id formatting.
+        private static readonly Dictionary<string, (string NormalizedFile, int Line)> RequestById = new();
 
         // The registry lives in a Runtime assembly this Editor-only tool assembly may depend on,
         // but not the reverse (patching is an outer/implementation concern the registry's inner
@@ -44,17 +48,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UloopPausePointRegistry.OnCleared = Unpatch;
             UloopPausePointRegistry.OnClearedAll = UnpatchAll;
             HotReloadPausePointCoordination.GetArmedMarkerIdsOnMethod = GetArmedMarkerIds;
+            HotReloadPausePointCoordination.GetSuppressedMarkerIdsOnMethod = GetSuppressedMarkerIds;
             HotReloadPausePointCoordination.OnHotReloadPatchStateChanged = HandleHotReloadPatchStateChanged;
         }
 
         // What: lets the hot-reload tool list marker ids by logical owner (user method),
         // including markers whose physical injection lives on a shim-side MoveNext/closure.
+        // Why IsArmed: hit/expired SingleShot markers keep instrumentation until clear, but
+        // transitions and apply warnings must track only currently armed markers.
         private static IReadOnlyList<string> GetArmedMarkerIds(MethodBase method)
         {
             List<string> ids = new List<string>();
             foreach (KeyValuePair<string, MethodBase> pair in LogicalOwnerById)
             {
-                if (pair.Value.Equals(method))
+                if (pair.Value.Equals(method) && UloopPausePointRegistry.IsArmed(pair.Key))
                 {
                     ids.Add(pair.Key);
                 }
@@ -63,50 +70,224 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ids;
         }
 
-        // What: mirrors hot-reload patch state onto markers by logical owner so ShimDirect
-        // (physical key = shim-side method) still receives suppress updates.
-        private static void HandleHotReloadPatchStateChanged(MethodBase method, bool isPatched)
+        // What: ids that stayed armed on the logical owner but could not be re-targeted.
+        private static IReadOnlyList<string> GetSuppressedMarkerIds(MethodBase method)
         {
-            foreach (KeyValuePair<string, MethodBase> ownerPair in LogicalOwnerById)
+            List<string> ids = new List<string>();
+            foreach (KeyValuePair<string, MethodBase> pair in LogicalOwnerById)
             {
-                if (!ownerPair.Value.Equals(method))
+                if (!pair.Value.Equals(method) || !UloopPausePointRegistry.IsArmed(pair.Key))
                 {
                     continue;
                 }
 
-                string id = ownerPair.Key;
-                if (!MethodById.TryGetValue(id, out MethodBase physicalMethod)
-                    || !InjectionsByMethod.TryGetValue(physicalMethod, out List<SourcePausePointPatchInjection> injections))
+                if (UloopPausePointRegistry.GetStatus(pair.Key).SuppressedByHotReload)
                 {
-                    continue;
-                }
-
-                SourcePausePointPatchInjection injection = FindInjectionById(injections, id);
-                if (injection == null)
-                {
-                    continue;
-                }
-
-                // Why kind-specific: OriginalBody indexes are valid again after revert (isPatched
-                // false). TransplantChainJoin / ShimDirect were resolved against a specific shim
-                // generation — apply and revert both invalidate that generation until PR-4
-                // auto-retarget replaces the injection, so status must stay suppressed=true.
-                if (injection.TargetKind == SourcePausePointPatchInjectionTargetKind.OriginalBody)
-                {
-                    UloopPausePointRegistry.SetSuppressedByHotReload(id, isPatched);
-                }
-                else
-                {
-                    UloopPausePointRegistry.SetSuppressedByHotReload(id, true);
+                    ids.Add(pair.Key);
                 }
             }
+
+            return ids;
+        }
+
+        // What: re-targets or restores armed markers when a logical owner's hot-reload patch
+        // state changes. Succeeds before mutating registry flags; never clears the marker.
+        private static void HandleHotReloadPatchStateChanged(MethodBase method, bool isPatched)
+        {
+            List<string> markerIds = CollectMarkerIdsForLogicalOwner(method);
+            if (isPatched)
+            {
+                RetargetMarkersOntoHotReloadPatch(markerIds, method);
+                return;
+            }
+
+            RestoreMarkersAfterHotReloadRevert(markerIds, method);
+        }
+
+        private static List<string> CollectMarkerIdsForLogicalOwner(MethodBase method)
+        {
+            List<string> ids = new List<string>();
+            foreach (KeyValuePair<string, MethodBase> ownerPair in LogicalOwnerById)
+            {
+                // Why IsArmed: hit/expired instrumentation remains until clear, but retarget /
+                // restore must not rewrite disarmed markers back to RetargetedToHotReloadPatch.
+                if (ownerPair.Value.Equals(method) && UloopPausePointRegistry.IsArmed(ownerPair.Key))
+                {
+                    ids.Add(ownerPair.Key);
+                }
+            }
+
+            return ids;
+        }
+
+        private static void RetargetMarkersOntoHotReloadPatch(List<string> markerIds, MethodBase logicalOwner)
+        {
+            for (int index = 0; index < markerIds.Count; index++)
+            {
+                string id = markerIds[index];
+                if (!RequestById.TryGetValue(id, out (string NormalizedFile, int Line) request))
+                {
+                    SuppressMarkerRetargetFailed(id);
+                    continue;
+                }
+
+                HotReloadShimFileLookup lookup =
+                    HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(request.NormalizedFile);
+                if (lookup == null)
+                {
+                    SuppressMarkerRetargetFailed(id);
+                    continue;
+                }
+
+                SourcePausePointShimResolution shimResolution = SourcePausePointShimResolver.Resolve(
+                    lookup,
+                    request.NormalizedFile,
+                    request.Line);
+                if (shimResolution.Kind != SourcePausePointShimResolveKind.TransplantChainJoin
+                    && shimResolution.Kind != SourcePausePointShimResolveKind.ShimDirect)
+                {
+                    SuppressMarkerRetargetFailed(id);
+                    continue;
+                }
+
+                UnpatchInstrumentationOnly(id);
+                // Why try-finally (not catch): Fail Fast on Harmony emit failures, but keep
+                // LogicalOwner/Request and suppress flags honest when CommitPatch rolls back.
+                bool committed = false;
+                try
+                {
+                    SourcePausePointPatchResult patchResult = PatchShimTarget(
+                        id,
+                        shimResolution,
+                        request.NormalizedFile,
+                        request.Line);
+                    committed = patchResult.Success;
+                    if (committed)
+                    {
+                        UloopPausePointRegistry.SetSuppressedByHotReload(id, false, null);
+                        UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, true);
+                    }
+                }
+                finally
+                {
+                    if (!committed)
+                    {
+                        ReanchorMarkerWithoutInjection(id, logicalOwner, request);
+                        SuppressMarkerRetargetFailed(id);
+                    }
+                }
+            }
+        }
+
+        private static void RestoreMarkersAfterHotReloadRevert(List<string> markerIds, MethodBase logicalOwner)
+        {
+            for (int index = 0; index < markerIds.Count; index++)
+            {
+                string id = markerIds[index];
+                if (!RequestById.TryGetValue(id, out (string NormalizedFile, int Line) request))
+                {
+                    SuppressMarkerRestoreFailed(id);
+                    continue;
+                }
+
+                SourcePausePointResolveResult resolveResult =
+                    SourcePausePointResolver.Resolve(request.NormalizedFile, request.Line);
+                if (!resolveResult.Success)
+                {
+                    SuppressMarkerRestoreFailed(id);
+                    continue;
+                }
+
+                SourcePausePointPatchResult methodResolve =
+                    TryResolveMethod(resolveResult.Resolution, out MethodBase restoredMethod);
+                if (!methodResolve.Success
+                    || restoredMethod == null
+                    || !IsSameLogicalMethodOrItsStateMachine(restoredMethod, logicalOwner))
+                {
+                    SuppressMarkerRestoreFailed(id);
+                    continue;
+                }
+
+                UnpatchInstrumentationOnly(id);
+                bool committed = false;
+                try
+                {
+                    // Why logicalOwner override: async/iterator PDB resolve returns MoveNext, but
+                    // hot-reload keys and later transitions use the compiled wrapper as owner.
+                    SourcePausePointPatchResult patchResult = Patch(
+                        id,
+                        resolveResult.Resolution,
+                        request.NormalizedFile,
+                        request.Line,
+                        logicalOwner);
+                    committed = patchResult.Success;
+                    if (committed)
+                    {
+                        UloopPausePointRegistry.SetSuppressedByHotReload(id, false, null);
+                        UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, false);
+                    }
+                }
+                finally
+                {
+                    if (!committed)
+                    {
+                        ReanchorMarkerWithoutInjection(id, logicalOwner, request);
+                        SuppressMarkerRestoreFailed(id);
+                    }
+                }
+            }
+        }
+
+        // Why StateMachineAttribute: async/iterator hot-reload events key the compiled wrapper,
+        // while compiled PDB resolve returns MoveNext on the state-machine type.
+        private static bool IsSameLogicalMethodOrItsStateMachine(
+            MethodBase restoredMethod,
+            MethodBase logicalOwner)
+        {
+            if (restoredMethod.Equals(logicalOwner))
+            {
+                return true;
+            }
+
+            StateMachineAttribute attribute = logicalOwner.GetCustomAttribute<StateMachineAttribute>();
+            return attribute != null
+                && attribute.StateMachineType != null
+                && attribute.StateMachineType == restoredMethod.DeclaringType;
+        }
+
+        private static void ReanchorMarkerWithoutInjection(
+            string id,
+            MethodBase logicalOwner,
+            (string NormalizedFile, int Line) request)
+        {
+            LogicalOwnerById[id] = logicalOwner;
+            RememberRequest(id, request.NormalizedFile, request.Line);
+        }
+
+        private static void SuppressMarkerRetargetFailed(string id)
+        {
+            UloopPausePointRegistry.SetSuppressedByHotReload(
+                id,
+                true,
+                SourcePausePointConstants.RetargetOntoHotReloadFailedReason);
+            UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, false);
+        }
+
+        private static void SuppressMarkerRestoreFailed(string id)
+        {
+            UloopPausePointRegistry.SetSuppressedByHotReload(
+                id,
+                true,
+                SourcePausePointConstants.RestoreAfterHotReloadRevertFailedReason);
+            UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, false);
         }
 
         public static SourcePausePointPatchResult Patch(
             string id,
             SourcePausePointResolution resolution,
             string normalizedFile = "",
-            int requestedLine = 0)
+            int requestedLine = 0,
+            MethodBase logicalOwnerOverride = null)
         {
             Debug.Assert(!string.IsNullOrEmpty(id), "id must not be null or empty.");
             Debug.Assert(resolution != null, "resolution must not be null.");
@@ -138,6 +319,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "restore compiled bodies, or run 'uloop compile' to realign line numbers.");
             }
 
+            MethodBase logicalOwner = logicalOwnerOverride ?? method;
+
             // Why conditional no-op: ShouldInject can leave a prior injection inert (e.g. stale
             // OriginalBody under an active shim). Re-enable must replace mismatched ledger state
             // instead of reporting success while the call site never fires.
@@ -147,6 +330,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     method,
                     donorShim: null))
             {
+                RememberRequest(id, normalizedFile, requestedLine);
+                LogicalOwnerById[id] = logicalOwner;
                 return SourcePausePointPatchResult.SuccessResult();
             }
 
@@ -159,7 +344,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolution.Locals,
                 SourcePausePointPatchInjectionTargetKind.OriginalBody);
 
-            return CommitPatch(id, method, method, injection);
+            return CommitPatch(id, method, logicalOwner, injection, normalizedFile, requestedLine);
         }
 
         /// <summary>
@@ -196,6 +381,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (TryReuseExistingPatch(id, targetKind, method, shim.DonorShim))
             {
+                RememberRequest(id, normalizedFile, requestedLine);
                 return SourcePausePointPatchResult.SuccessResult();
             }
 
@@ -217,7 +403,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 shim.DonorShim,
                 shim.InstanceFromFirstArgument);
 
-            return CommitPatch(id, method, shim.LogicalOwner, injection);
+            return CommitPatch(id, method, shim.LogicalOwner, injection, normalizedFile, requestedLine);
         }
 
         private static bool TryReuseExistingPatch(
@@ -247,7 +433,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return true;
             }
 
-            Unpatch(id);
+            UnpatchInstrumentationOnly(id);
             return false;
         }
 
@@ -266,11 +452,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
+        private static void RememberRequest(string id, string normalizedFile, int requestedLine)
+        {
+            RequestById[id] = (normalizedFile, requestedLine);
+        }
+
         private static SourcePausePointPatchResult CommitPatch(
             string id,
             MethodBase method,
             MethodBase logicalOwner,
-            SourcePausePointPatchInjection injection)
+            SourcePausePointPatchInjection injection,
+            string normalizedFile,
+            int requestedLine)
         {
             bool methodAlreadyPatched = InjectionsByMethod.TryGetValue(method, out List<SourcePausePointPatchInjection> injections);
             if (!methodAlreadyPatched)
@@ -282,6 +475,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             injections.Add(injection);
             MethodById[id] = method;
             LogicalOwnerById[id] = logicalOwner;
+            RememberRequest(id, normalizedFile, requestedLine);
 
             // The ledger above is written before Harmony actually rebuilds the method. If
             // Unpatch/Patch throws (e.g. a byref-like `this` produces invalid IL at JIT time), a
@@ -314,6 +508,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     }
                     MethodById.Remove(id);
                     LogicalOwnerById.Remove(id);
+                    RequestById.Remove(id);
                 }
             }
 
@@ -321,16 +516,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return SourcePausePointPatchResult.SuccessResult(warning, method.DeclaringType, hasPhysicsCallbackWarning);
         }
 
+        // What: removes Harmony instrumentation and patcher ledgers for one id without touching
+        // the runtime registry. Used by auto-retarget (keep armed/hit) and by registry clear.
+        // Why keep Unpatch as the OnCleared hook name: the registry wires OnCleared = Unpatch.
         public static void Unpatch(string id)
         {
+            UnpatchInstrumentationOnly(id);
+        }
+
+        public static void UnpatchInstrumentationOnly(string id)
+        {
             Debug.Assert(!string.IsNullOrEmpty(id), "id must not be null or empty.");
+
+            // Why before MethodById guard: ReanchorMarkerWithoutInjection leaves MethodById
+            // empty while LogicalOwnerById/RequestById still hold the id; clear must scrub
+            // those ledgers so a later transition cannot revive a cleared marker's request.
+            LogicalOwnerById.Remove(id);
+            RequestById.Remove(id);
 
             if (!MethodById.TryGetValue(id, out MethodBase method))
             {
                 return;
             }
             MethodById.Remove(id);
-            LogicalOwnerById.Remove(id);
 
             List<SourcePausePointPatchInjection> injections = InjectionsByMethod[method];
             injections.RemoveAll(injection => injection.Id == id);
@@ -360,6 +568,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     {
                         MethodById.Remove(remainingId);
                         LogicalOwnerById.Remove(remainingId);
+                        RequestById.Remove(remainingId);
                     }
                     InjectionsByMethod.Remove(method);
                 }
@@ -372,6 +581,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             InjectionsByMethod.Clear();
             MethodById.Clear();
             LogicalOwnerById.Clear();
+            RequestById.Clear();
         }
 
         private static SourcePausePointPatchResult TryResolveMethod(SourcePausePointResolution resolution, out MethodBase method)

@@ -44,6 +44,10 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         // into the method (empty when none).
         public static Func<MethodBase, IReadOnlyList<string>> GetArmedMarkerIdsOnMethod { get; set; }
 
+        // Set by SourcePausePointPatcher. Returns marker ids whose logical owner is the
+        // method and whose registry entry is currently SuppressedByHotReload.
+        public static Func<MethodBase, IReadOnlyList<string>> GetSuppressedMarkerIdsOnMethod { get; set; }
+
         // Set by SourcePausePointPatcher. Invoked by HotReloadPatcher after a
         // method's patch state changes (true = patched, false = reverted).
         public static Action<MethodBase, bool> OnHotReloadPatchStateChanged { get; set; }

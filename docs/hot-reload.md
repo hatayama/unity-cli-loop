@@ -212,11 +212,15 @@ Wire details:
 - In-flight async methods and coroutines keep running the old code until re-entered.
 - Callers whose call sites were JIT-inlined may not observe the detour (`IsLikelyJitInlined`
   heuristic produces a warning, as with pause points).
-- A pause point armed before a hot reload of the same method stops firing. The apply
-  response lists the affected marker ids, `pause-point-status` reports
-  `SuppressedByHotReload: true`, and enabling a new marker on a currently patched
-  method is rejected with `PAUSE_POINT_PATCHED_BY_HOT_RELOAD`. Reverting the patch
-  restores armed markers and clears the flag.
+- Pause points on a hot-reload patched method follow the patch instead of being
+  rejected: applying a patch re-targets armed markers onto the patched body
+  (`RetargetedToHotReloadPatch: true`) and reverting re-targets them back onto the
+  compiled body. The residual limit is a marker whose requested line no longer
+  resolves in the code now executing — it is suppressed (`SuppressedByHotReload: true`,
+  reason in `SuppressedByHotReloadReason`) rather than cleared, and stays silent until
+  a later patch transition restores the line or `uloop compile` runs. Enabling a new
+  marker on a patched method is rejected with `PAUSE_POINT_PATCHED_BY_HOT_RELOAD` only
+  when the line cannot be mapped onto the patched body.
 
 ## Open Questions Tracked for Implementation
 

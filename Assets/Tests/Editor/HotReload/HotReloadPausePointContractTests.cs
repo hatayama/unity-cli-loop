@@ -123,104 +123,176 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a transplant-enabled marker becomes SuppressedByHotReload after RevertAll and
-        /// does not hit (honest display until PR-4 auto-retarget).
+        /// What: arm → transplant hot-reload auto-retargets (not suppress) and hits the edited body.
         /// </summary>
         [Test]
-        public async Task RevertAll_AfterTransplantEnable_SetsSuppressedAndDoesNotHit()
-        {
-            string editedSource = BuildEditedComputeWithBoostedLocal();
-            int enableLine = FindLineNumber(editedSource, "return boosted;");
-            Assert.That(enableLine, Is.GreaterThan(0));
-            await HotReloadFromEditedSourceAsync(editedSource, "ContractTransplantSuppressOnRevert.cs");
-
-            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
-            {
-                File = FixtureProjectRelativePath,
-                Line = enableLine,
-                TimeoutSeconds = 30,
-                Mode = UloopPausePointCaptureMode.Continuous
-            });
-            Assert.That(enable.Success, Is.True, enable.Message);
-
-            HotReloadPatcher.RevertAll();
-            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).SuppressedByHotReload, Is.True);
-
-            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
-            fixture.ComputeWithPrivate(5);
-            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.False);
-        }
-
-        /// <summary>
-        /// What: a ShimDirect (delegation) marker is suppressed when a newer hot-reload generation
-        /// replaces the file's shim registration.
-        /// </summary>
-        [Test]
-        public async Task ReApply_AfterDelegationEnable_SetsSuppressed()
-        {
-            string firstEdit = BuildEditedLambdaPrivateDelegation();
-            int enableLine = FindLineNumber(firstEdit, "return pred(threshold) ? 7 : 0;");
-            Assert.That(enableLine, Is.GreaterThan(0));
-            await HotReloadFromEditedSourceAsync(firstEdit, "ContractDelegationSuppressGen1.cs");
-
-            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
-            {
-                File = FixtureProjectRelativePath,
-                Line = enableLine,
-                TimeoutSeconds = 30,
-                Mode = UloopPausePointCaptureMode.Continuous
-            });
-            Assert.That(enable.Success, Is.True, enable.Message);
-
-            string secondEdit = firstEdit.Replace(
-                "return pred(threshold) ? 7 : 0;",
-                "return pred(threshold) ? 8 : 0;",
-                StringComparison.Ordinal);
-            await HotReloadFromEditedSourceAsync(secondEdit, "ContractDelegationSuppressGen2.cs");
-            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).SuppressedByHotReload, Is.True);
-        }
-
-        /// <summary>
-        /// What: re-enabling the same file:line after hot-reload replaces a stale OriginalBody
-        /// injection and the marker hits on the edited body.
-        /// </summary>
-        [Test]
-        public async Task ReEnable_SameFileLine_AfterHotReload_HitsEditedBody()
+        public async Task ArmThenHotReload_AutoRetargetsAndHitsEditedBody()
         {
             string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
             int enableLine = FindLineNumber(onDisk, "return _secret + delta;");
             Assert.That(enableLine, Is.GreaterThan(0));
 
-            PausePointResponse firstEnable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
             {
                 File = FixtureProjectRelativePath,
                 Line = enableLine,
                 TimeoutSeconds = 30,
                 Mode = UloopPausePointCaptureMode.Continuous
             });
-            Assert.That(firstEnable.Success, Is.True, firstEnable.Message);
+            Assert.That(enable.Success, Is.True, enable.Message);
 
-            string editedSource = onDisk.Replace(
-                "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
-                "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
-                StringComparison.Ordinal);
-            Assert.That(editedSource, Is.Not.EqualTo(onDisk));
-            await HotReloadFromEditedSourceAsync(editedSource, "ContractReEnableSameLine.cs");
+            string editedSource = BuildEditedComputePlusHundred(onDisk);
+            await HotReloadFromEditedSourceAsync(editedSource, "ContractArmThenPatch.cs");
 
-            PausePointResponse reEnable = new PausePointUseCase().Enable(new EnablePausePointSchema
-            {
-                File = FixtureProjectRelativePath,
-                Line = enableLine,
-                TimeoutSeconds = 30,
-                Mode = UloopPausePointCaptureMode.Continuous
-            });
-            Assert.That(reEnable.Success, Is.True, reEnable.Message + " / " + reEnable.RecommendedNextAction);
+            UloopPausePointSnapshot afterPatch = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(afterPatch.SuppressedByHotReload, Is.False);
+            Assert.That(afterPatch.RetargetedToHotReloadPatch, Is.True);
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             int result = fixture.ComputeWithPrivate(5);
             Assert.That(result, Is.EqualTo(fixture.SecretForAssert + 5 + 100));
-            Assert.That(UloopPausePointRegistry.GetStatus(reEnable.Id).IsHit, Is.True);
-            Assert.That(UloopPausePointRegistry.GetStatus(reEnable.Id).SuppressedByHotReload, Is.False);
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+        }
+
+        /// <summary>
+        /// What: a SingleShot marker that already hit (disarmed) is not retargeted or suppressed
+        /// by a later hot-reload of the same method.
+        /// </summary>
+        [Test]
+        public async Task HotReload_AfterSingleShotHit_DoesNotTouchDisarmedMarker()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int enableLine = FindLineNumber(onDisk, "return _secret + delta;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+            Assert.That(enable.Success, Is.True, enable.Message);
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(fixture.SecretForAssert + 5));
+            UloopPausePointSnapshot afterHit = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(afterHit.IsHit, Is.True);
+            Assert.That(afterHit.IsEnabled, Is.False);
+
+            await HotReloadFromEditedSourceAsync(
+                BuildEditedComputePlusHundred(onDisk),
+                "ContractSingleShotDisarmed.cs");
+
+            UloopPausePointSnapshot afterPatch = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(afterPatch.RetargetedToHotReloadPatch, Is.False);
+            Assert.That(afterPatch.SuppressedByHotReload, Is.False);
+        }
+
+        /// <summary>
+        /// What: RevertAll after enable on a shim-only line cannot restore instrumentation and
+        /// records RestoreAfterHotReloadRevertFailedReason exactly.
+        /// </summary>
+        [Test]
+        public async Task RevertAll_AfterEnableOnShimOnlyLine_SuppressesWithRestoreReason()
+        {
+            string boostedEdit = BuildEditedComputeWithBoostedLocal();
+            int enableLine = FindLineNumber(boostedEdit, "return boosted;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+            await HotReloadFromEditedSourceAsync(boostedEdit, "ContractRestoreFailGen1.cs");
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+
+            HotReloadPatcher.RevertAll();
+
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(status.SuppressedByHotReload, Is.True);
+            Assert.That(status.RetargetedToHotReloadPatch, Is.False);
+            Assert.That(
+                status.SuppressedByHotReloadReason,
+                Is.EqualTo(SourcePausePointConstants.RestoreAfterHotReloadRevertFailedReason));
+        }
+
+        /// <summary>
+        /// What: after enable on a patched body, a second hot-reload generation keeps the marker
+        /// firing with the newer edited behavior (generation follow).
+        /// </summary>
+        [Test]
+        public async Task ReApply_AfterEnable_FollowsNewGenerationAndHits()
+        {
+            string firstEdit = BuildEditedLambdaPrivateDelegation();
+            int enableLine = FindLineNumber(firstEdit, "return pred(threshold) ? 7 : 0;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+            await HotReloadFromEditedSourceAsync(firstEdit, "ContractDelegationFollowGen1.cs");
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+
+            string secondEdit = firstEdit.Replace(
+                "return pred(threshold) ? 7 : 0;",
+                "return pred(threshold) ? 8 : 0;",
+                StringComparison.Ordinal);
+            await HotReloadFromEditedSourceAsync(secondEdit, "ContractDelegationFollowGen2.cs");
+
+            UloopPausePointSnapshot afterSecond = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(afterSecond.SuppressedByHotReload, Is.False);
+            Assert.That(afterSecond.RetargetedToHotReloadPatch, Is.True);
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.LambdaPrivate(0), Is.EqualTo(8));
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+        }
+
+        /// <summary>
+        /// What: shrinking the patched method so the armed line falls outside the shim range
+        /// suppresses with a non-empty reason mirrored on status Warning.
+        /// </summary>
+        [Test]
+        public async Task HotReload_ArmedLineOutsidePatchedMethod_SuppressesWithReason()
+        {
+            string boostedEdit = BuildEditedComputeWithBoostedLocal();
+            int enableLine = FindLineNumber(boostedEdit, "return boosted;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+            await HotReloadFromEditedSourceAsync(boostedEdit, "ContractRetargetFailGen1.cs");
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message);
+
+            // Why shrink: enableLine sits deep in the boosted body; the short +100 body ends
+            // earlier, so shim resolve reports NotInPatchedMethod and retarget suppresses.
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            string shortEdit = BuildEditedComputePlusHundred(onDisk);
+            Assert.That(
+                FindLineNumber(shortEdit, "return _secret + delta + 100;"),
+                Is.LessThan(enableLine));
+            await HotReloadFromEditedSourceAsync(shortEdit, "ContractRetargetFailGen2.cs");
+
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(status.SuppressedByHotReload, Is.True);
+            Assert.That(status.SuppressedByHotReloadReason, Is.Not.Null.And.Not.Empty);
+            Assert.That(status.RetargetedToHotReloadPatch, Is.False);
+            // Warning mirroring of the reason is covered by PausePointStatusResponseContractTests.
         }
 
         /// <summary>
@@ -259,6 +331,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             int result = await fixture.AsyncPrivateFieldAndMethod(5);
             Assert.That(result, Is.EqualTo(fixture.SecretForAssert + 5 + 100));
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+        }
+
+        /// <summary>
+        /// What: RevertAll after enable on a hot-reloaded async body restores instrumentation
+        /// onto the compiled MoveNext and hits with the original (non-edited) return value.
+        /// </summary>
+        [Test]
+        public async Task RevertAll_AfterEnableOnHotReloadedAsyncBody_RestoresAndHitsOriginal()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            string editedSource = onDisk.Replace(
+                "public async Task<int> AsyncPrivateFieldAndMethod(int delta)\n        {\n"
+                + "            await Task.Yield();\n"
+                + "            return _secret + delta;\n"
+                + "        }",
+                "public async Task<int> AsyncPrivateFieldAndMethod(int delta)\n        {\n"
+                + "            await Task.Yield();\n"
+                + "            return _secret + delta + 100;\n"
+                + "        }",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk));
+            int enableLine = FindLineNumber(editedSource, "return _secret + delta + 100;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            await HotReloadFromEditedSourceAsync(editedSource, "ContractAsyncRestore.cs");
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+
+            HotReloadPatcher.RevertAll();
+
+            UloopPausePointSnapshot afterRevert = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(afterRevert.SuppressedByHotReload, Is.False);
+            Assert.That(afterRevert.RetargetedToHotReloadPatch, Is.False);
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            int result = await fixture.AsyncPrivateFieldAndMethod(5);
+            Assert.That(result, Is.EqualTo(fixture.SecretForAssert + 5));
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
         }
 
@@ -356,37 +474,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: Applying a hot-reload patch to a method with an armed marker sets
-        /// SuppressedByHotReload, and RevertAll clears the flag.
-        /// </summary>
-        [Test]
-        public void Apply_MethodWithArmedMarker_SetsAndClearsSuppressedFlag()
-        {
-            const string id = "contract-suppress-flag";
-            MethodInfo original = AccessTools.Method(
-                typeof(HotReloadPausePointContractFixture),
-                nameof(HotReloadPausePointContractFixture.ReplaceableCompute));
-            MethodInfo shim = AccessTools.Method(
-                typeof(HotReloadPausePointContractShims),
-                nameof(HotReloadPausePointContractShims.ReplaceableCompute__shim0));
-
-            UloopPausePointRegistry.Enable(id, 30);
-            Assert.That(
-                SourcePausePointPatcher.Patch(id, BuildSyntheticResolution(original, instructionIndex: 0)).Success,
-                Is.True);
-
-            Assert.That(
-                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant).Success,
-                Is.True);
-            Assert.That(UloopPausePointRegistry.GetStatus(id).SuppressedByHotReload, Is.True);
-
-            HotReloadPatcher.RevertAll();
-            Assert.That(UloopPausePointRegistry.GetStatus(id).SuppressedByHotReload, Is.False);
-        }
-
-        /// <summary>
-        /// What: An armed deep marker does not make a subsequent hot-reload Apply fail, and
-        /// the marker is reported as SuppressedByHotReload after Apply succeeds.
+        /// What: a synthetic Apply without shim registration cannot retarget, so Apply still
+        /// succeeds and the armed marker is reported SuppressedByHotReload.
         /// </summary>
         [Test]
         public void Apply_MethodWithDeepArmedMarker_SucceedsAndSuppresses()
@@ -408,74 +497,85 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 original, shim, HotReloadPatchShape.Delegation);
             Assert.That(applyResult.Success, Is.True, applyResult.ErrorMessage);
             Assert.That(UloopPausePointRegistry.GetStatus(id).SuppressedByHotReload, Is.True);
+            Assert.That(
+                UloopPausePointRegistry.GetStatus(id).SuppressedByHotReloadReason,
+                Is.Not.Null.And.Not.Empty);
         }
 
         /// <summary>
-        /// What: Unpatching one of two armed markers while the method is hot-reload patched
-        /// does not re-instrument the surviving marker into the shim stream (and does not throw).
+        /// What: after two markers are retargeted onto a shim body, unpatching one sibling leaves
+        /// the survivor firing on the edited body.
         /// </summary>
         [Test]
-        public void Unpatch_SiblingMarker_WhileHotReloadPatched_DoesNotReinstrumentSurvivors()
+        public async Task Unpatch_SiblingMarker_WhileHotReloadPatched_SurvivorStillHits()
         {
-            const string id1 = "contract-sibling-unpatch-a";
-            const string id2 = "contract-sibling-unpatch-b";
-            MethodInfo original = AccessTools.Method(
-                typeof(HotReloadPausePointDeepFixture),
-                nameof(HotReloadPausePointDeepFixture.DeepStatements));
-            MethodInfo shim = AccessTools.Method(
-                typeof(HotReloadPausePointContractShims),
-                nameof(HotReloadPausePointContractShims.DeepStatements__shim0));
+            string editedSource = BuildEditedComputeWithBoostedLocal();
+            int lineBoosted = FindLineNumber(editedSource, "int boosted = _secret + delta + 100;");
+            int lineReturn = FindLineNumber(editedSource, "return boosted;");
+            Assert.That(lineBoosted, Is.GreaterThan(0));
+            Assert.That(lineReturn, Is.GreaterThan(lineBoosted));
+            await HotReloadFromEditedSourceAsync(editedSource, "ContractSiblingSurvivor.cs");
 
-            UloopPausePointRegistry.Enable(id1, 30);
-            Assert.That(
-                SourcePausePointPatcher.Patch(id1, BuildSyntheticResolution(original, instructionIndex: 0)).Success,
-                Is.True);
-            UloopPausePointRegistry.Enable(id2, 30);
-            Assert.That(
-                SourcePausePointPatcher.Patch(id2, BuildSyntheticResolution(original, instructionIndex: 10)).Success,
-                Is.True);
+            PausePointResponse enableBoosted = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = lineBoosted,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            PausePointResponse enableReturn = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = lineReturn,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enableBoosted.Success, Is.True, enableBoosted.Message);
+            Assert.That(enableReturn.Success, Is.True, enableReturn.Message);
 
-            Assert.That(
-                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Delegation).Success,
-                Is.True);
+            Assert.DoesNotThrow(() => SourcePausePointPatcher.Unpatch(enableBoosted.Id));
 
-            Assert.DoesNotThrow(() => SourcePausePointPatcher.Unpatch(id1));
-
-            HotReloadPausePointDeepFixture fixture = new HotReloadPausePointDeepFixture();
-            Assert.That(fixture.DeepStatements(), Is.EqualTo(99));
-            Assert.That(UloopPausePointRegistry.GetStatus(id2).IsHit, Is.False);
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            int result = fixture.ComputeWithPrivate(5);
+            Assert.That(result, Is.EqualTo(fixture.SecretForAssert + 5 + 100));
+            Assert.That(UloopPausePointRegistry.GetStatus(enableReturn.Id).IsHit, Is.True);
+            Assert.That(UloopPausePointRegistry.GetStatus(enableBoosted.Id).IsHit, Is.False);
         }
 
         /// <summary>
-        /// What: RevertAll restores armed-marker instrumentation so invoking the fixture
-        /// records a hit again (regression for ledger-clear-before-UnpatchAll ordering).
+        /// What: RevertAll restores instrumentation onto the compiled body, clears retargeted,
+        /// and the marker hits with the original (non-edited) return value.
         /// </summary>
         [Test]
-        public void RevertAll_RestoresArmedMarkerInstrumentation()
+        public async Task RevertAll_RestoresArmedMarkerInstrumentation()
         {
-            const string id = "contract-restore-hit";
-            MethodInfo original = AccessTools.Method(
-                typeof(HotReloadPausePointContractFixture),
-                nameof(HotReloadPausePointContractFixture.ReplaceableCompute));
-            MethodInfo shim = AccessTools.Method(
-                typeof(HotReloadPausePointContractShims),
-                nameof(HotReloadPausePointContractShims.ReplaceableCompute__shim0));
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int enableLine = FindLineNumber(onDisk, "return _secret + delta;");
+            Assert.That(enableLine, Is.GreaterThan(0));
 
-            UloopPausePointRegistry.Enable(id, 30);
-            Assert.That(
-                SourcePausePointPatcher.Patch(id, BuildSyntheticResolution(original, instructionIndex: 0)).Success,
-                Is.True);
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message);
 
-            Assert.That(
-                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant).Success,
-                Is.True);
+            await HotReloadFromEditedSourceAsync(
+                BuildEditedComputePlusHundred(onDisk),
+                "ContractRestoreAfterRevert.cs");
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).RetargetedToHotReloadPatch, Is.True);
+
             HotReloadPatcher.RevertAll();
 
-            HotReloadPausePointContractFixture fixture = new HotReloadPausePointContractFixture();
-            int result = fixture.ReplaceableCompute(5);
-            Assert.That(result, Is.EqualTo(-5));
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            int result = fixture.ComputeWithPrivate(5);
+            Assert.That(result, Is.EqualTo(fixture.SecretForAssert + 5));
 
-            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(id);
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(status.SuppressedByHotReload, Is.False);
+            Assert.That(status.RetargetedToHotReloadPatch, Is.False);
             Assert.That(status.IsHit, Is.True);
             Assert.That(status.HitCount, Is.EqualTo(1));
         }
@@ -496,6 +596,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 1,
                 Array.Empty<SourcePausePointLocalVariable>(),
                 Array.Empty<SourcePausePointParameter>());
+        }
+
+        private static string BuildEditedComputePlusHundred(string onDisk)
+        {
+            string edited = onDisk.Replace(
+                "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            return edited;
         }
 
         private static string BuildEditedComputeWithBoostedLocal()

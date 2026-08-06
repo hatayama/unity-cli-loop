@@ -21,6 +21,45 @@ func TestPausePointTimeoutHint_SuppressedByHotReload_WinsOverOtherBranches(t *te
 	}
 }
 
+// Verifies a non-empty Unity reason is returned as-is (no fixed-hint concatenation).
+func TestPausePointTimeoutHint_SuppressedByHotReload_ReturnsReasonOnly(t *testing.T) {
+	const reason = "Line no longer resolves inside the patched body."
+	response := pausePointStatusResponse{
+		Status:                      pausePointStatusEnabled,
+		HitCount:                    0,
+		SuppressedByHotReload:       true,
+		SuppressedByHotReloadReason: reason,
+		EditorState: pausePointEditorState{
+			IsPlaying: true,
+			IsPaused:  false,
+		},
+	}
+
+	hint := pausePointTimeoutHint(response, false)
+	if hint != reason {
+		t.Fatalf("expected reason-only hint %q, got %q", reason, hint)
+	}
+}
+
+// Verifies the fixed suppressed hint is used only when Unity omitted a reason.
+func TestPausePointTimeoutHint_SuppressedByHotReload_EmptyReasonUsesFallback(t *testing.T) {
+	response := pausePointStatusResponse{
+		Status:                      pausePointStatusEnabled,
+		HitCount:                    0,
+		SuppressedByHotReload:       true,
+		SuppressedByHotReloadReason: "",
+		EditorState: pausePointEditorState{
+			IsPlaying: true,
+			IsPaused:  false,
+		},
+	}
+
+	hint := pausePointTimeoutHint(response, false)
+	if hint != pausePointHintSuppressedByHotReload {
+		t.Fatalf("expected fallback suppressed hint, got %q", hint)
+	}
+}
+
 // Verifies the enabled-but-never-hit timeout hint still wins when suppression is false,
 // so inserting the suppressed short-circuit does not reorder the remaining branches.
 func TestPausePointTimeoutHint_NotSuppressed_ReturnsEnabledNeverHitHint(t *testing.T) {

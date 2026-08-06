@@ -33,10 +33,12 @@ type pausePointStatusResponse struct {
 	StatusBeforeClear               string                           `json:"StatusBeforeClear"`
 	LateHitDiscardedAfterClear      bool                             `json:"LateHitDiscardedAfterClear"`
 	SuppressedByHotReload           bool                             `json:"SuppressedByHotReload"`
+	RetargetedToHotReloadPatch      bool                             `json:"RetargetedToHotReloadPatch"`
+	SuppressedByHotReloadReason     string                           `json:"SuppressedByHotReloadReason,omitempty"`
 
 	// Warning is set by Unity on enable/clear tool responses when this shared type decodes those
-	// envelopes. The status bridge sets it only when SuppressedByHotReload is true. On
-	// enable-pause-point --await hits, that enable response text is exposed as EnableTimeWarning
+	// envelopes. The status bridge sets it to SuppressedByHotReloadReason when suppressed.
+	// On enable-pause-point --await hits, that enable response text is exposed as EnableTimeWarning
 	// on the wait payload, not as hit-time Warning.
 	Warning string `json:"Warning,omitempty"`
 

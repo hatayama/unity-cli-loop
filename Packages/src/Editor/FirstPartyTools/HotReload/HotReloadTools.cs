@@ -190,17 +190,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             List<string> warnings = new List<string>(result.Warnings);
-            if (result.PatchedTotal > 0)
+            if (result.RetargetedPausePointIds != null && result.RetargetedPausePointIds.Count > 0)
             {
-                // Always surface the pause-point interaction when any patch was applied.
-                warnings.Add(HotReloadConstants.PausePointInteractionWarning);
+                string ids = string.Join(", ", result.RetargetedPausePointIds);
+                warnings.Add(
+                    "Armed pause points were re-targeted onto the hot-reload patched bodies and keep "
+                    + $"firing at the edited lines: {ids}");
             }
 
             if (result.SuppressedPausePointIds != null && result.SuppressedPausePointIds.Count > 0)
             {
                 string ids = string.Join(", ", result.SuppressedPausePointIds);
                 warnings.Add(
-                    $"Armed pause points on the patched methods will not fire until the patch is reverted or compiled for real: {ids}");
+                    "Armed pause points could not be re-targeted and will not fire until the patch "
+                    + $"is reverted or compiled for real: {ids}");
             }
 
             return new HotReloadResponse

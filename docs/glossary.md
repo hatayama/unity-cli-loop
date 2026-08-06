@@ -159,6 +159,27 @@ instance method, the shim is a static method whose first parameter is the origin
 instance (`__uloopInstance`) so IL argument slots match the original method and the body can be
 transplanted without rewriting call/load slots. Prefix wrappers are not generated.
 
+### Shim registration
+
+The per-file record hot reload publishes after a successful apply so pause points can
+resolve against the patched code: the shim assembly and portable-PDB bytes plus, for
+each patched method, its shim `MethodBase`, source line range, and whether the patch is
+a delegation (`HotReloadShimRegistry`, exposed through
+`HotReloadPausePointCoordination`). A file's registration is replaced by the next
+hot-reload generation, and a method's entry is removed when its patch is reverted;
+consumers treat a missing entry as "cannot re-target", never as an error.
+
+### Re-target
+
+Moving an armed source pause point's instrumentation to follow a hot-reload patch
+transition without changing the marker's identity or registry state. On apply, the
+marker's requested file and line are re-resolved against the new shim registration and
+the capture call is re-injected into the patched body; on revert, the same request is
+re-resolved against the compiled assembly. A marker that re-targets onto a patched body
+reports `RetargetedToHotReloadPatch: true`; one that cannot be re-targeted is suppressed
+(`SuppressedByHotReload: true`, with a reason) until a later transition or
+`uloop compile` makes its line resolvable again.
+
 ### Publicized reference
 
 A Cecil-rewritten copy of a project assembly under `Library/UloopHotReload/PublicizedRefs/fmt2/`

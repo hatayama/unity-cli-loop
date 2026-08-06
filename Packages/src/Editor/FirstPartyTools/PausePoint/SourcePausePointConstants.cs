@@ -165,5 +165,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "and that --line is on or after an executable statement inside a method body. After a code edit "
             + "or a Code Optimization switch, run uloop compile and retry. See the pause-point skill's "
             + "troubleshooting reference for specific failure patterns.";
+
+        // Auto-retarget failure reasons surfaced on status Warning / SuppressedByHotReloadReason.
+        public const string RetargetOntoHotReloadFailedReason =
+            "The marker's line no longer resolves inside the hot-reload patched body; it will not fire "
+            + "until the patch is reverted, the line exists again, or 'uloop compile' runs.";
+
+        public const string RestoreAfterHotReloadRevertFailedReason =
+            "Instrumentation could not be restored after the hot-reload patch was reverted; the line "
+            + "no longer resolves in the compiled assembly. Re-enable the marker after 'uloop compile'.";
     }
 }

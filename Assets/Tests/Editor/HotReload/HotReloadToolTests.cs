@@ -75,10 +75,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(response.Methods[0].Kind, Is.EqualTo("Failed"));
         }
 
+        /// <summary>
+        /// What: BuildApplyResponse does not emit pause-point warnings when no markers
+        /// were retargeted or suppressed, even if PatchedTotal &gt; 0.
+        /// </summary>
         [Test]
-        public void BuildApplyResponse_AddsPausePointWarningOnlyWhenPatched()
+        public void BuildApplyResponse_WithoutPausePointTransitions_AddsNoPausePointWarning()
         {
-            // Verifies the pause-point interaction warning appears iff PatchedTotal > 0.
             HotReloadOrchestratorResult patched = new HotReloadOrchestratorResult(
                 new List<HotReloadMethodOutcome>
                 {
@@ -87,24 +90,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new List<string>(),
                 patchedTotal: 1,
                 activePatchTotal: 1);
-            HotReloadOrchestratorResult skippedOnly = new HotReloadOrchestratorResult(
-                new List<HotReloadMethodOutcome>
-                {
-                    HotReloadMethodOutcome.Skipped("Type.Other", "partial type", "Assets/A.cs")
-                },
-                new List<string>(),
-                patchedTotal: 0,
-                activePatchTotal: 0);
 
             HotReloadResponse patchedResponse = HotReloadTool.BuildApplyResponse(patched);
-            HotReloadResponse skippedResponse = HotReloadTool.BuildApplyResponse(skippedOnly);
 
             Assert.That(
-                patchedResponse.Warnings,
-                Does.Contain(HotReloadConstants.PausePointInteractionWarning));
-            Assert.That(
-                skippedResponse.Warnings,
-                Does.Not.Contain(HotReloadConstants.PausePointInteractionWarning));
+                string.Join(" | ", patchedResponse.Warnings),
+                Does.Not.Contain("pause points").IgnoreCase);
         }
 
         /// <summary>
@@ -133,7 +124,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.Warnings,
                 Does.Contain(
-                    "Armed pause points on the patched methods will not fire until the patch is reverted or compiled for real: Assets/Scripts/A.cs:10, Assets/Scripts/B.cs:20"));
+                    "Armed pause points could not be re-targeted and will not fire until the patch "
+                    + "is reverted or compiled for real: Assets/Scripts/A.cs:10, Assets/Scripts/B.cs:20"));
+        }
+
+        /// <summary>
+        /// What: BuildApplyResponse lists retargeted pause-point marker ids in Warnings
+        /// when auto-retarget kept markers firing on patched bodies.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithRetargetedPausePointIds_AddsAggregatedWarning()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                retargetedPausePointIds: new List<string>
+                {
+                    "Assets/Scripts/A.cs:10"
+                });
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Warnings,
+                Does.Contain(
+                    "Armed pause points were re-targeted onto the hot-reload patched bodies and keep "
+                    + "firing at the edited lines: Assets/Scripts/A.cs:10"));
         }
 
         [Test]

@@ -108,15 +108,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (ShimByMethod.ContainsKey(method))
             {
-                // A second hot reload of the same method must replace the previous patch;
-                // leaving it in place would stack transpilers and run discarded IL chains.
-                HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
+                // Why ledger before Unpatch: same as Revert — during Unpatch Harmony rebuilds
+                // the method and pause-point ChainJoin must see GetActiveShimForMethod == null,
+                // or it injects donor instruction indexes into the restored original IL stream.
+                // Do not RemoveMethod from the shim registry here: ApplyEntry already registered
+                // this method into the new generation before calling Apply.
                 ShimByMethod.Remove(method);
                 TransplantLocalsByMethod.Remove(method);
-                // Mirror the ledger removal immediately: if the re-Patch below fails, its
-                // contained Unpatch rebuilds the method with markers re-instrumented (the
-                // ledger no longer lists it), and RevertAll can never reach this method
-                // again — leaving the flag stuck at true would make status lie forever.
+                HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
+                // Mirror the ledger removal: if the re-Patch below fails, its contained Unpatch
+                // rebuilds with markers restored (ledger empty), and RevertAll can never reach
+                // this method again — leaving suppress stuck true would make status lie forever.
                 HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
             }
 
@@ -150,6 +152,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // suppress that re-instrumentation (regression vs the old ContainsKey probe).
                 _pendingShimMethod = null;
                 _pendingOriginalMethod = null;
+                // Why Remove before Unpatch: Invoke(true) may have written ShimByMethod before
+                // a later failure; rebuild must not see an active shim (same as re-apply path).
+                ShimByMethod.Remove(method);
                 // User-approved exception to the no-try-catch policy: Harmony emit/JIT
                 // failures cannot be pre-validated (the IL shape is only known inside
                 // Harmony), and an escaping exception would abort the whole run while
@@ -159,6 +164,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // wrapper, restoring the original body (verified by the extern-shim test).
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
                 TransplantLocalsByMethod.Remove(method);
+                // Why after Unpatch: retarget may have already replaced markers onto the shim;
+                // restore them onto the original body now that GetActiveShim is null.
+                HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
                 Exception rootCause = exception;
                 while (rootCause.InnerException != null)
                 {
