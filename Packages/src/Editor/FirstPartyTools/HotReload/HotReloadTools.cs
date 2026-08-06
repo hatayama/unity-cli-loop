@@ -55,6 +55,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public int ActivePatchTotal { get; set; }
 
+        public int UnchangedTotal { get; set; }
+
         public int ClearedCount { get; set; }
 
         public string Message { get; set; } = string.Empty;
@@ -208,30 +210,47 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Warnings = warnings,
                 PatchedTotal = result.PatchedTotal,
                 ActivePatchTotal = result.ActivePatchTotal,
+                UnchangedTotal = result.UnchangedTotal,
                 Message = BuildApplyMessage(result, hasFailure)
             };
         }
 
         private static string BuildApplyMessage(HotReloadOrchestratorResult result, bool hasFailure)
         {
+            // Why: when every method was left untouched, the empty Methods list is intentional —
+            // report the unchanged count instead of the generic "no patchable bodies" message.
+            if (!hasFailure && result.Methods.Count == 0 && result.UnchangedTotal > 0)
+            {
+                return "All " + result.UnchangedTotal
+                    + " methods are unchanged since the last compile; nothing to patch.";
+            }
+
+            string message;
             if (hasFailure)
             {
-                return "Hot reload finished with one or more Failed method outcomes. See Methods.";
+                message = "Hot reload finished with one or more Failed method outcomes. See Methods.";
             }
-
-            if (result.Methods.Count == 0)
+            else if (result.Methods.Count == 0)
             {
-                return "Hot reload found no patchable method bodies in the given files; nothing was changed. "
+                message = "Hot reload found no patchable method bodies in the given files; nothing was changed. "
                     + "Hot reload only replaces existing ordinary method bodies; use uloop compile for other edits.";
             }
-
-            if (result.PatchedTotal == 0)
+            else if (result.PatchedTotal == 0)
             {
-                return "Hot reload finished with no methods patched. See Methods for Skipped reasons.";
+                message = "Hot reload finished with no methods patched. See Methods for Skipped reasons.";
+            }
+            else
+            {
+                message = "Hot reload applied. PatchedTotal=" + result.PatchedTotal
+                    + ", ActivePatchTotal=" + result.ActivePatchTotal + ".";
             }
 
-            return "Hot reload applied. PatchedTotal=" + result.PatchedTotal
-                + ", ActivePatchTotal=" + result.ActivePatchTotal + ".";
+            if (result.UnchangedTotal > 0)
+            {
+                message += " " + result.UnchangedTotal + " unchanged methods were left untouched.";
+            }
+
+            return message;
         }
 
         private static HotReloadResponse CreateValidationFailure(string message)

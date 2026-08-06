@@ -104,5 +104,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "A hot-reload patch replaces the method body and discards other transpilers on "
             + "that method; a pause point on a hot-reloaded method will not fire until the patch "
             + "is reverted or a domain reload restores the original IL.";
+
+        // Format: file name, assembly name. Emitted per file when PDB-validated snapshot is absent.
+        public const string NoVerifiedSourceSnapshotWarningFormat =
+            "No verified source snapshot for {0} (assembly {1}); patching all methods. "
+            + "Run uloop compile to establish a baseline for edited-method detection.";
     }
 }

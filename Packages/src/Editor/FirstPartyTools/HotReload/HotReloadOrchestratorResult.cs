@@ -13,19 +13,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int PatchedTotal { get; }
         public int ActivePatchTotal { get; }
         public IReadOnlyList<string> SuppressedPausePointIds { get; }
+        public int UnchangedTotal { get; }
 
         public HotReloadOrchestratorResult(
             IReadOnlyList<HotReloadMethodOutcome> methods,
             IReadOnlyList<string> warnings,
             int patchedTotal,
             int activePatchTotal,
-            IReadOnlyList<string> suppressedPausePointIds = null)
+            IReadOnlyList<string> suppressedPausePointIds = null,
+            int unchangedTotal = 0)
         {
             Methods = methods;
             Warnings = warnings;
             PatchedTotal = patchedTotal;
             ActivePatchTotal = activePatchTotal;
             SuppressedPausePointIds = suppressedPausePointIds ?? Array.Empty<string>();
+            UnchangedTotal = unchangedTotal;
         }
     }
 

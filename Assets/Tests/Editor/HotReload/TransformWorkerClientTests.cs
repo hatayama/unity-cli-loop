@@ -293,7 +293,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: with a snapshot whose ComputeWithPrivate body differs, the worker emits only that edited method and reports a positive unchangedMethodCount for the rest.
+        /// What: with a snapshot whose ComputeWithPrivate body differs, the worker emits only that
+        /// edited method and lists the remaining methods in unchangedMethods.
         /// </summary>
         [Test]
         public async Task Run_WithSnapshotDifferingOnlyInOneMethod_EmitsOnlyEditedMethod()
@@ -307,7 +308,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             TransformWorkerClientResult result = await RunWorkerOnE2EFixtureAsync(snapshotSource);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.unchangedMethodCount, Is.GreaterThan(0));
+            Assert.That(result.Output.unchangedMethods, Is.Not.Null);
+            Assert.That(result.Output.unchangedMethods.Length, Is.GreaterThan(0));
             Assert.That(
                 result.Output.declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
@@ -341,7 +343,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a snapshot that differs only by EOL (LF↔CRLF) treats every method as unchanged — Windows guardrail for line-ending noise.
+        /// What: a snapshot that differs only by EOL (LF↔CRLF) treats every method as unchanged —
+        /// Windows guardrail for line-ending noise — and lists ComputeWithPrivate in
+        /// unchangedMethods.
         /// </summary>
         [Test]
         public async Task Run_WithSnapshotDifferingOnlyByEol_TreatsAllMethodsUnchanged()
@@ -357,7 +361,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerClientResult result = await RunWorkerOnE2EFixtureAsync(snapshotSource);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.entries, Is.Empty);
-            Assert.That(result.Output.unchangedMethodCount, Is.GreaterThan(0));
+            Assert.That(result.Output.unchangedMethods, Is.Not.Null);
+            Assert.That(result.Output.unchangedMethods.Length, Is.GreaterThan(0));
+            bool foundComputeUnchanged = false;
+            foreach (TransformWorkerUnchangedMethodDto unchanged in result.Output.unchangedMethods)
+            {
+                if (unchanged.methodName == nameof(HotReloadE2EFixture.ComputeWithPrivate))
+                {
+                    foundComputeUnchanged = true;
+                    break;
+                }
+            }
+
+            Assert.That(
+                foundComputeUnchanged,
+                Is.True,
+                "EOL-only snapshot must list ComputeWithPrivate in unchangedMethods.");
             Assert.That(result.Output.skipped, Is.Empty);
             Assert.That(result.Output.declarationDriftWarnings, Is.Empty);
         }
@@ -384,7 +403,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a snapshot that duplicates a method key falls back to no-baseline behavior (same entries as a null snapshot, unchangedMethodCount 0).
+        /// What: a snapshot that duplicates a method key falls back to no-baseline behavior
+        /// (same entries as a null snapshot, empty unchangedMethods).
         /// </summary>
         [Test]
         public async Task Run_WithSnapshotDuplicateMethodKey_FallsBackToNoBaseline()
@@ -412,7 +432,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerClientResult withCollision = await RunWorkerOnE2EFixtureAsync(snapshotSource);
             Assert.That(baseline.Success, Is.True, baseline.ErrorMessage);
             Assert.That(withCollision.Success, Is.True, withCollision.ErrorMessage);
-            Assert.That(withCollision.Output.unchangedMethodCount, Is.EqualTo(0));
+            Assert.That(
+                withCollision.Output.unchangedMethods == null
+                || withCollision.Output.unchangedMethods.Length == 0,
+                Is.True,
+                "Duplicate-key fallback must not report unchanged methods.");
 
             HashSet<string> baselineKeys = CollectEntryKeys(baseline.Output.entries);
             HashSet<string> collisionKeys = CollectEntryKeys(withCollision.Output.entries);
