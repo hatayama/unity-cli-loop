@@ -249,6 +249,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerOutput.shimSource,
                 shimReferences,
                 defines,
+                projectRelativePath,
                 ct).ConfigureAwait(false);
 
             TransformWorkerEntryDto[] entriesToPatch = workerOutput.entries;
@@ -265,10 +266,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ct).ConfigureAwait(false);
                 if (isolation == null)
                 {
-                    // Why these line numbers are original-file lines: shim sources emit #line
-                    // directives mapped to the edited user file, and the compile backends report
-                    // GetMappedLineSpan / csc locations — so ErrorMessage lines refer to the
-                    // user's source, not the temp HotReloadShim.cs scaffold.
+                    // Why: CompileAndLoadAsync appends "(line N)" only for diagnostics whose
+                    // #line-mapped file matches projectRelativePath — scaffold-only errors stay
+                    // bare. Single-entry failures skip isolation and always take this path.
                     outcomes.Add(
                         HotReloadMethodOutcome.Failed(
                             "(shim-compile)",
@@ -757,6 +757,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 retryOutput.shimSource,
                 shimReferences,
                 defines,
+                workerInput.projectRelativePath,
                 ct).ConfigureAwait(false);
             if (!retryCompileResult.Success)
             {
@@ -851,16 +852,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
+            // Why reject multi-match: original-source ranges can share a line (unlike the old
+            // shim-source ranges, which were structurally disjoint). First-match would exclude the
+            // wrong method on isolation retry — treat ambiguity as unattributable.
+            TransformWorkerEntryDto matchedEntry = null;
+            int matchCount = 0;
             foreach (TransformWorkerEntryDto entry in entries)
             {
                 bool hasKnownRange = entry.sourceStartLine > 0 && entry.sourceEndLine > 0;
                 if (hasKnownRange && error.Line >= entry.sourceStartLine && error.Line <= entry.sourceEndLine)
                 {
-                    return entry;
+                    matchedEntry = entry;
+                    matchCount++;
+                    if (matchCount > 1)
+                    {
+                        return null;
+                    }
                 }
             }
 
-            return null;
+            return matchedEntry;
         }
 
         private sealed class ShimCompileErrorAttribution

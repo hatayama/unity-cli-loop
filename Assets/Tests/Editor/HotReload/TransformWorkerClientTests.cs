@@ -168,6 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.entries, Is.Not.Empty);
 
+            int fixtureLineCount = File.ReadAllLines(ResolveE2EFixturePath()).Length;
             List<(int Start, int End, string MethodName)> ranges =
                 new List<(int Start, int End, string MethodName)>();
             foreach (TransformWorkerEntryDto entry in result.Output.entries)
@@ -180,6 +181,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     entry.sourceStartLine,
                     Is.LessThanOrEqualTo(entry.sourceEndLine),
                     "Entry source start line must not be after its end line: " + entry.methodName);
+                Assert.That(
+                    entry.sourceEndLine,
+                    Is.LessThanOrEqualTo(fixtureLineCount),
+                    "Entry source end line exceeds fixture file line count: " + entry.methodName);
                 ranges.Add((entry.sourceStartLine, entry.sourceEndLine, entry.methodName));
             }
 

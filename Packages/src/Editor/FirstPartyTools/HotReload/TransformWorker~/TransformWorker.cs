@@ -7,7 +7,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -123,6 +122,25 @@ public static class TransformWorkerProgram
     private static WorkerOutput TransformFile(WorkerInput input)
     {
         List<string> parseErrors = new List<string>();
+
+        // Why ParseErrors (not Debug.Assert): ProjectRelativePath crosses a process boundary via
+        // JSON, and the worker is built without a DEBUG define so Conditional Asserts are stripped.
+        if (string.IsNullOrEmpty(input.ProjectRelativePath)
+            || input.ProjectRelativePath.IndexOf('\\') >= 0
+            || input.ProjectRelativePath.IndexOf('"') >= 0)
+        {
+            return new WorkerOutput
+            {
+                ShimSource = string.Empty,
+                Entries = Array.Empty<WorkerEntry>(),
+                Skipped = Array.Empty<WorkerSkipped>(),
+                ParseErrors = new[]
+                {
+                    "Invalid projectRelativePath: must be a non-empty forward-slash path without quotes."
+                }
+            };
+        }
+
         string sourceText;
         try
         {
@@ -3317,12 +3335,7 @@ internal static class ShimSourceEmitter
             return string.Empty;
         }
 
-        Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
-        // Why assert shape: #line document names are embedded as C# string literals; backslashes
-        // or quotes would break the directive or require escaping we deliberately do not support.
-        Debug.Assert(
-            projectRelativePath.IndexOf('\\') < 0 && projectRelativePath.IndexOf('"') < 0,
-            "projectRelativePath must be forward-slash and quote-free.");
+        // projectRelativePath shape is validated at TransformFile's input boundary (ParseErrors).
 
         // Emit each shim type in the original type's namespace (and with that type's usings) so
         // unqualified sibling-type references in transplanted bodies still resolve. Manifest

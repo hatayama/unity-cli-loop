@@ -1127,6 +1127,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: when the only edited method fails shim compile, isolation is skipped
+        /// (FailedEntries.Count == entries.Length) and the whole-file (shim-compile) Failed
+        /// Reason still carries the original-file "(line N)" from #line-mapped diagnostics.
+        /// </summary>
+        [Test]
+        public async Task Run_SingleEditedMethodFailingShimCompile_WholeFileFailureIncludesOriginalLine()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string targetDllPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                "UnityCLILoop.Tests.Editor.HotReload"
+                + HotReloadConstants.CompiledAssemblyExtension);
+            // Why require a snapshot: without it every method becomes an entry and isolation
+            // succeeds — this test pins the whole-file path that only fires when the sole entry fails.
+            Assert.That(
+                HotReloadSourceBaseline.LoadVerifiedSnapshotSource(
+                    "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs",
+                    targetDllPath),
+                Is.Not.Null,
+                "Verified snapshot must resolve so only the edited failing method is an entry.");
+
+            string editedSource = BuildFixtureSource(
+                computeWithPrivateMethod:
+                "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                callsMissingHelperMethod:
+                "public int CallsMissingHelper(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }");
+            string editedPath = WriteEditedSource("WholeFileShimFailure.cs", editedSource);
+
+            int expectedOriginalLine = FindLineNumberContaining(editedSource, "MissingHelperAddedByEdit");
+            Assert.That(expectedOriginalLine, Is.GreaterThan(0));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            bool foundWholeFileFailure = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method == "(shim-compile)"
+                    && outcome.Reason.Contains(HotReloadConstants.NewMemberCompileHint)
+                    && outcome.Reason.Contains("(line " + expectedOriginalLine + ")"))
+                {
+                    foundWholeFileFailure = true;
+                }
+            }
+
+            Assert.That(
+                foundWholeFileFailure,
+                Is.True,
+                "Single-entry shim compile failure must report (shim-compile) with original-file line "
+                + expectedOriginalLine + ".\n" + FormatOutcomes(result));
+        }
+
+        /// <summary>
         /// What: a shim compile error in one method no longer kills the file — the failing method
         /// reports Failed with its own compiler error (and the new-member hint) while the other
         /// methods still patch and take effect. Attribution uses original-file line numbers from
