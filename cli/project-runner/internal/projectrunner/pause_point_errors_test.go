@@ -21,6 +21,26 @@ func TestPausePointTimeoutHint_SuppressedByHotReload_WinsOverOtherBranches(t *te
 	}
 }
 
+// Verifies a non-empty Unity reason is prepended to the shared suppressed recovery hint.
+func TestPausePointTimeoutHint_SuppressedByHotReload_PrependsReason(t *testing.T) {
+	response := pausePointStatusResponse{
+		Status:                      pausePointStatusEnabled,
+		HitCount:                    0,
+		SuppressedByHotReload:       true,
+		SuppressedByHotReloadReason: "Line no longer resolves inside the patched body.",
+		EditorState: pausePointEditorState{
+			IsPlaying: true,
+			IsPaused:  false,
+		},
+	}
+
+	hint := pausePointTimeoutHint(response, false)
+	want := "Line no longer resolves inside the patched body. " + pausePointHintSuppressedByHotReload
+	if hint != want {
+		t.Fatalf("expected %q, got %q", want, hint)
+	}
+}
+
 // Verifies the enabled-but-never-hit timeout hint still wins when suppression is false,
 // so inserting the suppressed short-circuit does not reorder the remaining branches.
 func TestPausePointTimeoutHint_NotSuppressed_ReturnsEnabledNeverHitHint(t *testing.T) {

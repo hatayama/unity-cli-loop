@@ -55,5 +55,6 @@
   "ClearedReason": "",
   "StatusBeforeClear": "",
   "LateHitDiscardedAfterClear": false,
-  "SuppressedByHotReload": false
+  "SuppressedByHotReload": false,
+  "RetargetedToHotReloadPatch": false
 }

@@ -129,14 +129,23 @@ const (
 
 	// pausePointHintSuppressedByHotReload short-circuits every other timeout diagnosis:
 	// a suppressed marker cannot fire no matter what the caller does in PlayMode.
-	pausePointHintSuppressedByHotReload = "The marker's method is currently hot-reload patched: the patch discarded the marker's instrumentation, so it cannot fire no matter how often the code path runs. Run `uloop hot-reload --revert-all` (or `uloop compile`) to restore it, then trigger the code path and wait again."
+	pausePointHintSuppressedByHotReload = "The marker's method is hot-reload patched and the marker could not be re-targeted onto the patched body. Revert the patch with 'uloop hot-reload --revert-all' or run 'uloop compile', then re-enable the marker."
 )
+
+// pausePointSuppressedByHotReloadHint prepends Unity's reason when present so agents see
+// both the specific failure and the shared recovery steps.
+func pausePointSuppressedByHotReloadHint(response pausePointStatusResponse) string {
+	if response.SuppressedByHotReloadReason != "" {
+		return response.SuppressedByHotReloadReason + " " + pausePointHintSuppressedByHotReload
+	}
+	return pausePointHintSuppressedByHotReload
+}
 
 // pausePointTimeoutHint maps the final probed status to a deterministic diagnosis,
 // because timeouts are where agents struggle to tell a missed code path from Editor state.
 func pausePointTimeoutHint(response pausePointStatusResponse, hasNewHitBaseline bool) string {
 	if response.SuppressedByHotReload {
-		return pausePointHintSuppressedByHotReload
+		return pausePointSuppressedByHotReloadHint(response)
 	}
 	if hasNewHitBaseline {
 		return pausePointHintAlreadyHitWaitingForNew
@@ -162,7 +171,7 @@ func pausePointTimeoutHint(response pausePointStatusResponse, hasNewHitBaseline 
 // of a timeout and would otherwise carry no hint at all.
 func pausePointExpiredHint(response pausePointStatusResponse) string {
 	if response.SuppressedByHotReload {
-		return pausePointHintSuppressedByHotReload
+		return pausePointSuppressedByHotReloadHint(response)
 	}
 	if !response.EditorState.IsPlaying {
 		return pausePointHintPlayModeNotRunning

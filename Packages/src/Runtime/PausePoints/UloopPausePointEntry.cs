@@ -62,6 +62,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string StatusBeforeClear { get; private set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; private set; }
         public bool SuppressedByHotReload { get; set; }
+        public string SuppressedByHotReloadReason { get; set; }
+        public bool RetargetedToHotReloadPatch { get; set; }
 
         public bool ExpireIfNeeded(DateTime nowUtc)
         {
@@ -269,7 +271,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 ClearedReason,
                 StatusBeforeClear,
                 LateHitDiscardedAfterClear,
-                SuppressedByHotReload);
+                SuppressedByHotReload,
+                SuppressedByHotReloadReason,
+                RetargetedToHotReloadPatch);
         }
 
         private long CalculateRemainingMilliseconds(DateTime nowUtc)

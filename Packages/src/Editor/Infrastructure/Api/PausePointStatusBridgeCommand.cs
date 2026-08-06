@@ -139,6 +139,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public string StatusBeforeClear { get; set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; set; }
         public bool SuppressedByHotReload { get; set; }
+        public bool RetargetedToHotReloadPatch { get; set; }
+        // Null when unset so the status contract omits the field (matches Go omitempty).
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string SuppressedByHotReloadReason { get; set; }
         // Null when unset so the status contract omits Warning (matches Go omitempty).
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string Warning { get; set; }
@@ -187,9 +191,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 StatusBeforeClear = snapshot.StatusBeforeClear,
                 LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear,
                 SuppressedByHotReload = snapshot.SuppressedByHotReload,
-                Warning = snapshot.SuppressedByHotReload
-                    ? "This method is currently hot-reload patched; the marker's instrumentation was discarded and it will not fire until 'uloop hot-reload --revert-all' or 'uloop compile'."
-                    : null
+                RetargetedToHotReloadPatch = snapshot.RetargetedToHotReloadPatch,
+                SuppressedByHotReloadReason = snapshot.SuppressedByHotReloadReason,
+                // Why reason as Warning: agents already read Warning; suppressed=false clears both.
+                Warning = snapshot.SuppressedByHotReload ? snapshot.SuppressedByHotReloadReason : null
             };
         }
     }
