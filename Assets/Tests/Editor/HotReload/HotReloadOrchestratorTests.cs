@@ -1129,19 +1129,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: a shim compile error in one method no longer kills the file — the failing method
         /// reports Failed with its own compiler error (and the new-member hint) while the other
-        /// methods still patch and take effect.
+        /// methods still patch and take effect. Attribution uses original-file line numbers from
+        /// #line-mapped diagnostics.
         /// </summary>
         [Test]
         public async Task Run_OneMethodFailingShimCompile_IsolatesFailureAndPatchesRest()
         {
             string fixturePath = ResolveE2EFixturePath();
-            string editedPath = WriteEditedSource(
-                "IsolatedShimFailure.cs",
-                BuildFixtureSource(
-                    computeWithPrivateMethod:
-                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
-                    callsMissingHelperMethod:
-                    "public int CallsMissingHelper(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }"));
+            string editedSource = BuildFixtureSource(
+                computeWithPrivateMethod:
+                "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
+                callsMissingHelperMethod:
+                "public int CallsMissingHelper(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }");
+            string editedPath = WriteEditedSource("IsolatedShimFailure.cs", editedSource);
+
+            int expectedOriginalLine = FindLineNumberContaining(editedSource, "MissingHelperAddedByEdit");
+            Assert.That(expectedOriginalLine, Is.GreaterThan(0));
 
             HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                 new[] { fixturePath },
@@ -1156,17 +1159,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
                     && outcome.Method.Contains(nameof(HotReloadE2EFixture.CallsMissingHelper))
-                    && outcome.Reason.Contains(HotReloadConstants.NewMemberCompileHint))
+                    && outcome.Reason.Contains(HotReloadConstants.NewMemberCompileHint)
+                    && outcome.Reason.Contains("(line " + expectedOriginalLine + ")"))
                 {
                     missingHelperFailed = true;
                 }
             }
 
             Assert.That(missingHelperFailed, Is.True,
-                "CallsMissingHelper must fail per-method with its own compiler error.\n" + FormatOutcomes(result));
+                "CallsMissingHelper must fail per-method with its own compiler error and original-file line "
+                + expectedOriginalLine + ".\n" + FormatOutcomes(result));
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
+        }
+
+        private static int FindLineNumberContaining(string source, string fragment)
+        {
+            string[] lines = source.Replace("\r\n", "\n").Split('\n');
+            for (int index = 0; index < lines.Length; index++)
+            {
+                if (lines[index].Contains(fragment))
+                {
+                    return index + 1;
+                }
+            }
+
+            return -1;
         }
 
         private static void AssertNoFileLevelFailure(HotReloadOrchestratorResult result)

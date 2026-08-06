@@ -7,6 +7,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -22,6 +23,10 @@ using Microsoft.CodeAnalysis.Text;
 public static class TransformWorkerProgram
 {
     private const string RoslynDirectorySidecarFileName = "roslyn-directory.txt";
+
+    // SyntaxAnnotation kind for original-source 1-based lines; survive rewriter + NormalizeWhitespace
+    // so Emit can inject #line directives after formatting.
+    internal const string UloopLineAnnotationKind = "uloop-line";
 
     private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
@@ -150,6 +155,13 @@ public static class TransformWorkerProgram
                 parseErrors.Add(diagnostic.ToString());
             }
         }
+
+        // Why before CSharpCompilation.Create: annotating after GetSemanticModel detaches nodes
+        // from the bound tree and ShimBodyRewriter's GetSymbolInfo throws "Syntax node is not
+        // within syntax tree". Binding the SemanticModel to the annotated tree keeps rewriter
+        // lookups valid while uloop-line annotations ride through to Emit.
+        CompilationUnitSyntax annotatedRoot = AnnotateOriginalSourceLines(syntaxTree.GetCompilationUnitRoot());
+        syntaxTree = syntaxTree.WithRootAndOptions(annotatedRoot, syntaxTree.Options);
 
         string targetTypesFullPath =
             !string.IsNullOrEmpty(input.TargetTypesAssemblyPath) && File.Exists(input.TargetTypesAssemblyPath)
@@ -357,8 +369,13 @@ public static class TransformWorkerProgram
                 string shimMethodName = methodSymbol.Name + "__shim" + globalShimMethodCounter;
                 globalShimMethodCounter++;
 
+                FileLinePositionSpan originalSpan = methodDeclaration.GetLocation().GetLineSpan();
+                int sourceStartLine = originalSpan.StartLinePosition.Line + 1;
+                int sourceEndLine = originalSpan.EndLinePosition.Line + 1;
+
                 // Eligibility uses a disposable plan; the rewriter lazily GetOrAdd-s into the
                 // shim-type-level plan so AllocateName stays unique across methods in the type.
+                // methodDeclaration already carries uloop-line annotations from the parse-time pass.
                 AccessorPlan rewritePlan = decision.UsesDelegation
                     ? currentShimType.AccessorPlan
                     : null;
@@ -377,13 +394,14 @@ public static class TransformWorkerProgram
                     ParameterTypeFullNames = parameterTypeFullNames,
                     ShimTypeName = currentShimType.ShimTypeName,
                     ShimMethodName = shimMethodName,
-                    PatchKind = decision.PatchKind
+                    PatchKind = decision.PatchKind,
+                    SourceStartLine = sourceStartLine,
+                    SourceEndLine = sourceEndLine
                 });
             }
         }
 
-        string shimSource = ShimSourceEmitter.Emit(root, shimTypes);
-        ApplyShimSourceLineRanges(shimSource, entries);
+        string shimSource = ShimSourceEmitter.Emit(root, shimTypes, input.ProjectRelativePath);
         return new WorkerOutput
         {
             ShimSource = shimSource,
@@ -395,30 +413,46 @@ public static class TransformWorkerProgram
         };
     }
 
-    // Shim method names are globally unique within one emitted source (name + global counter),
-    // so re-parsing the exact text csc will compile yields authoritative per-entry line ranges
-    // for error attribution. Members outside the manifest (e.g. __BindAccessors) end up in the
-    // map too but are simply never looked up.
-    private static void ApplyShimSourceLineRanges(string shimSource, List<WorkerEntry> entries)
+    /// <summary>
+    /// Attaches original-source 1-based line annotations to every method and statement in the
+    /// parsed tree. Must run before compilation so the SemanticModel binds the annotated tree.
+    /// </summary>
+    private static CompilationUnitSyntax AnnotateOriginalSourceLines(CompilationUnitSyntax root)
     {
-        SyntaxTree emittedTree = CSharpSyntaxTree.ParseText(shimSource);
-        Dictionary<string, (int Start, int End)> lineSpanByShimMethodName =
-            new Dictionary<string, (int Start, int End)>();
-        foreach (MethodDeclarationSyntax method in emittedTree.GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>())
+        List<SyntaxNode> nodesToAnnotate = new List<SyntaxNode>();
+        nodesToAnnotate.AddRange(root.DescendantNodes().OfType<MethodDeclarationSyntax>());
+        nodesToAnnotate.AddRange(root.DescendantNodes().OfType<StatementSyntax>());
+        if (nodesToAnnotate.Count == 0)
         {
-            FileLinePositionSpan lineSpan = method.GetLocation().GetLineSpan();
-            lineSpanByShimMethodName[method.Identifier.Text] =
-                (lineSpan.StartLinePosition.Line + 1, lineSpan.EndLinePosition.Line + 1);
+            return root;
         }
 
-        foreach (WorkerEntry entry in entries)
-        {
-            if (lineSpanByShimMethodName.TryGetValue(entry.ShimMethodName, out (int Start, int End) lineSpan))
+        // Why rewritten (not original): ReplaceNodes applies nested replacements first; basing the
+        // parent annotation on original would drop statement annotations already applied inside.
+        return root.ReplaceNodes(
+            nodesToAnnotate,
+            (original, rewritten) =>
             {
-                entry.ShimSourceStartLine = lineSpan.Start;
-                entry.ShimSourceEndLine = lineSpan.End;
-            }
+                int line = ResolveUloopLineAnnotationLine(original);
+                return rewritten.WithAdditionalAnnotations(
+                    new SyntaxAnnotation(
+                        UloopLineAnnotationKind,
+                        line.ToString(CultureInfo.InvariantCulture)));
+            });
+    }
+
+    private static int ResolveUloopLineAnnotationLine(SyntaxNode node)
+    {
+        if (node is MethodDeclarationSyntax methodDeclaration && methodDeclaration.ExpressionBody != null)
+        {
+            // Why arrow expression (not declaration start): NormalizeWhitespace collapses the
+            // method to one line, so mapping to the arrow expression's original start is the only
+            // location that still matches the user's intent for expression-bodied methods.
+            return methodDeclaration.ExpressionBody.Expression.GetLocation()
+                .GetLineSpan().StartLinePosition.Line + 1;
         }
+
+        return node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
     }
 
     /// <summary>
@@ -3273,12 +3307,22 @@ internal sealed class ShimTypeBuilder
 
 internal static class ShimSourceEmitter
 {
-    public static string Emit(CompilationUnitSyntax originalRoot, List<ShimTypeBuilder> shimTypes)
+    public static string Emit(
+        CompilationUnitSyntax originalRoot,
+        List<ShimTypeBuilder> shimTypes,
+        string projectRelativePath)
     {
         if (shimTypes.Count == 0)
         {
             return string.Empty;
         }
+
+        Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+        // Why assert shape: #line document names are embedded as C# string literals; backslashes
+        // or quotes would break the directive or require escaping we deliberately do not support.
+        Debug.Assert(
+            projectRelativePath.IndexOf('\\') < 0 && projectRelativePath.IndexOf('"') < 0,
+            "projectRelativePath must be forward-slash and quote-free.");
 
         // Emit each shim type in the original type's namespace (and with that type's usings) so
         // unqualified sibling-type references in transplanted bodies still resolve. Manifest
@@ -3313,13 +3357,62 @@ internal static class ShimSourceEmitter
             }
         }
 
+        // Why after NormalizeWhitespace: formatting would otherwise shift #line relative to
+        // statements; annotations survive formatting so we inject directives on the final tree.
         unit = unit.NormalizeWhitespace();
+        unit = InjectLineDirectives(unit, projectRelativePath);
 
         StringBuilder builder = new StringBuilder();
         builder.AppendLine(
             "// Generated shims mirror user method signatures verbatim; repo style rules apply to hand-written code only.");
         builder.Append(unit.ToFullString());
         return builder.ToString();
+    }
+
+    private static CompilationUnitSyntax InjectLineDirectives(
+        CompilationUnitSyntax unit,
+        string projectRelativePath)
+    {
+        List<SyntaxNode> annotatedNodes = unit.GetAnnotatedNodes(TransformWorkerProgram.UloopLineAnnotationKind)
+            .ToList();
+        if (annotatedNodes.Count > 0)
+        {
+            unit = unit.ReplaceNodes(
+                annotatedNodes,
+                (original, rewritten) =>
+                {
+                    SyntaxAnnotation annotation = original
+                        .GetAnnotations(TransformWorkerProgram.UloopLineAnnotationKind)
+                        .First();
+                    // Why leading trivia starts/ends with newline: #line must occupy its own line.
+                    string directiveText =
+                        "\n#line " + annotation.Data + " \"" + projectRelativePath + "\"\n";
+                    SyntaxTriviaList leading = SyntaxFactory.ParseLeadingTrivia(directiveText);
+                    return rewritten.WithLeadingTrivia(leading.AddRange(rewritten.GetLeadingTrivia()));
+                });
+        }
+
+        // Reset mapping after each method so scaffold (__BindAccessors, fields, class braces)
+        // does not inherit the previous method's document/line.
+        List<MethodDeclarationSyntax> methods = unit.DescendantNodes()
+            .OfType<MethodDeclarationSyntax>()
+            .ToList();
+        if (methods.Count == 0)
+        {
+            return unit;
+        }
+
+        // Why ParseLeadingTrivia into trailing: ParseTrailingTrivia does not reliably produce
+        // LineDirectiveTrivia for "#line default", while ParseLeadingTrivia does — and directive
+        // trivia is legal in a trailing trivia list for ToFullString emission.
+        return unit.ReplaceNodes(
+            methods,
+            (original, rewritten) =>
+            {
+                SyntaxTriviaList defaultDirective = SyntaxFactory.ParseLeadingTrivia("\n#line default\n");
+                return rewritten.WithTrailingTrivia(
+                    rewritten.GetTrailingTrivia().AddRange(defaultDirective));
+            });
     }
 }
 
@@ -3434,6 +3527,9 @@ internal sealed class WorkerInput
     // Why pass text (not a path): avoids an IO race between orchestrator verification and worker
     // read that would crash the whole file under the no-try-catch policy.
     public string SnapshotSource { get; set; }
+
+    // Project-relative forward-slash path embedded in #line document names.
+    public string ProjectRelativePath { get; set; }
 }
 
 internal sealed class WorkerOutput
@@ -3475,11 +3571,10 @@ internal sealed class WorkerEntry
     // "transplant" | "delegation" — see PatchKinds.
     public string PatchKind { get; set; }
 
-    // 1-based, both ends inclusive, within WorkerOutput.ShimSource; 0 when the shim method
-    // declaration could not be located while re-parsing the emitted source.
-    public int ShimSourceStartLine { get; set; }
+    // 1-based, both ends inclusive, within the original edited source file.
+    public int SourceStartLine { get; set; }
 
-    public int ShimSourceEndLine { get; set; }
+    public int SourceEndLine { get; set; }
 }
 
 internal static class PatchKinds

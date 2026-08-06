@@ -158,35 +158,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: every worker entry carries a 1-based shim source line range so the orchestrator
-        /// can attribute compile errors per method (end within the emitted source; ranges do not
-        /// overlap).
+        /// What: every worker entry carries a 1-based original-source line range (start &gt;= 1,
+        /// start &lt;= end) and those ranges do not overlap within the fixture file.
         /// </summary>
         [Test]
-        public async Task BootstrapAndRun_OnE2EFixture_EveryEntryHasAValidShimSourceLineRange()
+        public async Task BootstrapAndRun_OnE2EFixture_EveryEntryHasAValidOriginalSourceLineRange()
         {
             TransformWorkerClientResult result = await RunWorkerOnE2EFixtureAsync();
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.entries, Is.Not.Empty);
 
-            int shimSourceLineCount = CountLines(result.Output.shimSource);
             List<(int Start, int End, string MethodName)> ranges =
                 new List<(int Start, int End, string MethodName)>();
             foreach (TransformWorkerEntryDto entry in result.Output.entries)
             {
                 Assert.That(
-                    entry.shimSourceStartLine,
+                    entry.sourceStartLine,
                     Is.GreaterThanOrEqualTo(1),
-                    "Entry missing a 1-based shim source start line: " + entry.methodName);
+                    "Entry missing a 1-based original source start line: " + entry.methodName);
                 Assert.That(
-                    entry.shimSourceStartLine,
-                    Is.LessThanOrEqualTo(entry.shimSourceEndLine),
-                    "Entry shim source start line must not be after its end line: " + entry.methodName);
-                Assert.That(
-                    entry.shimSourceEndLine,
-                    Is.LessThanOrEqualTo(shimSourceLineCount),
-                    "Entry shim source end line exceeds shimSource line count: " + entry.methodName);
-                ranges.Add((entry.shimSourceStartLine, entry.shimSourceEndLine, entry.methodName));
+                    entry.sourceStartLine,
+                    Is.LessThanOrEqualTo(entry.sourceEndLine),
+                    "Entry source start line must not be after its end line: " + entry.methodName);
+                ranges.Add((entry.sourceStartLine, entry.sourceEndLine, entry.methodName));
             }
 
             ranges.Sort((left, right) => left.Start.CompareTo(right.Start));
@@ -195,30 +189,98 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(
                     ranges[index].Start,
                     Is.GreaterThan(ranges[index - 1].End),
-                    "Shim source line ranges overlap between "
+                    "Original source line ranges overlap between "
                     + ranges[index - 1].MethodName
                     + " and "
                     + ranges[index].MethodName);
             }
         }
 
-        private static int CountLines(string text)
+        /// <summary>
+        /// What: emitted shimSource contains #line directives that name the project-relative path
+        /// before methods/statements and #line default after each shim method.
+        /// </summary>
+        [Test]
+        public async Task BootstrapAndRun_OnE2EFixture_ShimSourceContainsLineDirectives()
         {
-            if (string.IsNullOrEmpty(text))
-            {
-                return 0;
-            }
+            TransformWorkerClientResult result = await RunWorkerOnE2EFixtureAsync();
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.shimSource, Is.Not.Null.And.Not.Empty);
 
-            int lineCount = 1;
-            for (int index = 0; index < text.Length; index++)
+            string expectedDirectivePrefix = "#line ";
+            string expectedPathLiteral = "\"" + ResolveE2EFixtureProjectRelativePath() + "\"";
+            Assert.That(result.Output.shimSource, Does.Contain(expectedDirectivePrefix));
+            Assert.That(result.Output.shimSource, Does.Contain(expectedPathLiteral));
+            Assert.That(result.Output.shimSource, Does.Contain("#line default"));
+
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
             {
-                if (text[index] == '\n')
+                string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
+                Assert.That(
+                    slice,
+                    Does.Contain(expectedDirectivePrefix),
+                    "Shim method must carry at least one #line directive: " + entry.methodName);
+                Assert.That(
+                    slice,
+                    Does.Contain(expectedPathLiteral),
+                    "Shim method #line must name the project-relative path: " + entry.methodName);
+            }
+        }
+
+        /// <summary>
+        /// What: an expression-bodied method maps its #line to the arrow expression's original
+        /// start line (not the declaration keyword line when they differ).
+        /// </summary>
+        [Test]
+        public async Task BootstrapAndRun_ArrowBodyMethod_LineDirectiveUsesArrowExpressionLine()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string tempDirectory = Path.Combine(
+                projectRoot,
+                "Library",
+                "UloopHotReload",
+                "TestSources",
+                "ArrowLineDirective");
+            Directory.CreateDirectory(tempDirectory);
+            string sourcePath = Path.Combine(tempDirectory, "ArrowBodyFixture.cs");
+            // Line 1 blank intentionally so the arrow expression starts on line 7 while the
+            // method keyword is on line 6 — the #line must report 7.
+            // Why a constant body: private-field access would force Delegation against a type that
+            // is not in the compiled test assembly; a literal return keeps Transplant and still
+            // exercises arrow-expression line mapping.
+            const string sourceText =
+                "\nnamespace ArrowLineDirectiveFixture\n{\n    public class ArrowHost\n    {\n"
+                + "        public int Read()\n"
+                + "            => 42;\n"
+                + "    }\n}\n";
+            File.WriteAllText(sourcePath, sourceText);
+
+            string projectRelativePath = "Library/UloopHotReload/TestSources/ArrowLineDirective/ArrowBodyFixture.cs";
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(sourcePath, projectRelativePath);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.entries, Is.Not.Empty);
+
+            TransformWorkerEntryDto arrowEntry = null;
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == "Read")
                 {
-                    lineCount++;
+                    arrowEntry = entry;
+                    break;
                 }
             }
 
-            return lineCount;
+            Assert.That(arrowEntry, Is.Not.Null, "Read entry missing.");
+            // Why not SliceShimMethod: expression-bodied shims have no `{` block to bound a slice.
+            string expectedLineDirective = "#line 7 \"" + projectRelativePath + "\"";
+            Assert.That(
+                result.Output.shimSource,
+                Does.Contain(expectedLineDirective),
+                "Arrow-body #line must point at the expression start line.\n" + result.Output.shimSource);
+            Assert.That(
+                result.Output.shimSource,
+                Does.Contain(arrowEntry.shimMethodName),
+                "Shim method must appear in emitted source.");
         }
 
         /// <summary>
@@ -464,7 +526,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static async Task<TransformWorkerClientResult> RunWorkerOnE2EFixtureAsync(
             string snapshotSource = null)
         {
-            string fixturePath = ResolveE2EFixturePath();
+            return await RunWorkerOnSourceAsync(
+                ResolveE2EFixturePath(),
+                ResolveE2EFixtureProjectRelativePath(),
+                snapshotSource);
+        }
+
+        private static async Task<TransformWorkerClientResult> RunWorkerOnSourceAsync(
+            string sourcePath,
+            string projectRelativePath,
+            string snapshotSource = null)
+        {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
                 projectRoot,
@@ -487,11 +559,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
-                sourcePath = fixturePath,
+                sourcePath = sourcePath,
                 defines = compilationAssembly.defines ?? System.Array.Empty<string>(),
                 referencePaths = compilationAssembly.allReferences,
                 targetTypesAssemblyPath = targetDllPath,
-                snapshotSource = snapshotSource
+                snapshotSource = snapshotSource,
+                projectRelativePath = projectRelativePath
             };
 
             return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
@@ -507,6 +580,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "HotReloadE2EFixtures.cs");
             Assert.That(File.Exists(path), Is.True, "E2E fixture source missing: " + path);
             return Path.GetFullPath(path);
+        }
+
+        private static string ResolveE2EFixtureProjectRelativePath()
+        {
+            return "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
         }
     }
 }

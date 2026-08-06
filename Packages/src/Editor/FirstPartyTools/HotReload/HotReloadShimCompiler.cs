@@ -159,7 +159,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (compilerMessage.type == CompilerMessageType.Error)
                 {
-                    errors.Add(new HotReloadShimCompileError(compilerMessage.line, compilerMessage.message));
+                    // Why keep file: #line-mapped diagnostics point at the user's project-relative
+                    // path (or an absolute form of it); attribution matches via suffix-tolerant
+                    // path compare, not exact equality across the three compile backends.
+                    errors.Add(
+                        new HotReloadShimCompileError(
+                            compilerMessage.file ?? string.Empty,
+                            compilerMessage.line,
+                            compilerMessage.message));
                 }
             }
 
@@ -181,16 +188,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// One compiler error from a shim compile, with its 1-based line in the shim source
-    /// (0 when the diagnostic carried no location).
+    /// One compiler error from a shim compile. Line/File are #line-mapped when directives are
+    /// present (original user file + 1-based original line); 0 / empty when the diagnostic
+    /// carried no location.
     /// </summary>
     internal sealed class HotReloadShimCompileError
     {
+        public string File { get; }
         public int Line { get; }
         public string Message { get; }
 
-        public HotReloadShimCompileError(int line, string message)
+        public HotReloadShimCompileError(string file, int line, string message)
         {
+            File = file ?? string.Empty;
             Line = line;
             Message = message;
         }
