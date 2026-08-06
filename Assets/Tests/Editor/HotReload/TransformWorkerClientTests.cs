@@ -308,6 +308,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerClientResult result = await RunWorkerOnE2EFixtureAsync(snapshotSource);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.unchangedMethodCount, Is.GreaterThan(0));
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "Method-body-only edits must not emit the outside-method-body drift warning.");
 
             bool foundCompute = false;
             foreach (TransformWorkerEntryDto entry in result.Output.entries)
@@ -344,15 +348,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string onDisk = File.ReadAllText(ResolveE2EFixturePath());
             string normalizedLf = onDisk.Replace("\r\n", "\n", StringComparison.Ordinal);
-            string snapshotSource = normalizedLf.Contains('\n')
-                ? normalizedLf.Replace("\n", "\r\n", StringComparison.Ordinal)
-                : normalizedLf + "\r\n";
+            // Opposite EOL of the on-disk bytes so the precondition holds for both LF and CRLF checkouts.
+            string snapshotSource = onDisk.Contains("\r\n", StringComparison.Ordinal)
+                ? normalizedLf
+                : normalizedLf.Replace("\n", "\r\n", StringComparison.Ordinal);
             Assert.That(snapshotSource, Is.Not.EqualTo(onDisk), "Precondition: EOL-swapped snapshot must differ as raw text.");
 
             TransformWorkerClientResult result = await RunWorkerOnE2EFixtureAsync(snapshotSource);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.entries, Is.Empty);
             Assert.That(result.Output.unchangedMethodCount, Is.GreaterThan(0));
+            Assert.That(result.Output.skipped, Is.Empty);
+            Assert.That(result.Output.declarationDriftWarnings, Is.Empty);
         }
 
         /// <summary>

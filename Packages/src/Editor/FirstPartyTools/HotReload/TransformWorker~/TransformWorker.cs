@@ -218,21 +218,25 @@ public static class TransformWorkerProgram
         Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap = null;
         Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap = null;
         Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap = null;
-        if (!string.IsNullOrEmpty(input.SnapshotSource))
+        // Null disables comparison; empty string is a real (empty) baseline text.
+        if (input.SnapshotSource != null)
         {
             CompilationUnitSyntax snapshotRoot = CSharpSyntaxTree.ParseText(
                     SourceText.From(input.SnapshotSource, Encoding.UTF8),
                     parseOptions)
                 .GetCompilationUnitRoot();
-            if (TryBuildSyntaxMethodMap(snapshotRoot, out Dictionary<string, MethodDeclarationSyntax> snapMethods)
-                && TryBuildSyntaxMethodMap(root, out Dictionary<string, MethodDeclarationSyntax> _))
+            Dictionary<string, MethodDeclarationSyntax> snapMethods = BuildSyntaxMethodMapOrNull(snapshotRoot);
+            Dictionary<string, MethodDeclarationSyntax> currentMethods = BuildSyntaxMethodMapOrNull(root);
+            if (snapMethods != null && currentMethods != null)
             {
                 // Why both maps: a duplicate key on either side makes AreEquivalent matching
                 // ambiguous, so fail closed to no-baseline (patch all) instead of guessing.
                 hasBaseline = true;
                 snapshotMethodMap = snapMethods;
-                TryBuildSyntaxPropertyMap(snapshotRoot, out snapshotPropertyMap);
-                TryBuildSyntaxIndexerMap(snapshotRoot, out snapshotIndexerMap);
+                // Why null is kept as-is: a colliding property/indexer key only disables accessor
+                // gating for this file; method-level baseline matching still applies.
+                snapshotPropertyMap = BuildSyntaxPropertyMapOrNull(snapshotRoot);
+                snapshotIndexerMap = BuildSyntaxIndexerMapOrNull(snapshotRoot);
                 AppendOutsideMethodBodyDriftWarningIfNeeded(
                     snapshotRoot,
                     root,
@@ -256,10 +260,13 @@ public static class TransformWorkerProgram
                 continue;
             }
 
+            string typeMetadataNameFromSyntax = BuildTypeMetadataNameFromSyntax(typeDeclaration);
+
             // Accessors are never patched in v1; report each explicit-body accessor as Skipped
             // so an edited getter/setter never disappears from the response silently.
             AppendExplicitAccessorSkips(
                 typeDeclaration,
+                typeMetadataNameFromSyntax,
                 semanticModel,
                 skipped,
                 hasBaseline ? snapshotPropertyMap : null,
@@ -273,7 +280,6 @@ public static class TransformWorkerProgram
                 continue;
             }
 
-            string typeMetadataNameFromSyntax = BuildTypeMetadataNameFromSyntax(typeDeclaration);
             ShimTypeBuilder currentShimType = null;
             foreach (MethodDeclarationSyntax methodDeclaration in methods)
             {
@@ -623,18 +629,22 @@ public static class TransformWorkerProgram
         return string.Empty;
     }
 
-    private static string BuildSyntaxPropertyKey(PropertyDeclarationSyntax propertyDeclaration)
+    private static string BuildSyntaxPropertyKey(
+        string typeMetadataName,
+        PropertyDeclarationSyntax propertyDeclaration)
     {
         string name = propertyDeclaration.Identifier.Text;
         if (propertyDeclaration.ExplicitInterfaceSpecifier != null)
         {
-            return propertyDeclaration.ExplicitInterfaceSpecifier.Name + "." + name;
+            name = propertyDeclaration.ExplicitInterfaceSpecifier.Name + "." + name;
         }
 
-        return name;
+        return typeMetadataName + "::" + name;
     }
 
-    private static string BuildSyntaxIndexerKey(IndexerDeclarationSyntax indexerDeclaration)
+    private static string BuildSyntaxIndexerKey(
+        string typeMetadataName,
+        IndexerDeclarationSyntax indexerDeclaration)
     {
         List<string> parameterKeys = new List<string>();
         if (indexerDeclaration.ParameterList != null)
@@ -645,14 +655,13 @@ public static class TransformWorkerProgram
             }
         }
 
-        return "this(" + string.Join(",", parameterKeys) + ")";
+        return typeMetadataName + "::this(" + string.Join(",", parameterKeys) + ")";
     }
 
-    private static bool TryBuildSyntaxMethodMap(
-        CompilationUnitSyntax root,
-        out Dictionary<string, MethodDeclarationSyntax> map)
+    private static Dictionary<string, MethodDeclarationSyntax> BuildSyntaxMethodMapOrNull(
+        CompilationUnitSyntax root)
     {
-        map = new Dictionary<string, MethodDeclarationSyntax>();
+        Dictionary<string, MethodDeclarationSyntax> map = new Dictionary<string, MethodDeclarationSyntax>();
         foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
         {
             string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
@@ -661,61 +670,58 @@ public static class TransformWorkerProgram
                 string key = BuildSyntaxMethodKey(typeMetadataName, methodDeclaration);
                 if (map.ContainsKey(key))
                 {
-                    map = null;
-                    return false;
+                    return null;
                 }
 
                 map[key] = methodDeclaration;
             }
         }
 
-        return true;
+        return map;
     }
 
-    private static bool TryBuildSyntaxPropertyMap(
-        CompilationUnitSyntax root,
-        out Dictionary<string, PropertyDeclarationSyntax> map)
+    private static Dictionary<string, PropertyDeclarationSyntax> BuildSyntaxPropertyMapOrNull(
+        CompilationUnitSyntax root)
     {
-        map = new Dictionary<string, PropertyDeclarationSyntax>();
+        Dictionary<string, PropertyDeclarationSyntax> map = new Dictionary<string, PropertyDeclarationSyntax>();
         foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
         {
+            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
             foreach (PropertyDeclarationSyntax propertyDeclaration in typeDeclaration.Members.OfType<PropertyDeclarationSyntax>())
             {
-                string key = BuildSyntaxPropertyKey(propertyDeclaration);
+                string key = BuildSyntaxPropertyKey(typeMetadataName, propertyDeclaration);
                 if (map.ContainsKey(key))
                 {
-                    map = null;
-                    return false;
+                    return null;
                 }
 
                 map[key] = propertyDeclaration;
             }
         }
 
-        return true;
+        return map;
     }
 
-    private static bool TryBuildSyntaxIndexerMap(
-        CompilationUnitSyntax root,
-        out Dictionary<string, IndexerDeclarationSyntax> map)
+    private static Dictionary<string, IndexerDeclarationSyntax> BuildSyntaxIndexerMapOrNull(
+        CompilationUnitSyntax root)
     {
-        map = new Dictionary<string, IndexerDeclarationSyntax>();
+        Dictionary<string, IndexerDeclarationSyntax> map = new Dictionary<string, IndexerDeclarationSyntax>();
         foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
         {
+            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
             foreach (IndexerDeclarationSyntax indexerDeclaration in typeDeclaration.Members.OfType<IndexerDeclarationSyntax>())
             {
-                string key = BuildSyntaxIndexerKey(indexerDeclaration);
+                string key = BuildSyntaxIndexerKey(typeMetadataName, indexerDeclaration);
                 if (map.ContainsKey(key))
                 {
-                    map = null;
-                    return false;
+                    return null;
                 }
 
                 map[key] = indexerDeclaration;
             }
         }
 
-        return true;
+        return map;
     }
 
     private static void AppendOutsideMethodBodyDriftWarningIfNeeded(
@@ -757,6 +763,7 @@ public static class TransformWorkerProgram
     // (unchanged accessors must not appear as Skipped noise).
     private static void AppendExplicitAccessorSkips(
         TypeDeclarationSyntax typeDeclaration,
+        string typeMetadataNameFromSyntax,
         SemanticModel semanticModel,
         List<WorkerSkipped> skipped,
         Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
@@ -768,7 +775,7 @@ public static class TransformWorkerProgram
             {
                 if (snapshotPropertyMap != null
                     && snapshotPropertyMap.TryGetValue(
-                        BuildSyntaxPropertyKey(propertyDeclaration),
+                        BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration),
                         out PropertyDeclarationSyntax snapshotProperty)
                     && SyntaxFactory.AreEquivalent(snapshotProperty, propertyDeclaration, topLevel: false))
                 {
@@ -786,7 +793,7 @@ public static class TransformWorkerProgram
             {
                 if (snapshotIndexerMap != null
                     && snapshotIndexerMap.TryGetValue(
-                        BuildSyntaxIndexerKey(indexerDeclaration),
+                        BuildSyntaxIndexerKey(typeMetadataNameFromSyntax, indexerDeclaration),
                         out IndexerDeclarationSyntax snapshotIndexer)
                     && SyntaxFactory.AreEquivalent(snapshotIndexer, indexerDeclaration, topLevel: false))
                 {
