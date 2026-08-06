@@ -1,21 +1,32 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 
 using HarmonyLib;
 using NUnit.Framework;
 
+using UnityEngine;
+
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
     /// EditMode coverage for the hot-reload / source pause-point contract:
-    /// reject new markers on patched methods, and restore arming after RevertAll.
+    /// shim-path enable after apply, restore arming after RevertAll, and suppress flags.
     /// </summary>
     public class HotReloadPausePointContractTests
     {
+        private const string FixtureProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
+
         [SetUp]
         public void SetUp()
         {
@@ -31,32 +42,112 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: Patching a pause point onto a method that is already hot-reload patched
-        /// returns MethodPatchedByHotReload instead of crashing or silently injecting.
+        /// What: after a transplant hot-reload, enable-pause-point on an edited-body line hits
+        /// and captures an added local (LocalBuilder hand-off) with the edited return value.
         /// </summary>
         [Test]
-        public void Patch_OnHotReloadedMethod_ReturnsMethodPatchedByHotReload()
+        public async Task Enable_OnHotReloadedTransplantBody_HitsAndCapturesAddedLocal()
         {
-            MethodInfo original = AccessTools.Method(
-                typeof(HotReloadPausePointContractFixture),
-                nameof(HotReloadPausePointContractFixture.ReplaceableCompute));
-            MethodInfo shim = AccessTools.Method(
-                typeof(HotReloadPausePointContractShims),
-                nameof(HotReloadPausePointContractShims.ReplaceableCompute__shim0));
+            string editedSource = BuildEditedComputeWithBoostedLocal();
+            // Why return line (not the declaration): sequence points on the declaration can land
+            // before the local enters the PDB scope, so capture would omit `boosted`.
+            int enableLine = FindLineNumber(editedSource, "return boosted;");
+            Assert.That(enableLine, Is.GreaterThan(0));
 
+            await HotReloadFromEditedSourceAsync(editedSource, "ContractTransplantBoosted.cs");
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+            Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            int result = fixture.ComputeWithPrivate(5);
+            Assert.That(result, Is.EqualTo(fixture.SecretForAssert + 5 + 100));
+
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(status.IsHit, Is.True);
+            UloopCapturedVariable boosted = status.CapturedVariables.FirstOrDefault(v => v.Name == "boosted");
+            Assert.That(boosted, Is.Not.Null, FormatCaptured(status));
+            Assert.That(boosted.Value, Is.EqualTo(result.ToString()));
+        }
+
+        /// <summary>
+        /// What: after a delegation hot-reload, enable on the shim body hits with synthetic
+        /// "this" and never exposes __uloopInstance as a captured parameter name.
+        /// </summary>
+        [Test]
+        public async Task Enable_OnHotReloadedDelegationBody_HitsWithoutUloopInstanceParameter()
+        {
+            string editedSource = BuildEditedLambdaPrivateDelegation();
+            int enableLine = FindLineNumber(editedSource, "return pred(threshold) ? 7 : 0;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            await HotReloadFromEditedSourceAsync(editedSource, "ContractDelegationLambda.cs");
+            HotReloadShimFileLookup lookup =
+                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+            Assert.That(lookup, Is.Not.Null);
+            HotReloadShimMethodLookup lambdaEntry = lookup.Methods.FirstOrDefault(
+                m => m.OriginalMethod != null
+                     && m.OriginalMethod.Name == nameof(HotReloadE2EFixture.LambdaPrivate));
+            Assert.That(lambdaEntry, Is.Not.Null);
+            Assert.That(lambdaEntry.IsDelegation, Is.True);
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.LambdaPrivate(5), Is.EqualTo(7));
+
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(status.IsHit, Is.True);
             Assert.That(
-                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant).Success,
-                Is.True);
-
-            SourcePausePointResolution resolution = BuildSyntheticResolution(original, instructionIndex: 5000);
-            SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
-                "contract-reject-on-patched",
-                resolution);
-
-            Assert.That(result.Success, Is.False);
+                status.CapturedVariables.Any(v => v.Name == "__uloopInstance"),
+                Is.False,
+                FormatCaptured(status));
             Assert.That(
-                result.FailureReason,
-                Is.EqualTo(SourcePausePointPatchFailureReason.MethodPatchedByHotReload));
+                status.CapturedVariables.Any(v => v.Name == "this"),
+                Is.True,
+                FormatCaptured(status));
+        }
+
+        /// <summary>
+        /// What: hot-reload then enable-pause-point (patch→enable order) yields the edited
+        /// return value and a marker hit (Priority.First pin for this PR; arm→patch is PR-4).
+        /// </summary>
+        [Test]
+        public async Task HotReloadThenEnable_EditedBodyHits()
+        {
+            string editedSource = BuildEditedComputeWithBoostedLocal();
+            int enableLine = FindLineNumber(editedSource, "return boosted;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            await HotReloadFromEditedSourceAsync(editedSource, "ContractOrderPatchThenEnable.cs");
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message);
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            int result = fixture.ComputeWithPrivate(1);
+            Assert.That(result, Is.EqualTo(fixture.SecretForAssert + 1 + 100));
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
         }
 
         /// <summary>
@@ -227,6 +318,109 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 1,
                 Array.Empty<SourcePausePointLocalVariable>(),
                 Array.Empty<SourcePausePointParameter>());
+        }
+
+        private static string BuildEditedComputeWithBoostedLocal()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            const string original =
+                "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }";
+            // Why the loop: Roslyn can elide a trivial local (`int x = …; return x;`) from both
+            // IL and PDB; the loop keeps `boosted` as a real capturable slot for the LocalBuilder assert.
+            const string replacement =
+                "public int ComputeWithPrivate(int delta)\n        {\n"
+                + "            int boosted = _secret + delta + 100;\n"
+                + "            for (int i = 0; i < 1; i++)\n"
+                + "            {\n"
+                + "                boosted += i;\n"
+                + "            }\n"
+                + "\n"
+                + "            return boosted;\n"
+                + "        }";
+            string edited = onDisk.Replace(original, replacement, StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            return edited;
+        }
+
+        private static string BuildEditedLambdaPrivateDelegation()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            string edited = onDisk.Replace(
+                "Func<int, bool> pred = v => v < _secret;\n            return pred(threshold) ? 1 : 0;",
+                "Func<int, bool> pred = v => v < (_secret + 100);\n            return pred(threshold) ? 7 : 0;",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            return edited;
+        }
+
+        private static async Task HotReloadFromEditedSourceAsync(string editedSource, string fileName)
+        {
+            string fixturePath = ResolveFixtureAbsolutePath();
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string editedPath = Path.Combine(directory, fileName);
+            File.WriteAllText(editedPath, editedSource);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+            Assert.That(
+                result.Methods.Any(m => m.Kind == HotReloadMethodOutcomeKind.Failed),
+                Is.False,
+                FormatHotReloadOutcomes(result));
+            Assert.That(
+                result.Methods.Any(m => m.Kind == HotReloadMethodOutcomeKind.Patched),
+                Is.True,
+                FormatHotReloadOutcomes(result));
+        }
+
+        private static string ResolveFixtureAbsolutePath()
+        {
+            return Path.GetFullPath(
+                Path.Combine(
+                    Application.dataPath,
+                    "Tests",
+                    "Editor",
+                    "HotReload",
+                    "HotReloadE2EFixtures.cs"));
+        }
+
+        private static int FindLineNumber(string source, string fragment)
+        {
+            string[] lines = source.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+            for (int index = 0; index < lines.Length; index++)
+            {
+                if (lines[index].Contains(fragment, StringComparison.Ordinal))
+                {
+                    return index + 1;
+                }
+            }
+
+            return -1;
+        }
+
+        private static string FormatCaptured(UloopPausePointSnapshot status)
+        {
+            List<string> lines = new List<string>();
+            foreach (UloopCapturedVariable variable in status.CapturedVariables)
+            {
+                lines.Add(variable.Name + "=" + variable.Value);
+            }
+
+            return string.Join(", ", lines);
+        }
+
+        private static string FormatHotReloadOutcomes(HotReloadOrchestratorResult result)
+        {
+            List<string> lines = new List<string>();
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                lines.Add(outcome.Kind + " " + outcome.Method + " :: " + outcome.Reason);
+            }
+
+            return string.Join("\n", lines);
         }
 
         private sealed class FakePausePointPauseController : IUloopPausePointPauseController

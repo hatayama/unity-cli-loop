@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -154,7 +155,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (bestMethod, bestSequencePoint);
         }
 
-        private static IEnumerable<MethodDefinition> EnumerateMethodsInModule(ModuleDefinition module)
+        // Shared with SourcePausePointShimResolver so shim-assembly sequence-point walks use the
+        // same nested-type enumeration and capturable-local / parameter exclusion rules.
+        internal static IEnumerable<MethodDefinition> EnumerateMethodsInModule(ModuleDefinition module)
         {
             foreach (TypeDefinition type in module.Types)
             {
@@ -181,7 +184,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static int FindInstructionIndex(Collection<Instruction> instructions, int offset)
+        internal static int FindInstructionIndex(Collection<Instruction> instructions, int offset)
         {
             for (int i = 0; i < instructions.Count; i++)
             {
@@ -194,7 +197,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return -1;
         }
 
-        private static List<SourcePausePointLocalVariable> CollectCapturableLocals(MethodDefinition method, int offset)
+        internal static List<SourcePausePointLocalVariable> CollectCapturableLocals(
+            MethodDefinition method,
+            int offset)
         {
             List<SourcePausePointLocalVariable> results = new List<SourcePausePointLocalVariable>();
             ScopeDebugInformation rootScope = method.DebugInformation.Scope;
@@ -204,6 +209,48 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return results;
+        }
+
+        /// <summary>
+        /// Collects every named capturable local in the method's debug scopes, ignoring IL offset.
+        /// Used when a shim sequence point lands on Ret (or similar) after local scopes close.
+        /// </summary>
+        internal static List<SourcePausePointLocalVariable> CollectAllCapturableLocals(
+            MethodDefinition method)
+        {
+            List<SourcePausePointLocalVariable> results = new List<SourcePausePointLocalVariable>();
+            ScopeDebugInformation rootScope = method.DebugInformation.Scope;
+            if (rootScope == null)
+            {
+                return results;
+            }
+
+            CollectAllScopeVariables(rootScope, method.Body.Variables, results);
+            return results;
+        }
+
+        private static void CollectAllScopeVariables(
+            ScopeDebugInformation scope,
+            Collection<VariableDefinition> methodVariables,
+            List<SourcePausePointLocalVariable> results)
+        {
+            if (scope.HasVariables)
+            {
+                foreach (VariableDebugInformation variableDebugInformation in scope.Variables)
+                {
+                    AppendLocalIfCapturable(variableDebugInformation, methodVariables, results);
+                }
+            }
+
+            if (!scope.HasScopes)
+            {
+                return;
+            }
+
+            foreach (ScopeDebugInformation childScope in scope.Scopes)
+            {
+                CollectAllScopeVariables(childScope, methodVariables, results);
+            }
         }
 
         private static void CollectInScopeVariables(
@@ -320,7 +367,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return elementType.FullName == "System.Span`1" || elementType.FullName == "System.ReadOnlySpan`1";
         }
 
-        private static List<SourcePausePointParameter> CollectParameters(MethodDefinition method)
+        internal static List<SourcePausePointParameter> CollectParameters(MethodDefinition method)
         {
             List<SourcePausePointParameter> parameters = new List<SourcePausePointParameter>();
             foreach (ParameterDefinition parameter in method.Parameters)
@@ -335,6 +382,66 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return parameters;
+        }
+
+        /// <summary>
+        /// Collects capturable parameters from a reflection MethodBase (transplant chain-join
+        /// uses the original method; shim-direct uses the resolved shim-side method).
+        /// </summary>
+        internal static List<SourcePausePointParameter> CollectParametersFromReflection(
+            MethodBase method,
+            bool skipFirstParameter)
+        {
+            Debug.Assert(method != null, "method must not be null.");
+
+            // Fully qualify: ToolContracts also defines ParameterInfo (tool schema DTO).
+            System.Reflection.ParameterInfo[] runtimeParameters = method.GetParameters();
+            List<SourcePausePointParameter> parameters = new List<SourcePausePointParameter>();
+            int startIndex = skipFirstParameter ? 1 : 0;
+            for (int index = startIndex; index < runtimeParameters.Length; index++)
+            {
+                System.Reflection.ParameterInfo parameter = runtimeParameters[index];
+                Type parameterType = parameter.ParameterType;
+                if (IsCaptureExcludedReflection(parameterType))
+                {
+                    continue;
+                }
+
+                // Keep GetParameters() position so LoadArgument hits the right slot even when
+                // earlier parameters were excluded from capture (same as Cecil Parameter.Index).
+                parameters.Add(
+                    new SourcePausePointParameter(
+                        parameter.Name,
+                        index,
+                        parameterType.FullName,
+                        parameterType.IsValueType));
+            }
+
+            return parameters;
+        }
+
+        private static bool IsCaptureExcludedReflection(Type type)
+        {
+            return type.IsByRef || type.IsPointer || IsByRefLikeTypeReflection(type);
+        }
+
+        private static bool IsByRefLikeTypeReflection(Type type)
+        {
+            Type elementType = type.IsGenericType ? type.GetGenericTypeDefinition() : type;
+            if (elementType.FullName == "System.Span`1" || elementType.FullName == "System.ReadOnlySpan`1")
+            {
+                return true;
+            }
+
+            foreach (object attribute in type.GetCustomAttributes(inherit: false))
+            {
+                if (attribute.GetType().FullName == SourcePausePointConstants.IsByRefLikeAttributeFullName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

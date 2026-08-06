@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static readonly Dictionary<MethodBase, List<SourcePausePointPatchInjection>> InjectionsByMethod = new();
         private static readonly Dictionary<string, MethodBase> MethodById = new();
+        private static readonly Dictionary<string, MethodBase> LogicalOwnerById = new();
 
         // The registry lives in a Runtime assembly this Editor-only tool assembly may depend on,
         // but not the reverse (patching is an outer/implementation concern the registry's inner
@@ -46,14 +47,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPausePointCoordination.OnHotReloadPatchStateChanged = HandleHotReloadPatchStateChanged;
         }
 
-        // What: lets the hot-reload tool list the marker ids it is about to suppress.
+        // What: lets the hot-reload tool list marker ids by logical owner (user method),
+        // including markers whose physical injection lives on a shim-side MoveNext/closure.
         private static IReadOnlyList<string> GetArmedMarkerIds(MethodBase method)
         {
-            if (!InjectionsByMethod.TryGetValue(method, out List<SourcePausePointPatchInjection> injections))
+            List<string> ids = new List<string>();
+            foreach (KeyValuePair<string, MethodBase> pair in LogicalOwnerById)
             {
-                return Array.Empty<string>();
+                if (pair.Value.Equals(method))
+                {
+                    ids.Add(pair.Key);
+                }
             }
-            return injections.Select(injection => injection.Id).ToList();
+
+            return ids;
         }
 
         // What: mirrors the hot-reload patch state onto every marker of the method so
@@ -70,7 +77,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        public static SourcePausePointPatchResult Patch(string id, SourcePausePointResolution resolution)
+        public static SourcePausePointPatchResult Patch(
+            string id,
+            SourcePausePointResolution resolution,
+            string normalizedFile = "",
+            int requestedLine = 0)
         {
             Debug.Assert(!string.IsNullOrEmpty(id), "id must not be null or empty.");
             Debug.Assert(resolution != null, "resolution must not be null.");
@@ -98,13 +109,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadPausePointCoordination.GetActiveShimForMethod?.Invoke(method) != null;
             if (patchedByHotReload)
             {
+                string typeName = method.DeclaringType != null ? method.DeclaringType.Name : "?";
                 return SourcePausePointPatchResult.Failure(
                     SourcePausePointPatchFailureReason.MethodPatchedByHotReload,
-                    $"'{method.DeclaringType?.Name}.{method.Name}' is currently hot-reload patched; " +
-                    "pause-point instrumentation resolves instruction positions and local slots " +
-                    "against the pre-patch compiled body, which no longer exists at runtime.",
-                    "Run 'uloop hot-reload --revert-all' or 'uloop compile' first, then enable " +
-                    "the marker.");
+                    $"'{typeName}.{method.Name}' is currently hot-reload patched and line {requestedLine} "
+                    + "does not fall inside any hot-reload patched method's current body, so the marker "
+                    + "cannot be placed reliably.",
+                    "The compiled line map for this file is stale. Pick a line inside the edited method "
+                    + "body, or run 'uloop compile' to realign line numbers.");
             }
 
             SourcePausePointPatchInjection injection = new(
@@ -113,8 +125,77 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolution.IsStatic,
                 resolution.IsDeclaringTypeValueType,
                 resolution.Parameters,
-                resolution.Locals);
+                resolution.Locals,
+                SourcePausePointPatchInjectionTargetKind.OriginalBody);
 
+            return CommitPatch(id, method, method, injection);
+        }
+
+        /// <summary>
+        /// Patches a pause point onto a hot-reload shim target (transplant chain-join or
+        /// shim-direct) without AppDomain name/MVID resolution.
+        /// </summary>
+        public static SourcePausePointPatchResult PatchShimTarget(
+            string id,
+            SourcePausePointShimResolution shim,
+            string normalizedFile,
+            int requestedLine)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(id), "id must not be null or empty.");
+            Debug.Assert(shim != null, "shim must not be null.");
+            Debug.Assert(
+                shim.Kind == SourcePausePointShimResolveKind.TransplantChainJoin
+                || shim.Kind == SourcePausePointShimResolveKind.ShimDirect,
+                "PatchShimTarget requires a successful shim resolution.");
+
+            if (MethodById.ContainsKey(id))
+            {
+                return SourcePausePointPatchResult.SuccessResult();
+            }
+
+            // Why skip TryResolveMethod: shim assemblies are all named HotReloadShim across
+            // generations, so name+MVID lookup cannot identify the loaded generation; the
+            // resolver already handed us the MethodBase from that generation's LoadedAssembly.
+            MethodBase method = shim.TargetMethod;
+            SourcePausePointPatchResult patchabilityResult = CheckPatchable(method);
+            if (!patchabilityResult.Success)
+            {
+                return patchabilityResult;
+            }
+
+            SourcePausePointPatchInjectionTargetKind targetKind =
+                shim.Kind == SourcePausePointShimResolveKind.TransplantChainJoin
+                    ? SourcePausePointPatchInjectionTargetKind.TransplantChainJoin
+                    : SourcePausePointPatchInjectionTargetKind.ShimDirect;
+
+            bool isStatic = shim.InstanceFromFirstArgument
+                ? false
+                : method.IsStatic;
+            bool isDeclaringTypeValueType =
+                shim.LogicalOwner != null
+                && shim.LogicalOwner.DeclaringType != null
+                && shim.LogicalOwner.DeclaringType.IsValueType;
+
+            SourcePausePointPatchInjection injection = new(
+                id,
+                shim.InstructionIndex,
+                isStatic,
+                isDeclaringTypeValueType,
+                shim.Parameters,
+                shim.Locals,
+                targetKind,
+                shim.DonorShim,
+                shim.InstanceFromFirstArgument);
+
+            return CommitPatch(id, method, shim.LogicalOwner, injection);
+        }
+
+        private static SourcePausePointPatchResult CommitPatch(
+            string id,
+            MethodBase method,
+            MethodBase logicalOwner,
+            SourcePausePointPatchInjection injection)
+        {
             bool methodAlreadyPatched = InjectionsByMethod.TryGetValue(method, out List<SourcePausePointPatchInjection> injections);
             if (!methodAlreadyPatched)
             {
@@ -124,6 +205,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             injections.Add(injection);
             MethodById[id] = method;
+            LogicalOwnerById[id] = logicalOwner;
 
             // The ledger above is written before Harmony actually rebuilds the method. If
             // Unpatch/Patch throws (e.g. a byref-like `this` produces invalid IL at JIT time), a
@@ -155,6 +237,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         InjectionsByMethod.Remove(method);
                     }
                     MethodById.Remove(id);
+                    LogicalOwnerById.Remove(id);
                 }
             }
 
@@ -171,6 +254,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
             MethodById.Remove(id);
+            LogicalOwnerById.Remove(id);
 
             List<SourcePausePointPatchInjection> injections = InjectionsByMethod[method];
             injections.RemoveAll(injection => injection.Id == id);
@@ -199,6 +283,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     foreach (string remainingId in injections.Select(remaining => remaining.Id).ToList())
                     {
                         MethodById.Remove(remainingId);
+                        LogicalOwnerById.Remove(remainingId);
                     }
                     InjectionsByMethod.Remove(method);
                 }
@@ -210,6 +295,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HarmonyInstance.UnpatchAll(SourcePausePointConstants.HarmonyId);
             InjectionsByMethod.Clear();
             MethodById.Clear();
+            LogicalOwnerById.Clear();
         }
 
         private static SourcePausePointPatchResult TryResolveMethod(SourcePausePointResolution resolution, out MethodBase method)
@@ -366,25 +452,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return list;
             }
 
-            bool patchedByHotReload =
-                HotReloadPausePointCoordination.GetActiveShimForMethod?.Invoke(original) != null;
-            if (patchedByHotReload)
-            {
-                // Injections resolve instruction indexes and local slots against the
-                // pre-patch body; on a hot-reload shim stream they would land at a
-                // meaningless offset, read stale local slots, or run past the end of the
-                // list. Enable already rejects new markers on patched methods; this guard
-                // covers Unpatch of a sibling marker while the method is hot-reload
-                // patched: re-Patching the survivors registers a new transpiler that runs
-                // after the hot-reload one and therefore receives the shim stream. During
-                // the hot-reload apply itself the pending-shim exposure keeps this guard
-                // active, and Priority.First guarantees the hot-reload transpiler has
-                // already produced the shim stream this transpiler receives.
-                return list;
-            }
+            MethodBase activeShim =
+                HotReloadPausePointCoordination.GetActiveShimForMethod?.Invoke(original);
 
             foreach (SourcePausePointPatchInjection injection in injections.OrderByDescending(i => i.InstructionIndex))
             {
+                if (!ShouldInject(injection, activeShim))
+                {
+                    continue;
+                }
+
                 Label skip = generator.DefineLabel();
                 List<CodeInstruction> emitted = BuildInjection(injection, original, skip);
 
@@ -410,6 +487,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return list;
         }
 
+        private static bool ShouldInject(SourcePausePointPatchInjection injection, MethodBase activeShim)
+        {
+            switch (injection.TargetKind)
+            {
+                case SourcePausePointPatchInjectionTargetKind.OriginalBody:
+                    // Pre-hot-reload body indexes are only valid when no shim is active.
+                    return activeShim == null;
+                case SourcePausePointPatchInjectionTargetKind.TransplantChainJoin:
+                    // Inject only while the donor shim that produced these indexes is still active.
+                    return activeShim != null && activeShim.Equals(injection.DonorShim);
+                case SourcePausePointPatchInjectionTargetKind.ShimDirect:
+                    // ShimDirect injections live on the shim-side method's InjectionsByMethod entry;
+                    // they never share a ledger key with an original-body method.
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         private static List<CodeInstruction> BuildInjection(SourcePausePointPatchInjection injection, MethodBase method, Label skip)
         {
             // Checking IsArmed before building the parameter/local object array (rather than
@@ -425,15 +521,72 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             AppendInstanceLoad(emitted, injection, method);
 
+            // InstanceFromFirstArgument stores absolute GetParameters() indexes (including the
+            // hole left by skipping __uloopInstance at 0), so argOffset stays 0. Ordinary
+            // instance methods still need +1 to skip the hidden `this` argument.
+            int argOffset = injection.InstanceFromFirstArgument
+                ? 0
+                : (injection.IsStatic ? 0 : 1);
+
             // Fully qualify: ToolContracts also defines ParameterInfo (tool schema DTO).
             System.Reflection.ParameterInfo[] runtimeParameters = method.GetParameters();
-            int argOffset = injection.IsStatic ? 0 : 1;
             AppendNameValueArray(
                 emitted,
                 injection.Parameters,
                 p => CodeInstruction.LoadArgument(p.Index + argOffset, false),
                 p => p.IsValueType ? runtimeParameters[p.Index].ParameterType : null,
                 p => p.Name);
+
+            AppendLocalsLoad(emitted, injection, method);
+
+            emitted.Add(new CodeInstruction(OpCodes.Call, CaptureMethodInfo));
+            return emitted;
+        }
+
+        private static void AppendLocalsLoad(
+            List<CodeInstruction> emitted,
+            SourcePausePointPatchInjection injection,
+            MethodBase method)
+        {
+            if (injection.TargetKind == SourcePausePointPatchInjectionTargetKind.TransplantChainJoin)
+            {
+                IReadOnlyList<LocalBuilder> transplantLocals =
+                    HotReloadPausePointCoordination.GetTransplantLocals?.Invoke(method);
+                MethodBody donorBody = injection.DonorShim != null
+                    ? injection.DonorShim.GetMethodBody()
+                    : null;
+                List<SourcePausePointLocalVariable> capturable = new List<SourcePausePointLocalVariable>();
+                Dictionary<int, Type> boxTypeBySlot = new Dictionary<int, Type>();
+                foreach (SourcePausePointLocalVariable local in injection.Locals)
+                {
+                    if (transplantLocals == null
+                        || local.SlotIndex < 0
+                        || local.SlotIndex >= transplantLocals.Count
+                        || donorBody == null
+                        || local.SlotIndex >= donorBody.LocalVariables.Count)
+                    {
+                        // Why skip (not fail): a missing LocalBuilder mid-rebuild must not abort
+                        // the whole injection; capture the locals that are still addressable.
+                        Debug.Assert(
+                            false,
+                            "Transplant local slot must exist on the donor shim and LocalBuilder list.");
+                        continue;
+                    }
+
+                    capturable.Add(local);
+                    boxTypeBySlot[local.SlotIndex] = local.IsValueType
+                        ? donorBody.LocalVariables[local.SlotIndex].LocalType
+                        : null;
+                }
+
+                AppendNameValueArray(
+                    emitted,
+                    capturable,
+                    l => new CodeInstruction(OpCodes.Ldloc, transplantLocals[l.SlotIndex]),
+                    l => boxTypeBySlot[l.SlotIndex],
+                    l => l.Name);
+                return;
+            }
 
             IList<LocalVariableInfo> runtimeLocals = method.GetMethodBody().LocalVariables;
             foreach (SourcePausePointLocalVariable local in injection.Locals)
@@ -448,13 +601,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 l => CodeInstruction.LoadLocal(l.SlotIndex, false),
                 l => l.IsValueType ? runtimeLocals[l.SlotIndex].LocalType : null,
                 l => l.Name);
-
-            emitted.Add(new CodeInstruction(OpCodes.Call, CaptureMethodInfo));
-            return emitted;
         }
 
         private static void AppendInstanceLoad(List<CodeInstruction> emitted, SourcePausePointPatchInjection injection, MethodBase method)
         {
+            if (injection.InstanceFromFirstArgument)
+            {
+                // Why no box: hot-reload rejects value-type instance methods as UnpatchableValueType,
+                // so a delegation shim's __uloopInstance is always a reference-type receiver here.
+                emitted.Add(CodeInstruction.LoadArgument(0, false));
+                return;
+            }
+
             if (injection.IsStatic)
             {
                 emitted.Add(new CodeInstruction(OpCodes.Ldnull));

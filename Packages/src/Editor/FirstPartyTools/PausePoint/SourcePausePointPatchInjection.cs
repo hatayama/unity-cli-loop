@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -14,6 +15,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool IsDeclaringTypeValueType { get; }
         public IReadOnlyList<SourcePausePointParameter> Parameters { get; }
         public IReadOnlyList<SourcePausePointLocalVariable> Locals { get; }
+        public SourcePausePointPatchInjectionTargetKind TargetKind { get; }
+        public MethodBase DonorShim { get; }
+        public bool InstanceFromFirstArgument { get; }
 
         public SourcePausePointPatchInjection(
             string id,
@@ -21,7 +25,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool isStatic,
             bool isDeclaringTypeValueType,
             IReadOnlyList<SourcePausePointParameter> parameters,
-            IReadOnlyList<SourcePausePointLocalVariable> locals)
+            IReadOnlyList<SourcePausePointLocalVariable> locals,
+            SourcePausePointPatchInjectionTargetKind targetKind =
+                SourcePausePointPatchInjectionTargetKind.OriginalBody,
+            MethodBase donorShim = null,
+            bool instanceFromFirstArgument = false)
         {
             Id = id;
             InstructionIndex = instructionIndex;
@@ -29,6 +37,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IsDeclaringTypeValueType = isDeclaringTypeValueType;
             Parameters = parameters;
             Locals = locals;
+            TargetKind = targetKind;
+            DonorShim = donorShim;
+            InstanceFromFirstArgument = instanceFromFirstArgument;
         }
     }
 }
