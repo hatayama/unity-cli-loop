@@ -63,17 +63,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ids;
         }
 
-        // What: mirrors the hot-reload patch state onto every marker of the method so
-        // status responses can explain why an armed marker went silent.
+        // What: mirrors hot-reload patch state onto markers by logical owner so ShimDirect
+        // (physical key = shim-side method) still receives suppress updates.
         private static void HandleHotReloadPatchStateChanged(MethodBase method, bool isPatched)
         {
-            if (!InjectionsByMethod.TryGetValue(method, out List<SourcePausePointPatchInjection> injections))
+            foreach (KeyValuePair<string, MethodBase> ownerPair in LogicalOwnerById)
             {
-                return;
-            }
-            foreach (SourcePausePointPatchInjection injection in injections)
-            {
-                UloopPausePointRegistry.SetSuppressedByHotReload(injection.Id, isPatched);
+                if (!ownerPair.Value.Equals(method))
+                {
+                    continue;
+                }
+
+                string id = ownerPair.Key;
+                if (!MethodById.TryGetValue(id, out MethodBase physicalMethod)
+                    || !InjectionsByMethod.TryGetValue(physicalMethod, out List<SourcePausePointPatchInjection> injections))
+                {
+                    continue;
+                }
+
+                SourcePausePointPatchInjection injection = FindInjectionById(injections, id);
+                if (injection == null)
+                {
+                    continue;
+                }
+
+                // Why kind-specific: OriginalBody indexes are valid again after revert (isPatched
+                // false). TransplantChainJoin / ShimDirect were resolved against a specific shim
+                // generation — apply and revert both invalidate that generation until PR-4
+                // auto-retarget replaces the injection, so status must stay suppressed=true.
+                if (injection.TargetKind == SourcePausePointPatchInjectionTargetKind.OriginalBody)
+                {
+                    UloopPausePointRegistry.SetSuppressedByHotReload(id, isPatched);
+                }
+                else
+                {
+                    UloopPausePointRegistry.SetSuppressedByHotReload(id, true);
+                }
             }
         }
 
@@ -85,13 +110,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(!string.IsNullOrEmpty(id), "id must not be null or empty.");
             Debug.Assert(resolution != null, "resolution must not be null.");
-
-            if (MethodById.ContainsKey(id))
-            {
-                // Re-enabling an id that is already patched is a no-op here: the call site is
-                // already in the IL and always fires, gated only by the registry's armed state.
-                return SourcePausePointPatchResult.SuccessResult();
-            }
 
             SourcePausePointPatchResult resolveResult = TryResolveMethod(resolution, out MethodBase method);
             if (!resolveResult.Success)
@@ -114,9 +132,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     SourcePausePointPatchFailureReason.MethodPatchedByHotReload,
                     $"'{typeName}.{method.Name}' is currently hot-reload patched and line {requestedLine} "
                     + "does not fall inside any hot-reload patched method's current body, so the marker "
-                    + "cannot be placed reliably.",
-                    "The compiled line map for this file is stale. Pick a line inside the edited method "
-                    + "body, or run 'uloop compile' to realign line numbers.");
+                    + "cannot be placed reliably. Either the compiled line map for this file is stale, "
+                    + "or the method's active patch belongs to a superseded hot-reload generation.",
+                    "Pick a line inside the edited method body, run 'uloop hot-reload --revert-all' to "
+                    + "restore compiled bodies, or run 'uloop compile' to realign line numbers.");
+            }
+
+            // Why conditional no-op: ShouldInject can leave a prior injection inert (e.g. stale
+            // OriginalBody under an active shim). Re-enable must replace mismatched ledger state
+            // instead of reporting success while the call site never fires.
+            if (TryReuseExistingPatch(
+                    id,
+                    SourcePausePointPatchInjectionTargetKind.OriginalBody,
+                    method,
+                    donorShim: null))
+            {
+                return SourcePausePointPatchResult.SuccessResult();
             }
 
             SourcePausePointPatchInjection injection = new(
@@ -148,11 +179,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 || shim.Kind == SourcePausePointShimResolveKind.ShimDirect,
                 "PatchShimTarget requires a successful shim resolution.");
 
-            if (MethodById.ContainsKey(id))
-            {
-                return SourcePausePointPatchResult.SuccessResult();
-            }
-
             // Why skip TryResolveMethod: shim assemblies are all named HotReloadShim across
             // generations, so name+MVID lookup cannot identify the loaded generation; the
             // resolver already handed us the MethodBase from that generation's LoadedAssembly.
@@ -168,13 +194,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ? SourcePausePointPatchInjectionTargetKind.TransplantChainJoin
                     : SourcePausePointPatchInjectionTargetKind.ShimDirect;
 
-            bool isStatic = shim.InstanceFromFirstArgument
-                ? false
-                : method.IsStatic;
+            if (TryReuseExistingPatch(id, targetKind, method, shim.DonorShim))
+            {
+                return SourcePausePointPatchResult.SuccessResult();
+            }
+
+            bool isStatic = !shim.InstanceFromFirstArgument && method.IsStatic;
+            // Why physical DeclaringType: shim compiles with -optimize+, so async MoveNext state
+            // machines are structs even when the user type is a class. Boxing decisions must
+            // follow the method we actually patch, not the logical owner.
             bool isDeclaringTypeValueType =
-                shim.LogicalOwner != null
-                && shim.LogicalOwner.DeclaringType != null
-                && shim.LogicalOwner.DeclaringType.IsValueType;
+                method.DeclaringType != null && method.DeclaringType.IsValueType;
 
             SourcePausePointPatchInjection injection = new(
                 id,
@@ -188,6 +218,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 shim.InstanceFromFirstArgument);
 
             return CommitPatch(id, method, shim.LogicalOwner, injection);
+        }
+
+        private static bool TryReuseExistingPatch(
+            string id,
+            SourcePausePointPatchInjectionTargetKind targetKind,
+            MethodBase physicalTarget,
+            MethodBase donorShim)
+        {
+            if (!MethodById.TryGetValue(id, out MethodBase existingPhysical)
+                || !InjectionsByMethod.TryGetValue(existingPhysical, out List<SourcePausePointPatchInjection> injections))
+            {
+                return false;
+            }
+
+            SourcePausePointPatchInjection existing = FindInjectionById(injections, id);
+            if (existing == null)
+            {
+                return false;
+            }
+
+            bool sameKind = existing.TargetKind == targetKind;
+            bool sameTarget = existingPhysical.Equals(physicalTarget);
+            bool sameDonor = targetKind != SourcePausePointPatchInjectionTargetKind.TransplantChainJoin
+                || (existing.DonorShim != null && donorShim != null && existing.DonorShim.Equals(donorShim));
+            if (sameKind && sameTarget && sameDonor)
+            {
+                return true;
+            }
+
+            Unpatch(id);
+            return false;
+        }
+
+        private static SourcePausePointPatchInjection FindInjectionById(
+            List<SourcePausePointPatchInjection> injections,
+            string id)
+        {
+            for (int index = 0; index < injections.Count; index++)
+            {
+                if (injections[index].Id == id)
+                {
+                    return injections[index];
+                }
+            }
+
+            return null;
         }
 
         private static SourcePausePointPatchResult CommitPatch(

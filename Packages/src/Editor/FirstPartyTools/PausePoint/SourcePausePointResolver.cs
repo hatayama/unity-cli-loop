@@ -214,6 +214,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Collects every named capturable local in the method's debug scopes, ignoring IL offset.
         /// Used when a shim sequence point lands on Ret (or similar) after local scopes close.
+        /// Keep-first dedupe by slot and by name avoids duplicate capture entries when scopes
+        /// reuse slots or nest identically named locals.
         /// </summary>
         internal static List<SourcePausePointLocalVariable> CollectAllCapturableLocals(
             MethodDefinition method)
@@ -225,20 +227,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return results;
             }
 
-            CollectAllScopeVariables(rootScope, method.Body.Variables, results);
+            HashSet<int> seenSlots = new HashSet<int>();
+            HashSet<string> seenNames = new HashSet<string>(StringComparer.Ordinal);
+            CollectAllScopeVariables(rootScope, method.Body.Variables, results, seenSlots, seenNames);
             return results;
         }
 
         private static void CollectAllScopeVariables(
             ScopeDebugInformation scope,
             Collection<VariableDefinition> methodVariables,
-            List<SourcePausePointLocalVariable> results)
+            List<SourcePausePointLocalVariable> results,
+            HashSet<int> seenSlots,
+            HashSet<string> seenNames)
         {
             if (scope.HasVariables)
             {
                 foreach (VariableDebugInformation variableDebugInformation in scope.Variables)
                 {
+                    int beforeCount = results.Count;
                     AppendLocalIfCapturable(variableDebugInformation, methodVariables, results);
+                    if (results.Count == beforeCount)
+                    {
+                        continue;
+                    }
+
+                    SourcePausePointLocalVariable added = results[results.Count - 1];
+                    if (seenSlots.Contains(added.SlotIndex) || seenNames.Contains(added.Name))
+                    {
+                        results.RemoveAt(results.Count - 1);
+                    }
+                    else
+                    {
+                        seenSlots.Add(added.SlotIndex);
+                        seenNames.Add(added.Name);
+                    }
                 }
             }
 
@@ -249,7 +271,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (ScopeDebugInformation childScope in scope.Scopes)
             {
-                CollectAllScopeVariables(childScope, methodVariables, results);
+                CollectAllScopeVariables(childScope, methodVariables, results, seenSlots, seenNames);
             }
         }
 

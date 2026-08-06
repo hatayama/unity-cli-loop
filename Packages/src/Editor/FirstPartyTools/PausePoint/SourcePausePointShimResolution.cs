@@ -109,7 +109,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public static SourcePausePointShimResolution NoStatementInPatchedMethod(
             MethodBase logicalOwner,
-            int line,
             string errorMessage)
         {
             return new SourcePausePointShimResolution(
@@ -122,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 locals: null,
                 parameters: null,
                 instanceFromFirstArgument: false,
-                logicalOwner != null ? logicalOwner.ToString() : null,
+                logicalOwner.ToString(),
                 errorMessage);
         }
     }

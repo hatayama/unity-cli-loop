@@ -31,10 +31,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return SourcePausePointShimResolution.NotInPatchedMethod();
             }
 
+            // Why bail before Cecil: fallback compile backends can omit PDB bytes; ReadSymbols
+            // against an empty stream throws and would abort the whole enable call.
+            if (lookup.PdbBytes == null || lookup.PdbBytes.Length == 0)
+            {
+                return SourcePausePointShimResolution.NotInPatchedMethod();
+            }
+
             using MemoryStream assemblyStream = new MemoryStream(lookup.AssemblyBytes, writable: false);
-            using MemoryStream pdbStream = new MemoryStream(
-                lookup.PdbBytes ?? System.Array.Empty<byte>(),
-                writable: false);
+            using MemoryStream pdbStream = new MemoryStream(lookup.PdbBytes, writable: false);
 
             ReaderParameters readerParameters = new ReaderParameters
             {
@@ -56,12 +61,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (containingMethod == null)
             {
-                string displayName = methodEntry.OriginalMethod != null
-                    ? methodEntry.OriginalMethod.DeclaringType?.Name + "." + methodEntry.OriginalMethod.Name
-                    : "unknown";
+                string displayName =
+                    methodEntry.OriginalMethod.DeclaringType?.Name
+                    + "."
+                    + methodEntry.OriginalMethod.Name;
                 return SourcePausePointShimResolution.NoStatementInPatchedMethod(
                     methodEntry.OriginalMethod,
-                    line,
                     "No executable statement at or after line " + line
                     + " inside the hot-reload patched method '" + displayName
                     + "'. The patched body was compiled from the current source, so line numbers "
@@ -77,9 +82,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             List<SourcePausePointLocalVariable> locals =
                 SourcePausePointResolver.CollectCapturableLocals(containingMethod, sequencePoint.Offset);
-            // Why fallback: shim PDBs (especially with #line) can place the return sequence point
-            // at an offset after lexical local scopes close, yielding an empty in-scope set even
-            // though the locals are still live for capture on that statement.
+            // Why fallback: observed during PR-3 development — shim PDBs with #line can place the
+            // return sequence point after lexical local scopes close, so in-scope collection is
+            // empty while named locals still exist in the method debug info.
             if (locals.Count == 0)
             {
                 locals = SourcePausePointResolver.CollectAllCapturableLocals(containingMethod);
@@ -109,7 +114,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool instanceFromFirstArgument =
                 isShimMethodBody
                 && methodEntry.IsDelegation
-                && methodEntry.OriginalMethod != null
                 && !methodEntry.OriginalMethod.IsStatic;
             List<SourcePausePointParameter> shimParameters =
                 SourcePausePointResolver.CollectParametersFromReflection(
