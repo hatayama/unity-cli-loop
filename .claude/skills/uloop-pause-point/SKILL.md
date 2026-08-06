@@ -174,12 +174,17 @@ If a `simulate-*` command instead returns a failure whose message says PlayMode 
 
 If this command times out, the patched line was not reached while the command waited. Read `Error.Details.Hint` first: it names the most likely cause when PlayMode is not running, Unity is already paused, or the marker was enabled but never hit. A `PAUSE_POINT_EXPIRED` error means the marker's own `enable-pause-point --timeout-seconds` window (measured from enable, not from wait) ran out first — clear and re-enable the pause point using the returned `Id` and `TimeoutSeconds`. When `--trigger` was passed, the expired envelope also carries `Error.Details.TriggerResult` (with `Completed: false` and no `Error` field when the trigger's outcome was still unknown at expiry). The countdown freezes while a hit holds the Editor paused; a manual pause without a hit does not stop it.
 
-`PAUSE_POINT_PATCHED_BY_HOT_RELOAD` means the target method's body is currently replaced
-by `uloop hot-reload`, so a new marker cannot be trusted anywhere in that method. Run
-`uloop compile` (or `uloop hot-reload --revert-all`) first, then enable the marker.
-Relatedly, `SuppressedByHotReload: true` on a status response means the marker's method
-was hot-reload patched after arming; the marker will not fire until the patch is
-reverted or compiled for real.
+`enable-pause-point` works on hot-reload patched methods: the marker resolves against
+the patched body, and `RetargetedToHotReloadPatch: true` in the response confirms it is
+armed on the edited code. `PAUSE_POINT_PATCHED_BY_HOT_RELOAD` is returned only when the
+requested line cannot be mapped onto the patched body — the file's line map is stale or
+the patch belongs to a superseded hot-reload generation. Pick a line inside the edited
+method body, run `uloop hot-reload --revert-all`, or run `uloop compile`, then retry.
+`SuppressedByHotReload: true` on a status response means a later hot-reload transition
+(apply, a newer generation, or revert) could not re-target the armed marker; the reason
+is in `SuppressedByHotReloadReason` and surfaced as the status `Warning`. The marker is
+not cleared — it fires again once a transition restores its line, or after
+`uloop compile` and a re-enable.
 
 Use `uloop pause-point-status --id "Assets/Scripts/Enemy.cs:42"` only when you need to confirm the marker is armed or inspect the current hit state.
 

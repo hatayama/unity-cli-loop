@@ -159,25 +159,27 @@ and read the returned value.
 ## Pause point interaction
 
 Both patch shapes discard the original IL and any prior transpiler output on the patched
-method — delegation replaces the body with a forward to the shim. Source pause points
-instrument methods through the same transpiler chain, so the two tools enforce a strict
-contract instead of composing silently:
+method, so armed source pause points cannot survive a patch unchanged. Instead of
+enforcing exclusivity, every patch transition re-targets them:
 
-- A pause point armed **before** a hot reload of the same method stops firing — its
-  instrumentation was part of the discarded IL. The apply response lists the affected
-  marker ids in `Warnings`, and `pause-point-status` reports `SuppressedByHotReload: true`
-  for those markers until the patch is reverted.
-- Enabling a pause point **on a currently patched method is rejected** with
-  `PAUSE_POINT_PATCHED_BY_HOT_RELOAD`. Marker positions and local-variable capture
-  resolve against the pre-patch compiled body, which no longer exists at runtime; there
-  is no line on a patched method where a new marker would be trustworthy.
-- `uloop hot-reload --revert-all` (or any domain reload) restores the original IL;
-  previously armed pause points fire again and their `SuppressedByHotReload` flag clears.
+- Applying a patch re-resolves each armed marker on the edited method against the
+  patched body. A marker whose line still resolves keeps firing at the edited line —
+  the apply response reports those ids in a `Warnings` entry and `pause-point-status`
+  shows `RetargetedToHotReloadPatch: true`. A marker whose line no longer resolves is
+  suppressed instead: the apply response lists it, and status shows
+  `SuppressedByHotReload: true` with the reason in `SuppressedByHotReloadReason`.
+- Enabling a new pause point on a currently patched method resolves against the patched
+  body directly. `PAUSE_POINT_PATCHED_BY_HOT_RELOAD` is returned only when the line
+  cannot be mapped onto it (a stale line map or a superseded generation).
+- `uloop hot-reload --revert-all` (or reverting a method's patch) re-targets armed
+  markers back onto the compiled body; a marker whose line no longer resolves there
+  stays suppressed with a reason until `uloop compile` and a re-enable.
 
-So the workflow is: iterate on behavior with hot reload, and when you need pause-point
-inspection of an edited method, run `uloop compile` to make the edits real (the compile's
-domain reload clears every patch), then enable the marker. Use `--revert-all` instead
-when you want the on-disk build back without recompiling.
+Suppressed markers are never cleared automatically — they keep their identity and fire
+again as soon as a transition restores their line. The practical workflow: iterate with
+hot reload and place pause points on edited lines in either order — enable then patch,
+or patch then enable. `uloop compile` is needed only when a marker stays suppressed
+because its line no longer resolves in any live body.
 
 ## Output
 

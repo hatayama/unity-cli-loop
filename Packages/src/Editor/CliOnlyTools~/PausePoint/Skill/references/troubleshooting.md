@@ -31,6 +31,10 @@ Recovery order:
 
 A method already bound into a delegate or event before `enable-pause-point` may not fire through that delegate: the pre-bound invocation path can bypass the patch. Workarounds: enable the pause point before the delegate is created, recreate the subscribing GameObject, or re-bind the delegate (e.g. via `execute-dynamic-code`) after enabling.
 
+## Hot-Reload Interaction
+
+`uloop hot-reload` transitions (apply, a newer generation, revert) re-target armed source pause points automatically. `SuppressedByHotReload: true` on a status or wait response means the last transition could not re-target that marker — its line no longer resolves in the code now executing. The reason is in `SuppressedByHotReloadReason` (surfaced as the status `Warning`), and the marker stays armed but silent. Recover by reverting the patch (`uloop hot-reload --revert-all`), editing so the line exists again and re-running `uloop hot-reload`, or running `uloop compile` and re-enabling the marker. `RetargetedToHotReloadPatch: true` is not a problem: it confirms the marker follows the patched body and keeps firing at the edited line.
+
 ## Enable Failures
 
 If enable fails with a "No sequence point found" error even for clearly executable lines, that script's assembly lacks debug sequence points and no line in the file can be patched. Move the pause point to a script in an assembly that carries them, such as a script under `Assets/`.
