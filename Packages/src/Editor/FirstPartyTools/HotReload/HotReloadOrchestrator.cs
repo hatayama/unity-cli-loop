@@ -156,12 +156,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] defines = compilationAssembly.defines ?? Array.Empty<string>();
             string[] referencePaths = BuildWorkerReferencePaths(compilationAssembly, targetDllPath);
 
+            // Why projectRelativePath (not workerSourcePath): contentPathOverride E2E copies live
+            // under Library/UloopHotReload/TestSources/ and are absent from the PDB document list.
+            // Assembly resolution already computed the on-disk Assets/Packages path above.
+            string snapshotSource = HotReloadSourceBaseline.LoadVerifiedSnapshotSource(
+                projectRelativePath,
+                targetDllPath);
+            if (snapshotSource == null)
+            {
+                warnings.Add(
+                    string.Format(
+                        HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat,
+                        Path.GetFileName(projectRelativePath),
+                        assemblyName));
+            }
+
             TransformWorkerInputDto workerInput = new TransformWorkerInputDto
             {
                 sourcePath = Path.GetFullPath(workerSourcePath),
                 defines = defines,
                 referencePaths = referencePaths,
-                targetTypesAssemblyPath = Path.GetFullPath(targetDllPath)
+                targetTypesAssemblyPath = Path.GetFullPath(targetDllPath),
+                snapshotSource = snapshotSource
             };
 
             TransformWorkerClientResult workerResult =
@@ -660,7 +676,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines = workerInput.defines,
                 referencePaths = workerInput.referencePaths,
                 targetTypesAssemblyPath = workerInput.targetTypesAssemblyPath,
-                excludedMethodKeys = excludedMethodKeys
+                excludedMethodKeys = excludedMethodKeys,
+                // Why copy: omitting snapshotSource would make the retry patch unedited methods
+                // again and diverge the retry entries set from the first-pass isolation baseline.
+                snapshotSource = workerInput.snapshotSource
             };
 
             TransformWorkerClientResult retryWorkerResult =
