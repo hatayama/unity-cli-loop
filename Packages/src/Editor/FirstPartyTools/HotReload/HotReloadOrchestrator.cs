@@ -44,6 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> suppressedPausePointIds = new List<string>();
             List<string> inlineRiskMethodLabels = new List<string>();
             int patchedTotal = 0;
+            int unchangedTotal = 0;
 
             for (int index = 0; index < files.Count; index++)
             {
@@ -68,6 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 AppendDistinct(suppressedPausePointIds, fileResult.SuppressedPausePointIds);
                 AppendDistinct(inlineRiskMethodLabels, fileResult.InlineRiskMethodLabels);
                 patchedTotal += fileResult.PatchedCount;
+                unchangedTotal += fileResult.UnchangedMethodCount;
             }
 
             if (inlineRiskMethodLabels.Count > 0)
@@ -85,7 +87,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings,
                 patchedTotal,
                 HotReloadPatcher.ActivePatchCount,
-                suppressedPausePointIds);
+                suppressedPausePointIds,
+                unchangedTotal);
         }
 
         private static async Task<HotReloadFileProcessResult> ProcessFileAsync(
@@ -201,11 +204,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
+            int unchangedMethodCount = workerOutput.unchangedMethodCount;
+
             if (string.IsNullOrEmpty(workerOutput.shimSource)
                 || workerOutput.entries == null
                 || workerOutput.entries.Length == 0)
             {
-                return new HotReloadFileProcessResult(outcomes, warnings, 0);
+                return new HotReloadFileProcessResult(
+                    outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
             }
 
             // BuildShimReferencePaths reads Application.dataPath / platform; stay on main thread.
@@ -240,14 +246,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             "(shim-compile)",
                             compileResult.ErrorMessage,
                             assemblyResolvePath));
-                    return new HotReloadFileProcessResult(outcomes, warnings, 0);
+                    return new HotReloadFileProcessResult(
+                        outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
                 }
 
                 outcomes.AddRange(isolation.FailedMethodOutcomes);
                 if (isolation.RetryEntries.Length == 0)
                 {
                     return new HotReloadFileProcessResult(
-                        outcomes, warnings, 0, suppressedPausePointIds, new List<string>());
+                        outcomes,
+                        warnings,
+                        0,
+                        suppressedPausePointIds,
+                        new List<string>(),
+                        unchangedMethodCount);
                 }
 
                 entriesToPatch = isolation.RetryEntries;
@@ -278,7 +290,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return new HotReloadFileProcessResult(
-                outcomes, warnings, patchedCount, suppressedPausePointIds, inlineRiskMethodLabels);
+                outcomes,
+                warnings,
+                patchedCount,
+                suppressedPausePointIds,
+                inlineRiskMethodLabels,
+                unchangedMethodCount);
         }
 
         private static HotReloadMethodOutcome ApplyEntry(
@@ -888,19 +905,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public int PatchedCount { get; }
             public List<string> SuppressedPausePointIds { get; }
             public List<string> InlineRiskMethodLabels { get; }
+            public int UnchangedMethodCount { get; }
 
             public HotReloadFileProcessResult(
                 List<HotReloadMethodOutcome> outcomes,
                 List<string> warnings,
                 int patchedCount,
                 List<string> suppressedPausePointIds = null,
-                List<string> inlineRiskMethodLabels = null)
+                List<string> inlineRiskMethodLabels = null,
+                int unchangedMethodCount = 0)
             {
                 Outcomes = outcomes;
                 Warnings = warnings;
                 PatchedCount = patchedCount;
                 SuppressedPausePointIds = suppressedPausePointIds ?? new List<string>();
                 InlineRiskMethodLabels = inlineRiskMethodLabels ?? new List<string>();
+                UnchangedMethodCount = unchangedMethodCount;
             }
         }
     }

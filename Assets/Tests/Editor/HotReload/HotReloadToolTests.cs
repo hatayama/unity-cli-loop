@@ -178,6 +178,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an empty Methods list with UnchangedTotal reports the all-unchanged message
+        /// instead of the generic "no patchable bodies" wording.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_EmptyMethodsWithUnchangedTotal_YieldsAllUnchangedMessage()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0,
+                unchangedTotal: 8);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo("All 8 methods are unchanged since the last compile; nothing to patch."));
+            Assert.That(response.UnchangedTotal, Is.EqualTo(8));
+        }
+
+        /// <summary>
+        /// What: a patched run with UnchangedTotal appends the untouched-methods suffix.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithUnchangedTotal_AppendsUntouchedSuffix()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                unchangedTotal: 7);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    + "7 unchanged methods were left untouched."));
+            Assert.That(response.UnchangedTotal, Is.EqualTo(7));
+        }
+
+        /// <summary>
         /// What: a skipped-only run keeps the existing "See Methods for Skipped reasons." message.
         /// </summary>
         [Test]
