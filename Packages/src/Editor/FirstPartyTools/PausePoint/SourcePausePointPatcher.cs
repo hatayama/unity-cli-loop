@@ -95,7 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             bool patchedByHotReload =
-                HotReloadPausePointCoordination.IsMethodPatchedByHotReload?.Invoke(method) ?? false;
+                HotReloadPausePointCoordination.GetActiveShimForMethod?.Invoke(method) != null;
             if (patchedByHotReload)
             {
                 return SourcePausePointPatchResult.Failure(
@@ -367,7 +367,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             bool patchedByHotReload =
-                HotReloadPausePointCoordination.IsMethodPatchedByHotReload?.Invoke(original) ?? false;
+                HotReloadPausePointCoordination.GetActiveShimForMethod?.Invoke(original) != null;
             if (patchedByHotReload)
             {
                 // Injections resolve instruction indexes and local slots against the
