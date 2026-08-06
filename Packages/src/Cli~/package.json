@@ -51,7 +51,7 @@
     "@eslint/js": "10.0.1",
     "@types/jest": "30.0.0",
     "@types/node": "26.1.2",
-    "@types/semver": "7.7.1",
+    "@types/semver": "7.8.0",
     "esbuild": "0.28.1",
     "eslint": "10.8.0",
     "eslint-config-prettier": "10.1.8",
