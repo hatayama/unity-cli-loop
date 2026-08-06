@@ -964,6 +964,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: with a verified source snapshot, hot reload patches only the edited method —
+        /// unedited methods appear neither as Patched nor Skipped, and the response carries the
+        /// unchanged count.
+        /// </summary>
+        [Test]
+        public async Task Run_WithVerifiedSnapshot_PatchesOnlyEditedMethod()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string fixtureProjectRelativePath =
+                "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
+            string targetDllPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                "UnityCLILoop.Tests.Editor.HotReload"
+                + HotReloadConstants.CompiledAssemblyExtension);
+
+            string snapshot = HotReloadSourceBaseline.LoadVerifiedSnapshotSource(
+                fixtureProjectRelativePath,
+                targetDllPath);
+            Assert.That(
+                snapshot,
+                Is.Not.Null,
+                "Verified snapshot must resolve for the E2E fixture; capture regresses otherwise.");
+
+            string editedPath = WriteEditedSource(
+                "OnlyEditedMethod.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                Assert.That(
+                    outcome.Method.Contains(nameof(HotReloadE2EFixture.QueryPrivate)),
+                    Is.False,
+                    "Unedited QueryPrivate must not appear as Patched/Skipped/Failed.\n"
+                    + FormatOutcomes(result));
+            }
+
+            Assert.That(result.UnchangedTotal, Is.GreaterThan(0));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
+        }
+
+        /// <summary>
         /// What: a shim compile error in one method no longer kills the file — the failing method
         /// reports Failed with its own compiler error (and the new-member hint) while the other
         /// methods still patch and take effect.
