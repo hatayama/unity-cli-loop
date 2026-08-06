@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 
 using UnityEngine;
@@ -60,36 +61,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Removes <paramref name="originalMethod"/> from every file generation; deletes empty
-        /// generations. Safe when the method is not registered.
+        /// Removes <paramref name="originalMethod"/> from every file generation. Empty
+        /// generations stay so a later RegisterMethod in the same Apply run still finds the
+        /// file key (per-method Apply failure must not abort sibling registration).
         /// </summary>
         public static void RemoveMethod(MethodBase originalMethod)
         {
             Debug.Assert(originalMethod != null, "originalMethod must not be null.");
 
-            List<string> emptyPaths = null;
             foreach (KeyValuePair<string, FileGeneration> pair in GenerationsByPath)
             {
-                if (!pair.Value.Methods.Remove(originalMethod))
-                {
-                    continue;
-                }
-
-                if (pair.Value.Methods.Count == 0)
-                {
-                    emptyPaths ??= new List<string>();
-                    emptyPaths.Add(pair.Key);
-                }
-            }
-
-            if (emptyPaths == null)
-            {
-                return;
-            }
-
-            for (int index = 0; index < emptyPaths.Count; index++)
-            {
-                GenerationsByPath.Remove(emptyPaths[index]);
+                pair.Value.Methods.Remove(originalMethod);
             }
         }
 
@@ -105,19 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            // Why linear scan (not Dictionary key equality): request paths may be absolute while
-            // registration keys are project-relative, and Windows needs OrdinalIgnoreCase —
-            // HotReloadSourcePathNormalizer already encodes both rules.
-            FileGeneration matchedGeneration = null;
-            foreach (KeyValuePair<string, FileGeneration> pair in GenerationsByPath)
-            {
-                if (HotReloadSourcePathNormalizer.PathsReferToSameFile(requestedPath, pair.Key))
-                {
-                    matchedGeneration = pair.Value;
-                    break;
-                }
-            }
-
+            FileGeneration matchedGeneration = FindGenerationForPath(requestedPath);
             if (matchedGeneration == null)
             {
                 return null;
@@ -155,6 +125,46 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 matchedGeneration.PdbBytes,
                 matchedGeneration.LoadedAssembly,
                 methods);
+        }
+
+        private static FileGeneration FindGenerationForPath(string requestedPath)
+        {
+            string normalizedRequest = HotReloadSourcePathNormalizer.ToForwardSlashes(requestedPath);
+            StringComparison comparison = Path.DirectorySeparatorChar == '\\'
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+
+            // Why exact-first: Dictionary enumeration order is non-deterministic; prefer a
+            // unique Ordinal(/IgnoreCase) key match before any suffix match.
+            foreach (KeyValuePair<string, FileGeneration> pair in GenerationsByPath)
+            {
+                string normalizedKey = HotReloadSourcePathNormalizer.ToForwardSlashes(pair.Key);
+                if (string.Equals(normalizedRequest, normalizedKey, comparison))
+                {
+                    return pair.Value;
+                }
+            }
+
+            FileGeneration suffixMatch = null;
+            int suffixMatchCount = 0;
+            foreach (KeyValuePair<string, FileGeneration> pair in GenerationsByPath)
+            {
+                if (!HotReloadSourcePathNormalizer.PathsReferToSameFile(requestedPath, pair.Key))
+                {
+                    continue;
+                }
+
+                suffixMatchCount++;
+                suffixMatch = pair.Value;
+                if (suffixMatchCount > 1)
+                {
+                    // Why null on ambiguity: same fail-closed rule as FindEntryForError —
+                    // guessing among multiple suffix hits is worse than no lookup.
+                    return null;
+                }
+            }
+
+            return suffixMatchCount == 1 ? suffixMatch : null;
         }
 
         internal sealed class MethodEntry

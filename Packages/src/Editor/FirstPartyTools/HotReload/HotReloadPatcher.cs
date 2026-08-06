@@ -56,7 +56,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return shimMethod;
                 }
 
-                if (_pendingShimMethod != null && ReferenceEquals(method, _pendingOriginalMethod))
+                // Why Equals (not ReferenceEquals): match MethodBase equality used by
+                // ShimByMethod.TryGetValue rather than Harmony's instance identity.
+                if (_pendingShimMethod != null
+                    && _pendingOriginalMethod != null
+                    && method != null
+                    && method.Equals(_pendingOriginalMethod))
                 {
                     return _pendingShimMethod;
                 }
@@ -67,8 +72,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 TransplantLocalsByMethod.TryGetValue(method, out IReadOnlyList<LocalBuilder> locals)
                     ? locals
                     : null;
-            // Touch the registry type so GetShimLookupForFile is wired in this domain.
-            HotReloadShimRegistry.Clear();
         }
 
         /// <summary>
@@ -141,6 +144,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             catch (Exception exception)
             {
+                // Why clear pending before Unpatch: cleanup rebuild must see "not patched"
+                // so pause-point markers re-instrument the restored original body. Leaving
+                // pending set would make GetActiveShimForMethod return the failed shim and
+                // suppress that re-instrumentation (regression vs the old ContainsKey probe).
+                _pendingShimMethod = null;
+                _pendingOriginalMethod = null;
                 // User-approved exception to the no-try-catch policy: Harmony emit/JIT
                 // failures cannot be pre-validated (the IL shape is only known inside
                 // Harmony), and an escaping exception would abort the whole run while

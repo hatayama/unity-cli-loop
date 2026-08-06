@@ -377,9 +377,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // covers Unpatch of a sibling marker while the method is hot-reload
                 // patched: re-Patching the survivors registers a new transpiler that runs
                 // after the hot-reload one and therefore receives the shim stream. During
-                // the hot-reload apply itself the guard is inert (the ledger is written
-                // after Patch succeeds), which is fine — the hot-reload transpiler
-                // discards prior transpiler output anyway.
+                // the hot-reload apply itself the pending-shim exposure keeps this guard
+                // active, and Priority.First guarantees the hot-reload transpiler has
+                // already produced the shim stream this transpiler receives.
                 return list;
             }
 

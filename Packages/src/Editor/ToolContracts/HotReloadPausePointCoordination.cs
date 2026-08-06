@@ -21,12 +21,23 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         // original method, or null when the method is not hot-reload patched.
         public static Func<MethodBase, MethodBase> GetActiveShimForMethod { get; set; }
 
-        // Set by HotReloadShimRegistry. Argument is a forward-slash path (absolute or
-        // project-relative); returns null when that file has no active shim generation.
+        /// <summary>
+        /// Set by HotReloadShimRegistry. Argument is a forward-slash path (absolute or
+        /// project-relative); returns null when that file has no active shim generation.
+        /// A method may still report an active shim via <see cref="GetActiveShimForMethod"/>
+        /// while missing from this file lookup (a newer generation replaced the file and
+        /// the method was skipped, bind-failed, or isolation-excluded). Consumers must treat
+        /// that combination as retarget-impossible (suppress the marker).
+        /// </summary>
         public static Func<string, HotReloadShimFileLookup> GetShimLookupForFile { get; set; }
 
-        // Set by HotReloadPatcher. Returns the LocalBuilder array (shim slot order) from
-        // the latest transplant rebuild of the original method, or null when none.
+        /// <summary>
+        /// Set by HotReloadPatcher. Returns the LocalBuilder array (shim slot order) from
+        /// the latest transplant rebuild of the original method, or null when none.
+        /// Returned LocalBuilders are tied to the ILGenerator of that rebuild and are valid
+        /// only inside the same rebuild (the pause-point transpiler that runs after the
+        /// hot-reload transpiler). Do not retain or use them outside that rebuild.
+        /// </summary>
         public static Func<MethodBase, IReadOnlyList<LocalBuilder>> GetTransplantLocals { get; set; }
 
         // Set by SourcePausePointPatcher. Returns the marker ids currently injected

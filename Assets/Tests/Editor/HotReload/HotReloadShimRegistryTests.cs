@@ -32,7 +32,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: after a successful orchestrated apply, GetShimLookupForFile returns the
-        /// patched method for the fixture's project-relative path.
+        /// patched method for the fixture path (relative and absolute), with PDB bytes and
+        /// transplant (non-delegation) shape for ComputeWithPrivate.
         /// </summary>
         [Test]
         public async Task Apply_ThenGetShimLookupForFile_ReturnsPatchedMethods()
@@ -43,8 +44,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
             Assert.That(lookup, Is.Not.Null);
             Assert.That(lookup.AssemblyBytes, Is.Not.Null.And.Not.Empty);
+            Assert.That(lookup.PdbBytes, Is.Not.Null.And.Not.Empty);
             Assert.That(lookup.LoadedAssembly, Is.Not.Null);
             Assert.That(lookup.Methods, Is.Not.Empty);
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string absoluteFixturePath = Path.GetFullPath(
+                Path.Combine(projectRoot, FixtureProjectRelativePath));
+            HotReloadShimFileLookup absoluteLookup =
+                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(absoluteFixturePath);
+            Assert.That(
+                absoluteLookup,
+                Is.Not.Null,
+                "Absolute --file-style paths must resolve via PathsReferToSameFile linear scan.");
 
             bool foundCompute = false;
             foreach (HotReloadShimMethodLookup method in lookup.Methods)
@@ -54,6 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 {
                     foundCompute = true;
                     Assert.That(method.ShimMethod, Is.Not.Null);
+                    Assert.That(method.IsDelegation, Is.False);
                     Assert.That(method.SourceStartLine, Is.GreaterThan(0));
                     Assert.That(method.SourceEndLine, Is.GreaterThanOrEqualTo(method.SourceStartLine));
                 }
@@ -63,8 +76,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: reverting a patched method removes it from GetShimLookupForFile (lookup becomes
-        /// null when it was the last registered method for that file).
+        /// What: reverting ComputeWithPrivate removes only that method from GetShimLookupForFile
+        /// while sibling methods that shared the edited statement remain registered.
         /// </summary>
         [Test]
         public async Task Revert_RemovesMethodFromShimLookup()
@@ -75,18 +88,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 BindingFlags.Instance | BindingFlags.Public);
             Assert.That(computeMethod, Is.Not.Null);
 
+            HotReloadShimFileLookup beforeLookup =
+                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+            Assert.That(beforeLookup, Is.Not.Null);
+            Assert.That(
+                beforeLookup.Methods.Count,
+                Is.GreaterThanOrEqualTo(2),
+                "Precondition: Replace of `return _secret + delta;` must patch ComputeWithPrivate " +
+                "plus at least one sibling so revert cannot clear the whole file lookup.");
+
             bool reverted = HotReloadPatcher.Revert(computeMethod);
             Assert.That(reverted, Is.True);
 
             HotReloadShimFileLookup lookup =
                 HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
-            if (lookup == null)
-            {
-                return;
-            }
+            Assert.That(lookup, Is.Not.Null);
+            Assert.That(lookup.Methods, Is.Not.Empty);
 
-            // Why allow non-null lookup: editing `return _secret + delta;` can also touch sibling
-            // methods that share that statement text; only ComputeWithPrivate must disappear.
             foreach (HotReloadShimMethodLookup method in lookup.Methods)
             {
                 Assert.That(
@@ -132,7 +150,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: GetTransplantLocals returns a non-null list for a method patched via transplant.
+        /// What: GetTransplantLocals returns a list whose length matches the shim method's
+        /// LocalVariables count for a transplant-patched method.
         /// </summary>
         [Test]
         public async Task Apply_Transplant_ExposesTransplantLocals()
@@ -143,9 +162,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 BindingFlags.Instance | BindingFlags.Public);
             Assert.That(computeMethod, Is.Not.Null);
 
+            HotReloadShimFileLookup lookup =
+                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);
+            Assert.That(lookup, Is.Not.Null);
+
+            MethodBase shimMethod = null;
+            foreach (HotReloadShimMethodLookup method in lookup.Methods)
+            {
+                if (method.OriginalMethod != null
+                    && method.OriginalMethod.Name == nameof(HotReloadE2EFixture.ComputeWithPrivate))
+                {
+                    shimMethod = method.ShimMethod;
+                    break;
+                }
+            }
+
+            Assert.That(shimMethod, Is.Not.Null);
+            MethodBody shimBody = shimMethod.GetMethodBody();
+            Assert.That(shimBody, Is.Not.Null);
+
             IReadOnlyList<LocalBuilder> locals =
                 HotReloadPausePointCoordination.GetTransplantLocals?.Invoke(computeMethod);
             Assert.That(locals, Is.Not.Null);
+            Assert.That(locals.Count, Is.EqualTo(shimBody.LocalVariables.Count));
         }
 
         private static async Task PatchComputeWithPrivateAsync(int extraDelta = 100)
