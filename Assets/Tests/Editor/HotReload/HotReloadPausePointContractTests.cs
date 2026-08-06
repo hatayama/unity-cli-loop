@@ -155,6 +155,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a SingleShot marker that already hit (disarmed) is not retargeted or suppressed
+        /// by a later hot-reload of the same method.
+        /// </summary>
+        [Test]
+        public async Task HotReload_AfterSingleShotHit_DoesNotTouchDisarmedMarker()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int enableLine = FindLineNumber(onDisk, "return _secret + delta;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+            Assert.That(enable.Success, Is.True, enable.Message);
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(fixture.SecretForAssert + 5));
+            UloopPausePointSnapshot afterHit = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(afterHit.IsHit, Is.True);
+            Assert.That(afterHit.IsEnabled, Is.False);
+
+            await HotReloadFromEditedSourceAsync(
+                BuildEditedComputePlusHundred(onDisk),
+                "ContractSingleShotDisarmed.cs");
+
+            UloopPausePointSnapshot afterPatch = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(afterPatch.RetargetedToHotReloadPatch, Is.False);
+            Assert.That(afterPatch.SuppressedByHotReload, Is.False);
+        }
+
+        /// <summary>
+        /// What: RevertAll after enable on a shim-only line cannot restore instrumentation and
+        /// records RestoreAfterHotReloadRevertFailedReason exactly.
+        /// </summary>
+        [Test]
+        public async Task RevertAll_AfterEnableOnShimOnlyLine_SuppressesWithRestoreReason()
+        {
+            string boostedEdit = BuildEditedComputeWithBoostedLocal();
+            int enableLine = FindLineNumber(boostedEdit, "return boosted;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+            await HotReloadFromEditedSourceAsync(boostedEdit, "ContractRestoreFailGen1.cs");
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+
+            HotReloadPatcher.RevertAll();
+
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(status.SuppressedByHotReload, Is.True);
+            Assert.That(status.RetargetedToHotReloadPatch, Is.False);
+            Assert.That(
+                status.SuppressedByHotReloadReason,
+                Is.EqualTo(SourcePausePointConstants.RestoreAfterHotReloadRevertFailedReason));
+        }
+
+        /// <summary>
         /// What: after enable on a patched body, a second hot-reload generation keeps the marker
         /// firing with the newer edited behavior (generation follow).
         /// </summary>

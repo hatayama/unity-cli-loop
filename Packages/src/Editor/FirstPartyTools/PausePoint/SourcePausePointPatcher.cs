@@ -53,12 +53,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // What: lets the hot-reload tool list marker ids by logical owner (user method),
         // including markers whose physical injection lives on a shim-side MoveNext/closure.
+        // Why IsArmed: hit/expired SingleShot markers keep instrumentation until clear, but
+        // transitions and apply warnings must track only currently armed markers.
         private static IReadOnlyList<string> GetArmedMarkerIds(MethodBase method)
         {
             List<string> ids = new List<string>();
             foreach (KeyValuePair<string, MethodBase> pair in LogicalOwnerById)
             {
-                if (pair.Value.Equals(method))
+                if (pair.Value.Equals(method) && UloopPausePointRegistry.IsArmed(pair.Key))
                 {
                     ids.Add(pair.Key);
                 }
@@ -73,7 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> ids = new List<string>();
             foreach (KeyValuePair<string, MethodBase> pair in LogicalOwnerById)
             {
-                if (!pair.Value.Equals(method))
+                if (!pair.Value.Equals(method) || !UloopPausePointRegistry.IsArmed(pair.Key))
                 {
                     continue;
                 }
@@ -106,7 +108,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> ids = new List<string>();
             foreach (KeyValuePair<string, MethodBase> ownerPair in LogicalOwnerById)
             {
-                if (ownerPair.Value.Equals(method))
+                // Why IsArmed: hit/expired instrumentation remains until clear, but retarget /
+                // restore must not rewrite disarmed markers back to RetargetedToHotReloadPatch.
+                if (ownerPair.Value.Equals(method) && UloopPausePointRegistry.IsArmed(ownerPair.Key))
                 {
                     ids.Add(ownerPair.Key);
                 }
@@ -479,13 +483,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(!string.IsNullOrEmpty(id), "id must not be null or empty.");
 
+            // Why before MethodById guard: ReanchorMarkerWithoutInjection leaves MethodById
+            // empty while LogicalOwnerById/RequestById still hold the id; clear must scrub
+            // those ledgers so a later transition cannot revive a cleared marker's request.
+            LogicalOwnerById.Remove(id);
+            RequestById.Remove(id);
+
             if (!MethodById.TryGetValue(id, out MethodBase method))
             {
                 return;
             }
             MethodById.Remove(id);
-            LogicalOwnerById.Remove(id);
-            RequestById.Remove(id);
 
             List<SourcePausePointPatchInjection> injections = InjectionsByMethod[method];
             injections.RemoveAll(injection => injection.Id == id);

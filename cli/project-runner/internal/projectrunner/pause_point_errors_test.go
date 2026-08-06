@@ -21,13 +21,14 @@ func TestPausePointTimeoutHint_SuppressedByHotReload_WinsOverOtherBranches(t *te
 	}
 }
 
-// Verifies a non-empty Unity reason is prepended to the shared suppressed recovery hint.
-func TestPausePointTimeoutHint_SuppressedByHotReload_PrependsReason(t *testing.T) {
+// Verifies a non-empty Unity reason is returned as-is (no fixed-hint concatenation).
+func TestPausePointTimeoutHint_SuppressedByHotReload_ReturnsReasonOnly(t *testing.T) {
+	const reason = "Line no longer resolves inside the patched body."
 	response := pausePointStatusResponse{
 		Status:                      pausePointStatusEnabled,
 		HitCount:                    0,
 		SuppressedByHotReload:       true,
-		SuppressedByHotReloadReason: "Line no longer resolves inside the patched body.",
+		SuppressedByHotReloadReason: reason,
 		EditorState: pausePointEditorState{
 			IsPlaying: true,
 			IsPaused:  false,
@@ -35,9 +36,27 @@ func TestPausePointTimeoutHint_SuppressedByHotReload_PrependsReason(t *testing.T
 	}
 
 	hint := pausePointTimeoutHint(response, false)
-	want := "Line no longer resolves inside the patched body. " + pausePointHintSuppressedByHotReload
-	if hint != want {
-		t.Fatalf("expected %q, got %q", want, hint)
+	if hint != reason {
+		t.Fatalf("expected reason-only hint %q, got %q", reason, hint)
+	}
+}
+
+// Verifies the fixed suppressed hint is used only when Unity omitted a reason.
+func TestPausePointTimeoutHint_SuppressedByHotReload_EmptyReasonUsesFallback(t *testing.T) {
+	response := pausePointStatusResponse{
+		Status:                      pausePointStatusEnabled,
+		HitCount:                    0,
+		SuppressedByHotReload:       true,
+		SuppressedByHotReloadReason: "",
+		EditorState: pausePointEditorState{
+			IsPlaying: true,
+			IsPaused:  false,
+		},
+	}
+
+	hint := pausePointTimeoutHint(response, false)
+	if hint != pausePointHintSuppressedByHotReload {
+		t.Fatalf("expected fallback suppressed hint, got %q", hint)
 	}
 }
 

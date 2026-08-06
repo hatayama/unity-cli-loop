@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
@@ -86,6 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool LateHitDiscardedAfterClear { get; set; }
         public bool SuppressedByHotReload { get; set; }
         public bool RetargetedToHotReloadPatch { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string SuppressedByHotReloadReason { get; set; }
 
         internal static PausePointResponse FromSnapshot(UloopPausePointSnapshot snapshot)

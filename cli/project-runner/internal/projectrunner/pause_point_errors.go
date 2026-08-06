@@ -132,11 +132,13 @@ const (
 	pausePointHintSuppressedByHotReload = "The marker's method is hot-reload patched and the marker could not be re-targeted onto the patched body. Revert the patch with 'uloop hot-reload --revert-all' or run 'uloop compile', then re-enable the marker."
 )
 
-// pausePointSuppressedByHotReloadHint prepends Unity's reason when present so agents see
-// both the specific failure and the shared recovery steps.
+// pausePointSuppressedByHotReloadHint returns Unity's reason alone when present: both
+// retarget/restore reason strings already include recovery steps, and concatenating the
+// fixed "currently patched / revert-all" fallback after a restore-failure reason contradicts
+// itself (the patch was already reverted).
 func pausePointSuppressedByHotReloadHint(response pausePointStatusResponse) string {
 	if response.SuppressedByHotReloadReason != "" {
-		return response.SuppressedByHotReloadReason + " " + pausePointHintSuppressedByHotReload
+		return response.SuppressedByHotReloadReason
 	}
 	return pausePointHintSuppressedByHotReload
 }
