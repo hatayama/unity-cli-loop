@@ -810,6 +810,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertNoFileLevelFailure(result);
             AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
             bool foundDrift = false;
             foreach (string warning in result.Warnings)
             {
@@ -1031,6 +1032,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             fixture.EnableCounting();
             fixture.RaiseScore();
             Assert.That(fixture.HandledCount, Is.EqualTo(10));
+        }
+
+        /// <summary>
+        /// What: after patching an edited method, a later hot-reload against the on-disk baseline
+        /// reverts that patch so runtime behavior and ActivePatchTotal converge to the compiled IL.
+        /// </summary>
+        [Test]
+        public async Task Run_RevertedEditAfterPatch_RestoresOriginalBehaviorAndClearsPatch()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "RevertConvergence.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
+            Assert.That(patched.ActivePatchTotal, Is.EqualTo(1));
+
+            HotReloadOrchestratorResult reverted = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                contentPathOverride: null,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(reverted);
+            Assert.That(reverted.Methods, Is.Empty, FormatOutcomes(reverted));
+            Assert.That(reverted.UnchangedTotal, Is.GreaterThan(0));
+            Assert.That(reverted.ActivePatchTotal, Is.EqualTo(0));
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(15));
         }
 
         /// <summary>
@@ -1294,7 +1332,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        }";
             string lambdaPrivate = lambdaPrivateMethod ??
                 "public int LambdaPrivate(int threshold)\n        {\n"
-                + "            System.Func<int, bool> pred = v => v < _secret;\n"
+                + "            Func<int, bool> pred = v => v < _secret;\n"
                 + "            return pred(threshold) ? 1 : 0;\n"
                 + "        }";
             string propertyPrivate = propertyPrivateRoundTripMethod ??
@@ -1337,7 +1375,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "\n"
                 + "        private int this[int index] => _secret + index;";
 
-            return @"using System.Collections;
+            return @"using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
