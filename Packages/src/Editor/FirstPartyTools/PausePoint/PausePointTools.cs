@@ -460,6 +460,55 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     SourcePausePointConstants.ReleaseCodeOptimizationRecommendedNextAction);
             }
 
+            string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(parameters.File);
+            string id = BuildSourcePausePointId(parameters.File, parameters.Line);
+
+            HotReloadShimFileLookup shimLookup =
+                HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(normalizedFile);
+            if (shimLookup != null)
+            {
+                SourcePausePointShimResolution shimResolution =
+                    SourcePausePointShimResolver.Resolve(shimLookup, normalizedFile, parameters.Line);
+                if (shimResolution.Kind == SourcePausePointShimResolveKind.TransplantChainJoin
+                    || shimResolution.Kind == SourcePausePointShimResolveKind.ShimDirect)
+                {
+                    SourcePausePointPatchResult shimPatchResult = SourcePausePointPatcher.PatchShimTarget(
+                        id,
+                        shimResolution,
+                        normalizedFile,
+                        parameters.Line);
+                    if (!shimPatchResult.Success)
+                    {
+                        return new PausePointResponse
+                        {
+                            Success = false,
+                            ErrorCode = SourcePausePointConstants.ErrorCodePatchFailed,
+                            Message = shimPatchResult.ErrorMessage,
+                            RecommendedNextAction = shimPatchResult.Hint,
+                            EditorState = PausePointEditorState.FromSnapshot(
+                                UloopPausePointRegistry.CaptureEditorState()),
+                        };
+                    }
+
+                    return FinishEnableBySourceLocation(
+                        id,
+                        parameters,
+                        shimResolution.ResolvedLine,
+                        shimResolution.MethodDisplayName,
+                        shimPatchResult);
+                }
+
+                if (shimResolution.Kind == SourcePausePointShimResolveKind.NoStatementInPatchedMethod)
+                {
+                    return CreateValidationFailure(
+                        shimResolution.ErrorMessage,
+                        SourcePausePointConstants.ErrorCodeResolveFailed,
+                        "Pick a line with an executable statement inside the edited method body.");
+                }
+
+                // NotInPatchedMethod: fall through to the compiled ScriptAssemblies resolver.
+            }
+
             SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(parameters.File, parameters.Line);
             if (!resolveResult.Success)
             {
@@ -469,8 +518,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     SourcePausePointConstants.ResolveFailedRecommendedNextAction);
             }
 
-            string id = BuildSourcePausePointId(parameters.File, parameters.Line);
-            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(
+                id,
+                resolveResult.Resolution,
+                normalizedFile,
+                parameters.Line);
             if (!patchResult.Success)
             {
                 string errorCode =
@@ -487,6 +539,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 };
             }
 
+            return FinishEnableBySourceLocation(
+                id,
+                parameters,
+                resolveResult.Resolution.ResolvedLine,
+                resolveResult.Resolution.MethodDisplayName,
+                patchResult);
+        }
+
+        private static PausePointResponse FinishEnableBySourceLocation(
+            string id,
+            EnablePausePointSchema parameters,
+            int resolvedLine,
+            string resolvedMethod,
+            SourcePausePointPatchResult patchResult)
+        {
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(
                 id,
                 parameters.TimeoutSeconds,
@@ -494,9 +561,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxHistory,
                 parameters.MaxPreviewElements);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
-            response.ResolvedLine = resolveResult.Resolution.ResolvedLine;
-            response.ResolvedLineText = ReadResolvedLineText(parameters.File, resolveResult.Resolution.ResolvedLine);
-            response.ResolvedMethod = resolveResult.Resolution.MethodDisplayName;
+            response.ResolvedLine = resolvedLine;
+            response.ResolvedLineText = ReadResolvedLineText(parameters.File, resolvedLine);
+            response.ResolvedMethod = resolvedMethod;
             response.SnapshotTiming = SourcePausePointConstants.PreLineSnapshotTimingNote;
             response.Warning = MergeWarnings(CreateEnableWarning(), patchResult.Warning);
             LogEnable(response.Id, response.ResolvedMethod, $"{parameters.File}:{response.ResolvedLine}", response.Mode, response.Warning);
