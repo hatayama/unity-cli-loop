@@ -44,6 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> suppressedPausePointIds = new List<string>();
             List<string> inlineRiskMethodLabels = new List<string>();
             int patchedTotal = 0;
+            int unchangedTotal = 0;
 
             for (int index = 0; index < files.Count; index++)
             {
@@ -68,6 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 AppendDistinct(suppressedPausePointIds, fileResult.SuppressedPausePointIds);
                 AppendDistinct(inlineRiskMethodLabels, fileResult.InlineRiskMethodLabels);
                 patchedTotal += fileResult.PatchedCount;
+                unchangedTotal += fileResult.UnchangedMethodCount;
             }
 
             if (inlineRiskMethodLabels.Count > 0)
@@ -85,7 +87,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings,
                 patchedTotal,
                 HotReloadPatcher.ActivePatchCount,
-                suppressedPausePointIds);
+                suppressedPausePointIds,
+                unchangedTotal);
         }
 
         private static async Task<HotReloadFileProcessResult> ProcessFileAsync(
@@ -153,12 +156,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] defines = compilationAssembly.defines ?? Array.Empty<string>();
             string[] referencePaths = BuildWorkerReferencePaths(compilationAssembly, targetDllPath);
 
+            // Why projectRelativePath (not workerSourcePath): contentPathOverride E2E copies live
+            // under Library/UloopHotReload/TestSources/ and are absent from the PDB document list.
+            // Assembly resolution already computed the on-disk Assets/Packages path above.
+            string snapshotSource = HotReloadSourceBaseline.LoadVerifiedSnapshotSource(
+                projectRelativePath,
+                targetDllPath);
+            if (snapshotSource == null)
+            {
+                warnings.Add(
+                    string.Format(
+                        HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat,
+                        Path.GetFileName(projectRelativePath),
+                        assemblyName));
+            }
+
             TransformWorkerInputDto workerInput = new TransformWorkerInputDto
             {
                 sourcePath = Path.GetFullPath(workerSourcePath),
                 defines = defines,
                 referencePaths = referencePaths,
-                targetTypesAssemblyPath = Path.GetFullPath(targetDllPath)
+                targetTypesAssemblyPath = Path.GetFullPath(targetDllPath),
+                snapshotSource = snapshotSource
             };
 
             TransformWorkerClientResult workerResult =
@@ -201,11 +220,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
+            TransformWorkerUnchangedMethodDto[] unchangedMethods =
+                workerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>();
+            int unchangedMethodCount = unchangedMethods.Length;
+
+            // Why before the empty-entries return: all-unchanged runs exit there, and those are
+            // exactly the runs that must peel leftover patches so behavior converges to compiled IL.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            RevertUnchangedPatches(assemblyName, unchangedMethods);
+
             if (string.IsNullOrEmpty(workerOutput.shimSource)
                 || workerOutput.entries == null
                 || workerOutput.entries.Length == 0)
             {
-                return new HotReloadFileProcessResult(outcomes, warnings, 0);
+                return new HotReloadFileProcessResult(
+                    outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
             }
 
             // BuildShimReferencePaths reads Application.dataPath / platform; stay on main thread.
@@ -240,14 +269,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             "(shim-compile)",
                             compileResult.ErrorMessage,
                             assemblyResolvePath));
-                    return new HotReloadFileProcessResult(outcomes, warnings, 0);
+                    return new HotReloadFileProcessResult(
+                        outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
                 }
 
                 outcomes.AddRange(isolation.FailedMethodOutcomes);
                 if (isolation.RetryEntries.Length == 0)
                 {
                     return new HotReloadFileProcessResult(
-                        outcomes, warnings, 0, suppressedPausePointIds, new List<string>());
+                        outcomes,
+                        warnings,
+                        0,
+                        suppressedPausePointIds,
+                        new List<string>(),
+                        unchangedMethodCount);
                 }
 
                 entriesToPatch = isolation.RetryEntries;
@@ -278,7 +313,46 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return new HotReloadFileProcessResult(
-                outcomes, warnings, patchedCount, suppressedPausePointIds, inlineRiskMethodLabels);
+                outcomes,
+                warnings,
+                patchedCount,
+                suppressedPausePointIds,
+                inlineRiskMethodLabels,
+                unchangedMethodCount);
+        }
+
+        // Peels leftover Harmony patches when the source again matches the verified baseline.
+        // Resolve failures are silent: unchanged identities already matched compile-time IL.
+        private static void RevertUnchangedPatches(
+            string assemblyName,
+            TransformWorkerUnchangedMethodDto[] unchangedMethods)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
+            Debug.Assert(unchangedMethods != null, "unchangedMethods must not be null.");
+
+            for (int index = 0; index < unchangedMethods.Length; index++)
+            {
+                TransformWorkerUnchangedMethodDto unchanged = unchangedMethods[index];
+                if (unchanged == null
+                    || string.IsNullOrEmpty(unchanged.typeMetadataName)
+                    || string.IsNullOrEmpty(unchanged.methodName)
+                    || unchanged.parameterTypeFullNames == null)
+                {
+                    continue;
+                }
+
+                HotReloadMethodMatchResult matchResult = HotReloadMethodMatcher.Resolve(
+                    assemblyName,
+                    unchanged.typeMetadataName,
+                    unchanged.methodName,
+                    unchanged.parameterTypeFullNames);
+                if (!matchResult.Success)
+                {
+                    continue;
+                }
+
+                HotReloadPatcher.Revert(matchResult.Method);
+            }
         }
 
         private static HotReloadMethodOutcome ApplyEntry(
@@ -643,7 +717,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines = workerInput.defines,
                 referencePaths = workerInput.referencePaths,
                 targetTypesAssemblyPath = workerInput.targetTypesAssemblyPath,
-                excludedMethodKeys = excludedMethodKeys
+                excludedMethodKeys = excludedMethodKeys,
+                // Why copy: omitting snapshotSource would make the retry patch unedited methods
+                // again and diverge the retry entries set from the first-pass isolation baseline.
+                snapshotSource = workerInput.snapshotSource
             };
 
             TransformWorkerClientResult retryWorkerResult =
@@ -888,19 +965,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public int PatchedCount { get; }
             public List<string> SuppressedPausePointIds { get; }
             public List<string> InlineRiskMethodLabels { get; }
+            public int UnchangedMethodCount { get; }
 
             public HotReloadFileProcessResult(
                 List<HotReloadMethodOutcome> outcomes,
                 List<string> warnings,
                 int patchedCount,
                 List<string> suppressedPausePointIds = null,
-                List<string> inlineRiskMethodLabels = null)
+                List<string> inlineRiskMethodLabels = null,
+                int unchangedMethodCount = 0)
             {
                 Outcomes = outcomes;
                 Warnings = warnings;
                 PatchedCount = patchedCount;
                 SuppressedPausePointIds = suppressedPausePointIds ?? new List<string>();
                 InlineRiskMethodLabels = inlineRiskMethodLabels ?? new List<string>();
+                UnchangedMethodCount = unchangedMethodCount;
             }
         }
     }

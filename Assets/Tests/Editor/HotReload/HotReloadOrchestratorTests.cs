@@ -243,10 +243,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task Run_MethodWithBaseCall_IsSkippedWithReason()
         {
             string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "CallsBaseEdited.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    callsBaseMethod:
+                    "public int CallsBase()\n        {\n            return base.BaseSeed() + 2;\n        }"));
 
             HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                 new[] { fixturePath },
-                contentPathOverride: null,
+                contentPathOverride: editedPath,
                 CancellationToken.None);
 
             AssertNoFileLevelFailure(result);
@@ -266,6 +273,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: running hot reload on the on-disk fixture with no edits yields an empty Methods
+        /// list, a positive UnchangedTotal, and the all-unchanged Message wording.
+        /// </summary>
+        [Test]
+        public async Task Run_OnDiskFixtureUnchanged_ReportsEmptyMethodsAndUnchangedTotal()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                contentPathOverride: null,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            Assert.That(result.Methods, Is.Empty, FormatOutcomes(result));
+            Assert.That(result.UnchangedTotal, Is.GreaterThan(0));
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+            Assert.That(
+                response.Message,
+                Does.Contain("methods are unchanged since the last compile; nothing to patch"));
+        }
+
+        /// <summary>
         /// What: one orchestrator run over the fixture reports the explicit-body property getter,
         /// the explicit-body property setter, and the expression-bodied indexer getter as Skipped
         /// with the v1 accessor reason, while auto-property accessors stay unlisted.
@@ -277,10 +308,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string editedPath = WriteEditedSource(
                 "ExplicitBodyGetter.cs",
                 BuildFixtureSource(
+                    computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n"
                     + "        {\n"
                     + "            return _secret + delta;\n"
-                    + "        }"));
+                    + "        }",
+                    explicitAccessorsBlock:
+                    "// Explicit-body getter — worker must report get_ExplicitBodyGetter as Skipped (not silent).\n"
+                    + "        public int ExplicitBodyGetter\n"
+                    + "        {\n"
+                    + "            get { return _secret + 1; }\n"
+                    + "        }\n"
+                    + "\n"
+                    + "        // Explicit-body setter — worker must report set_ExplicitBodySetter as Skipped (not silent).\n"
+                    + "        public int ExplicitBodySetter\n"
+                    + "        {\n"
+                    + "            set { _secret = value + 1; }\n"
+                    + "        }\n"
+                    + "\n"
+                    + "        public int Counter;\n"
+                    + "\n"
+                    + "        private int this[int index] => _secret + index + 1;"));
 
             HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                 new[] { fixturePath },
@@ -396,10 +444,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 aggregatedInlineRiskCount,
                 Is.EqualTo(1),
                 "Expected exactly one aggregated inline-risk warning listing the at-risk methods.");
+
+            int declarationDriftCount = CountWarningsContaining(
+                result.Warnings,
+                "Edits outside method bodies");
             Assert.That(
                 result.Warnings,
-                Has.Count.EqualTo(1),
-                "This fixture run must emit only the aggregated inline-risk warning; any extra entry means per-method warning text has come back.");
+                Has.Count.EqualTo(1 + declarationDriftCount),
+                "Expected the aggregated inline-risk warning plus any declaration-drift warning(s).");
         }
 
         /// <summary>
@@ -437,16 +489,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(computeWithPrivatePatchedOperations, Is.EqualTo(2));
 
+            int declarationDriftCount = CountWarningsContaining(
+                result.Warnings,
+                "Edits outside method bodies");
             Assert.That(
                 result.Warnings,
-                Has.Count.EqualTo(1),
-                "This fixture run must emit only the aggregated inline-risk warning.");
+                Has.Count.EqualTo(1 + declarationDriftCount),
+                "Expected the aggregated inline-risk warning plus one declaration-drift warning per duplicate file input.");
 
-            string aggregatedWarning = result.Warnings[0];
+            string aggregatedWarning = null;
+            foreach (string warning in result.Warnings)
+            {
+                if (warning.Contains("patched methods had pre-patch bodies")
+                    && warning.Contains(nameof(HotReloadE2EFixture.ComputeWithPrivate)))
+                {
+                    aggregatedWarning = warning;
+                    break;
+                }
+            }
+
+            Assert.That(aggregatedWarning, Is.Not.Null, "Expected an aggregated inline-risk warning.");
             Assert.That(
                 CountOccurrences(aggregatedWarning, nameof(HotReloadE2EFixture.ComputeWithPrivate)),
                 Is.EqualTo(1),
                 "The aggregated warning must list a re-patched method once, not once per patch operation.");
+            Assert.That(
+                declarationDriftCount,
+                Is.EqualTo(2),
+                "Duplicate file inputs each emit a declaration-drift warning.");
         }
 
         /// <summary>
@@ -729,7 +799,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "ConstDrift.cs",
                 BuildFixtureSource(
                     computeWithPrivateMethod:
-                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
                     tuningConstDeclaration:
                     "private const int TuningConst = 4;"));
 
@@ -922,8 +992,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a file declaring a field-like event hot-reloads its subscriber and handler methods
         /// (no CS0229 from the publicized backing field) — the edited subscriber body (net two
         /// subscriptions via += / -=) must actually apply (HandledCount == 10, not the original
-        /// body's 5) and EnableCounting must be Patched — while the raising method is Skipped
-        /// instead of killing the whole file.
+        /// body's 5) and EnableCounting must be Patched — while the raising method (edited to a
+        /// double Invoke so it is not treated as unchanged) is Skipped instead of killing the
+        /// whole file.
         /// </summary>
         [Test]
         public async Task Run_FieldLikeEventFile_PatchesHandlerAndSkipsRaiser()
@@ -961,6 +1032,98 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             fixture.EnableCounting();
             fixture.RaiseScore();
             Assert.That(fixture.HandledCount, Is.EqualTo(10));
+        }
+
+        /// <summary>
+        /// What: after patching an edited method, a later hot-reload against the on-disk baseline
+        /// reverts that patch so runtime behavior and ActivePatchTotal converge to the compiled IL.
+        /// </summary>
+        [Test]
+        public async Task Run_RevertedEditAfterPatch_RestoresOriginalBehaviorAndClearsPatch()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "RevertConvergence.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
+            Assert.That(patched.ActivePatchTotal, Is.EqualTo(1));
+
+            HotReloadOrchestratorResult reverted = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                contentPathOverride: null,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(reverted);
+            Assert.That(reverted.Methods, Is.Empty, FormatOutcomes(reverted));
+            Assert.That(reverted.UnchangedTotal, Is.GreaterThan(0));
+            Assert.That(reverted.ActivePatchTotal, Is.EqualTo(0));
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(15));
+        }
+
+        /// <summary>
+        /// What: with a verified source snapshot, hot reload patches only the edited method —
+        /// unedited methods appear neither as Patched nor Skipped, and the response carries the
+        /// unchanged count.
+        /// </summary>
+        [Test]
+        public async Task Run_WithVerifiedSnapshot_PatchesOnlyEditedMethod()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string fixtureProjectRelativePath =
+                "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
+            string targetDllPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                "UnityCLILoop.Tests.Editor.HotReload"
+                + HotReloadConstants.CompiledAssemblyExtension);
+
+            string snapshot = HotReloadSourceBaseline.LoadVerifiedSnapshotSource(
+                fixtureProjectRelativePath,
+                targetDllPath);
+            Assert.That(
+                snapshot,
+                Is.Not.Null,
+                "Verified snapshot must resolve for the E2E fixture; capture regresses otherwise.");
+
+            string editedPath = WriteEditedSource(
+                "OnlyEditedMethod.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                Assert.That(
+                    outcome.Method.Contains(nameof(HotReloadE2EFixture.QueryPrivate)),
+                    Is.False,
+                    "Unedited QueryPrivate must not appear as Patched/Skipped/Failed.\n"
+                    + FormatOutcomes(result));
+            }
+
+            Assert.That(result.UnchangedTotal, Is.GreaterThan(0));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
         }
 
         /// <summary>
@@ -1099,6 +1262,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [MethodImpl(MethodImplOptions.NoInlining)]
         public void RaiseScore()
         {
+            // Double Invoke so the edited template differs from on-disk and stays Skipped
+            // (single Invoke would be unchanged and disappear from Methods after D).
+            ScoreChanged?.Invoke();
             ScoreChanged?.Invoke();
         }
     }
@@ -1118,6 +1284,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return path;
         }
 
+        private static int CountWarningsContaining(IReadOnlyList<string> warnings, string token)
+        {
+            int count = 0;
+            foreach (string warning in warnings)
+            {
+                if (warning.Contains(token))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
         private static string BuildFixtureSource(
             string computeWithPrivateMethod,
             string sumGridMethod = null,
@@ -1130,7 +1310,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string asyncUsesInternalTypeMethod = null,
             string tuningConstDeclaration = null,
             string modeEnumDeclaration = null,
-            string centerOfCellMethod = null)
+            string centerOfCellMethod = null,
+            string callsBaseMethod = null,
+            string explicitAccessorsBlock = null)
         {
             string sumGrid = sumGridMethod ??
                 "public int SumGrid(int[,] grid)\n        {\n            return -1;\n        }";
@@ -1150,7 +1332,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        }";
             string lambdaPrivate = lambdaPrivateMethod ??
                 "public int LambdaPrivate(int threshold)\n        {\n"
-                + "            System.Func<int, bool> pred = v => v < _secret;\n"
+                + "            Func<int, bool> pred = v => v < _secret;\n"
                 + "            return pred(threshold) ? 1 : 0;\n"
                 + "        }";
             string propertyPrivate = propertyPrivateRoundTripMethod ??
@@ -1174,8 +1356,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        {\n"
                 + "            return Vector3.zero;\n"
                 + "        }";
+            string callsBase = callsBaseMethod ??
+                "public int CallsBase()\n        {\n            return base.BaseSeed() + 1;\n        }";
+            string explicitAccessors = explicitAccessorsBlock ??
+                "// Explicit-body getter — worker must report get_ExplicitBodyGetter as Skipped (not silent).\n"
+                + "        public int ExplicitBodyGetter\n"
+                + "        {\n"
+                + "            get { return _secret; }\n"
+                + "        }\n"
+                + "\n"
+                + "        // Explicit-body setter — worker must report set_ExplicitBodySetter as Skipped (not silent).\n"
+                + "        public int ExplicitBodySetter\n"
+                + "        {\n"
+                + "            set { _secret = value; }\n"
+                + "        }\n"
+                + "\n"
+                + "        public int Counter;\n"
+                + "\n"
+                + "        private int this[int index] => _secret + index;";
 
-            return @"using System.Collections;
+            return @"using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -1211,21 +1412,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         public int SecretForAssert => _secret;
 
-        // Explicit-body getter — worker must report get_ExplicitBodyGetter as Skipped (not silent).
-        public int ExplicitBodyGetter
-        {
-            get { return _secret; }
-        }
-
-        // Explicit-body setter — worker must report set_ExplicitBodySetter as Skipped (not silent).
-        public int ExplicitBodySetter
-        {
-            set { _secret = value; }
-        }
-
-        public int Counter;
-
-        private int this[int index] => _secret + index;
+        " + explicitAccessors + @"
 
         private int HiddenScore { get; set; } = 3;
 
@@ -1237,10 +1424,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [MethodImpl(MethodImplOptions.NoInlining)]
         " + computeWithPrivateMethod + @"
 
-        public int CallsBase()
-        {
-            return base.BaseSeed() + 1;
-        }
+        " + callsBase + @"
 
         " + callsMissingHelper + @"
 

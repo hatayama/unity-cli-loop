@@ -247,10 +247,10 @@ public static class TransformWorkerProgram
 
         List<WorkerEntry> entries = new List<WorkerEntry>();
         List<WorkerSkipped> skipped = new List<WorkerSkipped>();
+        List<WorkerUnchangedMethod> unchangedMethods = new List<WorkerUnchangedMethod>();
         List<ShimTypeBuilder> shimTypes = new List<ShimTypeBuilder>();
         int globalShimMethodCounter = 0;
         int shimTypeCounter = 0;
-        int unchangedMethodCount = 0;
 
         foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
         {
@@ -304,14 +304,21 @@ public static class TransformWorkerProgram
 
                 // Why after ExcludedMethodKeys: exclusion means "already Failed on first round", so
                 // it must win. Unchanged methods add no per-method signal — skipping them cuts
-                // response noise and avoids pause-point collateral on untouched methods.
+                // response noise and avoids pause-point collateral on untouched methods. Identities
+                // are returned so the orchestrator can revert a leftover patch when source matches
+                // the baseline again.
                 if (hasBaseline)
                 {
                     string syntaxMethodKey = BuildSyntaxMethodKey(typeMetadataNameFromSyntax, methodDeclaration);
                     if (snapshotMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax snapshotDecl)
                         && SyntaxFactory.AreEquivalent(snapshotDecl, methodDeclaration, topLevel: false))
                     {
-                        unchangedMethodCount++;
+                        unchangedMethods.Add(new WorkerUnchangedMethod
+                        {
+                            TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
+                            MethodName = methodSymbol.Name,
+                            ParameterTypeFullNames = parameterTypeFullNames
+                        });
                         continue;
                     }
                 }
@@ -384,7 +391,7 @@ public static class TransformWorkerProgram
             Skipped = skipped.ToArray(),
             DeclarationDriftWarnings = declarationDriftWarnings.ToArray(),
             ParseErrors = parseErrors.ToArray(),
-            UnchangedMethodCount = unchangedMethodCount
+            UnchangedMethods = unchangedMethods.ToArray()
         };
     }
 
@@ -3441,7 +3448,16 @@ internal sealed class WorkerOutput
 
     public string[] ParseErrors { get; set; }
 
-    public int UnchangedMethodCount { get; set; }
+    public WorkerUnchangedMethod[] UnchangedMethods { get; set; }
+}
+
+internal sealed class WorkerUnchangedMethod
+{
+    public string TypeMetadataName { get; set; }
+
+    public string MethodName { get; set; }
+
+    public string[] ParameterTypeFullNames { get; set; }
 }
 
 internal sealed class WorkerEntry

@@ -144,6 +144,14 @@ transpiler (`io.github.hatayama.uloop.hot-reload`). Patches are static Editor st
 disappear on domain reload by design; a later `uloop compile` converges to the same
 source behavior.
 
+### Source snapshot
+
+A per-assembly byte-exact copy of project source files under
+`Library/UloopHotReload/SourceSnapshot/<assemblyName>-<mvid>/`, captured after domain
+reload. Hot reload adopts a snapshot as the edited-method baseline only when its bytes
+match the corresponding portable-PDB document checksum for that source file; otherwise
+the file falls back to patching every editable method.
+
 ### Shim
 
 A generated static method that mirrors an edited user method body for hot reload. For an
