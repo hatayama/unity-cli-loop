@@ -304,47 +304,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static string SliceShimMethod(string shimSource, string shimMethodName)
         {
             Assert.That(shimMethodName, Is.Not.Null.And.Not.Empty);
-            int nameIndex = shimSource.IndexOf(shimMethodName, StringComparison.Ordinal);
+            (bool found, int declarationStart, int closeBraceIndex) =
+                FindShimMethodSpan(shimSource, shimMethodName);
             Assert.That(
-                nameIndex,
-                Is.GreaterThanOrEqualTo(0),
-                "shimMethodName not found in shimSource: " + shimMethodName);
-
-            int declarationStart = shimSource.LastIndexOf(
-                "public static",
-                nameIndex,
-                StringComparison.Ordinal);
-            Assert.That(
-                declarationStart,
-                Is.GreaterThanOrEqualTo(0),
-                "shim method declaration start not found for: " + shimMethodName);
-
-            int openBrace = shimSource.IndexOf('{', nameIndex);
-            Assert.That(
-                openBrace,
-                Is.GreaterThanOrEqualTo(0),
-                "shim method body not found for: " + shimMethodName);
-
-            int depth = 0;
-            for (int index = openBrace; index < shimSource.Length; index++)
-            {
-                char character = shimSource[index];
-                if (character == '{')
-                {
-                    depth++;
-                }
-                else if (character == '}')
-                {
-                    depth--;
-                    if (depth == 0)
-                    {
-                        return shimSource.Substring(declarationStart, index - declarationStart + 1);
-                    }
-                }
-            }
-
-            Assert.Fail("Unbalanced braces while slicing shim method: " + shimMethodName);
-            return null;
+                found,
+                Is.True,
+                "Could not locate a balanced shim method span for: " + shimMethodName);
+            return shimSource.Substring(declarationStart, closeBraceIndex - declarationStart + 1);
         }
 
         /// <summary>
@@ -353,20 +319,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// </summary>
         private static bool TextAfterShimMethodContainsLineDefault(string shimSource, string shimMethodName)
         {
+            (bool found, int _, int closeBraceIndex) = FindShimMethodSpan(shimSource, shimMethodName);
+            if (!found)
+            {
+                return false;
+            }
+
+            int gapStart = closeBraceIndex + 1;
+            int nextMethod = shimSource.IndexOf("public static", gapStart, StringComparison.Ordinal);
+            string gap = nextMethod < 0
+                ? shimSource.Substring(gapStart)
+                : shimSource.Substring(gapStart, nextMethod - gapStart);
+            return gap.Contains("#line default", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// What: finds a shim method's <c>public static</c> declaration start and the index of its
+        /// balanced closing brace so slice and post-method gap checks share one scan.
+        /// </summary>
+        private static (bool Found, int DeclarationStart, int CloseBraceIndex) FindShimMethodSpan(
+            string shimSource,
+            string shimMethodName)
+        {
+            if (string.IsNullOrEmpty(shimSource) || string.IsNullOrEmpty(shimMethodName))
+            {
+                return (false, -1, -1);
+            }
+
             int nameIndex = shimSource.IndexOf(shimMethodName, StringComparison.Ordinal);
             if (nameIndex < 0)
             {
-                return false;
+                return (false, -1, -1);
+            }
+
+            int declarationStart = shimSource.LastIndexOf(
+                "public static",
+                nameIndex,
+                StringComparison.Ordinal);
+            if (declarationStart < 0)
+            {
+                return (false, -1, -1);
             }
 
             int openBrace = shimSource.IndexOf('{', nameIndex);
             if (openBrace < 0)
             {
-                return false;
+                return (false, -1, -1);
             }
 
             int depth = 0;
-            int closeBrace = -1;
             for (int index = openBrace; index < shimSource.Length; index++)
             {
                 char character = shimSource[index];
@@ -379,23 +380,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     depth--;
                     if (depth == 0)
                     {
-                        closeBrace = index;
-                        break;
+                        return (true, declarationStart, index);
                     }
                 }
             }
 
-            if (closeBrace < 0)
-            {
-                return false;
-            }
-
-            int gapStart = closeBrace + 1;
-            int nextMethod = shimSource.IndexOf("public static", gapStart, StringComparison.Ordinal);
-            string gap = nextMethod < 0
-                ? shimSource.Substring(gapStart)
-                : shimSource.Substring(gapStart, nextMethod - gapStart);
-            return gap.Contains("#line default", StringComparison.Ordinal);
+            return (false, -1, -1);
         }
 
         private static void AssertHasSkip(
