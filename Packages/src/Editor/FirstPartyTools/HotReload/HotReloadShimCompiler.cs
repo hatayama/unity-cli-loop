@@ -103,7 +103,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "Shim assembly compiled but failed to load: " + dllPath);
                 }
 
-                return HotReloadShimCompileResult.SuccessResult(loadResult.CompiledAssembly);
+                return HotReloadShimCompileResult.SuccessResult(
+                    loadResult.CompiledAssembly,
+                    assemblyBytes,
+                    pdbBytes);
             }
             finally
             {
@@ -229,7 +232,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Outcome of compiling and loading a hot-reload shim assembly.
+    /// Outcome of compiling and loading a hot-reload shim assembly. Successful results keep the
+    /// dll/pdb bytes so pause-point can resolve sequence points against the shim PDB after the
+    /// compile work directory is deleted.
     /// </summary>
     internal sealed class HotReloadShimCompileResult
     {
@@ -238,6 +243,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public bool Success { get; }
         public Assembly Assembly { get; }
+        public byte[] AssemblyBytes { get; }
+        public byte[] PdbBytes { get; }
         public string ErrorMessage { get; }
         public IReadOnlyList<HotReloadShimCompileError> Errors { get; }
 
@@ -245,17 +252,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool success,
             Assembly assembly,
             string errorMessage,
-            IReadOnlyList<HotReloadShimCompileError> errors)
+            IReadOnlyList<HotReloadShimCompileError> errors,
+            byte[] assemblyBytes,
+            byte[] pdbBytes)
         {
             Success = success;
             Assembly = assembly;
             ErrorMessage = errorMessage;
             Errors = errors;
+            AssemblyBytes = assemblyBytes;
+            PdbBytes = pdbBytes;
         }
 
-        public static HotReloadShimCompileResult SuccessResult(Assembly assembly)
+        public static HotReloadShimCompileResult SuccessResult(
+            Assembly assembly,
+            byte[] assemblyBytes,
+            byte[] pdbBytes)
         {
-            return new HotReloadShimCompileResult(true, assembly, string.Empty, EmptyErrors);
+            return new HotReloadShimCompileResult(
+                true,
+                assembly,
+                string.Empty,
+                EmptyErrors,
+                assemblyBytes,
+                pdbBytes);
         }
 
         // errors stays empty for failures that never reached the compiler (e.g. missing external
@@ -263,7 +283,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static HotReloadShimCompileResult Failure(
             string errorMessage, IReadOnlyList<HotReloadShimCompileError> errors = null)
         {
-            return new HotReloadShimCompileResult(false, null, errorMessage, errors ?? EmptyErrors);
+            return new HotReloadShimCompileResult(
+                false,
+                null,
+                errorMessage,
+                errors ?? EmptyErrors,
+                null,
+                null);
         }
     }
 }

@@ -296,6 +296,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Harmony Patch/Unpatch and method resolution against loaded modules require main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
+            // Why before ApplyEntry: OnHotReloadPatchStateChanged(true) runs inside Apply and
+            // pause-point retarget reads the shim registration — it must already see this
+            // generation's bytes/methods.
+            HotReloadShimRegistry.BeginFileGeneration(
+                projectRelativePath,
+                compileResult.AssemblyBytes,
+                compileResult.PdbBytes,
+                compileResult.Assembly);
             Dictionary<string, string> bindFailureReasonByShimTypeName =
                 BindShimAccessors(compileResult.Assembly);
             List<string> inlineRiskMethodLabels = new List<string>();
@@ -308,6 +316,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     compileResult.Assembly,
                     bindFailureReasonByShimTypeName,
                     assemblyResolvePath,
+                    projectRelativePath,
                     inlineRiskMethodLabels,
                     suppressedPausePointIds);
                 outcomes.Add(outcome);
@@ -366,6 +375,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Assembly shimAssembly,
             IReadOnlyDictionary<string, string> bindFailureReasonByShimTypeName,
             string filePath,
+            string projectRelativePath,
             List<string> inlineRiskMethodLabels,
             List<string> suppressedPausePointIds)
         {
@@ -425,9 +435,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     filePath);
             }
 
+            // Why before Apply: Apply notifies OnHotReloadPatchStateChanged(true) after the
+            // ledger write; registration must already expose this method's shim for retarget.
+            HotReloadShimRegistry.RegisterMethod(
+                projectRelativePath,
+                matchResult.Method,
+                new HotReloadShimRegistry.MethodEntry(
+                    shimMethod,
+                    patchShape == HotReloadPatchShape.Delegation,
+                    entry.sourceStartLine,
+                    entry.sourceEndLine));
             HotReloadPatchResult patchResult = HotReloadPatcher.Apply(matchResult.Method, shimMethod, patchShape);
             if (!patchResult.Success)
             {
+                HotReloadShimRegistry.RemoveMethod(matchResult.Method);
                 return HotReloadMethodOutcome.Failed(methodLabel, patchResult.ErrorMessage, filePath);
             }
 

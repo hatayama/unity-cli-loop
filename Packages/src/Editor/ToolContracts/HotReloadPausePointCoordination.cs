@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Reflection.Emit;
 
 namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
@@ -11,13 +12,33 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     /// wired in its own static constructor (the same pattern as
     /// UloopPausePointRegistry's OnCleared wiring). A null delegate means the owning
     /// side has not initialized in this domain, which also means it has no state
-    /// worth querying; callers treat null as "no patches" / "no markers".
+    /// worth querying; callers treat null as "no patches" / "no markers" /
+    /// "no shim lookup".
     /// </summary>
     public static class HotReloadPausePointCoordination
     {
-        // Set by HotReloadPatcher. True while the method's body is replaced by a
-        // hot-reload patch.
-        public static Func<MethodBase, bool> IsMethodPatchedByHotReload { get; set; }
+        // Set by HotReloadPatcher. Returns the active shim MethodBase for a patched
+        // original method, or null when the method is not hot-reload patched.
+        public static Func<MethodBase, MethodBase> GetActiveShimForMethod { get; set; }
+
+        /// <summary>
+        /// Set by HotReloadShimRegistry. Argument is a forward-slash path (absolute or
+        /// project-relative); returns null when that file has no active shim generation.
+        /// A method may still report an active shim via <see cref="GetActiveShimForMethod"/>
+        /// while missing from this file lookup (a newer generation replaced the file and
+        /// the method was skipped, bind-failed, or isolation-excluded). Consumers must treat
+        /// that combination as retarget-impossible (suppress the marker).
+        /// </summary>
+        public static Func<string, HotReloadShimFileLookup> GetShimLookupForFile { get; set; }
+
+        /// <summary>
+        /// Set by HotReloadPatcher. Returns the LocalBuilder array (shim slot order) from
+        /// the latest transplant rebuild of the original method, or null when none.
+        /// Returned LocalBuilders are tied to the ILGenerator of that rebuild and are valid
+        /// only inside the same rebuild (the pause-point transpiler that runs after the
+        /// hot-reload transpiler). Do not retain or use them outside that rebuild.
+        /// </summary>
+        public static Func<MethodBase, IReadOnlyList<LocalBuilder>> GetTransplantLocals { get; set; }
 
         // Set by SourcePausePointPatcher. Returns the marker ids currently injected
         // into the method (empty when none).
@@ -26,5 +47,55 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         // Set by SourcePausePointPatcher. Invoked by HotReloadPatcher after a
         // method's patch state changes (true = patched, false = reverted).
         public static Action<MethodBase, bool> OnHotReloadPatchStateChanged { get; set; }
+    }
+
+    /// <summary>
+    /// One method registered in an active hot-reload shim generation for a file.
+    /// BCL types only so PausePoint can consume it without referencing HotReload.
+    /// </summary>
+    public sealed class HotReloadShimMethodLookup
+    {
+        public MethodBase OriginalMethod { get; }
+        public MethodBase ShimMethod { get; }
+        public bool IsDelegation { get; }
+        public int SourceStartLine { get; }
+        public int SourceEndLine { get; }
+
+        public HotReloadShimMethodLookup(
+            MethodBase originalMethod,
+            MethodBase shimMethod,
+            bool isDelegation,
+            int sourceStartLine,
+            int sourceEndLine)
+        {
+            OriginalMethod = originalMethod;
+            ShimMethod = shimMethod;
+            IsDelegation = isDelegation;
+            SourceStartLine = sourceStartLine;
+            SourceEndLine = sourceEndLine;
+        }
+    }
+
+    /// <summary>
+    /// Active shim assembly bytes and per-method lookups for one edited source file.
+    /// </summary>
+    public sealed class HotReloadShimFileLookup
+    {
+        public byte[] AssemblyBytes { get; }
+        public byte[] PdbBytes { get; }
+        public Assembly LoadedAssembly { get; }
+        public IReadOnlyList<HotReloadShimMethodLookup> Methods { get; }
+
+        public HotReloadShimFileLookup(
+            byte[] assemblyBytes,
+            byte[] pdbBytes,
+            Assembly loadedAssembly,
+            IReadOnlyList<HotReloadShimMethodLookup> methods)
+        {
+            AssemblyBytes = assemblyBytes;
+            PdbBytes = pdbBytes;
+            LoadedAssembly = loadedAssembly;
+            Methods = methods;
+        }
     }
 }
