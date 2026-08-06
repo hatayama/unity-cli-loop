@@ -33,16 +33,45 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static readonly Dictionary<MethodBase, MethodInfo> ShimByMethod =
             new Dictionary<MethodBase, MethodInfo>();
 
+        // Transplant LocalBuilders (shim slot order) from the latest rebuild of each original.
+        private static readonly Dictionary<MethodBase, IReadOnlyList<LocalBuilder>> TransplantLocalsByMethod =
+            new Dictionary<MethodBase, IReadOnlyList<LocalBuilder>>();
+
         // Harmony resolves transpilers as static methods, so the shim cannot be a parameter.
         // Production looks up the target method in the ledger; the apply path also stashes the
         // pending shim here so the first Patch call can read it before the ledger entry
         // exists (Patch invokes the transpiler synchronously on the main thread).
         private static MethodInfo _pendingShimMethod;
+        private static MethodBase _pendingOriginalMethod;
 
         static HotReloadPatcher()
         {
-            HotReloadPausePointCoordination.IsMethodPatchedByHotReload = method =>
-                ShimByMethod.ContainsKey(method);
+            // Why also expose _pending*: with Priority.First, hot-reload runs before pause-point
+            // during Apply. The ledger is written only after Patch returns, so without the pending
+            // shim pause-point would try to inject original-body indexes into the shim stream.
+            HotReloadPausePointCoordination.GetActiveShimForMethod = method =>
+            {
+                if (ShimByMethod.TryGetValue(method, out MethodInfo shimMethod))
+                {
+                    return shimMethod;
+                }
+
+                // Why Equals (not ReferenceEquals): match MethodBase equality used by
+                // ShimByMethod.TryGetValue rather than Harmony's instance identity.
+                if (_pendingShimMethod != null
+                    && _pendingOriginalMethod != null
+                    && method != null
+                    && method.Equals(_pendingOriginalMethod))
+                {
+                    return _pendingShimMethod;
+                }
+
+                return null;
+            };
+            HotReloadPausePointCoordination.GetTransplantLocals = method =>
+                TransplantLocalsByMethod.TryGetValue(method, out IReadOnlyList<LocalBuilder> locals)
+                    ? locals
+                    : null;
         }
 
         /// <summary>
@@ -83,6 +112,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // leaving it in place would stack transpilers and run discarded IL chains.
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
                 ShimByMethod.Remove(method);
+                TransplantLocalsByMethod.Remove(method);
                 // Mirror the ledger removal immediately: if the re-Patch below fails, its
                 // contained Unpatch rebuilds the method with markers re-instrumented (the
                 // ledger no longer lists it), and RevertAll can never reach this method
@@ -97,16 +127,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Ledger is updated after Patch succeeds. During Patch the transpiler reads the
             // pending shim because Harmony resolves transpilers statically (no MethodInfo arg).
             _pendingShimMethod = shimMethodInfo;
+            _pendingOriginalMethod = method;
             try
             {
+                // Why Priority.First: same numeric priority sorts by registration index, and
+                // Unpatch does not reindex — Patch/Unpatch cycles make same-priority order
+                // unstable. pause-point must run after hot-reload so it sees the shim stream.
                 HarmonyInstance.Patch(
                     method,
-                    transpiler: new HarmonyMethod(transpilerMethodInfo));
+                    transpiler: new HarmonyMethod(transpilerMethodInfo)
+                    {
+                        priority = Priority.First
+                    });
                 ShimByMethod[method] = shimMethodInfo;
                 HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, true);
             }
             catch (Exception exception)
             {
+                // Why clear pending before Unpatch: cleanup rebuild must see "not patched"
+                // so pause-point markers re-instrument the restored original body. Leaving
+                // pending set would make GetActiveShimForMethod return the failed shim and
+                // suppress that re-instrumentation (regression vs the old ContainsKey probe).
+                _pendingShimMethod = null;
+                _pendingOriginalMethod = null;
                 // User-approved exception to the no-try-catch policy: Harmony emit/JIT
                 // failures cannot be pre-validated (the IL shape is only known inside
                 // Harmony), and an escaping exception would abort the whole run while
@@ -115,6 +158,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // the transpiler this call registered before failing and rebuilds the
                 // wrapper, restoring the original body (verified by the extern-shim test).
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
+                TransplantLocalsByMethod.Remove(method);
                 Exception rootCause = exception;
                 while (rootCause.InnerException != null)
                 {
@@ -133,6 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             finally
             {
                 _pendingShimMethod = null;
+                _pendingOriginalMethod = null;
             }
 
             return HotReloadPatchResult.SuccessResult(IsLikelyJitInlined(method));
@@ -146,10 +191,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Snapshot and clear the ledger BEFORE UnpatchAll: Harmony rebuilds every
             // patched method during UnpatchAll, and the pause-point transpiler guard
             // must see those methods as unpatched so armed markers are re-instrumented
-            // into the restored original IL.
+            // into the restored original IL. Shim registration clears in the same window
+            // so GetActiveShimForMethod / GetShimLookupForFile agree during rebuild.
             List<MethodBase> revertedMethods = new List<MethodBase>(ShimByMethod.Keys);
             ShimByMethod.Clear();
+            HotReloadShimRegistry.Clear();
+            TransplantLocalsByMethod.Clear();
             _pendingShimMethod = null;
+            _pendingOriginalMethod = null;
             HarmonyInstance.UnpatchAll(HotReloadConstants.HarmonyId);
             foreach (MethodBase revertedMethod in revertedMethods)
             {
@@ -171,8 +220,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             // Why Remove before Unpatch: Harmony rebuilds the method during Unpatch, and the
-            // pause-point transpiler guard reads IsMethodPatchedByHotReload — the ledger must
-            // already show unpatched so armed markers are re-instrumented into the restored IL.
+            // pause-point guard sees GetActiveShimForMethod == null so surviving markers are
+            // re-instrumented into the restored original IL. Registry removal stays in the same
+            // pre-Unpatch window so lookup and ledger never disagree mid-rebuild.
+            HotReloadShimRegistry.RemoveMethod(method);
+            TransplantLocalsByMethod.Remove(method);
             HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
             HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
             return true;
@@ -216,7 +268,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Labels need the same treatment: see RebindLabels below.
             List<CodeInstruction> transplanted =
                 new List<CodeInstruction>(PatchProcessor.GetOriginalInstructions(shimMethod));
-            RebindShortFormLocals(shimMethod, generator, transplanted);
+            IReadOnlyList<LocalBuilder> transplantLocals =
+                RebindShortFormLocals(shimMethod, generator, transplanted);
+            TransplantLocalsByMethod[original] = transplantLocals;
             RebindLabels(generator, transplanted);
             return transplanted;
         }
@@ -328,7 +382,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return HotReloadPatchResult.SuccessResult();
         }
 
-        private static void RebindShortFormLocals(
+        private static IReadOnlyList<LocalBuilder> RebindShortFormLocals(
             MethodInfo shimMethod,
             ILGenerator generator,
             List<CodeInstruction> instructions)
@@ -340,7 +394,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MethodBody methodBody = shimMethod.GetMethodBody();
             if (methodBody == null || methodBody.LocalVariables.Count == 0)
             {
-                return;
+                return Array.Empty<LocalBuilder>();
             }
 
             LocalBuilder[] locals = new LocalBuilder[methodBody.LocalVariables.Count];
@@ -374,6 +428,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     blocks = instruction.blocks
                 };
             }
+
+            return locals;
         }
 
         // Labels read from the shim without this patch's ILGenerator belong to a throwaway
