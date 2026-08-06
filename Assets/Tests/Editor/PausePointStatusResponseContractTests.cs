@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json;
@@ -5,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -84,7 +86,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ClearedReason = "",
                 StatusBeforeClear = "",
                 LateHitDiscardedAfterClear = false,
-                SuppressedByHotReload = false
+                SuppressedByHotReload = false,
+                RetargetedToHotReloadPatch = false
             };
             string json = JsonConvert.SerializeObject(
                 response,
@@ -93,6 +96,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject actual = NormalizeFieldShape(JObject.Parse(json));
 
             Assert.That(JToken.DeepEquals(actual, expected), Is.True, $"Expected {expected} but got {actual}");
+        }
+
+        /// <summary>
+        /// What: status Warning carries SuppressedByHotReloadReason when the marker is suppressed.
+        /// </summary>
+        [Test]
+        public void FromSnapshot_WhenSuppressed_WarningEqualsReason()
+        {
+            UloopPausePointRegistry.ConfigureForTests(new FakePauseController(), () => DateTime.UtcNow);
+            try
+            {
+                const string id = "status-warning-reason";
+                const string reason = "The marker's line no longer resolves inside the hot-reload patched body.";
+                UloopPausePointRegistry.Enable(id, 30);
+                UloopPausePointRegistry.SetSuppressedByHotReload(id, true, reason);
+                UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, false);
+
+                PausePointStatusResponse response =
+                    PausePointStatusResponse.FromSnapshot(UloopPausePointRegistry.GetStatus(id));
+
+                Assert.That(response.SuppressedByHotReload, Is.True);
+                Assert.That(response.SuppressedByHotReloadReason, Is.EqualTo(reason));
+                Assert.That(response.Warning, Is.EqualTo(reason));
+                Assert.That(response.RetargetedToHotReloadPatch, Is.False);
+            }
+            finally
+            {
+                UloopPausePointRegistry.ResetForTests();
+            }
+        }
+
+        private sealed class FakePauseController : IUloopPausePointPauseController
+        {
+            public bool IsPlaying => true;
+            public bool IsPaused => false;
+            public void Pause()
+            {
+            }
+
+            public void Resume()
+            {
+            }
         }
 
         private static JObject ReadSharedContractFieldShape()

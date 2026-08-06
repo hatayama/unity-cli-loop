@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
@@ -85,6 +86,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string StatusBeforeClear { get; set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; set; }
         public bool SuppressedByHotReload { get; set; }
+        public bool RetargetedToHotReloadPatch { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string SuppressedByHotReloadReason { get; set; }
 
         internal static PausePointResponse FromSnapshot(UloopPausePointSnapshot snapshot)
         {
@@ -123,7 +127,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ClearedReason = snapshot.ClearedReason,
                 StatusBeforeClear = snapshot.StatusBeforeClear,
                 LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear,
-                SuppressedByHotReload = snapshot.SuppressedByHotReload
+                SuppressedByHotReload = snapshot.SuppressedByHotReload,
+                RetargetedToHotReloadPatch = snapshot.RetargetedToHotReloadPatch,
+                SuppressedByHotReloadReason = snapshot.SuppressedByHotReloadReason
             };
         }
 
@@ -495,7 +501,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         parameters,
                         shimResolution.ResolvedLine,
                         shimResolution.MethodDisplayName,
-                        shimPatchResult);
+                        shimPatchResult,
+                        retargetedToHotReloadPatch: true);
                 }
 
                 if (shimResolution.Kind == SourcePausePointShimResolveKind.NoStatementInPatchedMethod)
@@ -544,7 +551,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters,
                 resolveResult.Resolution.ResolvedLine,
                 resolveResult.Resolution.MethodDisplayName,
-                patchResult);
+                patchResult,
+                retargetedToHotReloadPatch: false);
         }
 
         private static PausePointResponse FinishEnableBySourceLocation(
@@ -552,7 +560,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             EnablePausePointSchema parameters,
             int resolvedLine,
             string resolvedMethod,
-            SourcePausePointPatchResult patchResult)
+            SourcePausePointPatchResult patchResult,
+            bool retargetedToHotReloadPatch)
         {
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(
                 id,
@@ -560,6 +569,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.Mode,
                 parameters.MaxHistory,
                 parameters.MaxPreviewElements);
+            if (retargetedToHotReloadPatch)
+            {
+                UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, true);
+                snapshot = UloopPausePointRegistry.GetStatus(id);
+            }
+
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.ResolvedLine = resolvedLine;
             response.ResolvedLineText = ReadResolvedLineText(parameters.File, resolvedLine);

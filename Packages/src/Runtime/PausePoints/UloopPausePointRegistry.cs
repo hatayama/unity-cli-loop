@@ -194,17 +194,33 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         }
 
         /// <summary>
-        /// Marks whether an armed marker's instrumentation was discarded by a hot-reload patch.
+        /// Marks whether an armed marker could not stay live across a hot-reload patch transition.
+        /// When <paramref name="suppressed"/> is false, <paramref name="reason"/> is cleared to null.
         /// No-op when the id is unknown.
         /// </summary>
-        public static void SetSuppressedByHotReload(string id, bool value)
+        public static void SetSuppressedByHotReload(string id, bool suppressed, string reason)
         {
             if (!Entries.TryGetValue(id, out UloopPausePointEntry entry))
             {
                 return;
             }
 
-            entry.SuppressedByHotReload = value;
+            entry.SuppressedByHotReload = suppressed;
+            entry.SuppressedByHotReloadReason = suppressed ? reason : null;
+        }
+
+        /// <summary>
+        /// Marks whether the marker's instrumentation currently targets a hot-reload shim body.
+        /// No-op when the id is unknown.
+        /// </summary>
+        public static void SetRetargetedToHotReloadPatch(string id, bool value)
+        {
+            if (!Entries.TryGetValue(id, out UloopPausePointEntry entry))
+            {
+                return;
+            }
+
+            entry.RetargetedToHotReloadPatch = value;
         }
 
         /// <summary>
