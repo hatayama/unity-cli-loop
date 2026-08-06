@@ -335,6 +335,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: RevertAll after enable on a hot-reloaded async body restores instrumentation
+        /// onto the compiled MoveNext and hits with the original (non-edited) return value.
+        /// </summary>
+        [Test]
+        public async Task RevertAll_AfterEnableOnHotReloadedAsyncBody_RestoresAndHitsOriginal()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            string editedSource = onDisk.Replace(
+                "public async Task<int> AsyncPrivateFieldAndMethod(int delta)\n        {\n"
+                + "            await Task.Yield();\n"
+                + "            return _secret + delta;\n"
+                + "        }",
+                "public async Task<int> AsyncPrivateFieldAndMethod(int delta)\n        {\n"
+                + "            await Task.Yield();\n"
+                + "            return _secret + delta + 100;\n"
+                + "        }",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk));
+            int enableLine = FindLineNumber(editedSource, "return _secret + delta + 100;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            await HotReloadFromEditedSourceAsync(editedSource, "ContractAsyncRestore.cs");
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+
+            HotReloadPatcher.RevertAll();
+
+            UloopPausePointSnapshot afterRevert = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(afterRevert.SuppressedByHotReload, Is.False);
+            Assert.That(afterRevert.RetargetedToHotReloadPatch, Is.False);
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            int result = await fixture.AsyncPrivateFieldAndMethod(5);
+            Assert.That(result, Is.EqualTo(fixture.SecretForAssert + 5));
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+        }
+
+        /// <summary>
         /// What: Patching via synthetic resolution onto a hot-reload patched method still
         /// returns MethodPatchedByHotReload and mentions the requested line in the message.
         /// </summary>

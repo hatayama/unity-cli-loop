@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 
 using HarmonyLib;
 using UnityEngine;
@@ -150,22 +151,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 UnpatchInstrumentationOnly(id);
-                SourcePausePointPatchResult patchResult = PatchShimTarget(
-                    id,
-                    shimResolution,
-                    request.NormalizedFile,
-                    request.Line);
-                if (!patchResult.Success)
+                // Why try-finally (not catch): Fail Fast on Harmony emit failures, but keep
+                // LogicalOwner/Request and suppress flags honest when CommitPatch rolls back.
+                bool committed = false;
+                try
                 {
-                    // Why re-anchor: Unpatch cleared ledgers; without LogicalOwner later transitions
-                    // cannot see this armed registry marker.
-                    ReanchorMarkerWithoutInjection(id, logicalOwner, request);
-                    SuppressMarkerRetargetFailed(id);
-                    continue;
+                    SourcePausePointPatchResult patchResult = PatchShimTarget(
+                        id,
+                        shimResolution,
+                        request.NormalizedFile,
+                        request.Line);
+                    committed = patchResult.Success;
+                    if (committed)
+                    {
+                        UloopPausePointRegistry.SetSuppressedByHotReload(id, false, null);
+                        UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, true);
+                    }
                 }
-
-                UloopPausePointRegistry.SetSuppressedByHotReload(id, false, null);
-                UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, true);
+                finally
+                {
+                    if (!committed)
+                    {
+                        ReanchorMarkerWithoutInjection(id, logicalOwner, request);
+                        SuppressMarkerRetargetFailed(id);
+                    }
+                }
             }
         }
 
@@ -190,28 +200,59 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 SourcePausePointPatchResult methodResolve =
                     TryResolveMethod(resolveResult.Resolution, out MethodBase restoredMethod);
-                if (!methodResolve.Success || restoredMethod == null || !restoredMethod.Equals(logicalOwner))
+                if (!methodResolve.Success
+                    || restoredMethod == null
+                    || !IsSameLogicalMethodOrItsStateMachine(restoredMethod, logicalOwner))
                 {
                     SuppressMarkerRestoreFailed(id);
                     continue;
                 }
 
                 UnpatchInstrumentationOnly(id);
-                SourcePausePointPatchResult patchResult = Patch(
-                    id,
-                    resolveResult.Resolution,
-                    request.NormalizedFile,
-                    request.Line);
-                if (!patchResult.Success)
+                bool committed = false;
+                try
                 {
-                    ReanchorMarkerWithoutInjection(id, logicalOwner, request);
-                    SuppressMarkerRestoreFailed(id);
-                    continue;
+                    // Why logicalOwner override: async/iterator PDB resolve returns MoveNext, but
+                    // hot-reload keys and later transitions use the compiled wrapper as owner.
+                    SourcePausePointPatchResult patchResult = Patch(
+                        id,
+                        resolveResult.Resolution,
+                        request.NormalizedFile,
+                        request.Line,
+                        logicalOwner);
+                    committed = patchResult.Success;
+                    if (committed)
+                    {
+                        UloopPausePointRegistry.SetSuppressedByHotReload(id, false, null);
+                        UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, false);
+                    }
                 }
-
-                UloopPausePointRegistry.SetSuppressedByHotReload(id, false, null);
-                UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, false);
+                finally
+                {
+                    if (!committed)
+                    {
+                        ReanchorMarkerWithoutInjection(id, logicalOwner, request);
+                        SuppressMarkerRestoreFailed(id);
+                    }
+                }
             }
+        }
+
+        // Why StateMachineAttribute: async/iterator hot-reload events key the compiled wrapper,
+        // while compiled PDB resolve returns MoveNext on the state-machine type.
+        private static bool IsSameLogicalMethodOrItsStateMachine(
+            MethodBase restoredMethod,
+            MethodBase logicalOwner)
+        {
+            if (restoredMethod.Equals(logicalOwner))
+            {
+                return true;
+            }
+
+            StateMachineAttribute attribute = logicalOwner.GetCustomAttribute<StateMachineAttribute>();
+            return attribute != null
+                && attribute.StateMachineType != null
+                && attribute.StateMachineType == restoredMethod.DeclaringType;
         }
 
         private static void ReanchorMarkerWithoutInjection(
@@ -245,7 +286,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string id,
             SourcePausePointResolution resolution,
             string normalizedFile = "",
-            int requestedLine = 0)
+            int requestedLine = 0,
+            MethodBase logicalOwnerOverride = null)
         {
             Debug.Assert(!string.IsNullOrEmpty(id), "id must not be null or empty.");
             Debug.Assert(resolution != null, "resolution must not be null.");
@@ -277,6 +319,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "restore compiled bodies, or run 'uloop compile' to realign line numbers.");
             }
 
+            MethodBase logicalOwner = logicalOwnerOverride ?? method;
+
             // Why conditional no-op: ShouldInject can leave a prior injection inert (e.g. stale
             // OriginalBody under an active shim). Re-enable must replace mismatched ledger state
             // instead of reporting success while the call site never fires.
@@ -287,6 +331,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     donorShim: null))
             {
                 RememberRequest(id, normalizedFile, requestedLine);
+                LogicalOwnerById[id] = logicalOwner;
                 return SourcePausePointPatchResult.SuccessResult();
             }
 
@@ -299,7 +344,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolution.Locals,
                 SourcePausePointPatchInjectionTargetKind.OriginalBody);
 
-            return CommitPatch(id, method, method, injection, normalizedFile, requestedLine);
+            return CommitPatch(id, method, logicalOwner, injection, normalizedFile, requestedLine);
         }
 
         /// <summary>
