@@ -224,6 +224,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     slice,
                     Does.Contain(expectedPathLiteral),
                     "Shim method #line must name the project-relative path: " + entry.methodName);
+                // Why outside SliceShimMethod: #line default is trailing trivia after the closing
+                // '}', so the brace-bounded slice cannot see it — assert the reset in the gap
+                // before the next method (or EOF) instead.
+                Assert.That(
+                    TextAfterShimMethodContainsLineDefault(
+                        result.Output.shimSource,
+                        entry.shimMethodName),
+                    Is.True,
+                    "Each shim method must be followed by #line default: " + entry.methodName);
             }
         }
 
@@ -331,6 +340,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.Fail("Unbalanced braces while slicing shim method: " + shimMethodName);
             return null;
+        }
+
+        /// <summary>
+        /// What: returns whether <c>#line default</c> appears after a shim method's closing brace
+        /// and before the next <c>public static</c> method declaration (or EOF).
+        /// </summary>
+        private static bool TextAfterShimMethodContainsLineDefault(string shimSource, string shimMethodName)
+        {
+            int nameIndex = shimSource.IndexOf(shimMethodName, StringComparison.Ordinal);
+            if (nameIndex < 0)
+            {
+                return false;
+            }
+
+            int openBrace = shimSource.IndexOf('{', nameIndex);
+            if (openBrace < 0)
+            {
+                return false;
+            }
+
+            int depth = 0;
+            int closeBrace = -1;
+            for (int index = openBrace; index < shimSource.Length; index++)
+            {
+                char character = shimSource[index];
+                if (character == '{')
+                {
+                    depth++;
+                }
+                else if (character == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        closeBrace = index;
+                        break;
+                    }
+                }
+            }
+
+            if (closeBrace < 0)
+            {
+                return false;
+            }
+
+            int gapStart = closeBrace + 1;
+            int nextMethod = shimSource.IndexOf("public static", gapStart, StringComparison.Ordinal);
+            string gap = nextMethod < 0
+                ? shimSource.Substring(gapStart)
+                : shimSource.Substring(gapStart, nextMethod - gapStart);
+            return gap.Contains("#line default", StringComparison.Ordinal);
         }
 
         private static void AssertHasSkip(
