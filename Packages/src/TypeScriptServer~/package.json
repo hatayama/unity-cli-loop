@@ -83,7 +83,7 @@
     "husky": "9.1.7",
     "jest": "30.4.2",
     "knip": "6.31.0",
-    "lint-staged": "17.2.0",
+    "lint-staged": "17.3.0",
     "prettier": "3.9.6",
     "ts-jest": "29.4.12",
     "tsx": "4.23.5",
