@@ -3,14 +3,14 @@
 English | [日本語](migration-v2-to-v3_ja.md)
 
 > [!NOTE]
-> **Most users do not need this guide.** If you have no C# custom tools and no hand-written skills or scripts that call `uloop`, upgrading is just two steps: raise the Unity package version, then press **Install CLI** (or **Update CLI**) in `Window > Unity CLI Loop > Settings`. You are done — you can stop reading here. For what changed in V3, see [What's New in V3](whats-new-v3.md).
+> **Most users do not need this guide.** If you have no C# custom tools and no hand-written skills or scripts that call `uloop`, upgrading is just three steps: raise the Unity package version, press **Install CLI** (or **Update CLI**) in `Window > Unity CLI Loop > Settings`, then press **Install Skills** (or **Update Skills**) in the same window. You are done — you can stop reading here. For what changed in V3, see [What's New in V3](whats-new-v3.md).
 
 ## Who needs this guide
 
 Read on if either of these applies to your project:
 
-- **You have C# custom tools written against the V2 API** — classes deriving from the V2 tool base type, or anything else importing the `io.github.hatayama.uLoopMCP` namespace. Follow Step 1 through Step 3; the migration wizard rewrites them for you.
-- **You have `SKILL.md` files, Markdown docs, POSIX shell scripts, or PowerShell scripts that invoke `uloop`** — V3 changed the boolean option syntax and removed several commands, so existing invocations can silently break. Follow Step 4 onward.
+- **You have C# custom tools written against the V2 API** — classes deriving from the V2 tool base type, or anything else importing the `io.github.hatayama.uLoopMCP` namespace. Follow Step 1 through Step 2; the migration wizard rewrites them for you.
+- **You have `SKILL.md` files, Markdown docs, POSIX shell scripts, or PowerShell scripts that invoke `uloop`** — V3 changed the boolean option syntax and removed several commands, so existing invocations can silently break. Follow Step 3 onward.
 
 If both apply, work through the guide from the top in order.
 
@@ -31,8 +31,7 @@ On startup, Unity finds the compile errors from the V2 sources and asks whether 
 
 **Why this matters:** Safe Mode loads only a whitelisted set of assemblies. The Unity CLI Loop editor extension is not on that whitelist, so in Safe Mode the package code never runs and **the migration window cannot open**. Declining Safe Mode is what makes the rest of this guide possible.
 
-> 📸 **SCREENSHOT NEEDED** — `images/migration-safe-mode-dialog.png`
-> Unity's Safe Mode confirmation dialog shown on startup, with the `Ignore` button visible.
+![The Safe Mode confirmation dialog shown on startup. Press Ignore](images/migration-safe-mode-dialog.png)
 
 > [!WARNING]
 > If you previously turned off `Preferences > Asset Pipeline > Show Enter Safe Mode Dialog`, Unity enters Safe Mode **without asking**, and you will never get the chance to press `Ignore`. Turn that preference back on, then restart the Editor again.
@@ -41,36 +40,21 @@ Entering Safe Mode by accident is recoverable. Because the package code does not
 
 Launching from the CLI does not avoid this dialog. `uloop launch` shows the same prompt: Unity's `-ignorecompilererrors` switch does not suppress it in GUI mode.
 
-## Step 2: Let the wizard scan
+## Step 2: Press Migrate
 
-Once the Editor is up, the `Unity CLI Loop Migration` window **opens by itself and starts scanning**. This automatic open fires on the first startup after the package major version goes from V2 to V3, so it is a one-time event rather than something you can trigger again by restarting.
+Once the Editor is up, the `Unity CLI Loop Migration` window **opens by itself**. This automatic open fires on the first startup after the package major version goes from V2 to V3, so it is a one-time event rather than something you can trigger again by restarting. **If the window did not open on its own**, open it manually from `Window > Unity CLI Loop > Custom Tool Migration`.
 
-> 📸 **SCREENSHOT NEEDED** — `images/migration-wizard-overview.png`
-> The `Unity CLI Loop Migration` window with both sections visible: `C# Source Structure Migration` and `AI Skill and Script Migration`.
+![The Unity CLI Loop Migration window, showing both the C# Source Structure Migration and AI Skill and Script Migration sections, with the detection status and the Migrate button](images/migration-wizard-detected.png)
 
-**Give the scan a moment to finish.** When compilation fails, Unity does not perform a domain reload, so the package polls for the failure state instead of reacting to a single callback. A short pause before the status text appears is normal — the window has not frozen.
+The `C# Source Structure Migration` section reports the detection from the compile error like this (`{N}` is the number of affected files; the wording drops the count when it could not be determined):
 
-When the scan settles, the `C# Source Structure Migration` section reports what it found. Right after an automatic open, the status is phrased as a detection from the compile error:
-
-> Detected legacy V2 custom tool API usage from a compile error. Click Migrate to scan the project and update the affected files.
-
-and once a project scan has produced a file list:
-
-> Found 3 C# files that need V3 migration.
-
-> 📸 **SCREENSHOT NEEDED** — `images/migration-wizard-detected.png`
-> The wizard showing the detected state — a `Found {N} C# files that need V3 migration.` status with the `Migrate` button enabled.
-
-**If the window did not open on its own**, open it manually from `Window > Unity CLI Loop > Custom Tool Migration`.
-
-## Step 3: Press Migrate
+> Detected {N} C# files using legacy V2 custom tool APIs from a compile error. Click Migrate to scan the project and update them.
 
 Press **`Migrate`**. A confirmation dialog titled `Migrate C# Sources?` appears, warning that the files are rewritten in place and that you should commit or back up first. Confirm with **`Migrate`**.
 
-> 📸 **SCREENSHOT NEEDED** — `images/migration-wizard-confirm-dialog.png`
-> The `Migrate C# Sources?` confirmation dialog, with the "Commit or back up your project first (VCS recommended)." warning readable.
+![The Migrate C# Sources? confirmation dialog, warning to commit or back up first](images/migration-wizard-confirm-dialog.png)
 
-While it runs, the button reads `Migrating...` and the status line reports progress as `{n}/{N} steps complete.`. When it finishes you get:
+After you confirm, the project scan produces a definite file list and the status changes to `Found {N} C# files that need V3 migration.`. While the rewrite runs, the button reads `Migrating...` and the status line reports progress as `{n}/{N} steps complete.`. When it finishes you get:
 
 > Migration complete. No further C# migration is needed.
 
@@ -100,12 +84,11 @@ At that point the rewritten sources compile, and the errors you saw on startup a
 - **Attribute** — `[McpTool]` becomes `[UnityCliLoopTool]`. The `Description` argument is dropped, while `DisplayDevelopmentOnly` and `RequiredSecuritySetting` are carried over.
 - **Assembly definition references** — `uLoopMCP.Editor` and `uLoopMCP.Runtime` references in your `.asmdef` files are repointed at the V3 assemblies.
 
-## Step 4: Migrate skills and scripts that call uloop
+## Step 3: Migrate skills and scripts that call uloop
 
 The second section, `AI Skill and Script Migration`, covers the other half of the job: your `SKILL.md` files, Markdown docs, shell scripts, and PowerShell scripts that invoke `uloop`.
 
-> 📸 **SCREENSHOT NEEDED** — `images/migration-wizard-ai-skill.png`
-> The `AI Skill and Script Migration` section of the wizard, ideally with the `Prompt for your AI agent` foldout expanded.
+![The AI Skill and Script Migration section, showing the Install Migration Skill button and the Prompt for your AI agent contents](images/migration-wizard-ai-skill.png)
 
 **This window does not rewrite those files itself.** It only installs and removes a temporary AI skill; your AI agent does the actual editing. The workflow is:
 
@@ -159,6 +142,8 @@ For any boolean not listed below, run `uloop <command> --help`: every V3 flag pr
 
 ### Removed and renamed commands
 
+The six commands from `capture-window` through `get-menu-items` were already removed or renamed during V2's lifetime and do not exist in the final V2 release. They are listed here in case they linger in scripts written for older V2 versions.
+
 | V2 command | V3 handling |
 |---|---|
 | `uloop capture-window` | Renamed to `uloop screenshot`. |
@@ -172,7 +157,7 @@ For any boolean not listed below, run `uloop <command> --help`: every V3 flag pr
 
 The migration skill reports these as candidates rather than rewriting them, because the replacement depends on what your script was doing.
 
-## Step 5: Clean up the temporary skill
+## Step 4: Clean up the temporary skill
 
 Once your docs and scripts are migrated, remove the temporary skill. The window states this explicitly:
 
