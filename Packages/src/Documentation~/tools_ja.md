@@ -23,7 +23,7 @@ LogTypeや検索対象の文字列で絞り込む事ができます。また、s
 **高度な検索機能**:
 - **正規表現サポート**: `UseRegex: true`で強力なパターンマッチングが可能
 - **スタックトレース検索**: `SearchInStackTrace: true`でスタックトレース内も検索対象
-```
+```text
 → get-logs (LogType: Error, SearchText: "NullReference", MaxCount: 10)
 → get-logs (LogType: All, SearchText: "(?i).*error.*", UseRegex: true, MaxCount: 20)
 → get-logs (LogType: All, SearchText: "MyClass", SearchInStackTrace: true, MaxCount: 50)
@@ -114,7 +114,7 @@ macOS / Windows Editor上で、Unity Editor ウィンドウを最前面に表示
 
 ### 10. control-play-mode - Play Modeの制御
 Unity EditorのPlay Modeを制御します。Play（再生開始/一時停止解除）、Stop（停止）、Pause（一時停止）の3つのアクションを実行できます。
-```
+```text
 → control-play-mode (Action: Play)
 → Play Modeを開始してゲームの動作を確認
 → control-play-mode (Action: Pause)
@@ -129,7 +129,7 @@ Unity Editor内で動的にC#コードを実行します。
 - CancellationToken をツールに渡すと、キャンセルが末端まで伝播します
 
 有効化されている場合、動的コード実行はUnity Editorプロセスの権限で実行され、Unity API、.NET API、プロジェクトのアセンブリを利用できます。AIエージェントに任意のC#コードを実行させたくない場合は、Tool Settingsのトグルでこのツールを無効化してください。
-```
+```text
 → execute-dynamic-code (Code: "GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube); return \"Cube created\";")
 → プロトタイプの迅速な検証、バッチ処理の自動化
 → 信頼できる自動化向けにUnity Editor APIへフルアクセス

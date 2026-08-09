@@ -304,7 +304,7 @@ Add `uloop *` to `sandbox.excludedCommands` in `~/.claude/settings.json` to excl
 }
 ```
 
-The pattern is matched against **the command string as typed**, so invocations starting with `uloop` are excluded. See [docs/claude-code-sandbox.md](/docs/claude-code-sandbox.md) for details and measured results.
+The pattern is matched against **the command string as typed**, so invocations starting with `uloop` are excluded. See [docs/claude-code-sandbox.md](docs/claude-code-sandbox.md) for details and measured results.
 
 # How It Works
 

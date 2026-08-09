@@ -23,7 +23,7 @@ This allows you to retrieve logs while keeping the context small.
 **Advanced Search Features**:
 - **Regular Expression Support**: Use `UseRegex: true` for powerful pattern matching
 - **Stack Trace Search**: Use `SearchInStackTrace: true` to search within stack traces
-```
+```text
 → get-logs (LogType: Error, SearchText: "NullReference", MaxCount: 10)
 → get-logs (LogType: All, SearchText: "(?i).*error.*", UseRegex: true, MaxCount: 20)
 → get-logs (LogType: All, SearchText: "MyClass", SearchInStackTrace: true, MaxCount: 50)
@@ -114,7 +114,7 @@ Use `uloop set-game-view-size --width 1920 --height 1080` to pin a custom Game V
 
 ### 10. control-play-mode - Control Play Mode
 Control Unity Editor's Play Mode. Supports three actions: Play (start/resume), Stop, and Pause.
-```
+```text
 → control-play-mode (Action: Play)
 → Start Play Mode to verify game behavior
 → control-play-mode (Action: Pause)
@@ -129,7 +129,7 @@ Async support:
 - Cancellation is propagated when you pass a CancellationToken to the tool
 
 When enabled, dynamic code execution runs with full Unity Editor process permissions and can use Unity APIs, .NET APIs, and project assemblies. Disable this tool with the Tool Settings toggle when AI agents should not execute arbitrary C#.
-```
+```text
 → execute-dynamic-code (Code: "GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube); return \"Cube created\";")
 → Rapid prototype verification, batch processing automation
 → Full Unity Editor API access for trusted automation

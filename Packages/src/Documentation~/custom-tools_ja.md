@@ -88,7 +88,7 @@ public class MyCustomTool : UnityCliLoopTool<MyCustomSchema, MyCustomResponse>
 }
 ```
 
-[カスタムツールのサンプル](/Assets/Editor/CustomCommandSamples)も参考にして下さい。
+[カスタムツールのサンプル](../../../Assets/Editor/CustomCommandSamples)も参考にして下さい。
 
 ## カスタムツール用 Skills
 
@@ -101,7 +101,7 @@ public class MyCustomTool : UnityCliLoopTool<MyCustomSchema, MyCustomResponse>
 4. LLMツールがカスタムSkillを自動認識
 
 **ディレクトリ構造:**
-```
+```text
 Assets/Editor/CustomTools/MyTool/
 ├── MyTool.cs           # ツール実装
 └── Skill/
@@ -131,7 +131,7 @@ description: "ツールの説明と使用タイミング"
 > - フロントマターに `internal: true` を追加すると、インストール対象から除外されます（内部ツールやデバッグ用ツールに便利）
 > - `Skill/` フォルダ内の追加ファイル（`references/`、`scripts/`、`assets/` など）もインストール時に一緒にコピーされます
 
-完全な例は [HelloWorld サンプル](/Assets/Editor/CustomCommandSamples/HelloWorld/Skill/SKILL.md) を参照してください。
+完全な例は [HelloWorld サンプル](../../../Assets/Editor/CustomCommandSamples/HelloWorld/Skill/SKILL.md) を参照してください。
 
 > [!IMPORTANT]
 > **V2でカスタムツールやカスタムスキルを作っていた場合**、V3に上げると拡張APIの名前空間と型名が変わるため、**必ずコンパイルエラーが発生します**。これは想定内の挙動で、内蔵の移行ウィザードが該当ファイルを自動で書き換えます。手作業で直し始める前に、[カスタムツール／スキルのV3移行ガイド](migration-v2-to-v3_ja.md) を参照してください。

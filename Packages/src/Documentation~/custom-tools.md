@@ -88,7 +88,7 @@ public class MyCustomTool : UnityCliLoopTool<MyCustomSchema, MyCustomResponse>
 }
 ```
 
-Please also refer to [Custom Tool Samples](/Assets/Editor/CustomCommandSamples).
+Please also refer to [Custom Tool Samples](../../../Assets/Editor/CustomCommandSamples).
 
 ## Custom Skills for Your Tools
 
@@ -101,7 +101,7 @@ When you create a custom tool, you can create a `Skill/` subfolder within the to
 4. LLM tools will automatically recognize your custom skill
 
 **Directory structure:**
-```
+```text
 Assets/Editor/CustomTools/MyTool/
 ├── MyTool.cs           # Tool implementation
 └── Skill/
@@ -131,7 +131,7 @@ Detailed documentation for the tool...
 > - Add `internal: true` to the frontmatter to exclude a skill from installation (useful for internal/debug tools)
 > - Additional files in the `Skill/` folder (such as `references/`, `scripts/`, `assets/`) are also copied during installation
 
-See [HelloWorld sample](/Assets/Editor/CustomCommandSamples/HelloWorld/Skill/SKILL.md) for a complete example.
+See [HelloWorld sample](../../../Assets/Editor/CustomCommandSamples/HelloWorld/Skill/SKILL.md) for a complete example.
 
 > [!IMPORTANT]
 > **If you built custom tools or custom skills on V2**, upgrading to V3 *will* produce compile errors, because the extension API moved to a new namespace with new type names. This is expected — the built-in migration wizard rewrites the affected files for you. Before fixing anything by hand, see [Migrating Custom Tools and Skills to V3](migration-v2-to-v3.md).
