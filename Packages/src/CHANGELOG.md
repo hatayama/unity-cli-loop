@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.72](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.71...v3.0.0-beta.72) (2026-08-09)
+
+
+### Bug Fixes
+
+* Stop screenshot rendering mode from returning all-black PNGs ([#2107](https://github.com/hatayama/unity-cli-loop/issues/2107)) ([b9b77bb](https://github.com/hatayama/unity-cli-loop/commit/b9b77bb43d4c413552d2cfa4e165860fa2846503))
+
 ## [3.0.0-beta.71](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.70...v3.0.0-beta.71) (2026-07-29)
 
 
