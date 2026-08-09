@@ -1,10 +1,12 @@
 name: release-please
 
 on:
-  push:
-    branches:
-      - main
-  # Enable manual execution via "Run workflow" button in browser
+  # No push trigger on purpose. The v2 series is no longer released, so an automatic
+  # release PR is pure noise: closing it does not stick, because release-please
+  # recreates it on the next push to main (#2095 was closed and came back as #2099).
+  # Removing only the branch entry would leave an empty `branches:`, which matches
+  # every branch, so the whole push trigger goes.
+  # Run this workflow manually (branch=main) if a v2 release becomes necessary again.
   workflow_dispatch:
     inputs:
       branch:
