@@ -3,7 +3,7 @@
 English | [日本語](migration-v2-to-v3_ja.md)
 
 > [!NOTE]
-> **Most users do not need this guide.** If you have no C# custom tools and no hand-written skills or scripts that call `uloop`, upgrading is just two steps: raise the Unity package version, then press **Install CLI** (or **Update CLI**) in `Window > Unity CLI Loop > Settings`. You are done — you can stop reading here. For what changed in V3, see [What's New in V3](whats-new-v3.md).
+> **Most users do not need this guide.** If you have no C# custom tools and no hand-written skills or scripts that call `uloop`, upgrading is just three steps: raise the Unity package version, press **Install CLI** (or **Update CLI**) in `Window > Unity CLI Loop > Settings`, then press **Install Skills** (or **Update Skills**) in the same window. You are done — you can stop reading here. For what changed in V3, see [What's New in V3](whats-new-v3.md).
 
 ## Who needs this guide
 

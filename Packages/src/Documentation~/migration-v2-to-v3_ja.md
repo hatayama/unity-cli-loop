@@ -3,7 +3,7 @@
 [English](migration-v2-to-v3.md) | 日本語
 
 > [!NOTE]
-> **ほとんどのユーザーには、このガイドは不要です。** C#カスタムツールも、`uloop` を呼び出す自作のスキル／スクリプトも持っていないなら、アップグレードは2ステップで終わります。Unityパッケージのバージョンを上げ、`Window > Unity CLI Loop > Settings` で **Install CLI**（または **Update CLI**）を押すだけです。これで移行は完了なので、ここで読み終えて構いません。V3で何が変わったかは [V3の新機能](whats-new-v3_ja.md) を参照してください。
+> **ほとんどのユーザーには、このガイドは不要です。** C#カスタムツールも、`uloop` を呼び出す自作のスキル／スクリプトも持っていないなら、アップグレードは3ステップで終わります。Unityパッケージのバージョンを上げ、`Window > Unity CLI Loop > Settings` で **Install CLI**（または **Update CLI**）を押し、同じウィンドウで **Install Skills**（または **Update Skills**）を押すだけです。これで移行は完了なので、ここで読み終えて構いません。V3で何が変わったかは [V3の新機能](whats-new-v3_ja.md) を参照してください。
 
 ## このガイドが必要な人
 
