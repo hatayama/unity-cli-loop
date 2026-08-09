@@ -2,32 +2,25 @@
 
 English | [日本語](whats-new-v3_ja.md)
 
-V3 replaces the npm-distributed CLI with a native Go binary and moves the transport from TCP port management to OS-native IPC. Driving Unity from an AI agent no longer needs a Node.js setup or any port management.
+V3 replaces the npm-distributed CLI with a native Go binary and moves the transport from TCP port management to OS-native IPC. Driving Unity from an AI agent no longer needs a Node.js setup or any port management. Connection reliability is also improved: connections stay stable while Unity sits in the background, and across multiple Editors running in parallel.
 
-The headline new capability is `pause-point`: stop PlayMode at any source line and read the variables at that moment, without editing source or recompiling.
+The headline new capability is `pause-point`: stop PlayMode at any source line and read the variables at that moment, without editing source or recompiling. It is also handy for taking a screenshot of a specific moment, or inspecting the Hierarchy at a specific moment.
 
-MCP support and shell completion are gone; the CLI plus Skills is now the only integration path. The highlights and sections below carry the details of each change.
+MCP support has been removed; the CLI plus Skills is now the only integration path. The sections below carry the details of each change.
 
 ## Upgrading
 
-For most users the upgrade is two steps: raise the Unity package version, then open `Window > Unity CLI Loop > Settings` and press **Install CLI** (or **Update CLI**) to replace the old npm CLI with the native dispatcher. The installer attempts to remove the obsolete npm package with `npm uninstall -g uloop-cli` and prints the command to run manually when it cannot.
+For most users the upgrade is three steps. Raise the Unity package version, open `Window > Unity CLI Loop > Settings` and press **Install CLI** (or **Update CLI**) to replace the old npm CLI with the native `uloop` command, and finally press **Install Skills** (or **Update Skills**) in the same window to refresh your installed Skills to the V3 content. The installer attempts to remove the obsolete npm package with `npm uninstall -g uloop-cli` and prints the command to run manually when it cannot.
 
-The new dispatcher is also compatible with V2 projects. When a project still resolves to the V2 package, the dispatcher fetches the matching V2 CLI automatically and delegates the command to it — so replacing the CLI first does not break the V2 projects you still have around.
+The new `uloop` command is also compatible with V2 projects. When a project still resolves to the V2 package, it fetches the matching V2 CLI automatically and delegates the command to it — so replacing the CLI first does not break the V2 projects you still have around.
 
 You only need the migration guide if you wrote your own integrations: C# custom tools built on the V2 extension API, or your own `SKILL.md` files, Markdown docs, shell scripts, or PowerShell scripts that invoke `uloop`. In that case read [Migrating Custom Tools and Skills to V3](migration-v2-to-v3.md) before you start fixing anything by hand.
-
-## Highlights
-
-- **Native Go CLI, no Node.js** — `uloop` ships as a platform binary instead of an npm package. Node.js 22+ is no longer a requirement for running V3 projects.
-- **`pause-point` — breakpoint-style investigation without touching code** — pause PlayMode at any source line and read the variables at that frame. No `Debug.Log` statements, no recompile, and it can be armed in the middle of a PlayMode session.
-- **No more port management** — the CLI reaches Unity over a Unix domain socket (macOS/Linux) or a named pipe (Windows). There is no port to configure, and no port to collide with another Editor instance.
-- **The runner tracks the Unity package automatically** — install the dispatcher once, and the runner version each project needs is resolved and downloaded automatically from `.uloop/project-runner-pin.json`. The runner follows Unity package updates on its own, so there is no per-project CLI version to manage, and projects on different versions coexist on one machine.
 
 ## New Tools
 
 ### `pause-point` — stop at a line and read the frame
 
-`pause-point` patches an already-compiled method at a source `file:line` and pauses Unity when execution reaches it, so you do not edit source or recompile to investigate a bug. The hit response carries `CapturedVariables` — the method's locals, its parameters, and the `this` instance fields — captured immediately before the target line runs, exactly like an IDE breakpoint. Because the values are point-in-time strings rather than live references, they remain valid evidence after Unity resumes.
+`pause-point` patches an already-compiled method at a source `file:line` and pauses Unity when execution reaches it, so you do not edit source or recompile to investigate a bug, and it can be armed in the middle of a PlayMode session. The hit response carries `CapturedVariables` — the method's locals, its parameters, and the `this` instance fields — captured immediately before the target line runs, exactly like an IDE breakpoint. Because the values are point-in-time strings rather than live references, they remain valid evidence after Unity resumes.
 
 Markers come in three capture modes: `single-shot` (the default) disarms after the first hit, `continuous` pauses on every hit and keeps a history of earlier frames, and `trace` records every hit without pausing at all. Watch expressions (`uloop enable-watch` / `uloop get-watch-values`) re-evaluate automatically on each paused Editor Step, which is how you follow a value as it changes frame by frame. The Editor's Code Optimization mode must be Debug; enabling is rejected with instructions when it is set to Release.
 
@@ -42,11 +35,14 @@ uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"
 ```
 
 > `set-game-view-size` also arrives in V3: it reads and sets the Game View custom rendering resolution (`uloop set-game-view-size --width 1920 --height 1080`), which is useful for keeping the coordinate space of `screenshot --capture-mode rendering` stable across runs.
+>
+> `simulate-mouse-input` gained `--dry-run`: check what a Game View coordinate hits in 3D physics without injecting mouse input (`uloop simulate-mouse-input --dry-run --x 640 --y 360`). Use it to confirm where a click will land before sending it.
 
 ## CLI and Distribution Changes
 
-- **npm package to native binary** — the CLI is distributed as a signed platform binary rather than through npm. The V2 `uloop-cli` npm package is obsolete; remove it with `npm uninstall -g uloop-cli` if the installer could not.
-- **Two-layer architecture** — a single global `uloop` dispatcher lives on your `PATH` and delegates to a per-project `uloop-project-runner`. The runner version comes from `.uloop/project-runner-pin.json` in each project and is downloaded into a per-version user cache automatically, so upgrading one project does not disturb another.
+- **npm package to native binary** — the CLI is distributed as platform-native binaries rather than through npm. Node.js 22+ is no longer a requirement for running V3 projects. The V2 `uloop-cli` npm package is obsolete; remove it with `npm uninstall -g uloop-cli` if the installer could not.
+- **No more port management** — the CLI reaches Unity over a Unix domain socket (macOS/Linux) or a named pipe (Windows). There is no port to configure, and no port to collide with another Editor instance.
+- **Two-layer architecture, with the runner tracking the Unity package automatically** — a single global `uloop` command (the dispatcher) lives on your `PATH` and delegates to a per-project `uloop-project-runner`. The runner version comes from `.uloop/project-runner-pin.json` in each project and is downloaded into a per-version user cache automatically. Because the runner follows Unity package updates on its own, there is no per-project CLI version to manage, and projects on different versions coexist on one machine.
 - **Installer authenticity verification** — release assets carry sigstore attestations. The documented install flow verifies them with `gh attestation verify` against the signing workflow and the release tag's commit before running the installer.
 - **Bounded runtime output** — each subfolder under `.uloop/outputs/` is capped at 20 files, with the oldest removed first, so screenshots, test results, and hierarchy dumps no longer accumulate without limit.
 - **Automatic delegation to V2 projects** — when the V3 dispatcher detects that a project still resolves to the V2 package, it installs the matching V2 `uloop-cli` release into a per-version cache and forwards the command. Keeping the V3 dispatcher installed is the supported way to work across V2 and V3 projects at the same time. Note that Node.js 22+ is needed **only if you keep using V2 projects**, because delegation goes through npm; once everything is on V3, Node.js is not needed at all.
@@ -54,10 +50,6 @@ uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"
 ## Removed in V3
 
 - **MCP connection** — removed. Use the CLI together with the bundled Skills; every capability that was exposed over MCP is reachable through `uloop` commands.
-- **Shell completion** — removed. `uloop completion` remains only as a no-op stub so existing shell profiles do not error out.
-- **`capture-window`** — use `screenshot`, which absorbed its role and adds Game View rendering capture and element annotation.
-- **`unity-search`, `get-unity-search-providers`, `get-provider-details`** — removed. Use `execute-dynamic-code` to call the Unity Search API directly when you need it, or `find-game-objects` for ordinary scene lookups.
-- **`execute-menu-item`, `get-menu-items`** — removed. Use `execute-dynamic-code` with `EditorApplication.ExecuteMenuItem(...)`.
 - **`get-version`, `get-project-info`** — removed as user commands. They were internal diagnostics and were never installed as agent skills, but V2 scripts could still invoke them. Use `uloop --version` for the CLI version, or `execute-dynamic-code` for Unity and project metadata.
 
 ## Breaking Changes

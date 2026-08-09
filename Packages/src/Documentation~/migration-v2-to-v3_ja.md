@@ -3,14 +3,14 @@
 [English](migration-v2-to-v3.md) | 日本語
 
 > [!NOTE]
-> **ほとんどのユーザーには、このガイドは不要です。** C#カスタムツールも、`uloop` を呼び出す自作のスキル／スクリプトも持っていないなら、アップグレードは2ステップで終わります。Unityパッケージのバージョンを上げ、`Window > Unity CLI Loop > Settings` で **Install CLI**（または **Update CLI**）を押すだけです。これで移行は完了なので、ここで読み終えて構いません。V3で何が変わったかは [V3の新機能](whats-new-v3_ja.md) を参照してください。
+> **ほとんどのユーザーには、このガイドは不要です。** C#カスタムツールも、`uloop` を呼び出す自作のスキル／スクリプトも持っていないなら、アップグレードは3ステップで終わります。Unityパッケージのバージョンを上げ、`Window > Unity CLI Loop > Settings` で **Install CLI**（または **Update CLI**）を押し、同じウィンドウで **Install Skills**（または **Update Skills**）を押すだけです。これで移行は完了なので、ここで読み終えて構いません。V3で何が変わったかは [V3の新機能](whats-new-v3_ja.md) を参照してください。
 
 ## このガイドが必要な人
 
 次のどちらかに当てはまる場合は、続きを読んでください。
 
-- **V2 APIで書いたC#カスタムツールがある** — V2のツール基底型を継承したクラスや、`io.github.hatayama.uLoopMCP` 名前空間をimportしているコードがある場合です。Step 1〜Step 3に従ってください。移行ウィザードが自動で書き換えます。
-- **`uloop` を呼び出す `SKILL.md`・Markdownドキュメント・POSIXシェルスクリプト・PowerShellスクリプトがある** — V3ではbooleanオプションの書式が変わり、いくつかのコマンドが削除されたため、既存の呼び出しが気づかないうちに壊れる可能性があります。Step 4以降に従ってください。
+- **V2 APIで書いたC#カスタムツールがある** — V2のツール基底型を継承したクラスや、`io.github.hatayama.uLoopMCP` 名前空間をimportしているコードがある場合です。Step 1〜Step 2に従ってください。移行ウィザードが自動で書き換えます。
+- **`uloop` を呼び出す `SKILL.md`・Markdownドキュメント・POSIXシェルスクリプト・PowerShellスクリプトがある** — V3ではbooleanオプションの書式が変わり、いくつかのコマンドが削除されたため、既存の呼び出しが気づかないうちに壊れる可能性があります。Step 3以降に従ってください。
 
 両方に当てはまる場合は、このガイドを上から順に進めてください。
 
@@ -40,29 +40,21 @@
 
 CLIから起動してもこのダイアログは回避できません。`uloop launch` でも同じダイアログが出ます。Unityの仕様上、`-ignorecompilererrors` はGUIモードではこのダイアログを抑止しないためです。
 
-## Step 2: ウィザードのスキャンを待つ
+## Step 2: Migrateを押す
 
-Editorが起動すると、`Unity CLI Loop Migration` ウィンドウが**自動的に開き、スキャンが始まります**。この自動オープンは、パッケージのメジャーバージョンがV2からV3になった最初の起動時に発火します。つまり一度きりのイベントで、再起動すればまた出せるというものではありません。
+Editorが起動すると、`Unity CLI Loop Migration` ウィンドウが**自動的に開きます**。この自動オープンは、パッケージのメジャーバージョンがV2からV3になった最初の起動時に発火します。つまり一度きりのイベントで、再起動すればまた出せるというものではありません。**自動で開かなかった場合**は、`Window > Unity CLI Loop > Custom Tool Migration` から手動で開いてください。
 
 ![Unity CLI Loop Migrationウィンドウ。C# Source Structure MigrationとAI Skill and Script Migrationの2セクションが表示され、検出結果とMigrateボタンが見える](images/migration-wizard-detected.png)
 
-**スキャンが終わるまで少し待ってください。** コンパイルが失敗している間、Unityはドメインリロードを行いません。そのためパッケージはコールバック1回に頼らず、失敗状態をポーリングして検出します。ステータスが表示されるまでに少し間があるのは正常な挙動で、ウィンドウが固まったわけではありません。
+`C# Source Structure Migration` セクションには、コンパイルエラー起点の検出結果が次のように表示されます（`{N}` は対象ファイル数。特定できなかった場合は件数なしの文言になります）。
 
-スキャンが落ち着くと、`C# Source Structure Migration` セクションが結果を表示します。自動オープン直後は、コンパイルエラー起点の検出として次のように表示されます（対象ファイル数を特定できなかった場合は件数なしの文言になります）。
-
-> Detected 36 C# files using legacy V2 custom tool APIs from a compile error. Click Migrate to scan the project and update them.
-
-この後 `Migrate` を押してプロジェクトスキャンでファイル一覧が確定すると、`Found {N} C# files that need V3 migration.` という表示に変わります。
-
-**ウィンドウが自動で開かなかった場合**は、`Window > Unity CLI Loop > Custom Tool Migration` から手動で開いてください。
-
-## Step 3: Migrateを押す
+> Detected {N} C# files using legacy V2 custom tool APIs from a compile error. Click Migrate to scan the project and update them.
 
 **`Migrate`** を押します。`Migrate C# Sources?` というタイトルの確認ダイアログが表示され、ファイルがその場で書き換えられること、先にcommitまたはバックアップを取るべきことが警告されます。**`Migrate`** で確定してください。
 
 ![Migrate C# Sources?確認ダイアログ。commitまたはバックアップを促す警告が表示される](images/migration-wizard-confirm-dialog.png)
 
-実行中はボタンが `Migrating...` になり、ステータス行に `{n}/{N} steps complete.` と進捗が表示されます。完了すると次のように表示されます。
+確定するとプロジェクトスキャンでファイル一覧が確定し、ステータスが `Found {N} C# files that need V3 migration.` に変わります。実行中はボタンが `Migrating...` になり、ステータス行に `{n}/{N} steps complete.` と進捗が表示されます。完了すると次のように表示されます。
 
 > Migration complete. No further C# migration is needed.
 
@@ -92,7 +84,7 @@ Editorが起動すると、`Unity CLI Loop Migration` ウィンドウが**自動
 - **属性** — `[McpTool]` が `[UnityCliLoopTool]` になります。`Description` 引数は削除され、`DisplayDevelopmentOnly` と `RequiredSecuritySetting` は引き継がれます。
 - **asmdefの参照** — `.asmdef` ファイル内の `uLoopMCP.Editor` と `uLoopMCP.Runtime` への参照が、V3のアセンブリに張り替えられます。
 
-## Step 4: uloopを呼び出すスキル・スクリプトを移行する
+## Step 3: uloopを呼び出すスキル・スクリプトを移行する
 
 2つ目のセクション `AI Skill and Script Migration` は、残り半分の作業を担当します。対象は、`uloop` を呼び出している `SKILL.md`・Markdownドキュメント・シェルスクリプト・PowerShellスクリプトです。
 
@@ -165,7 +157,7 @@ V3のbooleanオプションは値を取りません。V2の呼び出しをどう
 
 移行スキルはこれらを自動で書き換えず、移行候補として報告するだけです。スクリプトが何をしていたかによって適切な代替手段が変わるためです。
 
-## Step 5: 一時スキルを削除する
+## Step 4: 一時スキルを削除する
 
 ドキュメントとスクリプトの移行が終わったら、一時スキルを削除してください。画面にも明示されています。
 

@@ -1,4 +1,5 @@
 # Unity CLI Loop
+
 English | [日本語](README_ja.md)
 
 [![Unity](https://img.shields.io/badge/Unity-2022.3+-red.svg)](https://unity3d.com/)
@@ -10,8 +11,8 @@ English | [日本語](README_ja.md)
 ![GitHubCopilot](https://img.shields.io/badge/GitHub_Copilot-111?logo=githubcopilot)
 
 <p align="center">
-    <img height="450" alt="logo-black-bg" src="https://github.com/user-attachments/assets/fca3047f-9042-4bf9-83bd-58b03f061082" /><br>
-    <sub>(Logo inspired by Daft Punk's <i>Discovery</i> album art)</sub>  
+    <img height="450" alt="logo-black-bg" src="Packages/src/Documentation~/images/logo.png" /><br>
+    <sub>(Logo inspired by Daft Punk's <i>Human After All</i> album art)</sub>  
 </p>
   
 
@@ -19,25 +20,26 @@ Let an AI agent compile, test, and operate your Unity project from popular LLM t
 
 Designed to keep AI-driven development loops running autonomously inside your existing Unity projects.
 
+> [!IMPORTANT]
+> - **[What's New in V3](Packages/src/Documentation~/whats-new-v3.md)** — what changed since V2: the move to a native Go CLI, the end of port management, the new `pause-point` tool, and connections that stay stable with Unity in the background or several Editors running in parallel
+> - **[Migrating Custom Tools and Skills to V3](Packages/src/Documentation~/migration-v2-to-v3.md)** — for anyone with C# custom tools or hand-written skills/scripts that invoke `uloop`. Everyone else migrates just by updating the package and the CLI
+
 # Concept
 Unity CLI Loop is a Unity integration tool designed so that **AI can drive your Unity project forward with minimal human intervention**.
-Tasks that humans typically handle manually—compiling, running the Test Runner, checking logs, editing scenes, and capturing windows to verify UI layouts—are exposed as tools that LLMs can orchestrate.
+Tasks that humans typically handle manually — compiling, running the Test Runner, checking logs, editing scenes, capturing windows to verify UI layouts, and even operating a freshly implemented feature to confirm it actually works — can all be carried out from LLM tools.
 
 Unity CLI Loop is built around four core ideas:
 
-1. **A self-hosted development loop where AI autonomously compiles, tests, inspects logs, and fixes issues.** Uses `compile`, `run-tests`, `get-logs`, `clear-console`.
-2. **AI-driven Unity Editor operation—scene building, object manipulation, menu execution, and UI refinement from screenshots.** Uses `execute-dynamic-code`, `screenshot`.
-3. **PlayMode automated testing—AI clicks buttons, drags elements, presses keys, records and replays input, and verifies game behavior.** Uses `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `record-input`, `replay-input`, `execute-dynamic-code`, `screenshot`.
+1. **A self-hosted development loop where AI autonomously compiles, tests, inspects logs, and fixes issues** — it can even pause execution at any source line without editing code and read the variables at that moment to pin down a cause. Uses `compile`, `run-tests`, `get-logs`, `clear-console`, `pause-point`.
+2. **AI-driven Unity Editor operation — scene building, object manipulation, menu execution, and UI refinement from screenshots.** Uses `execute-dynamic-code`, `screenshot`.
+3. **PlayMode automated testing — AI clicks buttons, drags elements, presses keys, records and replays input, and verifies game behavior.** Uses `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `record-input`, `replay-input`, `execute-dynamic-code`, `screenshot`.
 4. **Achieving the above with a minimal set of tools.** See [Design Philosophy](#design-philosophy).
 
 https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 
 # Installation
 
-> [!WARNING]
-> The following software is required
->
-> - **Unity 2022.3 or later**
+This section installs the Unity package. The CLI itself (a native binary) is installed after the package, in [Quickstart Step 1](#step-1-install-the-cli). A terminal-only way to install the CLI without going through Unity is folded into the same step.
 
 ## Via Unity Package Manager
 
@@ -73,23 +75,24 @@ Scope(s): io.github.hatayama.uloopmcp
 
 3. Open Package Manager window and select OpenUPM in the My Registries section. Unity CLI Loop will be displayed.
 
-> [!NOTE]
-> `com.unity.inputsystem` is now an optional dependency. Install it only if you want Input System features such as `simulate-keyboard`, `simulate-mouse-input`, `record-input`, `replay-input`, and the Recordings window.
-> `com.unity.test-framework` is also optional. Install it only if you want the `run-tests` tool to execute Unity Test Runner.
-
 # Quickstart
 
 ## Step 1: Install the CLI
 
 Select Window > Unity CLI Loop > Settings. A dedicated window will open. If the **CLI** button is not highlighted in blue, press **Install CLI**.
 
-The installer places the global `uloop` dispatcher on PATH. Project-specific `uloop-project-runner` binaries are downloaded into the user cache automatically from each project's `.uloop/project-runner-pin.json`.
+The installer places the global `uloop` command on PATH. Project-specific `uloop-project-runner` binaries are downloaded into the user cache automatically from each project's `.uloop/project-runner-pin.json`.
+
+<details>
+<summary>Working with V2 projects side by side</summary>
 
 Keep the v3 dispatcher installed when working with both v2 and v3 projects. If Unity resolves a project to a v2 `io.github.hatayama.uloopmcp` package, the dispatcher automatically installs the matching v2 `uloop-cli` release into its versioned user cache and delegates the command to it. The resolved package version takes precedence over a stale v3 project-runner pin left after a downgrade. The initial npm installation and the v2-mode notice are written to stderr so stdout remains the delegated command's output. V3 projects continue to use the project runner selected by their pin.
 
-The global `install`, `update`, `uninstall`, `completion` (now a no-op stub; shell completion has been removed), and `launch` commands remain owned by the v3 dispatcher in every project. Other project commands, help, and the project-scoped version request are delegated for detected v2 projects.
+The global `install`, `update`, `uninstall`, and `launch` commands remain owned by the v3 dispatcher in every project. Other project commands, help, and the project-scoped version request are delegated for detected v2 projects.
 
 V2 delegation requires Node.js 22 or later, including npm for the first command that populates the cache. Do not press **Update CLI** or **Downgrade CLI** in a v2 project's Settings window. These buttons are normally hidden because the delegated CLI reports the matching v2 version, but using one can restore a global npm CLI that hides the v3 dispatcher depending on PATH order.
+
+</details>
 
 <details>
 <summary>CLI-only terminal install</summary>
@@ -180,23 +183,23 @@ uloop --version
 
 </details>
 
-<img width="277" height="306" alt="1" src="https://github.com/user-attachments/assets/0e25c327-73bf-4af6-997b-eebb3c26b372" />
+
+<img width="350" alt="The Settings window with the CLI not yet installed, showing the Install CLI button" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
 
 The Settings window shows whether the global `uloop` command is detected.
 
+If you see the following display, the installation was successful.
 
-
-If you see the following display, the installation was successful.  
-<img width="272" height="309" alt="2" src="https://github.com/user-attachments/assets/ec14f73b-53be-4435-af95-84bb9125e3e4" />
+<img width="350" alt="The Settings window after successful CLI detection, showing a green indicator and the CLI version" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
 
 ## Step 2: Install Skills
 
-Select your target (Claude Code, Codex, etc.) and press the **Install Skills** button.  
-<img width="272" height="306" alt="3" src="https://github.com/user-attachments/assets/492e9680-726a-425b-8bf1-e5983f4f15a5" />
+Select your target (Claude Code, Codex, etc.) and press the **Install Skills** button.
+
+<img width="350" alt="The Skills section of the Settings window, with a target selected and the Install Skills button ready" src="Packages/src/Documentation~/images/settings-skills-install.png" />
 
 
-
-<details>
+<details> 
 <summary>To install from terminal</summary>
 
 ```bash
@@ -224,10 +227,11 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 | "Take a screenshot of Game View and adjust the UI layout" | `/uloop-screenshot` + `/uloop-execute-dynamic-code` |
 | "Record my gameplay input" | `/uloop-record-input` |
 | "Replay the recorded input" | `/uloop-replay-input` |
+| "Pause at this line and investigate the bug" | `/uloop-pause-point` |
 
 
 <details>
-<summary>All 16 Bundled Skills</summary>
+<summary>All 18 Bundled Skills</summary>
 
 - `/uloop-launch` - Launch Unity with correct version
 - `/uloop-compile` - Execute compilation
@@ -238,8 +242,10 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 - `/uloop-get-hierarchy` - Get scene hierarchy
 - `/uloop-find-game-objects` - Find GameObjects
 - `/uloop-screenshot` - Capture EditorWindow
+- `/uloop-pause-point` - Pause execution at any line and capture variables
+- `/uloop-set-game-view-size` - Read and set the Game View custom resolution
 - `/uloop-simulate-mouse-ui` - Simulate mouse click, long-press, and drag on PlayMode UI elements
-- `/uloop-simulate-mouse-input` - Simulate mouse input in PlayMode via Input System (use `--dry-run` to check 3D physics hits)
+- `/uloop-simulate-mouse-input` - Simulate mouse input in PlayMode via Input System
 - `/uloop-simulate-keyboard` - Simulate keyboard input in PlayMode via Input System
 - `/uloop-record-input` - Record keyboard and mouse input during PlayMode
 - `/uloop-replay-input` - Replay recorded input during PlayMode
@@ -284,17 +290,31 @@ uloop execute-dynamic-code --code 'using UnityEngine; Debug.Log("Hello from CLI!
 
 </details>
 
-## Project Path Specification
+## Configuration for Claude Code
 
-If `--project-path` is omitted, the port is automatically selected from the Unity project detected in the current directory.
+Claude Code runs shell commands inside a sandbox, and the sandbox blocks network access by default. The IPC connection to Unity is also affected, so `uloop` fails with `UNITY_NOT_REACHABLE` (`connect: operation not permitted`) at the moment it tries to connect — even when Unity itself is running fine.
 
-To operate multiple Unity instances from a single LLM tool, explicitly specify a project path:
+Add `uloop *` to `sandbox.excludedCommands` in `~/.claude/settings.json` to exclude `uloop` commands from the sandbox:
 
-```bash
-# Specify by project path (absolute or relative)
-uloop compile --project-path /Users/foo/my-unity-project
-uloop compile --project-path ../other-project
+```json
+{
+  "sandbox": {
+    "excludedCommands": ["uloop *"]
+  }
+}
 ```
+
+The pattern is matched against **the command string as typed**, so invocations starting with `uloop` are excluded. See [docs/claude-code-sandbox.md](docs/claude-code-sandbox.md) for details and measured results.
+
+# How It Works
+
+A `uloop` command reaches the Unity Editor through the following chain:
+
+- **The global `uloop` dispatcher** — the single entry point on PATH. It interprets the command and delegates it to the runner for the target project
+- **`uloop-project-runner`** — the per-project runner. The version to use is determined by each project's `.uloop/project-runner-pin.json` (the pin) and downloaded automatically into a per-version user cache, which is how multiple projects on different versions coexist on one machine → [project runner pin details](docs/project-runner-pin.md)
+- **The IPC server inside the Unity Editor** — accepts connections from the runner, executes Unity APIs, and returns the results
+
+The connection uses **no TCP ports**. It goes over a Unix domain socket on macOS/Linux and a named pipe on Windows, so there is no port to configure and no port collision with other Editor instances.
 
 # Design Philosophy
 
@@ -304,356 +324,44 @@ Too many tools make it harder for AI to choose the right one. And even when tool
 
 Dedicated tools exist only for operations that dynamic code execution cannot handle by nature — such as frame-spanning input simulation and screenshot capture — and for operations called so frequently in the development loop, like `compile` and `get-logs`, that generating C# code each time would waste tokens.
 
+When you find yourself wanting a new dedicated tool, a Skill usually suffices. Write the routine operation down as SKILL.md instructions, a shell script, or a C# snippet passed to `execute-dynamic-code`, and the AI just invokes it. The skill body is loaded only at startup and nothing has to be regenerated per run, so the additional token cost is close to zero. See the [Custom Tool Development Guide](Packages/src/Documentation~/custom-tools.md#custom-skills-for-your-tools) for how to build one.
+
 # Key Features
+
+For detailed descriptions and usage examples of every tool, see the **[Tool Reference](Packages/src/Documentation~/tools.md)**.
+
 ## Development Loop Tools
-### 1. compile - Execute Compilation
-Performs AssetDatabase.Refresh() and then compiles, returning the results after Domain Reload completes. Can detect errors and warnings that built-in linters cannot find.
-You can choose between incremental compilation and forced full compilation.
-Use `--no-wait-for-domain-reload` only when you need the fire-and-forget path.
-```text
-→ Execute compile, analyze error and warning content
-→ Automatically fix relevant files
-→ Verify with compile again
-```
+- `compile` - Run compilation and return errors and warnings
+- `get-logs` - Retrieve the same logs as the Console, filtered by type or search string
+- `run-tests` - Run Unity Test Runner (PlayMode / EditMode)
+- `pause-point` - Pause PlayMode at any line without editing code and read the variables at that moment
 
-### 2. get-logs - Retrieve Logs Same as Unity Console
-Filter by LogType or search target string with advanced search capabilities. You can also choose whether to include stacktrace.
-This allows you to retrieve logs while keeping the context small.
-**MaxCount behavior**: Returns the latest logs (tail-like behavior). When MaxCount=10, returns the most recent 10 logs.
-**Advanced Search Features**:
-- **Regular Expression Support**: Use `UseRegex: true` for powerful pattern matching
-- **Stack Trace Search**: Use `SearchInStackTrace: true` to search within stack traces
-```
-→ get-logs (LogType: Error, SearchText: "NullReference", MaxCount: 10)
-→ get-logs (LogType: All, SearchText: "(?i).*error.*", UseRegex: true, MaxCount: 20)
-→ get-logs (LogType: All, SearchText: "MyClass", SearchInStackTrace: true, MaxCount: 50)
-→ Identify cause from stacktrace, fix relevant code
-```
+## Unity Editor Automation & Discovery Tools
+- `clear-console` - Clear the Console logs
+- `find-game-objects` - Search scene objects and inspect components
+- `get-hierarchy` - Retrieve the scene structure as JSON
+- `focus-window` - Bring the Unity Editor window to the front
+- `screenshot` - Save screenshots of EditorWindows or the Game View
+- `control-play-mode` - Play, stop, and pause Play Mode
+- `execute-dynamic-code` - Execute dynamic C# code
 
-### 3. run-tests - Execute TestRunner (PlayMode, EditMode supported)
-Executes Unity Test Runner and retrieves test results. You can set conditions with FilterType and FilterValue.
-- FilterType: all (all tests), exact (individual test method name), regex (class name or namespace), assembly (assembly name)
-- FilterValue: Value according to filter type (class name, namespace, etc.)
-- SaveBeforeRun: Saves unsaved loaded Scene changes and current Prefab Stage changes before running tests by default. When disabled, unsaved editor changes stop test execution instead of being discarded.
-Test results can be output as xml. The output path is returned so AI can read it.
-This is also a strategy to avoid consuming context.
-```text
-→ run-tests (FilterType: exact, FilterValue: "PlayerControllerTests.TestJump")
-→ run-tests (SaveBeforeRun: false, fail if editor changes are unsaved)
-→ Check failed tests, fix implementation to pass tests
-```
-> [!WARNING]
-> During PlayMode test execution, Domain Reload is forcibly turned OFF. (Settings are restored after test completion)
-> Note that static variables will not be reset during this period.
-
-### Unity Editor Automation & Discovery Tools
-### 4. clear-console - Log Cleanup
-Clear logs that become noise during log searches.
-```text
-→ clear-console
-→ Start new debug session
-```
-
-### 5. find-game-objects - Search Scene Objects
-Retrieve objects and examine component parameters. Also retrieve information about currently selected GameObjects (multiple selection supported) in Unity Editor.
-```text
-→ find-game-objects (RequiredComponents: ["Camera"])
-→ Investigate Camera component parameters
-
-→ find-game-objects (SearchMode: "Selected")
-→ Get detailed information about currently selected GameObjects in Unity Editor (supports multiple selection)
-```
-
-### 6. get-hierarchy - Analyze Scene Structure
-Retrieve information about the currently active Hierarchy in nested JSON format. Works at runtime as well.
-**Automatic File Export**: Retrieved hierarchy data is always saved as JSON in `{project_root}/.uloop/outputs/HierarchyResults/` directory. The response only returns the file path, minimizing token consumption even for large datasets.
-**Selection Mode**: Use `uloop get-hierarchy --use-selection` to get hierarchy starting from currently selected GameObject(s) in Unity Editor. Supports multiple selection - when parent and child are both selected, only the parent is used as root to avoid duplicate traversal.
-```text
-→ Understand parent-child relationships between GameObjects, discover and fix structural issues
-→ Regardless of scene size, hierarchy data is saved to a file and the path is returned instead of raw JSON
-→ uloop get-hierarchy --use-selection
-→ Get hierarchy of currently selected GameObjects without specifying paths manually
-```
-
-### 7. focus-window - Bring Unity Editor Window to Front (macOS & Windows)
-Ensures the Unity Editor window becomes the foreground application on macOS and Windows Editor builds.
-Great for keeping visual feedback in sync after other apps steal focus. (Linux is currently unsupported.)
-
-### 8. screenshot - Take a Screenshot of EditorWindow
-Take a screenshot of any EditorWindow as a PNG. Specify the window name (the text displayed in the title bar/tab) to capture.
-When multiple windows of the same type are open (e.g., 3 Inspector windows), all windows are saved with numbered filenames.
-Supports three matching modes: `exact` (default), `prefix`, and `contains` - all case-insensitive.
-Use `CaptureMode: rendering` when you need coordinates for `simulate-mouse-input` (including `--dry-run`) or `simulate-mouse-ui`; convert raw image pixels with `ScreenshotToInputFormula`, or pass annotated `SimX/SimY` values directly.
-```text
-→ screenshot (WindowName: "Console")
-→ screenshot (CaptureMode: rendering, AnnotateRaycastGrid: true)
-→ Save Console window state as PNG
-→ Provide visual feedback to AI
-```
-
-### 9. control-play-mode - Control Play Mode
-Control Unity Editor's Play Mode. Supports three actions: Play (start/resume), Stop, and Pause.
-```
-→ control-play-mode (Action: Play)
-→ Start Play Mode to verify game behavior
-→ control-play-mode (Action: Pause)
-→ Pause to inspect state
-```
-
-### 10. execute-dynamic-code - Dynamic C# Code Execution
-Execute C# code dynamically within Unity Editor.
-
-Async support:
-- You can write await in your snippet (Task/ValueTask/UniTask and any awaitable type)
-- Cancellation is propagated when you pass a CancellationToken to the tool
-
-When enabled, dynamic code execution runs with full Unity Editor process permissions and can use Unity APIs, .NET APIs, and project assemblies. Disable this tool with the Tool Settings toggle when AI agents should not execute arbitrary C#.
-```
-→ execute-dynamic-code (Code: "GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube); return \"Cube created\";")
-→ Rapid prototype verification, batch processing automation
-→ Full Unity Editor API access for trusted automation
-```
-
-### PlayMode Automated Testing Tools
-### 11. simulate-mouse-ui - Simulate Mouse Input on PlayMode UI
-Simulate mouse click, long-press, and drag on PlayMode UI elements. Uses EventSystem and ExecuteEvents to dispatch pointer events directly — works independently of both old and new Input System. For game logic that reads Input System (e.g. `Mouse.current.leftButton.wasPressedThisFrame`), use `simulate-mouse-input` instead.
-
-Supports 6 actions: Click, LongPress, Drag (one-shot), DragStart/DragMove/DragEnd (split drag).
-
-```text
-→ screenshot (CaptureMode: rendering, AnnotateElements: true)
-→ Get element coordinates from AnnotatedElements (SimX/SimY)
-→ simulate-mouse-ui (Action: Click, X: 400, Y: 300)
-→ simulate-mouse-ui (Action: LongPress, X: 400, Y: 300, Duration: 5.0)
-→ simulate-mouse-ui (Action: Drag, FromX: 100, FromY: 500, X: 400, Y: 300)
-→ simulate-mouse-ui (Action: DragStart, X: 100, Y: 500)
-→ simulate-mouse-ui (Action: DragMove, X: 200, Y: 400, DragSpeed: 300)
-→ simulate-mouse-ui (Action: DragEnd, X: 400, Y: 300)
-```
-https://github.com/user-attachments/assets/c7ee9103-c282-4f90-8b01-64bb17400f3e
-
-### 12. simulate-mouse-input - Simulate Mouse Input in PlayMode via Input System
-Simulate mouse input in PlayMode via Input System. Injects button clicks, mouse delta, and scroll wheel directly into `Mouse.current` for game logic that reads Input System. Unlike `simulate-mouse-ui` which fires EventSystem pointer events for uGUI, this tool targets game logic that reads `Mouse.current` directly. Real mouse injection is available only when the Input System package is installed, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings.
-
-Use `--dry-run` to check what a top-left Game View coordinate hits in 3D physics without injecting input. Dry-run works in EditMode and does not require the Input System package.
-
-Click, LongPress, and dry-run coordinates use the same top-left Game View coordinates as `screenshot --capture-mode rendering`; do not flip Y before calling the tool.
-
-Supports 5 actions: Click, LongPress, MoveDelta, SmoothDelta, Scroll.
-
-```text
-→ simulate-mouse-input (DryRun: true, X: 960, Y: 540)
-→ simulate-mouse-input (Action: Click, X: 400, Y: 300)
-→ simulate-mouse-input (Action: Click, X: 400, Y: 300, Button: Right)
-→ simulate-mouse-input (Action: LongPress, X: 400, Y: 300, Duration: 2.0)
-→ simulate-mouse-input (Action: MoveDelta, DeltaX: 100, DeltaY: 0)
-→ simulate-mouse-input (Action: Scroll, ScrollY: 120)
-→ simulate-mouse-input (Action: SmoothDelta, DeltaX: 300, DeltaY: 0, Duration: 0.5)
-```
-
-### 13. simulate-keyboard - Simulate Keyboard Input in PlayMode
-Simulate keyboard key input in PlayMode via Input System. Supports single key taps, sustained holds, and multi-key combinations (e.g. Shift+W for sprinting). This tool is available only when the Input System package is installed, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings. Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`.
-
-Supports 3 actions: Press (one-shot tap or timed hold), KeyDown (hold key down), KeyUp (release held key). Use Press for edge-triggered gameplay such as `Keyboard.current.spaceKey.wasPressedThisFrame`; KeyDown emits only one initial press edge and then becomes held state, so use KeyDown/KeyUp only when the test intentionally needs a held key.
-
-```text
-→ simulate-keyboard (Action: Press, Key: Space)
-→ simulate-keyboard (Action: Press, Key: W, Duration: 2.0)
-→ simulate-keyboard (Action: KeyDown, Key: LeftShift)
-→ simulate-keyboard (Action: KeyDown, Key: W)
-→ screenshot (CaptureMode: rendering)
-→ simulate-keyboard (Action: KeyUp, Key: W)
-→ simulate-keyboard (Action: KeyUp, Key: LeftShift)
-```
-
-### 14. record-input - Record Input During PlayMode
-Record keyboard and mouse input during PlayMode frame-by-frame into a JSON file. Captures key presses, mouse movement, clicks, and scroll events via Input System device state diffing. This tool is available only when the Input System package is installed.
-
-```text
-→ record-input (Action: Start)
-→ record-input (Action: Start, Keys: "W,A,S,D,Space")
-→ record-input (Action: Stop)
-→ JSON file saved to .uloop/outputs/InputRecordings/
-```
-
-### 15. replay-input - Replay Recorded Input During PlayMode
-Replay recorded keyboard and mouse input during PlayMode. Loads a JSON recording and injects input frame-by-frame via Input System. Supports looping and progress monitoring. This tool is available only when the Input System package is installed.
-
-```text
-→ replay-input (Action: Start)
-→ replay-input (Action: Start, InputPath: "scripts/my-play.json", Loop: true)
-→ replay-input (Action: Status)
-→ replay-input (Action: Stop)
-```
-
-Terminal-driven E2E coverage is available through one runner per shell family:
-
-```bash
-sh scripts/run-posix-e2e.sh --project-path /path/to/unity-project
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-windows-e2e.ps1
-```
-
-`run-posix-e2e.sh` uses the built native CLI binary by default, passes an explicit `--project-path` to every `uloop` invocation, and runs CLI recovery/readiness, input record/replay, and simulate-mouse UI coverage in one sequence.
+## PlayMode Automated Testing Tools
+- `simulate-mouse-ui` - Simulate mouse operations on UI elements (via EventSystem)
+- `simulate-mouse-input` - Simulate mouse input via Input System
+- `simulate-keyboard` - Simulate keyboard input via Input System
+- `record-input` / `replay-input` - Record and replay input during PlayMode
 
 ## Unity CLI Loop Extension Development
-Unity CLI Loop enables efficient development of project-specific tools without requiring changes to the core package.
-The type-safe design allows for reliable custom tool implementation in minimal time.
-(If you ask AI, they should be able to make it for you soon ✨)
 
-You can publish your extension tools on GitHub and reuse them across other projects.
+Add project-specific custom tools in a type-safe way without touching the core package. Ship a `Skill/SKILL.md` alongside your tool and AI agents discover it automatically.
 
-> [!TIP]
-> **For AI-assisted development**: Detailed implementation guides are available in [.claude/rules/cli.md](/.claude/rules/cli.md) for CLI and Skills development. These guides are automatically loaded by Claude Code when working in the relevant directories.
-
-<details>
-<summary>View Implementation Guide</summary>
-
-**Step 1: Create Schema Class** (define parameters):
-```csharp
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-
-public class MyCustomSchema : UnityCliLoopToolSchema
-{
-    public string MyParameter { get; set; } = "default_value";
-
-    public MyEnum EnumParameter { get; set; } = MyEnum.Option1;
-}
-
-public enum MyEnum
-{
-    Option1 = 0,
-    Option2 = 1,
-    Option3 = 2
-}
-```
-
-**Step 2: Create Response Class** (define return data):
-```csharp
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-
-public class MyCustomResponse : UnityCliLoopToolResponse
-{
-    public string Result { get; set; }
-    public bool Success { get; set; }
-
-    public MyCustomResponse(string result, bool success)
-    {
-        Result = result;
-        Success = success;
-    }
-
-    // Required parameterless constructor
-    public MyCustomResponse() { }
-}
-```
-
-**Step 3: Create Tool Class**:
-```csharp
-using System.Threading;
-using System.Threading.Tasks;
-using io.github.hatayama.UnityCliLoop.ToolContracts;
-
-[UnityCliLoopTool]
-public class MyCustomTool : UnityCliLoopTool<MyCustomSchema, MyCustomResponse>
-{
-    public override string ToolName => "my-custom-tool";
-
-    // Executed on main thread
-    protected override Task<MyCustomResponse> ExecuteAsync(MyCustomSchema parameters, CancellationToken ct)
-    {
-        // Type-safe parameter access
-        string param = parameters.MyParameter;
-        MyEnum enumValue = parameters.EnumParameter;
-
-        // Check for cancellation before long-running operations
-        ct.ThrowIfCancellationRequested();
-
-        // Implement custom logic here
-        string result = ProcessCustomLogic(param, enumValue);
-        bool success = !string.IsNullOrEmpty(result);
-
-        // For long-running operations, periodically check for cancellation
-        // ct.ThrowIfCancellationRequested();
-
-        return Task.FromResult(new MyCustomResponse(result, success));
-    }
-
-    private string ProcessCustomLogic(string input, MyEnum enumValue)
-    {
-        // Implement custom logic
-        return $"Processed '{input}' with enum '{enumValue}'";
-    }
-}
-```
-
-Please also refer to [Custom Tool Samples](/Assets/Editor/CustomToolSamples).
-
-</details>
-
-### Custom Skills for Your Tools
-
-When you create a custom tool, you can create a `Skill/` subfolder within the tool folder and place a `SKILL.md` file there. This allows LLM tools to automatically discover and use your custom tool through the Skills system.
-
-**How it works:**
-1. Create a `Skill/` subfolder in your custom tool's folder
-2. Place `SKILL.md` inside the `Skill/` folder
-3. Run `uloop skills install --claude` to install all skills (bundled + project)
-4. LLM tools will automatically recognize your custom skill
-
-**Directory structure:**
-```
-Assets/Editor/CustomTools/MyTool/
-├── MyTool.cs           # Tool implementation
-└── Skill/
-    ├── SKILL.md        # Skill definition (required)
-    └── references/     # Additional files (optional)
-        └── usage.md
-```
-
-**SKILL.md format:**
-```markdown
----
-name: uloop-my-custom-tool
-description: "Description of what the tool does and when to use it."
----
-
-# uloop my-custom-tool
-
-Detailed documentation for the tool...
-```
-
-**Scanned locations** (searches for `Skill/SKILL.md` files):
-- `Assets/**/Editor/<ToolFolder>/Skill/SKILL.md`
-- `Packages/*/Editor/<ToolFolder>/Skill/SKILL.md`
-- `Library/PackageCache/*/Editor/<ToolFolder>/Skill/SKILL.md`
-
-> [!TIP]
-> - Add `internal: true` to the frontmatter to exclude a skill from installation (useful for internal/debug tools)
-> - Additional files in the `Skill/` folder (such as `references/`, `scripts/`, `assets/`) are also copied during installation
-
-See [HelloWorld sample](/Assets/Editor/CustomCommandSamples/HelloWorld/Skill/SKILL.md) for a complete example.
+For implementation steps and how to write Skills, see the **[Custom Tool Development Guide](Packages/src/Documentation~/custom-tools.md)**.
 
 ## Other
 
-### Native Go CLI Development
-
-Run the native Go CLI checks before changing files under `cli`:
-
-```bash
-scripts/check-go-cli.sh
-```
-
-The check script verifies formatting with `goimports` and `gofumpt`, runs `go vet ./...`, runs `golangci-lint`, and then runs `go test ./...` for every Go module in the repository. Install `golangci-lint` first if it is not available on your `PATH`.
-
-Use the existing build script when you need to refresh local development binaries under `dist`:
-
-```bash
-scripts/build-go-cli.sh
-```
-
 ### Unity CLI Loop Files
 
-`UserSettings/UnityMcpSettings.json` stores per-user editor session state and should always remain local-only. The file name is a historical compatibility name.
+`UserSettings/UnityCliLoopSettings.json` stores per-user editor settings and should always remain local-only.
 
 The `.uloop/` directory at the project root stores CLI cache, tool registry, and runtime outputs. Most of its contents are local-only, but some files can optionally be git-tracked for team sharing.
 

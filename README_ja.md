@@ -21,7 +21,7 @@ CLIを通じて、AIエージェントがUnityプロジェクトのコンパイ�
 AI駆動の開発ループを既存のUnityプロジェクト内で自律的に回し続けるために設計されています。
 
 > [!IMPORTANT]
-> - **[V3の新機能](Packages/src/Documentation~/whats-new-v3_ja.md)** — ネイティブGo CLIへの移行、ポート管理の廃止、`pause-point` の追加など、V2からの変更点
+> - **[V3の新機能](Packages/src/Documentation~/whats-new-v3_ja.md)** — ネイティブGo CLIへの移行、ポート管理の廃止、`pause-point` の追加、Unityがバックグラウンドにあっても複数のUnityを並列で動かしても接続が安定し続ける信頼性の向上など、V2からの変更点
 > - **[カスタムツール／スキルのV3移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md)** — C#カスタムツールや、`uloop` を呼び出す自作スキル／スクリプトを持っている人向け。それ以外の人は、パッケージとCLIを更新するだけで移行できます
 
 # コンセプト
@@ -38,13 +38,6 @@ Unity CLI Loopのコアとなるコンセプトは次の4つです。
 https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 
 # インストール
-
-> [!WARNING]
-> 以下のソフトウェアが必須です
->
-> - **Unity 2022.3以上**
->
-> CLIはネイティブバイナリで配布されるため、**Node.jsは不要です。**
 
 ここでインストールするのはUnityパッケージです。CLI本体（ネイティブバイナリ）は、パッケージ導入後に[クイックスタートのステップ1](#ステップ1-cliのインストール)でインストールします。Unityを経由せずterminalだけでCLIを入れる方法も、同じステップに畳んで記載しています。
 
@@ -82,17 +75,13 @@ Scope(s): io.github.hatayama.uloopmcp
 
 3. Package Managerウィンドウを開き、My RegistriesセクションのOpenUPMを選択。Unity CLI Loopが表示されます。
 
-> [!NOTE]
-> `com.unity.inputsystem` は optional dependency になりました。`simulate-keyboard`、`simulate-mouse-input`、`record-input`、`replay-input`、Recordings ウィンドウを使いたい場合だけ追加してください。
-> `com.unity.test-framework` も optional dependency です。`run-tests` で Unity Test Runner を実行したい場合だけ追加してください。
-
 # クイックスタート
 
 ## ステップ1: CLIのインストール
 
 Window > Unity CLI Loop > Settingsを選択します。専用ウィンドウが開くので、**CLI** ボタンが青くなっていなければ **Install CLI** を押してください。
 
-installerはグローバルな`uloop` dispatcherをPATH上に配置します。プロジェクト固有の`uloop-project-runner` binaryは、各プロジェクトの`.uloop/project-runner-pin.json`に従ってuser cacheへ自動的にdownloadされます。
+installerはグローバルな`uloop`コマンドをPATH上に配置します。プロジェクト固有の`uloop-project-runner` binaryは、各プロジェクトの`.uloop/project-runner-pin.json`に従ってuser cacheへ自動的にdownloadされます。
 
 <details>
 <summary>V2プロジェクトと併用する場合</summary>
@@ -211,19 +200,19 @@ uloop --version
 </details>
 
 
-<img width="700" alt="CLI未インストール状態のSettingsウィンドウ。Install CLIボタンが表示されている" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
+<img width="350" alt="CLI未インストール状態のSettingsウィンドウ。Install CLIボタンが表示されている" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
 
 Settings ウィンドウでは、グローバルな `uloop` コマンドが検出されているかを確認できます。
 
 下記の表示になれば成功です。
 
-<img width="700" alt="CLI検出に成功したSettingsウィンドウ。緑のインジケータとCLIバージョンが表示されている" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
+<img width="350" alt="CLI検出に成功したSettingsウィンドウ。緑のインジケータとCLIバージョンが表示されている" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
 
 ## ステップ2: Skillsのインストール
 
 Claude CodeやCodexなど、対象を選択して **Install Skills** ボタンを押します。
 
-<img width="700" alt="SettingsウィンドウのSkillsセクション。対象を選択してInstall Skillsボタンが押せる状態" src="Packages/src/Documentation~/images/settings-skills-install.png" />
+<img width="350" alt="SettingsウィンドウのSkillsセクション。対象を選択してInstall Skillsボタンが押せる状態" src="Packages/src/Documentation~/images/settings-skills-install.png" />
 
 
 <details> 
@@ -258,7 +247,7 @@ uloop skills install --claude --global
 
 
 <details>
-<summary>バンドルされている全19個のSkills一覧</summary>
+<summary>バンドルされている全18個のSkills一覧</summary>
 
 - `/uloop-launch` - 正しいバージョンでUnityを起動
 - `/uloop-compile` - コンパイルの実行
@@ -331,19 +320,7 @@ Claude Codeはシェルコマンドをサンドボックス内で実行し、サ
 }
 ```
 
-このパターンは**入力されたコマンド文字列**に対して照合されるため、`uloop` で始まる呼び出しが対象外になります。詳細と検証結果は [docs/claude-code-sandbox.md](/docs/claude-code-sandbox.md) を参照してください。
-
-## プロジェクトパス指定
-
-`--project-path` を省略した場合は、カレントディレクトリから Unity プロジェクトを検出して接続します。
-
-一つのLLMツールから複数のUnityインスタンスを操作したい場合、プロジェクトパスを明示的に指定します：
-
-```bash
-# プロジェクトパスで指定（絶対パス・相対パスどちらも可）
-uloop compile --project-path /Users/foo/my-unity-project
-uloop compile --project-path ../other-project
-```
+このパターンは**入力されたコマンド文字列**に対して照合されるため、`uloop` で始まる呼び出しが対象外になります。詳細と検証結果は [docs/claude-code-sandbox.md](docs/claude-code-sandbox.md) を参照してください。
 
 # 仕組み
 
@@ -400,7 +377,7 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 
 ### Unity CLI Loop 関連ファイル
 
-`UserSettings/UnityMcpSettings.json` はユーザー個別のエディタセッション状態を保持するため、常にローカル専用です。このファイル名は旧名称由来の互換名です。
+`UserSettings/UnityCliLoopSettings.json` はユーザー個別のエディタ設定を保持するため、常にローカル専用です。
 
 プロジェクトルートの `.uloop/` ディレクトリには、CLIキャッシュ、ツールレジストリ、ランタイム出力が格納されます。大半はローカル専用ですが、一部のファイルはチーム共有のためにオプションでgit管理できます。
 
