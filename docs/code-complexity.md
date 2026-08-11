@@ -35,9 +35,10 @@ dotnet run --project tools/UnityCliLoop.CodeComplexity -- --root . --max-complex
 
 ## Operating Policy
 
-The repository-wide maximum cyclomatic complexity is 15. It is declared in two places that must
-stay in step: `MAX_COMPLEXITY` in `scripts/check-code-complexity.sh` and `cyclop.max-complexity`
-in `cli/.golangci-complexity.yml`. The `Code Complexity` workflow runs on every pull request that
+The repository-wide maximum cyclomatic complexity is 15. It is declared in three places that must
+stay in step: `MAX_COMPLEXITY` in `scripts/check-code-complexity.sh`, `cyclop.max-complexity`
+in `cli/.golangci-complexity.yml`, and `--max-complexity` in the artifact step of
+`.github/workflows/code-complexity.yml`. The `Code Complexity` workflow runs on every pull request that
 touches `cli/**/*.go` or `Packages/src/**/*.cs`, reports findings, and uploads per-module JSON
 artifacts — it never fails the build.
 
