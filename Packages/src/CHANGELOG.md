@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.0.0-beta.72](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.71...v3.0.0-beta.72) (2026-08-11)
+## [3.0.0-beta.73](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.71...v3.0.0-beta.73) (2026-08-11)
 
 
 ### Bug Fixes
