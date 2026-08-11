@@ -1,5 +1,8 @@
 # Changelog
 
+## [3.0.0-beta.31] (2026-08-11)
+
+
 ## [3.0.0-beta.30](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.29...dispatcher-v3.0.0-beta.30) (2026-07-30)
 
 

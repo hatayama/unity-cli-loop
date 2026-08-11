@@ -1,5 +1,8 @@
 # Changelog
 
+## [3.0.0-beta.66] (2026-08-11)
+
+
 ## [3.0.0-beta.65](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.64...uloop-project-runner-v3.0.0-beta.65) (2026-07-29)
 
 
