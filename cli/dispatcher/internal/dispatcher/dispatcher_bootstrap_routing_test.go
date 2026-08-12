@@ -68,11 +68,13 @@ func TestRunDispatcherUpdateRunsInDispatcherProcess(t *testing.T) {
 	previousReader := dispatcherReadInstalledVersion
 	previousResolver := resolveUpdateTargetVersionFunc
 	previousManifest := fetchAttestationSubjectManifestFunc
+	previousExecutablePath := resolveUpdateExecutablePathFunc
 	defer func() {
 		updateRunCommand = previousRun
 		dispatcherReadInstalledVersion = previousReader
 		resolveUpdateTargetVersionFunc = previousResolver
 		fetchAttestationSubjectManifestFunc = previousManifest
+		resolveUpdateExecutablePathFunc = previousExecutablePath
 	}()
 	updateExecuted := false
 	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
@@ -90,6 +92,11 @@ func TestRunDispatcherUpdateRunsInDispatcherProcess(t *testing.T) {
 	}
 	fetchAttestationSubjectManifestFunc = func(ctx context.Context, tag string) (string, error) {
 		return "deadbeef  install.sh\n", nil
+	}
+	// Why: keep this routing test off os.Executable so a Cellar-hosted binary cannot
+	// trip the Homebrew guard and hide a real dispatcher-process regression.
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "/Users/someone/.local/bin/uloop", nil
 	}
 
 	var stdout bytes.Buffer
