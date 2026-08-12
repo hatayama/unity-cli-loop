@@ -1072,6 +1072,87 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a const-only source with no verified snapshot does not emit the
+        /// "No verified source snapshot" warning (no patch candidates → no noise).
+        /// </summary>
+        [Test]
+        public async Task Run_ConstOnlySourceWithoutSnapshot_DoesNotWarnMissingSnapshot()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            const string projectRelativePath = "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
+            string editedPath = WriteEditedSource(
+                "ConstOnlyNoSnapshot.cs",
+                "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n"
+                + "{\n"
+                + "    internal static class HotReloadConstOnlyProbe\n"
+                + "    {\n"
+                + "        public const int Amp = 5;\n"
+                + "        public const float Speed = 1.5f;\n"
+                + "    }\n"
+                + "}\n");
+
+            using (HideVerifiedSnapshot(projectRelativePath))
+            {
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { fixturePath },
+                    editedPath,
+                    CancellationToken.None);
+
+                AssertNoFileLevelFailure(result);
+                foreach (string warning in result.Warnings)
+                {
+                    Assert.That(
+                        warning.Contains("No verified source snapshot"),
+                        Is.False,
+                        "Const-only source must not warn about missing snapshot.\n"
+                        + string.Join("\n", result.Warnings));
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: a method-bearing source with no verified snapshot still emits the
+        /// "No verified source snapshot" warning (patch candidates exist).
+        /// </summary>
+        [Test]
+        public async Task Run_MethodSourceWithoutSnapshot_WarnsMissingSnapshot()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            const string projectRelativePath = "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
+            string editedPath = WriteEditedSource(
+                "MethodNoSnapshot.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            using (HideVerifiedSnapshot(projectRelativePath))
+            {
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { fixturePath },
+                    editedPath,
+                    CancellationToken.None);
+
+                AssertNoFileLevelFailure(result);
+                bool found = false;
+                foreach (string warning in result.Warnings)
+                {
+                    if (warning.Contains("No verified source snapshot")
+                        && warning.Contains("HotReloadE2EFixtures.cs"))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+
+                Assert.That(
+                    found,
+                    Is.True,
+                    "Method-bearing source without snapshot must warn.\n"
+                    + string.Join("\n", result.Warnings));
+            }
+        }
+
+        /// <summary>
         /// What: with a verified source snapshot, hot reload patches only the edited method —
         /// unedited methods appear neither as Patched nor Skipped, and the response carries the
         /// unchanged count.
@@ -1359,6 +1440,80 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string path = Path.Combine(directory, fileName);
             File.WriteAllText(path, contents);
             return path;
+        }
+
+        /// <summary>
+        /// Temporarily moves a verified snapshot aside so LoadVerifiedSnapshotSource returns null.
+        /// Restores the file on dispose.
+        /// </summary>
+        private static IDisposable HideVerifiedSnapshot(string projectRelativePath)
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string targetDllPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                "UnityCLILoop.Tests.Editor.HotReload"
+                + HotReloadConstants.CompiledAssemblyExtension);
+            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath);
+            string snapshotFileName =
+                HotReloadSourceSnapshotter.HashProjectRelativePath(
+                    projectRelativePath.Replace('\\', '/')) + ".cs";
+            string snapshotPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.SourceSnapshotRelativeDirectory,
+                "UnityCLILoop.Tests.Editor.HotReload-" + mvid,
+                snapshotFileName);
+            Assert.That(
+                File.Exists(snapshotPath),
+                Is.True,
+                "Precondition: verified snapshot must exist to hide: " + snapshotPath);
+            // Why LoadVerifiedSnapshotSource (not File.Exists alone): a stale/checksum-invalid
+            // snapshot file already yields null, so hiding it would not change the precondition.
+            Assert.That(
+                HotReloadSourceBaseline.LoadVerifiedSnapshotSource(projectRelativePath, targetDllPath),
+                Is.Not.Null,
+                "Precondition: snapshot must be loadable before hide: " + projectRelativePath);
+
+            string hiddenPath = snapshotPath + ".hidden-for-test";
+            if (File.Exists(hiddenPath))
+            {
+                File.Delete(hiddenPath);
+            }
+
+            File.Move(snapshotPath, hiddenPath);
+            return new SnapshotHideScope(snapshotPath, hiddenPath);
+        }
+
+        private sealed class SnapshotHideScope : IDisposable
+        {
+            private readonly string _snapshotPath;
+            private readonly string _hiddenPath;
+            private bool _disposed;
+
+            public SnapshotHideScope(string snapshotPath, string hiddenPath)
+            {
+                _snapshotPath = snapshotPath;
+                _hiddenPath = hiddenPath;
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+                if (File.Exists(_hiddenPath))
+                {
+                    if (File.Exists(_snapshotPath))
+                    {
+                        File.Delete(_snapshotPath);
+                    }
+
+                    File.Move(_hiddenPath, _snapshotPath);
+                }
+            }
         }
 
         private static int CountWarningsContaining(IReadOnlyList<string> warnings, string token)

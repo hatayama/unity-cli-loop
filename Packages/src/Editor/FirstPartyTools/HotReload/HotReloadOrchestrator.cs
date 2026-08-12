@@ -166,14 +166,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string snapshotSource = HotReloadSourceBaseline.LoadVerifiedSnapshotSource(
                 projectRelativePath,
                 targetDllPath);
-            if (snapshotSource == null)
-            {
-                warnings.Add(
-                    string.Format(
-                        HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat,
-                        Path.GetFileName(projectRelativePath),
-                        assemblyName));
-            }
 
             TransformWorkerInputDto workerInput = new TransformWorkerInputDto
             {
@@ -195,6 +187,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             TransformWorkerOutputDto workerOutput = workerResult.Output;
+            // Why after the worker: const-only / empty files have no patch candidates, so the
+            // missing-baseline warning was pure noise (FB E). Emit only when the worker saw at
+            // least one method or accessor row.
+            if (snapshotSource == null
+                && CountPatchCandidateRows(workerOutput) >= 1)
+            {
+                warnings.Add(
+                    string.Format(
+                        HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat,
+                        Path.GetFileName(projectRelativePath),
+                        assemblyName));
+            }
+
+            if (workerOutput.baselineDisabledByDuplicateKeys)
+            {
+                warnings.Add(
+                    string.Format(
+                        HotReloadConstants.BaselineDisabledByDuplicateKeysWarningFormat,
+                        Path.GetFileName(projectRelativePath),
+                        assemblyName));
+            }
+
             if (workerOutput.parseErrors != null)
             {
                 foreach (string parseError in workerOutput.parseErrors)
@@ -657,6 +671,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return HotReloadConstants.AssemblyNotLoadedHint;
+        }
+
+        private static int CountPatchCandidateRows(TransformWorkerOutputDto workerOutput)
+        {
+            int entryCount = workerOutput.entries != null ? workerOutput.entries.Length : 0;
+            int skippedCount = workerOutput.skipped != null ? workerOutput.skipped.Length : 0;
+            int unchangedCount =
+                workerOutput.unchangedMethods != null ? workerOutput.unchangedMethods.Length : 0;
+            return entryCount + skippedCount + unchangedCount;
         }
 
         private static string[] BuildWorkerReferencePaths(
