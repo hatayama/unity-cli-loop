@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -367,6 +368,63 @@ func TestTryHandleUpdateRequestReportsAlreadyCurrentVersion(t *testing.T) {
 	}
 }
 
+func TestUpdateRefusesHomebrewManagedExecutable(t *testing.T) {
+	// Verifies Homebrew-managed installs refuse self-update and point users at brew upgrade.
+	previousResolver := resolveUpdateExecutablePathFunc
+	previousRunner := updateRunCommand
+	defer func() {
+		resolveUpdateExecutablePathFunc = previousResolver
+		updateRunCommand = previousRunner
+	}()
+	homebrewPath := "/opt/homebrew/Cellar/uloop/3.0.0/bin/uloop"
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return homebrewPath, nil
+	}
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		t.Fatal("updateRunCommand must not run for Homebrew-managed installs")
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code := tryHandleUpdateRequest(context.Background(), []string{clicore.UpdateCommandName}, &stdout, &stderr)
+
+	if !handled || code != 1 {
+		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "brew upgrade uloop") {
+		t.Fatalf("expected brew upgrade guidance in stderr, got: %s", stderr.String())
+	}
+}
+
+func TestUpdateFailsWhenExecutablePathResolutionFails(t *testing.T) {
+	// Verifies update aborts when the dispatcher executable path cannot be resolved.
+	previousResolver := resolveUpdateExecutablePathFunc
+	previousRunner := updateRunCommand
+	defer func() {
+		resolveUpdateExecutablePathFunc = previousResolver
+		updateRunCommand = previousRunner
+	}()
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "", errors.New("executable path unavailable")
+	}
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		t.Fatal("updateRunCommand must not run when executable path resolution fails")
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code := tryHandleUpdateRequest(context.Background(), []string{clicore.UpdateCommandName}, &stdout, &stderr)
+
+	if !handled || code != 1 {
+		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "executable path unavailable") {
+		t.Fatalf("expected resolution error in stderr, got: %s", stderr.String())
+	}
+}
+
 func TestUpdateCommandForLinuxIsUnsupported(t *testing.T) {
 	// Verifies Linux update fails before trying to run a platform-specific update.
 	_, _, err := updateCommandForOS("linux")
@@ -400,6 +458,7 @@ func stubManualUpdateHooks(t *testing.T, updatedVersion string) func() {
 	previousReader := dispatcherReadInstalledVersion
 	previousResolver := resolveUpdateTargetVersionFunc
 	previousManifest := fetchAttestationSubjectManifestFunc
+	previousExecutablePath := resolveUpdateExecutablePathFunc
 	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
 		return nil
 	}
@@ -415,11 +474,17 @@ func stubManualUpdateHooks(t *testing.T, updatedVersion string) func() {
 	fetchAttestationSubjectManifestFunc = func(ctx context.Context, tag string) (string, error) {
 		return "deadbeef  install.sh\n", nil
 	}
+	// Why: keep existing update tests off os.Executable so a Cellar-hosted test binary
+	// cannot trip the Homebrew guard and change their assertions.
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "/Users/someone/.local/bin/uloop", nil
+	}
 	return func() {
 		updateRunCommand = previousRunner
 		dispatcherReadInstalledVersion = previousReader
 		resolveUpdateTargetVersionFunc = previousResolver
 		fetchAttestationSubjectManifestFunc = previousManifest
+		resolveUpdateExecutablePathFunc = previousExecutablePath
 	}
 }
 

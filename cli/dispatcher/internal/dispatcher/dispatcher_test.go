@@ -420,6 +420,71 @@ func TestEnforceDispatcherFreshnessRequiresManualUpdateWhenSelfUpdateDisabled(t 
 	}
 }
 
+func TestEnforceDispatcherFreshnessRequiresBrewUpgradeWhenHomebrewManagedAndUpdateRequired(t *testing.T) {
+	// Verifies Homebrew-managed installs block required auto-update and point at brew upgrade.
+	previousResolver := resolveUpdateExecutablePathFunc
+	defer func() {
+		resolveUpdateExecutablePathFunc = previousResolver
+	}()
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "/opt/homebrew/Cellar/uloop/3.0.0/bin/uloop", nil
+	}
+	deps := defaultDispatcherRunDeps()
+	deps.runUpdate = func(context.Context) error {
+		t.Fatal("runUpdate must not run for Homebrew-managed required freshness")
+		return nil
+	}
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshnessWithDeps(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: "999.0.0"},
+		&stderr,
+		deps)
+
+	if !handled || code != 1 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	expectedNextAction := "Run `brew upgrade uloop` and retry the command."
+	if !bytes.Contains(stderr.Bytes(), []byte(expectedNextAction)) {
+		t.Fatalf("expected NextActions brew upgrade guidance in stderr, got: %s", stderr.String())
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte(clierrors.ErrorCodeCLIUpdateRequired)) {
+		t.Fatalf("freshness output mismatch: %s", stderr.String())
+	}
+}
+
+func TestEnforceDispatcherFreshnessSkipsOptionalUpdateWhenHomebrewManaged(t *testing.T) {
+	// Verifies Homebrew-managed installs skip optional auto-update without running the installer.
+	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
+	previousResolver := resolveUpdateExecutablePathFunc
+	defer func() {
+		resolveUpdateExecutablePathFunc = previousResolver
+	}()
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "/opt/homebrew/Cellar/uloop/3.0.0/bin/uloop", nil
+	}
+	deps := defaultDispatcherRunDeps()
+	deps.runUpdate = func(context.Context) error {
+		t.Fatal("runUpdate must not run for Homebrew-managed optional freshness")
+		return nil
+	}
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshnessWithDeps(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
+		&stderr,
+		deps)
+
+	if handled || code != 0 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no optional update output for Homebrew installs, got: %s", stderr.String())
+	}
+}
+
 func TestEnforceDispatcherFreshnessMarksFailedOptionalUpdateChecked(t *testing.T) {
 	// Verifies transient optional update failures are throttled until the next check interval.
 	cacheRoot := t.TempDir()
@@ -545,7 +610,9 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 		selfUpdateDisabled bool
 		hasSiblingRealCLI  bool
 		updateDue          bool
+		homebrewManaged    bool
 		expectedAction     dispatcherFreshnessAction
+		expectedReason     string
 	}{
 		{
 			name:           "no minimum",
@@ -559,6 +626,16 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 			selfUpdateDisabled: true,
 			updateDue:          true,
 			expectedAction:     dispatcherFreshnessManualUpdateRequired,
+			expectedReason:     dispatcherFreshnessReasonSelfUpdateDisabled,
+		},
+		{
+			name:            "required update homebrew managed",
+			minimumVersion:  "999.0.0",
+			currentVersion:  dispatcherVersion,
+			homebrewManaged: true,
+			updateDue:       true,
+			expectedAction:  dispatcherFreshnessManualUpdateRequired,
+			expectedReason:  dispatcherFreshnessReasonHomebrewManaged,
 		},
 		{
 			name:           "required update runs immediately",
@@ -573,6 +650,14 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 			hasSiblingRealCLI: true,
 			updateDue:         true,
 			expectedAction:    dispatcherFreshnessNoop,
+		},
+		{
+			name:            "optional homebrew skip",
+			minimumVersion:  dispatcherVersion,
+			currentVersion:  dispatcherVersion,
+			homebrewManaged: true,
+			updateDue:       true,
+			expectedAction:  dispatcherFreshnessNoop,
 		},
 		{
 			name:           "optional due",
@@ -597,6 +682,7 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 				SelfUpdateDisabled: tt.selfUpdateDisabled,
 				HasSiblingRealCLI:  tt.hasSiblingRealCLI,
 				UpdateDue:          tt.updateDue,
+				HomebrewManaged:    tt.homebrewManaged,
 			})
 
 			if plan.Action != tt.expectedAction {
@@ -605,6 +691,9 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 			if plan.MinimumVersion != strings.TrimSpace(tt.minimumVersion) {
 				t.Fatalf("minimum version mismatch: %s", plan.MinimumVersion)
 			}
+			if plan.Reason != tt.expectedReason {
+				t.Fatalf("reason mismatch: %q", plan.Reason)
+			}
 		})
 	}
 }
@@ -612,6 +701,7 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 func stubDispatcherUpdateHooks(t *testing.T, updatedVersion string) (dispatcherRunDeps, func()) {
 	t.Helper()
 	previousReader := dispatcherReadInstalledVersion
+	previousExecutablePath := resolveUpdateExecutablePathFunc
 	deps := defaultDispatcherRunDeps()
 	deps.runUpdate = func(context.Context) error {
 		return nil
@@ -619,8 +709,14 @@ func stubDispatcherUpdateHooks(t *testing.T, updatedVersion string) (dispatcherR
 	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
 		return updatedVersion, nil
 	}
+	// Why: keep freshness update tests off os.Executable so a Cellar-hosted binary cannot
+	// trip the Homebrew guard and hide a real auto-update regression.
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "/Users/someone/.local/bin/uloop", nil
+	}
 	return deps, func() {
 		dispatcherReadInstalledVersion = previousReader
+		resolveUpdateExecutablePathFunc = previousExecutablePath
 	}
 }
 

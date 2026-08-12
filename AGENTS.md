@@ -117,6 +117,12 @@ parsing, read `docs/windows-compatibility.md` (encoding, line endings, path sepa
 PowerShell validation). Add a regression test whenever a fix depends on encoding, line endings,
 or separator normalization — a passing macOS test alone is not enough for these cases.
 
+## Package Manager Distribution
+
+The Homebrew tap (`hatayama/homebrew-tap`) is updated by release automation —
+never edit the tap formula by hand. Channel policy, secrets, and the planned
+winget rollout live in `docs/package-manager-distribution.md`.
+
 ## Dead Code Scanner
 
 Before deleting apparently unreferenced C# code, or before adding comments explaining why an

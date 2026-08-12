@@ -27,6 +27,7 @@ jobs:
       should_publish: ${{ steps.release.outputs.publish }}
       should_release: ${{ steps.release.outputs.release }}
       dry_run: ${{ steps.release.outputs.dry_run }}
+      release_tag: ${{ steps.release.outputs.tag }}
     steps:
       - name: Checkout approved event commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -411,3 +412,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: scripts/sync-release-please-package-releases.sh
+
+      - name: Update Homebrew formula
+        if: needs.build.outputs.should_publish == 'true'
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: >-
+          go run ./cmd/update-homebrew-formula
+          --repo "${{ github.repository }}"
+          --tag "${{ needs.build.outputs.release_tag }}"
+          --tap-repo hatayama/homebrew-tap
