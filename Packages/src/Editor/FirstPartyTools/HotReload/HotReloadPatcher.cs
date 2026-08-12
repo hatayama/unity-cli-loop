@@ -275,9 +275,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // What: status / counter key from a resolved MethodBase (apply outcomes use the same
         // helper after Resolve so --status rows match Patched Methods[].Method).
-        // Why parameter FullNames (+ generic arity): MethodBase ledger entries distinguish
+        // Why parameter ToString (+ generic arity): MethodBase ledger entries distinguish
         // overloads, so a name-only key would merge counts and let Revert of one overload
-        // zero the other's counter.
+        // zero the other's counter. FullName embeds assembly Version/PublicKeyToken for
+        // constructed generics (List`1[[Int32, mscorlib, ...]]), which bloated labels.
         internal static string FormatMethodKey(MethodBase method)
         {
             Debug.Assert(method != null, "method must not be null.");
@@ -288,8 +289,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] parameterTypeFullNames = new string[parameters.Length];
             for (int index = 0; index < parameters.Length; index++)
             {
-                Type parameterType = parameters[index].ParameterType;
-                parameterTypeFullNames[index] = parameterType.FullName ?? parameterType.Name;
+                parameterTypeFullNames[index] = parameters[index].ParameterType.ToString();
             }
 
             int genericArity = 0;

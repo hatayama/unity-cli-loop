@@ -319,8 +319,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: FormatMethodKey includes parameter FullNames so overloads do not share a counter
-        /// key (name-only keys would merge counts across Compute(int) and Compute(string)).
+        /// What: FormatMethodKey includes parameter type strings so overloads do not share a
+        /// counter key (name-only keys would merge counts across Compute(int) and Compute(string)).
         /// </summary>
         [Test]
         public void FormatMethodKey_DistinguishesOverloadsByParameterTypes()
@@ -343,6 +343,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: constructed generic parameters use Type.ToString (List`1[System.Int32]), not
+        /// assembly-qualified FullName (FullName would embed Version/PublicKeyToken).
+        /// </summary>
+        [Test]
+        public void FormatMethodKey_ConstructedGenericParameter_OmitsAssemblyQualification()
+        {
+            MethodInfo take = AccessTools.Method(
+                typeof(HotReloadGenericKeyFixture),
+                nameof(HotReloadGenericKeyFixture.Take));
+            string key = HotReloadPatcher.FormatMethodKey(take);
+
+            Assert.That(key, Does.Contain("System.Collections.Generic.List`1[System.Int32]"));
+            Assert.That(key, Does.Contain("System.Collections.Generic.Dictionary`2[System.String,System.Int32]"));
+            Assert.That(key, Does.Not.Contain("Version="));
+            Assert.That(key, Does.Not.Contain("PublicKeyToken="));
+            Assert.That(key, Does.Not.Contain("mscorlib"));
+            Assert.That(key, Does.Not.Contain("[["));
+        }
+
+        /// <summary>
         /// What: worker-shaped FormatMethodKeyParts matches FormatMethodKey(MethodBase) so apply
         /// Methods[].Method and --status Active rows use the same label (including '()' and
         /// Cecil '/' → reflection '+' nested separators).
@@ -356,7 +376,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string fromParts = HotReloadPatcher.FormatMethodKeyParts(
                 typeof(HotReloadCoreFixture).FullName,
                 nameof(HotReloadCoreFixture.ReplaceableCompute),
-                new[] { typeof(int).FullName },
+                new[] { typeof(int).ToString() },
                 genericArity: 0);
 
             Assert.That(fromParts, Is.EqualTo(fromMethod));
@@ -441,6 +461,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 return 1;
             }
+        }
+    }
+
+    /// <summary>
+    /// Constructed-generic parameters used only to assert FormatMethodKey omits assembly quals.
+    /// </summary>
+    public sealed class HotReloadGenericKeyFixture
+    {
+        public void Take(
+            System.Collections.Generic.List<int> values,
+            System.Collections.Generic.Dictionary<string, int> byName)
+        {
         }
     }
 }

@@ -403,7 +403,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             string[] parameterTypeFullNames = entry.parameterTypeFullNames ?? Array.Empty<string>();
             // Pre-Resolve label: same shape as --status (params + nested '+' normalization).
-            // After Resolve, prefer FormatMethodKey(MethodBase) so reflection FullNames win.
+            // After Resolve, prefer FormatMethodKey(MethodBase) so reflection ToString() wins.
+            // Why genericArity 0: TransformWorkerEntryDto has no arity field; open generics are
+            // rare here, and Resolve replaces this label with FormatMethodKey(MethodBase).
             string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
                 entry.typeMetadataName,
                 entry.methodName,
@@ -860,6 +862,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadMethodOutcome> failedMethodOutcomes = new List<HotReloadMethodOutcome>();
             foreach (TransformWorkerEntryDto failedEntry in attribution.FailedEntries)
             {
+                // Why genericArity 0: TransformWorkerEntryDto has no arity field (see ApplyEntry).
                 string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
                     failedEntry.typeMetadataName,
                     failedEntry.methodName,
