@@ -129,7 +129,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear,
                 SuppressedByHotReload = snapshot.SuppressedByHotReload,
                 RetargetedToHotReloadPatch = snapshot.RetargetedToHotReloadPatch,
-                SuppressedByHotReloadReason = snapshot.SuppressedByHotReloadReason
+                SuppressedByHotReloadReason = snapshot.SuppressedByHotReloadReason,
+                ResolvedLine = snapshot.ResolvedLine,
+                ResolvedLineText = snapshot.ResolvedLineText ?? string.Empty
             };
         }
 
@@ -575,9 +577,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 snapshot = UloopPausePointRegistry.GetStatus(id);
             }
 
+            string resolvedLineText = PausePointLineTextReader.ReadResolvedLineText(parameters.File, resolvedLine);
+            UloopPausePointRegistry.SetResolvedLine(id, resolvedLine, resolvedLineText);
+
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
+            // Why re-read after SetResolvedLine: FromSnapshot above used the pre-write snapshot.
             response.ResolvedLine = resolvedLine;
-            response.ResolvedLineText = ReadResolvedLineText(parameters.File, resolvedLine);
+            response.ResolvedLineText = resolvedLineText;
             response.ResolvedMethod = resolvedMethod;
             response.SnapshotTiming = SourcePausePointConstants.PreLineSnapshotTimingNote;
             response.Warning = MergeWarnings(CreateEnableWarning(), patchResult.Warning);
@@ -640,16 +646,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     InstanceCount = instanceCount,
                     StatusBeforeClear = statusBeforeClear
                 });
-        }
-
-        // The resolved line can be rounded forward from the requested line (the Resolver picks
-        // the closest sequence point on or after it), so returning the actual source text lets
-        // the caller notice a mismatch immediately instead of assuming the requested line hit.
-        private static string ReadResolvedLineText(string requestedFile, int resolvedLine)
-        {
-            string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(requestedFile);
-            string absoluteFilePath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), normalizedFile);
-            return SourcePausePointSourceLineReader.ReadLineText(absoluteFilePath, resolvedLine);
         }
 
         // The derived id must use the originally requested file/line (not the resolved/rounded

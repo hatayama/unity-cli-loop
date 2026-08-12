@@ -224,6 +224,21 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         }
 
         /// <summary>
+        /// Stores the currently resolved source line for status / hot-reload retarget visibility.
+        /// Pass 0 / null to clear (unresolved). No-op when the id is unknown.
+        /// </summary>
+        public static void SetResolvedLine(string id, int resolvedLine, string resolvedLineText)
+        {
+            if (!Entries.TryGetValue(id, out UloopPausePointEntry entry))
+            {
+                return;
+            }
+
+            entry.ResolvedLine = resolvedLine;
+            entry.ResolvedLineText = resolvedLineText;
+        }
+
+        /// <summary>
         /// Extends a marker's capture window to at least minimumRemainingSeconds from now, so a
         /// slow multi-step CLI round trip (enable -&gt; seed state -&gt; await) does not let the marker
         /// expire before await-pause-point even starts observing it. Called once when the wait
