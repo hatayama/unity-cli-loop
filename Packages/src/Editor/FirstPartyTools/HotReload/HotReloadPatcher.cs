@@ -10,6 +10,8 @@ using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
+using ReflectionParameterInfo = System.Reflection.ParameterInfo;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -271,7 +273,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return labels;
         }
 
-        // What: status label shared by DescribeActivePatches and the IL-injected counter key.
+        // What: status / counter key from a resolved MethodBase (apply outcomes use the same
+        // helper after Resolve so --status rows match Patched Methods[].Method).
         // Why parameter FullNames (+ generic arity): MethodBase ledger entries distinguish
         // overloads, so a name-only key would merge counts and let Revert of one overload
         // zero the other's counter.
@@ -280,31 +283,74 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(method != null, "method must not be null.");
             Debug.Assert(method.DeclaringType != null, "Patched methods must have a declaring type.");
 
-            StringBuilder builder = new StringBuilder();
-            builder.Append(method.DeclaringType.FullName);
-            builder.Append('.');
-            builder.Append(method.Name);
+            // Why alias: ToolContracts.ParameterInfo also exists in this file's usings.
+            ReflectionParameterInfo[] parameters = method.GetParameters();
+            string[] parameterTypeFullNames = new string[parameters.Length];
+            for (int index = 0; index < parameters.Length; index++)
+            {
+                Type parameterType = parameters[index].ParameterType;
+                parameterTypeFullNames[index] = parameterType.FullName ?? parameterType.Name;
+            }
+
+            int genericArity = 0;
             if (method.IsGenericMethodDefinition || method.IsGenericMethod)
             {
+                genericArity = method.GetGenericArguments().Length;
+            }
+
+            return FormatMethodKeyParts(
+                method.DeclaringType.FullName,
+                method.Name,
+                parameterTypeFullNames,
+                genericArity);
+        }
+
+        // What: Method label from worker DTO fields (pre-Resolve failures) using the same shape
+        // as FormatMethodKey. Cecil nested separators ('/') are normalized to reflection ('+').
+        internal static string FormatMethodKeyParts(
+            string typeMetadataName,
+            string methodName,
+            string[] parameterTypeFullNames,
+            int genericArity)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(typeMetadataName), "typeMetadataName must not be null or empty.");
+            Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be null or empty.");
+            Debug.Assert(parameterTypeFullNames != null, "parameterTypeFullNames must not be null.");
+            Debug.Assert(genericArity >= 0, "genericArity must not be negative.");
+
+            StringBuilder builder = new StringBuilder();
+            builder.Append(NormalizeNestedTypeSeparators(typeMetadataName));
+            builder.Append('.');
+            builder.Append(methodName);
+            if (genericArity > 0)
+            {
                 builder.Append('`');
-                builder.Append(method.GetGenericArguments().Length);
+                builder.Append(genericArity);
             }
 
             builder.Append('(');
-            System.Reflection.ParameterInfo[] parameters = method.GetParameters();
-            for (int index = 0; index < parameters.Length; index++)
+            for (int index = 0; index < parameterTypeFullNames.Length; index++)
             {
                 if (index > 0)
                 {
                     builder.Append(',');
                 }
 
-                Type parameterType = parameters[index].ParameterType;
-                builder.Append(parameterType.FullName ?? parameterType.Name);
+                string parameterTypeFullName = parameterTypeFullNames[index];
+                Debug.Assert(
+                    !string.IsNullOrEmpty(parameterTypeFullName),
+                    "parameterTypeFullNames entries must not be null or empty.");
+                builder.Append(NormalizeNestedTypeSeparators(parameterTypeFullName));
             }
 
             builder.Append(')');
             return builder.ToString();
+        }
+
+        // Why: Cecil metadata names use '/' for nested types; Type.FullName uses '+'.
+        private static string NormalizeNestedTypeSeparators(string metadataName)
+        {
+            return metadataName.Replace('/', '+');
         }
 
         private static IEnumerable<CodeInstruction> ReplaceWithTransplantSourceTranspiler(

@@ -343,6 +343,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: worker-shaped FormatMethodKeyParts matches FormatMethodKey(MethodBase) so apply
+        /// Methods[].Method and --status Active rows use the same label (including '()' and
+        /// Cecil '/' → reflection '+' nested separators).
+        /// </summary>
+        [Test]
+        public void FormatMethodKeyParts_MatchesFormatMethodKey_IncludingNestedCecilSeparators()
+        {
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
+            string fromMethod = HotReloadPatcher.FormatMethodKey(original);
+            string fromParts = HotReloadPatcher.FormatMethodKeyParts(
+                typeof(HotReloadCoreFixture).FullName,
+                nameof(HotReloadCoreFixture.ReplaceableCompute),
+                new[] { typeof(int).FullName },
+                genericArity: 0);
+
+            Assert.That(fromParts, Is.EqualTo(fromMethod));
+            Assert.That(fromParts, Does.EndWith("(System.Int32)"));
+
+            MethodInfo nested = AccessTools.Method(
+                typeof(HotReloadNestedKeyFixture.Inner),
+                nameof(HotReloadNestedKeyFixture.Inner.Ping));
+            string nestedFromMethod = HotReloadPatcher.FormatMethodKey(nested);
+            string cecilStyleTypeName = typeof(HotReloadNestedKeyFixture.Inner).FullName.Replace('+', '/');
+            string nestedFromParts = HotReloadPatcher.FormatMethodKeyParts(
+                cecilStyleTypeName,
+                nameof(HotReloadNestedKeyFixture.Inner.Ping),
+                System.Array.Empty<string>(),
+                genericArity: 0);
+
+            Assert.That(nestedFromParts, Is.EqualTo(nestedFromMethod));
+            Assert.That(nestedFromParts, Does.Contain("+Inner.Ping()"));
+            Assert.That(nestedFromParts, Does.Not.Contain("/Inner"));
+        }
+
+        /// <summary>
         /// What: Revert(method) clears that method's invocation count (RevertAll is not required).
         /// </summary>
         [Test]
@@ -391,6 +427,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int Compute(string label)
         {
             return label == null ? 0 : label.Length;
+        }
+    }
+
+    /// <summary>
+    /// Nested type used only to assert Cecil '/' labels normalize to reflection '+'.
+    /// </summary>
+    public sealed class HotReloadNestedKeyFixture
+    {
+        public sealed class Inner
+        {
+            public int Ping()
+            {
+                return 1;
+            }
         }
     }
 }

@@ -401,7 +401,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> suppressedPausePointIds,
             List<string> retargetedPausePointIds)
         {
-            string methodLabel = entry.typeMetadataName + "." + entry.methodName;
+            string[] parameterTypeFullNames = entry.parameterTypeFullNames ?? Array.Empty<string>();
+            // Pre-Resolve label: same shape as --status (params + nested '+' normalization).
+            // After Resolve, prefer FormatMethodKey(MethodBase) so reflection FullNames win.
+            string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
+                entry.typeMetadataName,
+                entry.methodName,
+                parameterTypeFullNames,
+                genericArity: 0);
 
             // Only "delegation" selects the forwarding patch; null/empty/anything else is transplant.
             HotReloadPatchShape patchShape = entry.patchKind == HotReloadConstants.PatchKindDelegation
@@ -416,8 +423,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadMethodOutcome.Failed(methodLabel, bindFailureReason, filePath);
             }
 
-            string[] parameterTypeFullNames = entry.parameterTypeFullNames ?? Array.Empty<string>();
-
             HotReloadMethodMatchResult matchResult = HotReloadMethodMatcher.Resolve(
                 assemblyName,
                 entry.typeMetadataName,
@@ -427,6 +432,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return HotReloadMethodOutcome.Failed(methodLabel, matchResult.ErrorMessage, filePath);
             }
+
+            methodLabel = HotReloadPatcher.FormatMethodKey(matchResult.Method);
 
             Type shimType = FindShimType(shimAssembly, entry.shimTypeName);
             if (shimType == null)
@@ -853,7 +860,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadMethodOutcome> failedMethodOutcomes = new List<HotReloadMethodOutcome>();
             foreach (TransformWorkerEntryDto failedEntry in attribution.FailedEntries)
             {
-                string methodLabel = failedEntry.typeMetadataName + "." + failedEntry.methodName;
+                string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
+                    failedEntry.typeMetadataName,
+                    failedEntry.methodName,
+                    failedEntry.parameterTypeFullNames ?? Array.Empty<string>(),
+                    genericArity: 0);
                 List<string> entryErrorMessages = attribution.ErrorMessagesByEntry[failedEntry];
                 failedMethodOutcomes.Add(
                     HotReloadMethodOutcome.Failed(
