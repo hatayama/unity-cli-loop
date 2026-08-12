@@ -659,6 +659,14 @@ public static class TransformWorkerProgram
                 + methodDeclaration.TypeParameterList.Parameters.Count.ToString(CultureInfo.InvariantCulture);
         }
 
+        // Why explicit-interface qualifier: IA.Run() and IB.Run() must not share a key (same as
+        // BuildSyntaxPropertyKey). Property keys already include ExplicitInterfaceSpecifier.
+        if (methodDeclaration.ExplicitInterfaceSpecifier != null)
+        {
+            methodName = methodDeclaration.ExplicitInterfaceSpecifier.Name.NormalizeWhitespace().ToString()
+                + "." + methodName;
+        }
+
         return typeMetadataName + "::" + methodName + "("
             + string.Join(",", parameterKeys) + ")";
     }
@@ -715,13 +723,14 @@ public static class TransformWorkerProgram
         SyntaxNode current = node.Parent;
         while (current != null)
         {
+            // Why NormalizeWhitespace: trivia in nested namespace names must not invent distinct keys.
             if (current is NamespaceDeclarationSyntax namespaceDeclaration)
             {
-                parts.Add(namespaceDeclaration.Name.ToString());
+                parts.Add(namespaceDeclaration.Name.NormalizeWhitespace().ToString());
             }
             else if (current is FileScopedNamespaceDeclarationSyntax fileScopedNamespace)
             {
-                parts.Add(fileScopedNamespace.Name.ToString());
+                parts.Add(fileScopedNamespace.Name.NormalizeWhitespace().ToString());
             }
 
             current = current.Parent;

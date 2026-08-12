@@ -67,4 +67,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return x + 1;
         }
     }
+
+    internal interface IHotReloadKeyNormA
+    {
+        int Run();
+    }
+
+    internal interface IHotReloadKeyNormB
+    {
+        int Run();
+    }
+
+    /// <summary>
+    /// Why two explicit implementations: syntax keys must distinguish IA.Run vs IB.Run so baseline
+    /// comparison is not silently disabled by a colliding Identifier.Text-only key.
+    /// </summary>
+    internal class HotReloadExplicitInterfaceKeyFixture : IHotReloadKeyNormA, IHotReloadKeyNormB
+    {
+        int IHotReloadKeyNormA.Run()
+        {
+            return 1;
+        }
+
+        int IHotReloadKeyNormB.Run()
+        {
+            return 2;
+        }
+    }
 }

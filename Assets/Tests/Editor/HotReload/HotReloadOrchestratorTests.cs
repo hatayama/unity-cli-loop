@@ -1467,6 +1467,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 File.Exists(snapshotPath),
                 Is.True,
                 "Precondition: verified snapshot must exist to hide: " + snapshotPath);
+            // Why LoadVerifiedSnapshotSource (not File.Exists alone): a stale/checksum-invalid
+            // snapshot file already yields null, so hiding it would not change the precondition.
+            Assert.That(
+                HotReloadSourceBaseline.LoadVerifiedSnapshotSource(projectRelativePath, targetDllPath),
+                Is.Not.Null,
+                "Precondition: snapshot must be loadable before hide: " + projectRelativePath);
 
             string hiddenPath = snapshotPath + ".hidden-for-test";
             if (File.Exists(hiddenPath))

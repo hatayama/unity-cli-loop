@@ -740,6 +740,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Both F(int) and F<T>(int) must appear in unchangedMethods after arity normalization.");
         }
 
+        /// <summary>
+        /// What: after including ExplicitInterfaceSpecifier in syntax keys, IA.Run and IB.Run no
+        /// longer collide, so an identical self-snapshot treats both as unchanged.
+        /// </summary>
+        [Test]
+        public async Task Run_WithSelfSnapshotOnExplicitInterfaceMethods_TreatsBothUnchanged()
+        {
+            string sourcePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(sourcePath);
+            Assert.That(onDisk, Does.Contain("HotReloadExplicitInterfaceKeyFixture"));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveShapeFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.baselineDisabledByDuplicateKeys, Is.False);
+            Assert.That(
+                result.Output.entries,
+                Is.Empty,
+                "Explicit-interface methods must not disable baseline; got entries: "
+                + FormatEntryMethodNames(result.Output.entries));
+
+            int unchangedRunCount = 0;
+            Assert.That(result.Output.unchangedMethods, Is.Not.Null);
+            foreach (TransformWorkerUnchangedMethodDto unchanged in result.Output.unchangedMethods)
+            {
+                // Why EndsWith(".Run"): Roslyn reports explicit-interface methodSymbol.Name as
+                // "IHotReloadKeyNormA.Run" (not bare "Run").
+                bool isExplicitFixture =
+                    unchanged.typeMetadataName != null
+                    && unchanged.typeMetadataName.Contains(
+                        nameof(HotReloadExplicitInterfaceKeyFixture),
+                        StringComparison.Ordinal);
+                bool isRunName =
+                    unchanged.methodName != null
+                    && unchanged.methodName.EndsWith(".Run", StringComparison.Ordinal);
+                if (isExplicitFixture && isRunName)
+                {
+                    unchangedRunCount++;
+                }
+            }
+
+            Assert.That(
+                unchangedRunCount,
+                Is.EqualTo(2),
+                "Both IA.Run and IB.Run must appear in unchangedMethods after key qualification.");
+        }
+
         private static HashSet<string> CollectEntryKeys(TransformWorkerEntryDto[] entries)
         {
             HashSet<string> keys = new HashSet<string>();
