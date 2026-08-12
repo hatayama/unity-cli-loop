@@ -870,6 +870,92 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: with an identical snapshot, property getters with bodies are listed in
+        /// unchangedMethods as get_&lt;Name&gt; (Skipped-only accessors would leave them out).
+        /// </summary>
+        [Test]
+        public async Task Run_WithIdenticalSnapshotOnPropertyGetterFixture_ListsGettersUnchanged()
+        {
+            string sourcePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(sourcePath);
+            Assert.That(onDisk, Does.Contain(nameof(HotReloadPropertyGetterFixture)));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveShapeFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.unchangedMethods, Is.Not.Null);
+
+            HashSet<string> unchangedNames = new HashSet<string>();
+            foreach (TransformWorkerUnchangedMethodDto unchanged in result.Output.unchangedMethods)
+            {
+                if (unchanged.typeMetadataName != null
+                    && unchanged.typeMetadataName.Contains(nameof(HotReloadPropertyGetterFixture)))
+                {
+                    unchangedNames.Add(unchanged.methodName);
+                }
+            }
+
+            Assert.That(
+                unchangedNames,
+                Does.Contain("get_HeightAmplitude"),
+                "Unedited expression-bodied getter must appear in unchangedMethods; got: "
+                + string.Join(", ", unchangedNames));
+            Assert.That(
+                unchangedNames,
+                Does.Contain("get_Score"),
+                "Unedited block getter must appear in unchangedMethods; got: "
+                + string.Join(", ", unchangedNames));
+        }
+
+        /// <summary>
+        /// What: when only a property getter body differs from the snapshot, the worker emits a
+        /// get_&lt;Name&gt; entry (Skipped for accessors would leave entries empty for that edit).
+        /// </summary>
+        [Test]
+        public async Task Run_WithSnapshotDifferingOnlyInGetter_EmitsGetAccessorEntry()
+        {
+            string sourcePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(sourcePath);
+            string snapshotSource = onDisk.Replace(
+                "public static float HeightAmplitude => 5f;",
+                "public static float HeightAmplitude => 6f;",
+                StringComparison.Ordinal);
+            Assert.That(snapshotSource, Is.Not.EqualTo(onDisk), "Precondition: snapshot must differ.");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveShapeFixtureProjectRelativePath(),
+                snapshotSource: snapshotSource);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.entries, Is.Not.Null);
+
+            bool foundGetter = false;
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == "get_HeightAmplitude")
+                {
+                    foundGetter = true;
+                    Assert.That(
+                        entry.parameterTypeFullNames == null
+                        || entry.parameterTypeFullNames.Length == 0,
+                        "Getter entries must have zero parameters.");
+                }
+            }
+
+            Assert.That(
+                foundGetter,
+                Is.True,
+                "Edited get_HeightAmplitude must appear in entries; got: "
+                + FormatEntryMethodNames(result.Output.entries)
+                + "; skipped="
+                + FormatSkippedMethodNames(result.Output.skipped));
+        }
+
+        /// <summary>
         /// What: patching Awake itself emits the direct one-shot lifecycle note.
         /// </summary>
         [Test]
@@ -1079,6 +1165,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             foreach (TransformWorkerEntryDto entry in entries)
             {
                 names.Add(entry.methodName);
+            }
+
+            return string.Join(", ", names);
+        }
+
+        private static string FormatSkippedMethodNames(TransformWorkerSkippedDto[] skipped)
+        {
+            if (skipped == null || skipped.Length == 0)
+            {
+                return "(none)";
+            }
+
+            List<string> names = new List<string>(skipped.Length);
+            foreach (TransformWorkerSkippedDto entry in skipped)
+            {
+                names.Add(entry.method);
             }
 
             return string.Join(", ", names);
