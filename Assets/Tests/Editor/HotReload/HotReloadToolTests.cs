@@ -331,29 +331,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: BuildApplyResponse copies lifecycleNote onto Methods and appends it to Message.
+        /// What: BuildApplyResponse keeps LifecycleNote on Methods and aggregates a count into
+        /// Message instead of concatenating every note (two notes must not paste both paragraphs).
         /// </summary>
         [Test]
-        public void BuildApplyResponse_WithLifecycleNote_ExposesNoteOnMethodsAndMessage()
+        public void BuildApplyResponse_WithLifecycleNotes_ExposesPerMethodAndAggregatesMessage()
         {
-            const string note =
-                "BuildPlayer is only called from Awake (one-shot lifecycle methods); "
-                + "the patched body may not run again for objects that are already initialized.";
+            const string noteA =
+                "Awake is a one-shot lifecycle method; objects that already ran it will not run the "
+                + "patched body. It takes effect only for newly created objects.";
+            const string noteB =
+                "Start is a one-shot lifecycle method; objects that already ran it will not run the "
+                + "patched body. It takes effect only for newly created objects.";
             HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
                 new List<HotReloadMethodOutcome>
                 {
-                    HotReloadMethodOutcome.Patched("Type.BuildPlayer", "Assets/A.cs", note)
+                    HotReloadMethodOutcome.Patched("Type.Awake", "Assets/A.cs", noteA),
+                    HotReloadMethodOutcome.Patched("Type.Start", "Assets/A.cs", noteB)
                 },
                 new List<string>(),
-                patchedTotal: 1,
-                activePatchTotal: 1);
+                patchedTotal: 2,
+                activePatchTotal: 2);
 
             HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
 
-            Assert.That(response.Methods.Count, Is.EqualTo(1));
-            Assert.That(response.Methods[0].LifecycleNote, Is.EqualTo(note));
-            Assert.That(response.Methods[0].Kind, Is.EqualTo("Patched"));
-            Assert.That(response.Message, Does.Contain(note));
+            Assert.That(response.Methods.Count, Is.EqualTo(2));
+            Assert.That(response.Methods[0].LifecycleNote, Is.EqualTo(noteA));
+            Assert.That(response.Methods[1].LifecycleNote, Is.EqualTo(noteB));
+            Assert.That(
+                response.Message,
+                Does.Contain("2 patched method(s) have one-shot lifecycle notes"));
+            Assert.That(response.Message, Does.Contain("Methods[].LifecycleNote"));
+            Assert.That(response.Message, Does.Not.Contain(noteA));
+            Assert.That(response.Message, Does.Not.Contain(noteB));
         }
 
         /// <summary>

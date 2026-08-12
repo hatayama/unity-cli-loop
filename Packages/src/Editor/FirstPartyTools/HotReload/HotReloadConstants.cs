@@ -123,24 +123,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string RetargetedPausePointIdDetailFormat =
             "{0} (now line {1}: {2})";
 
-        // Keep in sync with TransformWorker LifecycleNotes (worker cannot reference this type).
-        public static readonly string[] OneShotLifecycleMethodNames =
-        {
-            "Awake",
-            "Start",
-            "OnEnable",
-            "OnDisable",
-            "OnDestroy"
-        };
-
-        // Format: method name.
-        public const string DirectLifecycleNoteFormat =
-            "{0} is a one-shot lifecycle method; objects that already ran it will not run the "
-            + "patched body. It takes effect only for newly created objects.";
-
-        // Format: method name, comma-separated caller names.
-        public const string IndirectLifecycleNoteFormat =
-            "Within this file, {0} is only called from {1} (one-shot lifecycle methods); the "
-            + "patched body may not run again for objects that are already initialized.";
+        // Format: count of Methods entries that carry a LifecycleNote.
+        public const string LifecycleNotesAggregatedMessageFormat =
+            "{0} patched method(s) have one-shot lifecycle notes; see Methods[].LifecycleNote.";
     }
 }

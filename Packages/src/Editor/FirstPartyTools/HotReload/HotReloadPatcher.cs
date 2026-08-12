@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Text;
 
 using HarmonyLib;
 
@@ -271,11 +272,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // What: status label shared by DescribeActivePatches and the IL-injected counter key.
+        // Why parameter FullNames (+ generic arity): MethodBase ledger entries distinguish
+        // overloads, so a name-only key would merge counts and let Revert of one overload
+        // zero the other's counter.
         internal static string FormatMethodKey(MethodBase method)
         {
             Debug.Assert(method != null, "method must not be null.");
             Debug.Assert(method.DeclaringType != null, "Patched methods must have a declaring type.");
-            return method.DeclaringType.FullName + "." + method.Name;
+
+            StringBuilder builder = new StringBuilder();
+            builder.Append(method.DeclaringType.FullName);
+            builder.Append('.');
+            builder.Append(method.Name);
+            if (method.IsGenericMethodDefinition || method.IsGenericMethod)
+            {
+                builder.Append('`');
+                builder.Append(method.GetGenericArguments().Length);
+            }
+
+            builder.Append('(');
+            System.Reflection.ParameterInfo[] parameters = method.GetParameters();
+            for (int index = 0; index < parameters.Length; index++)
+            {
+                if (index > 0)
+                {
+                    builder.Append(',');
+                }
+
+                Type parameterType = parameters[index].ParameterType;
+                builder.Append(parameterType.FullName ?? parameterType.Name);
+            }
+
+            builder.Append(')');
+            return builder.ToString();
         }
 
         private static IEnumerable<CodeInstruction> ReplaceWithTransplantSourceTranspiler(

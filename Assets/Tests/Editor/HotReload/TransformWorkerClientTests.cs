@@ -791,61 +791,82 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a method only called from Awake gets an indirect lifecycleNote; the same method
-        /// also called from Update does not (removing ComputeLifecycleNote would leave both null).
+        /// What: private void Start on MonoBehaviour gets a direct lifecycleNote; POCO Start and
+        /// public/parameterized Start on MonoBehaviour do not (name-only notes would flag all).
         /// </summary>
         [Test]
-        public async Task Run_WithAwakeOnlyCallee_EmitsIndirectLifecycleNote_UpdateCallerDoesNot()
+        public async Task Run_WithStartLifecycleGates_EmitsNoteOnlyForPrivateVoidMonoBehaviour()
         {
-            string awakeOnlySource =
+            string monoPrivateSource =
                 "using UnityEngine;\n"
-                + "public class HotReloadLifecycleAwakeOnlyFixture : MonoBehaviour\n"
+                + "public class HotReloadLifecycleMonoPrivateStartFixture : MonoBehaviour\n"
                 + "{\n"
-                + "    private void Awake()\n"
-                + "    {\n"
-                + "        BuildPlayer();\n"
-                + "    }\n"
-                + "\n"
-                + "    private void BuildPlayer()\n"
+                + "    private void Start()\n"
                 + "    {\n"
                 + "        int x = 1;\n"
                 + "        x += 1;\n"
                 + "    }\n"
                 + "}\n";
-            string updateAlsoSource =
-                "using UnityEngine;\n"
-                + "public class HotReloadLifecycleUpdateAlsoFixture : MonoBehaviour\n"
+            string pocoSource =
+                "public class HotReloadLifecyclePocoStartFixture\n"
                 + "{\n"
-                + "    private void Awake()\n"
-                + "    {\n"
-                + "        BuildPlayer();\n"
-                + "    }\n"
-                + "\n"
-                + "    private void Update()\n"
-                + "    {\n"
-                + "        BuildPlayer();\n"
-                + "    }\n"
-                + "\n"
-                + "    private void BuildPlayer()\n"
+                + "    private void Start()\n"
                 + "    {\n"
                 + "        int x = 1;\n"
                 + "        x += 1;\n"
                 + "    }\n"
                 + "}\n";
+            string monoPublicSource =
+                "using UnityEngine;\n"
+                + "public class HotReloadLifecycleMonoPublicStartFixture : MonoBehaviour\n"
+                + "{\n"
+                + "    public void Start()\n"
+                + "    {\n"
+                + "        int x = 1;\n"
+                + "        x += 1;\n"
+                + "    }\n"
+                + "}\n";
+            string monoParameterizedSource =
+                "using UnityEngine;\n"
+                + "public class HotReloadLifecycleMonoParamStartFixture : MonoBehaviour\n"
+                + "{\n"
+                + "    private void Start(int delay)\n"
+                + "    {\n"
+                + "        int x = delay;\n"
+                + "        x += 1;\n"
+                + "    }\n"
+                + "}\n";
 
-            TransformWorkerEntryDto awakeOnlyEntry =
-                await RunWorkerAndFindEntryAsync(awakeOnlySource, "LifecycleAwakeOnly.cs", "BuildPlayer");
-            Assert.That(awakeOnlyEntry.lifecycleNote, Is.Not.Null.And.Not.Empty);
-            Assert.That(awakeOnlyEntry.lifecycleNote, Does.Contain("BuildPlayer"));
-            Assert.That(awakeOnlyEntry.lifecycleNote, Does.Contain("Awake"));
-            Assert.That(awakeOnlyEntry.lifecycleNote, Does.Contain("one-shot lifecycle"));
-
-            TransformWorkerEntryDto updateAlsoEntry =
-                await RunWorkerAndFindEntryAsync(updateAlsoSource, "LifecycleUpdateAlso.cs", "BuildPlayer");
+            TransformWorkerEntryDto monoPrivateEntry =
+                await RunWorkerAndFindEntryAsync(
+                    monoPrivateSource, "LifecycleMonoPrivateStart.cs", "Start");
+            Assert.That(monoPrivateEntry.lifecycleNote, Is.Not.Null.And.Not.Empty);
             Assert.That(
-                updateAlsoEntry.lifecycleNote,
+                monoPrivateEntry.lifecycleNote,
+                Does.Contain("Start is a one-shot lifecycle method"));
+
+            TransformWorkerEntryDto pocoEntry =
+                await RunWorkerAndFindEntryAsync(pocoSource, "LifecyclePocoStart.cs", "Start");
+            Assert.That(
+                pocoEntry.lifecycleNote,
                 Is.Null.Or.Empty,
-                "A method also called from Update must not get a lifecycle note.");
+                "POCO Start must not get a lifecycle note.");
+
+            TransformWorkerEntryDto monoPublicEntry =
+                await RunWorkerAndFindEntryAsync(
+                    monoPublicSource, "LifecycleMonoPublicStart.cs", "Start");
+            Assert.That(
+                monoPublicEntry.lifecycleNote,
+                Is.Null.Or.Empty,
+                "public void Start on MonoBehaviour must not get a lifecycle note.");
+
+            TransformWorkerEntryDto monoParameterizedEntry =
+                await RunWorkerAndFindEntryAsync(
+                    monoParameterizedSource, "LifecycleMonoParamStart.cs", "Start");
+            Assert.That(
+                monoParameterizedEntry.lifecycleNote,
+                Is.Null.Or.Empty,
+                "private void Start(int) must not get a lifecycle note.");
         }
 
         /// <summary>

@@ -317,6 +317,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(100));
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(1L));
         }
+
+        /// <summary>
+        /// What: FormatMethodKey includes parameter FullNames so overloads do not share a counter
+        /// key (name-only keys would merge counts across Compute(int) and Compute(string)).
+        /// </summary>
+        [Test]
+        public void FormatMethodKey_DistinguishesOverloadsByParameterTypes()
+        {
+            MethodInfo intOverload = AccessTools.Method(
+                typeof(HotReloadOverloadKeyFixture),
+                nameof(HotReloadOverloadKeyFixture.Compute),
+                new[] { typeof(int) });
+            MethodInfo stringOverload = AccessTools.Method(
+                typeof(HotReloadOverloadKeyFixture),
+                nameof(HotReloadOverloadKeyFixture.Compute),
+                new[] { typeof(string) });
+
+            string intKey = HotReloadPatcher.FormatMethodKey(intOverload);
+            string stringKey = HotReloadPatcher.FormatMethodKey(stringOverload);
+
+            Assert.That(intKey, Is.Not.EqualTo(stringKey));
+            Assert.That(intKey, Does.Contain("System.Int32"));
+            Assert.That(stringKey, Does.Contain("System.String"));
+        }
+
+        /// <summary>
+        /// What: Revert(method) clears that method's invocation count (RevertAll is not required).
+        /// </summary>
+        [Test]
+        public void Revert_ClearsInvocationCountForThatMethod()
+        {
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
+            MethodInfo shim = AccessTools.Method(
+                typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+            string methodKey = HotReloadPatcher.FormatMethodKey(original);
+
+            HotReloadCoreFixture fixture = new HotReloadCoreFixture();
+            Assert.That(
+                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant).Success,
+                Is.True);
+            Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(1L));
+
+            Assert.That(HotReloadPatcher.Revert(original), Is.True);
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(0L));
+            Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(-5));
+        }
     }
 
     /// <summary>
@@ -327,6 +375,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int Compute(int delta)
         {
             return delta;
+        }
+    }
+
+    /// <summary>
+    /// Overload pair used only to assert FormatMethodKey distinguishes parameter types.
+    /// </summary>
+    public sealed class HotReloadOverloadKeyFixture
+    {
+        public int Compute(int delta)
+        {
+            return delta;
+        }
+
+        public int Compute(string label)
+        {
+            return label == null ? 0 : label.Length;
         }
     }
 }

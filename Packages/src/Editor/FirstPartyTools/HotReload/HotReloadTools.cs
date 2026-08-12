@@ -328,19 +328,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message += " " + result.UnchangedTotal + " unchanged methods were left untouched.";
             }
 
-            List<string> lifecycleNotes = new List<string>();
+            int lifecycleNoteCount = 0;
             for (int index = 0; index < result.Methods.Count; index++)
             {
-                string note = result.Methods[index].LifecycleNote;
-                if (!string.IsNullOrEmpty(note))
+                if (!string.IsNullOrEmpty(result.Methods[index].LifecycleNote))
                 {
-                    lifecycleNotes.Add(note);
+                    lifecycleNoteCount++;
                 }
             }
 
-            if (lifecycleNotes.Count > 0)
+            if (lifecycleNoteCount > 0)
             {
-                message += " " + string.Join(" ", lifecycleNotes);
+                // Why aggregate: per-method text already lives on Methods[].LifecycleNote;
+                // dumping every note into Message repeats nearly identical paragraphs.
+                message += " " + string.Format(
+                    HotReloadConstants.LifecycleNotesAggregatedMessageFormat,
+                    lifecycleNoteCount);
             }
 
             return message;

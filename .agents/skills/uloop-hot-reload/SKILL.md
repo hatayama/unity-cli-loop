@@ -184,7 +184,7 @@ because its line no longer resolves in any live body.
 Returns JSON with:
 
 - `Success` (boolean): `false` on parameter validation failure or when any method outcome is `Failed`. `Skipped` outcomes alone never force `false`
-- `Methods` (array): Per-method `{ Kind, Method, Reason, FilePath }` where `Kind` is `Patched`, `Skipped`, or `Failed` on apply runs, or `Active` on `--status` runs; empty on `--revert-all` runs
+- `Methods` (array): Per-method `{ Kind, Method, Reason, FilePath, InvocationCount, LifecycleNote }` where `Kind` is `Patched`, `Skipped`, or `Failed` on apply runs, or `Active` on `--status` runs; empty on `--revert-all` runs. `InvocationCount` is meaningful on `Active` rows (calls since the current patch was applied); it is `0` on apply/revert outcomes. `LifecycleNote` is set when a patched method is a Unity one-shot lifecycle message (`private void Awake`/`Start`/`OnEnable`/`OnDisable`/`OnDestroy` on a `MonoBehaviour`); empty otherwise — it does not change `Kind`
 - `Warnings` (array): Non-fatal notes — one aggregated line listing the patched methods whose pre-patch bodies were small enough (or marked `[AggressiveInlining]`) to have been JIT-inlined into existing callers (the change may not show at those call sites), the pause-point interaction above, and the const drift, outside-body drift, and missing-baseline entries described in "Scope and limits"
 - `PatchedTotal` (number): Methods patched in this run
 - `UnchangedTotal` (number): Methods left untouched because their bodies match the source baseline from the last compile; `0` when no baseline was available
