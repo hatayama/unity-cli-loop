@@ -137,7 +137,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadTransplantControlFlowTests), shimName);
 
             HotReloadPatchResult result = HotReloadPatcher.Apply(
-                original, shim, HotReloadPatchShape.Transplant);
+                original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.True, result.ErrorMessage);
 
             return OriginalToCenter(new Vector3Int(1, 2, 3));
@@ -219,7 +219,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadTransplantControlFlowTests), nameof(ShimToCenterThrowInTry));
 
             HotReloadPatchResult result = HotReloadPatcher.Apply(
-                original, shim, HotReloadPatchShape.Transplant);
+                original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs");
             Assert.That(result.Success, Is.True, result.ErrorMessage);
 
             Assert.Throws<InvalidOperationException>(

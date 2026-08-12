@@ -1035,6 +1035,49 @@ public static class TransformWorkerProgram
             return visited.WithAccessorList(
                 SyntaxFactory.AccessorList(SyntaxFactory.List(accessors)));
         }
+
+        // Why strip const initializers: const drift has its own warning with both values;
+        // leaving EqualsValueClause here would also trip the generic outside-body warning.
+        public override SyntaxNode VisitFieldDeclaration(FieldDeclarationSyntax node)
+        {
+            FieldDeclarationSyntax visited = (FieldDeclarationSyntax)base.VisitFieldDeclaration(node);
+            bool isConst = false;
+            foreach (SyntaxToken modifier in visited.Modifiers)
+            {
+                if (modifier.IsKind(SyntaxKind.ConstKeyword))
+                {
+                    isConst = true;
+                    break;
+                }
+            }
+
+            if (!isConst)
+            {
+                return visited;
+            }
+
+            List<VariableDeclaratorSyntax> declarators = new List<VariableDeclaratorSyntax>();
+            foreach (VariableDeclaratorSyntax declarator in visited.Declaration.Variables)
+            {
+                declarators.Add(declarator.WithInitializer(null));
+            }
+
+            return visited.WithDeclaration(
+                visited.Declaration.WithVariables(SyntaxFactory.SeparatedList(declarators)));
+        }
+
+        // Why strip enum member values: enum constants use the same dedicated const-drift path.
+        public override SyntaxNode VisitEnumMemberDeclaration(EnumMemberDeclarationSyntax node)
+        {
+            EnumMemberDeclarationSyntax visited =
+                (EnumMemberDeclarationSyntax)base.VisitEnumMemberDeclaration(node);
+            if (visited.EqualsValue == null)
+            {
+                return visited;
+            }
+
+            return visited.WithEqualsValue(null);
+        }
     }
 
     // What: reports each property/indexer accessor that has an explicit body as Skipped.

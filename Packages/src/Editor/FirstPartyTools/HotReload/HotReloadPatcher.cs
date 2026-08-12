@@ -44,6 +44,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static readonly Dictionary<MethodBase, MethodInfo> ShimByMethod =
             new Dictionary<MethodBase, MethodInfo>();
 
+        // Parallel to ShimByMethod: project-relative (or test) path of the source that was applied.
+        private static readonly Dictionary<MethodBase, string> FilePathByMethod =
+            new Dictionary<MethodBase, string>();
+
         // Transplant LocalBuilders (shim slot order) from the latest rebuild of each original.
         private static readonly Dictionary<MethodBase, IReadOnlyList<LocalBuilder>> TransplantLocalsByMethod =
             new Dictionary<MethodBase, IReadOnlyList<LocalBuilder>>();
@@ -95,7 +99,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static HotReloadPatchResult Apply(
             MethodBase method,
             MethodInfo shimMethodInfo,
-            HotReloadPatchShape patchShape)
+            HotReloadPatchShape patchShape,
+            string filePath)
         {
             if (method == null)
             {
@@ -125,6 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Do not RemoveMethod from the shim registry here: ApplyEntry already registered
                 // this method into the new generation before calling Apply.
                 ShimByMethod.Remove(method);
+                FilePathByMethod.Remove(method);
                 TransplantLocalsByMethod.Remove(method);
                 HotReloadInvocationRegistry.Remove(FormatMethodKey(method));
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
@@ -154,6 +160,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         priority = Priority.First
                     });
                 ShimByMethod[method] = shimMethodInfo;
+                FilePathByMethod[method] = filePath ?? string.Empty;
                 HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, true);
             }
             catch (Exception exception)
@@ -167,6 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why Remove before Unpatch: Invoke(true) may have written ShimByMethod before
                 // a later failure; rebuild must not see an active shim (same as re-apply path).
                 ShimByMethod.Remove(method);
+                FilePathByMethod.Remove(method);
                 HotReloadInvocationRegistry.Remove(FormatMethodKey(method));
                 // User-approved exception to the no-try-catch policy: Harmony emit/JIT
                 // failures cannot be pre-validated (the IL shape is only known inside
@@ -216,6 +224,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // so GetActiveShimForMethod / GetShimLookupForFile agree during rebuild.
             List<MethodBase> revertedMethods = new List<MethodBase>(ShimByMethod.Keys);
             ShimByMethod.Clear();
+            FilePathByMethod.Clear();
             HotReloadShimRegistry.Clear();
             TransplantLocalsByMethod.Clear();
             HotReloadInvocationRegistry.Clear();
@@ -245,6 +254,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // pause-point guard sees GetActiveShimForMethod == null so surviving markers are
             // re-instrumented into the restored original IL. Registry removal stays in the same
             // pre-Unpatch window so lookup and ledger never disagree mid-rebuild.
+            FilePathByMethod.Remove(method);
             HotReloadShimRegistry.RemoveMethod(method);
             TransplantLocalsByMethod.Remove(method);
             HotReloadInvocationRegistry.Remove(FormatMethodKey(method));
@@ -259,19 +269,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static int ActivePatchCount => ShimByMethod.Count;
 
         /// <summary>
-        /// Returns a sorted list of labels for every method currently recorded in the
-        /// patch ledger, for status reporting without applying or reverting patches.
+        /// Returns a sorted list of active patches (method key + source file path) for status
+        /// reporting without applying or reverting patches.
         /// </summary>
-        public static IReadOnlyList<string> DescribeActivePatches()
+        public static IReadOnlyList<HotReloadActivePatchInfo> DescribeActivePatches()
         {
-            List<string> labels = new List<string>(ShimByMethod.Count);
-            foreach (MethodBase method in ShimByMethod.Keys)
+            List<HotReloadActivePatchInfo> patches =
+                new List<HotReloadActivePatchInfo>(ShimByMethod.Count);
+            foreach (KeyValuePair<MethodBase, MethodInfo> pair in ShimByMethod)
             {
-                labels.Add(FormatMethodKey(method));
+                string methodKey = FormatMethodKey(pair.Key);
+                string filePath = string.Empty;
+                if (FilePathByMethod.TryGetValue(pair.Key, out string recordedPath))
+                {
+                    filePath = recordedPath;
+                }
+
+                patches.Add(new HotReloadActivePatchInfo(methodKey, filePath));
             }
 
-            labels.Sort(StringComparer.Ordinal);
-            return labels;
+            patches.Sort(
+                (left, right) => string.CompareOrdinal(left.MethodKey, right.MethodKey));
+            return patches;
         }
 
         // What: status / counter key from a resolved MethodBase (apply outcomes use the same

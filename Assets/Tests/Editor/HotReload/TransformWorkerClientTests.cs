@@ -713,6 +713,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: editing only a const value emits the dedicated const-drift warning and does not
+        /// also emit the generic outside-method-body warning.
+        /// </summary>
+        [Test]
+        public async Task Run_WithConstValueOnlyEdit_EmitsConstDriftWithoutOutsideBodyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            string editedSource = onDisk.Replace(
+                "private const int TuningConst = 3;",
+                "private const int TuningConst = 4;",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: const value must differ.");
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, "ConstOnlyDriftWarning.cs");
+            File.WriteAllText(sourcePath, editedSource);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveE2EFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.declarationDriftWarnings, Is.Not.Null);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.Some.Contain("TuningConst").And.Contain("is 4 in the edited source but 3"),
+                "Const-only edits must keep the dedicated const-drift warning.\n"
+                + string.Join("\n", result.Output.declarationDriftWarnings));
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "Const-only edits must not also emit the generic outside-body warning.");
+        }
+
+        /// <summary>
+        /// What: a non-const field initializer change still emits the generic outside-method-body
+        /// warning (const stripping must not hide ordinary field initializer drift).
+        /// </summary>
+        [Test]
+        public async Task Run_WithNonConstFieldInitializerEdit_StillEmitsOutsideBodyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            string editedSource = onDisk.Replace(
+                "private int _secret = 10;",
+                "private int _secret = 12;",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: field initializer must differ.");
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, "NonConstFieldInitializerDrift.cs");
+            File.WriteAllText(sourcePath, editedSource);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveE2EFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.declarationDriftWarnings, Is.Not.Null);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.Some.Contain("Edits outside method bodies"),
+                "Non-const field initializer edits must still emit the outside-body warning.");
+        }
+
+        /// <summary>
         /// What: a snapshot that duplicates a method key falls back to no-baseline behavior
         /// (same entries as a null snapshot, empty unchangedMethods) and sets
         /// baselineDisabledByDuplicateKeys so the orchestrator can warn.

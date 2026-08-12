@@ -489,7 +489,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     patchShape == HotReloadPatchShape.Delegation,
                     entry.sourceStartLine,
                     entry.sourceEndLine));
-            HotReloadPatchResult patchResult = HotReloadPatcher.Apply(matchResult.Method, shimMethod, patchShape);
+            HotReloadPatchResult patchResult = HotReloadPatcher.Apply(
+                matchResult.Method,
+                shimMethod,
+                patchShape,
+                projectRelativePath);
             if (!patchResult.Success)
             {
                 HotReloadShimRegistry.RemoveMethod(matchResult.Method);
