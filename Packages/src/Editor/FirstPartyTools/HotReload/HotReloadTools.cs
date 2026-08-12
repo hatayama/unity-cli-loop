@@ -192,6 +192,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             List<string> warnings = new List<string>(result.Warnings);
             AppendRetargetLineDriftWarnings(warnings);
+            AppendExpiredNotRetargetedWarnings(warnings);
 
             if (result.RetargetedPausePointIds != null && result.RetargetedPausePointIds.Count > 0)
             {
@@ -213,14 +214,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings.Add(
                     "Armed pause points could not be re-targeted and will not fire until the patch "
                     + $"is reverted or compiled for real: {ids}");
-            }
-
-            if (result.ExpiredPausePointIds != null && result.ExpiredPausePointIds.Count > 0)
-            {
-                warnings.Add(
-                    string.Format(
-                        HotReloadConstants.ExpiredPausePointsNotRetargetedMessageFormat,
-                        string.Join(", ", result.ExpiredPausePointIds)));
             }
 
             return new HotReloadResponse
@@ -255,6 +248,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         oldText,
                         newText));
             }
+        }
+
+        // What: drains expired-not-retargeted ids recorded during the latest patch transition.
+        private static void AppendExpiredNotRetargetedWarnings(List<string> warnings)
+        {
+            IReadOnlyList<string> expiredIds =
+                HotReloadPausePointCoordination.ConsumeExpiredNotRetargetedMarkerIds?.Invoke();
+            if (expiredIds == null || expiredIds.Count == 0)
+            {
+                return;
+            }
+
+            warnings.Add(
+                string.Format(
+                    HotReloadConstants.ExpiredPausePointsNotRetargetedMessageFormat,
+                    string.Join(", ", expiredIds)));
         }
 
         // What: "{id} (now line {N}: {text})" from the registry values written on retarget/enable.

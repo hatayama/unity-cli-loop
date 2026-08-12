@@ -43,7 +43,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> warnings = new List<string>();
             List<string> suppressedPausePointIds = new List<string>();
             List<string> retargetedPausePointIds = new List<string>();
-            List<string> expiredPausePointIds = new List<string>();
             List<string> inlineRiskMethodLabels = new List<string>();
             int patchedTotal = 0;
             int unchangedTotal = 0;
@@ -70,7 +69,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings.AddRange(fileResult.Warnings);
                 AppendDistinct(suppressedPausePointIds, fileResult.SuppressedPausePointIds);
                 AppendDistinct(retargetedPausePointIds, fileResult.RetargetedPausePointIds);
-                AppendDistinct(expiredPausePointIds, fileResult.ExpiredPausePointIds);
                 AppendDistinct(inlineRiskMethodLabels, fileResult.InlineRiskMethodLabels);
                 patchedTotal += fileResult.PatchedCount;
                 unchangedTotal += fileResult.UnchangedMethodCount;
@@ -93,8 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadPatcher.ActivePatchCount,
                 suppressedPausePointIds,
                 unchangedTotal,
-                retargetedPausePointIds,
-                expiredPausePointIds);
+                retargetedPausePointIds);
         }
 
         private static async Task<HotReloadFileProcessResult> ProcessFileAsync(
@@ -106,7 +103,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> warnings = new List<string>();
             List<string> suppressedPausePointIds = new List<string>();
             List<string> retargetedPausePointIds = new List<string>();
-            List<string> expiredPausePointIds = new List<string>();
 
             // CompilationPipeline / Application.dataPath require the Unity main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -310,8 +306,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         suppressedPausePointIds,
                         new List<string>(),
                         unchangedMethodCount,
-                        retargetedPausePointIds,
-                        expiredPausePointIds);
+                        retargetedPausePointIds);
                 }
 
                 entriesToPatch = isolation.RetryEntries;
@@ -343,8 +338,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     projectRelativePath,
                     inlineRiskMethodLabels,
                     suppressedPausePointIds,
-                    retargetedPausePointIds,
-                    expiredPausePointIds);
+                    retargetedPausePointIds);
                 outcomes.Add(outcome);
                 if (outcome.Kind == HotReloadMethodOutcomeKind.Patched)
                 {
@@ -359,8 +353,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 suppressedPausePointIds,
                 inlineRiskMethodLabels,
                 unchangedMethodCount,
-                retargetedPausePointIds,
-                expiredPausePointIds);
+                retargetedPausePointIds);
         }
 
         // Peels leftover Harmony patches when the source again matches the verified baseline.
@@ -406,8 +399,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRelativePath,
             List<string> inlineRiskMethodLabels,
             List<string> suppressedPausePointIds,
-            List<string> retargetedPausePointIds,
-            List<string> expiredPausePointIds)
+            List<string> retargetedPausePointIds)
         {
             string methodLabel = entry.typeMetadataName + "." + entry.methodName;
 
@@ -485,8 +477,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AppendPausePointTransitionIds(
                 matchResult.Method,
                 suppressedPausePointIds,
-                retargetedPausePointIds,
-                expiredPausePointIds);
+                retargetedPausePointIds);
 
             // Inline risk is flagged per method but reported as one aggregated warning so
             // Warnings stay readable when many tiny methods are patched together.
@@ -526,26 +517,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        // What: after Apply (+ retarget handler), splits markers into retargeted / suppressed /
-        // expired (expired are owned by the method but not armed, so they were not re-targeted).
+        // What: after Apply (+ retarget handler), splits armed markers into retargeted vs suppressed.
+        // Expired skips are recorded as a pending-drain event inside SourcePausePointPatcher and
+        // surfaced from HotReloadTools.BuildApplyResponse (same pattern as line-drift warnings).
         private static void AppendPausePointTransitionIds(
             MethodBase method,
             List<string> suppressedPausePointIds,
-            List<string> retargetedPausePointIds,
-            List<string> expiredPausePointIds)
+            List<string> retargetedPausePointIds)
         {
-            IReadOnlyList<string> expiredIds =
-                HotReloadPausePointCoordination.GetExpiredMarkerIdsOnMethod?.Invoke(method)
-                ?? Array.Empty<string>();
-            for (int expiredIndex = 0; expiredIndex < expiredIds.Count; expiredIndex++)
-            {
-                string expiredId = expiredIds[expiredIndex];
-                if (!expiredPausePointIds.Contains(expiredId))
-                {
-                    expiredPausePointIds.Add(expiredId);
-                }
-            }
-
             IReadOnlyList<string> armedIds =
                 HotReloadPausePointCoordination.GetArmedMarkerIdsOnMethod?.Invoke(method);
             if (armedIds == null || armedIds.Count == 0)
@@ -1106,7 +1085,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public int PatchedCount { get; }
             public List<string> SuppressedPausePointIds { get; }
             public List<string> RetargetedPausePointIds { get; }
-            public List<string> ExpiredPausePointIds { get; }
             public List<string> InlineRiskMethodLabels { get; }
             public int UnchangedMethodCount { get; }
 
@@ -1117,8 +1095,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 List<string> suppressedPausePointIds = null,
                 List<string> inlineRiskMethodLabels = null,
                 int unchangedMethodCount = 0,
-                List<string> retargetedPausePointIds = null,
-                List<string> expiredPausePointIds = null)
+                List<string> retargetedPausePointIds = null)
             {
                 Outcomes = outcomes;
                 Warnings = warnings;
@@ -1127,7 +1104,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 InlineRiskMethodLabels = inlineRiskMethodLabels ?? new List<string>();
                 UnchangedMethodCount = unchangedMethodCount;
                 RetargetedPausePointIds = retargetedPausePointIds ?? new List<string>();
-                ExpiredPausePointIds = expiredPausePointIds ?? new List<string>();
             }
         }
     }
