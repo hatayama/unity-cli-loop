@@ -752,7 +752,10 @@ public static class TransformWorkerProgram
         string name = propertyDeclaration.Identifier.Text;
         if (propertyDeclaration.ExplicitInterfaceSpecifier != null)
         {
-            name = propertyDeclaration.ExplicitInterfaceSpecifier.Name + "." + name;
+            // Why NormalizeWhitespace: keep property keys symmetric with BuildSyntaxMethodKey so
+            // trivia in the interface name cannot invent a distinct baseline key.
+            name = propertyDeclaration.ExplicitInterfaceSpecifier.Name.NormalizeWhitespace().ToString()
+                + "." + name;
         }
 
         return typeMetadataName + "::" + name;
