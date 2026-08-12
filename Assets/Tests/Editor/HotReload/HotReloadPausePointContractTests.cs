@@ -63,6 +63,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Mode = UloopPausePointCaptureMode.Continuous
             });
             Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             int result = fixture.SummarizeCells();
