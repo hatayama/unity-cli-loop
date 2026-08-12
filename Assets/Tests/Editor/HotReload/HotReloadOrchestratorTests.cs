@@ -9,6 +9,7 @@ using NUnit.Framework;
 
 using Newtonsoft.Json.Linq;
 
+using UnityEditor.Compilation;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -474,12 +475,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: patching multiple small methods emits one aggregated inline-risk warning and
-        /// leaves each Patched outcome's Reason empty.
+        /// What: under Debug code optimization, size-only small methods do not emit the
+        /// aggregated inline-risk warning (branch a); Patched Reason stays empty.
         /// </summary>
         [Test]
-        public async Task Run_MultipleSmallPatchedMethods_AggregatesInlineRiskWarningOnce()
+        public async Task Run_MultipleSmallPatchedMethods_OmitsInlineRiskWarningInDebug()
         {
+            Assert.That(
+                CompilationPipeline.codeOptimization,
+                Is.EqualTo(CodeOptimization.Debug),
+                "This regression pins Debug behavior; run under Debug code optimization.");
+
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
                 "MultipleSmallInlineRisk.cs",
@@ -502,7 +508,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
             AssertHasPatched(result, nameof(HotReloadE2EFixture.CenterOfCell));
 
-            int patchedWithEmptyReason = 0;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
             {
                 if (outcome.Kind != HotReloadMethodOutcomeKind.Patched)
@@ -511,17 +516,68 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
 
                 Assert.That(outcome.Reason, Is.Empty, "Patched Reason must not carry per-method inline-risk text.");
-                patchedWithEmptyReason++;
             }
 
-            Assert.That(patchedWithEmptyReason, Is.GreaterThanOrEqualTo(2));
+            foreach (string warning in result.Warnings)
+            {
+                Assert.That(
+                    warning.Contains("patched methods had pre-patch bodies"),
+                    Is.False,
+                    "Debug must not emit IL-size inline-risk warnings: " + warning);
+            }
+        }
+
+        /// <summary>
+        /// What: [AggressiveInlining] patched methods still emit exactly one aggregated
+        /// inline-risk warning under Debug, listing every at-risk method.
+        /// </summary>
+        [Test]
+        public async Task Run_MultipleAggressiveInliningMethods_AggregatesInlineRiskWarningOnce()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "MultipleAggressiveInliningInlineRisk.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    inlineRiskAlphaMethod:
+                    "[MethodImpl(MethodImplOptions.AggressiveInlining)]\n"
+                    + "        public int InlineRiskAlpha()\n"
+                    + "        {\n"
+                    + "            return 11;\n"
+                    + "        }",
+                    inlineRiskBetaMethod:
+                    "[MethodImpl(MethodImplOptions.AggressiveInlining)]\n"
+                    + "        public int InlineRiskBeta()\n"
+                    + "        {\n"
+                    + "            return 22;\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.InlineRiskAlpha));
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.InlineRiskBeta));
+
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind != HotReloadMethodOutcomeKind.Patched)
+                {
+                    continue;
+                }
+
+                Assert.That(outcome.Reason, Is.Empty, "Patched Reason must not carry per-method inline-risk text.");
+            }
 
             int aggregatedInlineRiskCount = 0;
             foreach (string warning in result.Warnings)
             {
                 if (warning.Contains("patched methods had pre-patch bodies")
-                    && warning.Contains(nameof(HotReloadE2EFixture.ComputeWithPrivate))
-                    && warning.Contains(nameof(HotReloadE2EFixture.CenterOfCell)))
+                    && warning.Contains(nameof(HotReloadE2EFixture.InlineRiskAlpha))
+                    && warning.Contains(nameof(HotReloadE2EFixture.InlineRiskBeta)))
                 {
                     aggregatedInlineRiskCount++;
                 }
@@ -542,11 +598,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// Verifies duplicate file inputs re-patch the same method yet the aggregated warning lists it once.
+        /// What: duplicate file inputs re-patch the same small method yet Debug emits no
+        /// IL-size inline-risk warning (branch a); declaration-drift warnings still appear twice.
         /// </summary>
         [Test]
-        public async Task Run_DuplicateFileInputs_ListsEachAtRiskMethodOnceInAggregatedWarning()
+        public async Task Run_DuplicateFileInputs_OmitsInlineRiskWarningInDebug()
         {
+            Assert.That(
+                CompilationPipeline.codeOptimization,
+                Is.EqualTo(CodeOptimization.Debug),
+                "This regression pins Debug behavior; run under Debug code optimization.");
+
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
                 "DuplicateInputInlineRisk.cs",
@@ -576,6 +638,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(computeWithPrivatePatchedOperations, Is.EqualTo(2));
 
+            foreach (string warning in result.Warnings)
+            {
+                Assert.That(
+                    warning.Contains("patched methods had pre-patch bodies"),
+                    Is.False,
+                    "Debug must not emit IL-size inline-risk warnings: " + warning);
+            }
+
+            int declarationDriftCount = CountWarningsContaining(
+                result.Warnings,
+                "Edits outside method bodies");
+            Assert.That(
+                declarationDriftCount,
+                Is.EqualTo(2),
+                "Duplicate file inputs each emit a declaration-drift warning.");
+        }
+
+        /// <summary>
+        /// What: duplicate file inputs re-patch an [AggressiveInlining] method twice yet the
+        /// aggregated warning lists that method once.
+        /// </summary>
+        [Test]
+        public async Task Run_DuplicateFileInputs_ListsEachAtRiskMethodOnceInAggregatedWarning()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "DuplicateInputAggressiveInliningInlineRisk.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    inlineRiskAlphaMethod:
+                    "[MethodImpl(MethodImplOptions.AggressiveInlining)]\n"
+                    + "        public int InlineRiskAlpha()\n"
+                    + "        {\n"
+                    + "            return 11;\n"
+                    + "        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath, fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.InlineRiskAlpha));
+
+            // Methods and PatchedTotal keep reflecting raw patch operations on purpose:
+            // the duplicated input re-patches every fixture method once per file entry.
+            int inlineRiskAlphaPatchedOperations = 0;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    && outcome.Method.Contains(nameof(HotReloadE2EFixture.InlineRiskAlpha)))
+                {
+                    inlineRiskAlphaPatchedOperations++;
+                }
+            }
+
+            Assert.That(inlineRiskAlphaPatchedOperations, Is.EqualTo(2));
+
             int declarationDriftCount = CountWarningsContaining(
                 result.Warnings,
                 "Edits outside method bodies");
@@ -588,7 +709,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             foreach (string warning in result.Warnings)
             {
                 if (warning.Contains("patched methods had pre-patch bodies")
-                    && warning.Contains(nameof(HotReloadE2EFixture.ComputeWithPrivate)))
+                    && warning.Contains(nameof(HotReloadE2EFixture.InlineRiskAlpha)))
                 {
                     aggregatedWarning = warning;
                     break;
@@ -597,7 +718,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(aggregatedWarning, Is.Not.Null, "Expected an aggregated inline-risk warning.");
             Assert.That(
-                CountOccurrences(aggregatedWarning, nameof(HotReloadE2EFixture.ComputeWithPrivate)),
+                CountOccurrences(aggregatedWarning, nameof(HotReloadE2EFixture.InlineRiskAlpha)),
                 Is.EqualTo(1),
                 "The aggregated warning must list a re-patched method once, not once per patch operation.");
             Assert.That(
@@ -1698,7 +1819,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string modeEnumDeclaration = null,
             string centerOfCellMethod = null,
             string callsBaseMethod = null,
-            string explicitAccessorsBlock = null)
+            string explicitAccessorsBlock = null,
+            string inlineRiskAlphaMethod = null,
+            string inlineRiskBetaMethod = null)
         {
             string sumGrid = sumGridMethod ??
                 "public int SumGrid(int[,] grid)\n        {\n            return -1;\n        }";
@@ -1760,6 +1883,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        public int Counter;\n"
                 + "\n"
                 + "        private int this[int index] => _secret + index;";
+            string inlineRiskAlpha = inlineRiskAlphaMethod ??
+                "[MethodImpl(MethodImplOptions.AggressiveInlining)]\n"
+                + "        public int InlineRiskAlpha()\n"
+                + "        {\n"
+                + "            return 1;\n"
+                + "        }";
+            string inlineRiskBeta = inlineRiskBetaMethod ??
+                "[MethodImpl(MethodImplOptions.AggressiveInlining)]\n"
+                + "        public int InlineRiskBeta()\n"
+                + "        {\n"
+                + "            return 2;\n"
+                + "        }";
 
             return @"using System;
 using System.Collections;
@@ -1832,6 +1967,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         " + sumGrid + @"
 
         " + centerOfCell + @"
+
+        " + inlineRiskAlpha + @"
+
+        " + inlineRiskBeta + @"
 
         public int CountEnumerator(List<int>.Enumerator enumerator)
         {

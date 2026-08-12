@@ -118,6 +118,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return total;
         }
 
+        // Why AggressiveInlining: Debug still treats these as at-risk so orchestrator aggregation
+        // / dedupe E2E can run without requiring Release code optimization.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int InlineRiskAlpha()
+        {
+            return 1;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int InlineRiskBeta()
+        {
+            return 2;
+        }
+
         private List<int> BuildCells()
         {
             return new List<int> { 1, 2, 3 };

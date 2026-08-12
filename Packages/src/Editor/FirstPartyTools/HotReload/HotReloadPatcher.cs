@@ -6,6 +6,7 @@ using System.Text;
 
 using HarmonyLib;
 
+using UnityEditor.Compilation;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -714,15 +715,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Heuristic only: [AggressiveInlining] is a hint, and IL size cannot predict Mono's real
         // inlining decision. Exists to surface a warning when HitCount-like symptoms appear.
+        // Why inject codeOptimization: Debug mode does not inline tiny getters into warmed callers
+        // (measured PR-4 To-Do 12), so the IL-size heuristic must stay Release-only.
         private static bool IsLikelyJitInlined(MethodBase method)
         {
-            if ((method.GetMethodImplementationFlags() & MethodImplAttributes.AggressiveInlining) != 0)
-            {
-                return true;
-            }
-
+            bool hasAggressiveInlining =
+                (method.GetMethodImplementationFlags() & MethodImplAttributes.AggressiveInlining) != 0;
             byte[] ilBytes = method.GetMethodBody()?.GetILAsByteArray();
-            return ilBytes != null && ilBytes.Length <= HotReloadConstants.SmallMethodInliningRiskThresholdBytes;
+            int? ilByteLength = ilBytes == null ? (int?)null : ilBytes.Length;
+            return HotReloadJitInliningRisk.Evaluate(
+                hasAggressiveInlining,
+                ilByteLength,
+                CompilationPipeline.codeOptimization);
         }
     }
 }
