@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -164,5 +165,107 @@ func TestRunWaitForPausePointEvaluatesExpectations(t *testing.T) {
 	}
 	if result.AllExpectationsPassed == nil || *result.AllExpectationsPassed {
 		t.Fatalf("expected AllExpectationsPassed to be false, got %#v", result.AllExpectationsPassed)
+	}
+}
+
+// Verifies Found=false expectations produce the not-found Warning on a hit.
+func TestRunWaitForPausePointWarnsWhenExpectedVariableNotFound(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalFetch := fetchMatchingLogs
+	defer func() {
+		queryPausePointStatus = originalQuery
+		fetchMatchingLogs = originalFetch
+	}()
+
+	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:       id,
+			Status:   pausePointStatusHit,
+			IsHit:    true,
+			HitCount: 1,
+			CapturedVariables: []pausePointCapturedVariable{
+				{Name: "health", Scope: "Local", Value: pausePointVariableValue("100")},
+			},
+		}, nil
+	}
+	fetchMatchingLogs = func(ctx context.Context, connection unityipc.Connection, searchText string, maxCount int) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{SearchText: searchText, Logs: []pausePointMatchingLog{}}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:                   "jump",
+		timeoutSeconds:       1,
+		timeout:              time.Second,
+		matchingLogsMaxCount: pausePointDefaultLogsMaxCount,
+		expectations: []pausePointExpectation{
+			{Name: "cells", Expected: "whatever"},
+			{Name: "total", Expected: "3"},
+		},
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	var result pausePointWaitResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout parse failed: %v from %s", err, stdout.String())
+	}
+	const wantWarning = "Expected variable(s) not present in CapturedVariables: cells, total. This is a not-found result, not a value mismatch — check the variable name, and note that locals can be missing from hot-reload patched bodies compiled before this fix."
+	if result.Warning != wantWarning {
+		t.Fatalf("Warning mismatch:\n got: %q\nwant: %q", result.Warning, wantWarning)
+	}
+}
+
+// Verifies Found=true expectations do not emit the not-found Warning, even on value mismatch.
+func TestRunWaitForPausePointOmitsNotFoundWarningWhenEveryExpectationIsFound(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalFetch := fetchMatchingLogs
+	defer func() {
+		queryPausePointStatus = originalQuery
+		fetchMatchingLogs = originalFetch
+	}()
+
+	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:       id,
+			Status:   pausePointStatusHit,
+			IsHit:    true,
+			HitCount: 1,
+			CapturedVariables: []pausePointCapturedVariable{
+				{Name: "health", Scope: "Local", Value: pausePointVariableValue("100")},
+				{Name: "speed", Scope: "Local", Value: pausePointVariableValue("4.2")},
+			},
+		}, nil
+	}
+	fetchMatchingLogs = func(ctx context.Context, connection unityipc.Connection, searchText string, maxCount int) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{SearchText: searchText, Logs: []pausePointMatchingLog{}}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:                   "jump",
+		timeoutSeconds:       1,
+		timeout:              time.Second,
+		matchingLogsMaxCount: pausePointDefaultLogsMaxCount,
+		expectations: []pausePointExpectation{
+			{Name: "health", Expected: "100"},
+			{Name: "speed", Expected: "9.9"},
+		},
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	var result pausePointWaitResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout parse failed: %v from %s", err, stdout.String())
+	}
+	if strings.Contains(result.Warning, "not present in CapturedVariables") {
+		t.Fatalf("not-found warning must be absent when every expectation was Found: %q", result.Warning)
 	}
 }
