@@ -400,9 +400,16 @@ func runPausePointWaitAfterEnable(
 
 		response.TriggerResult = triggerResult
 		response.ResumePlayResult = resumeResult
-		// Status polls never carry these fields today; always prefer the enable-time values.
-		response.ResolvedLine = enableFields.ResolvedLine
-		response.ResolvedLineText = enableFields.ResolvedLineText
+		// Why prefer status when non-zero/non-empty: hot-reload retarget updates ResolvedLine
+		// / ResolvedLineText on the registry, so a later status poll carries the live target.
+		// Fall back to enable-time values when status still omits them (pre-retarget path).
+		if response.ResolvedLine == 0 {
+			response.ResolvedLine = enableFields.ResolvedLine
+		}
+		if response.ResolvedLineText == "" {
+			response.ResolvedLineText = enableFields.ResolvedLineText
+		}
+		// ResolvedMethod / SnapshotTiming are still enable-only on the status DTO today.
 		response.ResolvedMethod = enableFields.ResolvedMethod
 		response.SnapshotTiming = enableFields.SnapshotTiming
 		response = filterPausePointCapturedVariableHistory(response)
