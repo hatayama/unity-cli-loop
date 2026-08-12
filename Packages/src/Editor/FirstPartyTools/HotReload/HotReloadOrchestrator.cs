@@ -287,9 +287,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     // Why: CompileAndLoadAsync appends "(line N)" only for diagnostics whose
                     // #line-mapped file matches projectRelativePath — scaffold-only errors stay
                     // bare. Single-entry failures skip isolation and always take this path.
+                    // Why attribute single-entry failures: "(shim-compile)" hides which method
+                    // body failed when the agent edited only one method.
+                    string failureMethodLabel = "(shim-compile)";
+                    if (entriesToPatch.Length == 1)
+                    {
+                        TransformWorkerEntryDto soleEntry = entriesToPatch[0];
+                        failureMethodLabel = HotReloadPatcher.FormatMethodKeyParts(
+                            soleEntry.typeMetadataName,
+                            soleEntry.methodName,
+                            soleEntry.parameterTypeFullNames ?? Array.Empty<string>(),
+                            genericArity: 0);
+                    }
+
                     outcomes.Add(
                         HotReloadMethodOutcome.Failed(
-                            "(shim-compile)",
+                            failureMethodLabel,
                             compileResult.ErrorMessage,
                             assemblyResolvePath));
                     return new HotReloadFileProcessResult(
@@ -753,7 +766,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// be attributed to them, so the rest of the file's methods can still patch. Returns null
         /// when isolation is not possible (unattributable errors, all/none of the entries failing,
         /// the retry worker run failing, or the retry compile failing) — the caller then falls back
-        /// to today's whole-file "(shim-compile)" Failed.
+        /// to a single Failed outcome (method-attributed when only one entry remains).
         /// </summary>
         private static async Task<HotReloadShimIsolationResult> TryIsolateShimCompileFailureAsync(
             TransformWorkerInputDto workerInput,
