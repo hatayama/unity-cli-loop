@@ -1295,12 +1295,62 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: when the only edited method fails shim compile, isolation is skipped
-        /// (FailedEntries.Count == entries.Length) and the whole-file (shim-compile) Failed
-        /// Reason still carries the original-file "(line N)" from #line-mapped diagnostics.
+        /// What: when every edited method fails shim compile, isolation is skipped and the
+        /// Failed Reason keeps both CS0103 messages in full (no in-uloop truncation).
         /// </summary>
         [Test]
-        public async Task Run_SingleEditedMethodFailingShimCompile_WholeFileFailureIncludesOriginalLine()
+        public async Task Run_AllEditedMethodsFailingShimCompile_ReasonKeepsBothDiagnosticsInFull()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedSource = BuildFixtureSource(
+                computeWithPrivateMethod:
+                "public int ComputeWithPrivate(int delta)\n        {\n            return MissingAlphaHelper(delta);\n        }",
+                callsMissingHelperMethod:
+                "public int CallsMissingHelper(int value)\n        {\n            return MissingBetaHelper(value);\n        }");
+            string editedPath = WriteEditedSource("AllEntriesShimFailure.cs", editedSource);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            HotReloadMethodOutcome failed = null;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed)
+                {
+                    failed = outcome;
+                    break;
+                }
+            }
+
+            Assert.That(failed, Is.Not.Null, FormatOutcomes(result));
+            Assert.That(
+                failed.Method,
+                Is.EqualTo("(shim-compile)"),
+                "Multi-entry unattributable failures must keep the file-level label.\n"
+                + FormatOutcomes(result));
+            Assert.That(failed.Reason, Does.Contain("MissingAlphaHelper"));
+            Assert.That(failed.Reason, Does.Contain("MissingBetaHelper"));
+            Assert.That(failed.Reason, Does.Contain("CS0103"));
+            Assert.That(
+                failed.Reason,
+                Does.Contain(HotReloadConstants.NewMemberCompileHint),
+                "Reason must keep the full joined diagnostics plus new-member hint.\n" + failed.Reason);
+            Assert.That(
+                failed.Reason.Contains(" ... (truncated)"),
+                Is.False,
+                "uloop must not truncate shim-compile Reason.\n" + failed.Reason);
+        }
+
+        /// <summary>
+        /// What: when the only edited method fails shim compile, isolation is skipped
+        /// (FailedEntries.Count == entries.Length) and Failed.Method uses that method's
+        /// FormatMethodKeyParts label (not "(shim-compile)"), while Reason still carries the
+        /// original-file "(line N)" from #line-mapped diagnostics.
+        /// </summary>
+        [Test]
+        public async Task Run_SingleEditedMethodFailingShimCompile_AttributesFailureToThatMethod()
         {
             string fixturePath = ResolveE2EFixturePath();
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
@@ -1310,7 +1360,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "UnityCLILoop.Tests.Editor.HotReload"
                 + HotReloadConstants.CompiledAssemblyExtension);
             // Why require a snapshot: without it every method becomes an entry and isolation
-            // succeeds — this test pins the whole-file path that only fires when the sole entry fails.
+            // succeeds — this test pins the single-entry path that only fires when the sole entry fails.
             Assert.That(
                 HotReloadSourceBaseline.LoadVerifiedSnapshotSource(
                     "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs",
@@ -1327,29 +1377,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             int expectedOriginalLine = FindLineNumberContaining(editedSource, "MissingHelperAddedByEdit");
             Assert.That(expectedOriginalLine, Is.GreaterThan(0));
+            string expectedMethodLabel = HotReloadPatcher.FormatMethodKeyParts(
+                typeof(HotReloadE2EFixture).FullName,
+                nameof(HotReloadE2EFixture.CallsMissingHelper),
+                new[] { typeof(int).FullName },
+                genericArity: 0);
 
             HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
 
-            bool foundWholeFileFailure = false;
+            bool foundAttributedFailure = false;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
             {
                 if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
-                    && outcome.Method == "(shim-compile)"
+                    && outcome.Method == expectedMethodLabel
                     && outcome.Reason.Contains(HotReloadConstants.NewMemberCompileHint)
                     && outcome.Reason.Contains("(line " + expectedOriginalLine + ")"))
                 {
-                    foundWholeFileFailure = true;
+                    foundAttributedFailure = true;
                 }
             }
 
             Assert.That(
-                foundWholeFileFailure,
+                foundAttributedFailure,
                 Is.True,
-                "Single-entry shim compile failure must report (shim-compile) with original-file line "
-                + expectedOriginalLine + ".\n" + FormatOutcomes(result));
+                "Single-entry shim compile failure must report Method=" + expectedMethodLabel
+                + " with original-file line " + expectedOriginalLine + ".\n" + FormatOutcomes(result));
         }
 
         /// <summary>
