@@ -110,5 +110,5 @@ func buildPausePointExpectNotFoundWarning(results []pausePointExpectationResult)
 
 	return "Expected variable(s) not present in CapturedVariables: " +
 		strings.Join(missingNames, ", ") +
-		". This is a not-found result, not a value mismatch — check the variable name, and note that locals can be missing from hot-reload patched bodies compiled before this fix."
+		". This is a not-found result, not a value mismatch — check the variable name; if the method is hot-reload patched, older patches may have dropped locals, so re-apply hot-reload or run uloop compile."
 }

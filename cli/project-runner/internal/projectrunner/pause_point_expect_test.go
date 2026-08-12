@@ -213,7 +213,7 @@ func TestRunWaitForPausePointWarnsWhenExpectedVariableNotFound(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("stdout parse failed: %v from %s", err, stdout.String())
 	}
-	const wantWarning = "Expected variable(s) not present in CapturedVariables: cells, total. This is a not-found result, not a value mismatch — check the variable name, and note that locals can be missing from hot-reload patched bodies compiled before this fix."
+	const wantWarning = "Expected variable(s) not present in CapturedVariables: cells, total. This is a not-found result, not a value mismatch — check the variable name; if the method is hot-reload patched, older patches may have dropped locals, so re-apply hot-reload or run uloop compile."
 	if result.Warning != wantWarning {
 		t.Fatalf("Warning mismatch:\n got: %q\nwant: %q", result.Warning, wantWarning)
 	}
