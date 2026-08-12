@@ -94,4 +94,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return 2;
         }
     }
+
+    /// <summary>
+    /// Property getters for hot-reload property-patch coverage: static expression-bodied and
+    /// instance block get. Auto-properties are intentionally absent (not patch candidates).
+    /// </summary>
+    internal class HotReloadPropertyGetterFixture
+    {
+        public static float HeightAmplitude => 5f;
+
+        private int _score;
+
+        public int Score
+        {
+            get
+            {
+                return _score;
+            }
+        }
+    }
 }

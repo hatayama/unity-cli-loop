@@ -312,8 +312,8 @@ public static class TransformWorkerProgram
 
             string typeMetadataNameFromSyntax = BuildTypeMetadataNameFromSyntax(typeDeclaration);
 
-            // Accessors are never patched in v1; report each explicit-body accessor as Skipped
-            // so an edited getter/setter never disappears from the response silently.
+            // Property setters/init and all indexer accessors with bodies stay Skipped.
+            // Property getters are patched below (not reported here).
             AppendExplicitAccessorSkips(
                 typeDeclaration,
                 typeMetadataNameFromSyntax,
@@ -327,10 +327,6 @@ public static class TransformWorkerProgram
             List<MethodDeclarationSyntax> methods = typeDeclaration.Members
                 .OfType<MethodDeclarationSyntax>()
                 .ToList();
-            if (methods.Count == 0)
-            {
-                continue;
-            }
 
             ShimTypeBuilder currentShimType = null;
             foreach (MethodDeclarationSyntax methodDeclaration in methods)
@@ -378,11 +374,14 @@ public static class TransformWorkerProgram
                     }
                 }
 
+                SyntaxNode methodBodyNode =
+                    (SyntaxNode)methodDeclaration.Body ?? methodDeclaration.ExpressionBody;
                 MethodTransformDecision decision = DecideMethodTransform(
                     typeDeclaration,
                     typeSymbol,
                     methodDeclaration,
                     methodSymbol,
+                    methodBodyNode,
                     semanticModel);
                 if (decision.SkipReason != null)
                 {
@@ -442,6 +441,33 @@ public static class TransformWorkerProgram
                     SourceEndLine = sourceEndLine,
                     LifecycleNote = ComputeLifecycleNote(methodDeclaration, methodSymbol, typeSymbol)
                 });
+            }
+
+            foreach (PropertyDeclarationSyntax propertyDeclaration in typeDeclaration.Members
+                .OfType<PropertyDeclarationSyntax>())
+            {
+                (ShimTypeBuilder nextShimType, int nextShimTypeCounter, int nextGlobalShimMethodCounter) =
+                    AppendPropertyGetterEntry(
+                        propertyDeclaration,
+                        typeDeclaration,
+                        typeSymbol,
+                        typeMetadataNameFromSyntax,
+                        semanticModel,
+                        root,
+                        input,
+                        hasBaseline,
+                        snapshotPropertyMap,
+                        plainCurrentPropertyMap,
+                        entries,
+                        skipped,
+                        unchangedMethods,
+                        shimTypes,
+                        shimTypeCounter,
+                        globalShimMethodCounter,
+                        currentShimType);
+                currentShimType = nextShimType;
+                shimTypeCounter = nextShimTypeCounter;
+                globalShimMethodCounter = nextGlobalShimMethodCounter;
             }
         }
 
@@ -530,6 +556,26 @@ public static class TransformWorkerProgram
         List<SyntaxNode> nodesToAnnotate = new List<SyntaxNode>();
         nodesToAnnotate.AddRange(root.DescendantNodes().OfType<MethodDeclarationSyntax>());
         nodesToAnnotate.AddRange(root.DescendantNodes().OfType<StatementSyntax>());
+        // Why property/accessor arrows: expression-bodied getters are rewritten into synthetic
+        // MethodDeclarations that would otherwise carry no #line annotations into the shim.
+        foreach (PropertyDeclarationSyntax propertyDeclaration in root.DescendantNodes()
+            .OfType<PropertyDeclarationSyntax>())
+        {
+            if (propertyDeclaration.ExpressionBody != null)
+            {
+                nodesToAnnotate.Add(propertyDeclaration.ExpressionBody);
+            }
+        }
+
+        foreach (AccessorDeclarationSyntax accessor in root.DescendantNodes()
+            .OfType<AccessorDeclarationSyntax>())
+        {
+            if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration) && accessor.ExpressionBody != null)
+            {
+                nodesToAnnotate.Add(accessor.ExpressionBody);
+            }
+        }
+
         if (nodesToAnnotate.Count == 0)
         {
             return root;
@@ -557,6 +603,12 @@ public static class TransformWorkerProgram
             // method to one line, so mapping to the arrow expression's original start is the only
             // location that still matches the user's intent for expression-bodied methods.
             return methodDeclaration.ExpressionBody.Expression.GetLocation()
+                .GetLineSpan().StartLinePosition.Line + 1;
+        }
+
+        if (node is ArrowExpressionClauseSyntax arrowExpressionClause)
+        {
+            return arrowExpressionClause.Expression.GetLocation()
                 .GetLineSpan().StartLinePosition.Line + 1;
         }
 
@@ -694,7 +746,8 @@ public static class TransformWorkerProgram
     }
 
     private const string ExplicitAccessorSkipReason =
-        "Property and indexer accessors are out of scope for v1; run 'uloop compile' to apply accessor edits.";
+        "Property setter, init, or indexer accessors are out of scope for v1; "
+        + "run 'uloop compile' to apply accessor edits.";
 
     private const string OutsideMethodBodyDriftWarningFormat =
         "Edits outside method bodies in {0} (fields, initializers, attributes, or added/removed members) are not applied by hot reload; run uloop compile to pick them up.";
@@ -938,6 +991,50 @@ public static class TransformWorkerProgram
                 .WithSemicolonToken(default(SyntaxToken))
                 .WithBody(SyntaxFactory.Block());
         }
+
+        // Why strip getters only: patched getter edits must not look like outside-body drift.
+        // Setter/init/indexer bodies stay so those still-unapplied edits keep the warning.
+        public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
+        {
+            PropertyDeclarationSyntax visited = (PropertyDeclarationSyntax)base.VisitPropertyDeclaration(node);
+            if (visited.ExpressionBody != null)
+            {
+                return visited
+                    .WithExpressionBody(null)
+                    .WithSemicolonToken(default(SyntaxToken))
+                    .WithAccessorList(
+                        SyntaxFactory.AccessorList(
+                            SyntaxFactory.SingletonList(
+                                SyntaxFactory.AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                                    .WithBody(SyntaxFactory.Block()))));
+            }
+
+            if (visited.AccessorList == null)
+            {
+                return visited;
+            }
+
+            List<AccessorDeclarationSyntax> accessors = new List<AccessorDeclarationSyntax>();
+            foreach (AccessorDeclarationSyntax accessor in visited.AccessorList.Accessors)
+            {
+                if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration)
+                    && (accessor.Body != null || accessor.ExpressionBody != null))
+                {
+                    accessors.Add(
+                        accessor
+                            .WithExpressionBody(null)
+                            .WithSemicolonToken(default(SyntaxToken))
+                            .WithBody(SyntaxFactory.Block()));
+                }
+                else
+                {
+                    accessors.Add(accessor);
+                }
+            }
+
+            return visited.WithAccessorList(
+                SyntaxFactory.AccessorList(SyntaxFactory.List(accessors)));
+        }
     }
 
     // What: reports each property/indexer accessor that has an explicit body as Skipped.
@@ -1015,13 +1112,52 @@ public static class TransformWorkerProgram
             return;
         }
 
-        // Expression-bodied property/indexer (`=> expr`) is the getter body.
-        bool hasExpressionBody =
-            (propertyDeclaration is PropertyDeclarationSyntax propertyWithExpression
-                && propertyWithExpression.ExpressionBody != null)
-            || (propertyDeclaration is IndexerDeclarationSyntax indexerWithExpression
-                && indexerWithExpression.ExpressionBody != null);
-        if (hasExpressionBody)
+        // Indexers: keep reporting every explicit-body accessor (including expression-bodied).
+        if (propertyDeclaration is IndexerDeclarationSyntax indexerDeclaration)
+        {
+            AppendIndexerExplicitAccessorSkips(indexerDeclaration, propertySymbol, skipped);
+            return;
+        }
+
+        // Properties: getters are patched elsewhere; only setter/init with bodies are Skipped here.
+        if (propertyDeclaration.AccessorList == null)
+        {
+            return;
+        }
+
+        foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
+        {
+            if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration))
+            {
+                continue;
+            }
+
+            // Auto-properties emit accessors with neither Body nor ExpressionBody.
+            if (accessor.Body == null && accessor.ExpressionBody == null)
+            {
+                continue;
+            }
+
+            IMethodSymbol accessorMethod = ResolveAccessorMethodSymbol(propertySymbol, accessor.Kind());
+            if (accessorMethod == null)
+            {
+                continue;
+            }
+
+            skipped.Add(new WorkerSkipped
+            {
+                Method = FormatMethodLabel(accessorMethod),
+                Reason = ExplicitAccessorSkipReason
+            });
+        }
+    }
+
+    private static void AppendIndexerExplicitAccessorSkips(
+        IndexerDeclarationSyntax indexerDeclaration,
+        IPropertySymbol propertySymbol,
+        List<WorkerSkipped> skipped)
+    {
+        if (indexerDeclaration.ExpressionBody != null)
         {
             if (propertySymbol.GetMethod != null)
             {
@@ -1035,14 +1171,13 @@ public static class TransformWorkerProgram
             return;
         }
 
-        if (propertyDeclaration.AccessorList == null)
+        if (indexerDeclaration.AccessorList == null)
         {
             return;
         }
 
-        foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
+        foreach (AccessorDeclarationSyntax accessor in indexerDeclaration.AccessorList.Accessors)
         {
-            // Auto-properties emit accessors with neither Body nor ExpressionBody.
             if (accessor.Body == null && accessor.ExpressionBody == null)
             {
                 continue;
@@ -1080,6 +1215,289 @@ public static class TransformWorkerProgram
         return null;
     }
 
+    // What: emit a get_<Name> entry / unchanged row / skip for one property with a getter body.
+    private static (ShimTypeBuilder CurrentShimType, int ShimTypeCounter, int GlobalShimMethodCounter)
+        AppendPropertyGetterEntry(
+            PropertyDeclarationSyntax propertyDeclaration,
+            TypeDeclarationSyntax typeDeclaration,
+            INamedTypeSymbol typeSymbol,
+            string typeMetadataNameFromSyntax,
+            SemanticModel semanticModel,
+            CompilationUnitSyntax root,
+            WorkerInput input,
+            bool hasBaseline,
+            Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
+            Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
+            List<WorkerEntry> entries,
+            List<WorkerSkipped> skipped,
+            List<WorkerUnchangedMethod> unchangedMethods,
+            List<ShimTypeBuilder> shimTypes,
+            int shimTypeCounter,
+            int globalShimMethodCounter,
+            ShimTypeBuilder currentShimType)
+    {
+        IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
+        if (propertySymbol == null || propertySymbol.GetMethod == null)
+        {
+            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+        }
+
+        (bool hasGetterBody, AccessorDeclarationSyntax getAccessor) =
+            TryGetPropertyGetterBody(propertyDeclaration);
+        if (!hasGetterBody)
+        {
+            // Auto-property / setter-only: not a patch candidate (no Skipped row either).
+            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+        }
+
+        IMethodSymbol getterSymbol = propertySymbol.GetMethod;
+        string[] parameterTypeFullNames = Array.Empty<string>();
+        string methodKey = BuildMethodKey(
+            CecilTypeNames.ToMetadataName(typeSymbol),
+            getterSymbol.Name,
+            parameterTypeFullNames);
+        if (input.ExcludedMethodKeys.Contains(methodKey))
+        {
+            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+        }
+
+        if (hasBaseline
+            && snapshotPropertyMap != null
+            && plainCurrentPropertyMap != null)
+        {
+            string propertyKey = BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
+            if (snapshotPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax snapshotProperty)
+                && plainCurrentPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax plainProperty)
+                && ArePropertyGettersEquivalent(snapshotProperty, plainProperty))
+            {
+                unchangedMethods.Add(new WorkerUnchangedMethod
+                {
+                    TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
+                    MethodName = getterSymbol.Name,
+                    ParameterTypeFullNames = parameterTypeFullNames
+                });
+                return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+            }
+        }
+
+        if (propertyDeclaration.ExplicitInterfaceSpecifier != null)
+        {
+            skipped.Add(new WorkerSkipped
+            {
+                Method = FormatMethodLabel(getterSymbol),
+                Reason = "Explicit interface implementations are skipped in v1."
+            });
+            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+        }
+
+        // Why body stays on the property tree: SemanticModel rejects nodes re-parented onto a
+        // synthetic MethodDeclaration ("Syntax node is not within syntax tree").
+        SyntaxNode getterBodyNode = (SyntaxNode)propertyDeclaration.ExpressionBody
+            ?? (SyntaxNode)getAccessor.Body
+            ?? getAccessor.ExpressionBody;
+        MethodTransformDecision decision = DecideMethodTransform(
+            typeDeclaration,
+            typeSymbol,
+            methodDeclaration: null,
+            getterSymbol,
+            getterBodyNode,
+            semanticModel);
+        if (decision.SkipReason != null)
+        {
+            skipped.Add(new WorkerSkipped
+            {
+                Method = FormatMethodLabel(getterSymbol),
+                Reason = decision.SkipReason
+            });
+            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+        }
+
+        if (currentShimType == null)
+        {
+            string shimTypeName = typeSymbol.Name + "_UloopHotReloadShims_" + shimTypeCounter;
+            shimTypeCounter++;
+            string namespaceName = typeSymbol.ContainingNamespace == null
+                || typeSymbol.ContainingNamespace.IsGlobalNamespace
+                ? string.Empty
+                : typeSymbol.ContainingNamespace.ToDisplayString();
+            currentShimType = new ShimTypeBuilder(
+                shimTypeName,
+                namespaceName,
+                CollectUsingsForType(root, typeDeclaration));
+            shimTypes.Add(currentShimType);
+        }
+
+        string shimMethodName = getterSymbol.Name + "__shim" + globalShimMethodCounter;
+        globalShimMethodCounter++;
+
+        FileLinePositionSpan originalSpan = propertyDeclaration.GetLocation().GetLineSpan();
+        int sourceStartLine = originalSpan.StartLinePosition.Line + 1;
+        int sourceEndLine = originalSpan.EndLinePosition.Line + 1;
+
+        AccessorPlan rewritePlan = decision.UsesDelegation
+            ? currentShimType.AccessorPlan
+            : null;
+        MethodDeclarationSyntax rewrittenMethod = RewritePropertyGetterBody(
+            propertyDeclaration,
+            getterBodyNode,
+            getterSymbol,
+            typeSymbol,
+            semanticModel,
+            rewritePlan);
+        currentShimType.AddMethod(rewrittenMethod, shimMethodName);
+
+        entries.Add(new WorkerEntry
+        {
+            TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
+            MethodName = getterSymbol.Name,
+            ParameterTypeFullNames = parameterTypeFullNames,
+            ShimTypeName = currentShimType.ShimTypeName,
+            ShimMethodName = shimMethodName,
+            PatchKind = decision.PatchKind,
+            SourceStartLine = sourceStartLine,
+            SourceEndLine = sourceEndLine,
+            LifecycleNote = null
+        });
+
+        return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+    }
+
+    private static (bool HasGetterBody, AccessorDeclarationSyntax GetAccessor) TryGetPropertyGetterBody(
+        PropertyDeclarationSyntax propertyDeclaration)
+    {
+        if (propertyDeclaration.ExpressionBody != null)
+        {
+            return (true, null);
+        }
+
+        if (propertyDeclaration.AccessorList == null)
+        {
+            return (false, null);
+        }
+
+        foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
+        {
+            if (!accessor.IsKind(SyntaxKind.GetAccessorDeclaration))
+            {
+                continue;
+            }
+
+            if (accessor.Body == null && accessor.ExpressionBody == null)
+            {
+                return (false, null);
+            }
+
+            return (true, accessor);
+        }
+
+        return (false, null);
+    }
+
+    // Why getter-only: whole-property AreEquivalent treats setter edits as getter changes and
+    // would emit a useless Patched get_ row beside Skipped set_.
+    private static bool ArePropertyGettersEquivalent(
+        PropertyDeclarationSyntax snapshotProperty,
+        PropertyDeclarationSyntax currentProperty)
+    {
+        return SyntaxFactory.AreEquivalent(
+            NormalizePropertyToGetterShape(snapshotProperty),
+            NormalizePropertyToGetterShape(currentProperty),
+            topLevel: false);
+    }
+
+    private static PropertyDeclarationSyntax NormalizePropertyToGetterShape(
+        PropertyDeclarationSyntax propertyDeclaration)
+    {
+        if (propertyDeclaration.ExpressionBody != null)
+        {
+            return propertyDeclaration.WithAccessorList(null);
+        }
+
+        if (propertyDeclaration.AccessorList == null)
+        {
+            return propertyDeclaration;
+        }
+
+        List<AccessorDeclarationSyntax> getAccessors = new List<AccessorDeclarationSyntax>();
+        foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
+        {
+            if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration))
+            {
+                getAccessors.Add(accessor);
+            }
+        }
+
+        return propertyDeclaration.WithAccessorList(
+            SyntaxFactory.AccessorList(SyntaxFactory.List(getAccessors)));
+    }
+
+    // What: rewrite a getter body while it is still in the bound tree, then wrap as a shim method.
+    private static MethodDeclarationSyntax RewritePropertyGetterBody(
+        PropertyDeclarationSyntax propertyDeclaration,
+        SyntaxNode getterBodyNode,
+        IMethodSymbol getterSymbol,
+        INamedTypeSymbol targetType,
+        SemanticModel semanticModel,
+        AccessorPlan accessorPlan)
+    {
+        ShimBodyRewriter rewriter = new ShimBodyRewriter(semanticModel, targetType, accessorPlan);
+        SyntaxNode rewrittenBody = rewriter.Visit(getterBodyNode);
+        // Why transfer: Visit may rebuild ArrowExpressionClause nodes and drop #line annotations.
+        rewrittenBody = TransferUloopLineAnnotations(getterBodyNode, rewrittenBody);
+
+        TypeSyntax returnType = propertyDeclaration.Type.WithoutTrivia();
+        // ToShimMethod forces public static and injects __instance for instance getters.
+        MethodDeclarationSyntax method = SyntaxFactory.MethodDeclaration(
+                returnType,
+                SyntaxFactory.Identifier(getterSymbol.Name))
+            .WithModifiers(
+                SyntaxFactory.TokenList(
+                    SyntaxFactory.Token(SyntaxKind.PublicKeyword),
+                    SyntaxFactory.Token(SyntaxKind.StaticKeyword)))
+            .WithParameterList(SyntaxFactory.ParameterList());
+
+        if (rewrittenBody is ArrowExpressionClauseSyntax arrowBody)
+        {
+            method = method
+                .WithExpressionBody(arrowBody)
+                .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken));
+        }
+        else if (rewrittenBody is BlockSyntax blockBody)
+        {
+            method = method.WithBody(blockBody);
+        }
+        else
+        {
+            // get => expr rewritten to a bare expression: wrap as arrow.
+            ArrowExpressionClauseSyntax wrappedArrow = SyntaxFactory.ArrowExpressionClause(
+                (ExpressionSyntax)rewrittenBody);
+            wrappedArrow = (ArrowExpressionClauseSyntax)TransferUloopLineAnnotations(
+                getterBodyNode,
+                wrappedArrow);
+            method = method
+                .WithExpressionBody(wrappedArrow)
+                .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken));
+        }
+
+        return ShimMethodFactory.ToShimMethod(method, getterSymbol);
+    }
+
+    private static SyntaxNode TransferUloopLineAnnotations(SyntaxNode source, SyntaxNode target)
+    {
+        if (source == null || target == null)
+        {
+            return target;
+        }
+
+        SyntaxNode result = target;
+        foreach (SyntaxAnnotation annotation in source.GetAnnotations(UloopLineAnnotationKind))
+        {
+            result = result.WithAdditionalAnnotations(annotation);
+        }
+
+        return result;
+    }
+
     private static IEnumerable<TypeDeclarationSyntax> EnumerateTypeDeclarations(CompilationUnitSyntax root)
     {
         return root.DescendantNodes()
@@ -1090,11 +1508,13 @@ public static class TransformWorkerProgram
                 || typeDeclaration is RecordDeclarationSyntax);
     }
 
+    // methodDeclaration may be null for property getters (bodyNode must still be in the bound tree).
     private static MethodTransformDecision DecideMethodTransform(
         TypeDeclarationSyntax typeDeclaration,
         INamedTypeSymbol typeSymbol,
         MethodDeclarationSyntax methodDeclaration,
         IMethodSymbol methodSymbol,
+        SyntaxNode bodyNode,
         SemanticModel semanticModel)
     {
         string hardSkip = EvaluateHardSkipReason(
@@ -1107,7 +1527,6 @@ public static class TransformWorkerProgram
             return MethodTransformDecision.Skip(hardSkip);
         }
 
-        SyntaxNode bodyNode = (SyntaxNode)methodDeclaration.Body ?? methodDeclaration.ExpressionBody;
         if (bodyNode == null)
         {
             return MethodTransformDecision.Skip("Methods without a body (abstract/extern) are skipped.");
@@ -1145,7 +1564,6 @@ public static class TransformWorkerProgram
 
         if (!AccessorEligibility.TryBuildPlan(
                 semanticModel,
-                methodDeclaration,
                 methodSymbol,
                 typeSymbol,
                 bodyNode,
@@ -1188,8 +1606,8 @@ public static class TransformWorkerProgram
             return "Struct (value type) methods are out of scope for v1; byref instance transplant is unverified.";
         }
 
-        if (typeSymbol.IsGenericType || methodSymbol.IsGenericMethod
-            || methodDeclaration.TypeParameterList != null)
+        bool hasTypeParameters = methodDeclaration != null && methodDeclaration.TypeParameterList != null;
+        if (typeSymbol.IsGenericType || methodSymbol.IsGenericMethod || hasTypeParameters)
         {
             return "Generic methods and methods inside generic types cannot be safely patched with Harmony.";
         }
@@ -1197,7 +1615,7 @@ public static class TransformWorkerProgram
         // Explicit interface implementations have dotted metadata names (e.g. IFoo.Bar) that are
         // not valid C# identifiers for shim method names; sanitizing would also desync the
         // matcher (Cecil MethodDefinition.Name). v1 skips them with an explicit reason.
-        if (methodDeclaration.ExplicitInterfaceSpecifier != null)
+        if (methodDeclaration != null && methodDeclaration.ExplicitInterfaceSpecifier != null)
         {
             return "Explicit interface implementations are skipped in v1.";
         }
@@ -1257,7 +1675,8 @@ public static class TransformWorkerProgram
 
     private static bool IsAsyncOrIterator(MethodDeclarationSyntax methodDeclaration, SyntaxNode bodyNode)
     {
-        if (methodDeclaration.Modifiers.Any(static modifier => modifier.IsKind(SyntaxKind.AsyncKeyword)))
+        if (methodDeclaration != null
+            && methodDeclaration.Modifiers.Any(static modifier => modifier.IsKind(SyntaxKind.AsyncKeyword)))
         {
             return true;
         }
@@ -2135,7 +2554,6 @@ internal static class AccessorEligibility
 {
     public static bool TryBuildPlan(
         SemanticModel semanticModel,
-        MethodDeclarationSyntax methodDeclaration,
         IMethodSymbol methodSymbol,
         INamedTypeSymbol typeSymbol,
         SyntaxNode bodyNode,
@@ -2156,7 +2574,7 @@ internal static class AccessorEligibility
             return false;
         }
 
-        if (!AreBodyTypeUsagesVisible(semanticModel, methodDeclaration, out rejectReason))
+        if (!AreBodyTypeUsagesVisible(semanticModel, bodyNode, out rejectReason))
         {
             return false;
         }
@@ -2223,10 +2641,10 @@ internal static class AccessorEligibility
 
     private static bool AreBodyTypeUsagesVisible(
         SemanticModel semanticModel,
-        MethodDeclarationSyntax methodDeclaration,
+        SyntaxNode bodyNode,
         out string rejectReason)
     {
-        foreach (SyntaxNode node in methodDeclaration.DescendantNodesAndSelf())
+        foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
         {
             if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
             {

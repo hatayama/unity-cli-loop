@@ -7,9 +7,12 @@ using System.Threading.Tasks;
 
 using NUnit.Framework;
 
+using Newtonsoft.Json.Linq;
+
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -297,12 +300,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: one orchestrator run over the fixture reports the explicit-body property getter,
-        /// the explicit-body property setter, and the expression-bodied indexer getter as Skipped
-        /// with the v1 accessor reason, while auto-property accessors stay unlisted.
+        /// What: property getters with bodies are Patched; property setters and indexer getters
+        /// with bodies stay Skipped with the accessor reason; auto-property accessors stay unlisted.
         /// </summary>
         [Test]
-        public async Task Run_ExplicitAccessorsSkipped_AutoPropertyAccessorsUnlisted()
+        public async Task Run_PropertyGettersPatched_SetterAndIndexerAccessorsSkipped()
         {
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
@@ -314,13 +316,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            return _secret + delta;\n"
                     + "        }",
                     explicitAccessorsBlock:
-                    "// Explicit-body getter — worker must report get_ExplicitBodyGetter as Skipped (not silent).\n"
+                    "// Explicit-body getter — worker must patch get_ExplicitBodyGetter.\n"
                     + "        public int ExplicitBodyGetter\n"
                     + "        {\n"
                     + "            get { return _secret + 1; }\n"
                     + "        }\n"
                     + "\n"
-                    + "        // Explicit-body setter — worker must report set_ExplicitBodySetter as Skipped (not silent).\n"
+                    + "        // Explicit-body setter — worker must report set_ExplicitBodySetter as Skipped.\n"
                     + "        public int ExplicitBodySetter\n"
                     + "        {\n"
                     + "            set { _secret = value + 1; }\n"
@@ -338,20 +340,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(result);
 
             const string expectedReason =
-                "Property and indexer accessors are out of scope for v1; run 'uloop compile' to apply accessor edits.";
-            bool foundPropertyGetter = false;
+                "Property setter, init, or indexer accessors are out of scope for v1; "
+                + "run 'uloop compile' to apply accessor edits.";
+            bool foundPropertyGetterPatched = false;
             bool foundIndexerGetter = false;
             bool foundPropertySetter = false;
             bool foundAutoPropertyAccessor = false;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
             {
-                bool skippedWithAccessorReason = outcome.Kind == HotReloadMethodOutcomeKind.Skipped
-                    && outcome.Reason == expectedReason;
-                if (skippedWithAccessorReason && outcome.Method.Contains("get_ExplicitBodyGetter"))
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    && outcome.Method.Contains("get_ExplicitBodyGetter"))
                 {
-                    foundPropertyGetter = true;
+                    foundPropertyGetterPatched = true;
                 }
 
+                bool skippedWithAccessorReason = outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Reason == expectedReason;
                 if (skippedWithAccessorReason && outcome.Method.Contains("get_Item"))
                 {
                     foundIndexerGetter = true;
@@ -369,9 +373,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.That(
-                foundPropertyGetter,
+                foundPropertyGetterPatched,
                 Is.True,
-                "Expected get_ExplicitBodyGetter to be Skipped with the accessor out-of-scope reason.");
+                "Expected get_ExplicitBodyGetter to be Patched; got: " + FormatOutcomes(result));
             Assert.That(
                 foundIndexerGetter,
                 Is.True,
@@ -384,6 +388,89 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 foundAutoPropertyAccessor,
                 Is.False,
                 "Auto-property accessors must not be listed; only explicit-body accessors are reported.");
+        }
+
+        /// <summary>
+        /// What: editing a static expression-bodied property getter patches runtime reads,
+        /// --status lists the Active get_ row, and RevertAll restores the compiled literal.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedPropertyGetter_ApplyStatusRevert_UpdatesRuntimeValue()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "public static float HeightAmplitude => 5f;",
+                "public static float HeightAmplitude => 6f;",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: getter body must differ.");
+
+            string editedPath = WriteEditedSource("PropertyGetterHeightAmplitude.cs", editedSource);
+
+            Assert.That(HotReloadPropertyGetterFixture.HeightAmplitude, Is.EqualTo(5f));
+
+            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "get_HeightAmplitude");
+            Assert.That(patched.ActivePatchTotal, Is.GreaterThanOrEqualTo(1));
+            Assert.That(
+                patched.Warnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "Getter-only edits must not warn that outside-body edits were not applied.");
+            // Why exact label: Skill docs and --status must share FormatMethodKey shape with apply.
+            const string expectedGetterLabel =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadPropertyGetterFixture.get_HeightAmplitude()";
+            string applyMethodLabel = null;
+            foreach (HotReloadMethodOutcome outcome in patched.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    && outcome.Method.Contains("get_HeightAmplitude"))
+                {
+                    applyMethodLabel = outcome.Method;
+                    break;
+                }
+            }
+
+            Assert.That(applyMethodLabel, Is.EqualTo(expectedGetterLabel));
+            Assert.That(
+                HotReloadPropertyGetterFixture.HeightAmplitude,
+                Is.EqualTo(6f),
+                "Patched getter must return the edited literal.");
+
+            HotReloadTool tool = new HotReloadTool();
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
+                new JObject { ["Status"] = true },
+                CancellationToken.None);
+            HotReloadResponse status = baseResponse as HotReloadResponse;
+            Assert.That(status, Is.Not.Null);
+            Assert.That(status.Success, Is.True);
+
+            bool foundActiveGetter = false;
+            foreach (HotReloadMethodResult method in status.Methods)
+            {
+                if (method.Kind == "Active" && method.Method == expectedGetterLabel)
+                {
+                    foundActiveGetter = true;
+                    Assert.That(method.InvocationCount, Is.GreaterThanOrEqualTo(1L));
+                }
+            }
+
+            Assert.That(
+                foundActiveGetter,
+                Is.True,
+                "Status must list Active get_HeightAmplitude after apply with the same Method label.");
+
+            HotReloadPatcher.RevertAll();
+            Assert.That(HotReloadPatcher.DescribeActivePatches(), Is.Empty);
+            Assert.That(
+                HotReloadPropertyGetterFixture.HeightAmplitude,
+                Is.EqualTo(5f),
+                "RevertAll must restore the compiled getter body.");
         }
 
         /// <summary>
@@ -1378,6 +1465,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "HotReload",
                 "HotReloadE2EFixtures.cs");
             Assert.That(File.Exists(path), Is.True, "E2E fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveShapeFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadShapeFixtures.cs");
+            Assert.That(File.Exists(path), Is.True, "Shape fixture source missing: " + path);
             return Path.GetFullPath(path);
         }
 

@@ -52,10 +52,10 @@ ledger across runs.
 
 ## Scope and limits
 
-Only ordinary method declarations are patched. Constructors, finalizers, operators, event
-accessors, and `interface` members (including default interface implementations) are never
-scanned: edits to them produce **no per-method entry at all** and are silently not applied —
-use `uloop compile` for those.
+Only ordinary method declarations and property getters with a body are patched.
+Constructors, finalizers, operators, event accessors, and `interface` members
+(including default interface implementations) are never scanned: edits to them produce
+**no per-method entry at all** and are silently not applied — use `uloop compile` for those.
 
 Hot reload never adds members. A refactor that extracts a new helper method cannot be
 applied piecewise — keep iterating inside existing method bodies, then run
@@ -72,6 +72,18 @@ initializers, attributes, added or removed members — is reported as a `Warning
 entry as well; without a baseline it stays silent. Either way, use `uloop compile`
 for such edits.
 
+### Tunable values: prefer a getter over a const
+
+`const` edits never take effect through hot reload: C# bakes const values into every
+call site at compile time. When you expect to tune a value while Play Mode is running
+(speeds, amplitudes, sensitivities), expose it as a static property getter instead:
+
+    public static float HeightAmplitude => 5f;
+
+A getter body is an ordinary patchable method body, so editing the literal and running
+`uloop hot-reload` updates every consumer on its next call — across all files, without
+restarting Play Mode. Keep `const` for values you never tune at runtime.
+
 Each `uloop compile` also establishes a per-assembly source baseline: a snapshot of
 the sources exactly as they were compiled, captured after the compile's domain reload
 and adopted only once it verifies against the compiled assembly's PDB checksums. With
@@ -87,9 +99,10 @@ the first compile after installing or updating the package — every editable me
 the file is patched and a `Warnings` line reports the fallback; run `uloop compile`
 to establish the baseline.
 
-Property and indexer accessors with explicit bodies are reported per-accessor as
-`Skipped`, so an edited getter never disappears from the response silently; with a
-verified baseline, accessors unchanged from it produce no row.
+Property getters with a body (including expression-bodied properties) are patched
+like ordinary methods. Setter, init, and indexer accessors with explicit bodies are
+reported per-accessor as `Skipped`, so an edited accessor never disappears from the
+response silently; with a verified baseline, accessors unchanged from it produce no row.
 
 Subscribing to or unsubscribing from a field-like event (`+=`/`-=`) inside an edited
 body works. Methods that raise the event are reported as `Skipped` (see the table
@@ -107,7 +120,7 @@ below) — raising is only expressible inside the declaring type, which a shim i
 | Body contains a `base.` call | `base` cannot be expressed from outside the type |
 | Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates |
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
-| Property or indexer accessor with an explicit body | Accessor patching is out of scope for v1; `uloop compile` applies accessor edits |
+| Property setter, init, or indexer accessor with an explicit body | Accessor patching covers getters only; `uloop compile` applies setter/init/indexer edits |
 | Method raises, invokes, or reads a field-like event (anything beyond `+=`/`-=`) | C# only allows `+=`/`-=` on an event outside its declaring type, so the raising body cannot compile from the shim assembly |
 
 ### Failed — flips `Success` to `false`
