@@ -58,6 +58,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Fixture for shim compile of static field access inside string interpolation holes.
+    /// </summary>
+    internal class HotReloadInterpolationFixture
+    {
+        private static int formatCallTotal;
+
+        public string FormatStaticCount()
+        {
+            formatCallTotal++;
+            return $"total: {formatCallTotal}";
+        }
+    }
+
+    /// <summary>
     /// Hand-written static shims that mirror the production transplant shape
     /// (instance methods become static with a leading <c>instance</c> argument). Generated
     /// shims mirror user signatures verbatim; repo style rules apply to hand-written code only.

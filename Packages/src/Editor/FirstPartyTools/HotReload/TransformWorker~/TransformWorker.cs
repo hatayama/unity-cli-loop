@@ -3400,6 +3400,37 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         return VisitName(node, node);
     }
 
+    public override SyntaxNode VisitInterpolation(InterpolationSyntax node)
+    {
+        InterpolationSyntax visited = (InterpolationSyntax)base.VisitInterpolation(node);
+        if (visited.Expression is ParenthesizedExpressionSyntax)
+        {
+            return visited;
+        }
+
+        // Why: a top-level ':' in an interpolation hole starts a format clause, so a
+        // rewrite that inserts bare `global::` yields CS0103 ('global'). Parenthesizing
+        // keeps the alias qualifier out of the format-clause scan and still coexists
+        // with alignment/format clauses. Nested positions do not need parentheses, but
+        // wrapping whenever an AliasQualifiedNameSyntax is present is always safe.
+        bool hasAliasQualifiedName = false;
+        foreach (SyntaxNode descendant in visited.Expression.DescendantNodesAndSelf())
+        {
+            if (descendant is AliasQualifiedNameSyntax)
+            {
+                hasAliasQualifiedName = true;
+                break;
+            }
+        }
+
+        if (!hasAliasQualifiedName)
+        {
+            return visited;
+        }
+
+        return visited.WithExpression(SyntaxFactory.ParenthesizedExpression(visited.Expression));
+    }
+
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
     {
         if (_accessorPlan == null

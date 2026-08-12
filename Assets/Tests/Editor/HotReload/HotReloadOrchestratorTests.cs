@@ -277,6 +277,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: editing a method that references a private static field inside a string
+        /// interpolation hole still Patches (alias-qualified names must be parenthesized so csc
+        /// does not treat ':' as a format-clause start).
+        /// </summary>
+        [Test]
+        public async Task Run_EditedInterpolationStaticFieldAccess_Patches()
+        {
+            string fixturePath = ResolveCoreFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "return $\"total: {formatCallTotal}\";",
+                "return $\"total=: {formatCallTotal}\";",
+                StringComparison.Ordinal);
+            Assert.That(
+                editedSource,
+                Is.Not.EqualTo(onDisk),
+                "Precondition: FormatStaticCount body must differ from on-disk.");
+
+            string editedPath = WriteEditedSource("InterpolationStaticField.cs", editedSource);
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                contentPathOverride: editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadInterpolationFixture.FormatStaticCount));
+        }
+
+        /// <summary>
         /// What: running hot reload on the on-disk fixture with no edits yields an empty Methods
         /// list, a positive UnchangedTotal, and the all-unchanged Message wording.
         /// </summary>
@@ -1645,6 +1674,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "HotReload",
                 "HotReloadE2EFixtures.cs");
             Assert.That(File.Exists(path), Is.True, "E2E fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveCoreFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadCoreFixtures.cs");
+            Assert.That(File.Exists(path), Is.True, "Core fixture source missing: " + path);
             return Path.GetFullPath(path);
         }
 
