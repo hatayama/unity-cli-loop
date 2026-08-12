@@ -98,10 +98,6 @@ V2 delegation requires Node.js 22 or later, including npm for the first command 
 <summary>CLI-only terminal install</summary>
 
 Use this only when you want to install the standalone global CLI without opening Unity package setup.
-The installer verifies the downloaded archive against the digest list in
-`Packages/src/project-runner-pin.json` (same pin Unity's **Install CLI** button uses).
-Optional env: `ULOOP_REF` (git ref for the pin; default `main`), `ULOOP_INSTALL_DIR`.
-`ULOOP_VERSION` is accepted only when it matches the pin's `dispatcherReleaseTag`.
 
 ### Homebrew (macOS)
 
@@ -110,6 +106,13 @@ brew install hatayama/tap/uloop
 ```
 
 Updates are managed by `brew upgrade uloop`. The formula is refreshed automatically on every dispatcher release.
+
+### Shell installer (curl / PowerShell)
+
+The installer verifies the downloaded archive against the digest list in
+`Packages/src/project-runner-pin.json` (same pin Unity's **Install CLI** button uses).
+Optional env: `ULOOP_REF` (git ref for the pin; default `main`), `ULOOP_INSTALL_DIR`.
+`ULOOP_VERSION` is accepted only when it matches the pin's `dispatcherReleaseTag`.
 
 On macOS or Windows Git Bash:
 

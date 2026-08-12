@@ -69,7 +69,7 @@ class Uloop < Formula
   test do
     assert_match version.to_s, shell_output("#{bin}/uloop --version")
   end
-}
+end
 `
 
 type homebrewFormulaUpdateConfig struct {

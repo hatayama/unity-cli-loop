@@ -127,10 +127,14 @@ class Uloop < Formula
   test do
     assert_match version.to_s, shell_output("#{bin}/uloop --version")
   end
-}
+end
 `
 	if got != want {
 		t.Fatalf("formula mismatch:\n got:\n%s\nwant:\n%s", got, want)
+	}
+	// Why: keep this independent of the golden blob so a copy-paste of a `}` closer cannot regress.
+	if !strings.HasSuffix(got, "end\n") {
+		t.Fatalf("formula must end with Ruby class closer end\\n, got %q", got)
 	}
 }
 
