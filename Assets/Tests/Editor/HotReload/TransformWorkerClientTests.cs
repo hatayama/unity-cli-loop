@@ -751,6 +751,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: editing only an enum member value emits the dedicated const-drift warning and
+        /// does not also emit the generic outside-method-body warning.
+        /// </summary>
+        [Test]
+        public async Task Run_WithEnumMemberValueOnlyEdit_EmitsConstDriftWithoutOutsideBodyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            string editedSource = onDisk.Replace(
+                "Active = 1",
+                "Active = 2",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: enum member value must differ.");
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, "EnumMemberOnlyDriftWarning.cs");
+            File.WriteAllText(sourcePath, editedSource);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveE2EFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.declarationDriftWarnings, Is.Not.Null);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.Some.Contain("HotReloadE2EMode.Active").And.Contain("is 2 in the edited source but 1"),
+                "Enum-member-only edits must keep the dedicated const-drift warning.\n"
+                + string.Join("\n", result.Output.declarationDriftWarnings));
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "Enum-member-only edits must not also emit the generic outside-body warning.");
+        }
+
+        /// <summary>
         /// What: a non-const field initializer change still emits the generic outside-method-body
         /// warning (const stripping must not hide ordinary field initializer drift).
         /// </summary>
