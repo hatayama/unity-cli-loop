@@ -420,6 +420,9 @@ func TestUpdateFailsWhenExecutablePathResolutionFails(t *testing.T) {
 	if !handled || code != 1 {
 		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
 	}
+	if !strings.Contains(stderr.String(), "executable path unavailable") {
+		t.Fatalf("expected resolution error in stderr, got: %s", stderr.String())
+	}
 }
 
 func TestUpdateCommandForLinuxIsUnsupported(t *testing.T) {
