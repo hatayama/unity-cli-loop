@@ -42,6 +42,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Identities of methods left untouched because they match the verified snapshot.
         // Null/empty means none (or no baseline). UnchangedTotal is derived from Length.
         public TransformWorkerUnchangedMethodDto[] unchangedMethods;
+
+        // True when snapshotSource was provided but a duplicate syntax-method key on either side
+        // disabled baseline comparison (silent patch-all fallback). False when snapshotSource is null.
+        public bool baselineDisabledByDuplicateKeys;
     }
 
     [Serializable]

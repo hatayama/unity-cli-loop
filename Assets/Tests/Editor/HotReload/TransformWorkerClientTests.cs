@@ -410,6 +410,137 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a self-snapshot of every .cs file under Assets/Tests/Editor/HotReload/ yields
+        /// Success, empty parseErrors/entries/declarationDriftWarnings, and at least one
+        /// unchanged or skipped method (proves the worker recognized the file). Permanent guard
+        /// that identical source never false-patches after the unannotated-baseline fix.
+        /// </summary>
+        [Test]
+        public async Task Run_WithSelfSnapshotOnHotReloadTestSources_TreatsAllMethodsUnchanged()
+        {
+            string directory = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload");
+            Assert.That(Directory.Exists(directory), Is.True, "HotReload test directory missing.");
+            string[] sourcePaths = Directory.GetFiles(directory, "*.cs", SearchOption.TopDirectoryOnly);
+            Assert.That(sourcePaths.Length, Is.GreaterThan(0), "Expected at least one HotReload test .cs file.");
+
+            List<string> failures = new List<string>();
+            foreach (string sourcePath in sourcePaths)
+            {
+                string fullPath = Path.GetFullPath(sourcePath);
+                string projectRelativePath =
+                    "Assets/Tests/Editor/HotReload/" + Path.GetFileName(fullPath);
+                string onDisk = File.ReadAllText(fullPath);
+                TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                    fullPath,
+                    projectRelativePath,
+                    snapshotSource: onDisk);
+
+                List<string> fileFailures = new List<string>();
+                if (!result.Success)
+                {
+                    fileFailures.Add("Success=false: " + result.ErrorMessage);
+                }
+
+                if (result.Output == null)
+                {
+                    fileFailures.Add("Output is null");
+                    failures.Add(projectRelativePath + " -> " + string.Join("; ", fileFailures));
+                    continue;
+                }
+
+                if (result.Output.parseErrors != null && result.Output.parseErrors.Length > 0)
+                {
+                    fileFailures.Add(
+                        "parseErrors=[" + string.Join(" | ", result.Output.parseErrors) + "]");
+                }
+
+                if (result.Output.entries != null && result.Output.entries.Length > 0)
+                {
+                    fileFailures.Add(
+                        "entries=[" + FormatEntryMethodNames(result.Output.entries) + "]");
+                }
+
+                int unchangedCount =
+                    result.Output.unchangedMethods != null ? result.Output.unchangedMethods.Length : 0;
+                int skippedCount = result.Output.skipped != null ? result.Output.skipped.Length : 0;
+                if (unchangedCount + skippedCount < 1)
+                {
+                    fileFailures.Add(
+                        "unchangedMethods+skipped < 1 (unchanged="
+                        + unchangedCount + ", skipped=" + skippedCount + ")");
+                }
+
+                if (result.Output.declarationDriftWarnings != null
+                    && result.Output.declarationDriftWarnings.Length > 0)
+                {
+                    fileFailures.Add(
+                        "declarationDriftWarnings=["
+                        + string.Join(" | ", result.Output.declarationDriftWarnings) + "]");
+                }
+
+                if (fileFailures.Count > 0)
+                {
+                    failures.Add(projectRelativePath + " -> " + string.Join("; ", fileFailures));
+                }
+            }
+
+            Assert.That(
+                failures,
+                Is.Empty,
+                "Self-snapshot must treat every HotReload test source as unchanged:\n"
+                + string.Join("\n", failures));
+        }
+
+        /// <summary>
+        /// What: an identical self-snapshot of HotReloadShapeFixture treats every method as
+        /// unchanged (empty entries; all five shape methods listed in unchangedMethods). Guards
+        /// the annotated-vs-plain AreEquivalent asymmetry on long-return / unchecked / switch.
+        /// </summary>
+        [Test]
+        public async Task Run_WithIdenticalSnapshotOnShapeFixture_TreatsAllMethodsUnchanged()
+        {
+            string sourcePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(sourcePath);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveShapeFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output, Is.Not.Null);
+            Assert.That(
+                result.Output.entries,
+                Is.Empty,
+                "Identical snapshot must emit no patch entries; got: "
+                + FormatEntryMethodNames(result.Output.entries));
+
+            string[] expectedMethods =
+            {
+                nameof(HotReloadShapeFixture.ShortSingle),
+                nameof(HotReloadShapeFixture.ExpressionBodied),
+                nameof(HotReloadShapeFixture.LongSingleReturn),
+                nameof(HotReloadShapeFixture.UncheckedLongBody),
+                nameof(HotReloadShapeFixture.SwitchMessage),
+            };
+            Assert.That(result.Output.unchangedMethods, Is.Not.Null);
+            HashSet<string> unchangedNames = new HashSet<string>();
+            foreach (TransformWorkerUnchangedMethodDto unchanged in result.Output.unchangedMethods)
+            {
+                unchangedNames.Add(unchanged.methodName);
+            }
+
+            Assert.That(
+                unchangedNames,
+                Is.SupersetOf(expectedMethods),
+                "Identical snapshot must list all five shape methods in unchangedMethods; got: "
+                + string.Join(", ", unchangedNames));
+        }
+
+        /// <summary>
         /// What: with a snapshot whose ComputeWithPrivate body differs, the worker emits only that
         /// edited method and lists the remaining methods in unchangedMethods.
         /// </summary>
@@ -521,7 +652,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a snapshot that duplicates a method key falls back to no-baseline behavior
-        /// (same entries as a null snapshot, empty unchangedMethods).
+        /// (same entries as a null snapshot, empty unchangedMethods) and sets
+        /// baselineDisabledByDuplicateKeys so the orchestrator can warn.
         /// </summary>
         [Test]
         public async Task Run_WithSnapshotDuplicateMethodKey_FallsBackToNoBaseline()
@@ -554,10 +686,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 || withCollision.Output.unchangedMethods.Length == 0,
                 Is.True,
                 "Duplicate-key fallback must not report unchanged methods.");
+            Assert.That(
+                withCollision.Output.baselineDisabledByDuplicateKeys,
+                Is.True,
+                "Duplicate-key fallback must set baselineDisabledByDuplicateKeys.");
 
             HashSet<string> baselineKeys = CollectEntryKeys(baseline.Output.entries);
             HashSet<string> collisionKeys = CollectEntryKeys(withCollision.Output.entries);
             Assert.That(collisionKeys, Is.EquivalentTo(baselineKeys));
+        }
+
+        /// <summary>
+        /// What: after arity normalization, void F(int) and void F&lt;T&gt;(int) no longer share a
+        /// syntax key, so an identical self-snapshot treats both as unchanged (no entries).
+        /// </summary>
+        [Test]
+        public async Task Run_WithSelfSnapshotOnArityDistinctMethods_TreatsBothUnchanged()
+        {
+            string sourcePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(sourcePath);
+            Assert.That(onDisk, Does.Contain("HotReloadKeyNormalizationFixture"));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveShapeFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.baselineDisabledByDuplicateKeys, Is.False);
+            Assert.That(
+                result.Output.entries,
+                Is.Empty,
+                "Arity-distinct methods must not disable baseline; got entries: "
+                + FormatEntryMethodNames(result.Output.entries));
+
+            int unchangedFCount = 0;
+            Assert.That(result.Output.unchangedMethods, Is.Not.Null);
+            foreach (TransformWorkerUnchangedMethodDto unchanged in result.Output.unchangedMethods)
+            {
+                if (unchanged.methodName == nameof(HotReloadKeyNormalizationFixture.F)
+                    && unchanged.typeMetadataName != null
+                    && unchanged.typeMetadataName.Contains(
+                        nameof(HotReloadKeyNormalizationFixture),
+                        StringComparison.Ordinal))
+                {
+                    unchangedFCount++;
+                }
+            }
+
+            Assert.That(
+                unchangedFCount,
+                Is.EqualTo(2),
+                "Both F(int) and F<T>(int) must appear in unchangedMethods after arity normalization.");
         }
 
         private static HashSet<string> CollectEntryKeys(TransformWorkerEntryDto[] entries)
@@ -612,17 +792,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(compilationAssembly, Is.Not.Null, "CompilationPipeline assembly not found.");
 
+            // Why absolute: the worker process cwd is not the Unity project root, so relative
+            // ScriptAssemblies paths from CompilationPipeline become "Reference not found"
+            // parseErrors and poison self-snapshot assertions that require parseErrors empty.
+            string[] referencePaths = BuildAbsoluteReferencePaths(
+                compilationAssembly.allReferences,
+                targetDllPath);
+
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
                 sourcePath = sourcePath,
                 defines = compilationAssembly.defines ?? System.Array.Empty<string>(),
-                referencePaths = compilationAssembly.allReferences,
+                referencePaths = referencePaths,
                 targetTypesAssemblyPath = targetDllPath,
                 snapshotSource = snapshotSource,
                 projectRelativePath = projectRelativePath
             };
 
             return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+        }
+
+        private static string[] BuildAbsoluteReferencePaths(
+            string[] allReferences,
+            string targetDllPath)
+        {
+            List<string> paths = new List<string>();
+            if (allReferences != null)
+            {
+                foreach (string reference in allReferences)
+                {
+                    if (string.IsNullOrEmpty(reference) || !File.Exists(reference))
+                    {
+                        continue;
+                    }
+
+                    paths.Add(Path.GetFullPath(reference));
+                }
+            }
+
+            string fullTarget = Path.GetFullPath(targetDllPath);
+            bool hasTarget = false;
+            foreach (string path in paths)
+            {
+                if (string.Equals(path, fullTarget, StringComparison.OrdinalIgnoreCase))
+                {
+                    hasTarget = true;
+                    break;
+                }
+            }
+
+            if (!hasTarget)
+            {
+                paths.Add(fullTarget);
+            }
+
+            return paths.ToArray();
         }
 
         private static string ResolveE2EFixturePath()
@@ -640,6 +864,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static string ResolveE2EFixtureProjectRelativePath()
         {
             return "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
+        }
+
+        private static string ResolveShapeFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadShapeFixtures.cs");
+            Assert.That(File.Exists(path), Is.True, "Shape fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveShapeFixtureProjectRelativePath()
+        {
+            return "Assets/Tests/Editor/HotReload/HotReloadShapeFixtures.cs";
+        }
+
+        private static string FormatEntryMethodNames(TransformWorkerEntryDto[] entries)
+        {
+            if (entries == null || entries.Length == 0)
+            {
+                return "(none)";
+            }
+
+            List<string> names = new List<string>(entries.Length);
+            foreach (TransformWorkerEntryDto entry in entries)
+            {
+                names.Add(entry.methodName);
+            }
+
+            return string.Join(", ", names);
         }
     }
 }

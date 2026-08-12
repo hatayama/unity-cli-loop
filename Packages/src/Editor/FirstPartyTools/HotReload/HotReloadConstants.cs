@@ -100,5 +100,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string NoVerifiedSourceSnapshotWarningFormat =
             "No verified source snapshot for {0} (assembly {1}); patching all methods. "
             + "Run uloop compile to establish a baseline for edited-method detection.";
+
+        // Format: file name, assembly name. Emitted when syntax-method key collision disables baseline.
+        public const string BaselineDisabledByDuplicateKeysWarningFormat =
+            "Baseline comparison disabled for {0} (assembly {1}): the file contains methods with "
+            + "colliding signature keys; patching all methods.";
     }
 }

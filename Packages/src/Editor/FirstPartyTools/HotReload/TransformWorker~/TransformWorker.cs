@@ -174,11 +174,16 @@ public static class TransformWorkerProgram
             }
         }
 
-        // Why before CSharpCompilation.Create: annotating after GetSemanticModel detaches nodes
-        // from the bound tree and ShimBodyRewriter's GetSymbolInfo throws "Syntax node is not
-        // within syntax tree". Binding the SemanticModel to the annotated tree keeps rewriter
-        // lookups valid while uloop-line annotations ride through to Emit.
-        CompilationUnitSyntax annotatedRoot = AnnotateOriginalSourceLines(syntaxTree.GetCompilationUnitRoot());
+        // Why capture plainRoot before annotate: StatementSyntax annotations make
+        // SyntaxFactory.AreEquivalent(topLevel:false) return false for some method shapes
+        // (long single return / unchecked multi-statement / switch) even when the source text
+        // is identical. Baseline comparison must use unannotated nodes on both sides.
+        // Why annotate before CSharpCompilation.Create: annotating after GetSemanticModel
+        // detaches nodes from the bound tree and ShimBodyRewriter's GetSymbolInfo throws
+        // "Syntax node is not within syntax tree". Binding the SemanticModel to the annotated
+        // tree keeps rewriter lookups valid while uloop-line annotations ride through to Emit.
+        CompilationUnitSyntax plainRoot = syntaxTree.GetCompilationUnitRoot();
+        CompilationUnitSyntax annotatedRoot = AnnotateOriginalSourceLines(plainRoot);
         syntaxTree = syntaxTree.WithRootAndOptions(annotatedRoot, syntaxTree.Options);
 
         string targetTypesFullPath =
@@ -245,9 +250,13 @@ public static class TransformWorkerProgram
         // Syntax-key maps for edited-method detection. Distinct from BuildMethodKey (Cecil names):
         // same-file old/new comparison only needs syntax keys to stay consistent with each other.
         bool hasBaseline = false;
+        bool baselineDisabledByDuplicateKeys = false;
         Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap = null;
+        Dictionary<string, MethodDeclarationSyntax> plainCurrentMethodMap = null;
         Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap = null;
         Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap = null;
+        Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap = null;
+        Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap = null;
         // Null disables comparison; empty string is a real (empty) baseline text.
         if (input.SnapshotSource != null)
         {
@@ -256,22 +265,33 @@ public static class TransformWorkerProgram
                     parseOptions)
                 .GetCompilationUnitRoot();
             Dictionary<string, MethodDeclarationSyntax> snapMethods = BuildSyntaxMethodMapOrNull(snapshotRoot);
-            Dictionary<string, MethodDeclarationSyntax> currentMethods = BuildSyntaxMethodMapOrNull(root);
+            // Why plainRoot: annotated current nodes break AreEquivalent for some shapes (see plainRoot above).
+            Dictionary<string, MethodDeclarationSyntax> currentMethods = BuildSyntaxMethodMapOrNull(plainRoot);
             if (snapMethods != null && currentMethods != null)
             {
                 // Why both maps: a duplicate key on either side makes AreEquivalent matching
                 // ambiguous, so fail closed to no-baseline (patch all) instead of guessing.
                 hasBaseline = true;
                 snapshotMethodMap = snapMethods;
+                plainCurrentMethodMap = currentMethods;
                 // Why null is kept as-is: a colliding property/indexer key only disables accessor
                 // gating for this file; method-level baseline matching still applies.
                 snapshotPropertyMap = BuildSyntaxPropertyMapOrNull(snapshotRoot);
                 snapshotIndexerMap = BuildSyntaxIndexerMapOrNull(snapshotRoot);
+                plainCurrentPropertyMap = BuildSyntaxPropertyMapOrNull(plainRoot);
+                plainCurrentIndexerMap = BuildSyntaxIndexerMapOrNull(plainRoot);
+                // Why plainRoot (not annotated root): StripMethodBodiesRewriter only clears method
+                // bodies, so accessor/ctor annotations would otherwise fake outside-body drift.
                 AppendOutsideMethodBodyDriftWarningIfNeeded(
                     snapshotRoot,
-                    root,
+                    plainRoot,
                     Path.GetFileName(input.SourcePath),
                     declarationDriftWarnings);
+            }
+            else
+            {
+                // Why surface: previously a colliding key silently disabled baseline and patched all.
+                baselineDisabledByDuplicateKeys = true;
             }
         }
 
@@ -300,7 +320,9 @@ public static class TransformWorkerProgram
                 semanticModel,
                 skipped,
                 hasBaseline ? snapshotPropertyMap : null,
-                hasBaseline ? snapshotIndexerMap : null);
+                hasBaseline ? snapshotIndexerMap : null,
+                hasBaseline ? plainCurrentPropertyMap : null,
+                hasBaseline ? plainCurrentIndexerMap : null);
 
             List<MethodDeclarationSyntax> methods = typeDeclaration.Members
                 .OfType<MethodDeclarationSyntax>()
@@ -340,8 +362,11 @@ public static class TransformWorkerProgram
                 if (hasBaseline)
                 {
                     string syntaxMethodKey = BuildSyntaxMethodKey(typeMetadataNameFromSyntax, methodDeclaration);
+                    // Why plainDecl: compare unannotated nodes; annotated methodDeclaration breaks
+                    // AreEquivalent for long-return / unchecked / switch shapes (see plainRoot).
                     if (snapshotMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax snapshotDecl)
-                        && SyntaxFactory.AreEquivalent(snapshotDecl, methodDeclaration, topLevel: false))
+                        && plainCurrentMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax plainDecl)
+                        && SyntaxFactory.AreEquivalent(snapshotDecl, plainDecl, topLevel: false))
                     {
                         unchangedMethods.Add(new WorkerUnchangedMethod
                         {
@@ -427,7 +452,8 @@ public static class TransformWorkerProgram
             Skipped = skipped.ToArray(),
             DeclarationDriftWarnings = declarationDriftWarnings.ToArray(),
             ParseErrors = parseErrors.ToArray(),
-            UnchangedMethods = unchangedMethods.ToArray()
+            UnchangedMethods = unchangedMethods.ToArray(),
+            BaselineDisabledByDuplicateKeys = baselineDisabledByDuplicateKeys
         };
     }
 
@@ -611,6 +637,7 @@ public static class TransformWorkerProgram
 
     // Syntax-based method key for same-file snapshot vs current comparison. Do not mix with
     // BuildMethodKey (Cecil/metadata names used by the orchestrator exclusion path).
+    // Used only for in-memory baseline maps — safe to evolve without wire compatibility concerns.
     private static string BuildSyntaxMethodKey(string typeMetadataName, MethodDeclarationSyntax methodDeclaration)
     {
         List<string> parameterKeys = new List<string>();
@@ -622,13 +649,26 @@ public static class TransformWorkerProgram
             }
         }
 
-        return typeMetadataName + "::" + methodDeclaration.Identifier.Text + "("
+        // Why arity suffix: void F(int) and void F<T>(int) must not share a key (was silent
+        // baseline-disable). Arity 0 keeps the bare name so existing non-generic keys stay stable.
+        string methodName = methodDeclaration.Identifier.Text;
+        if (methodDeclaration.TypeParameterList != null
+            && methodDeclaration.TypeParameterList.Parameters.Count > 0)
+        {
+            methodName += "`"
+                + methodDeclaration.TypeParameterList.Parameters.Count.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return typeMetadataName + "::" + methodName + "("
             + string.Join(",", parameterKeys) + ")";
     }
 
     private static string BuildSyntaxParameterTypeKey(ParameterSyntax parameter)
     {
-        string typeText = parameter.Type != null ? parameter.Type.ToString() : string.Empty;
+        // Why NormalizeWhitespace: trivia / spacing differences must not invent distinct keys.
+        string typeText = parameter.Type != null
+            ? parameter.Type.NormalizeWhitespace().ToString()
+            : string.Empty;
         if (parameter.Modifiers.Any(SyntaxKind.RefKeyword)
             || parameter.Modifiers.Any(SyntaxKind.OutKeyword)
             || parameter.Modifiers.Any(SyntaxKind.InKeyword))
@@ -639,6 +679,7 @@ public static class TransformWorkerProgram
         return typeText;
     }
 
+    // What: syntax-only type metadata name for baseline signature keys (not shim naming).
     private static string BuildTypeMetadataNameFromSyntax(TypeDeclarationSyntax typeDeclaration)
     {
         List<string> nestedNames = new List<string>();
@@ -667,25 +708,32 @@ public static class TransformWorkerProgram
         return namespaceName + "." + typeMetadataName;
     }
 
+    // What: dotted namespace path including all ancestor namespaces (not only the innermost).
     private static string GetContainingNamespaceName(SyntaxNode node)
     {
+        List<string> parts = new List<string>();
         SyntaxNode current = node.Parent;
         while (current != null)
         {
             if (current is NamespaceDeclarationSyntax namespaceDeclaration)
             {
-                return namespaceDeclaration.Name.ToString();
+                parts.Add(namespaceDeclaration.Name.ToString());
             }
-
-            if (current is FileScopedNamespaceDeclarationSyntax fileScopedNamespace)
+            else if (current is FileScopedNamespaceDeclarationSyntax fileScopedNamespace)
             {
-                return fileScopedNamespace.Name.ToString();
+                parts.Add(fileScopedNamespace.Name.ToString());
             }
 
             current = current.Parent;
         }
 
-        return string.Empty;
+        if (parts.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        parts.Reverse();
+        return string.Join(".", parts);
     }
 
     private static string BuildSyntaxPropertyKey(
@@ -826,17 +874,26 @@ public static class TransformWorkerProgram
         SemanticModel semanticModel,
         List<WorkerSkipped> skipped,
         Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
-        Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap)
+        Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap,
+        Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
+        Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap)
     {
         foreach (MemberDeclarationSyntax member in typeDeclaration.Members)
         {
             if (member is PropertyDeclarationSyntax propertyDeclaration)
             {
+                string propertyKey = BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
+                // Why plainCurrentPropertyMap: annotated property nodes break AreEquivalent the
+                // same way annotated method bodies do; compare unannotated peers only.
                 if (snapshotPropertyMap != null
+                    && plainCurrentPropertyMap != null
                     && snapshotPropertyMap.TryGetValue(
-                        BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration),
+                        propertyKey,
                         out PropertyDeclarationSyntax snapshotProperty)
-                    && SyntaxFactory.AreEquivalent(snapshotProperty, propertyDeclaration, topLevel: false))
+                    && plainCurrentPropertyMap.TryGetValue(
+                        propertyKey,
+                        out PropertyDeclarationSyntax plainProperty)
+                    && SyntaxFactory.AreEquivalent(snapshotProperty, plainProperty, topLevel: false))
                 {
                     continue;
                 }
@@ -850,11 +907,16 @@ public static class TransformWorkerProgram
 
             if (member is IndexerDeclarationSyntax indexerDeclaration)
             {
+                string indexerKey = BuildSyntaxIndexerKey(typeMetadataNameFromSyntax, indexerDeclaration);
                 if (snapshotIndexerMap != null
+                    && plainCurrentIndexerMap != null
                     && snapshotIndexerMap.TryGetValue(
-                        BuildSyntaxIndexerKey(typeMetadataNameFromSyntax, indexerDeclaration),
+                        indexerKey,
                         out IndexerDeclarationSyntax snapshotIndexer)
-                    && SyntaxFactory.AreEquivalent(snapshotIndexer, indexerDeclaration, topLevel: false))
+                    && plainCurrentIndexerMap.TryGetValue(
+                        indexerKey,
+                        out IndexerDeclarationSyntax plainIndexer)
+                    && SyntaxFactory.AreEquivalent(snapshotIndexer, plainIndexer, topLevel: false))
                 {
                     continue;
                 }
@@ -3558,6 +3620,8 @@ internal sealed class WorkerOutput
     public string[] ParseErrors { get; set; }
 
     public WorkerUnchangedMethod[] UnchangedMethods { get; set; }
+
+    public bool BaselineDisabledByDuplicateKeys { get; set; }
 }
 
 internal sealed class WorkerUnchangedMethod
