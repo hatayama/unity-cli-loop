@@ -790,6 +790,120 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Both IA.Run and IB.Run must appear in unchangedMethods after key qualification.");
         }
 
+        /// <summary>
+        /// What: a method only called from Awake gets an indirect lifecycleNote; the same method
+        /// also called from Update does not (removing ComputeLifecycleNote would leave both null).
+        /// </summary>
+        [Test]
+        public async Task Run_WithAwakeOnlyCallee_EmitsIndirectLifecycleNote_UpdateCallerDoesNot()
+        {
+            string awakeOnlySource =
+                "using UnityEngine;\n"
+                + "public class HotReloadLifecycleAwakeOnlyFixture : MonoBehaviour\n"
+                + "{\n"
+                + "    private void Awake()\n"
+                + "    {\n"
+                + "        BuildPlayer();\n"
+                + "    }\n"
+                + "\n"
+                + "    private void BuildPlayer()\n"
+                + "    {\n"
+                + "        int x = 1;\n"
+                + "        x += 1;\n"
+                + "    }\n"
+                + "}\n";
+            string updateAlsoSource =
+                "using UnityEngine;\n"
+                + "public class HotReloadLifecycleUpdateAlsoFixture : MonoBehaviour\n"
+                + "{\n"
+                + "    private void Awake()\n"
+                + "    {\n"
+                + "        BuildPlayer();\n"
+                + "    }\n"
+                + "\n"
+                + "    private void Update()\n"
+                + "    {\n"
+                + "        BuildPlayer();\n"
+                + "    }\n"
+                + "\n"
+                + "    private void BuildPlayer()\n"
+                + "    {\n"
+                + "        int x = 1;\n"
+                + "        x += 1;\n"
+                + "    }\n"
+                + "}\n";
+
+            TransformWorkerEntryDto awakeOnlyEntry =
+                await RunWorkerAndFindEntryAsync(awakeOnlySource, "LifecycleAwakeOnly.cs", "BuildPlayer");
+            Assert.That(awakeOnlyEntry.lifecycleNote, Is.Not.Null.And.Not.Empty);
+            Assert.That(awakeOnlyEntry.lifecycleNote, Does.Contain("BuildPlayer"));
+            Assert.That(awakeOnlyEntry.lifecycleNote, Does.Contain("Awake"));
+            Assert.That(awakeOnlyEntry.lifecycleNote, Does.Contain("one-shot lifecycle"));
+
+            TransformWorkerEntryDto updateAlsoEntry =
+                await RunWorkerAndFindEntryAsync(updateAlsoSource, "LifecycleUpdateAlso.cs", "BuildPlayer");
+            Assert.That(
+                updateAlsoEntry.lifecycleNote,
+                Is.Null.Or.Empty,
+                "A method also called from Update must not get a lifecycle note.");
+        }
+
+        /// <summary>
+        /// What: patching Awake itself emits the direct one-shot lifecycle note.
+        /// </summary>
+        [Test]
+        public async Task Run_WithAwakeMethod_EmitsDirectLifecycleNote()
+        {
+            string source =
+                "using UnityEngine;\n"
+                + "public class HotReloadLifecycleAwakeFixture : MonoBehaviour\n"
+                + "{\n"
+                + "    private void Awake()\n"
+                + "    {\n"
+                + "        int x = 1;\n"
+                + "        x += 1;\n"
+                + "    }\n"
+                + "}\n";
+
+            TransformWorkerEntryDto awakeEntry =
+                await RunWorkerAndFindEntryAsync(source, "LifecycleAwake.cs", "Awake");
+            Assert.That(awakeEntry.lifecycleNote, Is.Not.Null.And.Not.Empty);
+            Assert.That(
+                awakeEntry.lifecycleNote,
+                Does.Contain("Awake is a one-shot lifecycle method"));
+        }
+
+        private static async Task<TransformWorkerEntryDto> RunWorkerAndFindEntryAsync(
+            string source,
+            string fileName,
+            string methodName)
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, fileName);
+            File.WriteAllText(sourcePath, source);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HotReloadConstants.TestSourcesRelativeDirectory.Replace('\\', '/') + "/" + fileName);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.entries, Is.Not.Null);
+
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == methodName)
+                {
+                    return entry;
+                }
+            }
+
+            Assert.Fail(
+                "Expected entry for " + methodName + "; got: "
+                + FormatEntryMethodNames(result.Output.entries));
+            return null;
+        }
+
         private static HashSet<string> CollectEntryKeys(TransformWorkerEntryDto[] entries)
         {
             HashSet<string> keys = new HashSet<string>();

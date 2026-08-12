@@ -486,7 +486,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 inlineRiskMethodLabels.Add(methodLabel);
             }
 
-            return HotReloadMethodOutcome.Patched(methodLabel, filePath);
+            return HotReloadMethodOutcome.Patched(methodLabel, filePath, entry.lifecycleNote);
         }
 
         private static string FormatInlineRiskAggregatedWarning(

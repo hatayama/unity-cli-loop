@@ -46,6 +46,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Populated on --status; 0 for apply/revert outcomes.
         /// </summary>
         public long InvocationCount { get; set; }
+
+        /// <summary>
+        /// Optional note when the patched method is (or is only reached from) a one-shot lifecycle
+        /// method. Empty when not applicable; does not change Kind.
+        /// </summary>
+        public string LifecycleNote { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -194,7 +200,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         Kind = outcome.Kind.ToString(),
                         Method = outcome.Method,
                         Reason = outcome.Reason ?? string.Empty,
-                        FilePath = outcome.FilePath ?? string.Empty
+                        FilePath = outcome.FilePath ?? string.Empty,
+                        LifecycleNote = outcome.LifecycleNote ?? string.Empty
                     });
             }
 
@@ -319,6 +326,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (result.UnchangedTotal > 0)
             {
                 message += " " + result.UnchangedTotal + " unchanged methods were left untouched.";
+            }
+
+            List<string> lifecycleNotes = new List<string>();
+            for (int index = 0; index < result.Methods.Count; index++)
+            {
+                string note = result.Methods[index].LifecycleNote;
+                if (!string.IsNullOrEmpty(note))
+                {
+                    lifecycleNotes.Add(note);
+                }
+            }
+
+            if (lifecycleNotes.Count > 0)
+            {
+                message += " " + string.Join(" ", lifecycleNotes);
             }
 
             return message;

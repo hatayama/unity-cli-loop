@@ -439,7 +439,10 @@ public static class TransformWorkerProgram
                     ShimMethodName = shimMethodName,
                     PatchKind = decision.PatchKind,
                     SourceStartLine = sourceStartLine,
-                    SourceEndLine = sourceEndLine
+                    SourceEndLine = sourceEndLine,
+                    // Why annotated root: methodDeclaration comes from this tree, so caller
+                    // identity checks stay reference-equal (plainRoot would never match).
+                    LifecycleNote = ComputeLifecycleNote(methodDeclaration, root)
                 });
             }
         }
@@ -461,6 +464,87 @@ public static class TransformWorkerProgram
     /// Attaches original-source 1-based line annotations to every method and statement in the
     /// parsed tree. Must run before compilation so the SemanticModel binds the annotated tree.
     /// </summary>
+    // What: optional note when a patched method is (or is only reached from) a one-shot lifecycle.
+    private static string ComputeLifecycleNote(
+        MethodDeclarationSyntax methodDeclaration,
+        CompilationUnitSyntax root)
+    {
+        string methodName = methodDeclaration.Identifier.Text;
+        if (IsOneShotLifecycleMethodName(methodName))
+        {
+            return string.Format(LifecycleNotes.DirectFormat, methodName);
+        }
+
+        List<string> callerNames = new List<string>();
+        foreach (InvocationExpressionSyntax invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (!InvocationTargetsMethodName(invocation, methodName))
+            {
+                continue;
+            }
+
+            MethodDeclarationSyntax caller = invocation.Ancestors()
+                .OfType<MethodDeclarationSyntax>()
+                .FirstOrDefault();
+            if (caller == null || ReferenceEquals(caller, methodDeclaration))
+            {
+                continue;
+            }
+
+            string callerName = caller.Identifier.Text;
+            if (!IsOneShotLifecycleMethodName(callerName))
+            {
+                return null;
+            }
+
+            if (!callerNames.Contains(callerName))
+            {
+                callerNames.Add(callerName);
+            }
+        }
+
+        if (callerNames.Count == 0)
+        {
+            return null;
+        }
+
+        return string.Format(
+            LifecycleNotes.IndirectFormat,
+            methodName,
+            string.Join(", ", callerNames));
+    }
+
+    private static bool IsOneShotLifecycleMethodName(string methodName)
+    {
+        for (int index = 0; index < LifecycleNotes.OneShotLifecycleMethodNames.Length; index++)
+        {
+            if (LifecycleNotes.OneShotLifecycleMethodNames[index] == methodName)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool InvocationTargetsMethodName(
+        InvocationExpressionSyntax invocation,
+        string methodName)
+    {
+        if (invocation.Expression is IdentifierNameSyntax identifier)
+        {
+            return identifier.Identifier.Text == methodName;
+        }
+
+        if (invocation.Expression is MemberAccessExpressionSyntax memberAccess
+            && memberAccess.Name is IdentifierNameSyntax memberName)
+        {
+            return memberName.Identifier.Text == methodName;
+        }
+
+        return false;
+    }
+
     private static CompilationUnitSyntax AnnotateOriginalSourceLines(CompilationUnitSyntax root)
     {
         List<SyntaxNode> nodesToAnnotate = new List<SyntaxNode>();
@@ -3664,6 +3748,30 @@ internal sealed class WorkerEntry
     public int SourceStartLine { get; set; }
 
     public int SourceEndLine { get; set; }
+
+    // Null when the method is not a one-shot lifecycle method and is not only called from them.
+    public string LifecycleNote { get; set; }
+}
+
+internal static class LifecycleNotes
+{
+    // Keep in sync with HotReloadConstants one-shot lifecycle names / formats.
+    public static readonly string[] OneShotLifecycleMethodNames =
+    {
+        "Awake",
+        "Start",
+        "OnEnable",
+        "OnDisable",
+        "OnDestroy"
+    };
+
+    public const string DirectFormat =
+        "{0} is a one-shot lifecycle method; objects that already ran it will not run the "
+        + "patched body. It takes effect only for newly created objects.";
+
+    public const string IndirectFormat =
+        "Within this file, {0} is only called from {1} (one-shot lifecycle methods); the "
+        + "patched body may not run again for objects that are already initialized.";
 }
 
 internal static class PatchKinds

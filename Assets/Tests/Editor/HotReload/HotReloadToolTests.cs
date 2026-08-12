@@ -331,6 +331,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: BuildApplyResponse copies lifecycleNote onto Methods and appends it to Message.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithLifecycleNote_ExposesNoteOnMethodsAndMessage()
+        {
+            const string note =
+                "BuildPlayer is only called from Awake (one-shot lifecycle methods); "
+                + "the patched body may not run again for objects that are already initialized.";
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.BuildPlayer", "Assets/A.cs", note)
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Methods.Count, Is.EqualTo(1));
+            Assert.That(response.Methods[0].LifecycleNote, Is.EqualTo(note));
+            Assert.That(response.Methods[0].Kind, Is.EqualTo("Patched"));
+            Assert.That(response.Message, Does.Contain(note));
+        }
+
+        /// <summary>
         /// What: a skipped-only run keeps the existing "See Methods for Skipped reasons." message.
         /// </summary>
         [Test]

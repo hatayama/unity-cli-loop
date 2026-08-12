@@ -44,26 +44,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Method { get; }
         public string Reason { get; }
         public string FilePath { get; }
+        public string LifecycleNote { get; }
 
         private HotReloadMethodOutcome(
             HotReloadMethodOutcomeKind kind,
             string method,
             string reason,
-            string filePath)
+            string filePath,
+            string lifecycleNote)
         {
             Kind = kind;
             Method = method;
             Reason = reason;
             FilePath = filePath;
+            LifecycleNote = lifecycleNote ?? string.Empty;
         }
 
-        public static HotReloadMethodOutcome Patched(string method, string filePath)
+        public static HotReloadMethodOutcome Patched(
+            string method,
+            string filePath,
+            string lifecycleNote = null)
         {
             return new HotReloadMethodOutcome(
                 HotReloadMethodOutcomeKind.Patched,
                 method,
                 string.Empty,
-                filePath);
+                filePath,
+                lifecycleNote);
         }
 
         public static HotReloadMethodOutcome Skipped(string method, string reason, string filePath)
@@ -72,7 +79,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadMethodOutcomeKind.Skipped,
                 method,
                 reason,
-                filePath);
+                filePath,
+                string.Empty);
         }
 
         public static HotReloadMethodOutcome Failed(string method, string reason, string filePath)
@@ -81,7 +89,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadMethodOutcomeKind.Failed,
                 method,
                 reason,
-                filePath);
+                filePath,
+                string.Empty);
         }
     }
 
