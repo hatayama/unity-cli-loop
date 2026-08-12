@@ -40,6 +40,16 @@ without applying or reverting anything. It cannot be combined with `--files` or
 a domain reload it reports zero patched methods, which is exactly when an
 `ActivePatchTotal` remembered from an earlier response has gone stale.
 
+Each `Active` row's `InvocationCount` counts calls into the patched body since that patch
+was applied; re-running hot reload on the same method resets it to zero. While Unity is
+paused — including while a pause-point hit holds the game — the player loop does not
+advance, so game-driven calls stop and the count freezes; calls you make yourself (for
+example through `uloop execute-dynamic-code`) still increment it. A frozen count during a
+pause only means game-driven calls are not running; it says nothing about whether call
+sites reach the patch. Resume first
+(`uloop control-play-mode --action Resume`, or clear the owning pause point), drive the
+game, and only then read `InvocationCount` as a reachability signal.
+
 ## How it works
 
 1. Resolves each file to its compiled assembly via `CompilationPipeline`.
@@ -71,6 +81,17 @@ baseline is available (next paragraph), other outside-body drift — fields,
 initializers, attributes, added or removed members — is reported as a `Warnings`
 entry as well; without a baseline it stays silent. Either way, use `uloop compile`
 for such edits.
+
+### Explore with hot reload, land structure with compile
+
+Treat hot reload as the exploration phase and `uloop compile` as the landing phase. While
+diagnosing or tuning, keep every edit inside existing method bodies — inline a would-be
+helper's logic at its call site for now instead of extracting it. When the change needs new
+members (a helper method, a field, a type), collect all of them and run `uloop compile`
+once: every compile triggers a domain reload that drops all active patches and pause points
+and resets the running PlayMode session, so compiling member-by-member pays that cost
+repeatedly. After the one compile, re-enter PlayMode and continue exploring on the freshly
+compiled code.
 
 ### Tunable values: prefer a getter over a const
 
@@ -147,7 +168,11 @@ suspected early-return line. The other known cause is JIT inlining, which the re
 with a single aggregated warning listing the at-risk methods: `[AggressiveInlining]` methods
 always, tiny bodies only when the Editor's Code Optimization mode is Release (the default
 Debug mode does not inline them). If `uloop hot-reload --status` shows the method's
-`InvocationCount` increasing, the calls you exercised are reaching the patched body.
+`InvocationCount` increasing, the calls you exercised are reaching the patched body and the
+warning did not apply to them — call sites you have not exercised may still run inlined old
+code. Take both readings while the code is actually being driven — PlayMode running, or your own
+`uloop execute-dynamic-code` invocation for Editor-assembly methods; a count frozen during
+a pause is not evidence either way.
 
 ## Convergence and lifecycle
 
