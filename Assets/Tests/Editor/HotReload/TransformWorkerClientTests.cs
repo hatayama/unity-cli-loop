@@ -335,7 +335,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: finds a shim method's <c>public static</c> declaration start and the index of its
-        /// balanced closing brace so slice and post-method gap checks share one scan.
+        /// end token (balanced <c>}</c>, or terminating <c>;</c> for expression-bodied shims) so
+        /// slice and post-method gap checks share one scan.
         /// </summary>
         private static (bool Found, int DeclarationStart, int CloseBraceIndex) FindShimMethodSpan(
             string shimSource,
@@ -361,7 +362,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 return (false, -1, -1);
             }
 
+            int arrowIndex = shimSource.IndexOf("=>", nameIndex, StringComparison.Ordinal);
             int openBrace = shimSource.IndexOf('{', nameIndex);
+            // Why arrow-before-brace: expression-bodied shims have no '{'; IndexOf('{') would
+            // otherwise latch onto the next method and falsely include its #line directives.
+            if (arrowIndex >= 0 && (openBrace < 0 || arrowIndex < openBrace))
+            {
+                int semicolonIndex = FindExpressionBodiedShimSemicolon(shimSource, arrowIndex);
+                if (semicolonIndex < 0)
+                {
+                    return (false, -1, -1);
+                }
+
+                return (true, declarationStart, semicolonIndex);
+            }
+
             if (openBrace < 0)
             {
                 return (false, -1, -1);
@@ -386,6 +401,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return (false, -1, -1);
+        }
+
+        /// <summary>
+        /// What: locates the terminating semicolon of an expression-bodied shim after its <c>=&gt;</c>.
+        /// </summary>
+        private static int FindExpressionBodiedShimSemicolon(string shimSource, int arrowIndex)
+        {
+            int parenDepth = 0;
+            int bracketDepth = 0;
+            int braceDepth = 0;
+            for (int index = arrowIndex + 2; index < shimSource.Length; index++)
+            {
+                char character = shimSource[index];
+                if (character == '(')
+                {
+                    parenDepth++;
+                }
+                else if (character == ')')
+                {
+                    parenDepth--;
+                }
+                else if (character == '[')
+                {
+                    bracketDepth++;
+                }
+                else if (character == ']')
+                {
+                    bracketDepth--;
+                }
+                else if (character == '{')
+                {
+                    braceDepth++;
+                }
+                else if (character == '}')
+                {
+                    braceDepth--;
+                }
+                else if (character == ';'
+                    && parenDepth == 0
+                    && bracketDepth == 0
+                    && braceDepth == 0)
+                {
+                    return index;
+                }
+            }
+
+            return -1;
         }
 
         private static void AssertHasSkip(
@@ -953,6 +1015,120 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + FormatEntryMethodNames(result.Output.entries)
                 + "; skipped="
                 + FormatSkippedMethodNames(result.Output.skipped));
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "Getter-body-only edits must not emit the outside-method-body drift warning.");
+        }
+
+        /// <summary>
+        /// What: editing only an instance block getter emits get_Score with a successful shim
+        /// compile (covers __instance injection + private field rewrite + BlockSyntax path).
+        /// </summary>
+        [Test]
+        public async Task Run_WithSnapshotDifferingOnlyInBlockGetter_EmitsGetScoreEntry()
+        {
+            string sourcePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(sourcePath);
+            string snapshotSource = onDisk.Replace(
+                "return _score;",
+                "return _score + 1;",
+                StringComparison.Ordinal);
+            Assert.That(snapshotSource, Is.Not.EqualTo(onDisk), "Precondition: snapshot must differ.");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveShapeFixtureProjectRelativePath(),
+                snapshotSource: snapshotSource);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "Block getter-body-only edits must not emit outside-method-body drift.");
+
+            bool foundGetter = false;
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == "get_Score")
+                {
+                    foundGetter = true;
+                }
+            }
+
+            Assert.That(
+                foundGetter,
+                Is.True,
+                "Edited get_Score must appear in entries; got: "
+                + FormatEntryMethodNames(result.Output.entries));
+        }
+
+        /// <summary>
+        /// What: when only a property setter body differs from the snapshot, the unchanged getter
+        /// stays out of entries (baseline compare is getter-scoped, not whole-property).
+        /// </summary>
+        [Test]
+        public async Task Run_WithSnapshotDifferingOnlyInSetter_DoesNotEmitUnchangedGetter()
+        {
+            const string source =
+                "namespace GetterBaselineScope\n"
+                + "{\n"
+                + "    public class Host\n"
+                + "    {\n"
+                + "        private int _value;\n"
+                + "        public int Value\n"
+                + "        {\n"
+                + "            get { return _value; }\n"
+                + "            set { _value = value; }\n"
+                + "        }\n"
+                + "    }\n"
+                + "}\n";
+            string snapshotSource = source.Replace(
+                "set { _value = value; }",
+                "set { _value = value + 1; }",
+                StringComparison.Ordinal);
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(
+                projectRoot,
+                HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, "SetterOnlyBaseline.cs");
+            File.WriteAllText(sourcePath, source);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                "Library/UloopHotReload/TestSources/SetterOnlyBaseline.cs",
+                snapshotSource: snapshotSource);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            if (result.Output.entries != null)
+            {
+                foreach (TransformWorkerEntryDto entry in result.Output.entries)
+                {
+                    Assert.That(
+                        entry.methodName,
+                        Is.Not.EqualTo("get_Value"),
+                        "Setter-only edits must not emit Patched get_Value.");
+                }
+            }
+
+            bool foundUnchangedGetter = false;
+            if (result.Output.unchangedMethods != null)
+            {
+                foreach (TransformWorkerUnchangedMethodDto unchanged in result.Output.unchangedMethods)
+                {
+                    if (unchanged.methodName == "get_Value")
+                    {
+                        foundUnchangedGetter = true;
+                    }
+                }
+            }
+
+            Assert.That(
+                foundUnchangedGetter,
+                Is.True,
+                "Unedited get_Value must appear in unchangedMethods after a setter-only edit.");
         }
 
         /// <summary>

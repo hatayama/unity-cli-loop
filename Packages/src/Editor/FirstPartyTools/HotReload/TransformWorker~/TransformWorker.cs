@@ -556,6 +556,26 @@ public static class TransformWorkerProgram
         List<SyntaxNode> nodesToAnnotate = new List<SyntaxNode>();
         nodesToAnnotate.AddRange(root.DescendantNodes().OfType<MethodDeclarationSyntax>());
         nodesToAnnotate.AddRange(root.DescendantNodes().OfType<StatementSyntax>());
+        // Why property/accessor arrows: expression-bodied getters are rewritten into synthetic
+        // MethodDeclarations that would otherwise carry no #line annotations into the shim.
+        foreach (PropertyDeclarationSyntax propertyDeclaration in root.DescendantNodes()
+            .OfType<PropertyDeclarationSyntax>())
+        {
+            if (propertyDeclaration.ExpressionBody != null)
+            {
+                nodesToAnnotate.Add(propertyDeclaration.ExpressionBody);
+            }
+        }
+
+        foreach (AccessorDeclarationSyntax accessor in root.DescendantNodes()
+            .OfType<AccessorDeclarationSyntax>())
+        {
+            if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration) && accessor.ExpressionBody != null)
+            {
+                nodesToAnnotate.Add(accessor.ExpressionBody);
+            }
+        }
+
         if (nodesToAnnotate.Count == 0)
         {
             return root;
@@ -583,6 +603,12 @@ public static class TransformWorkerProgram
             // method to one line, so mapping to the arrow expression's original start is the only
             // location that still matches the user's intent for expression-bodied methods.
             return methodDeclaration.ExpressionBody.Expression.GetLocation()
+                .GetLineSpan().StartLinePosition.Line + 1;
+        }
+
+        if (node is ArrowExpressionClauseSyntax arrowExpressionClause)
+        {
+            return arrowExpressionClause.Expression.GetLocation()
                 .GetLineSpan().StartLinePosition.Line + 1;
         }
 
@@ -965,6 +991,50 @@ public static class TransformWorkerProgram
                 .WithSemicolonToken(default(SyntaxToken))
                 .WithBody(SyntaxFactory.Block());
         }
+
+        // Why strip getters only: patched getter edits must not look like outside-body drift.
+        // Setter/init/indexer bodies stay so those still-unapplied edits keep the warning.
+        public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
+        {
+            PropertyDeclarationSyntax visited = (PropertyDeclarationSyntax)base.VisitPropertyDeclaration(node);
+            if (visited.ExpressionBody != null)
+            {
+                return visited
+                    .WithExpressionBody(null)
+                    .WithSemicolonToken(default(SyntaxToken))
+                    .WithAccessorList(
+                        SyntaxFactory.AccessorList(
+                            SyntaxFactory.SingletonList(
+                                SyntaxFactory.AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                                    .WithBody(SyntaxFactory.Block()))));
+            }
+
+            if (visited.AccessorList == null)
+            {
+                return visited;
+            }
+
+            List<AccessorDeclarationSyntax> accessors = new List<AccessorDeclarationSyntax>();
+            foreach (AccessorDeclarationSyntax accessor in visited.AccessorList.Accessors)
+            {
+                if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration)
+                    && (accessor.Body != null || accessor.ExpressionBody != null))
+                {
+                    accessors.Add(
+                        accessor
+                            .WithExpressionBody(null)
+                            .WithSemicolonToken(default(SyntaxToken))
+                            .WithBody(SyntaxFactory.Block()));
+                }
+                else
+                {
+                    accessors.Add(accessor);
+                }
+            }
+
+            return visited.WithAccessorList(
+                SyntaxFactory.AccessorList(SyntaxFactory.List(accessors)));
+        }
     }
 
     // What: reports each property/indexer accessor that has an explicit body as Skipped.
@@ -1198,7 +1268,7 @@ public static class TransformWorkerProgram
             string propertyKey = BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
             if (snapshotPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax snapshotProperty)
                 && plainCurrentPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax plainProperty)
-                && SyntaxFactory.AreEquivalent(snapshotProperty, plainProperty, topLevel: false))
+                && ArePropertyGettersEquivalent(snapshotProperty, plainProperty))
             {
                 unchangedMethods.Add(new WorkerUnchangedMethod
                 {
@@ -1323,6 +1393,44 @@ public static class TransformWorkerProgram
         return (false, null);
     }
 
+    // Why getter-only: whole-property AreEquivalent treats setter edits as getter changes and
+    // would emit a useless Patched get_ row beside Skipped set_.
+    private static bool ArePropertyGettersEquivalent(
+        PropertyDeclarationSyntax snapshotProperty,
+        PropertyDeclarationSyntax currentProperty)
+    {
+        return SyntaxFactory.AreEquivalent(
+            NormalizePropertyToGetterShape(snapshotProperty),
+            NormalizePropertyToGetterShape(currentProperty),
+            topLevel: false);
+    }
+
+    private static PropertyDeclarationSyntax NormalizePropertyToGetterShape(
+        PropertyDeclarationSyntax propertyDeclaration)
+    {
+        if (propertyDeclaration.ExpressionBody != null)
+        {
+            return propertyDeclaration.WithAccessorList(null);
+        }
+
+        if (propertyDeclaration.AccessorList == null)
+        {
+            return propertyDeclaration;
+        }
+
+        List<AccessorDeclarationSyntax> getAccessors = new List<AccessorDeclarationSyntax>();
+        foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
+        {
+            if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration))
+            {
+                getAccessors.Add(accessor);
+            }
+        }
+
+        return propertyDeclaration.WithAccessorList(
+            SyntaxFactory.AccessorList(SyntaxFactory.List(getAccessors)));
+    }
+
     // What: rewrite a getter body while it is still in the bound tree, then wrap as a shim method.
     private static MethodDeclarationSyntax RewritePropertyGetterBody(
         PropertyDeclarationSyntax propertyDeclaration,
@@ -1334,6 +1442,8 @@ public static class TransformWorkerProgram
     {
         ShimBodyRewriter rewriter = new ShimBodyRewriter(semanticModel, targetType, accessorPlan);
         SyntaxNode rewrittenBody = rewriter.Visit(getterBodyNode);
+        // Why transfer: Visit may rebuild ArrowExpressionClause nodes and drop #line annotations.
+        rewrittenBody = TransferUloopLineAnnotations(getterBodyNode, rewrittenBody);
 
         TypeSyntax returnType = propertyDeclaration.Type.WithoutTrivia();
         // ToShimMethod forces public static and injects __instance for instance getters.
@@ -1359,13 +1469,33 @@ public static class TransformWorkerProgram
         else
         {
             // get => expr rewritten to a bare expression: wrap as arrow.
+            ArrowExpressionClauseSyntax wrappedArrow = SyntaxFactory.ArrowExpressionClause(
+                (ExpressionSyntax)rewrittenBody);
+            wrappedArrow = (ArrowExpressionClauseSyntax)TransferUloopLineAnnotations(
+                getterBodyNode,
+                wrappedArrow);
             method = method
-                .WithExpressionBody(
-                    SyntaxFactory.ArrowExpressionClause((ExpressionSyntax)rewrittenBody))
+                .WithExpressionBody(wrappedArrow)
                 .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken));
         }
 
         return ShimMethodFactory.ToShimMethod(method, getterSymbol);
+    }
+
+    private static SyntaxNode TransferUloopLineAnnotations(SyntaxNode source, SyntaxNode target)
+    {
+        if (source == null || target == null)
+        {
+            return target;
+        }
+
+        SyntaxNode result = target;
+        foreach (SyntaxAnnotation annotation in source.GetAnnotations(UloopLineAnnotationKind))
+        {
+            result = result.WithAdditionalAnnotations(annotation);
+        }
+
+        return result;
     }
 
     private static IEnumerable<TypeDeclarationSyntax> EnumerateTypeDeclarations(CompilationUnitSyntax root)

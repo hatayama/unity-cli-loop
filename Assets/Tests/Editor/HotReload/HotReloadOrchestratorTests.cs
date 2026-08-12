@@ -417,6 +417,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(patched);
             AssertHasPatched(patched, "get_HeightAmplitude");
             Assert.That(patched.ActivePatchTotal, Is.GreaterThanOrEqualTo(1));
+            Assert.That(
+                patched.Warnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "Getter-only edits must not warn that outside-body edits were not applied.");
             // Why exact label: Skill docs and --status must share FormatMethodKey shape with apply.
             const string expectedGetterLabel =
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
