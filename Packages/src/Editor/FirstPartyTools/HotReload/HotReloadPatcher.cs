@@ -28,6 +28,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             typeof(HotReloadPatcher).GetMethod(
                 nameof(ReplaceWithDelegationTranspiler),
                 BindingFlags.NonPublic | BindingFlags.Static);
+        private static readonly MethodInfo IncrementInvocationMethodInfo =
+            typeof(HotReloadInvocationRegistry).GetMethod(
+                nameof(HotReloadInvocationRegistry.Increment),
+                BindingFlags.Public | BindingFlags.Static,
+                null,
+                new[] { typeof(string) },
+                null);
 
         // Ledger: key = patched original method, value = the shim whose call replaced it.
         private static readonly Dictionary<MethodBase, MethodInfo> ShimByMethod =
@@ -115,6 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // this method into the new generation before calling Apply.
                 ShimByMethod.Remove(method);
                 TransplantLocalsByMethod.Remove(method);
+                HotReloadInvocationRegistry.Remove(FormatMethodKey(method));
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
                 // Mirror the ledger removal: if the re-Patch below fails, its contained Unpatch
                 // rebuilds with markers restored (ledger empty), and RevertAll can never reach
@@ -155,6 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why Remove before Unpatch: Invoke(true) may have written ShimByMethod before
                 // a later failure; rebuild must not see an active shim (same as re-apply path).
                 ShimByMethod.Remove(method);
+                HotReloadInvocationRegistry.Remove(FormatMethodKey(method));
                 // User-approved exception to the no-try-catch policy: Harmony emit/JIT
                 // failures cannot be pre-validated (the IL shape is only known inside
                 // Harmony), and an escaping exception would abort the whole run while
@@ -205,6 +214,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ShimByMethod.Clear();
             HotReloadShimRegistry.Clear();
             TransplantLocalsByMethod.Clear();
+            HotReloadInvocationRegistry.Clear();
             _pendingShimMethod = null;
             _pendingOriginalMethod = null;
             HarmonyInstance.UnpatchAll(HotReloadConstants.HarmonyId);
@@ -233,6 +243,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // pre-Unpatch window so lookup and ledger never disagree mid-rebuild.
             HotReloadShimRegistry.RemoveMethod(method);
             TransplantLocalsByMethod.Remove(method);
+            HotReloadInvocationRegistry.Remove(FormatMethodKey(method));
             HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
             HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
             return true;
@@ -252,12 +263,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> labels = new List<string>(ShimByMethod.Count);
             foreach (MethodBase method in ShimByMethod.Keys)
             {
-                Debug.Assert(method.DeclaringType != null, "Patched methods must have a declaring type.");
-                labels.Add(method.DeclaringType.FullName + "." + method.Name);
+                labels.Add(FormatMethodKey(method));
             }
 
             labels.Sort(StringComparer.Ordinal);
             return labels;
+        }
+
+        // What: status label shared by DescribeActivePatches and the IL-injected counter key.
+        internal static string FormatMethodKey(MethodBase method)
+        {
+            Debug.Assert(method != null, "method must not be null.");
+            Debug.Assert(method.DeclaringType != null, "Patched methods must have a declaring type.");
+            return method.DeclaringType.FullName + "." + method.Name;
         }
 
         private static IEnumerable<CodeInstruction> ReplaceWithTransplantSourceTranspiler(
@@ -280,6 +298,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RebindShortFormLocals(shimMethod, generator, transplanted);
             TransplantLocalsByMethod[original] = transplantLocals;
             RebindLabels(generator, transplanted);
+            PrependInvocationCountIncrement(transplanted, original);
             return transplanted;
         }
 
@@ -299,7 +318,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 argumentSlotCount == shimMethod.GetParameters().Length,
                 "Shim parameter count must equal the original's argument slots (instance receiver included).");
 
-            List<CodeInstruction> forwarding = new List<CodeInstruction>(argumentSlotCount + 2);
+            List<CodeInstruction> forwarding = new List<CodeInstruction>(argumentSlotCount + 4);
+            PrependInvocationCountIncrement(forwarding, original);
             for (int slot = 0; slot < argumentSlotCount; slot++)
             {
                 forwarding.Add(CreateLoadArgumentInstruction(slot));
@@ -308,6 +328,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             forwarding.Add(new CodeInstruction(OpCodes.Call, shimMethod));
             forwarding.Add(new CodeInstruction(OpCodes.Ret));
             return forwarding;
+        }
+
+        // What: records one invocation before the patched body runs (transplant or delegation).
+        // Why move entry labels onto Ldstr: branches targeting the old first instruction must
+        // still hit the counter when that instruction is no longer at offset 0.
+        private static void PrependInvocationCountIncrement(
+            List<CodeInstruction> instructions,
+            MethodBase original)
+        {
+            Debug.Assert(IncrementInvocationMethodInfo != null, "Increment method must resolve.");
+            CodeInstruction loadKey = new CodeInstruction(OpCodes.Ldstr, FormatMethodKey(original));
+            CodeInstruction increment = new CodeInstruction(OpCodes.Call, IncrementInvocationMethodInfo);
+            if (instructions.Count > 0 && instructions[0].labels.Count > 0)
+            {
+                loadKey.labels.AddRange(instructions[0].labels);
+                instructions[0].labels.Clear();
+            }
+
+            instructions.Insert(0, increment);
+            instructions.Insert(0, loadKey);
         }
 
         private static CodeInstruction CreateLoadArgumentInstruction(int slot)

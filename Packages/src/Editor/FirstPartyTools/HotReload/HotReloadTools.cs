@@ -40,6 +40,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Method { get; set; } = string.Empty;
         public string Reason { get; set; } = string.Empty;
         public string FilePath { get; set; } = string.Empty;
+
+        /// <summary>
+        /// How many times this patched method body has run since the current patch was applied.
+        /// Populated on --status; 0 for apply/revert outcomes.
+        /// </summary>
+        public long InvocationCount { get; set; }
     }
 
     /// <summary>
@@ -129,11 +135,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadMethodResult> methods = new List<HotReloadMethodResult>(active.Count);
             for (int index = 0; index < active.Count; index++)
             {
+                string methodKey = active[index];
                 methods.Add(
                     new HotReloadMethodResult
                     {
                         Kind = "Active",
-                        Method = active[index]
+                        Method = methodKey,
+                        InvocationCount = HotReloadInvocationRegistry.GetCount(methodKey)
                     });
             }
 

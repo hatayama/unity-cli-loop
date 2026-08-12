@@ -2,12 +2,16 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 using HarmonyLib;
 using NUnit.Framework;
 
+using Newtonsoft.Json.Linq;
+
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -235,6 +239,83 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(-5), "Original body must survive.");
+        }
+
+        /// <summary>
+        /// What: each call into a transplanted body increments the invocation registry, --status
+        /// reports that count, and RevertAll clears it (removing the IL Increment would leave 0).
+        /// </summary>
+        [Test]
+        public async Task Apply_ThenInvoke_IncrementsStatusCount_AndRevertAllClears()
+        {
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
+            MethodInfo shim = AccessTools.Method(
+                typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+            string methodKey = HotReloadPatcher.FormatMethodKey(original);
+
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(0L));
+            Assert.That(
+                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant).Success,
+                Is.True);
+            Assert.That(
+                HotReloadInvocationRegistry.GetCount(methodKey),
+                Is.EqualTo(0L),
+                "Count must stay 0 until the patched body actually runs.");
+
+            HotReloadCoreFixture fixture = new HotReloadCoreFixture();
+            Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
+            Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(2L));
+
+            HotReloadTool tool = new HotReloadTool();
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
+                new JObject { ["Status"] = true },
+                CancellationToken.None);
+            HotReloadResponse status = baseResponse as HotReloadResponse;
+            Assert.That(status, Is.Not.Null);
+            Assert.That(status.Success, Is.True);
+            Assert.That(status.Methods.Count, Is.EqualTo(1));
+            Assert.That(status.Methods[0].Method, Is.EqualTo(methodKey));
+            Assert.That(status.Methods[0].InvocationCount, Is.EqualTo(2L));
+
+            HotReloadPatcher.RevertAll();
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(0L));
+            Assert.That(HotReloadPatcher.DescribeActivePatches(), Is.Empty);
+        }
+
+        /// <summary>
+        /// What: re-applying a patch removes the previous invocation count so status does not
+        /// keep pre-reapply totals.
+        /// </summary>
+        [Test]
+        public void Apply_Twice_ResetsInvocationCount()
+        {
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
+            MethodInfo shim0 = AccessTools.Method(
+                typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+            MethodInfo shim1 = AccessTools.Method(
+                typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim1));
+            string methodKey = HotReloadPatcher.FormatMethodKey(original);
+
+            HotReloadCoreFixture fixture = new HotReloadCoreFixture();
+            Assert.That(
+                HotReloadPatcher.Apply(original, shim0, HotReloadPatchShape.Transplant).Success,
+                Is.True);
+            Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(43));
+            Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(43));
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(2L));
+
+            Assert.That(
+                HotReloadPatcher.Apply(original, shim1, HotReloadPatchShape.Transplant).Success,
+                Is.True);
+            Assert.That(
+                HotReloadInvocationRegistry.GetCount(methodKey),
+                Is.EqualTo(0L),
+                "Re-apply must drop the prior generation's count.");
+            Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(100));
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(1L));
         }
     }
 
