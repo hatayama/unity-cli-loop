@@ -400,13 +400,12 @@ func runPausePointWaitAfterEnable(
 
 		response.TriggerResult = triggerResult
 		response.ResumePlayResult = resumeResult
-		// Why prefer status when non-zero/non-empty: hot-reload retarget updates ResolvedLine
-		// / ResolvedLineText on the registry, so a later status poll carries the live target.
-		// Fall back to enable-time values when status still omits them (pre-retarget path).
+		// Why treat ResolvedLine/Text as a pair: Unity SetResolvedLine always writes or clears
+		// both together. Falling back field-by-field can synthesize a line number from status
+		// with enable-time text (or the reverse) when ReadLineText returns empty.
+		// Prefer the status pair when ResolvedLine is non-zero; otherwise keep enable-time.
 		if response.ResolvedLine == 0 {
 			response.ResolvedLine = enableFields.ResolvedLine
-		}
-		if response.ResolvedLineText == "" {
 			response.ResolvedLineText = enableFields.ResolvedLineText
 		}
 		// ResolvedMethod / SnapshotTiming are still enable-only on the status DTO today.
