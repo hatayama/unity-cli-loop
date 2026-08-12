@@ -19,7 +19,10 @@ const (
 	updateToVersionFlagName    = "to-version"
 )
 
-var updateRunCommand = runUpdateCommand
+var (
+	updateRunCommand                = runUpdateCommand
+	resolveUpdateExecutablePathFunc = resolveUpdateExecutablePath
+)
 
 type updateOptions struct {
 	targetVersion string
@@ -32,6 +35,19 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 	if clicore.ContainsHelpRequest(args[1:]) {
 		printUpdateHelp(stdout)
 		return true, 0
+	}
+	executablePath, err := resolveUpdateExecutablePathFunc()
+	if err != nil {
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.UpdateCommandName})
+		return true, 1
+	}
+	if update.IsHomebrewManagedPath(executablePath) {
+		clierrors.WriteErrorEnvelope(stderr, invalidArgumentExecutionError(
+			"uloop is managed by Homebrew ("+executablePath+"); self-update would create a second install in ~/.local/bin",
+			clierrors.ErrorContext{Command: clicore.UpdateCommandName},
+			[]string{"Run `brew upgrade uloop` to update."},
+		))
+		return true, 1
 	}
 	options, err := parseUpdateOptions(args[1:])
 	if err != nil {
@@ -149,6 +165,17 @@ func updateExecutionArgs(updateCommand update.Command, installerPath string) []s
 func printUpdateHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "Usage:")
 	clicore.WriteLine(stdout, "  uloop update [--to-version <version>]")
+}
+
+// resolveUpdateExecutablePath returns the on-disk path of this dispatcher binary.
+// Why: Homebrew installs link <prefix>/bin/uloop to Cellar; EvalSymlinks is required
+// so IsHomebrewManagedPath sees the Cellar segment instead of the shim path.
+func resolveUpdateExecutablePath() (string, error) {
+	executablePath, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(executablePath)
 }
 
 func parseUpdateOptions(args []string) (updateOptions, error) {
