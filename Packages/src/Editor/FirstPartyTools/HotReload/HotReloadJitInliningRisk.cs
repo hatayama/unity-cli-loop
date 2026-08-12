@@ -47,8 +47,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(methodLabels.Count == atRiskCount, "methodLabels count must match atRiskCount.");
 
             string methods = string.Join(", ", methodLabels);
-            return $"{atRiskCount} of {patchedTotal} patched methods had pre-patch bodies small enough (or marked [AggressiveInlining]) that the Mono JIT may already have inlined them into callers compiled before the patch; those call sites keep the old behavior until a real compile: {methods}"
-                + " If 'uloop hot-reload --status' shows the method's InvocationCount increasing afterwards, its call sites are reaching the patched body and this warning did not apply.";
+            return $"{atRiskCount} of {patchedTotal} patched methods had pre-patch bodies small enough (or marked [AggressiveInlining]) that the Mono JIT may already have inlined them into callers compiled before the patch; those call sites keep the old behavior until a real compile: {methods}."
+                + " If 'uloop hot-reload --status' shows the method's InvocationCount increasing afterwards, the calls you exercised are reaching the patched body and this warning did not apply to them.";
         }
     }
 }

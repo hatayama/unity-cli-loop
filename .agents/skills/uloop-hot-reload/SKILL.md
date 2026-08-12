@@ -143,8 +143,11 @@ trace` on a line inside the edited method body — it resolves against the patch
 directly (see the pause point interaction below) — drive the game, and check the hit
 count: zero hits means the calling path never reached the method, which no patch (or
 compile) can fix. To chase an early return inside the method, arm a second marker on the
-suspected early-return line. The other known cause is JIT inlining of tiny methods, which
-the response already flags with a single aggregated warning listing the at-risk methods.
+suspected early-return line. The other known cause is JIT inlining, which the response flags
+with a single aggregated warning listing the at-risk methods: `[AggressiveInlining]` methods
+always, tiny bodies only when the Editor's Code Optimization mode is Release (the default
+Debug mode does not inline them). If `uloop hot-reload --status` shows the method's
+`InvocationCount` increasing, the calls you exercised are reaching the patched body.
 
 ## Convergence and lifecycle
 
@@ -198,7 +201,7 @@ Returns JSON with:
 
 - `Success` (boolean): `false` on parameter validation failure or when any method outcome is `Failed`. `Skipped` outcomes alone never force `false`
 - `Methods` (array): Per-method `{ Kind, Method, Reason, FilePath, InvocationCount, LifecycleNote }` where `Kind` is `Patched`, `Skipped`, or `Failed` on apply runs, or `Active` on `--status` runs; empty on `--revert-all` runs. `InvocationCount` is meaningful on `Active` rows (calls since the current patch was applied); it is `0` on apply/revert outcomes. `LifecycleNote` is set when a patched method is a Unity one-shot lifecycle message (`private void Awake`/`Start`/`OnEnable`/`OnDisable`/`OnDestroy` on a `MonoBehaviour`); empty otherwise — it does not change `Kind`
-- `Warnings` (array): Non-fatal notes — one aggregated line listing the patched methods whose pre-patch bodies were small enough (or marked `[AggressiveInlining]`) to have been JIT-inlined into existing callers (the change may not show at those call sites), the pause-point interaction above, and the const drift, outside-body drift, and missing-baseline entries described in "Scope and limits"
+- `Warnings` (array): Non-fatal notes — one aggregated line listing the patched methods at risk of being already JIT-inlined into existing callers — those marked `[AggressiveInlining]`, plus (only when Code Optimization is Release) those with tiny pre-patch bodies — meaning the change may not show at those call sites, the pause-point interaction above, and the const drift, outside-body drift, and missing-baseline entries described in "Scope and limits"
 - `PatchedTotal` (number): Methods patched in this run
 - `UnchangedTotal` (number): Methods left untouched because their bodies match the source baseline from the last compile; `0` when no baseline was available
 - `ActivePatchTotal` (number): Methods still patched after this run

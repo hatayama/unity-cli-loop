@@ -83,11 +83,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methodLabels: new[] { "Demo.get_Probe()" });
 
             Assert.That(warning, Does.Contain("1 of 3 patched methods had pre-patch bodies"));
-            Assert.That(warning, Does.Contain("Demo.get_Probe()"));
+            Assert.That(warning, Does.Contain("Demo.get_Probe()."));
             Assert.That(
                 warning,
                 Does.EndWith(
-                    " If 'uloop hot-reload --status' shows the method's InvocationCount increasing afterwards, its call sites are reaching the patched body and this warning did not apply."));
+                    " If 'uloop hot-reload --status' shows the method's InvocationCount increasing afterwards, the calls you exercised are reaching the patched body and this warning did not apply to them."));
         }
     }
 }
