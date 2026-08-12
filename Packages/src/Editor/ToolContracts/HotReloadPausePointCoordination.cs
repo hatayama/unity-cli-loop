@@ -48,6 +48,16 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         // method and whose registry entry is currently SuppressedByHotReload.
         public static Func<MethodBase, IReadOnlyList<string>> GetSuppressedMarkerIdsOnMethod { get; set; }
 
+        // Set by SourcePausePointPatcher. Drains marker ids recorded during the latest
+        // hot-reload patch transition that were skipped for retarget because they were
+        // already Expired (not a scan of residual expired ledger state).
+        public static Func<IReadOnlyList<string>> ConsumeExpiredNotRetargetedMarkerIds { get; set; }
+
+        // Set by SourcePausePointPatcher. Drains (id, oldText, newText) triples recorded when
+        // retarget changed the resolved line text of an armed marker.
+        public static Func<IReadOnlyList<(string Id, string OldText, string NewText)>>
+            ConsumeRetargetLineDriftWarnings { get; set; }
+
         // Set by SourcePausePointPatcher. Invoked by HotReloadPatcher after a
         // method's patch state changes (true = patched, false = reverted).
         public static Action<MethodBase, bool> OnHotReloadPatchStateChanged { get; set; }

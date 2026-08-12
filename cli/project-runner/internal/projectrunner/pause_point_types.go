@@ -42,10 +42,11 @@ type pausePointStatusResponse struct {
 	// on the wait payload, not as hit-time Warning.
 	Warning string `json:"Warning,omitempty"`
 
-	// ResolvedLine / ResolvedLineText / ResolvedMethod / SnapshotTiming are copied from the
-	// enable-pause-point response on the --await hit path so a single await payload records
-	// both which source line was armed and what was captured. Method-name arms leave them empty
-	// on the Unity side, so omitempty keeps the historical await schema unchanged for those cases.
+	// ResolvedLine / ResolvedLineText are merged as a pair on the --await hit path: when status
+	// carries a non-zero ResolvedLine (retarget-updated), both fields come from status; otherwise
+	// both fall back to the enable-pause-point response. ResolvedMethod / SnapshotTiming are still
+	// enable-only today. Method-name arms leave them empty on the Unity side, so omitempty keeps
+	// the historical await schema unchanged for those cases.
 	ResolvedLine     int    `json:"ResolvedLine,omitempty"`
 	ResolvedLineText string `json:"ResolvedLineText,omitempty"`
 	ResolvedMethod   string `json:"ResolvedMethod,omitempty"`

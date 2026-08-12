@@ -37,6 +37,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why store file:line separately: auto-retarget must re-resolve with the original enable
         // request, and parsing the id string would couple us to id formatting.
         private static readonly Dictionary<string, (string NormalizedFile, int Line)> RequestById = new();
+        private static readonly List<RetargetLineDriftWarning> PendingRetargetLineDriftWarnings =
+            new List<RetargetLineDriftWarning>();
+        private static readonly List<string> PendingExpiredNotRetargetedIds = new List<string>();
 
         // The registry lives in a Runtime assembly this Editor-only tool assembly may depend on,
         // but not the reverse (patching is an outer/implementation concern the registry's inner
@@ -49,7 +52,62 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UloopPausePointRegistry.OnClearedAll = UnpatchAll;
             HotReloadPausePointCoordination.GetArmedMarkerIdsOnMethod = GetArmedMarkerIds;
             HotReloadPausePointCoordination.GetSuppressedMarkerIdsOnMethod = GetSuppressedMarkerIds;
+            HotReloadPausePointCoordination.ConsumeExpiredNotRetargetedMarkerIds =
+                ConsumeExpiredNotRetargetedMarkerIds;
             HotReloadPausePointCoordination.OnHotReloadPatchStateChanged = HandleHotReloadPatchStateChanged;
+            HotReloadPausePointCoordination.ConsumeRetargetLineDriftWarnings = ConsumeRetargetLineDriftWarnings;
+        }
+
+        /// <summary>
+        /// Drains retarget line-drift warnings recorded during the latest hot-reload patch apply.
+        /// </summary>
+        private static IReadOnlyList<(string Id, string OldText, string NewText)> ConsumeRetargetLineDriftWarnings()
+        {
+            if (PendingRetargetLineDriftWarnings.Count == 0)
+            {
+                return Array.Empty<(string, string, string)>();
+            }
+
+            List<(string Id, string OldText, string NewText)> copy =
+                new List<(string, string, string)>(PendingRetargetLineDriftWarnings.Count);
+            for (int index = 0; index < PendingRetargetLineDriftWarnings.Count; index++)
+            {
+                RetargetLineDriftWarning warning = PendingRetargetLineDriftWarnings[index];
+                copy.Add((warning.Id, warning.OldText, warning.NewText));
+            }
+
+            PendingRetargetLineDriftWarnings.Clear();
+            return copy;
+        }
+
+        /// <summary>
+        /// Drains expired-marker ids recorded during the latest hot-reload patch transition
+        /// (skipped for retarget because they were not armed).
+        /// </summary>
+        private static IReadOnlyList<string> ConsumeExpiredNotRetargetedMarkerIds()
+        {
+            if (PendingExpiredNotRetargetedIds.Count == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            List<string> copy = new List<string>(PendingExpiredNotRetargetedIds);
+            PendingExpiredNotRetargetedIds.Clear();
+            return copy;
+        }
+
+        private readonly struct RetargetLineDriftWarning
+        {
+            public RetargetLineDriftWarning(string id, string oldText, string newText)
+            {
+                Id = id;
+                OldText = oldText;
+                NewText = newText;
+            }
+
+            public string Id { get; }
+            public string OldText { get; }
+            public string NewText { get; }
         }
 
         // What: lets the hot-reload tool list marker ids by logical owner (user method),
@@ -94,14 +152,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // state changes. Succeeds before mutating registry flags; never clears the marker.
         private static void HandleHotReloadPatchStateChanged(MethodBase method, bool isPatched)
         {
-            List<string> markerIds = CollectMarkerIdsForLogicalOwner(method);
             if (isPatched)
             {
+                // Why before Collect: expired markers are not armed, so they never enter the
+                // retarget list — record them as a transition event (pending-drain) instead of
+                // scanning residual Expired ledger state on every later apply.
+                EnqueueExpiredNotRetargetedForLogicalOwner(method);
+                List<string> markerIds = CollectMarkerIdsForLogicalOwner(method);
                 RetargetMarkersOntoHotReloadPatch(markerIds, method);
                 return;
             }
 
-            RestoreMarkersAfterHotReloadRevert(markerIds, method);
+            List<string> restoreIds = CollectMarkerIdsForLogicalOwner(method);
+            RestoreMarkersAfterHotReloadRevert(restoreIds, method);
+        }
+
+        // What: records expired owned markers skipped by this patch transition, then detaches
+        // them from the retarget owner ledger so later hot-reloads do not re-warn forever.
+        // Why keep MethodById/injections: Clear → Unpatch still needs to remove Harmony patches.
+        private static void EnqueueExpiredNotRetargetedForLogicalOwner(MethodBase method)
+        {
+            List<string> expiredIds = new List<string>();
+            foreach (KeyValuePair<string, MethodBase> pair in LogicalOwnerById)
+            {
+                if (!pair.Value.Equals(method) || UloopPausePointRegistry.IsArmed(pair.Key))
+                {
+                    continue;
+                }
+
+                UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(pair.Key);
+                if (!status.Expired && status.Status != UloopPausePointStatus.Expired)
+                {
+                    continue;
+                }
+
+                expiredIds.Add(pair.Key);
+            }
+
+            for (int index = 0; index < expiredIds.Count; index++)
+            {
+                string id = expiredIds[index];
+                LogicalOwnerById.Remove(id);
+                RequestById.Remove(id);
+                if (!PendingExpiredNotRetargetedIds.Contains(id))
+                {
+                    PendingExpiredNotRetargetedIds.Add(id);
+                }
+            }
         }
 
         private static List<string> CollectMarkerIdsForLogicalOwner(MethodBase method)
@@ -164,6 +261,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     committed = patchResult.Success;
                     if (committed)
                     {
+                        string previousLineText = UloopPausePointRegistry.GetStatus(id).ResolvedLineText;
+                        string newLineText = PausePointLineTextReader.ReadResolvedLineText(
+                            request.NormalizedFile,
+                            shimResolution.ResolvedLine);
+                        UloopPausePointRegistry.SetResolvedLine(
+                            id,
+                            shimResolution.ResolvedLine,
+                            newLineText);
+                        if (!string.IsNullOrEmpty(previousLineText)
+                            && !string.Equals(previousLineText, newLineText, StringComparison.Ordinal))
+                        {
+                            PendingRetargetLineDriftWarnings.Add(
+                                new RetargetLineDriftWarning(id, previousLineText, newLineText));
+                        }
+
                         UloopPausePointRegistry.SetSuppressedByHotReload(id, false, null);
                         UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, true);
                     }
@@ -186,6 +298,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string id = markerIds[index];
                 if (!RequestById.TryGetValue(id, out (string NormalizedFile, int Line) request))
                 {
+                    UloopPausePointRegistry.SetResolvedLine(id, 0, null);
                     SuppressMarkerRestoreFailed(id);
                     continue;
                 }
@@ -194,6 +307,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     SourcePausePointResolver.Resolve(request.NormalizedFile, request.Line);
                 if (!resolveResult.Success)
                 {
+                    UloopPausePointRegistry.SetResolvedLine(id, 0, null);
                     SuppressMarkerRestoreFailed(id);
                     continue;
                 }
@@ -204,6 +318,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     || restoredMethod == null
                     || !IsSameLogicalMethodOrItsStateMachine(restoredMethod, logicalOwner))
                 {
+                    UloopPausePointRegistry.SetResolvedLine(id, 0, null);
                     SuppressMarkerRestoreFailed(id);
                     continue;
                 }
@@ -223,6 +338,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     committed = patchResult.Success;
                     if (committed)
                     {
+                        // Why update after restore: status must show the line that will fire next.
+                        string restoredLineText = PausePointLineTextReader.ReadResolvedLineText(
+                            request.NormalizedFile,
+                            resolveResult.Resolution.ResolvedLine);
+                        UloopPausePointRegistry.SetResolvedLine(
+                            id,
+                            resolveResult.Resolution.ResolvedLine,
+                            restoredLineText);
                         UloopPausePointRegistry.SetSuppressedByHotReload(id, false, null);
                         UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, false);
                     }
@@ -231,6 +354,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     if (!committed)
                     {
+                        // Why clear: restore failed, so previously stored shim line is no longer trustworthy.
+                        UloopPausePointRegistry.SetResolvedLine(id, 0, null);
                         ReanchorMarkerWithoutInjection(id, logicalOwner, request);
                         SuppressMarkerRestoreFailed(id);
                     }
@@ -582,6 +707,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MethodById.Clear();
             LogicalOwnerById.Clear();
             RequestById.Clear();
+            PendingExpiredNotRetargetedIds.Clear();
+            PendingRetargetLineDriftWarnings.Clear();
         }
 
         private static SourcePausePointPatchResult TryResolveMethod(SourcePausePointResolution resolution, out MethodBase method)

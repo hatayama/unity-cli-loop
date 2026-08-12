@@ -105,5 +105,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string BaselineDisabledByDuplicateKeysWarningFormat =
             "Baseline comparison disabled for {0} (assembly {1}): the file contains methods with "
             + "colliding signature keys; patching all methods.";
+
+        // Format: comma-separated "{id} (now line {N}: {text})" entries.
+        public const string RetargetedPausePointsMessageFormat =
+            "Armed pause points were re-targeted onto the hot-reload patched bodies: {0}";
+
+        // Format: id, old line text, new line text.
+        public const string RetargetLineDriftWarningFormat =
+            "Pause point {0} now targets a different statement (was: \"{1}\", now: \"{2}\"). "
+            + "Re-enable it at the intended line if this is not what you want.";
+
+        // Format: comma-separated expired marker ids.
+        public const string ExpiredPausePointsNotRetargetedMessageFormat =
+            "Expired pause points were not re-targeted and will not fire: {0}";
+
+        // Format: id, resolved line number, resolved line text.
+        public const string RetargetedPausePointIdDetailFormat =
+            "{0} (now line {1}: {2})";
     }
 }

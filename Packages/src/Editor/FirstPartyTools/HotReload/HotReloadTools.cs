@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -190,12 +191,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             List<string> warnings = new List<string>(result.Warnings);
+            AppendRetargetLineDriftWarnings(warnings);
+            AppendExpiredNotRetargetedWarnings(warnings);
+
             if (result.RetargetedPausePointIds != null && result.RetargetedPausePointIds.Count > 0)
             {
-                string ids = string.Join(", ", result.RetargetedPausePointIds);
+                List<string> details = new List<string>(result.RetargetedPausePointIds.Count);
+                for (int index = 0; index < result.RetargetedPausePointIds.Count; index++)
+                {
+                    details.Add(FormatRetargetedPausePointIdDetail(result.RetargetedPausePointIds[index]));
+                }
+
                 warnings.Add(
-                    "Armed pause points were re-targeted onto the hot-reload patched bodies and keep "
-                    + $"firing at the edited lines: {ids}");
+                    string.Format(
+                        HotReloadConstants.RetargetedPausePointsMessageFormat,
+                        string.Join(", ", details)));
             }
 
             if (result.SuppressedPausePointIds != null && result.SuppressedPausePointIds.Count > 0)
@@ -216,6 +226,56 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 UnchangedTotal = result.UnchangedTotal,
                 Message = BuildApplyMessage(result, hasFailure)
             };
+        }
+
+        // What: drains retarget line-drift triples recorded by SourcePausePointPatcher into Warnings.
+        private static void AppendRetargetLineDriftWarnings(List<string> warnings)
+        {
+            IReadOnlyList<(string Id, string OldText, string NewText)> driftWarnings =
+                HotReloadPausePointCoordination.ConsumeRetargetLineDriftWarnings?.Invoke();
+            if (driftWarnings == null || driftWarnings.Count == 0)
+            {
+                return;
+            }
+
+            for (int index = 0; index < driftWarnings.Count; index++)
+            {
+                (string id, string oldText, string newText) = driftWarnings[index];
+                warnings.Add(
+                    string.Format(
+                        HotReloadConstants.RetargetLineDriftWarningFormat,
+                        id,
+                        oldText,
+                        newText));
+            }
+        }
+
+        // What: drains expired-not-retargeted ids recorded during the latest patch transition.
+        private static void AppendExpiredNotRetargetedWarnings(List<string> warnings)
+        {
+            IReadOnlyList<string> expiredIds =
+                HotReloadPausePointCoordination.ConsumeExpiredNotRetargetedMarkerIds?.Invoke();
+            if (expiredIds == null || expiredIds.Count == 0)
+            {
+                return;
+            }
+
+            warnings.Add(
+                string.Format(
+                    HotReloadConstants.ExpiredPausePointsNotRetargetedMessageFormat,
+                    string.Join(", ", expiredIds)));
+        }
+
+        // What: "{id} (now line {N}: {text})" from the registry values written on retarget/enable.
+        private static string FormatRetargetedPausePointIdDetail(string id)
+        {
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(id);
+            string lineText = status.ResolvedLineText ?? string.Empty;
+            return string.Format(
+                HotReloadConstants.RetargetedPausePointIdDetailFormat,
+                id,
+                status.ResolvedLine,
+                lineText);
         }
 
         private static string BuildApplyMessage(HotReloadOrchestratorResult result, bool hasFailure)

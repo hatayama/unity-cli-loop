@@ -1,6 +1,8 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.PausePoint.Editor")]
+// HotReloadTools formats retarget warnings from registry ResolvedLine / ResolvedLineText.
+[assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.HotReload.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.RunTests.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.SimulateKeyboard.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.SimulateMouseInput.Editor")]

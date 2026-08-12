@@ -13,6 +13,7 @@ using NUnit.Framework;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -153,6 +154,156 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             int result = fixture.ComputeWithPrivate(5);
             Assert.That(result, Is.EqualTo(fixture.SecretForAssert + 5 + 100));
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+        }
+
+        /// <summary>
+        /// What: retarget rewrites registry ResolvedLine/Text (not just enable-time values) and
+        /// apply Warnings include the post-retarget detail; a sentinel previous text records
+        /// line-drift through PendingRetargetLineDriftWarnings.
+        /// </summary>
+        [Test]
+        public async Task ArmThenHotReload_RetargetRewritesResolvedLineAndRecordsDrift()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int enableLine = FindLineNumber(onDisk, "return _secret + delta;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message);
+            Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
+            int enableResolvedLine = enable.ResolvedLine;
+            string enableResolvedText = enable.ResolvedLineText;
+            Assert.That(enableResolvedText, Does.Contain("return _secret + delta;"));
+
+            // Why clear then sentinel: prove retarget wrote the registry (enable alone cannot
+            // satisfy post-patch assertions), and force a drift record against on-disk text.
+            const string sentinelOldText = "SENTINEL_PRE_RETARGET_LINE_TEXT";
+            UloopPausePointRegistry.SetResolvedLine(enable.Id, 0, null);
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).ResolvedLine, Is.EqualTo(0));
+            UloopPausePointRegistry.SetResolvedLine(enable.Id, enableResolvedLine, sentinelOldText);
+
+            string editedSource = BuildEditedComputePlusHundred(onDisk);
+            HotReloadResponse applyResponse =
+                await HotReloadApplyFromEditedSourceAsync(editedSource, "ContractArmThenPatchResolved.cs");
+
+            UloopPausePointSnapshot afterPatch = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(afterPatch.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(afterPatch.ResolvedLine, Is.GreaterThan(0));
+            Assert.That(afterPatch.ResolvedLineText, Is.Not.EqualTo(sentinelOldText));
+            Assert.That(afterPatch.ResolvedLineText, Does.Contain("return _secret + delta;"));
+
+            string warningsJoined = string.Join(" | ", applyResponse.Warnings);
+            Assert.That(
+                warningsJoined,
+                Does.Contain(
+                    "Armed pause points were re-targeted onto the hot-reload patched bodies:"));
+            Assert.That(
+                warningsJoined,
+                Does.Contain(
+                    enable.Id + " (now line " + afterPatch.ResolvedLine + ": "
+                    + afterPatch.ResolvedLineText + ")"));
+            Assert.That(warningsJoined, Does.Contain("now targets a different statement"));
+            Assert.That(warningsJoined, Does.Contain(sentinelOldText));
+            Assert.That(warningsJoined, Does.Contain(afterPatch.ResolvedLineText));
+
+            PausePointResponse statusResponse = PausePointResponse.FromSnapshot(afterPatch);
+            Assert.That(statusResponse.ResolvedLine, Is.EqualTo(afterPatch.ResolvedLine));
+            Assert.That(statusResponse.ResolvedLineText, Is.EqualTo(afterPatch.ResolvedLineText));
+
+            PausePointStatusResponse bridgeStatus =
+                PausePointStatusResponse.FromSnapshot(afterPatch);
+            Assert.That(bridgeStatus.ResolvedLine, Is.EqualTo(afterPatch.ResolvedLine));
+            Assert.That(bridgeStatus.ResolvedLineText, Is.EqualTo(afterPatch.ResolvedLineText));
+        }
+
+        /// <summary>
+        /// What: an expired armed marker is reported once on the next hot-reload of its owner
+        /// and does not re-warn on a later apply of the same method (pending-drain + detach).
+        /// </summary>
+        [Test]
+        public async Task HotReload_AfterExpire_WarnsOnceAndDoesNotRepeat()
+        {
+            DateTime nowUtc = new DateTime(2026, 8, 12, 12, 0, 0, DateTimeKind.Utc);
+            UloopPausePointRegistry.ConfigureForTests(new FakePausePointPauseController(), () => nowUtc);
+
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int enableLine = FindLineNumber(onDisk, "return _secret + delta;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 1,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message);
+
+            nowUtc = nowUtc.AddSeconds(2);
+            UloopPausePointSnapshot expired = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(expired.Expired, Is.True);
+            Assert.That(expired.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+
+            string editedSource = BuildEditedComputePlusHundred(onDisk);
+            HotReloadResponse firstApply =
+                await HotReloadApplyFromEditedSourceAsync(editedSource, "ContractExpiredWarn1.cs");
+            string firstWarnings = string.Join(" | ", firstApply.Warnings);
+            Assert.That(
+                firstWarnings,
+                Does.Contain(
+                    "Expired pause points were not re-targeted and will not fire: " + enable.Id),
+                firstWarnings);
+
+            HotReloadResponse secondApply =
+                await HotReloadApplyFromEditedSourceAsync(editedSource, "ContractExpiredWarn2.cs");
+            string secondWarnings = string.Join(" | ", secondApply.Warnings);
+            Assert.That(
+                secondWarnings,
+                Does.Not.Contain("Expired pause points were not re-targeted"),
+                secondWarnings);
+        }
+
+        /// <summary>
+        /// What: restore-after-revert rewrites ResolvedLine when re-resolve succeeds, proving
+        /// the restore SetResolvedLine path (not only enable/retarget) updates the registry.
+        /// </summary>
+        [Test]
+        public async Task RevertAll_AfterRetarget_RestoresResolvedLineOnOriginalBody()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int enableLine = FindLineNumber(onDisk, "return _secret + delta;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message);
+
+            UloopPausePointRegistry.SetResolvedLine(enable.Id, 0, null);
+            await HotReloadFromEditedSourceAsync(
+                BuildEditedComputePlusHundred(onDisk),
+                "ContractRestoreResolvedLine.cs");
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).ResolvedLine, Is.GreaterThan(0));
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).RetargetedToHotReloadPatch, Is.True);
+
+            UloopPausePointRegistry.SetResolvedLine(enable.Id, 0, null);
+            HotReloadPatcher.RevertAll();
+
+            UloopPausePointSnapshot afterRevert = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(afterRevert.RetargetedToHotReloadPatch, Is.False);
+            Assert.That(afterRevert.SuppressedByHotReload, Is.False);
+            Assert.That(afterRevert.ResolvedLine, Is.GreaterThan(0));
+            Assert.That(afterRevert.ResolvedLineText, Does.Contain("return _secret + delta;"));
         }
 
         /// <summary>
@@ -654,6 +805,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static async Task HotReloadFromEditedSourceAsync(string editedSource, string fileName)
         {
+            await HotReloadApplyFromEditedSourceAsync(editedSource, fileName);
+        }
+
+        private static async Task<HotReloadResponse> HotReloadApplyFromEditedSourceAsync(
+            string editedSource,
+            string fileName)
+        {
             string fixturePath = ResolveFixtureAbsolutePath();
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
@@ -673,6 +831,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result.Methods.Any(m => m.Kind == HotReloadMethodOutcomeKind.Patched),
                 Is.True,
                 FormatHotReloadOutcomes(result));
+            return HotReloadTool.BuildApplyResponse(result);
         }
 
         private static string ResolveFixtureAbsolutePath()

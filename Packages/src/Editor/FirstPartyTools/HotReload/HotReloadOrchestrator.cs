@@ -518,6 +518,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // What: after Apply (+ retarget handler), splits armed markers into retargeted vs suppressed.
+        // Expired skips are recorded as a pending-drain event inside SourcePausePointPatcher and
+        // surfaced from HotReloadTools.BuildApplyResponse (same pattern as line-drift warnings).
         private static void AppendPausePointTransitionIds(
             MethodBase method,
             List<string> suppressedPausePointIds,

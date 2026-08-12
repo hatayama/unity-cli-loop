@@ -64,6 +64,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public bool SuppressedByHotReload { get; set; }
         public string SuppressedByHotReloadReason { get; set; }
         public bool RetargetedToHotReloadPatch { get; set; }
+        // 0 / null-or-empty means unresolved (not yet written by enable or retarget).
+        public int ResolvedLine { get; set; }
+        public string ResolvedLineText { get; set; }
 
         public bool ExpireIfNeeded(DateTime nowUtc)
         {
@@ -273,7 +276,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 LateHitDiscardedAfterClear,
                 SuppressedByHotReload,
                 SuppressedByHotReloadReason,
-                RetargetedToHotReloadPatch);
+                RetargetedToHotReloadPatch,
+                ResolvedLine,
+                ResolvedLineText);
         }
 
         private long CalculateRemainingMilliseconds(DateTime nowUtc)

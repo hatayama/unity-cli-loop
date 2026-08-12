@@ -146,6 +146,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         // Null when unset so the status contract omits Warning (matches Go omitempty).
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string Warning { get; set; }
+        // Why DefaultValue/Null ignore: match Go omitempty so unresolved markers omit the fields
+        // from the status contract shape (0 / empty must not appear in the shared JSON fixture).
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public int ResolvedLine { get; set; }
+
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string ResolvedLineText { get; set; }
 
         internal static PausePointStatusResponse FromSnapshot(UloopPausePointSnapshot snapshot)
         {
@@ -194,7 +201,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 RetargetedToHotReloadPatch = snapshot.RetargetedToHotReloadPatch,
                 SuppressedByHotReloadReason = snapshot.SuppressedByHotReloadReason,
                 // Why reason as Warning: agents already read Warning; suppressed=false clears both.
-                Warning = snapshot.SuppressedByHotReload ? snapshot.SuppressedByHotReloadReason : null
+                Warning = snapshot.SuppressedByHotReload ? snapshot.SuppressedByHotReloadReason : null,
+                ResolvedLine = snapshot.ResolvedLine,
+                ResolvedLineText = string.IsNullOrEmpty(snapshot.ResolvedLineText)
+                    ? null
+                    : snapshot.ResolvedLineText
             };
         }
     }
