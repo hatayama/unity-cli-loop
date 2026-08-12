@@ -9,6 +9,7 @@ using NUnit.Framework;
 
 using Newtonsoft.Json.Linq;
 
+using UnityEditor.Compilation;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -474,12 +475,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: patching multiple small methods emits one aggregated inline-risk warning and
-        /// leaves each Patched outcome's Reason empty.
+        /// What: under Debug code optimization, size-only small methods do not emit the
+        /// aggregated inline-risk warning (branch a); Patched Reason stays empty.
         /// </summary>
         [Test]
-        public async Task Run_MultipleSmallPatchedMethods_AggregatesInlineRiskWarningOnce()
+        public async Task Run_MultipleSmallPatchedMethods_OmitsInlineRiskWarningInDebug()
         {
+            Assert.That(
+                CompilationPipeline.codeOptimization,
+                Is.EqualTo(CodeOptimization.Debug),
+                "This regression pins Debug behavior; run under Debug code optimization.");
+
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
                 "MultipleSmallInlineRisk.cs",
@@ -502,7 +508,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
             AssertHasPatched(result, nameof(HotReloadE2EFixture.CenterOfCell));
 
-            int patchedWithEmptyReason = 0;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
             {
                 if (outcome.Kind != HotReloadMethodOutcomeKind.Patched)
@@ -511,42 +516,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
 
                 Assert.That(outcome.Reason, Is.Empty, "Patched Reason must not carry per-method inline-risk text.");
-                patchedWithEmptyReason++;
             }
 
-            Assert.That(patchedWithEmptyReason, Is.GreaterThanOrEqualTo(2));
-
-            int aggregatedInlineRiskCount = 0;
             foreach (string warning in result.Warnings)
             {
-                if (warning.Contains("patched methods had pre-patch bodies")
-                    && warning.Contains(nameof(HotReloadE2EFixture.ComputeWithPrivate))
-                    && warning.Contains(nameof(HotReloadE2EFixture.CenterOfCell)))
-                {
-                    aggregatedInlineRiskCount++;
-                }
+                Assert.That(
+                    warning.Contains("patched methods had pre-patch bodies"),
+                    Is.False,
+                    "Debug must not emit IL-size inline-risk warnings: " + warning);
             }
-
-            Assert.That(
-                aggregatedInlineRiskCount,
-                Is.EqualTo(1),
-                "Expected exactly one aggregated inline-risk warning listing the at-risk methods.");
-
-            int declarationDriftCount = CountWarningsContaining(
-                result.Warnings,
-                "Edits outside method bodies");
-            Assert.That(
-                result.Warnings,
-                Has.Count.EqualTo(1 + declarationDriftCount),
-                "Expected the aggregated inline-risk warning plus any declaration-drift warning(s).");
         }
 
         /// <summary>
-        /// Verifies duplicate file inputs re-patch the same method yet the aggregated warning lists it once.
+        /// What: duplicate file inputs re-patch the same small method yet Debug emits no
+        /// IL-size inline-risk warning (branch a); declaration-drift warnings still appear twice.
         /// </summary>
         [Test]
-        public async Task Run_DuplicateFileInputs_ListsEachAtRiskMethodOnceInAggregatedWarning()
+        public async Task Run_DuplicateFileInputs_OmitsInlineRiskWarningInDebug()
         {
+            Assert.That(
+                CompilationPipeline.codeOptimization,
+                Is.EqualTo(CodeOptimization.Debug),
+                "This regression pins Debug behavior; run under Debug code optimization.");
+
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
                 "DuplicateInputInlineRisk.cs",
@@ -576,30 +568,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(computeWithPrivatePatchedOperations, Is.EqualTo(2));
 
+            foreach (string warning in result.Warnings)
+            {
+                Assert.That(
+                    warning.Contains("patched methods had pre-patch bodies"),
+                    Is.False,
+                    "Debug must not emit IL-size inline-risk warnings: " + warning);
+            }
+
             int declarationDriftCount = CountWarningsContaining(
                 result.Warnings,
                 "Edits outside method bodies");
-            Assert.That(
-                result.Warnings,
-                Has.Count.EqualTo(1 + declarationDriftCount),
-                "Expected the aggregated inline-risk warning plus one declaration-drift warning per duplicate file input.");
-
-            string aggregatedWarning = null;
-            foreach (string warning in result.Warnings)
-            {
-                if (warning.Contains("patched methods had pre-patch bodies")
-                    && warning.Contains(nameof(HotReloadE2EFixture.ComputeWithPrivate)))
-                {
-                    aggregatedWarning = warning;
-                    break;
-                }
-            }
-
-            Assert.That(aggregatedWarning, Is.Not.Null, "Expected an aggregated inline-risk warning.");
-            Assert.That(
-                CountOccurrences(aggregatedWarning, nameof(HotReloadE2EFixture.ComputeWithPrivate)),
-                Is.EqualTo(1),
-                "The aggregated warning must list a re-patched method once, not once per patch operation.");
             Assert.That(
                 declarationDriftCount,
                 Is.EqualTo(2),

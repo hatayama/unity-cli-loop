@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
@@ -111,6 +113,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 return _score;
             }
+        }
+    }
+
+    /// <summary>
+    /// Probe pair for JIT-inlining investigation: a tiny getter (eligible for Mono inlining)
+    /// and a NoInlining caller that is warmed before the getter is patched.
+    /// </summary>
+    internal static class HotReloadJitInliningInvestigationFixture
+    {
+        public static int Probe => 1;
+
+        // Why NoInlining on the caller only: keep ReadProbe as a stable call site while leaving
+        // Probe eligible for inlining into that already-JITed body.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static int ReadProbe()
+        {
+            return Probe;
         }
     }
 }
