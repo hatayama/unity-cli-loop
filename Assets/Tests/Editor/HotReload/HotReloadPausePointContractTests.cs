@@ -43,6 +43,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: after hot-reload of SummarizeCells, pause on return captures both the
+        /// interface-typed local (cells) and total — Release shim opts must not drop cells.
+        /// </summary>
+        [Test]
+        public async Task Enable_OnHotReloadedInterfaceLocal_CapturesCellsAndTotal()
+        {
+            string editedSource = BuildEditedSummarizeCellsWithBoostedTotal();
+            int enableLine = FindLineNumber(editedSource, "return total;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            await HotReloadFromEditedSourceAsync(editedSource, "ContractInterfaceLocalCells.cs");
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            int result = fixture.SummarizeCells();
+            Assert.That(result, Is.EqualTo(4));
+
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(status.IsHit, Is.True);
+            Assert.That(
+                status.CapturedVariables.Any(v => v.Name == "cells"),
+                Is.True,
+                "Expected interface local 'cells' in CapturedVariables: " + FormatCaptured(status));
+            Assert.That(
+                status.CapturedVariables.Any(v => v.Name == "total"),
+                Is.True,
+                "Expected local 'total' in CapturedVariables: " + FormatCaptured(status));
+        }
+
+        /// <summary>
         /// What: after a transplant hot-reload, enable-pause-point on an edited-body line hits
         /// and captures an added local (LocalBuilder hand-off) with the edited return value.
         /// </summary>
@@ -787,6 +825,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "\n"
                 + "            return boosted;\n"
                 + "        }";
+            string edited = onDisk.Replace(original, replacement, StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            return edited;
+        }
+
+        private static string BuildEditedSummarizeCellsWithBoostedTotal()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            // Why keep cells assigned then read once: Release optimization drops that slot from
+            // PDB locals; the test asserts both names survive after Debug shim compilation.
+            const string original =
+                "public int SummarizeCells()\n        {\n            IReadOnlyList<int> cells = BuildCells();\n            int total = cells.Count;\n            return total;\n        }";
+            const string replacement =
+                "public int SummarizeCells()\n        {\n            IReadOnlyList<int> cells = BuildCells();\n            int total = cells.Count + 1;\n            return total;\n        }";
             string edited = onDisk.Replace(original, replacement, StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             return edited;

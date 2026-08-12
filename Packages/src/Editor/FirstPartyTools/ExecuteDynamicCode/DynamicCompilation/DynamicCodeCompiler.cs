@@ -66,7 +66,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] activeDefineSymbols = EditorUserBuildSettings.activeScriptCompilationDefines ?? Array.Empty<string>();
             RoslynCompilerOptions compilerOptions = new(
                 activeDefineSymbols,
-                PlayerSettings.allowUnsafeCode);
+                PlayerSettings.allowUnsafeCode,
+                emitDebugCode: false);
             LastBuildCount = 0;
             Stopwatch compilerTotalStopwatch = Stopwatch.StartNew();
             Stopwatch planStopwatch = Stopwatch.StartNew();

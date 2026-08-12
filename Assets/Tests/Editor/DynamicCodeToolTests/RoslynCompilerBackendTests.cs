@@ -27,11 +27,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     dllPath: "snippet.dll",
                     references: new List<string>(),
                     defineSymbols: new List<string>(),
-                    allowUnsafeCode: false);
+                    allowUnsafeCode: false,
+                    emitDebugCode: false);
 
                 string[] lines = File.ReadAllLines(responseFilePath);
                 Assert.That(lines, Does.Contain("-debug:portable"));
                 Assert.That(lines, Does.Not.Contain("-debug-"));
+                Assert.That(lines, Does.Contain("-optimize+"));
             }
             finally
             {
@@ -57,7 +59,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     dllPath: "snippet.dll",
                     references: new List<string>(),
                     defineSymbols: new List<string>(),
-                    allowUnsafeCode: false);
+                    allowUnsafeCode: false,
+                    emitDebugCode: false);
 
                 string[] lines = File.ReadAllLines(responseFilePath);
                 Assert.That(lines, Does.Contain("-preferreduilang:en-US"));
@@ -68,6 +71,76 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 if (File.Exists(responseFilePath))
                 {
                     File.Delete(responseFilePath);
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: emitDebugCode writes -optimize- so hot-reload shim one-shot fallback keeps locals.
+        /// </summary>
+        [Test]
+        public void WriteCompilerResponseFile_WithEmitDebugCode_DisablesOptimization()
+        {
+            string responseFilePath = Path.Combine(Path.GetTempPath(), "uloop-roslyn-rsp-" + Path.GetRandomFileName());
+            try
+            {
+                RoslynCompilerBackend.WriteCompilerResponseFile(
+                    responseFilePath,
+                    sourcePath: "snippet.cs",
+                    dllPath: "snippet.dll",
+                    references: new List<string>(),
+                    defineSymbols: new List<string>(),
+                    allowUnsafeCode: false,
+                    emitDebugCode: true);
+
+                string[] lines = File.ReadAllLines(responseFilePath);
+                Assert.That(lines, Does.Contain("-optimize-"));
+                Assert.That(lines, Does.Not.Contain("-optimize+"));
+            }
+            finally
+            {
+                if (File.Exists(responseFilePath))
+                {
+                    File.Delete(responseFilePath);
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: WriteWorkerRequestFile encodes emitDebugCode for the shared Roslyn worker.
+        /// </summary>
+        [Test]
+        public void WriteWorkerRequestFile_IncludesDebugCodeFlag()
+        {
+            string requestFilePath = Path.Combine(Path.GetTempPath(), "uloop-roslyn-worker-" + Path.GetRandomFileName());
+            string sourcePath = Path.Combine(Path.GetTempPath(), "uloop-roslyn-src-" + Path.GetRandomFileName() + ".cs");
+            string dllPath = Path.Combine(Path.GetTempPath(), "uloop-roslyn-dll-" + Path.GetRandomFileName() + ".dll");
+            File.WriteAllText(sourcePath, "class C {}");
+            try
+            {
+                RoslynCompilerBackend.WriteWorkerRequestFile(
+                    requestFilePath,
+                    sourcePath,
+                    dllPath,
+                    references: new List<string>(),
+                    defineSymbols: new List<string>(),
+                    allowUnsafeCode: false,
+                    emitDebugCode: true);
+
+                string[] lines = File.ReadAllLines(requestFilePath);
+                Assert.That(lines, Does.Contain("debugCode:1"));
+                Assert.That(lines, Does.Contain("unsafe:0"));
+            }
+            finally
+            {
+                if (File.Exists(requestFilePath))
+                {
+                    File.Delete(requestFilePath);
+                }
+
+                if (File.Exists(sourcePath))
+                {
+                    File.Delete(sourcePath);
                 }
             }
         }

@@ -108,6 +108,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return _secret + delta;
         }
 
+        // Interface-typed local read once — Release shim optimization can drop `cells` from PDB
+        // locals while Debug keeps it for pause-point capture (FB round-2 severity 6).
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int SummarizeCells()
+        {
+            IReadOnlyList<int> cells = BuildCells();
+            int total = cells.Count;
+            return total;
+        }
+
+        private List<int> BuildCells()
+        {
+            return new List<int> { 1, 2, 3 };
+        }
+
         // Contains base. — worker must skip with an explicit reason (not an error).
         public int CallsBase()
         {
