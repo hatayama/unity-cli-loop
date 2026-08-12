@@ -790,6 +790,141 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Both IA.Run and IB.Run must appear in unchangedMethods after key qualification.");
         }
 
+        /// <summary>
+        /// What: private void Start on MonoBehaviour gets a direct lifecycleNote; POCO Start and
+        /// public/parameterized Start on MonoBehaviour do not (name-only notes would flag all).
+        /// </summary>
+        [Test]
+        public async Task Run_WithStartLifecycleGates_EmitsNoteOnlyForPrivateVoidMonoBehaviour()
+        {
+            string monoPrivateSource =
+                "using UnityEngine;\n"
+                + "public class HotReloadLifecycleMonoPrivateStartFixture : MonoBehaviour\n"
+                + "{\n"
+                + "    private void Start()\n"
+                + "    {\n"
+                + "        int x = 1;\n"
+                + "        x += 1;\n"
+                + "    }\n"
+                + "}\n";
+            string pocoSource =
+                "public class HotReloadLifecyclePocoStartFixture\n"
+                + "{\n"
+                + "    private void Start()\n"
+                + "    {\n"
+                + "        int x = 1;\n"
+                + "        x += 1;\n"
+                + "    }\n"
+                + "}\n";
+            string monoPublicSource =
+                "using UnityEngine;\n"
+                + "public class HotReloadLifecycleMonoPublicStartFixture : MonoBehaviour\n"
+                + "{\n"
+                + "    public void Start()\n"
+                + "    {\n"
+                + "        int x = 1;\n"
+                + "        x += 1;\n"
+                + "    }\n"
+                + "}\n";
+            string monoParameterizedSource =
+                "using UnityEngine;\n"
+                + "public class HotReloadLifecycleMonoParamStartFixture : MonoBehaviour\n"
+                + "{\n"
+                + "    private void Start(int delay)\n"
+                + "    {\n"
+                + "        int x = delay;\n"
+                + "        x += 1;\n"
+                + "    }\n"
+                + "}\n";
+
+            TransformWorkerEntryDto monoPrivateEntry =
+                await RunWorkerAndFindEntryAsync(
+                    monoPrivateSource, "LifecycleMonoPrivateStart.cs", "Start");
+            Assert.That(monoPrivateEntry.lifecycleNote, Is.Not.Null.And.Not.Empty);
+            Assert.That(
+                monoPrivateEntry.lifecycleNote,
+                Does.Contain("Start is a one-shot lifecycle method"));
+
+            TransformWorkerEntryDto pocoEntry =
+                await RunWorkerAndFindEntryAsync(pocoSource, "LifecyclePocoStart.cs", "Start");
+            Assert.That(
+                pocoEntry.lifecycleNote,
+                Is.Null.Or.Empty,
+                "POCO Start must not get a lifecycle note.");
+
+            TransformWorkerEntryDto monoPublicEntry =
+                await RunWorkerAndFindEntryAsync(
+                    monoPublicSource, "LifecycleMonoPublicStart.cs", "Start");
+            Assert.That(
+                monoPublicEntry.lifecycleNote,
+                Is.Null.Or.Empty,
+                "public void Start on MonoBehaviour must not get a lifecycle note.");
+
+            TransformWorkerEntryDto monoParameterizedEntry =
+                await RunWorkerAndFindEntryAsync(
+                    monoParameterizedSource, "LifecycleMonoParamStart.cs", "Start");
+            Assert.That(
+                monoParameterizedEntry.lifecycleNote,
+                Is.Null.Or.Empty,
+                "private void Start(int) must not get a lifecycle note.");
+        }
+
+        /// <summary>
+        /// What: patching Awake itself emits the direct one-shot lifecycle note.
+        /// </summary>
+        [Test]
+        public async Task Run_WithAwakeMethod_EmitsDirectLifecycleNote()
+        {
+            string source =
+                "using UnityEngine;\n"
+                + "public class HotReloadLifecycleAwakeFixture : MonoBehaviour\n"
+                + "{\n"
+                + "    private void Awake()\n"
+                + "    {\n"
+                + "        int x = 1;\n"
+                + "        x += 1;\n"
+                + "    }\n"
+                + "}\n";
+
+            TransformWorkerEntryDto awakeEntry =
+                await RunWorkerAndFindEntryAsync(source, "LifecycleAwake.cs", "Awake");
+            Assert.That(awakeEntry.lifecycleNote, Is.Not.Null.And.Not.Empty);
+            Assert.That(
+                awakeEntry.lifecycleNote,
+                Does.Contain("Awake is a one-shot lifecycle method"));
+        }
+
+        private static async Task<TransformWorkerEntryDto> RunWorkerAndFindEntryAsync(
+            string source,
+            string fileName,
+            string methodName)
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, fileName);
+            File.WriteAllText(sourcePath, source);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HotReloadConstants.TestSourcesRelativeDirectory.Replace('\\', '/') + "/" + fileName);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.entries, Is.Not.Null);
+
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == methodName)
+                {
+                    return entry;
+                }
+            }
+
+            Assert.Fail(
+                "Expected entry for " + methodName + "; got: "
+                + FormatEntryMethodNames(result.Output.entries));
+            return null;
+        }
+
         private static HashSet<string> CollectEntryKeys(TransformWorkerEntryDto[] entries)
         {
             HashSet<string> keys = new HashSet<string>();

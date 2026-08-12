@@ -439,7 +439,8 @@ public static class TransformWorkerProgram
                     ShimMethodName = shimMethodName,
                     PatchKind = decision.PatchKind,
                     SourceStartLine = sourceStartLine,
-                    SourceEndLine = sourceEndLine
+                    SourceEndLine = sourceEndLine,
+                    LifecycleNote = ComputeLifecycleNote(methodDeclaration, methodSymbol, typeSymbol)
                 });
             }
         }
@@ -461,6 +462,69 @@ public static class TransformWorkerProgram
     /// Attaches original-source 1-based line annotations to every method and statement in the
     /// parsed tree. Must run before compilation so the SemanticModel binds the annotated tree.
     /// </summary>
+    // What: direct one-shot Unity lifecycle note only. Indirect "only called from Awake"
+    // notes were dropped — syntax-only caller walks cannot prove that claim (ctors,
+    // accessors, lambdas, other types in the same file).
+    private static string ComputeLifecycleNote(
+        MethodDeclarationSyntax methodDeclaration,
+        IMethodSymbol methodSymbol,
+        INamedTypeSymbol typeSymbol)
+    {
+        string methodName = methodDeclaration.Identifier.Text;
+        if (!IsOneShotLifecycleMethodName(methodName))
+        {
+            return null;
+        }
+
+        if (!IsUnityEngineMonoBehaviourDerived(typeSymbol))
+        {
+            return null;
+        }
+
+        // Why private void (): Unity message methods are instance void with no parameters;
+        // public/static/parameterized Start() on a MonoBehaviour is not the lifecycle hook.
+        if (methodSymbol.DeclaredAccessibility != Accessibility.Private
+            || methodSymbol.IsStatic
+            || !methodSymbol.ReturnsVoid
+            || methodSymbol.Parameters.Length != 0)
+        {
+            return null;
+        }
+
+        return string.Format(LifecycleNotes.DirectFormat, methodName);
+    }
+
+    private static bool IsOneShotLifecycleMethodName(string methodName)
+    {
+        for (int index = 0; index < LifecycleNotes.OneShotLifecycleMethodNames.Length; index++)
+        {
+            if (LifecycleNotes.OneShotLifecycleMethodNames[index] == methodName)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsUnityEngineMonoBehaviourDerived(INamedTypeSymbol typeSymbol)
+    {
+        INamedTypeSymbol current = typeSymbol;
+        while (current != null)
+        {
+            if (current.Name == "MonoBehaviour"
+                && current.ContainingNamespace != null
+                && current.ContainingNamespace.ToDisplayString() == "UnityEngine")
+            {
+                return true;
+            }
+
+            current = current.BaseType;
+        }
+
+        return false;
+    }
+
     private static CompilationUnitSyntax AnnotateOriginalSourceLines(CompilationUnitSyntax root)
     {
         List<SyntaxNode> nodesToAnnotate = new List<SyntaxNode>();
@@ -3664,6 +3728,25 @@ internal sealed class WorkerEntry
     public int SourceStartLine { get; set; }
 
     public int SourceEndLine { get; set; }
+
+    // Null when the method is not a one-shot lifecycle method and is not only called from them.
+    public string LifecycleNote { get; set; }
+}
+
+internal static class LifecycleNotes
+{
+    public static readonly string[] OneShotLifecycleMethodNames =
+    {
+        "Awake",
+        "Start",
+        "OnEnable",
+        "OnDisable",
+        "OnDestroy"
+    };
+
+    public const string DirectFormat =
+        "{0} is a one-shot lifecycle method; objects that already ran it will not run the "
+        + "patched body. It takes effect only for newly created objects.";
 }
 
 internal static class PatchKinds

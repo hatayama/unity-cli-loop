@@ -2,12 +2,16 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 using HarmonyLib;
 using NUnit.Framework;
 
+using Newtonsoft.Json.Linq;
+
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -236,6 +240,187 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(-5), "Original body must survive.");
         }
+
+        /// <summary>
+        /// What: each call into a transplanted body increments the invocation registry, --status
+        /// reports that count, and RevertAll clears it (removing the IL Increment would leave 0).
+        /// </summary>
+        [Test]
+        public async Task Apply_ThenInvoke_IncrementsStatusCount_AndRevertAllClears()
+        {
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
+            MethodInfo shim = AccessTools.Method(
+                typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+            string methodKey = HotReloadPatcher.FormatMethodKey(original);
+
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(0L));
+            Assert.That(
+                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant).Success,
+                Is.True);
+            Assert.That(
+                HotReloadInvocationRegistry.GetCount(methodKey),
+                Is.EqualTo(0L),
+                "Count must stay 0 until the patched body actually runs.");
+
+            HotReloadCoreFixture fixture = new HotReloadCoreFixture();
+            Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
+            Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(2L));
+
+            HotReloadTool tool = new HotReloadTool();
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
+                new JObject { ["Status"] = true },
+                CancellationToken.None);
+            HotReloadResponse status = baseResponse as HotReloadResponse;
+            Assert.That(status, Is.Not.Null);
+            Assert.That(status.Success, Is.True);
+            Assert.That(status.Methods.Count, Is.EqualTo(1));
+            Assert.That(status.Methods[0].Method, Is.EqualTo(methodKey));
+            Assert.That(status.Methods[0].InvocationCount, Is.EqualTo(2L));
+
+            HotReloadPatcher.RevertAll();
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(0L));
+            Assert.That(HotReloadPatcher.DescribeActivePatches(), Is.Empty);
+        }
+
+        /// <summary>
+        /// What: re-applying a patch removes the previous invocation count so status does not
+        /// keep pre-reapply totals.
+        /// </summary>
+        [Test]
+        public void Apply_Twice_ResetsInvocationCount()
+        {
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
+            MethodInfo shim0 = AccessTools.Method(
+                typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+            MethodInfo shim1 = AccessTools.Method(
+                typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim1));
+            string methodKey = HotReloadPatcher.FormatMethodKey(original);
+
+            HotReloadCoreFixture fixture = new HotReloadCoreFixture();
+            Assert.That(
+                HotReloadPatcher.Apply(original, shim0, HotReloadPatchShape.Transplant).Success,
+                Is.True);
+            Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(43));
+            Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(43));
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(2L));
+
+            Assert.That(
+                HotReloadPatcher.Apply(original, shim1, HotReloadPatchShape.Transplant).Success,
+                Is.True);
+            Assert.That(
+                HotReloadInvocationRegistry.GetCount(methodKey),
+                Is.EqualTo(0L),
+                "Re-apply must drop the prior generation's count.");
+            Assert.That(fixture.ReplaceableCompute(1), Is.EqualTo(100));
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(1L));
+        }
+
+        /// <summary>
+        /// What: FormatMethodKey includes parameter type strings so overloads do not share a
+        /// counter key (name-only keys would merge counts across Compute(int) and Compute(string)).
+        /// </summary>
+        [Test]
+        public void FormatMethodKey_DistinguishesOverloadsByParameterTypes()
+        {
+            MethodInfo intOverload = AccessTools.Method(
+                typeof(HotReloadOverloadKeyFixture),
+                nameof(HotReloadOverloadKeyFixture.Compute),
+                new[] { typeof(int) });
+            MethodInfo stringOverload = AccessTools.Method(
+                typeof(HotReloadOverloadKeyFixture),
+                nameof(HotReloadOverloadKeyFixture.Compute),
+                new[] { typeof(string) });
+
+            string intKey = HotReloadPatcher.FormatMethodKey(intOverload);
+            string stringKey = HotReloadPatcher.FormatMethodKey(stringOverload);
+
+            Assert.That(intKey, Is.Not.EqualTo(stringKey));
+            Assert.That(intKey, Does.Contain("System.Int32"));
+            Assert.That(stringKey, Does.Contain("System.String"));
+        }
+
+        /// <summary>
+        /// What: constructed generic parameters use Type.ToString (List`1[System.Int32]), not
+        /// assembly-qualified FullName (FullName would embed Version/PublicKeyToken).
+        /// </summary>
+        [Test]
+        public void FormatMethodKey_ConstructedGenericParameter_OmitsAssemblyQualification()
+        {
+            MethodInfo take = AccessTools.Method(
+                typeof(HotReloadGenericKeyFixture),
+                nameof(HotReloadGenericKeyFixture.Take));
+            string key = HotReloadPatcher.FormatMethodKey(take);
+
+            Assert.That(key, Does.Contain("System.Collections.Generic.List`1[System.Int32]"));
+            Assert.That(key, Does.Contain("System.Collections.Generic.Dictionary`2[System.String,System.Int32]"));
+            Assert.That(key, Does.Not.Contain("Version="));
+            Assert.That(key, Does.Not.Contain("PublicKeyToken="));
+            Assert.That(key, Does.Not.Contain("mscorlib"));
+            Assert.That(key, Does.Not.Contain("[["));
+        }
+
+        /// <summary>
+        /// What: worker-shaped FormatMethodKeyParts matches FormatMethodKey(MethodBase) so apply
+        /// Methods[].Method and --status Active rows use the same label (including '()' and
+        /// Cecil '/' → reflection '+' nested separators).
+        /// </summary>
+        [Test]
+        public void FormatMethodKeyParts_MatchesFormatMethodKey_IncludingNestedCecilSeparators()
+        {
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
+            string fromMethod = HotReloadPatcher.FormatMethodKey(original);
+            string fromParts = HotReloadPatcher.FormatMethodKeyParts(
+                typeof(HotReloadCoreFixture).FullName,
+                nameof(HotReloadCoreFixture.ReplaceableCompute),
+                new[] { typeof(int).ToString() },
+                genericArity: 0);
+
+            Assert.That(fromParts, Is.EqualTo(fromMethod));
+            Assert.That(fromParts, Does.EndWith("(System.Int32)"));
+
+            MethodInfo nested = AccessTools.Method(
+                typeof(HotReloadNestedKeyFixture.Inner),
+                nameof(HotReloadNestedKeyFixture.Inner.Ping));
+            string nestedFromMethod = HotReloadPatcher.FormatMethodKey(nested);
+            string cecilStyleTypeName = typeof(HotReloadNestedKeyFixture.Inner).FullName.Replace('+', '/');
+            string nestedFromParts = HotReloadPatcher.FormatMethodKeyParts(
+                cecilStyleTypeName,
+                nameof(HotReloadNestedKeyFixture.Inner.Ping),
+                System.Array.Empty<string>(),
+                genericArity: 0);
+
+            Assert.That(nestedFromParts, Is.EqualTo(nestedFromMethod));
+            Assert.That(nestedFromParts, Does.Contain("+Inner.Ping()"));
+            Assert.That(nestedFromParts, Does.Not.Contain("/Inner"));
+        }
+
+        /// <summary>
+        /// What: Revert(method) clears that method's invocation count (RevertAll is not required).
+        /// </summary>
+        [Test]
+        public void Revert_ClearsInvocationCountForThatMethod()
+        {
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
+            MethodInfo shim = AccessTools.Method(
+                typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+            string methodKey = HotReloadPatcher.FormatMethodKey(original);
+
+            HotReloadCoreFixture fixture = new HotReloadCoreFixture();
+            Assert.That(
+                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant).Success,
+                Is.True);
+            Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(1L));
+
+            Assert.That(HotReloadPatcher.Revert(original), Is.True);
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(0L));
+            Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(-5));
+        }
     }
 
     /// <summary>
@@ -246,6 +431,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int Compute(int delta)
         {
             return delta;
+        }
+    }
+
+    /// <summary>
+    /// Overload pair used only to assert FormatMethodKey distinguishes parameter types.
+    /// </summary>
+    public sealed class HotReloadOverloadKeyFixture
+    {
+        public int Compute(int delta)
+        {
+            return delta;
+        }
+
+        public int Compute(string label)
+        {
+            return label == null ? 0 : label.Length;
+        }
+    }
+
+    /// <summary>
+    /// Nested type used only to assert Cecil '/' labels normalize to reflection '+'.
+    /// </summary>
+    public sealed class HotReloadNestedKeyFixture
+    {
+        public sealed class Inner
+        {
+            public int Ping()
+            {
+                return 1;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Constructed-generic parameters used only to assert FormatMethodKey omits assembly quals.
+    /// </summary>
+    public sealed class HotReloadGenericKeyFixture
+    {
+        public void Take(
+            System.Collections.Generic.List<int> values,
+            System.Collections.Generic.Dictionary<string, int> byName)
+        {
         }
     }
 }

@@ -72,6 +72,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Used to attribute shim compile errors whose #line-mapped locations fall in this method.
         public int sourceStartLine;
         public int sourceEndLine;
+
+        // Null/empty when the method is not a one-shot lifecycle method and is not only called
+        // from them inside this file.
+        public string lifecycleNote;
     }
 
     [Serializable]

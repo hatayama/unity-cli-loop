@@ -40,6 +40,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Method { get; set; } = string.Empty;
         public string Reason { get; set; } = string.Empty;
         public string FilePath { get; set; } = string.Empty;
+
+        /// <summary>
+        /// How many times this patched method body has run since the current patch was applied.
+        /// Populated on --status; 0 for apply/revert outcomes.
+        /// </summary>
+        public long InvocationCount { get; set; }
+
+        /// <summary>
+        /// Optional note when the patched method is (or is only reached from) a one-shot lifecycle
+        /// method. Empty when not applicable; does not change Kind.
+        /// </summary>
+        public string LifecycleNote { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -129,11 +141,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadMethodResult> methods = new List<HotReloadMethodResult>(active.Count);
             for (int index = 0; index < active.Count; index++)
             {
+                string methodKey = active[index];
                 methods.Add(
                     new HotReloadMethodResult
                     {
                         Kind = "Active",
-                        Method = active[index]
+                        Method = methodKey,
+                        InvocationCount = HotReloadInvocationRegistry.GetCount(methodKey)
                     });
             }
 
@@ -186,7 +200,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         Kind = outcome.Kind.ToString(),
                         Method = outcome.Method,
                         Reason = outcome.Reason ?? string.Empty,
-                        FilePath = outcome.FilePath ?? string.Empty
+                        FilePath = outcome.FilePath ?? string.Empty,
+                        LifecycleNote = outcome.LifecycleNote ?? string.Empty
                     });
             }
 
@@ -311,6 +326,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (result.UnchangedTotal > 0)
             {
                 message += " " + result.UnchangedTotal + " unchanged methods were left untouched.";
+            }
+
+            int lifecycleNoteCount = 0;
+            for (int index = 0; index < result.Methods.Count; index++)
+            {
+                if (!string.IsNullOrEmpty(result.Methods[index].LifecycleNote))
+                {
+                    lifecycleNoteCount++;
+                }
+            }
+
+            if (lifecycleNoteCount > 0)
+            {
+                // Why aggregate: per-method text already lives on Methods[].LifecycleNote;
+                // dumping every note into Message repeats nearly identical paragraphs.
+                message += " " + string.Format(
+                    HotReloadConstants.LifecycleNotesAggregatedMessageFormat,
+                    lifecycleNoteCount);
             }
 
             return message;

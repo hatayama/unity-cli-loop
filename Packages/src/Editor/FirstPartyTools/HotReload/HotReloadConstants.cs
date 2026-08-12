@@ -122,5 +122,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: id, resolved line number, resolved line text.
         public const string RetargetedPausePointIdDetailFormat =
             "{0} (now line {1}: {2})";
+
+        // Format: count of Methods entries that carry a LifecycleNote.
+        public const string LifecycleNotesAggregatedMessageFormat =
+            "{0} patched method(s) have one-shot lifecycle notes; see Methods[].LifecycleNote.";
     }
 }

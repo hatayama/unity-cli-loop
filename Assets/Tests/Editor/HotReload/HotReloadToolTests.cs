@@ -331,6 +331,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: BuildApplyResponse keeps LifecycleNote on Methods and aggregates a count into
+        /// Message instead of concatenating every note (two notes must not paste both paragraphs).
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithLifecycleNotes_ExposesPerMethodAndAggregatesMessage()
+        {
+            const string noteA =
+                "Awake is a one-shot lifecycle method; objects that already ran it will not run the "
+                + "patched body. It takes effect only for newly created objects.";
+            const string noteB =
+                "Start is a one-shot lifecycle method; objects that already ran it will not run the "
+                + "patched body. It takes effect only for newly created objects.";
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Awake", "Assets/A.cs", noteA),
+                    HotReloadMethodOutcome.Patched("Type.Start", "Assets/A.cs", noteB)
+                },
+                new List<string>(),
+                patchedTotal: 2,
+                activePatchTotal: 2);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Methods.Count, Is.EqualTo(2));
+            Assert.That(response.Methods[0].LifecycleNote, Is.EqualTo(noteA));
+            Assert.That(response.Methods[1].LifecycleNote, Is.EqualTo(noteB));
+            Assert.That(
+                response.Message,
+                Does.Contain("2 patched method(s) have one-shot lifecycle notes"));
+            Assert.That(response.Message, Does.Contain("Methods[].LifecycleNote"));
+            Assert.That(response.Message, Does.Not.Contain(noteA));
+            Assert.That(response.Message, Does.Not.Contain(noteB));
+        }
+
+        /// <summary>
         /// What: a skipped-only run keeps the existing "See Methods for Skipped reasons." message.
         /// </summary>
         [Test]
