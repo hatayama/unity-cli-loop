@@ -208,27 +208,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: BuildApplyResponse lists expired pause-point marker ids that were not retargeted.
+        /// What: BuildApplyResponse drains expired-not-retargeted ids into Warnings.
         /// </summary>
         [Test]
-        public void BuildApplyResponse_WithExpiredPausePointIds_AddsAggregatedWarning()
+        public void BuildApplyResponse_WithExpiredNotRetargetedIds_AddsAggregatedWarning()
         {
-            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
-                new List<HotReloadMethodOutcome>
-                {
-                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
-                },
-                new List<string>(),
-                patchedTotal: 1,
-                activePatchTotal: 1,
-                expiredPausePointIds: new List<string> { "Assets/Scripts/A.cs:10" });
+            Func<IReadOnlyList<string>> previous =
+                HotReloadPausePointCoordination.ConsumeExpiredNotRetargetedMarkerIds;
+            HotReloadPausePointCoordination.ConsumeExpiredNotRetargetedMarkerIds = () =>
+                new List<string> { "Assets/Scripts/A.cs:10" };
+            try
+            {
+                HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 1,
+                    activePatchTotal: 1);
 
-            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+                HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
 
-            Assert.That(
-                response.Warnings,
-                Does.Contain(
-                    "Expired pause points were not re-targeted and will not fire: Assets/Scripts/A.cs:10"));
+                Assert.That(
+                    response.Warnings,
+                    Does.Contain(
+                        "Expired pause points were not re-targeted and will not fire: Assets/Scripts/A.cs:10"));
+            }
+            finally
+            {
+                HotReloadPausePointCoordination.ConsumeExpiredNotRetargetedMarkerIds = previous;
+            }
         }
 
         [Test]
