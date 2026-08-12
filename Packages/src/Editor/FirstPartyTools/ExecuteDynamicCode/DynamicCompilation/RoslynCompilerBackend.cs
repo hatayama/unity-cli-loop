@@ -61,6 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string workerRequestFilePath = Path.ChangeExtension(sourcePath, ".worker");
             IReadOnlyCollection<string> defineSymbols = compilerOptions.DefineSymbols;
             bool allowUnsafeCode = compilerOptions.AllowUnsafeCode;
+            bool emitDebugCode = compilerOptions.EmitDebugCode;
 
             try
             {
@@ -70,7 +71,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     dllPath,
                     references,
                     defineSymbols,
-                    allowUnsafeCode);
+                    allowUnsafeCode,
+                    emitDebugCode);
 
                 SharedWorkerCompileOutcome workerOutcome = await SharedRoslynCompilerWorkerHost.TryCompileAsync(
                     workerRequestFilePath,
@@ -107,6 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     references,
                     defineSymbols,
                     allowUnsafeCode,
+                    emitDebugCode,
                     externalCompilerPaths,
                     ct,
                     markBuildStarted,
@@ -141,6 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> references,
             IReadOnlyCollection<string> defineSymbols,
             bool allowUnsafeCode,
+            bool emitDebugCode,
             ExternalCompilerPaths externalCompilerPaths,
             CancellationToken ct,
             Action markBuildStarted,
@@ -154,7 +158,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 dllPath,
                 references,
                 defineSymbols,
-                allowUnsafeCode);
+                allowUnsafeCode,
+                emitDebugCode);
 
             try
             {
@@ -225,7 +230,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string dllPath,
             IReadOnlyCollection<string> references,
             IReadOnlyCollection<string> defineSymbols,
-            bool allowUnsafeCode)
+            bool allowUnsafeCode,
+            bool emitDebugCode)
         {
             List<string> lines = new()
             {
@@ -235,7 +241,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "-utf8output",
                 "-nostdlib+",
                 "-target:library",
-                "-optimize+",
+                // Why -optimize- for emitDebugCode: hot-reload shims need locals in the PDB for
+                // pause-point capture; execute-dynamic-code keeps -optimize+.
+                emitDebugCode ? "-optimize-" : "-optimize+",
                 // Why portable: one-shot csc fallback must emit a PDB so Assembly.Load can map
                 // runtime exceptions back to user-snippet.cs lines (same as the shared worker).
                 "-debug:portable",
@@ -264,10 +272,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string dllPath,
             IReadOnlyCollection<string> references,
             IReadOnlyCollection<string> defineSymbols,
-            bool allowUnsafeCode)
+            bool allowUnsafeCode,
+            bool emitDebugCode)
         {
             List<string> lines = new() { Path.GetFullPath(sourcePath), Path.GetFullPath(dllPath) };
             lines.Add(allowUnsafeCode ? "unsafe:1" : "unsafe:0");
+            lines.Add(emitDebugCode ? "debugCode:1" : "debugCode:0");
 
             string serializedDefines = SerializeDefineSymbols(defineSymbols);
             if (!string.IsNullOrEmpty(serializedDefines))

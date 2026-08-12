@@ -14,6 +14,7 @@ public static class Program
     private const string QuitCommand = "{{SHARED_COMPILER_WORKER_QUIT_COMMAND}}";
     private const string RequestPathPrefix = "{{COMPILE_REQUEST_PATH_PREFIX}}";
     private const string UnsafePrefix = "unsafe:";
+    private const string DebugCodePrefix = "debugCode:";
     private const string DefinePrefix = "define:";
     private const string ReferencePrefix = "ref:";
     private static readonly object SyncRoot = new object();
@@ -166,12 +167,13 @@ public static class Program
         string sourcePath = requestLines[0];
         string dllPath = requestLines[1];
         bool allowUnsafe = ParseAllowUnsafe(requestLines);
+        bool emitDebugCode = ParseEmitDebugCode(requestLines);
         string[] defineSymbols = ParseDefineSymbols(requestLines);
         string source = File.ReadAllText(sourcePath, Encoding.UTF8);
         SourceText sourceText = SourceText.From(source, Encoding.UTF8);
         SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(sourceText, CreateParseOptions(defineSymbols), sourcePath);
         List<MetadataReference> references = BuildReferences(requestLines);
-        CSharpCompilation compilation = CSharpCompilation.Create(Path.GetFileNameWithoutExtension(dllPath), new[] { syntaxTree }, references, CreateCompilationOptions(allowUnsafe));
+        CSharpCompilation compilation = CSharpCompilation.Create(Path.GetFileNameWithoutExtension(dllPath), new[] { syntaxTree }, references, CreateCompilationOptions(allowUnsafe, emitDebugCode));
         // Why portable PDB: execute-dynamic-code loads these bytes so runtime exceptions can
         // surface user-snippet.cs line numbers from #line directives in the wrapper.
         string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
@@ -215,11 +217,12 @@ public static class Program
             : CSharpParseOptions.Default.WithPreprocessorSymbols(defineSymbols);
     }
 
-    private static CSharpCompilationOptions CreateCompilationOptions(bool allowUnsafe)
+    private static CSharpCompilationOptions CreateCompilationOptions(bool allowUnsafe, bool emitDebugCode)
     {
+        // Why Debug for emitDebugCode: hot-reload shims need locals kept for pause-point capture.
         return new CSharpCompilationOptions(
             OutputKind.DynamicallyLinkedLibrary,
-            optimizationLevel: OptimizationLevel.Release,
+            optimizationLevel: emitDebugCode ? OptimizationLevel.Debug : OptimizationLevel.Release,
             allowUnsafe: allowUnsafe);
     }
 
@@ -234,6 +237,22 @@ public static class Program
             }
 
             return string.Equals(line.Substring(UnsafePrefix.Length), "1", StringComparison.Ordinal);
+        }
+
+        return false;
+    }
+
+    private static bool ParseEmitDebugCode(string[] requestLines)
+    {
+        for (int i = 2; i < requestLines.Length; i++)
+        {
+            string line = requestLines[i];
+            if (!line.StartsWith(DebugCodePrefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            return string.Equals(line.Substring(DebugCodePrefix.Length), "1", StringComparison.Ordinal);
         }
 
         return false;
@@ -270,6 +289,7 @@ public static class Program
             {
                 string referencePath = requestLines[i];
                 if (referencePath.StartsWith(UnsafePrefix, StringComparison.Ordinal)
+                    || referencePath.StartsWith(DebugCodePrefix, StringComparison.Ordinal)
                     || referencePath.StartsWith(DefinePrefix, StringComparison.Ordinal))
                 {
                     continue;

@@ -519,7 +519,7 @@ namespace System.Runtime.CompilerServices
             ExternalCompilerPaths externalCompilerPaths = ExternalCompilerPathResolver.Resolve();
             Assert.That(externalCompilerPaths, Is.Not.Null, "External compiler paths could not be resolved for this Unity installation.");
 
-            RoslynCompilerOptions compilerOptions = new(new List<string>(), false);
+            RoslynCompilerOptions compilerOptions = new(new List<string>(), false, emitDebugCode: false);
             using CancellationTokenSource cts = new(TimeSpan.FromSeconds(120));
             DynamicCompilationBackendResult result = await RoslynCompilerBackend.CompileAsync(
                 snippetSourcePath,

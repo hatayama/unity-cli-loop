@@ -62,7 +62,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     references.Add(referencePath);
                 }
 
-                RoslynCompilerOptions compilerOptions = new RoslynCompilerOptions(defineSymbols, allowUnsafeCode: false);
+                // Why emitDebugCode: Release optimization drops interface-typed locals from PDB
+                // scopes, so pause-point CapturedVariables miss them after a hot-reload patch.
+                RoslynCompilerOptions compilerOptions = new RoslynCompilerOptions(
+                    defineSymbols,
+                    allowUnsafeCode: false,
+                    emitDebugCode: true);
                 DynamicCompilationBackendResult backendResult = await RoslynCompilerBackend.CompileAsync(
                     sourcePath,
                     dllPath,
