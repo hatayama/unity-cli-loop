@@ -297,12 +297,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: one orchestrator run over the fixture reports the explicit-body property getter,
-        /// the explicit-body property setter, and the expression-bodied indexer getter as Skipped
-        /// with the v1 accessor reason, while auto-property accessors stay unlisted.
+        /// What: property getters with bodies are Patched; property setters and indexer getters
+        /// with bodies stay Skipped with the accessor reason; auto-property accessors stay unlisted.
         /// </summary>
         [Test]
-        public async Task Run_ExplicitAccessorsSkipped_AutoPropertyAccessorsUnlisted()
+        public async Task Run_PropertyGettersPatched_SetterAndIndexerAccessorsSkipped()
         {
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
@@ -314,13 +313,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            return _secret + delta;\n"
                     + "        }",
                     explicitAccessorsBlock:
-                    "// Explicit-body getter — worker must report get_ExplicitBodyGetter as Skipped (not silent).\n"
+                    "// Explicit-body getter — worker must patch get_ExplicitBodyGetter.\n"
                     + "        public int ExplicitBodyGetter\n"
                     + "        {\n"
                     + "            get { return _secret + 1; }\n"
                     + "        }\n"
                     + "\n"
-                    + "        // Explicit-body setter — worker must report set_ExplicitBodySetter as Skipped (not silent).\n"
+                    + "        // Explicit-body setter — worker must report set_ExplicitBodySetter as Skipped.\n"
                     + "        public int ExplicitBodySetter\n"
                     + "        {\n"
                     + "            set { _secret = value + 1; }\n"
@@ -338,20 +337,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(result);
 
             const string expectedReason =
-                "Property and indexer accessors are out of scope for v1; run 'uloop compile' to apply accessor edits.";
-            bool foundPropertyGetter = false;
+                "Property setter, init, or indexer accessors are out of scope for v1; "
+                + "run 'uloop compile' to apply accessor edits.";
+            bool foundPropertyGetterPatched = false;
             bool foundIndexerGetter = false;
             bool foundPropertySetter = false;
             bool foundAutoPropertyAccessor = false;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
             {
-                bool skippedWithAccessorReason = outcome.Kind == HotReloadMethodOutcomeKind.Skipped
-                    && outcome.Reason == expectedReason;
-                if (skippedWithAccessorReason && outcome.Method.Contains("get_ExplicitBodyGetter"))
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    && outcome.Method.Contains("get_ExplicitBodyGetter"))
                 {
-                    foundPropertyGetter = true;
+                    foundPropertyGetterPatched = true;
                 }
 
+                bool skippedWithAccessorReason = outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Reason == expectedReason;
                 if (skippedWithAccessorReason && outcome.Method.Contains("get_Item"))
                 {
                     foundIndexerGetter = true;
@@ -369,9 +370,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.That(
-                foundPropertyGetter,
+                foundPropertyGetterPatched,
                 Is.True,
-                "Expected get_ExplicitBodyGetter to be Skipped with the accessor out-of-scope reason.");
+                "Expected get_ExplicitBodyGetter to be Patched; got: " + FormatOutcomes(result));
             Assert.That(
                 foundIndexerGetter,
                 Is.True,
