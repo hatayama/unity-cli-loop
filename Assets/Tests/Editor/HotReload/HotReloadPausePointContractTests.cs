@@ -13,6 +13,7 @@ using NUnit.Framework;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -153,6 +154,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             int result = fixture.ComputeWithPrivate(5);
             Assert.That(result, Is.EqualTo(fixture.SecretForAssert + 5 + 100));
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+        }
+
+        /// <summary>
+        /// What: after auto-retarget, apply Warnings include "{id} (now line N: …)" from the
+        /// registry, and both PausePointResponse / PausePointStatusResponse expose
+        /// ResolvedLine / ResolvedLineText. Line-drift wording is covered by HotReloadToolTests
+        /// (contentPathOverride tests cannot rewrite on-disk line text for the reader).
+        /// </summary>
+        [Test]
+        public async Task ArmThenHotReload_ExposesResolvedLineOnStatusAndApplyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            int enableLine = FindLineNumber(onDisk, "return _secret + delta;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message);
+            Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
+            Assert.That(enable.ResolvedLineText, Does.Contain("return _secret + delta;"));
+
+            string editedSource = BuildEditedComputePlusHundred(onDisk);
+            HotReloadResponse applyResponse =
+                await HotReloadApplyFromEditedSourceAsync(editedSource, "ContractArmThenPatchResolved.cs");
+
+            string warningsJoined = string.Join(" | ", applyResponse.Warnings);
+            Assert.That(
+                warningsJoined,
+                Does.Contain(
+                    "Armed pause points were re-targeted onto the hot-reload patched bodies:"));
+            Assert.That(warningsJoined, Does.Contain(enable.Id + " (now line "));
+            Assert.That(warningsJoined, Does.Contain("return _secret + delta;"));
+
+            UloopPausePointSnapshot afterPatch = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(afterPatch.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(afterPatch.ResolvedLine, Is.GreaterThan(0));
+            Assert.That(afterPatch.ResolvedLineText, Does.Contain("return _secret + delta;"));
+
+            PausePointResponse statusResponse = PausePointResponse.FromSnapshot(afterPatch);
+            Assert.That(statusResponse.ResolvedLine, Is.EqualTo(afterPatch.ResolvedLine));
+            Assert.That(statusResponse.ResolvedLineText, Is.EqualTo(afterPatch.ResolvedLineText));
+
+            PausePointStatusResponse bridgeStatus =
+                PausePointStatusResponse.FromSnapshot(afterPatch);
+            Assert.That(bridgeStatus.ResolvedLine, Is.EqualTo(afterPatch.ResolvedLine));
+            Assert.That(bridgeStatus.ResolvedLineText, Is.EqualTo(afterPatch.ResolvedLineText));
         }
 
         /// <summary>
@@ -654,6 +706,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static async Task HotReloadFromEditedSourceAsync(string editedSource, string fileName)
         {
+            await HotReloadApplyFromEditedSourceAsync(editedSource, fileName);
+        }
+
+        private static async Task<HotReloadResponse> HotReloadApplyFromEditedSourceAsync(
+            string editedSource,
+            string fileName)
+        {
             string fixturePath = ResolveFixtureAbsolutePath();
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
@@ -673,6 +732,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result.Methods.Any(m => m.Kind == HotReloadMethodOutcomeKind.Patched),
                 Is.True,
                 FormatHotReloadOutcomes(result));
+            return HotReloadTool.BuildApplyResponse(result);
         }
 
         private static string ResolveFixtureAbsolutePath()

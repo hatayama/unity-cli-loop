@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -7,6 +8,7 @@ using NUnit.Framework;
 using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
@@ -129,11 +131,87 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: BuildApplyResponse lists retargeted pause-point marker ids in Warnings
-        /// when auto-retarget kept markers firing on patched bodies.
+        /// What: BuildApplyResponse lists retargeted pause-point marker ids with resolved
+        /// line text from the registry (no "keep firing at the edited lines" wording).
         /// </summary>
         [Test]
         public void BuildApplyResponse_WithRetargetedPausePointIds_AddsAggregatedWarning()
+        {
+            UloopPausePointRegistry.ConfigureForTests(new FakePausePointPauseController(), () => DateTime.UtcNow);
+            try
+            {
+                const string id = "Assets/Scripts/A.cs:10";
+                UloopPausePointRegistry.Enable(id, 30);
+                UloopPausePointRegistry.SetResolvedLine(id, 12, "return value;");
+
+                HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 1,
+                    activePatchTotal: 1,
+                    retargetedPausePointIds: new List<string> { id });
+
+                HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+                Assert.That(
+                    response.Warnings,
+                    Does.Contain(
+                        "Armed pause points were re-targeted onto the hot-reload patched bodies: "
+                        + "Assets/Scripts/A.cs:10 (now line 12: return value;)"));
+            }
+            finally
+            {
+                UloopPausePointRegistry.ResetForTests();
+            }
+        }
+
+        /// <summary>
+        /// What: BuildApplyResponse drains retarget line-drift warnings into Warnings.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithRetargetLineDrift_AddsDriftWarning()
+        {
+            Func<IReadOnlyList<(string Id, string OldText, string NewText)>> previous =
+                HotReloadPausePointCoordination.ConsumeRetargetLineDriftWarnings;
+            HotReloadPausePointCoordination.ConsumeRetargetLineDriftWarnings = () =>
+                new List<(string, string, string)>
+                {
+                    ("Assets/Scripts/A.cs:10", "return a;", "return a + 1;")
+                };
+            try
+            {
+                HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 1,
+                    activePatchTotal: 1);
+
+                HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+                Assert.That(
+                    response.Warnings,
+                    Does.Contain(
+                        "Pause point Assets/Scripts/A.cs:10 now targets a different statement "
+                        + "(was: \"return a;\", now: \"return a + 1;\"). "
+                        + "Re-enable it at the intended line if this is not what you want."));
+            }
+            finally
+            {
+                HotReloadPausePointCoordination.ConsumeRetargetLineDriftWarnings = previous;
+            }
+        }
+
+        /// <summary>
+        /// What: BuildApplyResponse lists expired pause-point marker ids that were not retargeted.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithExpiredPausePointIds_AddsAggregatedWarning()
         {
             HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
                 new List<HotReloadMethodOutcome>
@@ -143,18 +221,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new List<string>(),
                 patchedTotal: 1,
                 activePatchTotal: 1,
-                retargetedPausePointIds: new List<string>
-                {
-                    "Assets/Scripts/A.cs:10"
-                });
+                expiredPausePointIds: new List<string> { "Assets/Scripts/A.cs:10" });
 
             HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
 
             Assert.That(
                 response.Warnings,
                 Does.Contain(
-                    "Armed pause points were re-targeted onto the hot-reload patched bodies and keep "
-                    + "firing at the edited lines: Assets/Scripts/A.cs:10"));
+                    "Expired pause points were not re-targeted and will not fire: Assets/Scripts/A.cs:10"));
         }
 
         [Test]
@@ -288,6 +362,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.Message,
                 Is.EqualTo("Hot reload finished with one or more Failed method outcomes. See Methods."));
+        }
+
+        private sealed class FakePausePointPauseController : IUloopPausePointPauseController
+        {
+            public bool IsPlaying => true;
+            public bool IsPaused => false;
+
+            public void Pause()
+            {
+            }
+
+            public void Resume()
+            {
+            }
         }
     }
 }
