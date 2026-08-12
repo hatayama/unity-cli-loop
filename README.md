@@ -103,6 +103,14 @@ The installer verifies the downloaded archive against the digest list in
 Optional env: `ULOOP_REF` (git ref for the pin; default `main`), `ULOOP_INSTALL_DIR`.
 `ULOOP_VERSION` is accepted only when it matches the pin's `dispatcherReleaseTag`.
 
+### Homebrew (macOS)
+
+```bash
+brew install hatayama/tap/uloop
+```
+
+Updates are managed by `brew upgrade uloop`. The formula is refreshed automatically on every dispatcher release.
+
 On macOS or Windows Git Bash:
 
 ```sh
