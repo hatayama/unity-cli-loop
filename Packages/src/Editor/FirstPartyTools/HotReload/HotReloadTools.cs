@@ -137,17 +137,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static HotReloadResponse ExecuteStatus()
         {
-            IReadOnlyList<string> active = HotReloadPatcher.DescribeActivePatches();
+            IReadOnlyList<HotReloadActivePatchInfo> active = HotReloadPatcher.DescribeActivePatches();
             List<HotReloadMethodResult> methods = new List<HotReloadMethodResult>(active.Count);
             for (int index = 0; index < active.Count; index++)
             {
-                string methodKey = active[index];
+                HotReloadActivePatchInfo patch = active[index];
                 methods.Add(
                     new HotReloadMethodResult
                     {
                         Kind = "Active",
-                        Method = methodKey,
-                        InvocationCount = HotReloadInvocationRegistry.GetCount(methodKey)
+                        Method = patch.MethodKey,
+                        FilePath = patch.FilePath,
+                        InvocationCount = HotReloadInvocationRegistry.GetCount(patch.MethodKey)
                     });
             }
 

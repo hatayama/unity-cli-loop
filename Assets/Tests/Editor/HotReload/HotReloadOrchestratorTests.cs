@@ -458,6 +458,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 {
                     foundActiveGetter = true;
                     Assert.That(method.InvocationCount, Is.GreaterThanOrEqualTo(1L));
+                    Assert.That(
+                        method.FilePath,
+                        Is.EqualTo("Assets/Tests/Editor/HotReload/HotReloadShapeFixtures.cs"),
+                        "Status Active rows must carry the project-relative source path from apply.");
                 }
             }
 
