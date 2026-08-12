@@ -7,9 +7,12 @@ using System.Threading.Tasks;
 
 using NUnit.Framework;
 
+using Newtonsoft.Json.Linq;
+
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -385,6 +388,85 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 foundAutoPropertyAccessor,
                 Is.False,
                 "Auto-property accessors must not be listed; only explicit-body accessors are reported.");
+        }
+
+        /// <summary>
+        /// What: editing a static expression-bodied property getter patches runtime reads,
+        /// --status lists the Active get_ row, and RevertAll restores the compiled literal.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedPropertyGetter_ApplyStatusRevert_UpdatesRuntimeValue()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "public static float HeightAmplitude => 5f;",
+                "public static float HeightAmplitude => 6f;",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: getter body must differ.");
+
+            string editedPath = WriteEditedSource("PropertyGetterHeightAmplitude.cs", editedSource);
+
+            Assert.That(HotReloadPropertyGetterFixture.HeightAmplitude, Is.EqualTo(5f));
+
+            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "get_HeightAmplitude");
+            Assert.That(patched.ActivePatchTotal, Is.GreaterThanOrEqualTo(1));
+            // Why exact label: Skill docs and --status must share FormatMethodKey shape with apply.
+            const string expectedGetterLabel =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadPropertyGetterFixture.get_HeightAmplitude()";
+            string applyMethodLabel = null;
+            foreach (HotReloadMethodOutcome outcome in patched.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    && outcome.Method.Contains("get_HeightAmplitude"))
+                {
+                    applyMethodLabel = outcome.Method;
+                    break;
+                }
+            }
+
+            Assert.That(applyMethodLabel, Is.EqualTo(expectedGetterLabel));
+            Assert.That(
+                HotReloadPropertyGetterFixture.HeightAmplitude,
+                Is.EqualTo(6f),
+                "Patched getter must return the edited literal.");
+
+            HotReloadTool tool = new HotReloadTool();
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
+                new JObject { ["Status"] = true },
+                CancellationToken.None);
+            HotReloadResponse status = baseResponse as HotReloadResponse;
+            Assert.That(status, Is.Not.Null);
+            Assert.That(status.Success, Is.True);
+
+            bool foundActiveGetter = false;
+            foreach (HotReloadMethodResult method in status.Methods)
+            {
+                if (method.Kind == "Active" && method.Method == expectedGetterLabel)
+                {
+                    foundActiveGetter = true;
+                    Assert.That(method.InvocationCount, Is.GreaterThanOrEqualTo(1L));
+                }
+            }
+
+            Assert.That(
+                foundActiveGetter,
+                Is.True,
+                "Status must list Active get_HeightAmplitude after apply with the same Method label.");
+
+            HotReloadPatcher.RevertAll();
+            Assert.That(HotReloadPatcher.DescribeActivePatches(), Is.Empty);
+            Assert.That(
+                HotReloadPropertyGetterFixture.HeightAmplitude,
+                Is.EqualTo(5f),
+                "RevertAll must restore the compiled getter body.");
         }
 
         /// <summary>
@@ -1379,6 +1461,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "HotReload",
                 "HotReloadE2EFixtures.cs");
             Assert.That(File.Exists(path), Is.True, "E2E fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveShapeFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadShapeFixtures.cs");
+            Assert.That(File.Exists(path), Is.True, "Shape fixture source missing: " + path);
             return Path.GetFullPath(path);
         }
 
