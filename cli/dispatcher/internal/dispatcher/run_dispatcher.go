@@ -329,11 +329,7 @@ func executeDispatcherFreshnessPlan(ctx context.Context, plan dispatcherFreshnes
 	case dispatcherFreshnessNoop:
 		return false, 0
 	case dispatcherFreshnessManualUpdateRequired:
-		reason := plan.Reason
-		if reason == "" {
-			reason = dispatcherFreshnessReasonSelfUpdateDisabled
-		}
-		writeDispatcherManualUpdateRequiredError(stderr, plan.MinimumVersion, reason)
+		writeDispatcherManualUpdateRequiredError(stderr, plan.MinimumVersion, plan.Reason)
 		return true, 1
 	case dispatcherFreshnessRunRequiredUpdate, dispatcherFreshnessRunOptionalUpdate:
 		return runDispatcherFreshnessUpdate(ctx, plan, stderr, deps)

@@ -445,8 +445,9 @@ func TestEnforceDispatcherFreshnessRequiresBrewUpgradeWhenHomebrewManagedAndUpda
 	if !handled || code != 1 {
 		t.Fatalf("freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
 	}
-	if !bytes.Contains(stderr.Bytes(), []byte("brew upgrade uloop")) {
-		t.Fatalf("expected brew upgrade guidance in stderr, got: %s", stderr.String())
+	expectedNextAction := "Run `brew upgrade uloop` and retry the command."
+	if !bytes.Contains(stderr.Bytes(), []byte(expectedNextAction)) {
+		t.Fatalf("expected NextActions brew upgrade guidance in stderr, got: %s", stderr.String())
 	}
 	if !bytes.Contains(stderr.Bytes(), []byte(clierrors.ErrorCodeCLIUpdateRequired)) {
 		t.Fatalf("freshness output mismatch: %s", stderr.String())
