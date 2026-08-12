@@ -1325,6 +1325,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.That(failed, Is.Not.Null, FormatOutcomes(result));
+            Assert.That(
+                failed.Method,
+                Is.EqualTo("(shim-compile)"),
+                "Multi-entry unattributable failures must keep the file-level label.\n"
+                + FormatOutcomes(result));
             Assert.That(failed.Reason, Does.Contain("MissingAlphaHelper"));
             Assert.That(failed.Reason, Does.Contain("MissingBetaHelper"));
             Assert.That(failed.Reason, Does.Contain("CS0103"));
