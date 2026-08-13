@@ -42,9 +42,13 @@ jobs:
             strict-compile-check: true
           # Newer editors open the committed 2022.3 project through an ephemeral
           # in-place upgrade, so obsolete-API warnings are expected there; skip the
-          # zero-warning gate and run only the hot-reload suite, which is the
+          # zero-warning gate and run only the hot-reload suites, which are the
           # cross-version compatibility signal these legs exist for. Compile errors
           # still fail the leg because the test runner cannot run without compiling.
+          # The filter is an unanchored prefix on purpose: it matches both the
+          # ...Tests.Editor.HotReload namespace and the ...HotReloadSpike namespace,
+          # whose publicizer/worker-bootstrap spikes exercise exactly the machinery
+          # that breaks across editor generations.
           - unity-version: 6000.3.15f1
             test-filter: io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             strict-compile-check: false
@@ -145,6 +149,14 @@ jobs:
           # GameCI container.
           sudo rm -rf "Assets/Editor/Editor"
           sudo rm -f "Assets/Editor/Editor.meta"
+          # Fail loudly if the injection moved somewhere this cleanup does not cover,
+          # so the leg points at the real cause instead of a confusing asmdef audit
+          # failure later in the test step.
+          LEFTOVER=$(find Assets -name 'UnityBuilderAction*' -print -quit)
+          if [ -n "$LEFTOVER" ]; then
+            echo "::error::GameCI build script found outside the expected injection path: $LEFTOVER"
+            exit 1
+          fi
 
       - name: Run EditMode tests
         if: env.HAS_UNITY_LICENSE == 'true'
