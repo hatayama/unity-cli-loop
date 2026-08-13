@@ -11,6 +11,7 @@ using NUnit.Framework;
 using UnityEditor.Compilation;
 using UnityEngine;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload;
 using Assembly = System.Reflection.Assembly;
 using CecilFieldAttributes = Mono.Cecil.FieldAttributes;
 using CecilMethodAttributes = Mono.Cecil.MethodAttributes;
@@ -570,9 +571,30 @@ namespace System.Runtime.CompilerServices
         private static void WritePublicizedCopy(string sourceDllPath, string outputDllPath)
         {
             // InMemory read: the source dll is the currently loaded script assembly, so the copy
-            // must not keep a file handle on it.
-            ReaderParameters readerParameters = new() { InMemory = true };
-            using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(sourceDllPath, readerParameters);
+            // must not keep a file handle on it. Resolver search dirs match production publicize
+            // so optional-parameter default enums (netstandard) resolve during Write.
+            IReadOnlyCollection<string> searchDirectories =
+                PublicizerTestSearchDirectories.ForHotReloadTestAssembly();
+            using DefaultAssemblyResolver assemblyResolver = new DefaultAssemblyResolver();
+            assemblyResolver.AddSearchDirectory(Path.GetDirectoryName(sourceDllPath));
+            foreach (string searchDirectory in searchDirectories)
+            {
+                if (string.IsNullOrEmpty(searchDirectory) || !Directory.Exists(searchDirectory))
+                {
+                    continue;
+                }
+
+                assemblyResolver.AddSearchDirectory(searchDirectory);
+            }
+
+            ReaderParameters readerParameters = new ReaderParameters
+            {
+                InMemory = true,
+                AssemblyResolver = assemblyResolver
+            };
+            using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(
+                sourceDllPath,
+                readerParameters);
             foreach (ModuleDefinition module in assemblyDefinition.Modules)
             {
                 foreach (TypeDefinition type in module.GetTypes())

@@ -1093,8 +1093,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string scriptAssembliesDirectory = Path.GetFullPath(
                 Path.Combine(projectRoot, HotReloadConstants.ScriptAssembliesRelativeDirectory));
 
+            // Derive Cecil search dirs from Unity's actual compile references so publicize
+            // resolves netstandard/engine modules without hardcoding Editor Contents layouts.
+            IReadOnlyCollection<string> resolverSearchDirectories =
+                ReferencePublicizer.CollectResolverSearchDirectories(compilationAssembly.allReferences);
+
             List<string> references = new List<string>();
-            string publicizedTarget = ReferencePublicizer.GetOrCreatePublicizedCopy(targetDllPath);
+            string publicizedTarget = ReferencePublicizer.GetOrCreatePublicizedCopy(
+                targetDllPath,
+                resolverSearchDirectories);
             references.Add(publicizedTarget);
 
             if (includeHarmonyReference)
@@ -1126,7 +1133,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (IsUnderDirectory(fullReference, scriptAssembliesDirectory)
                     && HotReloadConstants.IsPublicizableProjectAssemblyFileName(referenceFileName))
                 {
-                    references.Add(ReferencePublicizer.GetOrCreatePublicizedCopy(fullReference));
+                    references.Add(
+                        ReferencePublicizer.GetOrCreatePublicizedCopy(
+                            fullReference,
+                            resolverSearchDirectories));
                 }
                 else
                 {
