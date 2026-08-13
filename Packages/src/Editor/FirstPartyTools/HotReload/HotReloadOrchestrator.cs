@@ -1093,8 +1093,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string scriptAssembliesDirectory = Path.GetFullPath(
                 Path.Combine(projectRoot, HotReloadConstants.ScriptAssembliesRelativeDirectory));
 
+            // Derive Cecil search dirs from Unity's actual compile references so publicize
+            // resolves netstandard/engine modules without hardcoding Editor Contents layouts.
+            HashSet<string> resolverSearchDirectories = new HashSet<string>(StringComparer.Ordinal);
+            if (compilationAssembly.allReferences != null)
+            {
+                foreach (string reference in compilationAssembly.allReferences)
+                {
+                    if (string.IsNullOrEmpty(reference) || !File.Exists(reference))
+                    {
+                        continue;
+                    }
+
+                    string directory = Path.GetDirectoryName(Path.GetFullPath(reference));
+                    if (!string.IsNullOrEmpty(directory))
+                    {
+                        resolverSearchDirectories.Add(directory);
+                    }
+                }
+            }
+
             List<string> references = new List<string>();
-            string publicizedTarget = ReferencePublicizer.GetOrCreatePublicizedCopy(targetDllPath);
+            string publicizedTarget = ReferencePublicizer.GetOrCreatePublicizedCopy(
+                targetDllPath,
+                resolverSearchDirectories);
             references.Add(publicizedTarget);
 
             if (includeHarmonyReference)
@@ -1126,7 +1148,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (IsUnderDirectory(fullReference, scriptAssembliesDirectory)
                     && HotReloadConstants.IsPublicizableProjectAssemblyFileName(referenceFileName))
                 {
-                    references.Add(ReferencePublicizer.GetOrCreatePublicizedCopy(fullReference));
+                    references.Add(
+                        ReferencePublicizer.GetOrCreatePublicizedCopy(
+                            fullReference,
+                            resolverSearchDirectories));
                 }
                 else
                 {

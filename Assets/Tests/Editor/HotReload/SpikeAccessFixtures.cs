@@ -1,3 +1,4 @@
+using System;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
@@ -16,6 +17,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike
         private void BumpByOne()
         {
             _counter++;
+        }
+
+        // Optional enum default forces Cecil to resolve netstandard while writing a publicized
+        // copy; without a working resolver Unity 6 fails publicize with AssemblyResolutionException.
+        public static bool ContainsWithComparison(
+            string source,
+            string value,
+            StringComparison comparisonType = StringComparison.OrdinalIgnoreCase)
+        {
+            return source.IndexOf(value, comparisonType) >= 0;
         }
 
         // Why NoInlining on both patch targets below: these tests verify detour mechanics,

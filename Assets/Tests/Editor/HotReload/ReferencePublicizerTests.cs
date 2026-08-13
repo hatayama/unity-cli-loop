@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -30,7 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void GetOrCreatePublicizedCopy_RewritesPrivateMembersAndCachesByMvid()
         {
             string sourceDllPath = ResolveTestAssemblyDllPath();
-            string firstPath = ReferencePublicizer.GetOrCreatePublicizedCopy(sourceDllPath);
+            IReadOnlyCollection<string> searchDirectories = PublicizerTestSearchDirectories.ForHotReloadTestAssembly();
+            string firstPath = ReferencePublicizer.GetOrCreatePublicizedCopy(sourceDllPath, searchDirectories);
 
             // Plant a distinctive mtime: a cache hit must leave it alone, while a regenerate
             // would rewrite the file and replace this marker with "now". Avoids Thread.Sleep
@@ -38,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             DateTime markerWriteTimeUtc = new DateTime(2001, 2, 3, 4, 5, 6, DateTimeKind.Utc);
             File.SetLastWriteTimeUtc(firstPath, markerWriteTimeUtc);
 
-            string secondPath = ReferencePublicizer.GetOrCreatePublicizedCopy(sourceDllPath);
+            string secondPath = ReferencePublicizer.GetOrCreatePublicizedCopy(sourceDllPath, searchDirectories);
 
             Assert.That(firstPath, Is.EqualTo(secondPath), "Second call must reuse the cached publicized copy.");
             Assert.That(
@@ -101,7 +103,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TestAssemblyName + "-" + Guid.NewGuid().ToString("N") + ".dll");
             File.WriteAllBytes(staleSameAssemblyPath, new byte[] { 0x4D, 0x5A });
 
-            string publicizedPath = ReferencePublicizer.GetOrCreatePublicizedCopy(ResolveTestAssemblyDllPath());
+            string publicizedPath = ReferencePublicizer.GetOrCreatePublicizedCopy(
+                ResolveTestAssemblyDllPath(),
+                PublicizerTestSearchDirectories.ForHotReloadTestAssembly());
 
             Assert.That(File.Exists(publicizedPath), Is.True, "Current-mvid publicized copy must be written.");
             Assert.That(
@@ -187,7 +191,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void GetOrCreatePublicizedCopy_KeepsEventBackingFieldNonPublic()
         {
-            string publicizedPath = ReferencePublicizer.GetOrCreatePublicizedCopy(ResolveTestAssemblyDllPath());
+            string publicizedPath = ReferencePublicizer.GetOrCreatePublicizedCopy(
+                ResolveTestAssemblyDllPath(),
+                PublicizerTestSearchDirectories.ForHotReloadTestAssembly());
             using AssemblyDefinition publicizedAssembly = AssemblyDefinition.ReadAssembly(publicizedPath);
 
             const string eventFixtureTypeFullName =

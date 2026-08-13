@@ -1,9 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 using Mono.Cecil;
-
-using UnityEditor;
 
 using UnityEngine;
 
@@ -24,10 +23,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Returns the path of a cached publicized copy for <paramref name="sourceDllPath"/>,
         /// writing it on first use. Only <c>Library/ScriptAssemblies/</c> DLLs are accepted —
         /// engine and system assemblies must not be rewritten.
+        /// <paramref name="resolverSearchDirectories"/> are extra Cecil search dirs derived by
+        /// the caller from compilation references (Unity Editor layout must not be hardcoded).
         /// </summary>
-        public static string GetOrCreatePublicizedCopy(string sourceDllPath)
+        public static string GetOrCreatePublicizedCopy(
+            string sourceDllPath,
+            IReadOnlyCollection<string> resolverSearchDirectories)
         {
             Debug.Assert(!string.IsNullOrEmpty(sourceDllPath), "sourceDllPath must not be null or empty.");
+            Debug.Assert(resolverSearchDirectories != null, "resolverSearchDirectories must not be null.");
 
             string fullSourceDllPath = Path.GetFullPath(sourceDllPath);
             Debug.Assert(File.Exists(fullSourceDllPath), "sourceDllPath must point to an existing DLL.");
@@ -36,7 +40,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // InMemory: the source DLL is the currently loaded script assembly; keep no file handle.
             // A search-path resolver is required so Cecil can satisfy assembly refs while rewriting
             // (missing mscorlib/netstandard otherwise throws AssemblyResolutionException on Write).
-            using DefaultAssemblyResolver assemblyResolver = CreateAssemblyResolver(fullSourceDllPath);
+            using DefaultAssemblyResolver assemblyResolver = CreateAssemblyResolver(
+                fullSourceDllPath,
+                resolverSearchDirectories);
             ReaderParameters readerParameters = new ReaderParameters
             {
                 InMemory = true,
@@ -141,8 +147,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return Path.Combine(projectRoot, HotReloadConstants.PublicizedRefsRelativeDirectory);
         }
 
-        private static DefaultAssemblyResolver CreateAssemblyResolver(string sourceDllPath)
+        private static DefaultAssemblyResolver CreateAssemblyResolver(
+            string sourceDllPath,
+            IReadOnlyCollection<string> resolverSearchDirectories)
         {
+            Debug.Assert(resolverSearchDirectories != null, "resolverSearchDirectories must not be null.");
+
             DefaultAssemblyResolver resolver = new DefaultAssemblyResolver();
             resolver.AddSearchDirectory(Path.GetDirectoryName(sourceDllPath));
 
@@ -150,18 +160,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             resolver.AddSearchDirectory(
                 Path.Combine(projectRoot, HotReloadConstants.ScriptAssembliesRelativeDirectory));
 
-            string contentsPath = EditorApplication.applicationContentsPath;
-            if (!string.IsNullOrEmpty(contentsPath))
+            foreach (string searchDirectory in resolverSearchDirectories)
             {
-                resolver.AddSearchDirectory(Path.Combine(contentsPath, "Managed"));
-                resolver.AddSearchDirectory(Path.Combine(contentsPath, "Managed", "UnityEngine"));
-                resolver.AddSearchDirectory(Path.Combine(contentsPath, "UnityReferenceAssemblies", "unity-4.8-api"));
+                if (string.IsNullOrEmpty(searchDirectory) || !Directory.Exists(searchDirectory))
+                {
+                    continue;
+                }
+
+                resolver.AddSearchDirectory(searchDirectory);
             }
 
             // Why not: walk AppDomain assemblies for extra search dirs — Assembly.Load(byte[])
             // shims throw NotSupportedException on .Location, and hot reload loads those shims into
-            // the same domain. ScriptAssemblies + Editor Managed cover the project/engine refs
-            // publicize needs for Write.
+            // the same domain. Search directories come from the caller's compilation references
+            // instead; hardcoding Editor Contents Managed paths fails on Unity 6 layouts.
 
             return resolver;
         }
