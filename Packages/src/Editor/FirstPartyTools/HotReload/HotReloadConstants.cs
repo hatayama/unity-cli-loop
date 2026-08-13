@@ -47,6 +47,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string NewMemberCompileHint =
             "Adding new members requires a real compile (uloop compile); hot reload only replaces existing method bodies.";
 
+        public const string MissingUsingCompileHint =
+            "This can mean a missing using or global using (hot reload collects global usings from the edited file's assembly).";
+
         // Wire value for TransformWorkerEntryDto.patchKind when the worker rewrote inaccessible
         // accesses into accessor delegates.
         public const string PatchKindDelegation = "delegation";

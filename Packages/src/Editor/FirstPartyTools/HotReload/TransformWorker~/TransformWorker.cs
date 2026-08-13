@@ -104,6 +104,7 @@ public static class TransformWorkerProgram
         input.Defines ??= Array.Empty<string>();
         input.ReferencePaths ??= Array.Empty<string>();
         input.ExcludedMethodKeys ??= Array.Empty<string>();
+        input.AssemblySourcePaths ??= Array.Empty<string>();
         return input;
     }
 
@@ -301,6 +302,8 @@ public static class TransformWorkerProgram
         List<ShimTypeBuilder> shimTypes = new List<ShimTypeBuilder>();
         int globalShimMethodCounter = 0;
         int shimTypeCounter = 0;
+        List<UsingDirectiveSyntax> assemblyGlobalUsings =
+            CollectAssemblyGlobalUsings(input, parseOptions);
 
         foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
         {
@@ -404,7 +407,7 @@ public static class TransformWorkerProgram
                     currentShimType = new ShimTypeBuilder(
                         shimTypeName,
                         namespaceName,
-                        CollectUsingsForType(root, typeDeclaration));
+                        CollectUsingsForType(root, typeDeclaration, assemblyGlobalUsings));
                     shimTypes.Add(currentShimType);
                 }
 
@@ -464,7 +467,8 @@ public static class TransformWorkerProgram
                         shimTypes,
                         shimTypeCounter,
                         globalShimMethodCounter,
-                        currentShimType);
+                        currentShimType,
+                        assemblyGlobalUsings);
                 currentShimType = nextShimType;
                 shimTypeCounter = nextShimTypeCounter;
                 globalShimMethodCounter = nextGlobalShimMethodCounter;
@@ -1277,7 +1281,8 @@ public static class TransformWorkerProgram
             List<ShimTypeBuilder> shimTypes,
             int shimTypeCounter,
             int globalShimMethodCounter,
-            ShimTypeBuilder currentShimType)
+            ShimTypeBuilder currentShimType,
+            List<UsingDirectiveSyntax> assemblyGlobalUsings)
     {
         IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
         if (propertySymbol == null || propertySymbol.GetMethod == null)
@@ -1366,7 +1371,7 @@ public static class TransformWorkerProgram
             currentShimType = new ShimTypeBuilder(
                 shimTypeName,
                 namespaceName,
-                CollectUsingsForType(root, typeDeclaration));
+                CollectUsingsForType(root, typeDeclaration, assemblyGlobalUsings));
             shimTypes.Add(currentShimType);
         }
 
@@ -2046,7 +2051,8 @@ public static class TransformWorkerProgram
 
     private static List<UsingDirectiveSyntax> CollectUsingsForType(
         CompilationUnitSyntax root,
-        TypeDeclarationSyntax typeDeclaration)
+        TypeDeclarationSyntax typeDeclaration,
+        List<UsingDirectiveSyntax> assemblyGlobalUsings)
     {
         List<UsingDirectiveSyntax> usings = new List<UsingDirectiveSyntax>();
         foreach (UsingDirectiveSyntax usingDirective in root.Usings)
@@ -2065,7 +2071,139 @@ public static class TransformWorkerProgram
             }
         }
 
+        foreach (UsingDirectiveSyntax assemblyUsing in assemblyGlobalUsings)
+        {
+            if (!ContainsEquivalentUsing(usings, assemblyUsing))
+            {
+                usings.Add(assemblyUsing);
+            }
+        }
+
         return usings;
+    }
+
+    // Why skip SourcePath: the edited file's usings already come from the in-memory tree.
+    // Reading the on-disk copy would pick up the pre-edit source.
+    private static List<UsingDirectiveSyntax> CollectAssemblyGlobalUsings(
+        WorkerInput input,
+        CSharpParseOptions parseOptions)
+    {
+        List<UsingDirectiveSyntax> collected = new List<UsingDirectiveSyntax>();
+        foreach (string assemblySourcePath in input.AssemblySourcePaths)
+        {
+            if (string.IsNullOrEmpty(assemblySourcePath)
+                || PathsReferToSameSourceFile(assemblySourcePath, input.SourcePath)
+                || !File.Exists(assemblySourcePath))
+            {
+                continue;
+            }
+
+            string text = File.ReadAllText(
+                assemblySourcePath,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            if (!FileContainsGlobalUsingLine(text))
+            {
+                continue;
+            }
+
+            AppendGlobalUsingsFromParsedText(collected, text, parseOptions, assemblySourcePath);
+        }
+
+        return collected;
+    }
+
+    private static void AppendGlobalUsingsFromParsedText(
+        List<UsingDirectiveSyntax> collected,
+        string text,
+        CSharpParseOptions parseOptions,
+        string assemblySourcePath)
+    {
+        SyntaxTree tree = CSharpSyntaxTree.ParseText(
+            SourceText.From(text, Encoding.UTF8),
+            parseOptions,
+            path: assemblySourcePath);
+        CompilationUnitSyntax unit = tree.GetCompilationUnitRoot();
+        foreach (UsingDirectiveSyntax usingDirective in unit.Usings)
+        {
+            if (!usingDirective.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword))
+            {
+                continue;
+            }
+
+            UsingDirectiveSyntax asOrdinary = usingDirective
+                .WithGlobalKeyword(default)
+                .WithoutTrivia();
+            if (!ContainsEquivalentUsing(collected, asOrdinary))
+            {
+                collected.Add(asOrdinary);
+            }
+        }
+    }
+
+    private static bool FileContainsGlobalUsingLine(string text)
+    {
+        using StringReader reader = new StringReader(text);
+        string line;
+        while ((line = reader.ReadLine()) != null)
+        {
+            if (line.TrimStart().StartsWith("global using", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool PathsReferToSameSourceFile(string left, string right)
+    {
+        if (string.IsNullOrEmpty(left) || string.IsNullOrEmpty(right))
+        {
+            return false;
+        }
+
+        string normalizedLeft = Path.GetFullPath(left);
+        string normalizedRight = Path.GetFullPath(right);
+        StringComparison comparison = Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return string.Equals(normalizedLeft, normalizedRight, comparison);
+    }
+
+    private static bool ContainsEquivalentUsing(
+        List<UsingDirectiveSyntax> usings,
+        UsingDirectiveSyntax candidate)
+    {
+        foreach (UsingDirectiveSyntax existing in usings)
+        {
+            if (UsingDirectivesMatch(existing, candidate))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool UsingDirectivesMatch(UsingDirectiveSyntax left, UsingDirectiveSyntax right)
+    {
+        bool leftStatic = left.StaticKeyword.IsKind(SyntaxKind.StaticKeyword);
+        bool rightStatic = right.StaticKeyword.IsKind(SyntaxKind.StaticKeyword);
+        if (leftStatic != rightStatic)
+        {
+            return false;
+        }
+
+        string leftAlias = left.Alias == null ? string.Empty : left.Alias.Name.ToString();
+        string rightAlias = right.Alias == null ? string.Empty : right.Alias.Name.ToString();
+        if (leftAlias != rightAlias)
+        {
+            return false;
+        }
+
+        string leftName = left.Name == null ? string.Empty : left.Name.ToString();
+        string rightName = right.Name == null ? string.Empty : right.Name.ToString();
+        return leftName == rightName;
     }
 }
 
@@ -4209,6 +4347,10 @@ internal sealed class WorkerInput
 
     // Project-relative forward-slash path embedded in #line document names.
     public string ProjectRelativePath { get; set; }
+
+    // Absolute paths of every source file in the edited file's compilation assembly.
+    // Null/omitted is treated as empty (no sibling global usings collected).
+    public string[] AssemblySourcePaths { get; set; }
 }
 
 internal sealed class WorkerOutput

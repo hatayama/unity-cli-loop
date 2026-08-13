@@ -1,3 +1,5 @@
+using System;
+
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -67,6 +69,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(message, Does.Contain(error));
             Assert.That(message, Does.Not.Contain(HotReloadConstants.NewMemberCompileHint));
+        }
+
+        /// <summary>
+        /// What: CS0246 leads with the missing using / global using hint, then the new-member hint.
+        /// </summary>
+        [Test]
+        public void ComposeShimCompileFailureMessage_TypeNotFound_LeadsWithMissingUsingHint()
+        {
+            string message = HotReloadShimCompiler.ComposeShimCompileFailureMessage(
+                new[]
+                {
+                    "CS0246: The type or namespace name 'HotReloadGlobalAlias' could not be found"
+                });
+
+            int usingHintIndex = message.IndexOf(
+                HotReloadConstants.MissingUsingCompileHint,
+                StringComparison.Ordinal);
+            int newMemberHintIndex = message.IndexOf(
+                HotReloadConstants.NewMemberCompileHint,
+                StringComparison.Ordinal);
+            Assert.That(usingHintIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(newMemberHintIndex, Is.GreaterThan(usingHintIndex));
+        }
+
+        /// <summary>
+        /// What: CS1061 also leads with the missing using / global using hint.
+        /// </summary>
+        [Test]
+        public void ComposeShimCompileFailureMessage_MissingExtension_LeadsWithMissingUsingHint()
+        {
+            string message = HotReloadShimCompiler.ComposeShimCompileFailureMessage(
+                new[]
+                {
+                    "CS1061: 'int' does not contain a definition for 'Forget'"
+                });
+
+            int usingHintIndex = message.IndexOf(
+                HotReloadConstants.MissingUsingCompileHint,
+                StringComparison.Ordinal);
+            int newMemberHintIndex = message.IndexOf(
+                HotReloadConstants.NewMemberCompileHint,
+                StringComparison.Ordinal);
+            Assert.That(usingHintIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(newMemberHintIndex, Is.GreaterThan(usingHintIndex));
         }
     }
 }

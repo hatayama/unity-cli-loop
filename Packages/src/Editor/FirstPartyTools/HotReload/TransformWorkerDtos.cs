@@ -25,6 +25,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Project-relative forward-slash path baked into #line document names so shim compile
         // diagnostics map back to the user's file (not the temp HotReloadShim.cs path).
         public string projectRelativePath;
+
+        // Absolute paths of every source file in the edited file's compilation assembly.
+        // The worker scans these for global using directives. Null/omitted is treated as empty.
+        public string[] assemblySourcePaths;
     }
 
     /// <summary>

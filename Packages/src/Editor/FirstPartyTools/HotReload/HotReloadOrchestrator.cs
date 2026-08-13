@@ -174,7 +174,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 referencePaths = referencePaths,
                 targetTypesAssemblyPath = Path.GetFullPath(targetDllPath),
                 snapshotSource = snapshotSource,
-                projectRelativePath = projectRelativePath
+                projectRelativePath = projectRelativePath,
+                assemblySourcePaths = BuildAssemblySourcePaths(projectRoot, compilationAssembly.sourceFiles)
             };
 
             TransformWorkerClientResult workerResult =
@@ -683,6 +684,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
+        // Why Path.Combine then GetFullPath: Unity Assembly.sourceFiles are project-relative
+        // (slash-separated). The worker cwd is Library/UloopHotReload/Worker/<hash>/, so it
+        // can only open absolute paths. Normalization matches HotReloadSourceSnapshotter.
+        private static string[] BuildAssemblySourcePaths(string projectRoot, string[] sourceFiles)
+        {
+            if (sourceFiles == null || sourceFiles.Length == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            string[] paths = new string[sourceFiles.Length];
+            for (int index = 0; index < sourceFiles.Length; index++)
+            {
+                string normalizedRelativePath = sourceFiles[index].Replace('\\', '/');
+                string absoluteSourcePath = Path.Combine(
+                    projectRoot,
+                    normalizedRelativePath.Replace('/', Path.DirectorySeparatorChar));
+                paths[index] = Path.GetFullPath(absoluteSourcePath);
+            }
+
+            return paths;
+        }
+
         private static string CheckMvidGuard(string assemblyName, string targetDllPath)
         {
             ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
@@ -840,7 +864,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why copy: omitting snapshotSource would make the retry patch unedited methods
                 // again and diverge the retry entries set from the first-pass isolation baseline.
                 snapshotSource = workerInput.snapshotSource,
-                projectRelativePath = workerInput.projectRelativePath
+                projectRelativePath = workerInput.projectRelativePath,
+                assemblySourcePaths = workerInput.assemblySourcePaths
             };
 
             TransformWorkerClientResult retryWorkerResult =

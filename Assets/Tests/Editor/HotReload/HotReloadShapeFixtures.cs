@@ -147,4 +147,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 #endif
     }
+
+    /// <summary>
+    /// Method body that resolves <c>HotReloadGlobalAlias</c> only through a sibling-file
+    /// <c>global using</c>. Shim compile fails with CS0246 unless the worker collects that alias.
+    /// </summary>
+    internal class HotReloadGlobalUsingFixture
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public string BuildWithGlobalAlias()
+        {
+            HotReloadGlobalAlias builder = new HotReloadGlobalAlias();
+            builder.Append("base");
+            return builder.ToString();
+        }
+    }
 }

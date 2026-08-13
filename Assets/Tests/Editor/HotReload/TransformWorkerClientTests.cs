@@ -496,6 +496,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 string projectRelativePath =
                     "Assets/Tests/Editor/HotReload/" + Path.GetFileName(fullPath);
                 string onDisk = File.ReadAllText(fullPath);
+                // Why skip: a global-using-only file has no methods to mark unchanged; the worker
+                // correctly emits empty entries/skipped/unchanged for it.
+                if (!ContainsTypeDeclaration(onDisk))
+                {
+                    continue;
+                }
+
                 TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
                     fullPath,
                     projectRelativePath,
@@ -1362,7 +1369,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 referencePaths = referencePaths,
                 targetTypesAssemblyPath = targetDllPath,
                 snapshotSource = snapshotSource,
-                projectRelativePath = projectRelativePath
+                projectRelativePath = projectRelativePath,
+                assemblySourcePaths = BuildAbsoluteAssemblySourcePaths(
+                    compilationAssembly.sourceFiles)
             };
 
             return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
@@ -1403,6 +1412,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return paths.ToArray();
+        }
+
+        private static string[] BuildAbsoluteAssemblySourcePaths(string[] sourceFiles)
+        {
+            if (sourceFiles == null || sourceFiles.Length == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string[] paths = new string[sourceFiles.Length];
+            for (int index = 0; index < sourceFiles.Length; index++)
+            {
+                string normalizedRelativePath = sourceFiles[index].Replace('\\', '/');
+                string absoluteSourcePath = Path.Combine(
+                    projectRoot,
+                    normalizedRelativePath.Replace('/', Path.DirectorySeparatorChar));
+                paths[index] = Path.GetFullPath(absoluteSourcePath);
+            }
+
+            return paths;
+        }
+
+        private static bool ContainsTypeDeclaration(string sourceText)
+        {
+            return sourceText.IndexOf(" class ", StringComparison.Ordinal) >= 0
+                || sourceText.IndexOf(" struct ", StringComparison.Ordinal) >= 0
+                || sourceText.IndexOf(" interface ", StringComparison.Ordinal) >= 0
+                || sourceText.IndexOf(" enum ", StringComparison.Ordinal) >= 0;
         }
 
         private static string ResolveE2EFixturePath()

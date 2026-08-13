@@ -160,21 +160,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(errors.Count > 0, "errors must not be empty.");
 
             string message = string.Join("\n", errors);
+            bool hasMissingUsingDiagnostic = false;
+            bool hasMissingMemberDiagnostic = false;
             for (int index = 0; index < errors.Count; index++)
             {
                 string error = errors[index];
-                for (int codeIndex = 0; codeIndex < MissingMemberDiagnosticCodes.Length; codeIndex++)
+                if (ErrorStartsWithDiagnosticCode(error, "CS0246")
+                    || ErrorStartsWithDiagnosticCode(error, "CS1061"))
                 {
-                    // Match the diagnostic-code prefix ("CS0103: …"), not a bare Contains —
-                    // otherwise a message that merely mentions the code text could append the hint.
-                    if (error.StartsWith(MissingMemberDiagnosticCodes[codeIndex] + ":", StringComparison.Ordinal))
-                    {
-                        return message + "\n" + HotReloadConstants.NewMemberCompileHint;
-                    }
+                    hasMissingUsingDiagnostic = true;
+                }
+
+                if (ErrorStartsWithAnyDiagnosticCode(error, MissingMemberDiagnosticCodes))
+                {
+                    hasMissingMemberDiagnostic = true;
                 }
             }
 
+            if (hasMissingUsingDiagnostic)
+            {
+                message += "\n" + HotReloadConstants.MissingUsingCompileHint;
+            }
+
+            if (hasMissingMemberDiagnostic)
+            {
+                message += "\n" + HotReloadConstants.NewMemberCompileHint;
+            }
+
             return message;
+        }
+
+        private static bool ErrorStartsWithAnyDiagnosticCode(string error, string[] diagnosticCodes)
+        {
+            for (int codeIndex = 0; codeIndex < diagnosticCodes.Length; codeIndex++)
+            {
+                if (ErrorStartsWithDiagnosticCode(error, diagnosticCodes[codeIndex]))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ErrorStartsWithDiagnosticCode(string error, string diagnosticCode)
+        {
+            // Match the diagnostic-code prefix ("CS0103: …"), not a bare Contains —
+            // otherwise a message that merely mentions the code text could append the hint.
+            return error.StartsWith(diagnosticCode + ":", StringComparison.Ordinal);
         }
 
         private static List<HotReloadShimCompileError> CollectErrors(CompilerMessage[] compilerMessages)
