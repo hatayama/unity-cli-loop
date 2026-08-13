@@ -320,9 +320,11 @@ jobs:
               -projectPath "$RUNNER_TEMP/BlankProject"
           fi
 
-          # Why -debugCodeOptimization: Linux batchmode starts in Release.
-          # Pause-point HotReload tests reject Release, and tiny patched
-          # getters get JIT-inlined so they would not observe the edit.
+          # Why: this job invokes the extracted Editor binary, not GameCI's
+          # unity-test-runner (no 6000.7 Docker image). That runner always
+          # passes -debugCodeOptimization; Linux batchmode otherwise starts
+          # in Release, which rejects pause-point enable and JIT-inlines
+          # tiny patched getters.
           "$UNITY_EDITOR" -batchmode -nographics -debugCodeOptimization \
             -projectPath "$GITHUB_WORKSPACE" \
             -accept-apiupdate \
