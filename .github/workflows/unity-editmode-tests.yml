@@ -213,8 +213,8 @@ jobs:
       UNITY_VERSION: ${{ needs.resolve-latest-6000-7.outputs.version }}
       UNITY_CHANGESET: ${{ needs.resolve-latest-6000-7.outputs.changeset }}
       UNITY_EDITOR_URL: ${{ needs.resolve-latest-6000-7.outputs.editorUrl }}
-      UNITY_TARBALL: ${{ runner.temp }}/unity-linux-editor.tar.xz
-      UNITY_INSTALL_DIR: ${{ runner.temp }}/unity-editor
+      UNITY_TARBALL: .unity-ci/unity-linux-editor.tar.xz
+      UNITY_INSTALL_DIR: .unity-ci/unity-editor
       HOT_RELOAD_TEST_FILTER: io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     steps:
       - name: Checkout repository
@@ -236,13 +236,14 @@ jobs:
         id: editor-tarball-cache
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
-          path: ${{ env.UNITY_TARBALL }}
+          path: .unity-ci/unity-linux-editor.tar.xz
           key: unity-linux-editor-${{ env.UNITY_VERSION }}-${{ env.UNITY_CHANGESET }}
 
       - name: Download Linux editor
         if: env.HAS_UNITY_LICENSE == 'true' && steps.editor-tarball-cache.outputs.cache-hit != 'true'
         run: |
           set -eu
+          mkdir -p .unity-ci
           curl --fail --location --retry 3 --retry-delay 5 \
             --output "$UNITY_TARBALL" \
             "$UNITY_EDITOR_URL"
