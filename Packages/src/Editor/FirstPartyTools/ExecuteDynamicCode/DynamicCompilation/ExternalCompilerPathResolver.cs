@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Newtonsoft.Json;
 using UnityEditor;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -24,6 +25,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string CodeAnalysisCSharpDllFileName = "Microsoft.CodeAnalysis.CSharp.dll";
         private const string NetCoreRuntimeSharedDirectoryName = "shared";
         private const string NetCoreRuntimeSharedFrameworkName = "Microsoft.NETCore.App";
+        private const string CscRuntimeConfigRuntimeOptionsPropertyName = "runtimeOptions";
+        private const string CscRuntimeConfigFrameworkPropertyName = "framework";
+        private const string CscRuntimeConfigVersionPropertyName = "version";
 
         public static ExternalCompilerPaths Resolve()
         {
@@ -142,25 +146,45 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 layoutKind);
         }
 
-        // compilerDirectoryPath is part of the seam so pairing can later read csc.runtimeconfig.json
-        // beside the compiler without changing Resolve()'s call site.
+        // Why NetCoreRuntime first: 6000.3/6000.5 already satisfy csc's required major from
+        // NetCoreRuntime, so switching on "DotNetSdk is a complete root" would change those
+        // layouts' host/shared bytes. Switch only when that major is unsatisfied.
         internal static ExternalCompilerRuntimePairing ResolveRuntimePairing(
             string effectiveScriptingRootPath,
             string compilerDirectoryPath,
             string dotnetHostFileName)
         {
-            string dotnetHostPath = Path.Combine(
+            string netCoreHostPath = Path.Combine(
                 effectiveScriptingRootPath,
                 NetCoreRuntimeDirectoryName,
                 dotnetHostFileName);
-            string netCoreRuntimeSharedRootPath = Path.Combine(
+            string netCoreSharedRootPath = Path.Combine(
                 effectiveScriptingRootPath,
                 NetCoreRuntimeDirectoryName,
                 NetCoreRuntimeSharedDirectoryName,
                 NetCoreRuntimeSharedFrameworkName);
-            string netCoreRuntimeSharedDirectoryPath =
-                ResolveNetCoreRuntimeSharedDirectoryPath(netCoreRuntimeSharedRootPath);
-            return new ExternalCompilerRuntimePairing(dotnetHostPath, netCoreRuntimeSharedDirectoryPath);
+            string netCoreSharedDirectoryPath =
+                ResolveNetCoreRuntimeSharedDirectoryPath(netCoreSharedRootPath);
+            ExternalCompilerRuntimePairing netCorePairing =
+                new ExternalCompilerRuntimePairing(netCoreHostPath, netCoreSharedDirectoryPath);
+
+            int? requiredMajor = ReadRequiredRuntimeMajor(compilerDirectoryPath);
+            if (requiredMajor == null
+                || SharedRootSatisfiesRequiredMajor(netCoreSharedRootPath, requiredMajor.Value))
+            {
+                return netCorePairing;
+            }
+
+            ExternalCompilerRuntimePairing dotNetSdkPairing = TryResolveDotNetSdkRuntimePairing(
+                compilerDirectoryPath,
+                dotnetHostFileName,
+                requiredMajor.Value);
+            if (dotNetSdkPairing == null)
+            {
+                return netCorePairing;
+            }
+
+            return dotNetSdkPairing;
         }
 
         internal static string ResolveScriptingRootPath(string contentsPath)
@@ -403,6 +427,130 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return string.IsNullOrEmpty(installRootPath)
                 ? null
                 : installRootPath;
+        }
+
+        private static int? ReadRequiredRuntimeMajor(string compilerDirectoryPath)
+        {
+            if (string.IsNullOrEmpty(compilerDirectoryPath))
+            {
+                return null;
+            }
+
+            string runtimeConfigPath = Path.Combine(compilerDirectoryPath, CompilerRuntimeConfigFileName);
+            if (!File.Exists(runtimeConfigPath))
+            {
+                return null;
+            }
+
+            string text = File.ReadAllText(runtimeConfigPath);
+            CscRuntimeConfigDto config = JsonConvert.DeserializeObject<CscRuntimeConfigDto>(text);
+            string versionText = config?.RuntimeOptions?.Framework?.Version;
+            if (string.IsNullOrEmpty(versionText) || !Version.TryParse(versionText, out Version version))
+            {
+                return null;
+            }
+
+            return version.Major;
+        }
+
+        private static bool SharedRootSatisfiesRequiredMajor(string sharedRootPath, int requiredMajor)
+        {
+            if (!Directory.Exists(sharedRootPath))
+            {
+                return false;
+            }
+
+            string[] runtimeDirectories = Directory.GetDirectories(sharedRootPath);
+            foreach (string runtimeDirectoryPath in runtimeDirectories)
+            {
+                string versionText = Path.GetFileName(runtimeDirectoryPath);
+                if (Version.TryParse(versionText, out Version version) && version.Major >= requiredMajor)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static ExternalCompilerRuntimePairing TryResolveDotNetSdkRuntimePairing(
+            string compilerDirectoryPath,
+            string dotnetHostFileName,
+            int requiredMajor)
+        {
+            string dotNetSdkRootPath = FindDirectoryContainingSdk(compilerDirectoryPath);
+            if (string.IsNullOrEmpty(dotNetSdkRootPath))
+            {
+                return null;
+            }
+
+            string hostPath = Path.Combine(dotNetSdkRootPath, dotnetHostFileName);
+            if (!File.Exists(hostPath))
+            {
+                return null;
+            }
+
+            string sharedRootPath = Path.Combine(
+                dotNetSdkRootPath,
+                NetCoreRuntimeSharedDirectoryName,
+                NetCoreRuntimeSharedFrameworkName);
+            if (!SharedRootSatisfiesRequiredMajor(sharedRootPath, requiredMajor))
+            {
+                return null;
+            }
+
+            string sharedDirectoryPath = ResolveNetCoreRuntimeSharedDirectoryPath(sharedRootPath);
+            if (string.IsNullOrEmpty(sharedDirectoryPath))
+            {
+                return null;
+            }
+
+            return new ExternalCompilerRuntimePairing(hostPath, sharedDirectoryPath);
+        }
+
+        private static string FindDirectoryContainingSdk(string startDirectoryPath)
+        {
+            if (string.IsNullOrEmpty(startDirectoryPath))
+            {
+                return null;
+            }
+
+            string currentPath = Path.GetFullPath(startDirectoryPath);
+            while (!string.IsNullOrEmpty(currentPath))
+            {
+                if (Directory.Exists(Path.Combine(currentPath, DotNetSdkSdkDirectoryName)))
+                {
+                    return currentPath;
+                }
+
+                string parentPath = Path.GetDirectoryName(currentPath);
+                if (string.IsNullOrEmpty(parentPath) || parentPath == currentPath)
+                {
+                    return null;
+                }
+
+                currentPath = parentPath;
+            }
+
+            return null;
+        }
+
+        private sealed class CscRuntimeConfigDto
+        {
+            [JsonProperty(CscRuntimeConfigRuntimeOptionsPropertyName)]
+            public CscRuntimeConfigRuntimeOptionsDto RuntimeOptions { get; set; }
+        }
+
+        private sealed class CscRuntimeConfigRuntimeOptionsDto
+        {
+            [JsonProperty(CscRuntimeConfigFrameworkPropertyName)]
+            public CscRuntimeConfigFrameworkDto Framework { get; set; }
+        }
+
+        private sealed class CscRuntimeConfigFrameworkDto
+        {
+            [JsonProperty(CscRuntimeConfigVersionPropertyName)]
+            public string Version { get; set; }
         }
     }
 }
