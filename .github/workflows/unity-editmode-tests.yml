@@ -136,6 +136,15 @@ jobs:
             fi
           fi
 
+      - name: Remove GameCI build script injected during compile
+        if: env.HAS_UNITY_LICENSE == 'true' && matrix.strict-compile-check == true
+        run: |
+          # unity-builder copies its default build script (UnityBuilderAction) into the
+          # workspace; left in place, the asmdef audit test sees a foreign auto-referenced
+          # assembly and fails.
+          rm -rf "Assets/Editor/Editor"
+          rm -f "Assets/Editor/Editor.meta"
+
       - name: Run EditMode tests
         if: env.HAS_UNITY_LICENSE == 'true'
         uses: game-ci/unity-test-runner@0ff419b913a3630032cbe0de48a0099b5a9f0ed9
