@@ -40,6 +40,13 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// </summary>
         public static Func<MethodBase, IReadOnlyList<LocalBuilder>> GetTransplantLocals { get; set; }
 
+        /// <summary>
+        /// Set by HotReloadPatcher. Returns how many instructions the latest rebuild prepended
+        /// before the patched body (0 when none). Pause-point must add this only to
+        /// TransplantChainJoin indexes; ShimDirect and OriginalBody have no transplant preamble.
+        /// </summary>
+        public static Func<MethodBase, int> GetTransplantPreambleLength { get; set; }
+
         // Set by SourcePausePointPatcher. Returns the marker ids currently injected
         // into the method (empty when none).
         public static Func<MethodBase, IReadOnlyList<string>> GetArmedMarkerIdsOnMethod { get; set; }

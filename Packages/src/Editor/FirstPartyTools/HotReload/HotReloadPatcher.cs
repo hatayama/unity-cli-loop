@@ -52,6 +52,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static readonly Dictionary<MethodBase, IReadOnlyList<LocalBuilder>> TransplantLocalsByMethod =
             new Dictionary<MethodBase, IReadOnlyList<LocalBuilder>>();
 
+        // How many instructions PrependInvocationCountIncrement inserted on the latest transplant
+        // (or delegation) rebuild of each original. Pause-point reads this only for chain-join.
+        private static readonly Dictionary<MethodBase, int> TransplantPreambleLengthByMethod =
+            new Dictionary<MethodBase, int>();
+
         // Harmony resolves transpilers as static methods, so the shim cannot be a parameter.
         // Production looks up the target method in the ledger; the apply path also stashes the
         // pending shim here so the first Patch call can read it before the ledger entry
@@ -87,6 +92,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 TransplantLocalsByMethod.TryGetValue(method, out IReadOnlyList<LocalBuilder> locals)
                     ? locals
                     : null;
+            HotReloadPausePointCoordination.GetTransplantPreambleLength = method =>
+                TransplantPreambleLengthByMethod.TryGetValue(method, out int length)
+                    ? length
+                    : 0;
         }
 
         /// <summary>
@@ -132,6 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ShimByMethod.Remove(method);
                 FilePathByMethod.Remove(method);
                 TransplantLocalsByMethod.Remove(method);
+                TransplantPreambleLengthByMethod.Remove(method);
                 HotReloadInvocationRegistry.Remove(FormatMethodKey(method));
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
                 // Mirror the ledger removal: if the re-Patch below fails, its contained Unpatch
@@ -185,6 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // wrapper, restoring the original body (verified by the extern-shim test).
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
                 TransplantLocalsByMethod.Remove(method);
+                TransplantPreambleLengthByMethod.Remove(method);
                 // Why after Unpatch: retarget may have already replaced markers onto the shim;
                 // restore them onto the original body now that GetActiveShim is null.
                 HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
@@ -227,6 +238,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             FilePathByMethod.Clear();
             HotReloadShimRegistry.Clear();
             TransplantLocalsByMethod.Clear();
+            TransplantPreambleLengthByMethod.Clear();
             HotReloadInvocationRegistry.Clear();
             _pendingShimMethod = null;
             _pendingOriginalMethod = null;
@@ -257,6 +269,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             FilePathByMethod.Remove(method);
             HotReloadShimRegistry.RemoveMethod(method);
             TransplantLocalsByMethod.Remove(method);
+            TransplantPreambleLengthByMethod.Remove(method);
             HotReloadInvocationRegistry.Remove(FormatMethodKey(method));
             HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
             HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
@@ -441,8 +454,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 instructions[0].labels.Clear();
             }
 
+            int countBeforeInsert = instructions.Count;
             instructions.Insert(0, increment);
             instructions.Insert(0, loadKey);
+            TransplantPreambleLengthByMethod[original] = instructions.Count - countBeforeInsert;
         }
 
         private static CodeInstruction CreateLoadArgumentInstruction(int slot)
