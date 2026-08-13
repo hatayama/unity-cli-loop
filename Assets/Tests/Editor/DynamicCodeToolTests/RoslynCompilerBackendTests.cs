@@ -107,6 +107,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// What: WriteCompilerResponseFile maps the source directory onto the project root via -pathmap.
+        /// </summary>
+        [Test]
+        public void WriteCompilerResponseFile_MapsSourceDirectoryToProjectRoot()
+        {
+            string tempDirectory = Path.Combine(Path.GetTempPath(), "uloop-roslyn-pathmap-" + Path.GetRandomFileName());
+            Directory.CreateDirectory(tempDirectory);
+            string responseFilePath = Path.Combine(tempDirectory, "snippet.rsp");
+            string sourcePath = Path.Combine(tempDirectory, "snippet.cs");
+            string dllPath = Path.Combine(tempDirectory, "snippet.dll");
+            try
+            {
+                RoslynCompilerBackend.WriteCompilerResponseFile(
+                    responseFilePath,
+                    sourcePath,
+                    dllPath,
+                    references: new List<string>(),
+                    defineSymbols: new List<string>(),
+                    allowUnsafeCode: false,
+                    emitDebugCode: false);
+
+                string sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath));
+                string expectedPathmap = "-pathmap:\"" + sourceDirectory + "=" + Directory.GetCurrentDirectory() + "\"";
+                string[] lines = File.ReadAllLines(responseFilePath);
+                Assert.That(lines, Does.Contain(expectedPathmap));
+            }
+            finally
+            {
+                if (Directory.Exists(tempDirectory))
+                {
+                    Directory.Delete(tempDirectory, recursive: true);
+                }
+            }
+        }
+
+        /// <summary>
         /// What: WriteWorkerRequestFile encodes emitDebugCode for the shared Roslyn worker.
         /// </summary>
         [Test]
