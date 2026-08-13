@@ -568,6 +568,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: editing a method that uses a sibling-file global using alias still patches and
+        /// returns the edited value. The worker must collect assembly global usings; otherwise
+        /// shim compile fails with CS0246.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedMethodUsingSiblingGlobalUsing_PatchesBehavior()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "builder.Append(\"base\");",
+                "builder.Append(\"patched\");",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: global-alias body must differ.");
+
+            string editedPath = WriteEditedSource("BuildWithGlobalAlias.cs", editedSource);
+
+            HotReloadGlobalUsingFixture fixture = new HotReloadGlobalUsingFixture();
+            Assert.That(fixture.BuildWithGlobalAlias(), Is.EqualTo("base"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadGlobalUsingFixture.BuildWithGlobalAlias));
+            Assert.That(fixture.BuildWithGlobalAlias(), Is.EqualTo("patched"));
+        }
+
+        /// <summary>
         /// What: under Debug code optimization, size-only small methods do not emit the
         /// aggregated inline-risk warning (branch a); Patched Reason stays empty.
         /// </summary>

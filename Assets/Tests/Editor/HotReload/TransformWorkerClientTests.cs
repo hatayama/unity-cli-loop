@@ -496,6 +496,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 string projectRelativePath =
                     "Assets/Tests/Editor/HotReload/" + Path.GetFileName(fullPath);
                 string onDisk = File.ReadAllText(fullPath);
+                // Why skip: a global-using-only file has no methods to mark unchanged; the worker
+                // correctly emits empty entries/skipped/unchanged for it.
+                if (!ContainsTypeDeclaration(onDisk))
+                {
+                    continue;
+                }
+
                 TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
                     fullPath,
                     projectRelativePath,
@@ -1173,6 +1180,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a namespace-scoped using alias of the same name as a sibling global using alias
+        /// keeps only the local alias in the shim. Flattening both into one namespace is CS1537,
+        /// even though C# lets the inner alias shadow the global one.
+        /// </summary>
+        [Test]
+        public async Task Run_WithLocalAliasShadowingGlobalAlias_KeepsLocalAliasOnly()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+
+            string editedSource =
+                "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n"
+                + "{\n"
+                + "    using AliasProbe = System.Text.StringBuilder;\n"
+                + "\n"
+                + "    internal class HotReloadAliasShadowFixture\n"
+                + "    {\n"
+                + "        public string Build()\n"
+                + "        {\n"
+                + "            AliasProbe builder = new AliasProbe();\n"
+                + "            builder.Append(\"ok\");\n"
+                + "            return builder.ToString();\n"
+                + "        }\n"
+                + "    }\n"
+                + "}\n";
+            string globalSource = "global using AliasProbe = System.Collections.Generic.List<int>;\n";
+            string sourcePath = Path.Combine(directory, "AliasShadowEdited.cs");
+            string globalPath = Path.Combine(directory, "AliasShadowGlobal.cs");
+            File.WriteAllText(sourcePath, editedSource);
+            File.WriteAllText(globalPath, globalSource);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                "Library/UloopHotReload/TestSources/AliasShadowEdited.cs",
+                snapshotSource: null,
+                additionalAssemblySourcePaths: new[] { globalPath });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.parseErrors, Is.Empty);
+            Assert.That(
+                result.Output.shimSource,
+                Does.Contain("using AliasProbe = System.Text.StringBuilder"));
+            Assert.That(
+                result.Output.shimSource,
+                Does.Not.Contain("using AliasProbe = System.Collections.Generic.List<int>"),
+                "Local AliasProbe must shadow the sibling global alias; both in one namespace is CS1537.");
+        }
+
+        /// <summary>
         /// What: when only a property setter body differs from the snapshot, the unchanged getter
         /// stays out of entries (baseline compare is getter-scoped, not whole-property).
         /// </summary>
@@ -1326,7 +1383,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static async Task<TransformWorkerClientResult> RunWorkerOnSourceAsync(
             string sourcePath,
             string projectRelativePath,
-            string snapshotSource = null)
+            string snapshotSource = null,
+            string[] additionalAssemblySourcePaths = null)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
@@ -1355,6 +1413,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compilationAssembly.allReferences,
                 targetDllPath);
 
+            string[] assemblySourcePaths = BuildAbsoluteAssemblySourcePaths(
+                compilationAssembly.sourceFiles);
+            if (additionalAssemblySourcePaths != null && additionalAssemblySourcePaths.Length > 0)
+            {
+                List<string> merged = new List<string>(assemblySourcePaths);
+                foreach (string additionalPath in additionalAssemblySourcePaths)
+                {
+                    merged.Add(Path.GetFullPath(additionalPath));
+                }
+
+                assemblySourcePaths = merged.ToArray();
+            }
+
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
                 sourcePath = sourcePath,
@@ -1362,7 +1433,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 referencePaths = referencePaths,
                 targetTypesAssemblyPath = targetDllPath,
                 snapshotSource = snapshotSource,
-                projectRelativePath = projectRelativePath
+                projectRelativePath = projectRelativePath,
+                assemblySourcePaths = assemblySourcePaths
             };
 
             return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
@@ -1403,6 +1475,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return paths.ToArray();
+        }
+
+        private static string[] BuildAbsoluteAssemblySourcePaths(string[] sourceFiles)
+        {
+            if (sourceFiles == null || sourceFiles.Length == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string[] paths = new string[sourceFiles.Length];
+            for (int index = 0; index < sourceFiles.Length; index++)
+            {
+                string normalizedRelativePath = sourceFiles[index].Replace('\\', '/');
+                string absoluteSourcePath = Path.Combine(
+                    projectRoot,
+                    normalizedRelativePath.Replace('/', Path.DirectorySeparatorChar));
+                paths[index] = Path.GetFullPath(absoluteSourcePath);
+            }
+
+            return paths;
+        }
+
+        private static bool ContainsTypeDeclaration(string sourceText)
+        {
+            return sourceText.IndexOf(" class ", StringComparison.Ordinal) >= 0
+                || sourceText.IndexOf(" struct ", StringComparison.Ordinal) >= 0
+                || sourceText.IndexOf(" interface ", StringComparison.Ordinal) >= 0
+                || sourceText.IndexOf(" enum ", StringComparison.Ordinal) >= 0
+                || sourceText.IndexOf(" record ", StringComparison.Ordinal) >= 0;
         }
 
         private static string ResolveE2EFixturePath()
