@@ -64,14 +64,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 missingComponents.Add(Path.Combine(effectiveScriptingRootPath, DotNetSdkDirectoryName, DotNetSdkSdkDirectoryName, "*", RoslynDirectoryName, CompilerBincoreDirectoryName));
             }
 
-            string dotnetHostPath = Path.Combine(effectiveScriptingRootPath, NetCoreRuntimeDirectoryName, dotnetHostFileName);
             string compilerDllPath = Path.Combine(compilerDirectoryPath, CompilerDllFileName);
             string compilerRuntimeConfigPath = Path.Combine(compilerDirectoryPath, CompilerRuntimeConfigFileName);
             string compilerDepsFilePath = Path.Combine(compilerDirectoryPath, CompilerDepsFileName);
             string codeAnalysisDllPath = Path.Combine(compilerDirectoryPath, CodeAnalysisDllFileName);
             string codeAnalysisCSharpDllPath = Path.Combine(compilerDirectoryPath, CodeAnalysisCSharpDllFileName);
-            string netCoreRuntimeSharedRootPath = Path.Combine(effectiveScriptingRootPath, NetCoreRuntimeDirectoryName, NetCoreRuntimeSharedDirectoryName, NetCoreRuntimeSharedFrameworkName);
-            string netCoreRuntimeSharedDirectoryPath = ResolveNetCoreRuntimeSharedDirectoryPath(netCoreRuntimeSharedRootPath);
+            ExternalCompilerRuntimePairing runtimePairing = ResolveRuntimePairing(
+                effectiveScriptingRootPath,
+                compilerDirectoryPath,
+                dotnetHostFileName);
+            string dotnetHostPath = runtimePairing.DotnetHostPath;
+            string netCoreRuntimeSharedDirectoryPath = runtimePairing.NetCoreRuntimeSharedDirectoryPath;
             ExternalCompilerLayoutKind layoutKind = ResolveCompilerLayoutKind(
                 contentsPath,
                 effectiveScriptingRootPath,
@@ -109,7 +112,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (string.IsNullOrEmpty(netCoreRuntimeSharedDirectoryPath))
             {
-                missingComponents.Add(netCoreRuntimeSharedRootPath);
+                missingComponents.Add(
+                    Path.Combine(
+                        effectiveScriptingRootPath,
+                        NetCoreRuntimeDirectoryName,
+                        NetCoreRuntimeSharedDirectoryName,
+                        NetCoreRuntimeSharedFrameworkName));
             }
 
             if (missingComponents.Count > 0)
@@ -132,6 +140,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 codeAnalysisCSharpDllPath,
                 netCoreRuntimeSharedDirectoryPath,
                 layoutKind);
+        }
+
+        // compilerDirectoryPath is part of the seam so pairing can later read csc.runtimeconfig.json
+        // beside the compiler without changing Resolve()'s call site.
+        internal static ExternalCompilerRuntimePairing ResolveRuntimePairing(
+            string effectiveScriptingRootPath,
+            string compilerDirectoryPath,
+            string dotnetHostFileName)
+        {
+            string dotnetHostPath = Path.Combine(
+                effectiveScriptingRootPath,
+                NetCoreRuntimeDirectoryName,
+                dotnetHostFileName);
+            string netCoreRuntimeSharedRootPath = Path.Combine(
+                effectiveScriptingRootPath,
+                NetCoreRuntimeDirectoryName,
+                NetCoreRuntimeSharedDirectoryName,
+                NetCoreRuntimeSharedFrameworkName);
+            string netCoreRuntimeSharedDirectoryPath =
+                ResolveNetCoreRuntimeSharedDirectoryPath(netCoreRuntimeSharedRootPath);
+            return new ExternalCompilerRuntimePairing(dotnetHostPath, netCoreRuntimeSharedDirectoryPath);
         }
 
         internal static string ResolveScriptingRootPath(string contentsPath)
