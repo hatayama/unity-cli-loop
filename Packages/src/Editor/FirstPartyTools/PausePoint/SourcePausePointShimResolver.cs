@@ -177,9 +177,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         continue;
                     }
 
-                    // Why request-first arg order: shim PDB Document.Url is the #line project-relative
-                    // literal while --file may be absolute; PathsReferToSameFile suffixes the first
-                    // argument, so the absolute request must be first (opposite of ScriptAssemblies).
+                    // Why request-first remains valid: PathsReferToSameFile is now symmetric.
+                    // Either argument may be the absolute side: shim compiles route through the
+                    // shared worker (relative literal documents) or the one-shot csc
+                    // (project-rooted absolute documents), while the pause-point request may
+                    // arrive relative or absolute.
                     string documentUrl = SourcePausePointPathNormalizer.ToForwardSlashes(
                         sequencePoint.Document.Url);
                     if (!SourcePausePointPathNormalizer.PathsReferToSameFile(

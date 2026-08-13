@@ -3,6 +3,7 @@ using System.IO;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
@@ -102,6 +103,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 if (File.Exists(responseFilePath))
                 {
                     File.Delete(responseFilePath);
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: WriteCompilerResponseFile maps the source directory onto the project root via -pathmap.
+        /// </summary>
+        [Test]
+        public void WriteCompilerResponseFile_MapsSourceDirectoryToProjectRoot()
+        {
+            string tempDirectory = Path.Combine(Path.GetTempPath(), "uloop-roslyn-pathmap-" + Path.GetRandomFileName());
+            Directory.CreateDirectory(tempDirectory);
+            string responseFilePath = Path.Combine(tempDirectory, "snippet.rsp");
+            string sourcePath = Path.Combine(tempDirectory, "snippet.cs");
+            string dllPath = Path.Combine(tempDirectory, "snippet.dll");
+            try
+            {
+                RoslynCompilerBackend.WriteCompilerResponseFile(
+                    responseFilePath,
+                    sourcePath,
+                    dllPath,
+                    references: new List<string>(),
+                    defineSymbols: new List<string>(),
+                    allowUnsafeCode: false,
+                    emitDebugCode: false);
+
+                string sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath));
+                string expectedPathmap = "-pathmap:\"" + sourceDirectory + "=" + UnityCliLoopPathResolver.GetProjectRoot() + "\"";
+                string[] lines = File.ReadAllLines(responseFilePath);
+                Assert.That(lines, Does.Contain(expectedPathmap));
+            }
+            finally
+            {
+                if (Directory.Exists(tempDirectory))
+                {
+                    Directory.Delete(tempDirectory, recursive: true);
                 }
             }
         }

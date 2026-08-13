@@ -251,6 +251,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 QuoteResponseFileArgument("-out:", dllPath)
             };
 
+            // Why pathmap: csc resolves relative #line document paths against the source file's
+            // directory and writes work-directory absolute URLs into the PDB; map the compile
+            // directory back to the project root so PDB documents point at the real project files
+            // (the shared worker's ParseText path leaves the literal as-is and needs no mapping).
+            // Why GetProjectRoot: it is the single source of truth; process CWD can be moved by
+            // external assets via Directory.SetCurrentDirectory.
+            string sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath));
+            lines.Add(QuoteResponseFileArgument("-pathmap:", sourceDirectory + "=" + UnityCliLoopPathResolver.GetProjectRoot()));
+
             string defineOption = BuildDefineOption(defineSymbols);
             if (!string.IsNullOrEmpty(defineOption))
             {
