@@ -10,16 +10,12 @@ permissions:
   contents: read
 
 jobs:
-  editmode-tests:
-    name: EditMode Tests (Linux)
+  concurrency-unit-tests:
+    name: Concurrency Unit Tests
     runs-on: ubuntu-latest
-    env:
-      HAS_UNITY_LICENSE: ${{ secrets.UNITY_LICENSE != '' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          lfs: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
@@ -32,17 +28,52 @@ jobs:
           dotnet test tests/SharedRoslynCompilerWorker.UnitTests/SharedRoslynCompilerWorker.UnitTests.csproj --configuration Release
           dotnet test tests/OutputFileRetention.UnitTests/OutputFileRetention.UnitTests.csproj --configuration Release
 
+  editmode-tests:
+    name: EditMode Tests (${{ matrix.unity-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The committed project version: full EditMode suite plus the strict
+          # zero-warning compile gate.
+          - unity-version: 2022.3.62f3
+            test-filter: ''
+            strict-compile-check: true
+          # Newer editors open the committed 2022.3 project through an ephemeral
+          # in-place upgrade, so obsolete-API warnings are expected there; skip the
+          # zero-warning gate and run only the hot-reload suites, which are the
+          # cross-version compatibility signal these legs exist for. Compile errors
+          # still fail the leg because the test runner cannot run without compiling.
+          # The filter is an unanchored prefix on purpose: it matches both the
+          # ...Tests.Editor.HotReload namespace and the ...HotReloadSpike namespace,
+          # whose publicizer/worker-bootstrap spikes exercise exactly the machinery
+          # that breaks across editor generations.
+          - unity-version: 6000.3.15f1
+            test-filter: io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+            strict-compile-check: false
+          - unity-version: 6000.5.8f1
+            test-filter: io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+            strict-compile-check: false
+    env:
+      HAS_UNITY_LICENSE: ${{ secrets.UNITY_LICENSE != '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          lfs: true
+
       - name: Cache Library folder
         if: env.HAS_UNITY_LICENSE == 'true'
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: Library
-          key: Library-2022.3.62f1-${{ hashFiles('Packages/src/**/*.cs', 'Assets/**/*.cs', 'Packages/manifest.json', 'Packages/packages-lock.json') }}
+          key: Library-${{ matrix.unity-version }}-${{ hashFiles('Packages/src/**/*.cs', 'Assets/**/*.cs', 'Packages/manifest.json', 'Packages/packages-lock.json') }}
           restore-keys: |
-            Library-2022.3.62f1-
+            Library-${{ matrix.unity-version }}-
 
       - name: Compile Unity project
-        if: env.HAS_UNITY_LICENSE == 'true'
+        if: env.HAS_UNITY_LICENSE == 'true' && matrix.strict-compile-check == true
         id: compile
         uses: game-ci/unity-builder@1d4ee0697f193f54668e98961d79907911f4b4f2
         timeout-minutes: 30
@@ -51,14 +82,14 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
-          unityVersion: 2022.3.62f1
+          unityVersion: ${{ matrix.unity-version }}
           targetPlatform: StandaloneLinux64
           buildMethod: ''
           allowDirtyBuild: true
         continue-on-error: true
 
       - name: Check for compile errors and warnings
-        if: env.HAS_UNITY_LICENSE == 'true'
+        if: env.HAS_UNITY_LICENSE == 'true' && matrix.strict-compile-check == true
         run: |
           LOG_FILE=$(find . -name "*.log" -path "*/build/*" -o -name "Editor.log" 2>/dev/null | head -1)
 
@@ -109,23 +140,44 @@ jobs:
             fi
           fi
 
+      - name: Remove GameCI build script injected during compile
+        if: env.HAS_UNITY_LICENSE == 'true' && matrix.strict-compile-check == true
+        run: |
+          # unity-builder copies its default build script (UnityBuilderAction) into the
+          # workspace; left in place, the asmdef audit test sees a foreign auto-referenced
+          # assembly and fails. sudo because the files are created root-owned inside the
+          # GameCI container.
+          sudo rm -rf "Assets/Editor/Editor"
+          sudo rm -f "Assets/Editor/Editor.meta"
+          # Fail loudly if the injection moved somewhere this cleanup does not cover,
+          # so the leg points at the real cause instead of a confusing asmdef audit
+          # failure later in the test step.
+          LEFTOVER=$(find Assets -name 'UnityBuilderAction*' -print -quit)
+          if [ -n "$LEFTOVER" ]; then
+            echo "::error::GameCI build script found outside the expected injection path: $LEFTOVER"
+            exit 1
+          fi
+
       - name: Run EditMode tests
         if: env.HAS_UNITY_LICENSE == 'true'
         uses: game-ci/unity-test-runner@0ff419b913a3630032cbe0de48a0099b5a9f0ed9
-        timeout-minutes: 30
+        # 45 minutes: the 6000.x legs upgrade the project in place on a cold Library
+        # cache, which makes the first import much slower than a plain 2022.3 open.
+        timeout-minutes: 45
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
-          unityVersion: 2022.3.62f1
+          unityVersion: ${{ matrix.unity-version }}
           testMode: EditMode
-          checkName: Unity Test Results
+          customParameters: ${{ matrix.test-filter != '' && format('-testFilter {0}', matrix.test-filter) || '' }}
+          checkName: Unity Test Results (${{ matrix.unity-version }})
           githubToken: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload test results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always() && env.HAS_UNITY_LICENSE == 'true'
         with:
-          name: Unity test results
+          name: Unity test results (${{ matrix.unity-version }})
           path: artifacts

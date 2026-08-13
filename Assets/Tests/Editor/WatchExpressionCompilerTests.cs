@@ -1,4 +1,6 @@
+using System;
 using System.Collections;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -16,7 +18,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     [TestFixture]
     public sealed class WatchExpressionCompilerTests
     {
-        private const int MaxCompilationWaitTicks = 600;
+        // Wall-clock bound, not editor-tick bound: the first compile spawns an external
+        // compiler process whose duration is time-based, and batchmode CI burns hundreds of
+        // editor ticks per second while that cold start is still in flight.
+        private static readonly TimeSpan MaxCompilationWait = TimeSpan.FromSeconds(60);
 
         /// <summary>
         /// Verifies a valid expression reaches the compile-only path and produces an evaluator.
@@ -27,16 +32,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             WatchExpressionCompiler compiler = new(new DynamicCodeCompiler());
             Task<WatchCompilationResult> compilationTask = compiler.CompileAsync("1 + 2", CancellationToken.None);
 
-            int waitTicks = 0;
-            while (!compilationTask.IsCompleted && waitTicks < MaxCompilationWaitTicks)
+            Stopwatch waitStopwatch = Stopwatch.StartNew();
+            while (!compilationTask.IsCompleted && waitStopwatch.Elapsed < MaxCompilationWait)
             {
-                waitTicks++;
                 yield return null;
             }
 
             if (!compilationTask.IsCompleted)
             {
-                Assert.Fail($"Watch expression compilation did not complete within {MaxCompilationWaitTicks} editor ticks.");
+                Assert.Fail($"Watch expression compilation did not complete within {MaxCompilationWait.TotalSeconds:F0} seconds.");
                 yield break;
             }
 
