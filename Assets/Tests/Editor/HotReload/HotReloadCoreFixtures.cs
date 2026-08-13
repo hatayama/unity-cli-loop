@@ -64,10 +64,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private static int formatCallTotal;
 
+        private const int PaddingWidth = 6;
+
         public string FormatStaticCount()
         {
             formatCallTotal++;
             return $"total: {formatCallTotal}";
+        }
+
+        public string FormatAlignedStaticCount()
+        {
+            formatCallTotal++;
+            return $"total: {formatCallTotal,PaddingWidth}";
         }
     }
 

@@ -306,6 +306,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: editing a method that uses a private const as an interpolation alignment width
+        /// still Patches (alias-qualified alignment expressions must be parenthesized so csc
+        /// does not treat ':' as a format-clause start).
+        /// </summary>
+        [Test]
+        public async Task Run_EditedInterpolationAlignmentConstAccess_Patches()
+        {
+            string fixturePath = ResolveCoreFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "return $\"total: {formatCallTotal,PaddingWidth}\";",
+                "return $\"total=: {formatCallTotal,PaddingWidth}\";",
+                StringComparison.Ordinal);
+            Assert.That(
+                editedSource,
+                Is.Not.EqualTo(onDisk),
+                "Precondition: FormatAlignedStaticCount body must differ from on-disk.");
+
+            string editedPath = WriteEditedSource("InterpolationAlignmentConst.cs", editedSource);
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                contentPathOverride: editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadInterpolationFixture.FormatAlignedStaticCount));
+        }
+
+        /// <summary>
         /// What: running hot reload on the on-disk fixture with no edits yields an empty Methods
         /// list, a positive UnchangedTotal, and the all-unchanged Message wording.
         /// </summary>
