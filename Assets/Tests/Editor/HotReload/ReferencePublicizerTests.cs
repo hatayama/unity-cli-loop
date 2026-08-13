@@ -80,6 +80,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a 0-byte file at the publicized cache path is rejected and regenerated instead
+        /// of being treated as a valid hit (recovers from failed Write pollution).
+        /// </summary>
+        [Test]
+        public void GetOrCreatePublicizedCopy_RegeneratesWhenCachedDllIsEmpty()
+        {
+            string sourceDllPath = ResolveTestAssemblyDllPath();
+            IReadOnlyCollection<string> searchDirectories = PublicizerTestSearchDirectories.ForHotReloadTestAssembly();
+            string outputPath = ReferencePublicizer.GetOrCreatePublicizedCopy(sourceDllPath, searchDirectories);
+            Assert.That(new FileInfo(outputPath).Length, Is.GreaterThan(0), "Precondition: first publicize must write bytes.");
+
+            File.Delete(outputPath);
+            File.WriteAllBytes(outputPath, Array.Empty<byte>());
+            Assert.That(new FileInfo(outputPath).Length, Is.EqualTo(0), "Precondition: planted cache must be empty.");
+
+            string regeneratedPath = ReferencePublicizer.GetOrCreatePublicizedCopy(sourceDllPath, searchDirectories);
+            Assert.That(regeneratedPath, Is.EqualTo(outputPath), "Regeneration must target the same Mvid cache path.");
+            Assert.That(
+                new FileInfo(regeneratedPath).Length,
+                Is.GreaterThan(0),
+                "Empty cached DLL must be replaced with a non-empty publicized copy.");
+        }
+
+        /// <summary>
         /// What: pruning stale publicized copies does not delete hyphenated sibling assembly
         /// caches that share a prefix (e.g. Assembly-CSharp vs Assembly-CSharp-Editor).
         /// </summary>

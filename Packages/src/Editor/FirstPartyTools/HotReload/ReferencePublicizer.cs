@@ -89,9 +89,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string outputDllPath = Path.Combine(
                 outputDirectory,
                 assemblyName + "-" + mvid + HotReloadConstants.CompiledAssemblyExtension);
-            if (File.Exists(outputDllPath))
+            if (File.Exists(outputDllPath) && new FileInfo(outputDllPath).Length > 0)
             {
                 return outputDllPath;
+            }
+
+            // Why: older versions wrote the publicized DLL in place; a failed Write could leave
+            // a 0-byte file that File.Exists alone treated as a valid cache hit. Delete it so
+            // this call regenerates instead of poisoning later shim compiles.
+            if (File.Exists(outputDllPath))
+            {
+                File.Delete(outputDllPath);
             }
 
             // An Mvid change means the assembly already reloaded; no in-flight compile can still
@@ -112,7 +120,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            assemblyDefinition.Write(outputDllPath);
+            // Write to a temp path then Move so a thrown Write cannot leave a 0-byte final cache.
+            string tempDllPath = outputDllPath + ".tmp-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                assemblyDefinition.Write(tempDllPath);
+                File.Move(tempDllPath, outputDllPath);
+            }
+            finally
+            {
+                if (File.Exists(tempDllPath))
+                {
+                    File.Delete(tempDllPath);
+                }
+            }
+
             return outputDllPath;
         }
 
