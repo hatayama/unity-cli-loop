@@ -86,6 +86,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// What: the worker reference set includes the consolidated System.Security.Cryptography assembly when that file exists.
+        /// </summary>
+        [Test]
+        public void BuildWorkerReferenceSet_WhenConsolidatedCryptographyAssemblyExists_ShouldIncludeConsolidatedReference()
+        {
+            ExternalCompilerPaths externalCompilerPaths = ExternalCompilerPathResolver.Resolve();
+            Assert.That(externalCompilerPaths, Is.Not.Null, "Unity external compiler layout should be available.");
+
+            string consolidatedAssemblyPath = Path.Combine(
+                externalCompilerPaths.NetCoreRuntimeSharedDirectoryPath,
+                "System.Security.Cryptography.dll");
+            if (!File.Exists(consolidatedAssemblyPath))
+            {
+                Assert.Ignore(
+                    "System.Security.Cryptography.dll is not present in this Unity NetCoreRuntime shared directory.");
+            }
+
+            List<string> references =
+                SharedRoslynCompilerWorkerAssemblyBuilder.BuildWorkerReferenceSet(externalCompilerPaths);
+
+            Assert.That(references, Does.Contain(consolidatedAssemblyPath));
+        }
+
+        /// <summary>
         /// Verifies shutdown remains an idempotent no-op before a worker process or directory exists.
         /// </summary>
         [Test]
