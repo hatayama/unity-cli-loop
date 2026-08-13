@@ -231,16 +231,12 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h
 
-      - name: Cache Linux editor tarball
-        if: env.HAS_UNITY_LICENSE == 'true'
-        id: editor-tarball-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
-        with:
-          path: ${{ env.UNITY_TARBALL }}
-          key: unity-linux-editor-${{ env.UNITY_VERSION }}-${{ env.UNITY_CHANGESET }}
-
+      # Why not cache the tarball: a single 6000.7 Linux editor archive is
+      # ~4GB and would exceed the 10GB Actions cache quota, evicting the
+      # existing GameCI Library caches. Re-download is ~2 minutes with curl
+      # retries, which is cheaper than that eviction.
       - name: Download Linux editor
-        if: env.HAS_UNITY_LICENSE == 'true' && steps.editor-tarball-cache.outputs.cache-hit != 'true'
+        if: env.HAS_UNITY_LICENSE == 'true'
         run: |
           set -eu
           mkdir -p .unity-ci
@@ -294,11 +290,16 @@ jobs:
           SERIAL=$(tail -c +5 "$RUNNER_TEMP/developer-data.bin" | tr -d "\r\n")
           test "${#SERIAL}" -eq 27
 
+          # Why RUNNER_TEMP: Unity prints -username unmasked in COMMAND LINE
+          # ARGUMENTS. artifacts/ is uploaded from a public repository.
+          ACTIVATE_LOG="$RUNNER_TEMP/unity-activate.log"
+          ACTIVATE_FALLBACK_LOG="$RUNNER_TEMP/unity-activate-fallback.log"
+
           ACTIVATED=false
           ATTEMPT=1
           while [ "$ATTEMPT" -le 3 ]; do
             if "$UNITY_EDITOR" -batchmode -nographics -quit \
-              -logFile artifacts/unity-activate.log \
+              -logFile "$ACTIVATE_LOG" \
               -serial "$SERIAL" \
               -username "$UNITY_EMAIL" \
               -password "$UNITY_PASSWORD" \
@@ -307,17 +308,22 @@ jobs:
               break
             fi
             echo "Serial activation attempt $ATTEMPT failed"
+            tail -n 80 "$ACTIVATE_LOG" || true
             ATTEMPT=$((ATTEMPT + 1))
             sleep $((ATTEMPT * 5))
           done
 
           if [ "$ACTIVATED" != true ]; then
             echo "Serial activation failed; falling back to email/password"
-            "$UNITY_EDITOR" -batchmode -nographics -quit \
-              -logFile artifacts/unity-activate-fallback.log \
+            if ! "$UNITY_EDITOR" -batchmode -nographics -quit \
+              -logFile "$ACTIVATE_FALLBACK_LOG" \
               -username "$UNITY_EMAIL" \
               -password "$UNITY_PASSWORD" \
-              -projectPath "$RUNNER_TEMP/BlankProject"
+              -projectPath "$RUNNER_TEMP/BlankProject"; then
+              echo "Email/password fallback failed"
+              tail -n 80 "$ACTIVATE_FALLBACK_LOG" || true
+              exit 1
+            fi
           fi
 
           # Why: this job invokes the extracted Editor binary, not GameCI's
