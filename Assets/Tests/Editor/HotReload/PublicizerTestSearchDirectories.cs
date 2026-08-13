@@ -1,18 +1,18 @@
-using System;
 using System.Collections.Generic;
-using System.IO;
 
 using NUnit.Framework;
 
 using UnityEditor.Compilation;
+
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 using UnityCompilationAssembly = UnityEditor.Compilation.Assembly;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// Builds the same Cecil resolver search-directory set production uses for this test
-    /// assembly: directories of existing <see cref="UnityCompilationAssembly.allReferences"/>.
+    /// Resolves Cecil resolver search directories for this test assembly via the production
+    /// <see cref="ReferencePublicizer.CollectResolverSearchDirectories"/> helper.
     /// </summary>
     internal static class PublicizerTestSearchDirectories
     {
@@ -26,27 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.Not.Null,
                 "CompilationPipeline assembly not found: " + HotReloadTestAssemblyName);
 
-            HashSet<string> directories = new HashSet<string>(StringComparer.Ordinal);
-            if (compilationAssembly.allReferences == null)
-            {
-                return directories;
-            }
-
-            foreach (string reference in compilationAssembly.allReferences)
-            {
-                if (string.IsNullOrEmpty(reference) || !File.Exists(reference))
-                {
-                    continue;
-                }
-
-                string directory = Path.GetDirectoryName(Path.GetFullPath(reference));
-                if (!string.IsNullOrEmpty(directory))
-                {
-                    directories.Add(directory);
-                }
-            }
-
-            return directories;
+            return ReferencePublicizer.CollectResolverSearchDirectories(compilationAssembly.allReferences);
         }
 
         private static UnityCompilationAssembly FindHotReloadTestAssembly()

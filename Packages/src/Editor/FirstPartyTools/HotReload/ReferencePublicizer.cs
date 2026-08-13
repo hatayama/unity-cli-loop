@@ -20,6 +20,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class ReferencePublicizer
     {
         /// <summary>
+        /// Collects distinct directory paths of existing DLL references for Cecil
+        /// <see cref="DefaultAssemblyResolver"/> search. Null <paramref name="referencePaths"/>
+        /// yields an empty set so callers need not special-case Unity's null allReferences.
+        /// </summary>
+        internal static IReadOnlyCollection<string> CollectResolverSearchDirectories(
+            IReadOnlyCollection<string> referencePaths)
+        {
+            HashSet<string> directories = new HashSet<string>(StringComparer.Ordinal);
+            if (referencePaths == null)
+            {
+                return directories;
+            }
+
+            foreach (string reference in referencePaths)
+            {
+                if (string.IsNullOrEmpty(reference) || !File.Exists(reference))
+                {
+                    continue;
+                }
+
+                string directory = Path.GetDirectoryName(Path.GetFullPath(reference));
+                if (!string.IsNullOrEmpty(directory))
+                {
+                    directories.Add(directory);
+                }
+            }
+
+            return directories;
+        }
+
+        /// <summary>
         /// Returns the path of a cached publicized copy for <paramref name="sourceDllPath"/>,
         /// writing it on first use. Only <c>Library/ScriptAssemblies/</c> DLLs are accepted —
         /// engine and system assemblies must not be rewritten.
