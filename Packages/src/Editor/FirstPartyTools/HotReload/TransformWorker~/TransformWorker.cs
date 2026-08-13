@@ -2146,13 +2146,33 @@ public static class TransformWorkerProgram
         string line;
         while ((line = reader.ReadLine()) != null)
         {
-            if (line.TrimStart().StartsWith("global using", StringComparison.Ordinal))
+            if (LineStartsWithGlobalUsing(line))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    // Why same-line tokens (not ParseText): the prefilter must stay cheaper than parsing every
+    // assembly file. Extra whitespace between global and using is allowed; a comment or line
+    // break between those tokens is out of scope for this filter.
+    private static bool LineStartsWithGlobalUsing(string line)
+    {
+        string trimmed = line.TrimStart();
+        if (!trimmed.StartsWith("global", StringComparison.Ordinal) || trimmed.Length <= 6)
+        {
+            return false;
+        }
+
+        char afterGlobal = trimmed[6];
+        if (afterGlobal != ' ' && afterGlobal != '\t')
+        {
+            return false;
+        }
+
+        return trimmed.Substring(6).TrimStart().StartsWith("using", StringComparison.Ordinal);
     }
 
     private static bool PathsReferToSameSourceFile(string left, string right)

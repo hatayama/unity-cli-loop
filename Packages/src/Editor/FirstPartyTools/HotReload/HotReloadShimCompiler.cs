@@ -136,6 +136,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "CS7036"
         };
 
+        private static readonly string[] MissingUsingDiagnosticCodes =
+        {
+            "CS0246",
+            "CS1061"
+        };
+
         /// <summary>
         /// Appends " (line N)" only when the diagnostic's #line-mapped file refers to the user's
         /// project-relative path. Scaffold-path errors keep the bare message.
@@ -165,8 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int index = 0; index < errors.Count; index++)
             {
                 string error = errors[index];
-                if (ErrorStartsWithDiagnosticCode(error, "CS0246")
-                    || ErrorStartsWithDiagnosticCode(error, "CS1061"))
+                if (ErrorStartsWithAnyDiagnosticCode(error, MissingUsingDiagnosticCodes))
                 {
                     hasMissingUsingDiagnostic = true;
                 }

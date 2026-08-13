@@ -1440,7 +1440,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return sourceText.IndexOf(" class ", StringComparison.Ordinal) >= 0
                 || sourceText.IndexOf(" struct ", StringComparison.Ordinal) >= 0
                 || sourceText.IndexOf(" interface ", StringComparison.Ordinal) >= 0
-                || sourceText.IndexOf(" enum ", StringComparison.Ordinal) >= 0;
+                || sourceText.IndexOf(" enum ", StringComparison.Ordinal) >= 0
+                || sourceText.IndexOf(" record ", StringComparison.Ordinal) >= 0;
         }
 
         private static string ResolveE2EFixturePath()
