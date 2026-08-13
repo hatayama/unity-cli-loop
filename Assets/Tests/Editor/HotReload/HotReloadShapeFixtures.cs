@@ -132,4 +132,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return Probe;
         }
     }
+
+    /// <summary>
+    /// Method wrapped in <c>#if UNITY_EDITOR</c> so a shim that copies leading directive trivia
+    /// without the matching <c>#endif</c> (which lives on the next token) fails to compile.
+    /// </summary>
+    internal class HotReloadDirectiveTriviaFixture
+    {
+#if UNITY_EDITOR
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int EditorGuardedReturn()
+        {
+            return 7; // directive-trivia probe
+        }
+#endif
+    }
 }

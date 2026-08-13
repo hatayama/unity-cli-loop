@@ -3868,12 +3868,30 @@ internal static class ShimMethodFactory
             .WithParameterList(SyntaxFactory.ParameterList(parameters))
             .WithExplicitInterfaceSpecifier(null)
             .WithConstraintClauses(default)
-            .WithTriviaFrom(rewrittenOriginal);
+            .WithLeadingTrivia(StripDirectiveTrivia(rewrittenOriginal.GetLeadingTrivia()))
+            .WithTrailingTrivia(StripDirectiveTrivia(rewrittenOriginal.GetTrailingTrivia()));
 
         // Expression-bodied methods must keep their terminating semicolon; block bodies must not.
         return rewrittenOriginal.ExpressionBody != null
             ? shim.WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken))
             : shim.WithSemicolonToken(default);
+    }
+
+    // Why strip directives: #if sits on the method's leading trivia while its matching #endif
+    // belongs to the next token, so copied directives are unbalanced in the shim; #line mapping
+    // is injected later from annotations and needs no user directives.
+    private static SyntaxTriviaList StripDirectiveTrivia(SyntaxTriviaList trivia)
+    {
+        List<SyntaxTrivia> kept = new List<SyntaxTrivia>();
+        foreach (SyntaxTrivia item in trivia)
+        {
+            if (!item.IsDirective)
+            {
+                kept.Add(item);
+            }
+        }
+
+        return SyntaxFactory.TriviaList(kept);
     }
 
     private static SeparatedSyntaxList<ParameterSyntax> BuildShimParameters(
