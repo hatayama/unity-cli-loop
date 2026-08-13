@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSelectUnityReleasePicksFirstResultAsLatest(t *testing.T) {
@@ -106,6 +107,25 @@ func TestResolveUnityReleaseRejectsHTTPError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "502") {
 		t.Fatalf("expected HTTP 502 in error, got %v", err)
+	}
+}
+
+func TestResolveUnityReleaseHonorsContextDeadline(t *testing.T) {
+	// What: a stalled Unity Release API fails when the caller context deadline expires.
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		<-request.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err := ResolveUnityRelease(ctx, ResolveUnityReleaseRequest{
+		Series:     "6000.7",
+		APIBaseURL: server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err == nil {
+		t.Fatal("expected a deadline to fail a stalled request")
 	}
 }
 

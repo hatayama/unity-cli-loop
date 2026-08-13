@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 const (
@@ -25,6 +26,7 @@ const (
 	githubOutputVersion              = "version"
 	githubOutputChangeset            = "changeset"
 	githubOutputEditorURL            = "editorUrl"
+	unityReleaseAPITimeout           = 2 * time.Minute
 )
 
 // UnityRelease is the newest editor in a version series plus its Linux download URL.
@@ -131,7 +133,9 @@ func RunResolveUnityRelease(stdout io.Writer, stderr io.Writer, args []string) i
 		return 1
 	}
 
-	release, err := ResolveUnityRelease(context.Background(), ResolveUnityReleaseRequest{Series: *series})
+	ctx, cancel := context.WithTimeout(context.Background(), unityReleaseAPITimeout)
+	defer cancel()
+	release, err := ResolveUnityRelease(ctx, ResolveUnityReleaseRequest{Series: *series})
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "resolve-unity-release:", err)
 		return 1
