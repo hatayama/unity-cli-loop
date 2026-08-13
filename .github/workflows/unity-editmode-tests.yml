@@ -236,7 +236,7 @@ jobs:
         id: editor-tarball-cache
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
-          path: .unity-ci/unity-linux-editor.tar.xz
+          path: ${{ env.UNITY_TARBALL }}
           key: unity-linux-editor-${{ env.UNITY_VERSION }}-${{ env.UNITY_CHANGESET }}
 
       - name: Download Linux editor
@@ -269,9 +269,9 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: Library
-          key: Library-${{ env.UNITY_VERSION }}-${{ hashFiles('Packages/src/**/*.cs', 'Assets/**/*.cs', 'Packages/manifest.json', 'Packages/packages-lock.json') }}
+          key: Library-${{ env.UNITY_VERSION }}-debug-${{ hashFiles('Packages/src/**/*.cs', 'Assets/**/*.cs', 'Packages/manifest.json', 'Packages/packages-lock.json') }}
           restore-keys: |
-            Library-${{ env.UNITY_VERSION }}-
+            Library-${{ env.UNITY_VERSION }}-debug-
 
       - name: Activate Unity license and run EditMode tests
         if: env.HAS_UNITY_LICENSE == 'true'
@@ -320,7 +320,10 @@ jobs:
               -projectPath "$RUNNER_TEMP/BlankProject"
           fi
 
-          "$UNITY_EDITOR" -batchmode -nographics \
+          # Why -debugCodeOptimization: Linux batchmode starts in Release.
+          # Pause-point HotReload tests reject Release, and tiny patched
+          # getters get JIT-inlined so they would not observe the edit.
+          "$UNITY_EDITOR" -batchmode -nographics -debugCodeOptimization \
             -projectPath "$GITHUB_WORKSPACE" \
             -accept-apiupdate \
             -runTests \
