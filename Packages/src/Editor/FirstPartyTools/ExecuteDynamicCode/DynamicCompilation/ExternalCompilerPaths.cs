@@ -62,4 +62,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             LayoutKind = layoutKind;
         }
     }
+
+    /// <summary>
+    /// Host and shared-framework paths chosen together for running Unity's bundled csc.
+    /// </summary>
+    internal sealed class ExternalCompilerRuntimePairing
+    {
+        public string DotnetHostPath { get; }
+
+        public string NetCoreRuntimeSharedDirectoryPath { get; }
+
+        public ExternalCompilerRuntimePairing(
+            string dotnetHostPath,
+            string netCoreRuntimeSharedDirectoryPath)
+        {
+            DotnetHostPath = dotnetHostPath;
+            NetCoreRuntimeSharedDirectoryPath = netCoreRuntimeSharedDirectoryPath;
+        }
+    }
 }
