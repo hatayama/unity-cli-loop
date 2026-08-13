@@ -3400,6 +3400,55 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         return VisitName(node, node);
     }
 
+    public override SyntaxNode VisitInterpolation(InterpolationSyntax node)
+    {
+        InterpolationSyntax visited = (InterpolationSyntax)base.VisitInterpolation(node);
+
+        // Why: a top-level ':' in an interpolation hole starts a format clause, so a
+        // rewrite that inserts bare `global::` yields CS0103 ('global'). Parenthesizing
+        // keeps the alias qualifier out of the format-clause scan and still coexists
+        // with alignment/format clauses. Nested positions do not need parentheses, but
+        // wrapping whenever an AliasQualifiedNameSyntax is present is always safe.
+        // Alignment widths are integer expressions and hit the same ':' scan, so they
+        // need the same wrapping; format clauses are literal text and need none.
+        ExpressionSyntax parenthesizedExpression = ParenthesizeIfAliasQualified(visited.Expression);
+        if (!ReferenceEquals(parenthesizedExpression, visited.Expression))
+        {
+            visited = visited.WithExpression(parenthesizedExpression);
+        }
+
+        InterpolationAlignmentClauseSyntax alignmentClause = visited.AlignmentClause;
+        if (alignmentClause != null)
+        {
+            ExpressionSyntax parenthesizedAlignment = ParenthesizeIfAliasQualified(alignmentClause.Value);
+            if (!ReferenceEquals(parenthesizedAlignment, alignmentClause.Value))
+            {
+                visited = visited.WithAlignmentClause(
+                    alignmentClause.WithValue(parenthesizedAlignment));
+            }
+        }
+
+        return visited;
+    }
+
+    private static ExpressionSyntax ParenthesizeIfAliasQualified(ExpressionSyntax expression)
+    {
+        if (expression is ParenthesizedExpressionSyntax)
+        {
+            return expression;
+        }
+
+        foreach (SyntaxNode descendant in expression.DescendantNodesAndSelf())
+        {
+            if (descendant is AliasQualifiedNameSyntax)
+            {
+                return SyntaxFactory.ParenthesizedExpression(expression);
+            }
+        }
+
+        return expression;
+    }
+
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
     {
         if (_accessorPlan == null
