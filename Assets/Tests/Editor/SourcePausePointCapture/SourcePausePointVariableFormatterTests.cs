@@ -14,6 +14,7 @@ using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -248,7 +249,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopCapturedVariable variable = variables.Single();
             Assert.That(variable.UnityObjectKind, Is.EqualTo(UloopCapturedVariableUnityObjectKind.SceneObject));
             Assert.That(variable.UnityObjectPath, Does.Contain("PausePointFormatterComponentFixture"));
-            Assert.That(variable.UnityObjectInstanceId, Is.EqualTo(componentValue.GetInstanceID()));
+            // Raw GetInstanceID() is an obsolete-as-error API on Unity 6000.5; the production
+            // wrapper is also what populates UnityObjectInstanceId, so compare through it.
+            Assert.That(variable.UnityObjectInstanceId, Is.EqualTo(UnityObjectIdentifier.GetInstanceId(componentValue)));
         }
 
         [Test]
