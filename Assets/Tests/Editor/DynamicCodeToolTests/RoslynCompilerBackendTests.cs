@@ -3,6 +3,7 @@ using System.IO;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
@@ -129,7 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     emitDebugCode: false);
 
                 string sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath));
-                string expectedPathmap = "-pathmap:\"" + sourceDirectory + "=" + Directory.GetCurrentDirectory() + "\"";
+                string expectedPathmap = "-pathmap:\"" + sourceDirectory + "=" + UnityCliLoopPathResolver.GetProjectRoot() + "\"";
                 string[] lines = File.ReadAllLines(responseFilePath);
                 Assert.That(lines, Does.Contain(expectedPathmap));
             }

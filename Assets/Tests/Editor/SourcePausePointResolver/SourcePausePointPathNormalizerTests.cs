@@ -82,5 +82,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result, Is.False);
         }
+
+        /// <summary>
+        /// What: a shared multi-segment suffix under different Assets/ trees stays a miss.
+        /// </summary>
+        [Test]
+        public void PathsReferToSameFile_WhenMultiSegmentSuffixMatchesDifferentTrees_ReturnsFalse()
+        {
+            bool result = SourcePausePointPathNormalizer.PathsReferToSameFile(
+                "Assets/Common/Util.cs", "/proj/Assets/Other/Common/Util.cs");
+
+            Assert.That(result, Is.False);
+        }
     }
 }
