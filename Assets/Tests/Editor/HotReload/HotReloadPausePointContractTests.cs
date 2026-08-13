@@ -120,6 +120,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: after a transplant hot-reload, pausing on the return that uses a string assigned
+        /// in the immediately preceding straight-line statement captures that local's real value.
+        /// Why this shape: the transplant preamble is two instructions; an earlier assignment
+        /// (including the loop in Enable_OnHotReloadedTransplantBody_HitsAndCapturesAddedLocal)
+        /// still shows the final value when capture runs two instructions early.
+        /// </summary>
+        [Test]
+        public async Task Enable_OnHotReloadedTransplantBody_CapturesStringAssignedOnPreviousLine()
+        {
+            string editedSource = BuildEditedComputeWithPrecedingStringLocal();
+            int enableLine = FindLineNumber(editedSource, "return tagged.Length;");
+            Assert.That(enableLine, Is.GreaterThan(0));
+
+            await HotReloadFromEditedSourceAsync(editedSource, "ContractTransplantPrecedingString.cs");
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = enableLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
+
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            int result = fixture.ComputeWithPrivate(5);
+            Assert.That(result, Is.EqualTo("patched-tag".Length));
+
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(status.IsHit, Is.True);
+            UloopCapturedVariable tagged = status.CapturedVariables.FirstOrDefault(v => v.Name == "tagged");
+            Assert.That(tagged, Is.Not.Null, FormatCaptured(status));
+            Assert.That(tagged.Value, Is.EqualTo("patched-tag"));
+        }
+
+        /// <summary>
         /// What: after a delegation hot-reload, enable on the shim body hits with synthetic
         /// "this" and never exposes __uloopInstance as a captured parameter name.
         /// </summary>
@@ -826,6 +864,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "            }\n"
                 + "\n"
                 + "            return boosted;\n"
+                + "        }";
+            string edited = onDisk.Replace(original, replacement, StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            return edited;
+        }
+
+        private static string BuildEditedComputeWithPrecedingStringLocal()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            const string original =
+                "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }";
+            // Why no loop: an earlier assignment still has its final value when capture runs two
+            // instructions early (the transplant preamble). The string must be stored on the
+            // statement immediately before return so a preamble-offset bug captures null.
+            const string replacement =
+                "public int ComputeWithPrivate(int delta)\n        {\n"
+                + "            string tagged = \"patched-tag\";\n"
+                + "            return tagged.Length;\n"
                 + "        }";
             string edited = onDisk.Replace(original, replacement, StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));

@@ -519,7 +519,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             SourcePausePointPatchInjection injection = new(
                 id,
-                shim.InstructionIndex,
+                InstructionIndexForInjection(targetKind, method, shim.InstructionIndex),
                 isStatic,
                 isDeclaringTypeValueType,
                 shim.Parameters,
@@ -529,6 +529,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 shim.InstanceFromFirstArgument);
 
             return CommitPatch(id, method, shim.LogicalOwner, injection, normalizedFile, requestedLine);
+        }
+
+        // Why add preamble only for TransplantChainJoin: the recorded index is from the shim's
+        // raw IL. Transplant prepends ldstr+call before that stream; ShimDirect and OriginalBody
+        // have no such prefix.
+        private static int InstructionIndexForInjection(
+            SourcePausePointPatchInjectionTargetKind targetKind,
+            MethodBase method,
+            int instructionIndex)
+        {
+            if (targetKind != SourcePausePointPatchInjectionTargetKind.TransplantChainJoin)
+            {
+                return instructionIndex;
+            }
+
+            Func<MethodBase, int> getPreambleLength =
+                HotReloadPausePointCoordination.GetTransplantPreambleLength;
+            if (getPreambleLength == null)
+            {
+                return instructionIndex;
+            }
+
+            return instructionIndex + getPreambleLength(method);
         }
 
         private static bool TryReuseExistingPatch(
