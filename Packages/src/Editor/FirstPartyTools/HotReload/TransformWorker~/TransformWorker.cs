@@ -2073,13 +2073,41 @@ public static class TransformWorkerProgram
 
         foreach (UsingDirectiveSyntax assemblyUsing in assemblyGlobalUsings)
         {
-            if (!ContainsEquivalentUsing(usings, assemblyUsing))
+            if (!ShouldSkipAssemblyUsing(usings, assemblyUsing))
             {
                 usings.Add(assemblyUsing);
             }
         }
 
         return usings;
+    }
+
+    // Why skip same alias name regardless of target: C# lets a namespace-scoped alias shadow a
+    // global one. Flattening both into the shim's single namespace is CS1537.
+    private static bool ShouldSkipAssemblyUsing(
+        List<UsingDirectiveSyntax> existingUsings,
+        UsingDirectiveSyntax assemblyUsing)
+    {
+        if (ContainsEquivalentUsing(existingUsings, assemblyUsing))
+        {
+            return true;
+        }
+
+        if (assemblyUsing.Alias == null)
+        {
+            return false;
+        }
+
+        string aliasName = assemblyUsing.Alias.Name.ToString();
+        foreach (UsingDirectiveSyntax existing in existingUsings)
+        {
+            if (existing.Alias != null && existing.Alias.Name.ToString() == aliasName)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Why skip SourcePath: the edited file's usings already come from the in-memory tree.
