@@ -259,10 +259,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // BuildShimReferencePaths reads Application.dataPath / platform; stay on main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
             bool includeHarmonyReference = HasDelegationEntry(workerOutput.entries);
-            List<string> shimReferences = BuildShimReferencePaths(
+            ShimReferencePathsResult shimReferencePaths = TryBuildShimReferencePaths(
                 compilationAssembly,
                 targetDllPath,
                 includeHarmonyReference);
+            if (shimReferencePaths.ErrorMessage != null)
+            {
+                outcomes.Add(
+                    HotReloadMethodOutcome.Failed(
+                        "(file)",
+                        shimReferencePaths.ErrorMessage,
+                        assemblyResolvePath));
+                return new HotReloadFileProcessResult(
+                    outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
+            }
+
+            List<string> shimReferences = shimReferencePaths.References;
             HotReloadShimCompileResult compileResult = await HotReloadShimCompiler.CompileAndLoadAsync(
                 workerOutput.shimSource,
                 shimReferences,
@@ -849,10 +861,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
             bool includeHarmonyReference = HasDelegationEntry(retryOutput.entries);
-            List<string> shimReferences = BuildShimReferencePaths(
+            ShimReferencePathsResult shimReferencePaths = TryBuildShimReferencePaths(
                 compilationAssembly,
                 targetDllPath,
                 includeHarmonyReference);
+            if (shimReferencePaths.ErrorMessage != null)
+            {
+                // First-pass publicize already succeeded, so a miss here is rare; abandon
+                // isolation the same way as a retry compile failure.
+                return null;
+            }
+
+            List<string> shimReferences = shimReferencePaths.References;
             HotReloadShimCompileResult retryCompileResult = await HotReloadShimCompiler.CompileAndLoadAsync(
                 retryOutput.shimSource,
                 shimReferences,
@@ -1010,6 +1030,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 FailedMethodOutcomes = failedMethodOutcomes;
                 RetryEntries = retryEntries;
                 RetryCompileResult = retryCompileResult;
+            }
+        }
+
+        /// <summary>
+        /// Result of <see cref="TryBuildShimReferencePaths"/>. Exactly one of
+        /// <see cref="References"/> or <see cref="ErrorMessage"/> is set.
+        /// </summary>
+        private sealed class ShimReferencePathsResult
+        {
+            public List<string> References { get; }
+            public string ErrorMessage { get; }
+
+            public ShimReferencePathsResult(List<string> references, string errorMessage)
+            {
+                References = references;
+                ErrorMessage = errorMessage;
+            }
+        }
+
+        /// <summary>
+        /// Builds shim compile references, converting Cecil assembly-resolution failures into an
+        /// error message instead of letting them escape as UNITY_RPC_ERROR.
+        /// </summary>
+        private static ShimReferencePathsResult TryBuildShimReferencePaths(
+            UnityCompilationAssembly compilationAssembly,
+            string targetDllPath,
+            bool includeHarmonyReference)
+        {
+            // Why catch only AssemblyResolutionException: publicize fails when Cecil cannot
+            // resolve engine/netstandard types during Write; that is a per-file hot-reload
+            // outcome, not an internal tool crash. Other exceptions must still Fail Fast.
+            try
+            {
+                return new ShimReferencePathsResult(
+                    BuildShimReferencePaths(
+                        compilationAssembly,
+                        targetDllPath,
+                        includeHarmonyReference),
+                    null);
+            }
+            catch (AssemblyResolutionException resolutionException)
+            {
+                return new ShimReferencePathsResult(
+                    null,
+                    "Publicizing referenced assemblies failed: " + resolutionException.Message
+                    + " Hot reload could not build shim references for this file.");
             }
         }
 
