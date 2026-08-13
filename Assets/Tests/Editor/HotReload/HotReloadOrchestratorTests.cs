@@ -537,6 +537,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: editing a method wrapped in #if UNITY_EDITOR still patches and returns the
+        /// edited value. Directive trivia must not be copied onto the shim because the matching
+        /// #endif belongs to the next token.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedIfDefGuardedMethod_PatchesBehavior()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "return 7; // directive-trivia probe",
+                "return 42; // directive-trivia probe",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: guarded method body must differ.");
+
+            string editedPath = WriteEditedSource("EditorGuardedReturn.cs", editedSource);
+
+            HotReloadDirectiveTriviaFixture fixture = new HotReloadDirectiveTriviaFixture();
+            Assert.That(fixture.EditorGuardedReturn(), Is.EqualTo(7));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadDirectiveTriviaFixture.EditorGuardedReturn));
+            Assert.That(fixture.EditorGuardedReturn(), Is.EqualTo(42));
+        }
+
+        /// <summary>
         /// What: under Debug code optimization, size-only small methods do not emit the
         /// aggregated inline-risk warning (branch a); Patched Reason stays empty.
         /// </summary>
