@@ -1,0 +1,19 @@
+{
+  "offset": 0,
+  "limit": 1,
+  "total": 1,
+  "results": [
+    {
+      "version": "6000.7.0a4",
+      "shortRevision": "7305b6f6fd4f",
+      "downloads": [
+        {
+          "platform": "MAC_OS",
+          "architecture": "ARM64",
+          "type": "PKG",
+          "url": "https://example.invalid/Unity-6000.7.0a4.pkg"
+        }
+      ]
+    }
+  ]
+}
