@@ -181,3 +181,168 @@ jobs:
         with:
           name: Unity test results (${{ matrix.unity-version }})
           path: artifacts
+
+  resolve-latest-6000-7:
+    name: Resolve latest 6000.7 editor
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      changeset: ${{ steps.resolve.outputs.changeset }}
+      editorUrl: ${{ steps.resolve.outputs.editorUrl }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+
+      - name: Resolve newest 6000.7-series Linux editor
+        id: resolve
+        working-directory: cli/release-automation
+        run: go run ./cmd/resolve-unity-release --series 6000.7 >> "$GITHUB_OUTPUT"
+
+  editmode-tests-latest-alpha:
+    name: EditMode Tests (latest 6000.7)
+    runs-on: ubuntu-latest
+    needs: resolve-latest-6000-7
+    timeout-minutes: 90
+    env:
+      HAS_UNITY_LICENSE: ${{ secrets.UNITY_LICENSE != '' }}
+      UNITY_VERSION: ${{ needs.resolve-latest-6000-7.outputs.version }}
+      UNITY_CHANGESET: ${{ needs.resolve-latest-6000-7.outputs.changeset }}
+      UNITY_EDITOR_URL: ${{ needs.resolve-latest-6000-7.outputs.editorUrl }}
+      UNITY_TARBALL: .unity-ci/unity-linux-editor.tar.xz
+      UNITY_INSTALL_DIR: .unity-ci/unity-editor
+      HOT_RELOAD_TEST_FILTER: io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+    steps:
+      - name: Checkout repository
+        if: env.HAS_UNITY_LICENSE == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          lfs: true
+
+      - name: Free disk space
+        if: env.HAS_UNITY_LICENSE == 'true'
+        run: |
+          set -eu
+          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h
+
+      # Why not cache the tarball: a single 6000.7 Linux editor archive is
+      # ~4GB and would exceed the 10GB Actions cache quota, evicting the
+      # existing GameCI Library caches. Re-download is ~2 minutes with curl
+      # retries, which is cheaper than that eviction.
+      - name: Download Linux editor
+        if: env.HAS_UNITY_LICENSE == 'true'
+        run: |
+          set -eu
+          mkdir -p .unity-ci
+          curl --fail --location --retry 3 --retry-delay 5 \
+            --output "$UNITY_TARBALL" \
+            "$UNITY_EDITOR_URL"
+          ls -lh "$UNITY_TARBALL"
+
+      - name: Install Linux editor
+        if: env.HAS_UNITY_LICENSE == 'true'
+        id: install-editor
+        run: |
+          set -eu
+          mkdir -p "$UNITY_INSTALL_DIR"
+          tar -xJf "$UNITY_TARBALL" -C "$UNITY_INSTALL_DIR"
+          UNITY_EDITOR=$(find "$UNITY_INSTALL_DIR" -path '*/Editor/Unity' -type f -print -quit)
+          test -n "$UNITY_EDITOR"
+          test -x "$UNITY_EDITOR"
+          echo "UNITY_EDITOR=$UNITY_EDITOR" >> "$GITHUB_ENV"
+          echo "editor=$UNITY_EDITOR" >> "$GITHUB_OUTPUT"
+          echo "Installed Unity $UNITY_VERSION at $UNITY_EDITOR"
+          df -h
+
+      - name: Cache Library folder
+        if: env.HAS_UNITY_LICENSE == 'true'
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: Library
+          key: Library-${{ env.UNITY_VERSION }}-debug-${{ hashFiles('Packages/src/**/*.cs', 'Assets/**/*.cs', 'Packages/manifest.json', 'Packages/packages-lock.json') }}
+          restore-keys: |
+            Library-${{ env.UNITY_VERSION }}-debug-
+
+      - name: Activate Unity license and run EditMode tests
+        if: env.HAS_UNITY_LICENSE == 'true'
+        timeout-minutes: 60
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        run: |
+          set -eu
+          mkdir -p artifacts "$RUNNER_TEMP/BlankProject/Assets"
+          trap '"$UNITY_EDITOR" -batchmode -nographics -quit -returnlicense \
+            -logFile /dev/stdout \
+            -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" \
+            -projectPath "$RUNNER_TEMP/BlankProject" >/dev/null 2>&1 || true' EXIT
+
+          LICENSE_VALUE=$(printf "%s" "$UNITY_LICENSE" | tr "\n" " " | sed -n 's/.*<DeveloperData Value="\([^"]*\)"\/>.*/\1/p')
+          test -n "$LICENSE_VALUE"
+          printf "%s" "$LICENSE_VALUE" | base64 -d > "$RUNNER_TEMP/developer-data.bin"
+          SERIAL=$(tail -c +5 "$RUNNER_TEMP/developer-data.bin" | tr -d "\r\n")
+          test "${#SERIAL}" -eq 27
+
+          # Why RUNNER_TEMP: Unity prints -username unmasked in COMMAND LINE
+          # ARGUMENTS. artifacts/ is uploaded from a public repository.
+          ACTIVATE_LOG="$RUNNER_TEMP/unity-activate.log"
+          ACTIVATE_FALLBACK_LOG="$RUNNER_TEMP/unity-activate-fallback.log"
+
+          ACTIVATED=false
+          ATTEMPT=1
+          while [ "$ATTEMPT" -le 3 ]; do
+            if "$UNITY_EDITOR" -batchmode -nographics -quit \
+              -logFile "$ACTIVATE_LOG" \
+              -serial "$SERIAL" \
+              -username "$UNITY_EMAIL" \
+              -password "$UNITY_PASSWORD" \
+              -projectPath "$RUNNER_TEMP/BlankProject"; then
+              ACTIVATED=true
+              break
+            fi
+            echo "Serial activation attempt $ATTEMPT failed"
+            tail -n 80 "$ACTIVATE_LOG" || true
+            ATTEMPT=$((ATTEMPT + 1))
+            sleep $((ATTEMPT * 5))
+          done
+
+          if [ "$ACTIVATED" != true ]; then
+            echo "Serial activation failed; falling back to email/password"
+            if ! "$UNITY_EDITOR" -batchmode -nographics -quit \
+              -logFile "$ACTIVATE_FALLBACK_LOG" \
+              -username "$UNITY_EMAIL" \
+              -password "$UNITY_PASSWORD" \
+              -projectPath "$RUNNER_TEMP/BlankProject"; then
+              echo "Email/password fallback failed"
+              tail -n 80 "$ACTIVATE_FALLBACK_LOG" || true
+              exit 1
+            fi
+          fi
+
+          # Why: this job invokes the extracted Editor binary, not GameCI's
+          # unity-test-runner (no 6000.7 Docker image). That runner always
+          # passes -debugCodeOptimization; Linux batchmode otherwise starts
+          # in Release, which rejects pause-point enable and JIT-inlines
+          # tiny patched getters.
+          "$UNITY_EDITOR" -batchmode -nographics -debugCodeOptimization \
+            -projectPath "$GITHUB_WORKSPACE" \
+            -accept-apiupdate \
+            -runTests \
+            -testPlatform EditMode \
+            -testFilter "$HOT_RELOAD_TEST_FILTER" \
+            -testResults artifacts/editmode-latest-6000-7.xml \
+            -logFile artifacts/unity-editmode-latest-6000-7.log
+
+      - name: Upload latest 6000.7 test results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always() && env.HAS_UNITY_LICENSE == 'true'
+        with:
+          name: Unity test results (latest 6000.7)
+          path: artifacts
