@@ -1,4 +1,4 @@
-#if ULOOP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM && !CINEMACHINE_3_OR_NEWER
 #nullable enable
 using Cinemachine;
 using UnityEditor;
