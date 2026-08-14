@@ -331,6 +331,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an Added outcome appends Added: N to the apply message.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithAddedOutcome_AppendsAddedCount()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Caller", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Added("Type.AddedPing", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 2);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Methods[1].Kind, Is.EqualTo("Added"));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=2. Added: 1."));
+        }
+
+        /// <summary>
         /// What: BuildApplyResponse keeps LifecycleNote on Methods and aggregates a count into
         /// Message instead of concatenating every note (two notes must not paste both paragraphs).
         /// </summary>

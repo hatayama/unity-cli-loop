@@ -88,7 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 outcomes,
                 warnings,
                 patchedTotal,
-                HotReloadPatcher.ActivePatchCount,
+                HotReloadPatcher.ActiveChangeCount,
                 suppressedPausePointIds,
                 unchangedTotal,
                 retargetedPausePointIds);
@@ -355,11 +355,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compileResult.AssemblyBytes,
                 compileResult.PdbBytes,
                 compileResult.Assembly);
+            HotReloadAddedMemberRegistry.BeginFileGeneration(projectRelativePath);
             Dictionary<string, string> bindFailureReasonByShimTypeName =
                 BindShimAccessors(compileResult.Assembly);
             List<string> inlineRiskMethodLabels = new List<string>();
             int patchedCount = 0;
-            entriesToPatch = TakePatchableEntries(entriesToPatch, outcomes, assemblyResolvePath);
             foreach (TransformWorkerEntryDto entry in entriesToPatch)
             {
                 HotReloadMethodOutcome outcome = ApplyEntry(
@@ -445,6 +445,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameterTypeFullNames,
                 genericArity: 0);
 
+            if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod)
+            {
+                return ApplyAddedMethodEntry(
+                    entry,
+                    methodLabel,
+                    shimAssembly,
+                    bindFailureReasonByShimTypeName,
+                    filePath,
+                    projectRelativePath);
+            }
+
             // Only "delegation" selects the forwarding patch; null/empty/anything else is transplant.
             HotReloadPatchShape patchShape = entry.patchKind == HotReloadConstants.PatchKindDelegation
                 ? HotReloadPatchShape.Delegation
@@ -479,24 +490,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     filePath);
             }
 
-            MethodInfo shimMethod = shimType.GetMethod(
-                entry.shimMethodName,
-                BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
+            (MethodInfo shimMethod, string shimLookupError) = FindShimMethod(shimType, entry.shimMethodName);
             if (shimMethod == null)
             {
-                // Fall back to a broader lookup — DeclaredOnly can miss when the compiler emits
-                // unexpected metadata flags, but still prefer public static.
-                shimMethod = shimType.GetMethod(
-                    entry.shimMethodName,
-                    BindingFlags.Public | BindingFlags.Static);
-            }
-
-            if (shimMethod == null)
-            {
-                return HotReloadMethodOutcome.Failed(
-                    methodLabel,
-                    "Shim method not found: " + entry.shimTypeName + "." + entry.shimMethodName,
-                    filePath);
+                return HotReloadMethodOutcome.Failed(methodLabel, shimLookupError, filePath);
             }
 
             // Why before Apply: Apply notifies OnHotReloadPatchStateChanged(true) after the
@@ -533,6 +530,70 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return HotReloadMethodOutcome.Patched(methodLabel, filePath, entry.lifecycleNote);
+        }
+
+        private static HotReloadMethodOutcome ApplyAddedMethodEntry(
+            TransformWorkerEntryDto entry,
+            string methodLabel,
+            Assembly shimAssembly,
+            IReadOnlyDictionary<string, string> bindFailureReasonByShimTypeName,
+            string filePath,
+            string projectRelativePath)
+        {
+            // Added methods with accessors share the shim type's __BindAccessors; a bind
+            // failure leaves those delegates unbound, so the entry must not be registered.
+            if (bindFailureReasonByShimTypeName.TryGetValue(
+                    entry.shimTypeName ?? string.Empty,
+                    out string bindFailureReason))
+            {
+                return HotReloadMethodOutcome.Failed(methodLabel, bindFailureReason, filePath);
+            }
+
+            Type shimType = FindShimType(shimAssembly, entry.shimTypeName);
+            if (shimType == null)
+            {
+                return HotReloadMethodOutcome.Failed(
+                    methodLabel,
+                    "Shim type not found in compiled shim assembly: " + entry.shimTypeName,
+                    filePath);
+            }
+
+            (MethodInfo shimMethod, string shimLookupError) = FindShimMethod(shimType, entry.shimMethodName);
+            if (shimMethod == null)
+            {
+                return HotReloadMethodOutcome.Failed(methodLabel, shimLookupError, filePath);
+            }
+
+            HotReloadAddedMemberRegistry.Register(
+                projectRelativePath,
+                methodLabel,
+                shimMethod,
+                filePath);
+            return HotReloadMethodOutcome.Added(methodLabel, filePath, entry.lifecycleNote);
+        }
+
+        private static (MethodInfo ShimMethod, string ErrorMessage) FindShimMethod(
+            Type shimType,
+            string shimMethodName)
+        {
+            MethodInfo shimMethod = shimType.GetMethod(
+                shimMethodName,
+                BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
+            if (shimMethod == null)
+            {
+                // Fall back to a broader lookup — DeclaredOnly can miss when the compiler emits
+                // unexpected metadata flags, but still prefer public static.
+                shimMethod = shimType.GetMethod(
+                    shimMethodName,
+                    BindingFlags.Public | BindingFlags.Static);
+            }
+
+            if (shimMethod == null)
+            {
+                return (null, "Shim method not found: " + shimType.Name + "." + shimMethodName);
+            }
+
+            return (shimMethod, null);
         }
 
         private static string FormatInlineRiskAggregatedWarning(
@@ -607,9 +668,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Invokes each shim type's binder (emitted when the type carries at least one accessor
-        /// delegate) once, before any patch is applied, so no delegation shim can run with
-        /// unbound accessor delegates. Returns bind failures keyed by shim type name; every
-        /// delegation entry in a failed type becomes Failed instead of being patched.
+        /// delegate) once, before any patch is applied, so no delegation shim or added-method
+        /// accessor rewrite can run with unbound accessor delegates. Returns bind failures keyed
+        /// by shim type name; every delegation entry and added-method entry in a failed type
+        /// becomes Failed instead of being patched or registered.
         /// Internal so tests can pin the failure contract directly — an end-to-end bind failure
         /// cannot be fabricated once shim compilation has succeeded against the same assembly.
         /// </summary>
@@ -804,43 +866,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return false;
-        }
-
-        // Why not ApplyEntry: added methods are absent from the compiled assembly, so Resolve
-        // always fails. PR-2 replaces this Skipped outcome with Added.
-        private static TransformWorkerEntryDto[] TakePatchableEntries(
-            TransformWorkerEntryDto[] entries,
-            List<HotReloadMethodOutcome> outcomes,
-            string filePath)
-        {
-            if (entries == null || entries.Length == 0)
-            {
-                return Array.Empty<TransformWorkerEntryDto>();
-            }
-
-            List<TransformWorkerEntryDto> patchable = new List<TransformWorkerEntryDto>();
-            foreach (TransformWorkerEntryDto entry in entries)
-            {
-                if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod)
-                {
-                    string[] parameterTypeFullNames = entry.parameterTypeFullNames ?? Array.Empty<string>();
-                    string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
-                        entry.typeMetadataName,
-                        entry.methodName,
-                        parameterTypeFullNames,
-                        genericArity: 0);
-                    outcomes.Add(
-                        HotReloadMethodOutcome.Skipped(
-                            methodLabel,
-                            HotReloadConstants.AddedMethodDeferredSkipReason,
-                            filePath));
-                    continue;
-                }
-
-                patchable.Add(entry);
-            }
-
-            return patchable.ToArray();
         }
 
         private static string FormatRemovedMembersWarning(TransformWorkerRemovedMemberDto[] removedMembers)

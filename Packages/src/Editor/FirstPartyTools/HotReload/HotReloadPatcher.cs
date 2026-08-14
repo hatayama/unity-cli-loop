@@ -88,7 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 return null;
             };
-            HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = () => ShimByMethod.Count;
+            HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = () => ActiveChangeCount;
             HotReloadPausePointCoordination.GetTransplantLocals = method =>
                 TransplantLocalsByMethod.TryGetValue(method, out IReadOnlyList<LocalBuilder> locals)
                     ? locals
@@ -238,6 +238,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ShimByMethod.Clear();
             FilePathByMethod.Clear();
             HotReloadShimRegistry.Clear();
+            HotReloadAddedMemberRegistry.Clear();
             TransplantLocalsByMethod.Clear();
             TransplantPreambleLengthByMethod.Clear();
             HotReloadInvocationRegistry.Clear();
@@ -281,6 +282,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// How many methods currently have an active patch recorded in the ledger.
         /// </summary>
         public static int ActivePatchCount => ShimByMethod.Count;
+
+        /// <summary>
+        /// Harmony patches plus added-method shims. Domain reload drops both, so Play-entry
+        /// warnings and ActivePatchTotal count this sum.
+        /// </summary>
+        public static int ActiveChangeCount =>
+            ShimByMethod.Count + HotReloadAddedMemberRegistry.Count;
 
         /// <summary>
         /// Returns a sorted list of active patches (method key + source file path) for status
