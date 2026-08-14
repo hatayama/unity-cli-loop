@@ -30,7 +30,7 @@ consume exactly one value token.
 |-----------|------|---------|-------------|
 | `--files` | array | - | Project-relative `.cs` paths whose method bodies should be hot-reloaded. Required when neither `--revert-all` nor `--status` is set |
 | `--revert-all` | flag | - | Remove every active hot-reload patch and clear the patch ledger. When set, `--files` is ignored |
-| `--status` | flag | - | Lists the currently patched methods without applying or reverting anything. |
+| `--status` | flag | - | Lists the currently active changes (patched methods and added members) without applying or reverting anything. |
 
 ## Checking what is currently patched
 
@@ -64,8 +64,10 @@ ledger across runs.
 
 Only ordinary method declarations and property getters with a body are patched.
 Constructors, finalizers, operators, event accessors, and `interface` members
-(including default interface implementations) are never scanned: edits to them produce
-**no per-method entry at all** and are silently not applied — use `uloop compile` for those.
+(including default interface implementations) are never scanned: **edits** to them
+produce **no per-method entry at all** and are silently not applied — use
+`uloop compile` for those. (**Adding** one of these member kinds is different:
+the addition is detected and reported as `Skipped`, per the next section.)
 
 ### Added methods and fields
 
@@ -105,17 +107,18 @@ Adding a type (`class`, `struct`, `enum`, `record`), a property, an event, an
 indexer, a constructor, or an operator is still out of scope and reported as
 `Skipped`; land those with `uloop compile`.
 
-Edits outside method bodies never take effect: changing a `const` value, a field
-initializer, or any declaration other than a method body leaves runtime behavior
-unchanged even though the response reports `Success` — shims resolve those symbols
+Outside method bodies, only member additions (previous section) take effect.
+Every other declaration edit — changing a `const` value, a compiled field's
+initializer, an attribute — leaves runtime behavior unchanged even though the
+response reports `Success` — shims resolve those symbols
 against the already-compiled assembly, and C# bakes `const` values into IL at compile
 time. Changed `const` values (including enum member values) are detected and reported
 as a `Warnings` entry naming the constant and both values. When a verified source
-baseline is available (next paragraph), other outside-body drift — existing-field initializers, attributes, and other
-declaration edits — is reported as a `Warnings` entry as well (handled added
-members and reported removed members are excluded from this generic warning);
-without a baseline it stays silent. Either way, use `uloop compile`
-for such edits.
+baseline is available (next paragraph), other outside-body drift — existing-field
+initializers, attributes, and other declaration edits — is reported as a `Warnings`
+entry as well (handled added members and reported removed members are excluded
+from this generic warning); without a baseline it stays silent. Either way, use
+`uloop compile` for such edits.
 
 ### Explore with hot reload, land structure with compile
 
@@ -240,8 +243,10 @@ a pause is not evidence either way.
   default), not just `uloop compile`. `uloop control-play-mode --action Play` warns with
   the counts when it is about to drop patches or pause points. There is no persistence
   and no automatic re-apply.
-- Never reflected by hot reload: new fields, field initializer changes, new types, and
-  signature changes. Those always need `uloop compile`.
+- Never reflected by hot reload: initializer changes on compiled fields, new types,
+  and signature changes. Those always need `uloop compile`. (Added methods and
+  fields are reflected per the rules above, but only for the current Editor
+  session and only within their own file.)
 - A run with `Failed` outcomes still applies every other patch — outcomes are
   per-method and there is no run-level rollback. `Methods` is the authoritative
   record of which bodies changed.

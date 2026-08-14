@@ -761,7 +761,7 @@
           },
           "Status": {
             "type": "boolean",
-            "description": "Lists the currently patched methods without applying or reverting anything."
+            "description": "Lists the currently active changes (patched methods and added members) without applying or reverting anything."
           }
         }
       }
