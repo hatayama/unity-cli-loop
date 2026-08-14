@@ -15,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     /// </summary>
     public static class HotReloadAddedFieldStore
     {
-        // Keep in sync with the transform worker when it starts emitting field keys (PR-4).
+        // Keep in sync with TransformWorkerProgramMarker.AddedFieldKeySeparator.
         public const string FieldKeySeparator = "::";
 
         private static ConditionalWeakTable<object, Dictionary<string, object>> InstanceTables =

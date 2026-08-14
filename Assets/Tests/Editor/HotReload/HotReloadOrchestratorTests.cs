@@ -1943,6 +1943,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: adding a field and reading/writing it from edited bodies stores values per
+        /// instance, and a second apply keeps the stored values.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedField_AppliesThroughStoreAndKeepsValuesOnReapply()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = WithAddedFieldAccesses(onDisk);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldApplyE2E.cs", edited),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            AssertHasPatched(first, nameof(HotReloadAddedFieldApplyFixture.WriteAdded));
+
+            HotReloadAddedFieldApplyFixture firstHost = new HotReloadAddedFieldApplyFixture();
+            HotReloadAddedFieldApplyFixture secondHost = new HotReloadAddedFieldApplyFixture();
+            firstHost.WriteAdded(10);
+            secondHost.WriteAdded(20);
+            Assert.That(firstHost.ReadAdded(), Is.EqualTo(10));
+            Assert.That(secondHost.ReadAdded(), Is.EqualTo(20));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldApplyE2EReapply.cs", edited),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            AssertHasPatched(second, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            Assert.That(firstHost.ReadAdded(), Is.EqualTo(10));
+            Assert.That(secondHost.ReadAdded(), Is.EqualTo(20));
+        }
+
+        /// <summary>
         /// What: re-applying without the added method clears that file's added-member ledger
         /// so --status cannot keep a method the source no longer declares.
         /// </summary>
@@ -2412,6 +2449,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "HotReloadAddedMethodApplyFixture.cs");
             Assert.That(File.Exists(path), Is.True, "Added-method apply fixture source missing: " + path);
             return Path.GetFullPath(path);
+        }
+
+        private static string ResolveAddedFieldApplyFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadAddedFieldApplyFixture.cs");
+            Assert.That(File.Exists(path), Is.True, "Added-field apply fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string WithAddedFieldAccesses(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ReadAdded()\n        {\n            return 0;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n        }",
+                "        public int AddedCount;\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ReadAdded()\n        {\n            return AddedCount;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n            AddedCount = value;\n        }",
+                StringComparison.Ordinal);
         }
 
         private static string ResolveAddedMemberHostPath()
