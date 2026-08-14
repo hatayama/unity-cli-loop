@@ -2249,6 +2249,7 @@ public static class TransformWorkerProgram
             typeState,
             semanticModel,
             compiledType,
+            targetTypesAssemblySymbol,
             addedFieldCatalog,
             declarationDriftWarnings);
 
@@ -2508,7 +2509,7 @@ public static class TransformWorkerProgram
                 continue;
             }
 
-                addedMethodCatalog.AddRemovedSyntaxKey(pair.Key);
+            addedMethodCatalog.AddRemovedSyntaxKey(pair.Key);
             string name = pair.Value.Identifier.Text;
             if (!seenNames.Add(name))
             {
@@ -2951,6 +2952,7 @@ public static class TransformWorkerProgram
         TypeEmitState typeState,
         SemanticModel semanticModel,
         INamedTypeSymbol compiledType,
+        IAssemblySymbol targetTypesAssemblySymbol,
         AddedFieldCatalog addedFieldCatalog,
         List<string> declarationDriftWarnings)
     {
@@ -2968,6 +2970,7 @@ public static class TransformWorkerProgram
                 ClassifyOneAddedField(
                     typeState,
                     semanticModel,
+                    targetTypesAssemblySymbol,
                     fieldDeclaration,
                     variable,
                     fieldSymbol,
@@ -2980,6 +2983,7 @@ public static class TransformWorkerProgram
     private static void ClassifyOneAddedField(
         TypeEmitState typeState,
         SemanticModel semanticModel,
+        IAssemblySymbol targetTypesAssemblySymbol,
         FieldDeclarationSyntax fieldDeclaration,
         VariableDeclaratorSyntax variable,
         IFieldSymbol fieldSymbol,
@@ -3014,39 +3018,196 @@ public static class TransformWorkerProgram
             Initializer = variable.Initializer != null ? variable.Initializer.Value : null
         };
 
-        // Why skip struct hosts: GetOrInit boxes the receiver, so every access looks like a
-        // new instance and re-runs the initializer instead of remembering the value.
-        if (typeState.TypeSymbol.TypeKind == TypeKind.Struct)
+        binding.UnavailableReason = EvaluateAddedFieldAvailability(
+            typeState.TypeSymbol,
+            semanticModel,
+            targetTypesAssemblySymbol,
+            fieldSymbol,
+            binding);
+
+        if (binding.UnavailableReason != null)
         {
-            binding.UnavailableReason = AddedFieldSkipReasons.StructHost;
             addedFieldCatalog.RegisterUnavailable(binding);
             return;
         }
 
         if (fieldSymbol.IsConst)
         {
-            if (TryCreateConstantLiteral(binding.ConstantValue, fieldSymbol.Type) == null)
-            {
-                binding.UnavailableReason = AddedFieldSkipReasons.UnavailableAddedField;
-                addedFieldCatalog.RegisterUnavailable(binding);
-                return;
-            }
-
             addedFieldCatalog.RegisterConst(binding);
             return;
         }
 
-        // Why skip private/internal initializer access: the injected static lambda is a normal
-        // method in the shim assembly and does not get Harmony skip-visibility.
-        if (binding.Initializer != null
-            && SubtreeHasInaccessibleMemberAccess(semanticModel, new[] { binding.Initializer }))
+        addedFieldCatalog.RegisterStore(binding);
+    }
+
+    private static string EvaluateAddedFieldAvailability(
+        INamedTypeSymbol hostType,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetTypesAssemblySymbol,
+        IFieldSymbol fieldSymbol,
+        AddedFieldBinding binding)
+    {
+        if (fieldSymbol.IsConst)
         {
-            binding.UnavailableReason = AddedFieldSkipReasons.InaccessibleInitializer;
-            addedFieldCatalog.RegisterUnavailable(binding);
-            return;
+            if (TryCreateConstantLiteral(binding.ConstantValue, fieldSymbol.Type) == null)
+            {
+                return AddedFieldSkipReasons.UnavailableAddedField;
+            }
+
+            return null;
         }
 
-        addedFieldCatalog.RegisterStore(binding);
+        // Why after const: added consts on struct hosts still fold to literals; the store
+        // identity problem only applies to instance/static storage.
+        if (hostType.TypeKind == TypeKind.Struct)
+        {
+            return AddedFieldSkipReasons.StructHost;
+        }
+
+        if (!AccessibilityRules.IsExternallyVisibleType(fieldSymbol.Type))
+        {
+            return AddedFieldSkipReasons.FieldTypeNotExternallyVisible;
+        }
+
+        if (binding.Initializer != null
+            && InitializerCannotEmitInShimLambda(
+                binding.Initializer,
+                semanticModel,
+                hostType,
+                targetTypesAssemblySymbol))
+        {
+            return AddedFieldSkipReasons.InitializerNotLiteralOrExternalStatic;
+        }
+
+        return null;
+    }
+
+    // Why this gate (not inaccessible-only): the initializer is spliced into a static lambda on
+    // a shim type, so even public instance members of the host are CS0103 / CS0026, and
+    // same-file added members do not exist on the compiled type the shim references.
+    private static bool InitializerCannotEmitInShimLambda(
+        ExpressionSyntax initializer,
+        SemanticModel semanticModel,
+        INamedTypeSymbol hostType,
+        IAssemblySymbol targetTypesAssemblySymbol)
+    {
+        foreach (SyntaxNode node in initializer.DescendantNodesAndSelf())
+        {
+            if (NameofRules.IsInsideNameofArgument(node))
+            {
+                continue;
+            }
+
+            if (node is ThisExpressionSyntax || node is BaseExpressionSyntax)
+            {
+                return true;
+            }
+
+            if (HasDisallowedInitializerSymbol(
+                semanticModel.GetSymbolInfo(node).Symbol,
+                hostType,
+                targetTypesAssemblySymbol,
+                initializer.SyntaxTree))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasDisallowedInitializerSymbol(
+        ISymbol symbol,
+        INamedTypeSymbol hostType,
+        IAssemblySymbol targetTypesAssemblySymbol,
+        SyntaxTree currentTree)
+    {
+        if (symbol == null
+            || symbol is INamespaceSymbol
+            || symbol is ITypeSymbol
+            || symbol is ILabelSymbol
+            || symbol is IRangeVariableSymbol)
+        {
+            return false;
+        }
+
+        if (symbol is not IFieldSymbol
+            && symbol is not IPropertySymbol
+            && symbol is not IMethodSymbol
+            && symbol is not IEventSymbol)
+        {
+            return false;
+        }
+
+        if (!symbol.IsStatic)
+        {
+            return true;
+        }
+
+        if (hostType != null
+            && SymbolEqualityComparer.Default.Equals(symbol.ContainingType, hostType))
+        {
+            return true;
+        }
+
+        if (IsSameFileAddedMember(symbol, targetTypesAssemblySymbol, currentTree))
+        {
+            return true;
+        }
+
+        return AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol);
+    }
+
+    private static bool IsSameFileAddedMember(
+        ISymbol symbol,
+        IAssemblySymbol targetTypesAssemblySymbol,
+        SyntaxTree currentTree)
+    {
+        if (symbol.ContainingType == null || currentTree == null)
+        {
+            return false;
+        }
+
+        bool declaredInCurrentTree = false;
+        foreach (SyntaxReference reference in symbol.DeclaringSyntaxReferences)
+        {
+            if (reference.SyntaxTree == currentTree)
+            {
+                declaredInCurrentTree = true;
+                break;
+            }
+        }
+
+        if (!declaredInCurrentTree)
+        {
+            return false;
+        }
+
+        INamedTypeSymbol compiledType = FindCompiledType(symbol.ContainingType, targetTypesAssemblySymbol);
+        if (compiledType == null)
+        {
+            return true;
+        }
+
+        if (symbol is IFieldSymbol fieldSymbol)
+        {
+            return !CompiledTypeHasField(compiledType, fieldSymbol);
+        }
+
+        if (symbol is IMethodSymbol methodSymbol && methodSymbol.MethodKind == MethodKind.Ordinary)
+        {
+            return !CompiledTypeHasOrdinaryMethod(compiledType, methodSymbol);
+        }
+
+        foreach (ISymbol member in compiledType.GetMembers(symbol.Name))
+        {
+            if (member.Kind == symbol.Kind)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool FieldHasSerializationAttribute(FieldDeclarationSyntax fieldDeclaration)
@@ -3099,6 +3260,11 @@ public static class TransformWorkerProgram
         if (BodyHasUnsupportedAddedFieldCompound(bodyNode, semanticModel, addedFieldCatalog))
         {
             return AddedFieldSkipReasons.UnavailableAddedField;
+        }
+
+        if (BodyHasNonNumericAddedFieldIncrement(bodyNode, semanticModel, addedFieldCatalog))
+        {
+            return AddedFieldSkipReasons.IncrementNotNumeric;
         }
 
         if (BodyHasConsumedAddedFieldWrite(bodyNode, semanticModel, addedFieldCatalog))
@@ -3260,7 +3426,8 @@ public static class TransformWorkerProgram
         foreach (AssignmentExpressionSyntax assignment in bodyNode.DescendantNodesAndSelf()
             .OfType<AssignmentExpressionSyntax>())
         {
-            if (!IsStoreAddedInstanceField(semanticModel, assignment.Left, addedFieldCatalog))
+            if (assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
+                || !IsStoreAddedInstanceField(semanticModel, assignment.Left, addedFieldCatalog))
             {
                 continue;
             }
@@ -3302,6 +3469,79 @@ public static class TransformWorkerProgram
         }
 
         return false;
+    }
+
+    private static bool BodyHasNonNumericAddedFieldIncrement(
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        foreach (PrefixUnaryExpressionSyntax prefix in bodyNode.DescendantNodesAndSelf()
+            .OfType<PrefixUnaryExpressionSyntax>())
+        {
+            if (IsNonNumericAddedFieldIncrement(semanticModel, prefix.Kind(), prefix.Operand, addedFieldCatalog))
+            {
+                return true;
+            }
+        }
+
+        foreach (PostfixUnaryExpressionSyntax postfix in bodyNode.DescendantNodesAndSelf()
+            .OfType<PostfixUnaryExpressionSyntax>())
+        {
+            if (IsNonNumericAddedFieldIncrement(semanticModel, postfix.Kind(), postfix.Operand, addedFieldCatalog))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsNonNumericAddedFieldIncrement(
+        SemanticModel semanticModel,
+        SyntaxKind kind,
+        ExpressionSyntax operand,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        if (!IsIncrementOrDecrement(kind) || !IsStoreAddedField(semanticModel, operand, addedFieldCatalog))
+        {
+            return false;
+        }
+
+        IFieldSymbol field = TryGetFieldSymbol(semanticModel, operand);
+        return field != null && !IsIncrementablePrimitiveOrEnum(field.Type);
+    }
+
+    private static bool IsIncrementablePrimitiveOrEnum(ITypeSymbol typeSymbol)
+    {
+        if (typeSymbol == null)
+        {
+            return false;
+        }
+
+        if (typeSymbol.TypeKind == TypeKind.Enum)
+        {
+            return true;
+        }
+
+        switch (typeSymbol.SpecialType)
+        {
+            case SpecialType.System_SByte:
+            case SpecialType.System_Byte:
+            case SpecialType.System_Int16:
+            case SpecialType.System_UInt16:
+            case SpecialType.System_Int32:
+            case SpecialType.System_UInt32:
+            case SpecialType.System_Int64:
+            case SpecialType.System_UInt64:
+            case SpecialType.System_Char:
+            case SpecialType.System_Single:
+            case SpecialType.System_Double:
+            case SpecialType.System_Decimal:
+                return true;
+            default:
+                return false;
+        }
     }
 
     private static bool BodyHasValueTypeAddedFieldMemberWrite(
@@ -3491,6 +3731,11 @@ public static class TransformWorkerProgram
 
         if (value is float floatValue)
         {
+            if (float.IsNaN(floatValue) || float.IsInfinity(floatValue))
+            {
+                return null;
+            }
+
             return SyntaxFactory.LiteralExpression(
                 SyntaxKind.NumericLiteralExpression,
                 SyntaxFactory.Literal(floatValue));
@@ -3498,6 +3743,11 @@ public static class TransformWorkerProgram
 
         if (value is double doubleValue)
         {
+            if (double.IsNaN(doubleValue) || double.IsInfinity(doubleValue))
+            {
+                return null;
+            }
+
             return SyntaxFactory.LiteralExpression(
                 SyntaxKind.NumericLiteralExpression,
                 SyntaxFactory.Literal(doubleValue));
@@ -5546,7 +5796,11 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         SyntaxKind binaryKind = GetCompoundAssignmentBinaryKind(node.Kind());
         ExpressionSyntax getCall = CreateAddedFieldGetOrInit(binding, receiver);
         ExpressionSyntax combined = SyntaxFactory.BinaryExpression(binaryKind, getCall, visitedRight);
-        return CreateAddedFieldSet(binding, receiver, combined).WithTriviaFrom(node);
+        return CreateAddedFieldSet(
+                binding,
+                receiver,
+                CastToAddedFieldType(combined, binding.FieldType))
+            .WithTriviaFrom(node);
     }
 
     private SyntaxNode RewriteAddedFieldIncrement(
@@ -5556,34 +5810,42 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
     {
         ExpressionSyntax receiver = ExtractAddedFieldReceiver(operand, binding.IsStatic);
         ExpressionSyntax getCall = CreateAddedFieldGetOrInit(binding, receiver);
+        SyntaxKind binaryKind = IsDecrementNode(triviaSource)
+            ? SyntaxKind.SubtractExpression
+            : SyntaxKind.AddExpression;
         ExpressionSyntax combined = SyntaxFactory.BinaryExpression(
-            SyntaxKind.AddExpression,
+            binaryKind,
             getCall,
             SyntaxFactory.LiteralExpression(
                 SyntaxKind.NumericLiteralExpression,
                 SyntaxFactory.Literal(1)));
-        if (triviaSource is PrefixUnaryExpressionSyntax prefix
-            && prefix.IsKind(SyntaxKind.PreDecrementExpression))
+        return CreateAddedFieldSet(
+                binding,
+                receiver,
+                CastToAddedFieldType(combined, binding.FieldType))
+            .WithTriviaFrom(triviaSource);
+    }
+
+    private static bool IsDecrementNode(SyntaxNode node)
+    {
+        if (node is PrefixUnaryExpressionSyntax prefix)
         {
-            combined = SyntaxFactory.BinaryExpression(
-                SyntaxKind.SubtractExpression,
-                getCall,
-                SyntaxFactory.LiteralExpression(
-                    SyntaxKind.NumericLiteralExpression,
-                    SyntaxFactory.Literal(1)));
-        }
-        else if (triviaSource is PostfixUnaryExpressionSyntax postfix
-            && postfix.IsKind(SyntaxKind.PostDecrementExpression))
-        {
-            combined = SyntaxFactory.BinaryExpression(
-                SyntaxKind.SubtractExpression,
-                getCall,
-                SyntaxFactory.LiteralExpression(
-                    SyntaxKind.NumericLiteralExpression,
-                    SyntaxFactory.Literal(1)));
+            return prefix.IsKind(SyntaxKind.PreDecrementExpression);
         }
 
-        return CreateAddedFieldSet(binding, receiver, combined).WithTriviaFrom(triviaSource);
+        return node is PostfixUnaryExpressionSyntax postfix
+            && postfix.IsKind(SyntaxKind.PostDecrementExpression);
+    }
+
+    // Why cast: C# compound assignment and ++/-- apply a conversion back to the field type
+    // (byte += 1 is (byte)(byte + 1)). Emitting the binary without that conversion is CS1503.
+    private static ExpressionSyntax CastToAddedFieldType(ExpressionSyntax expression, ITypeSymbol fieldType)
+    {
+        TypeSyntax typeSyntax = SyntaxFactory.ParseTypeName(
+            fieldType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        return SyntaxFactory.CastExpression(
+            typeSyntax,
+            SyntaxFactory.ParenthesizedExpression(expression));
     }
 
     private ExpressionSyntax ExtractAddedFieldReceiver(ExpressionSyntax expression, bool isStatic)
@@ -6542,6 +6804,9 @@ internal sealed class AddedMethodCatalog
     }
 }
 
+/// <summary>
+/// What: one added field's store/const/unavailable binding used by skip evaluation and rewrite.
+/// </summary>
 internal sealed class AddedFieldBinding
 {
     public string FieldKey { get; set; }
@@ -6565,6 +6830,10 @@ internal sealed class AddedFieldBinding
     public bool IsStoreRewriteable => UnavailableReason == null && !IsConst;
 }
 
+/// <summary>
+/// What: file-wide catalog of added fields, syntax keys for drift strip, and whether any
+/// shim body actually emitted a HotReloadAddedFieldStore call.
+/// </summary>
 internal sealed class AddedFieldCatalog
 {
     private readonly Dictionary<string, AddedFieldBinding> _byKey =
@@ -6633,15 +6902,27 @@ internal sealed class AddedFieldCatalog
     }
 }
 
+/// <summary>
+/// What: skip and warning strings for added-field classification. Keep in the existing
+/// "reason + run uloop compile" style; the worker cannot reference HotReloadConstants.
+/// </summary>
 internal static class AddedFieldSkipReasons
 {
     public const string StructHost =
         "Added fields on struct types are skipped; the store requires a reference-type instance. "
         + "Run 'uloop compile' to add them.";
 
-    public const string InaccessibleInitializer =
-        "Added field initializer accesses inaccessible members; the initializer lambda cannot skip visibility. "
+    public const string InitializerNotLiteralOrExternalStatic =
+        "Added field initializer is not a literal or externally visible static member; "
+        + "the shim lambda cannot use instance, host-type, or same-file added members. "
         + "Run 'uloop compile'.";
+
+    public const string FieldTypeNotExternallyVisible =
+        "Added field type is not visible to the shim assembly. Run 'uloop compile'.";
+
+    public const string IncrementNotNumeric =
+        "Increment or decrement of an added field is skipped unless the type is a numeric "
+        + "primitive or enum. Run 'uloop compile'.";
 
     public const string RefOutIn =
         "Added fields cannot be passed by ref, out, or in. Run 'uloop compile'.";
@@ -6655,7 +6936,8 @@ internal static class AddedFieldSkipReasons
         + "Run 'uloop compile'.";
 
     public const string ValueTypeMemberWrite =
-        "Writes to members of an added value-type field cannot be rewritten. Run 'uloop compile'.";
+        "Writes to members of an added value-type field, and instance method calls on that field, "
+        + "cannot be rewritten. Run 'uloop compile'.";
 
     public const string UnavailableAddedField =
         "Uses an added field that hot reload cannot emit. Run 'uloop compile'.";

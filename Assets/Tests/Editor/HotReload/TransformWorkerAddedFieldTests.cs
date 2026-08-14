@@ -252,11 +252,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an added field initializer that touches a private member skips referencing
-        /// methods so the initializer lambda cannot throw FieldAccessException at runtime.
+        /// What: an added field initializer that touches a host instance member skips, including
+        /// private fields, because the static shim lambda cannot bind those names.
         /// </summary>
         [Test]
-        public async Task Skip_PrivateInitializer_UsesInaccessibleReason()
+        public async Task Skip_PrivateInitializer_UsesLiteralOrExternalStaticReason()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = WithHostMembers(onDisk, "public int AddedFromPrivate = _privateSeed;");
@@ -271,8 +271,62 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "inaccessible");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "literal or externally visible static");
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+        }
+
+        /// <summary>
+        /// What: an added field initializer that reads a public instance field of the host is
+        /// skipped; the shim is a different static class so the name would be CS0103.
+        /// </summary>
+        [Test]
+        public async Task Skip_PublicInstanceInitializer_UsesLiteralOrExternalStaticReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public int AddedFromPublic = PublicSeed + 1;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return AddedFromPublic + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldPublicInit.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "literal or externally visible static");
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+        }
+
+        /// <summary>
+        /// What: an initializer that only uses a literal and an externally visible static API
+        /// still rewrites to GetOrInit with a static lambda.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_ExternalStaticInitializer_EmitsStaticLambda()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public int AddedFromStatic = Math.Abs(-4);");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return AddedFromStatic + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldStaticInit.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null);
+            string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(slice, Does.Contain("GetOrInit<"));
+            Assert.That(slice, Does.Contain("static () =>"));
+            Assert.That(slice, Does.Contain("Abs"));
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
         }
 
         /// <summary>
@@ -320,11 +374,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: assigning through a receiver that may have side effects skips so Get and Set
-        /// do not evaluate it twice.
+        /// What: compound assignment through a receiver that may have side effects skips so
+        /// Get and Set do not evaluate it twice.
         /// </summary>
         [Test]
         public async Task Skip_DoubleEvalReceiver_UsesDedicatedReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public int AddedCount;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            Get().AddedCount += value;\n            return value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldDoubleEval.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "side effects");
+        }
+
+        /// <summary>
+        /// What: a simple assignment through a side-effect receiver still rewrites because Set
+        /// evaluates the receiver once.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_SimpleAssignmentSideEffectReceiver_DoesNotSkip()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = WithHostMembers(onDisk, "public int AddedCount;");
@@ -335,11 +412,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
 
             TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
-                WriteEdited("AddedFieldDoubleEval.cs", edited),
+                WriteEdited("AddedFieldSimpleAssignReceiver.cs", edited),
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "side effects");
+
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null);
+            string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(slice, Does.Contain("Set<"));
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
+        }
+
+        /// <summary>
+        /// What: byte += and ++ emit a cast back to byte so the Set call matches compound
+        /// conversion and does not pass an int argument.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_ByteCompoundAndIncrement_CastsToByte()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public byte AddedByte;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            AddedByte += 1;\n            AddedByte++;\n            return AddedByte;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldByteCompound.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null);
+            string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(slice, Does.Contain("Set<"));
+            Assert.That(slice, Does.Contain("GetOrInit<"));
+            Assert.That(slice, Does.Contain("(byte)("));
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
         }
 
         /// <summary>
@@ -391,6 +503,177 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "struct");
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+        }
+
+        /// <summary>
+        /// What: an added const on a struct host still folds to a literal because const folding
+        /// does not use the instance store.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_AddedConstOnStructHost_FoldsToLiteral()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int Existing;\n",
+                "        public int Existing;\n\n        public const int AddedConst = 4;\n",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return HotReloadAddedFieldStructHost.AddedConst + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedConstOnStruct.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null);
+            string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(slice, Does.Contain("4"));
+            Assert.That(slice, Does.Not.Contain("HotReloadAddedFieldStore"));
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+        }
+
+        /// <summary>
+        /// What: ++ on an added field whose type has op_Increment but is not a numeric primitive
+        /// or enum skips so the rewrite does not emit a broken + 1.
+        /// </summary>
+        [Test]
+        public async Task Skip_NonNumericIncrement_UsesDedicatedReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public HotReloadAddedFieldCounter AddedCounter;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            AddedCounter++;\n            return value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldNonNumericIncrement.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "numeric");
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+        }
+
+        /// <summary>
+        /// What: an added field whose type is a private nested type skips because GetOrInit&lt;T&gt;
+        /// would be CS0122 in the shim.
+        /// </summary>
+        [Test]
+        public async Task Skip_PrivateFieldType_UsesDedicatedReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "private class HiddenBox { }\n        public HiddenBox AddedHidden;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return AddedHidden == null ? value : value + 1;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldPrivateType.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "not visible");
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+        }
+
+        /// <summary>
+        /// What: a non-finite added const cannot be emitted as a C# literal, so referencing
+        /// methods skip.
+        /// </summary>
+        [Test]
+        public async Task Skip_NonFiniteAddedConst_UsesUnavailableReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public const double AddedNaN = double.NaN;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return double.IsNaN(AddedNaN) ? value : 0;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedConstNaN.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "cannot emit");
+        }
+
+        /// <summary>
+        /// What: editing an existing field initializer still fires outside-body drift even when
+        /// an added field in the same file is stripped from the comparison.
+        /// </summary>
+        [Test]
+        public async Task Drift_ExistingInitializerEditWithAddedField_StillWarns()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public int AddedCount;");
+            edited = edited.Replace(
+                "        public int PublicSeed = 3;",
+                "        public int PublicSeed = 99;",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return AddedCount + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldWithInitializerDrift.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            bool foundDrift = false;
+            foreach (string warning in result.Output.declarationDriftWarnings)
+            {
+                if (warning != null && warning.Contains("Edits outside method bodies"))
+                {
+                    foundDrift = true;
+                }
+            }
+
+            Assert.That(foundDrift, Is.True, "Existing field initializer edits must still warn.");
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
+        }
+
+        /// <summary>
+        /// What: a readonly added field can still be read through GetOrInit.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_ReadonlyAddedField_ReadsThroughStore()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public readonly int AddedReadOnly = 5;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return AddedReadOnly + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldReadonly.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null);
+            string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(slice, Does.Contain("GetOrInit<"));
+            Assert.That(slice, Does.Contain("static () =>"));
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
         }
 
         /// <summary>

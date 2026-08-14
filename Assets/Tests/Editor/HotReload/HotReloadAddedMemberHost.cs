@@ -112,6 +112,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Compiled op_Increment struct so added-field ++ skip can target a real non-numeric type.
+    /// </summary>
+    public struct HotReloadAddedFieldCounter
+    {
+        public int Value;
+
+        public static HotReloadAddedFieldCounter operator ++(HotReloadAddedFieldCounter counter)
+        {
+            counter.Value += 1;
+            return counter;
+        }
+    }
+
+    /// <summary>
     /// Compiled MonoBehaviour host so Unity-message added-method warnings can be classified
     /// against a real compiled type rather than a throwaway uncompiled class.
     /// </summary>
