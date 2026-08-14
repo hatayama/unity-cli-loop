@@ -1846,6 +1846,82 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a non-void private instance call inside a lambda is accessor-rewritten
+        /// (Func&lt;Host, int&gt; MethodDelegate) so the enclosing method Patches.
+        /// </summary>
+        [Test]
+        public async Task Run_LambdaInstancePrivateCall_AccessorizesAndPatches()
+        {
+            string hostPath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(hostPath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            System.Func<int> read = () => PrivateCall();\n"
+                + "            return read();\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            string editedPath = WriteEditedSource("LambdaInstancePrivateCall.cs", edited);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method.Contains(nameof(HotReloadAddedMemberHost.ExistingCaller)))
+                {
+                    Assert.Fail("ExistingCaller must not Failed: " + outcome.Reason);
+                }
+            }
+
+            HotReloadAddedMemberHost host = new HotReloadAddedMemberHost();
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(7));
+        }
+
+        /// <summary>
+        /// What: a private instance property getter read inside a lambda is accessor-rewritten
+        /// (Func&lt;Host, TProp&gt; MethodDelegate) so the enclosing method Patches.
+        /// </summary>
+        [Test]
+        public async Task Run_LambdaInstancePrivatePropertyGetter_AccessorizesAndPatches()
+        {
+            string hostPath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(hostPath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            System.Func<int> read = () => PrivateSeedValue;\n"
+                + "            return read();\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            string editedPath = WriteEditedSource("LambdaInstancePrivatePropertyGetter.cs", edited);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method.Contains(nameof(HotReloadAddedMemberHost.ExistingCaller)))
+                {
+                    Assert.Fail("ExistingCaller must not Failed: " + outcome.Reason);
+                }
+            }
+
+            HotReloadAddedMemberHost host = new HotReloadAddedMemberHost();
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(7));
+        }
+
+        /// <summary>
         /// What: deleting a compiled method surfaces the aggregated removed-members warning.
         /// </summary>
         [Test]

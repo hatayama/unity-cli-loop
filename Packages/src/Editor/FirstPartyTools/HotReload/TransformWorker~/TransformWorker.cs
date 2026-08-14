@@ -3506,14 +3506,9 @@ internal sealed class AccessorEntry
     private static string BuildFuncOrActionType(IMethodSymbol methodSymbol)
     {
         List<string> typeArguments = new List<string>();
-        if (!methodSymbol.IsStatic)
+        foreach (ITypeSymbol parameterType in EnumerateDelegateParameterTypes(methodSymbol))
         {
-            typeArguments.Add(TypeDisplay(methodSymbol.ContainingType));
-        }
-
-        foreach (IParameterSymbol parameter in methodSymbol.Parameters)
-        {
-            typeArguments.Add(TypeDisplay(parameter.Type));
+            typeArguments.Add(TypeDisplay(parameterType));
         }
 
         if (methodSymbol.ReturnsVoid)
@@ -3542,27 +3537,52 @@ internal sealed class AccessorEntry
     {
         string declaringType = TypeDisplay(methodSymbol.ContainingType);
         string delegateType = BuildFuncOrActionType(methodSymbol);
-        string typeArray = BuildTypeArrayLiteral(methodSymbol);
+        List<ITypeSymbol> delegateParameterTypes = EnumerateDelegateParameterTypes(methodSymbol);
+        // AccessTools.Method matches metadata parameters only; the instance receiver is not one.
+        IReadOnlyList<ITypeSymbol> methodLookupTypes = methodSymbol.IsStatic
+            ? delegateParameterTypes
+            : delegateParameterTypes.GetRange(1, delegateParameterTypes.Count - 1);
+        string typeArray = BuildTypeArrayLiteral(methodLookupTypes);
         // virtualCall must stay true for virtual/override/abstract instance members so a derived
         // override is dispatched; non-virtual private/internal targets keep false (exact method).
         bool virtualCall = !methodSymbol.IsStatic
             && (methodSymbol.IsVirtual || methodSymbol.IsOverride || methodSymbol.IsAbstract);
         string virtualCallLiteral = virtualCall ? "true" : "false";
+        // Why not null: Harmony then uses Func<> generic arguments including TResult as
+        // DynamicMethod parameters, so Func<Host,T> becomes T(Host,T) and bind fails.
+        string delegateArgs = BuildTypeArrayLiteral(delegateParameterTypes);
         return DelegateFieldName + " = global::HarmonyLib.AccessTools.MethodDelegate<"
             + delegateType + ">(global::HarmonyLib.AccessTools.Method(typeof("
             + declaringType + "), \"" + EscapeStringLiteral(metadataName) + "\", "
-            + typeArray + "), null, " + virtualCallLiteral + ", null);";
+            + typeArray + "), null, " + virtualCallLiteral + ", " + delegateArgs + ");";
     }
 
-    private static string BuildTypeArrayLiteral(IMethodSymbol methodSymbol)
+    // Open-delegate parameter types: declaring type first for instance methods, then each
+    // method parameter. Excludes Func TResult so Harmony arity matches the delegate Invoke.
+    private static List<ITypeSymbol> EnumerateDelegateParameterTypes(IMethodSymbol methodSymbol)
     {
-        if (methodSymbol.Parameters.Length == 0)
+        List<ITypeSymbol> types = new List<ITypeSymbol>();
+        if (!methodSymbol.IsStatic)
+        {
+            types.Add(methodSymbol.ContainingType);
+        }
+
+        foreach (IParameterSymbol parameter in methodSymbol.Parameters)
+        {
+            types.Add(parameter.Type);
+        }
+
+        return types;
+    }
+
+    private static string BuildTypeArrayLiteral(IReadOnlyList<ITypeSymbol> types)
+    {
+        if (types.Count == 0)
         {
             return "new global::System.Type[] { }";
         }
 
-        IEnumerable<string> typeofs = methodSymbol.Parameters.Select(
-            parameter => "typeof(" + TypeDisplay(parameter.Type) + ")");
+        IEnumerable<string> typeofs = types.Select(type => "typeof(" + TypeDisplay(type) + ")");
         return "new global::System.Type[] { " + string.Join(", ", typeofs) + " }";
     }
 
