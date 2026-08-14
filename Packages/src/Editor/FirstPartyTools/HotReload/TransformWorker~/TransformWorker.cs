@@ -997,6 +997,16 @@ public static class TransformWorkerProgram
             return base.VisitRecordDeclaration(node);
         }
 
+        public override SyntaxNode VisitInterfaceDeclaration(InterfaceDeclarationSyntax node)
+        {
+            if (ShouldStripType(node))
+            {
+                return null;
+            }
+
+            return base.VisitInterfaceDeclaration(node);
+        }
+
         private bool ShouldStripType(TypeDeclarationSyntax node)
         {
             return _typeSyntaxKeysToStrip.Contains(BuildTypeMetadataNameFromSyntax(node));
@@ -1616,12 +1626,16 @@ public static class TransformWorkerProgram
 
     private static IEnumerable<TypeDeclarationSyntax> EnumerateTypeDeclarations(CompilationUnitSyntax root)
     {
+        // Why interfaces: a new interface (including default methods) is absent from the compiled
+        // assembly; enumerating it registers the type syntax key so the strip rewriter can drop
+        // it instead of firing a false outside-body drift warning.
         return root.DescendantNodes()
             .OfType<TypeDeclarationSyntax>()
             .Where(static typeDeclaration =>
                 typeDeclaration is ClassDeclarationSyntax
                 || typeDeclaration is StructDeclarationSyntax
-                || typeDeclaration is RecordDeclarationSyntax);
+                || typeDeclaration is RecordDeclarationSyntax
+                || typeDeclaration is InterfaceDeclarationSyntax);
     }
 
     // methodDeclaration may be null for property getters (bodyNode must still be in the bound tree).
@@ -2384,8 +2398,6 @@ public static class TransformWorkerProgram
                 continue;
             }
 
-            addedMethodCatalog.AddAddedSyntaxKey(
-                BuildSyntaxMethodKey(typeState.TypeMetadataNameFromSyntax, methodDeclaration));
             skipped.Add(new WorkerSkipped
             {
                 Method = FormatMethodLabel(methodSymbol),
@@ -2491,9 +2503,10 @@ public static class TransformWorkerProgram
             }
 
             string calledKey = BuildMethodKeyFromSymbol(methodSymbol);
-            // Why WhenNotNull (not MemberBinding only): other?.Inner.AddedPing(1) has
-            // MemberAccess as the invocation expression; the MemberBinding sits inside it.
-            if (IsInsideConditionalAccessWhenNotNull(invocation)
+            // Why the receiver spine (not a WhenNotNull ancestor walk): other?.Inner.AddedPing()
+            // is MemberAccess whose leftmost expression is MemberBinding. An ancestor walk also
+            // matches argument-list / lambda invocations that are ordinary rewrite targets.
+            if (IsConditionalAccessReceiverSpine(invocation)
                 && addedMethodCatalog.IsClassifiedAdded(calledKey))
             {
                 return AddedMethodSkipReasons.ConditionalAccess;
@@ -2579,20 +2592,32 @@ public static class TransformWorkerProgram
         return false;
     }
 
-    // Why WhenNotNull walk: other?.AddedPing() binds as MemberBinding, but
-    // other?.Inner.AddedPing() is MemberAccess under the same ConditionalAccess.WhenNotNull.
-    internal static bool IsInsideConditionalAccessWhenNotNull(SyntaxNode node)
+    // Why the receiver spine: other?.Inner.AddedPing() / other?[0].AddedPing() walk left
+    // through MemberAccess/ElementAccess to a MemberBinding/ElementBinding. Argument-list
+    // and lambda invocations (list?.Add(PrivateCall()), other?.Existing(AddedPing(1))) do not.
+    internal static bool IsConditionalAccessReceiverSpine(InvocationExpressionSyntax invocation)
     {
-        SyntaxNode current = node;
+        ExpressionSyntax current = invocation.Expression;
         while (current != null)
         {
-            if (current.Parent is ConditionalAccessExpressionSyntax conditionalAccess
-                && conditionalAccess.WhenNotNull == current)
+            if (current is MemberBindingExpressionSyntax || current is ElementBindingExpressionSyntax)
             {
                 return true;
             }
 
-            current = current.Parent;
+            if (current is MemberAccessExpressionSyntax memberAccess)
+            {
+                current = memberAccess.Expression;
+                continue;
+            }
+
+            if (current is ElementAccessExpressionSyntax elementAccess)
+            {
+                current = elementAccess.Expression;
+                continue;
+            }
+
+            return false;
         }
 
         return false;
@@ -4378,11 +4403,11 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         }
 
         ISymbol invokedSymbol = _semanticModel.GetSymbolInfo(node).Symbol;
-        if (TransformWorkerProgram.IsInsideConditionalAccessWhenNotNull(node))
+        if (TransformWorkerProgram.IsConditionalAccessReceiverSpine(node))
         {
-            // Why not rewrite: ExtractReceiver cannot recover the conditional-access receiver
-            // (simple ?. is MemberBinding; chained ?.Inner.M() is MemberAccess under WhenNotNull)
-            // and would emit a parse-invalid shim. Callers are skipped instead.
+            // Why not rewrite the spine invocation: ExtractReceiver cannot recover a
+            // MemberBinding/ElementBinding receiver and would emit a parse-invalid shim.
+            // Arguments and lambdas are not on the spine; base.Visit still rewrites those.
             return base.VisitInvocationExpression(node);
         }
 
@@ -5158,6 +5183,7 @@ internal static class CecilTypeNames
         {
             return "System.Object";
         }
+
         if (typeSymbol is IPointerTypeSymbol pointerType)
         {
             return ToCecilFullName(pointerType.PointedAtType) + "*";

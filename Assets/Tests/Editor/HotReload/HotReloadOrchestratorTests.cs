@@ -1807,6 +1807,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a private call in a conditional-access argument list is accessor-rewritten so
+        /// the enclosing method still Patches (it must not Failed with CS0122).
+        /// </summary>
+        [Test]
+        public async Task Run_ConditionalAccessArgumentPrivateCall_AccessorizesAndPatches()
+        {
+            string hostPath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(hostPath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            HotReloadAddedMemberHost other = this;\n"
+                + "            return other?.ExistingFail(PrivateCall()) ?? 0;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            string editedPath = WriteEditedSource("ConditionalAccessPrivateArg.cs", edited);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method.Contains(nameof(HotReloadAddedMemberHost.ExistingCaller)))
+                {
+                    Assert.Fail("ExistingCaller must not Failed: " + outcome.Reason);
+                }
+            }
+
+            HotReloadAddedMemberHost host = new HotReloadAddedMemberHost();
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(7));
+        }
+
+        /// <summary>
         /// What: deleting a compiled method surfaces the aggregated removed-members warning.
         /// </summary>
         [Test]

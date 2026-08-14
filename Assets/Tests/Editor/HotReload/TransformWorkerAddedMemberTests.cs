@@ -448,10 +448,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a chained conditional-access call (other?.Inner.AddedPing) skips the referencing
-        /// method; MemberAccess-under-WhenNotNull is the same hole as a bare MemberBinding.
+        /// method with the same ConditionalAccess reason as a simple MemberBinding call.
         /// </summary>
         [Test]
-        public async Task Skip_ChainedConditionalAccessAddedMethodCall_UsesDedicatedReason()
+        public async Task Skip_ChainedConditionalAccessAddedMethodCall_DoesNotRewriteCaller()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = WithHostMembers(
@@ -472,9 +472,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "conditional access");
             Assert.That(FindEntry(result, "AddedPing"), Is.Not.Null);
             Assert.That(
+                FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.Null,
+                "Chained ?. caller must be skipped, not rewritten into a parse-invalid shim.");
+            Assert.That(
                 result.Output.shimSource,
-                Does.Not.Contain("?.Inner"),
-                "Chained ?. must not emit a parse-invalid rewritten receiver.");
+                Does.Not.Contain("?global::"),
+                "ExtractReceiver must not splice a shim call after ?.");
+        }
+
+        /// <summary>
+        /// What: an added-method call in a conditional-access argument list is rewritten to the
+        /// shim; the caller is not skipped for ConditionalAccess.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_AddedMethodCallInConditionalAccessArgument_DoesNotSkipCaller()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedPing(int value)\n        {\n            return value;\n        }");
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            HotReloadAddedMemberHost other = this;\n"
+                + "            return other?.ExistingFail(AddedPing(1)) ?? 0;\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("RewriteConditionalAccessArgument.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto added = FindEntry(result, "AddedPing");
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(added, Is.Not.Null, "AddedPing must still emit.");
+            Assert.That(caller, Is.Not.Null, "Caller of other?.Existing(AddedPing) must not skip.");
+            string callerSlice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(
+                callerSlice,
+                Does.Contain(added.shimMethodName + "(__uloopInstance, 1)"),
+                "AddedPing inside the ?. argument list must rewrite to the shim.\n" + callerSlice);
         }
 
         /// <summary>
@@ -502,6 +539,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result.Output.declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Skipped new-type declarations must not fire fields/initializers drift.\n"
+                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+        }
+
+        /// <summary>
+        /// What: a type absent as a new interface with a default method is stripped as a whole
+        /// so it does not fire the outside-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Skip_NewInterfaceAbsentFromCompiledAssembly_DoesNotFireOutsideBodyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "    internal class HotReloadAliasShadowFixture\n",
+                "    public interface IHotReloadBrandNewInterface\n    {\n"
+                + "        int Fresh() => 1;\n    }\n\n"
+                + "    internal class HotReloadAliasShadowFixture\n",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("SkipNewInterface.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, "IHotReloadBrandNewInterface.Fresh", "New types are out of scope");
+            Assert.That(FindEntry(result, "Fresh"), Is.Null);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "Skipped new-interface declarations must not fire fields/initializers drift.\n"
                 + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
         }
 

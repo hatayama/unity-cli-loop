@@ -62,6 +62,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        private int PrivateCall()
+        {
+            return _privateSeed;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ReadPrivateSeed()
         {
             return _privateSeed;

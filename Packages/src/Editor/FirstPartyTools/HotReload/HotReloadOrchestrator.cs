@@ -1252,8 +1252,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 TransformWorkerEntryDto[] retryEntries,
                 HotReloadShimCompileResult retryCompileResult)
             {
+                Debug.Assert(skippedCallerOutcomes != null, "skippedCallerOutcomes must not be null.");
                 FailedMethodOutcomes = failedMethodOutcomes;
-                SkippedCallerOutcomes = skippedCallerOutcomes ?? new List<HotReloadMethodOutcome>();
+                SkippedCallerOutcomes = skippedCallerOutcomes;
                 RetryEntries = retryEntries;
                 RetryCompileResult = retryCompileResult;
             }
