@@ -44,6 +44,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string BurstCompileAttributeFullName = "Unity.Burst.BurstCompileAttribute";
 
+        // Cecil AttributeType.Name values for call-site logical-owner resolution.
+        public const string CompilerGeneratedAttributeTypeName = "CompilerGeneratedAttribute";
+        public const string AsyncStateMachineAttributeTypeName = "AsyncStateMachineAttribute";
+        public const string IteratorStateMachineAttributeTypeName = "IteratorStateMachineAttribute";
+
         // Why not "applied": this sentence is the cross-file / unsupported-kind hint appended
         // to NewMember compile failures. Same-file added methods are applied through the shim.
         public const string NewMemberCompileHint =
