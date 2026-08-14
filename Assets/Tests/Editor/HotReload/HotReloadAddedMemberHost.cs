@@ -13,6 +13,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         public int PublicSeed = 3;
 
+        public HotReloadAddedMemberHost Inner;
+
         private int _privateSeed = 7;
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -43,6 +45,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public int ExistingDynamic(object value)
+        {
+            return 0;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ExistingDynamicList(System.Collections.Generic.List<object> values)
+        {
+            return 0;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ExistingDynamicArray(object[] values)
         {
             return 0;
         }

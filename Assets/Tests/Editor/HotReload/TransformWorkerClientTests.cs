@@ -294,6 +294,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.That(arrowEntry, Is.Not.Null, "ArrowRead entry missing.");
+            // Why a separate arrow line: FindLineNumberContaining("=> 42;") must not match the
+            // method-keyword line. Keep ArrowRead as `public int ArrowRead()\n            => 42;`
+            // so the #line target stays the expression start, not the declaration.
             int expectedLine = FindLineNumberContaining(edited, "=> 42;");
             Assert.That(expectedLine, Is.GreaterThan(0));
             // Why not SliceShimMethod: expression-bodied shims have no `{` block to bound a slice.

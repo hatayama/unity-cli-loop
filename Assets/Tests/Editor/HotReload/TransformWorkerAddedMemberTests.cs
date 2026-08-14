@@ -447,6 +447,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a chained conditional-access call (other?.Inner.AddedPing) skips the referencing
+        /// method; MemberAccess-under-WhenNotNull is the same hole as a bare MemberBinding.
+        /// </summary>
+        [Test]
+        public async Task Skip_ChainedConditionalAccessAddedMethodCall_UsesDedicatedReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedPing(int value)\n        {\n            return value;\n        }");
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            HotReloadAddedMemberHost other = this;\n"
+                + "            other.Inner = this;\n"
+                + "            return other?.Inner.AddedPing(value) ?? 0;\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("SkipChainedConditionalAccess.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "conditional access");
+            Assert.That(FindEntry(result, "AddedPing"), Is.Not.Null);
+            Assert.That(
+                result.Output.shimSource,
+                Does.Not.Contain("?.Inner"),
+                "Chained ?. must not emit a parse-invalid rewritten receiver.");
+        }
+
+        /// <summary>
         /// What: a type absent from the compiled assembly skips every method with the new-type
         /// out-of-scope reason instead of emitting MethodNotFound entries.
         /// </summary>
@@ -467,6 +498,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, "HotReloadBrandNewType.Fresh", "New types are out of scope");
             Assert.That(FindEntry(result, "Fresh"), Is.Null);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "Skipped new-type declarations must not fire fields/initializers drift.\n"
+                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -490,6 +526,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(entry, Is.Not.Null);
             Assert.That(entry.patchKind, Is.Not.EqualTo(HotReloadConstants.PatchKindAddedMethod));
             Assert.That(entry.parameterTypeFullNames, Is.EqualTo(new[] { "System.Object" }));
+        }
+
+        /// <summary>
+        /// What: nested dynamic in List&lt;dynamic&gt; and dynamic[] still matches compiled
+        /// List&lt;object&gt; / object[] so the existing methods are not classified Added.
+        /// </summary>
+        [Test]
+        public async Task Classify_NestedDynamicParameter_DoesNotMisclassifyExistingMethodAsAdded()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingDynamicList(System.Collections.Generic.List<object> values)\n"
+                + "        {\n            return 0;\n        }",
+                "        public int ExistingDynamicList(System.Collections.Generic.List<dynamic> values)\n"
+                + "        {\n            return 1;\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ExistingDynamicArray(object[] values)\n        {\n            return 0;\n        }",
+                "        public int ExistingDynamicArray(dynamic[] values)\n        {\n            return 1;\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("NestedDynamicNotAdded.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto listEntry = FindEntry(
+                result,
+                nameof(HotReloadAddedMemberHost.ExistingDynamicList));
+            Assert.That(listEntry, Is.Not.Null);
+            Assert.That(listEntry.patchKind, Is.Not.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(
+                listEntry.parameterTypeFullNames,
+                Is.EqualTo(new[] { "System.Collections.Generic.List`1<System.Object>" }));
+
+            TransformWorkerEntryDto arrayEntry = FindEntry(
+                result,
+                nameof(HotReloadAddedMemberHost.ExistingDynamicArray));
+            Assert.That(arrayEntry, Is.Not.Null);
+            Assert.That(arrayEntry.patchKind, Is.Not.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(arrayEntry.parameterTypeFullNames, Is.EqualTo(new[] { "System.Object[]" }));
         }
 
         /// <summary>

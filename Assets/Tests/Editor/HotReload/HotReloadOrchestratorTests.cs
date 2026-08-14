@@ -711,17 +711,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 aggregatedInlineRiskCount,
                 Is.EqualTo(1),
                 "Expected exactly one aggregated inline-risk warning listing the at-risk methods.");
-
-            int declarationDriftCount = CountWarningsContaining(
-                result.Warnings,
-                "Edits outside method bodies");
-            int removedMembersCount = CountWarningsContaining(
-                result.Warnings,
-                "Removed members stay present");
             Assert.That(
-                result.Warnings,
-                Has.Count.EqualTo(1 + declarationDriftCount + removedMembersCount),
-                "Expected the aggregated inline-risk warning plus drift/removed-member warning(s).");
+                CountWarningsContaining(result.Warnings, "Edits outside method bodies"),
+                Is.EqualTo(1),
+                "Reconstructed fixture source differs outside method bodies once.");
+            Assert.That(
+                CountWarningsContaining(result.Warnings, "Removed members stay present"),
+                Is.EqualTo(1),
+                "Reconstructed fixture source omits compiled members once.");
+            Assert.That(
+                result.Warnings.Count,
+                Is.EqualTo(3),
+                "Exactly one inline-risk, one drift, and one removed-members warning.");
         }
 
         /// <summary>
@@ -824,16 +825,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(inlineRiskAlphaPatchedOperations, Is.EqualTo(2));
 
-            int declarationDriftCount = CountWarningsContaining(
-                result.Warnings,
-                "Edits outside method bodies");
-            int removedMembersCount = CountWarningsContaining(
-                result.Warnings,
-                "Removed members stay present");
             Assert.That(
-                result.Warnings,
-                Has.Count.EqualTo(1 + declarationDriftCount + removedMembersCount),
-                "Expected the aggregated inline-risk warning plus drift/removed-member warning(s).");
+                CountWarningsContaining(result.Warnings, "Edits outside method bodies"),
+                Is.EqualTo(2),
+                "Duplicate file inputs each emit a declaration-drift warning.");
+            Assert.That(
+                CountWarningsContaining(result.Warnings, "Removed members stay present"),
+                Is.EqualTo(2),
+                "Duplicate file inputs each emit a removed-members warning.");
+            Assert.That(
+                result.Warnings.Count,
+                Is.EqualTo(5),
+                "One aggregated inline-risk warning plus two drift and two removed-members warnings.");
 
             string aggregatedWarning = null;
             foreach (string warning in result.Warnings)
@@ -851,10 +854,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CountOccurrences(aggregatedWarning, nameof(HotReloadE2EFixture.InlineRiskAlpha)),
                 Is.EqualTo(1),
                 "The aggregated warning must list a re-patched method once, not once per patch operation.");
-            Assert.That(
-                declarationDriftCount,
-                Is.EqualTo(2),
-                "Duplicate file inputs each emit a declaration-drift warning.");
         }
 
         /// <summary>
@@ -1893,6 +1892,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 addedFailed,
                 Is.True,
                 "AddedPing must isolate as a per-method Failed.\n" + FormatOutcomes(result));
+            AssertHasSkipped(
+                result,
+                nameof(HotReloadAddedMemberHost.ExistingCaller),
+                HotReloadConstants.IsolatedAddedMethodCallerSkipReason);
 
             HotReloadAddedMemberHost host = new HotReloadAddedMemberHost();
             Assert.That(host.ExistingValue(), Is.EqualTo(10));

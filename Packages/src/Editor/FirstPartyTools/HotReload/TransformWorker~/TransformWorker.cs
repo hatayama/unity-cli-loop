@@ -935,9 +935,13 @@ public static class TransformWorkerProgram
         AddedMethodCatalog addedMethodCatalog)
     {
         StripHandledMethodDeclarationsRewriter stripSnapshot =
-            new StripHandledMethodDeclarationsRewriter(addedMethodCatalog.RemovedSyntaxKeys);
+            new StripHandledMethodDeclarationsRewriter(
+                addedMethodCatalog.RemovedSyntaxKeys,
+                Array.Empty<string>());
         StripHandledMethodDeclarationsRewriter stripCurrent =
-            new StripHandledMethodDeclarationsRewriter(addedMethodCatalog.AddedSyntaxKeys);
+            new StripHandledMethodDeclarationsRewriter(
+                addedMethodCatalog.AddedSyntaxKeys,
+                addedMethodCatalog.AddedTypeSyntaxKeys);
         StripMethodBodiesRewriter bodyStripper = new StripMethodBodiesRewriter();
         SyntaxNode strippedSnapshot = bodyStripper.Visit(stripSnapshot.Visit(snapshotRoot));
         SyntaxNode strippedCurrent = bodyStripper.Visit(stripCurrent.Visit(currentRoot));
@@ -951,10 +955,51 @@ public static class TransformWorkerProgram
     private sealed class StripHandledMethodDeclarationsRewriter : CSharpSyntaxRewriter
     {
         private readonly HashSet<string> _syntaxKeysToStrip;
+        private readonly HashSet<string> _typeSyntaxKeysToStrip;
 
-        public StripHandledMethodDeclarationsRewriter(IReadOnlyCollection<string> syntaxKeysToStrip)
+        public StripHandledMethodDeclarationsRewriter(
+            IReadOnlyCollection<string> syntaxKeysToStrip,
+            IReadOnlyCollection<string> typeSyntaxKeysToStrip)
         {
             _syntaxKeysToStrip = new HashSet<string>(syntaxKeysToStrip, StringComparer.Ordinal);
+            _typeSyntaxKeysToStrip = new HashSet<string>(
+                typeSyntaxKeysToStrip ?? Array.Empty<string>(),
+                StringComparer.Ordinal);
+        }
+
+        public override SyntaxNode VisitClassDeclaration(ClassDeclarationSyntax node)
+        {
+            if (ShouldStripType(node))
+            {
+                return null;
+            }
+
+            return base.VisitClassDeclaration(node);
+        }
+
+        public override SyntaxNode VisitStructDeclaration(StructDeclarationSyntax node)
+        {
+            if (ShouldStripType(node))
+            {
+                return null;
+            }
+
+            return base.VisitStructDeclaration(node);
+        }
+
+        public override SyntaxNode VisitRecordDeclaration(RecordDeclarationSyntax node)
+        {
+            if (ShouldStripType(node))
+            {
+                return null;
+            }
+
+            return base.VisitRecordDeclaration(node);
+        }
+
+        private bool ShouldStripType(TypeDeclarationSyntax node)
+        {
+            return _typeSyntaxKeysToStrip.Contains(BuildTypeMetadataNameFromSyntax(node));
         }
 
         public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
@@ -2074,7 +2119,7 @@ public static class TransformWorkerProgram
         INamedTypeSymbol compiledType = FindCompiledType(typeState.TypeSymbol, targetTypesAssemblySymbol);
         if (compiledType == null)
         {
-            SkipAllMethodsOnUncompiledType(typeState, semanticModel, skipped);
+            SkipAllMethodsOnUncompiledType(typeState, semanticModel, skipped, addedMethodCatalog);
             return (shimTypeCounter, globalShimMethodCounter);
         }
 
@@ -2325,9 +2370,11 @@ public static class TransformWorkerProgram
     private static void SkipAllMethodsOnUncompiledType(
         TypeEmitState typeState,
         SemanticModel semanticModel,
-        List<WorkerSkipped> skipped)
+        List<WorkerSkipped> skipped,
+        AddedMethodCatalog addedMethodCatalog)
     {
         typeState.TypeIsAbsentFromCompiledAssembly = true;
+        addedMethodCatalog.AddAddedTypeSyntaxKey(typeState.TypeMetadataNameFromSyntax);
         foreach (MethodDeclarationSyntax methodDeclaration in typeState.TypeDeclaration.Members
             .OfType<MethodDeclarationSyntax>())
         {
@@ -2337,6 +2384,8 @@ public static class TransformWorkerProgram
                 continue;
             }
 
+            addedMethodCatalog.AddAddedSyntaxKey(
+                BuildSyntaxMethodKey(typeState.TypeMetadataNameFromSyntax, methodDeclaration));
             skipped.Add(new WorkerSkipped
             {
                 Method = FormatMethodLabel(methodSymbol),
@@ -2442,7 +2491,9 @@ public static class TransformWorkerProgram
             }
 
             string calledKey = BuildMethodKeyFromSymbol(methodSymbol);
-            if (invocation.Expression is MemberBindingExpressionSyntax
+            // Why WhenNotNull (not MemberBinding only): other?.Inner.AddedPing(1) has
+            // MemberAccess as the invocation expression; the MemberBinding sits inside it.
+            if (IsInsideConditionalAccessWhenNotNull(invocation)
                 && addedMethodCatalog.IsClassifiedAdded(calledKey))
             {
                 return AddedMethodSkipReasons.ConditionalAccess;
@@ -2523,6 +2574,25 @@ public static class TransformWorkerProgram
             && bindingInvocation.Expression == memberBinding)
         {
             return true;
+        }
+
+        return false;
+    }
+
+    // Why WhenNotNull walk: other?.AddedPing() binds as MemberBinding, but
+    // other?.Inner.AddedPing() is MemberAccess under the same ConditionalAccess.WhenNotNull.
+    internal static bool IsInsideConditionalAccessWhenNotNull(SyntaxNode node)
+    {
+        SyntaxNode current = node;
+        while (current != null)
+        {
+            if (current.Parent is ConditionalAccessExpressionSyntax conditionalAccess
+                && conditionalAccess.WhenNotNull == current)
+            {
+                return true;
+            }
+
+            current = current.Parent;
         }
 
         return false;
@@ -4308,10 +4378,11 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         }
 
         ISymbol invokedSymbol = _semanticModel.GetSymbolInfo(node).Symbol;
-        if (node.Expression is MemberBindingExpressionSyntax)
+        if (TransformWorkerProgram.IsInsideConditionalAccessWhenNotNull(node))
         {
-            // Why not rewrite: ExtractReceiver does not handle MemberBinding and would invent
-            // __uloopInstance, breaking ?. short-circuit. Callers are skipped instead.
+            // Why not rewrite: ExtractReceiver cannot recover the conditional-access receiver
+            // (simple ?. is MemberBinding; chained ?.Inner.M() is MemberAccess under WhenNotNull)
+            // and would emit a parse-invalid shim. Callers are skipped instead.
             return base.VisitInvocationExpression(node);
         }
 
@@ -5070,12 +5141,7 @@ internal static class CecilTypeNames
     public static string ToParameterTypeFullName(IParameterSymbol parameterSymbol)
     {
         // Roslyn's IParameterSymbol.Type omits the byref wrapper; Cecil FullName uses a trailing '&'.
-        // Why dynamic → System.Object: source `dynamic` is TypeKind.Dynamic ("dynamic") while
-        // compiled metadata is System.Object; leaving them distinct misclassifies existing
-        // methods as Added.
-        string typeName = parameterSymbol.Type != null && parameterSymbol.Type.TypeKind == TypeKind.Dynamic
-            ? "System.Object"
-            : ToCecilFullName(parameterSymbol.Type);
+        string typeName = ToCecilFullName(parameterSymbol.Type);
         if (parameterSymbol.RefKind != RefKind.None)
         {
             return typeName + "&";
@@ -5086,6 +5152,12 @@ internal static class CecilTypeNames
 
     private static string ToCecilFullName(ITypeSymbol typeSymbol)
     {
+        // Why here (not only the parameter top level): source `List<dynamic>` / `dynamic[]`
+        // nest TypeKind.Dynamic while compiled metadata uses System.Object at the same depth.
+        if (typeSymbol != null && typeSymbol.TypeKind == TypeKind.Dynamic)
+        {
+            return "System.Object";
+        }
         if (typeSymbol is IPointerTypeSymbol pointerType)
         {
             return ToCecilFullName(pointerType.PointedAtType) + "*";
@@ -5204,9 +5276,12 @@ internal sealed class AddedMethodCatalog
         new Dictionary<string, AddedMethodBinding>(StringComparer.Ordinal);
     private readonly HashSet<string> _classifiedAddedKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _addedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
+    private readonly HashSet<string> _addedTypeSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _removedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
 
     public IReadOnlyCollection<string> AddedSyntaxKeys => _addedSyntaxKeys;
+
+    public IReadOnlyCollection<string> AddedTypeSyntaxKeys => _addedTypeSyntaxKeys;
 
     public IReadOnlyCollection<string> RemovedSyntaxKeys => _removedSyntaxKeys;
 
@@ -5237,6 +5312,14 @@ internal sealed class AddedMethodCatalog
     public void AddAddedSyntaxKey(string syntaxKey)
     {
         _addedSyntaxKeys.Add(syntaxKey);
+    }
+
+    public void AddAddedTypeSyntaxKey(string typeSyntaxKey)
+    {
+        if (typeSyntaxKey != null)
+        {
+            _addedTypeSyntaxKeys.Add(typeSyntaxKey);
+        }
     }
 
     public void AddRemovedSyntaxKey(string syntaxKey)

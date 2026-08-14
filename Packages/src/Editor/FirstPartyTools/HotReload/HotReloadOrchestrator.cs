@@ -328,6 +328,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 outcomes.AddRange(isolation.FailedMethodOutcomes);
+                outcomes.AddRange(isolation.SkippedCallerOutcomes);
                 if (isolation.RetryEntries.Length == 0)
                 {
                     return new HotReloadFileProcessResult(
@@ -908,11 +909,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IsolationExclusions exclusions = BuildIsolationExclusions(
                 attribution.FailedEntries,
                 workerOutput.entries);
+            List<HotReloadMethodOutcome> skippedCallerOutcomes = BuildSkippedCallerOutcomes(
+                exclusions.CallerEntries,
+                assemblyResolvePath);
 
             return await RunIsolationRetryAsync(
                 workerInput,
                 exclusions,
                 failedMethodOutcomes,
+                skippedCallerOutcomes,
                 compilationAssembly,
                 targetDllPath,
                 defines,
@@ -923,6 +928,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerInputDto workerInput,
             IsolationExclusions exclusions,
             List<HotReloadMethodOutcome> failedMethodOutcomes,
+            List<HotReloadMethodOutcome> skippedCallerOutcomes,
             UnityCompilationAssembly compilationAssembly,
             string targetDllPath,
             string[] defines,
@@ -956,7 +962,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (string.IsNullOrEmpty(retryOutput.shimSource) || retryOutput.entries.Length == 0)
             {
                 return new HotReloadShimIsolationResult(
-                    failedMethodOutcomes, Array.Empty<TransformWorkerEntryDto>(), null);
+                    failedMethodOutcomes,
+                    skippedCallerOutcomes,
+                    Array.Empty<TransformWorkerEntryDto>(),
+                    null);
             }
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -984,7 +993,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            return new HotReloadShimIsolationResult(failedMethodOutcomes, retryOutput.entries, retryCompileResult);
+            return new HotReloadShimIsolationResult(
+                failedMethodOutcomes,
+                skippedCallerOutcomes,
+                retryOutput.entries,
+                retryCompileResult);
         }
 
         private static List<HotReloadMethodOutcome> BuildFailedMethodOutcomes(
@@ -1018,6 +1031,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HashSet<string> excludedKeys = new HashSet<string>(StringComparer.Ordinal);
             HashSet<string> excludedAddedMethodKeys = new HashSet<string>(StringComparer.Ordinal);
             HashSet<string> failedAddedMethodKeys = new HashSet<string>(StringComparer.Ordinal);
+            List<TransformWorkerEntryDto> excludedCallerEntries = new List<TransformWorkerEntryDto>();
             foreach (TransformWorkerEntryDto failedEntry in failedEntries)
             {
                 string methodKey = BuildMethodKey(failedEntry);
@@ -1034,23 +1048,50 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 excludedKeys.Add(methodKey);
             }
 
+            HashSet<string> failedEntryKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (TransformWorkerEntryDto failedEntry in failedEntries)
+            {
+                failedEntryKeys.Add(BuildMethodKey(failedEntry));
+            }
+
             if (failedAddedMethodKeys.Count > 0 && allEntries != null)
             {
                 foreach (TransformWorkerEntryDto entry in allEntries)
                 {
-                    if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod
-                        || entry.calledAddedMethodKeys == null)
+                    if (entry.calledAddedMethodKeys == null)
                     {
                         continue;
                     }
 
+                    string callerKey = BuildMethodKey(entry);
+                    if (failedEntryKeys.Contains(callerKey))
+                    {
+                        continue;
+                    }
+
+                    bool callsFailedAdded = false;
                     foreach (string calledKey in entry.calledAddedMethodKeys)
                     {
                         if (failedAddedMethodKeys.Contains(calledKey))
                         {
-                            excludedKeys.Add(BuildMethodKey(entry));
+                            callsFailedAdded = true;
                             break;
                         }
+                    }
+
+                    if (!callsFailedAdded)
+                    {
+                        continue;
+                    }
+
+                    excludedCallerEntries.Add(entry);
+                    if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod)
+                    {
+                        excludedAddedMethodKeys.Add(callerKey);
+                    }
+                    else
+                    {
+                        excludedKeys.Add(callerKey);
                     }
                 }
             }
@@ -1059,7 +1100,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             excludedKeys.CopyTo(excludedMethodKeys);
             string[] excludedAddedKeys = new string[excludedAddedMethodKeys.Count];
             excludedAddedMethodKeys.CopyTo(excludedAddedKeys);
-            return new IsolationExclusions(excludedMethodKeys, excludedAddedKeys);
+            return new IsolationExclusions(
+                excludedMethodKeys,
+                excludedAddedKeys,
+                excludedCallerEntries);
+        }
+
+        private static List<HotReloadMethodOutcome> BuildSkippedCallerOutcomes(
+            IReadOnlyList<TransformWorkerEntryDto> callerEntries,
+            string assemblyResolvePath)
+        {
+            List<HotReloadMethodOutcome> skippedCallerOutcomes = new List<HotReloadMethodOutcome>();
+            foreach (TransformWorkerEntryDto caller in callerEntries)
+            {
+                string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
+                    caller.typeMetadataName,
+                    caller.methodName,
+                    caller.parameterTypeFullNames ?? Array.Empty<string>(),
+                    genericArity: 0);
+                skippedCallerOutcomes.Add(
+                    HotReloadMethodOutcome.Skipped(
+                        methodLabel,
+                        HotReloadConstants.IsolatedAddedMethodCallerSkipReason,
+                        assemblyResolvePath));
+            }
+
+            return skippedCallerOutcomes;
         }
 
         /// <summary>
@@ -1155,11 +1221,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             public string[] ExcludedMethodKeys { get; }
             public string[] ExcludedAddedMethodKeys { get; }
+            public IReadOnlyList<TransformWorkerEntryDto> CallerEntries { get; }
 
-            public IsolationExclusions(string[] excludedMethodKeys, string[] excludedAddedMethodKeys)
+            public IsolationExclusions(
+                string[] excludedMethodKeys,
+                string[] excludedAddedMethodKeys,
+                IReadOnlyList<TransformWorkerEntryDto> callerEntries)
             {
                 ExcludedMethodKeys = excludedMethodKeys;
                 ExcludedAddedMethodKeys = excludedAddedMethodKeys;
+                CallerEntries = callerEntries;
             }
         }
 
@@ -1171,15 +1242,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private sealed class HotReloadShimIsolationResult
         {
             public List<HotReloadMethodOutcome> FailedMethodOutcomes { get; }
+            public List<HotReloadMethodOutcome> SkippedCallerOutcomes { get; }
             public TransformWorkerEntryDto[] RetryEntries { get; }
             public HotReloadShimCompileResult RetryCompileResult { get; }
 
             public HotReloadShimIsolationResult(
                 List<HotReloadMethodOutcome> failedMethodOutcomes,
+                List<HotReloadMethodOutcome> skippedCallerOutcomes,
                 TransformWorkerEntryDto[] retryEntries,
                 HotReloadShimCompileResult retryCompileResult)
             {
                 FailedMethodOutcomes = failedMethodOutcomes;
+                SkippedCallerOutcomes = skippedCallerOutcomes ?? new List<HotReloadMethodOutcome>();
                 RetryEntries = retryEntries;
                 RetryCompileResult = retryCompileResult;
             }

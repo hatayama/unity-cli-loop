@@ -60,6 +60,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string AddedMethodDeferredSkipReason =
             "Added-method application lands in the next change; call sites in edited bodies already route to the shim.";
 
+        // Isolation retry drops callers of a failed added shim so retry does not CS0103; they
+        // are not Failed (the compile error was in the added body) and must not stay silent.
+        public const string IsolatedAddedMethodCallerSkipReason =
+            "Calls an added method whose shim failed to compile; the caller was left unpatched. "
+            + "Run 'uloop compile'.";
+
         // Wire value for TransformWorkerRemovedMemberDto.kind.
         // Keep in sync with RemovedMemberKinds.Method in TransformWorker~/TransformWorker.cs.
         public const string RemovedMemberKindMethod = "method";
