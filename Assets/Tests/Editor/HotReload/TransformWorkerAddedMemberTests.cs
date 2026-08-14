@@ -482,6 +482,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: other?.Inner!.AddedPing() (postfix ! on the chained member) still skips the
+        /// caller as a conditional-access spine; ! is unwrap-only and does not exit the spine.
+        /// </summary>
+        [Test]
+        public async Task Skip_ConditionalAccessInnerSuppressThenAddedMethod_DoesNotRewriteCaller()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedPing(int value)\n        {\n            return value;\n        }");
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            HotReloadAddedMemberHost other = this;\n"
+                + "            other.Inner = this;\n"
+                + "            return other?.Inner!.AddedPing(value) ?? 0;\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("SkipConditionalAccessInnerSuppress.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "conditional access");
+            Assert.That(FindEntry(result, "AddedPing"), Is.Not.Null);
+            Assert.That(
+                FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.Null,
+                "other?.Inner!.AddedPing must skip the caller, not rewrite the ! spine.");
+            Assert.That(
+                result.Output.shimSource,
+                Does.Not.Contain("?global::"),
+                "ExtractReceiver must not splice a shim call after ?.");
+        }
+
+        /// <summary>
         /// What: other?.Get().AddedPing() is a MemberBinding-rooted invocation spine (Get sits
         /// between ? and AddedPing) and skips the caller instead of emitting a parse-invalid shim.
         /// </summary>

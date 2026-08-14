@@ -3548,10 +3548,30 @@ internal sealed class AccessorEntry
         bool virtualCall = !methodSymbol.IsStatic
             && (methodSymbol.IsVirtual || methodSymbol.IsOverride || methodSymbol.IsAbstract);
         string virtualCallLiteral = virtualCall ? "true" : "false";
+        // Why not null: Harmony then uses Func<> generic arguments including TResult as
+        // DynamicMethod parameters, so Func<Host,T> becomes T(Host,T) and bind fails.
+        string delegateArgs = BuildDelegateArgsLiteral(methodSymbol);
         return DelegateFieldName + " = global::HarmonyLib.AccessTools.MethodDelegate<"
             + delegateType + ">(global::HarmonyLib.AccessTools.Method(typeof("
             + declaringType + "), \"" + EscapeStringLiteral(metadataName) + "\", "
-            + typeArray + "), null, " + virtualCallLiteral + ", null);";
+            + typeArray + "), null, " + virtualCallLiteral + ", " + delegateArgs + ");";
+    }
+
+    // Parameter types of the open delegate Harmony should emit, excluding the Func TResult.
+    private static string BuildDelegateArgsLiteral(IMethodSymbol methodSymbol)
+    {
+        List<string> typeofs = new List<string>();
+        if (!methodSymbol.IsStatic)
+        {
+            typeofs.Add("typeof(" + TypeDisplay(methodSymbol.ContainingType) + ")");
+        }
+
+        foreach (IParameterSymbol parameter in methodSymbol.Parameters)
+        {
+            typeofs.Add("typeof(" + TypeDisplay(parameter.Type) + ")");
+        }
+
+        return "new global::System.Type[] { " + string.Join(", ", typeofs) + " }";
     }
 
     private static string BuildTypeArrayLiteral(IMethodSymbol methodSymbol)
