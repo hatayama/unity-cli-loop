@@ -858,7 +858,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return HasDelegationEntry(output.entries) || output.hasAccessorDelegates;
         }
 
-        private static bool NeedsAddedFieldStoreReference(TransformWorkerOutputDto output)
+        internal static bool NeedsAddedFieldStoreReference(TransformWorkerOutputDto output)
         {
             Debug.Assert(output != null, "output must not be null.");
             return output.hasAddedFieldRewrites;
@@ -877,13 +877,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (includeHarmonyReference)
             {
-                references.Add(typeof(Harmony).Assembly.Location);
+                AppendIfMissingByFileName(references, typeof(Harmony).Assembly.Location);
             }
 
             if (includeAddedFieldStoreReference)
             {
-                references.Add(typeof(HotReloadAddedFieldStore).Assembly.Location);
+                AppendIfMissingByFileName(
+                    references,
+                    typeof(HotReloadAddedFieldStore).Assembly.Location);
             }
+        }
+
+        // Why filename (not full path): ToolContracts lives under ScriptAssemblies and is
+        // publicized, so the list may already hold a publicized copy while Location is the raw
+        // DLL. Adding both is CS1703. Harmony is a plugin outside ScriptAssemblies, so this
+        // collision does not arise there, but the same skip is still correct.
+        private static void AppendIfMissingByFileName(List<string> references, string assemblyPath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(assemblyPath), "assemblyPath must not be empty.");
+            string fileName = Path.GetFileName(assemblyPath);
+            for (int index = 0; index < references.Count; index++)
+            {
+                if (string.Equals(
+                    Path.GetFileName(references[index]),
+                    fileName,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+
+            references.Add(assemblyPath);
         }
 
         private static bool HasDelegationEntry(TransformWorkerEntryDto[] entries)

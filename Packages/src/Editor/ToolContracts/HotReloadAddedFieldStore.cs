@@ -10,6 +10,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     /// Side table for hot-reload added fields. Compiled types cannot gain real fields, so
     /// shims store values here. Instance entries follow the host object's lifetime via
     /// ConditionalWeakTable; static entries live until Clear or domain reload.
+    /// Editor main thread only. Thread safety is the caller's responsibility (the current
+    /// hot-reload pipeline applies and clears on the main thread).
     /// </summary>
     public static class HotReloadAddedFieldStore
     {
@@ -35,6 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// <summary>
         /// Returns the stored instance field, running <paramref name="initializer"/> (or
         /// default(T) when it is null) on first access or after a stored type mismatch.
+        /// Reference-type instances only. Struct hosts box on every access and would always
+        /// reinitialize; the worker (PR-4) skips struct hosts.
         /// </summary>
         public static T GetOrInit<T>(object instance, string fieldKey, Func<T> initializer)
         {
@@ -129,9 +133,11 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                 return (true, typed);
             }
 
-            // Why treat null as a hit for reference T: Set stores null in the dictionary, and
-            // `is T` is false for null. Value types are boxed and never stored as null.
-            if (stored == null && !typeof(T).IsValueType)
+            // Why treat null as a hit for reference T and Nullable<T>: Set stores a null
+            // dictionary value, and `is T` is false for null. Non-nullable value types are
+            // boxed and never stored as null.
+            if (stored == null
+                && (!typeof(T).IsValueType || Nullable.GetUnderlyingType(typeof(T)) != null))
             {
                 return (true, default);
             }

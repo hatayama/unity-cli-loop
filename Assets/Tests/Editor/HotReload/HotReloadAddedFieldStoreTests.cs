@@ -101,6 +101,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: storing null for Nullable&lt;T&gt; is a real value, not a miss that re-runs
+        /// the initializer (boxed null is a null reference, unlike non-nullable value types).
+        /// </summary>
+        [Test]
+        public void Set_NullNullableInt_GetOrInitDoesNotReinitialize()
+        {
+            StoreHost host = new StoreHost();
+            string key = HotReloadAddedFieldStore.FormatFieldKey(HostTypeName, FieldName);
+            int calls = 0;
+
+            HotReloadAddedFieldStore.Set<int?>(host, key, null);
+            int? value = HotReloadAddedFieldStore.GetOrInit<int?>(host, key, () =>
+            {
+                calls++;
+                return 7;
+            });
+
+            Assert.That(value, Is.Null);
+            Assert.That(calls, Is.EqualTo(0));
+        }
+
+        /// <summary>
         /// What: a stored value whose runtime type is not T is discarded and the initializer
         /// runs again (added-field type change).
         /// </summary>
