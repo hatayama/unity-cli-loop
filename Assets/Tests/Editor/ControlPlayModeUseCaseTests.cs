@@ -476,7 +476,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
                 new StubCompilationFailureGate(false),
                 quietSaver,
-                editorState);
+                editorState,
+                new StubDomainReloadDropStateProvider());
             ControlPlayModeSchema schema = new ControlPlayModeSchema
             {
                 Action = PlayModeAction.Play,
@@ -505,7 +506,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
                 new StubCompilationFailureGate(false),
                 quietSaver,
-                editorState);
+                editorState,
+                new StubDomainReloadDropStateProvider());
             ControlPlayModeSchema schema = new ControlPlayModeSchema
             {
                 Action = PlayModeAction.Play,
@@ -517,6 +519,95 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.ResumedFromPause, Is.False);
             Assert.That(response.Warning, Is.EqualTo(ControlPlayModeUseCase.FreshPlayStartFromNewSessionWarning));
             Assert.That(editorState.IsPlaying, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies Edit-to-Play with active patches concatenates the fresh-start warning
+        /// and the domain-reload drop warning, separated by a single space.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartsWithActivePatches_AppendsDropWarningAfterFreshStart()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState,
+                new StubDomainReloadDropStateProvider(patchCount: 2));
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            string dropWarning = PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: false,
+                isDomainReloadDisabledOnEnterPlayMode: false,
+                activeHotReloadPatchCount: 2,
+                activePausePointCount: 0);
+            Assert.That(
+                response.Warning,
+                Is.EqualTo(ControlPlayModeUseCase.FreshPlayStartFromNewSessionWarning + " " + dropWarning));
+        }
+
+        /// <summary>
+        /// Verifies resume from pause does not attach the domain-reload drop warning even when
+        /// patches exist, because that path does not reload the domain.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenPlayResumesWithActivePatches_DoesNotAppendDropWarning()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: true);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState,
+                new StubDomainReloadDropStateProvider(patchCount: 2));
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.ResumedFromPause, Is.True);
+            Assert.That(response.Warning, Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies a fresh Play start with zero patches and pause points keeps only the
+        /// existing fresh-start warning.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartsWithZeroDropCounts_KeepsOnlyFreshStartWarning()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState,
+                new StubDomainReloadDropStateProvider());
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Warning, Is.EqualTo(ControlPlayModeUseCase.FreshPlayStartFromNewSessionWarning));
         }
 
         [Test]
@@ -620,6 +711,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void Step()
             {
                 StepCallCount++;
+            }
+        }
+
+        private sealed class StubDomainReloadDropStateProvider : IControlPlayModeDomainReloadDropStateProvider
+        {
+            private readonly int _patchCount;
+            private readonly int _pausePointCount;
+            private readonly bool _isDomainReloadDisabled;
+
+            public StubDomainReloadDropStateProvider(
+                int patchCount = 0,
+                int pausePointCount = 0,
+                bool isDomainReloadDisabled = false)
+            {
+                _patchCount = patchCount;
+                _pausePointCount = pausePointCount;
+                _isDomainReloadDisabled = isDomainReloadDisabled;
+            }
+
+            public int GetActiveHotReloadPatchCount()
+            {
+                return _patchCount;
+            }
+
+            public int GetActivePausePointCount()
+            {
+                return _pausePointCount;
+            }
+
+            public bool IsDomainReloadDisabledOnEnterPlayMode()
+            {
+                return _isDomainReloadDisabled;
             }
         }
 

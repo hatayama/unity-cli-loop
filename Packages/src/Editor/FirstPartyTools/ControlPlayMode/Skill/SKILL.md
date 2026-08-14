@@ -31,6 +31,7 @@ Returns JSON with the current play mode state:
 - `WasAlreadyStopped`: Whether `Stop` was requested while Play Mode was already stopped
 - `ResumedFromPause`: Whether `Play` resumed a paused Play Mode session instead of starting a new one
 - `Message`: Description of the action performed
+- `Warning`: Set when the action carries a caveat. A fresh `Play` start always notes that the session started from Edit-time scene state; additionally, when active hot-reload patches or enabled pause points exist and Domain Reload is enabled, it reports how many of them the Play-entry domain reload will discard.
 
 ## Notes
 
@@ -43,3 +44,4 @@ Returns JSON with the current play mode state:
 - Before relying on PlayMode behavior as verification evidence, check `uloop get-logs --log-type Error` for pre-existing errors. An error already present when PlayMode starts can otherwise be mistaken for one caused by the action under test.
 - `Status` reads the current state with no side effects: `Changed` is always `false`, no waiting, no scene saving, and it is never rejected by compile errors. It reports whether compile errors would currently block `Play` (`BlockedByCompileErrors` with the `CompileErrors` list), read from the last compile result without triggering a new compile. It does not predict unsaved-changes blocking: `BlockedByUnsavedChanges` describes a failed save attempt during a `Play` request, and `Status` never attempts one.
 - `Play` fails immediately with a `CONTROL_PLAY_MODE_UNSAVED_CHANGES` error when unsaved changes cannot be saved quietly — most commonly an Untitled scene, which has no path to save to. The error message lists exactly which scenes or prefab stages blocked it; save the Untitled scene to an explicit path (or discard the changes), then retry.
+- `Play` from Edit mode triggers a domain reload (unless Enter Play Mode Options disable it), which discards all active hot-reload patches and enabled pause points. The response `Warning` reports the counts being dropped. Edits that were only hot-reloaded are not part of the compiled assemblies, so the new session runs the last compiled code — run `uloop compile` before `Play` to keep them, or re-apply `uloop hot-reload` after Play Mode starts.

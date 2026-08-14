@@ -10,6 +10,7 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.Common.Preflight.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.Compile.Editor")]
+[assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.ControlPlayMode.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.Infrastructure")]
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.Tests.PlayMode")]
