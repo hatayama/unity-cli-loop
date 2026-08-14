@@ -34,6 +34,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ArrowRead() => 1;
+
+        public int ExistingGetter
+        {
+            get { return 1; }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ExistingDynamic(object value)
+        {
+            return 0;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ReadPrivateSeed()
         {
             return _privateSeed;
@@ -94,6 +108,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int ChildExisting()
         {
             return 1;
+        }
+    }
+
+    /// <summary>
+    /// Compiled lifecycle hosts so worker tests bind against real types rather than throwaways.
+    /// </summary>
+    public class HotReloadLifecycleMonoPrivateStartFixture : MonoBehaviour
+    {
+        private void Start()
+        {
+            int x = 1;
+            x += 1;
+        }
+    }
+
+    /// <summary>
+    /// Compiled POCO Start host for the lifecycle-note gate.
+    /// </summary>
+    public class HotReloadLifecyclePocoStartFixture
+    {
+        private void Start()
+        {
+            int x = 1;
+            x += 1;
+        }
+    }
+
+    /// <summary>
+    /// Compiled public Start host; name-only notes must not flag this.
+    /// </summary>
+    public class HotReloadLifecycleMonoPublicStartFixture : MonoBehaviour
+    {
+        public void Start()
+        {
+            int x = 1;
+            x += 1;
+        }
+    }
+
+    /// <summary>
+    /// Compiled parameterized Start host; Unity will not invoke this as a message.
+    /// </summary>
+    public class HotReloadLifecycleMonoParamStartFixture : MonoBehaviour
+    {
+        private void Start(int delay)
+        {
+            int x = delay;
+            x += 1;
+        }
+    }
+
+    /// <summary>
+    /// Compiled Awake host for the direct one-shot lifecycle note.
+    /// </summary>
+    public class HotReloadLifecycleAwakeFixture : MonoBehaviour
+    {
+        private void Awake()
+        {
+            int x = 1;
+            x += 1;
+        }
+    }
+
+    /// <summary>
+    /// Compiled alias-shadow host so the local-vs-global using-alias test is not a new type.
+    /// </summary>
+    internal class HotReloadAliasShadowFixture
+    {
+        public string Build()
+        {
+            return "ok";
         }
     }
 }

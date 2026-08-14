@@ -240,6 +240,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
+            if (workerOutput.removedMembers != null && workerOutput.removedMembers.Length > 0)
+            {
+                warnings.Add(FormatRemovedMembersWarning(workerOutput.removedMembers));
+            }
+
             TransformWorkerUnchangedMethodDto[] unchangedMethods =
                 workerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>();
             int unchangedMethodCount = unchangedMethods.Length;
@@ -259,7 +264,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // BuildShimReferencePaths reads Application.dataPath / platform; stay on main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            bool includeHarmonyReference = HasDelegationEntry(workerOutput.entries);
+            bool includeHarmonyReference = NeedsHarmonyReference(workerOutput);
             ShimReferencePathsResult shimReferencePaths = TryBuildShimReferencePaths(
                 compilationAssembly,
                 targetDllPath,
@@ -353,6 +358,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 BindShimAccessors(compileResult.Assembly);
             List<string> inlineRiskMethodLabels = new List<string>();
             int patchedCount = 0;
+            entriesToPatch = TakePatchableEntries(entriesToPatch, outcomes, assemblyResolvePath);
             foreach (TransformWorkerEntryDto entry in entriesToPatch)
             {
                 HotReloadMethodOutcome outcome = ApplyEntry(
@@ -776,8 +782,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return paths.ToArray();
         }
 
+        private static bool NeedsHarmonyReference(TransformWorkerOutputDto output)
+        {
+            return HasDelegationEntry(output.entries) || output.hasAccessorDelegates;
+        }
+
         private static bool HasDelegationEntry(TransformWorkerEntryDto[] entries)
         {
+            if (entries == null)
+            {
+                return false;
+            }
+
             foreach (TransformWorkerEntryDto entry in entries)
             {
                 if (entry.patchKind == HotReloadConstants.PatchKindDelegation)
@@ -787,6 +803,62 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return false;
+        }
+
+        // Why not ApplyEntry: added methods are absent from the compiled assembly, so Resolve
+        // always fails. PR-2 replaces this Skipped outcome with Added.
+        private static TransformWorkerEntryDto[] TakePatchableEntries(
+            TransformWorkerEntryDto[] entries,
+            List<HotReloadMethodOutcome> outcomes,
+            string filePath)
+        {
+            if (entries == null || entries.Length == 0)
+            {
+                return Array.Empty<TransformWorkerEntryDto>();
+            }
+
+            List<TransformWorkerEntryDto> patchable = new List<TransformWorkerEntryDto>();
+            foreach (TransformWorkerEntryDto entry in entries)
+            {
+                if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod)
+                {
+                    string[] parameterTypeFullNames = entry.parameterTypeFullNames ?? Array.Empty<string>();
+                    string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
+                        entry.typeMetadataName,
+                        entry.methodName,
+                        parameterTypeFullNames,
+                        genericArity: 0);
+                    outcomes.Add(
+                        HotReloadMethodOutcome.Skipped(
+                            methodLabel,
+                            HotReloadConstants.AddedMethodDeferredSkipReason,
+                            filePath));
+                    continue;
+                }
+
+                patchable.Add(entry);
+            }
+
+            return patchable.ToArray();
+        }
+
+        private static string FormatRemovedMembersWarning(TransformWorkerRemovedMemberDto[] removedMembers)
+        {
+            List<string> names = new List<string>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (TransformWorkerRemovedMemberDto removed in removedMembers)
+            {
+                if (removed == null || string.IsNullOrEmpty(removed.name) || !seen.Add(removed.name))
+                {
+                    continue;
+                }
+
+                names.Add(removed.name);
+            }
+
+            return string.Format(
+                HotReloadConstants.RemovedMembersWarningFormat,
+                string.Join(", ", names));
         }
 
         // Keep in sync with TransformWorkerProgram.BuildMethodKey (out-of-process worker side).
@@ -833,13 +905,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             List<HotReloadMethodOutcome> failedMethodOutcomes =
                 BuildFailedMethodOutcomes(attribution, assemblyResolvePath);
-            string[] excludedMethodKeys = BuildExcludedMethodKeys(
+            IsolationExclusions exclusions = BuildIsolationExclusions(
                 attribution.FailedEntries,
                 workerOutput.entries);
 
             return await RunIsolationRetryAsync(
                 workerInput,
-                excludedMethodKeys,
+                exclusions,
                 failedMethodOutcomes,
                 compilationAssembly,
                 targetDllPath,
@@ -849,7 +921,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static async Task<HotReloadShimIsolationResult> RunIsolationRetryAsync(
             TransformWorkerInputDto workerInput,
-            string[] excludedMethodKeys,
+            IsolationExclusions exclusions,
             List<HotReloadMethodOutcome> failedMethodOutcomes,
             UnityCompilationAssembly compilationAssembly,
             string targetDllPath,
@@ -862,7 +934,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines = workerInput.defines,
                 referencePaths = workerInput.referencePaths,
                 targetTypesAssemblyPath = workerInput.targetTypesAssemblyPath,
-                excludedMethodKeys = excludedMethodKeys,
+                excludedMethodKeys = exclusions.ExcludedMethodKeys,
+                excludedAddedMethodKeys = exclusions.ExcludedAddedMethodKeys,
                 // Why copy: omitting snapshotSource would make the retry patch unedited methods
                 // again and diverge the retry entries set from the first-pass isolation baseline.
                 snapshotSource = workerInput.snapshotSource,
@@ -887,7 +960,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            bool includeHarmonyReference = HasDelegationEntry(retryOutput.entries);
+            bool includeHarmonyReference = NeedsHarmonyReference(retryOutput);
             ShimReferencePathsResult shimReferencePaths = TryBuildShimReferencePaths(
                 compilationAssembly,
                 targetDllPath,
@@ -938,54 +1011,55 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return failedMethodOutcomes;
         }
 
-        private static string[] BuildExcludedMethodKeys(
+        private static IsolationExclusions BuildIsolationExclusions(
             IReadOnlyList<TransformWorkerEntryDto> failedEntries,
             TransformWorkerEntryDto[] allEntries)
         {
             HashSet<string> excludedKeys = new HashSet<string>(StringComparer.Ordinal);
+            HashSet<string> excludedAddedMethodKeys = new HashSet<string>(StringComparer.Ordinal);
             HashSet<string> failedAddedMethodKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (TransformWorkerEntryDto failedEntry in failedEntries)
             {
                 string methodKey = BuildMethodKey(failedEntry);
                 if (failedEntry.patchKind == HotReloadConstants.PatchKindAddedMethod)
                 {
-                    // Why not exclude the added method: dropping its shim leaves remaining
-                    // callers with CS0103 and isolation collapses to a file-level Failed (G1).
+                    // Why a separate set: dropping a healthy added shim via excludedMethodKeys
+                    // leaves remaining callers with CS0103 (G1). A broken added body must still
+                    // be excluded together with its callers so retry does not re-emit it.
                     failedAddedMethodKeys.Add(methodKey);
+                    excludedAddedMethodKeys.Add(methodKey);
                     continue;
                 }
 
                 excludedKeys.Add(methodKey);
             }
 
-            if (failedAddedMethodKeys.Count == 0 || allEntries == null)
+            if (failedAddedMethodKeys.Count > 0 && allEntries != null)
             {
-                string[] keys = new string[excludedKeys.Count];
-                excludedKeys.CopyTo(keys);
-                return keys;
-            }
-
-            foreach (TransformWorkerEntryDto entry in allEntries)
-            {
-                if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod
-                    || entry.calledAddedMethodKeys == null)
+                foreach (TransformWorkerEntryDto entry in allEntries)
                 {
-                    continue;
-                }
-
-                foreach (string calledKey in entry.calledAddedMethodKeys)
-                {
-                    if (failedAddedMethodKeys.Contains(calledKey))
+                    if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod
+                        || entry.calledAddedMethodKeys == null)
                     {
-                        excludedKeys.Add(BuildMethodKey(entry));
-                        break;
+                        continue;
+                    }
+
+                    foreach (string calledKey in entry.calledAddedMethodKeys)
+                    {
+                        if (failedAddedMethodKeys.Contains(calledKey))
+                        {
+                            excludedKeys.Add(BuildMethodKey(entry));
+                            break;
+                        }
                     }
                 }
             }
 
-            string[] result = new string[excludedKeys.Count];
-            excludedKeys.CopyTo(result);
-            return result;
+            string[] excludedMethodKeys = new string[excludedKeys.Count];
+            excludedKeys.CopyTo(excludedMethodKeys);
+            string[] excludedAddedKeys = new string[excludedAddedMethodKeys.Count];
+            excludedAddedMethodKeys.CopyTo(excludedAddedKeys);
+            return new IsolationExclusions(excludedMethodKeys, excludedAddedKeys);
         }
 
         /// <summary>
@@ -1077,6 +1151,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        private sealed class IsolationExclusions
+        {
+            public string[] ExcludedMethodKeys { get; }
+            public string[] ExcludedAddedMethodKeys { get; }
+
+            public IsolationExclusions(string[] excludedMethodKeys, string[] excludedAddedMethodKeys)
+            {
+                ExcludedMethodKeys = excludedMethodKeys;
+                ExcludedAddedMethodKeys = excludedAddedMethodKeys;
+            }
+        }
+
         /// <summary>
         /// Outcome of <see cref="TryIsolateShimCompileFailureAsync"/>. <see cref="RetryEntries"/>
         /// empty means the retry worker run produced nothing to patch (still a valid, non-null
@@ -1147,8 +1233,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Publicize ScriptAssemblies references; leave engine/system DLLs untouched. Never include
-        /// the original (non-publicized) target assembly. Harmony is added only when the worker
-        /// emitted at least one delegation entry so transplant-only compiles stay byte-identical.
+        /// the original (non-publicized) target assembly. Harmony is added when the worker
+        /// emitted a delegation entry or accessor delegates (addedMethod entries can need them).
         /// </summary>
         private static List<string> BuildShimReferencePaths(
             UnityCompilationAssembly compilationAssembly,

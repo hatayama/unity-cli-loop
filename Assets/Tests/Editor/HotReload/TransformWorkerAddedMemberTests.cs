@@ -214,8 +214,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
 
             AssertHasSkip(result, "AddedVirtual", "vtable slot");
-            AssertHasSkip(result, "ExistingVirtual", "vtable slot");
-            AssertHasSkip(result, "AddedGeneric", "Generic");
+            AssertHasSkip(
+                result,
+                "HotReloadAddedMemberVirtualChild.ExistingVirtual",
+                "vtable slot");
+            AssertHasSkip(result, "AddedGeneric", "Added generic");
             AssertHasSkip(result, "CaptureAdded", "method group");
             Assert.That(FindEntry(result, "AddedInstance"), Is.Not.Null, "Added instance method must still emit.");
         }
@@ -351,6 +354,235 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(caller, Is.Not.Null);
             string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
             Assert.That(slice, Does.Contain(added.shimMethodName));
+        }
+
+        /// <summary>
+        /// What: excludedAddedMethodKeys drops the added shim itself so a broken added body can
+        /// be isolated without re-emitting it.
+        /// </summary>
+        [Test]
+        public async Task Isolation_ExcludedAddedMethodKeys_DropsAddedMethodShim()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedPing(int value)\n        {\n            return value + 1;\n        }");
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value);\n        }",
+                StringComparison.Ordinal);
+            string addedKey = BuildHostMethodKey("AddedPing", "System.Int32");
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("IsolationDropAdded.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk,
+                excludedAddedMethodKeys: new[] { addedKey });
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "AddedPing"), Is.Null, "Excluded added method must not emit.");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "cannot emit");
+        }
+
+        /// <summary>
+        /// What: a caller of a skipped added method is skipped with the unavailable-call reason
+        /// instead of leaving a bare CS0103 in the shim; static method-group capture is skipped
+        /// the same way as instance capture.
+        /// </summary>
+        [Test]
+        public async Task Skip_CallersOfSkippedAddedAndStaticMethodGroup_UseDedicatedReasons()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public virtual int AddedVirtual(int value)\n        {\n            return value;\n        }\n\n"
+                + "        public static int AddedStatic(int value)\n        {\n            return value;\n        }");
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedVirtual(value);\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public int ExistingValue()\n        {\n"
+                + "            System.Func<int, int> bound = AddedStatic;\n"
+                + "            return bound(1);\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("SkipUnavailableAndStaticGroup.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, "AddedVirtual", "vtable slot");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "cannot emit");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingValue), "method group");
+            Assert.That(FindEntry(result, "AddedStatic"), Is.Not.Null);
+        }
+
+        /// <summary>
+        /// What: an added-method call through conditional access skips the referencing method
+        /// rather than rewriting the receiver to __uloopInstance.
+        /// </summary>
+        [Test]
+        public async Task Skip_ConditionalAccessAddedMethodCall_UsesDedicatedReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedPing(int value)\n        {\n            return value;\n        }");
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            HotReloadAddedMemberHost other = this;\n"
+                + "            return other?.AddedPing(value) ?? 0;\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("SkipConditionalAccess.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "conditional access");
+            Assert.That(FindEntry(result, "AddedPing"), Is.Not.Null);
+            Assert.That(
+                result.Output.shimSource,
+                Does.Not.Contain("?.AddedPing"),
+                "Skipped caller must not emit a broken conditional-access rewrite.");
+        }
+
+        /// <summary>
+        /// What: a type absent from the compiled assembly skips every method with the new-type
+        /// out-of-scope reason instead of emitting MethodNotFound entries.
+        /// </summary>
+        [Test]
+        public async Task Skip_NewTypeAbsentFromCompiledAssembly_UsesOutOfScopeReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "    internal class HotReloadAliasShadowFixture\n",
+                "    public class HotReloadBrandNewType\n    {\n"
+                + "        public int Fresh()\n        {\n            return 1;\n        }\n    }\n\n"
+                + "    internal class HotReloadAliasShadowFixture\n",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("SkipNewType.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, "HotReloadBrandNewType.Fresh", "New types are out of scope");
+            Assert.That(FindEntry(result, "Fresh"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a compiled method whose source parameter is rewritten as dynamic is still
+        /// classified Existing (dynamic normalizes to System.Object), not Added.
+        /// </summary>
+        [Test]
+        public async Task Classify_DynamicParameter_DoesNotMisclassifyExistingMethodAsAdded()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingDynamic(object value)\n        {\n            return 0;\n        }",
+                "        public int ExistingDynamic(dynamic value)\n        {\n            return 1;\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("DynamicNotAdded.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto entry = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingDynamic));
+            Assert.That(entry, Is.Not.Null);
+            Assert.That(entry.patchKind, Is.Not.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(entry.parameterTypeFullNames, Is.EqualTo(new[] { "System.Object" }));
+        }
+
+        /// <summary>
+        /// What: a property getter that calls an added method records calledAddedMethodKeys, and
+        /// a getter that captures an added method group is skipped.
+        /// </summary>
+        [Test]
+        public async Task Getter_AddedMethodCallAndMethodGroup_SetsKeysOrSkips()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedPing(int value)\n        {\n            return value;\n        }");
+            edited = edited.Replace(
+                "        public int ExistingGetter\n        {\n            get { return 1; }\n        }",
+                "        public int ExistingGetter\n        {\n            get { return AddedPing(1); }\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult callResult = await RunWorkerOnSourceAsync(
+                WriteEdited("GetterCallsAdded.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(callResult.Success, Is.True, callResult.ErrorMessage);
+            TransformWorkerEntryDto getter = FindEntry(callResult, "get_ExistingGetter");
+            Assert.That(getter, Is.Not.Null);
+            Assert.That(
+                getter.calledAddedMethodKeys,
+                Does.Contain(BuildHostMethodKey("AddedPing", "System.Int32")));
+
+            string groupEdited = WithHostMembers(
+                onDisk,
+                "public int AddedPing(int value)\n        {\n            return value;\n        }");
+            groupEdited = groupEdited.Replace(
+                "        public int ExistingGetter\n        {\n            get { return 1; }\n        }",
+                "        public int ExistingGetter\n        {\n"
+                + "            get { System.Func<int, int> bound = AddedPing; return bound(1); }\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult groupResult = await RunWorkerOnSourceAsync(
+                WriteEdited("GetterMethodGroup.cs", groupEdited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(groupResult.Success, Is.True, groupResult.ErrorMessage);
+            AssertHasSkip(groupResult, "get_ExistingGetter", "method group");
+            Assert.That(FindEntry(groupResult, "AddedPing"), Is.Not.Null);
+        }
+
+        /// <summary>
+        /// What: an added explicit interface implementation is skipped so the compiled
+        /// IHotReloadAddedMemberPing / InterfaceHost fixtures are not dead.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedExplicitInterfaceImplementation_UsesExplicitReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        int Ping(int value);",
+                "        int Ping(int value);\n        int Extra(int value);",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int Ping(int value)\n        {\n            return value;\n        }",
+                "        public int Ping(int value)\n        {\n            return value;\n        }\n\n"
+                + "        int IHotReloadAddedMemberPing.Extra(int value)\n        {\n            return value;\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("SkipExplicitInterface.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, "IHotReloadAddedMemberPing.Extra", "Explicit interface");
+            Assert.That(FindEntry(result, "Extra"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a skipped added method declaration is stripped before drift compare so the skip
+        /// reason is the only signal (no fields/initializers warning).
+        /// </summary>
+        [Test]
+        public async Task Drift_SkippedAddedMethod_DoesNotFireOutsideBodyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public virtual int AddedVirtual(int value)\n        {\n            return value;\n        }");
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("DriftSkippedAdded.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, "AddedVirtual", "vtable slot");
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "Skipped added declarations must not fire fields/initializers drift.\n"
+                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -508,7 +740,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string sourcePath,
             string projectRelativePath,
             string snapshotSource = null,
-            string[] excludedMethodKeys = null)
+            string[] excludedMethodKeys = null,
+            string[] excludedAddedMethodKeys = null)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
@@ -544,7 +777,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource = snapshotSource,
                 projectRelativePath = projectRelativePath,
                 assemblySourcePaths = assemblySourcePaths,
-                excludedMethodKeys = excludedMethodKeys ?? Array.Empty<string>()
+                excludedMethodKeys = excludedMethodKeys ?? Array.Empty<string>(),
+                excludedAddedMethodKeys = excludedAddedMethodKeys ?? Array.Empty<string>()
             };
 
             return await TransformWorkerClient.RunAsync(input, CancellationToken.None);

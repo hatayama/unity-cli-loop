@@ -44,18 +44,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string BurstCompileAttributeFullName = "Unity.Burst.BurstCompileAttribute";
 
+        // Why not "applied": this PR defers added-method ApplyEntry (Skipped). Call sites in
+        // edited bodies already route to the shim; PR-2 replaces the skip with Added.
         public const string NewMemberCompileHint =
-            "Same-file added methods are applied by hot reload; cross-file references and unsupported "
-            + "member kinds still require a real compile (uloop compile).";
+            "Same-file added methods are not applied in this pass; call sites in edited bodies already "
+            + "route to the shim. Cross-file references and unsupported member kinds still require a "
+            + "real compile (uloop compile).";
 
         // Wire value for TransformWorkerEntryDto.patchKind when the worker emits a shim for a
         // method that exists only in the edited source. Keep in sync with PatchKinds.AddedMethod
         // in TransformWorker~/TransformWorker.cs.
         public const string PatchKindAddedMethod = "addedMethod";
 
-        // Wire values for TransformWorkerRemovedMemberDto.kind.
+        // Why Skipped (not Failed): ApplyEntry cannot Resolve an added method until PR-2.
+        public const string AddedMethodDeferredSkipReason =
+            "Added-method application lands in the next change; call sites in edited bodies already route to the shim.";
+
+        // Wire value for TransformWorkerRemovedMemberDto.kind.
+        // Keep in sync with RemovedMemberKinds.Method in TransformWorker~/TransformWorker.cs.
         public const string RemovedMemberKindMethod = "method";
-        public const string RemovedMemberKindField = "field";
+
+        // Format: comma-separated removed member names.
+        public const string RemovedMembersWarningFormat =
+            "Removed members stay present in the compiled assembly until 'uloop compile'; "
+            + "edited bodies no longer call them: {0}.";
 
         public const string MissingUsingCompileHint =
             "This can mean a missing using or global using (hot reload collects global usings from the edited file's assembly).";

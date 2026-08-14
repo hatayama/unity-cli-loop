@@ -88,20 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "Failed to deserialize transform worker output JSON.");
                 }
 
-                output.entries ??= Array.Empty<TransformWorkerEntryDto>();
-                output.skipped ??= Array.Empty<TransformWorkerSkippedDto>();
-                output.parseErrors ??= Array.Empty<string>();
-                output.declarationDriftWarnings ??= Array.Empty<string>();
-                output.unchangedMethods ??= Array.Empty<TransformWorkerUnchangedMethodDto>();
-                output.removedMembers ??= Array.Empty<TransformWorkerRemovedMemberDto>();
-                output.shimSource ??= string.Empty;
-                foreach (TransformWorkerEntryDto entry in output.entries)
-                {
-                    entry.patchKind ??= string.Empty;
-                    entry.calledAddedMethodKeys ??= Array.Empty<string>();
-                    entry.parameterTypeFullNames ??= Array.Empty<string>();
-                }
-
+                CoalesceOutput(output);
                 return TransformWorkerClientResult.SuccessResult(output);
             }
             finally
@@ -110,6 +97,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Directory.Delete(tempDirectory, recursive: true);
                 }
+            }
+        }
+
+        // Why internal: tests must exercise this path instead of re-implementing ??=.
+        internal static void CoalesceOutput(TransformWorkerOutputDto output)
+        {
+            Debug.Assert(output != null, "output must not be null.");
+
+            output.entries ??= Array.Empty<TransformWorkerEntryDto>();
+            output.skipped ??= Array.Empty<TransformWorkerSkippedDto>();
+            output.parseErrors ??= Array.Empty<string>();
+            output.declarationDriftWarnings ??= Array.Empty<string>();
+            output.unchangedMethods ??= Array.Empty<TransformWorkerUnchangedMethodDto>();
+            output.removedMembers ??= Array.Empty<TransformWorkerRemovedMemberDto>();
+            output.shimSource ??= string.Empty;
+            foreach (TransformWorkerEntryDto entry in output.entries)
+            {
+                if (entry == null)
+                {
+                    continue;
+                }
+
+                entry.patchKind ??= string.Empty;
+                entry.calledAddedMethodKeys ??= Array.Empty<string>();
+                entry.parameterTypeFullNames ??= Array.Empty<string>();
             }
         }
 

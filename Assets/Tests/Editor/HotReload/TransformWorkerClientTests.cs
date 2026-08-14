@@ -245,12 +245,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an expression-bodied method maps its #line to the arrow expression's original
-        /// start line (not the declaration keyword line when they differ).
+        /// start line (not the declaration keyword line when they differ). Uses the compiled
+        /// HotReloadAddedMemberHost.ArrowRead so the type is present in the test assembly.
         /// </summary>
         [Test]
         public async Task BootstrapAndRun_ArrowBodyMethod_LineDirectiveUsesArrowExpressionLine()
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string hostPath = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadAddedMemberHost.cs");
+            string onDisk = File.ReadAllText(hostPath);
+            string edited = onDisk.Replace(
+                "        public int ArrowRead() => 1;",
+                "        public int ArrowRead()\n            => 42;",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk), "Precondition: ArrowRead must become multi-line.");
+
             string tempDirectory = Path.Combine(
                 projectRoot,
                 "Library",
@@ -259,36 +273,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "ArrowLineDirective");
             Directory.CreateDirectory(tempDirectory);
             string sourcePath = Path.Combine(tempDirectory, "ArrowBodyFixture.cs");
-            // Line 1 blank intentionally so the arrow expression starts on line 7 while the
-            // method keyword is on line 6 — the #line must report 7.
-            // Why a constant body: private-field access would force Delegation against a type that
-            // is not in the compiled test assembly; a literal return keeps Transplant and still
-            // exercises arrow-expression line mapping.
-            const string sourceText =
-                "\nnamespace ArrowLineDirectiveFixture\n{\n    public class ArrowHost\n    {\n"
-                + "        public int Read()\n"
-                + "            => 42;\n"
-                + "    }\n}\n";
-            File.WriteAllText(sourcePath, sourceText);
+            File.WriteAllText(sourcePath, edited);
 
-            string projectRelativePath = "Library/UloopHotReload/TestSources/ArrowLineDirective/ArrowBodyFixture.cs";
-            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(sourcePath, projectRelativePath);
+            string projectRelativePath = "Assets/Tests/Editor/HotReload/HotReloadAddedMemberHost.cs";
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                projectRelativePath,
+                snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.entries, Is.Not.Empty);
 
             TransformWorkerEntryDto arrowEntry = null;
             foreach (TransformWorkerEntryDto entry in result.Output.entries)
             {
-                if (entry.methodName == "Read")
+                if (entry.methodName == nameof(HotReloadAddedMemberHost.ArrowRead))
                 {
                     arrowEntry = entry;
                     break;
                 }
             }
 
-            Assert.That(arrowEntry, Is.Not.Null, "Read entry missing.");
+            Assert.That(arrowEntry, Is.Not.Null, "ArrowRead entry missing.");
+            int expectedLine = FindLineNumberContaining(edited, "=> 42;");
+            Assert.That(expectedLine, Is.GreaterThan(0));
             // Why not SliceShimMethod: expression-bodied shims have no `{` block to bound a slice.
-            string expectedLineDirective = "#line 7 \"" + projectRelativePath + "\"";
+            string expectedLineDirective = "#line " + expectedLine + " \"" + projectRelativePath + "\"";
             Assert.That(
                 result.Output.shimSource,
                 Does.Contain(expectedLineDirective),
@@ -979,6 +988,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string monoPrivateSource =
                 "using UnityEngine;\n"
+                + "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n{\n"
                 + "public class HotReloadLifecycleMonoPrivateStartFixture : MonoBehaviour\n"
                 + "{\n"
                 + "    private void Start()\n"
@@ -986,18 +996,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        int x = 1;\n"
                 + "        x += 1;\n"
                 + "    }\n"
-                + "}\n";
+                + "}\n}\n";
             string pocoSource =
-                "public class HotReloadLifecyclePocoStartFixture\n"
+                "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n{\n"
+                + "public class HotReloadLifecyclePocoStartFixture\n"
                 + "{\n"
                 + "    private void Start()\n"
                 + "    {\n"
                 + "        int x = 1;\n"
                 + "        x += 1;\n"
                 + "    }\n"
-                + "}\n";
+                + "}\n}\n";
             string monoPublicSource =
                 "using UnityEngine;\n"
+                + "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n{\n"
                 + "public class HotReloadLifecycleMonoPublicStartFixture : MonoBehaviour\n"
                 + "{\n"
                 + "    public void Start()\n"
@@ -1005,9 +1017,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        int x = 1;\n"
                 + "        x += 1;\n"
                 + "    }\n"
-                + "}\n";
+                + "}\n}\n";
             string monoParameterizedSource =
                 "using UnityEngine;\n"
+                + "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n{\n"
                 + "public class HotReloadLifecycleMonoParamStartFixture : MonoBehaviour\n"
                 + "{\n"
                 + "    private void Start(int delay)\n"
@@ -1015,7 +1028,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        int x = delay;\n"
                 + "        x += 1;\n"
                 + "    }\n"
-                + "}\n";
+                + "}\n}\n";
 
             TransformWorkerEntryDto monoPrivateEntry =
                 await RunWorkerAndFindEntryAsync(
@@ -1238,35 +1251,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Run_WithSnapshotDifferingOnlyInSetter_DoesNotEmitUnchangedGetter()
         {
-            const string source =
-                "namespace GetterBaselineScope\n"
-                + "{\n"
-                + "    public class Host\n"
-                + "    {\n"
-                + "        private int _value;\n"
-                + "        public int Value\n"
-                + "        {\n"
-                + "            get { return _value; }\n"
-                + "            set { _value = value; }\n"
-                + "        }\n"
-                + "    }\n"
-                + "}\n";
-            string snapshotSource = source.Replace(
+            string sourcePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(sourcePath);
+            string snapshotSource = onDisk.Replace(
                 "set { _value = value; }",
                 "set { _value = value + 1; }",
                 StringComparison.Ordinal);
-
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string directory = Path.Combine(
-                projectRoot,
-                HotReloadConstants.TestSourcesRelativeDirectory);
-            Directory.CreateDirectory(directory);
-            string sourcePath = Path.Combine(directory, "SetterOnlyBaseline.cs");
-            File.WriteAllText(sourcePath, source);
+            Assert.That(snapshotSource, Is.Not.EqualTo(onDisk), "Precondition: setter must differ.");
 
             TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
                 sourcePath,
-                "Library/UloopHotReload/TestSources/SetterOnlyBaseline.cs",
+                ResolveShapeFixtureProjectRelativePath(),
                 snapshotSource: snapshotSource);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -1307,6 +1302,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string source =
                 "using UnityEngine;\n"
+                + "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n{\n"
                 + "public class HotReloadLifecycleAwakeFixture : MonoBehaviour\n"
                 + "{\n"
                 + "    private void Awake()\n"
@@ -1314,7 +1310,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        int x = 1;\n"
                 + "        x += 1;\n"
                 + "    }\n"
-                + "}\n";
+                + "}\n}\n";
 
             TransformWorkerEntryDto awakeEntry =
                 await RunWorkerAndFindEntryAsync(source, "LifecycleAwake.cs", "Awake");
@@ -1543,6 +1539,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return "Assets/Tests/Editor/HotReload/HotReloadShapeFixtures.cs";
         }
 
+        private static int FindLineNumberContaining(string source, string fragment)
+        {
+            string[] lines = source.Replace("\r\n", "\n").Split('\n');
+            for (int index = 0; index < lines.Length; index++)
+            {
+                if (lines[index].Contains(fragment))
+                {
+                    return index + 1;
+                }
+            }
+
+            return -1;
+        }
+
         private static string FormatEntryMethodNames(TransformWorkerEntryDto[] entries)
         {
             if (entries == null || entries.Length == 0)
@@ -1593,10 +1603,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.Null,
                 "Omitted calledAddedMethodKeys must deserialize as null.");
 
-            omitted.removedMembers ??= Array.Empty<TransformWorkerRemovedMemberDto>();
-            omitted.entries[0].calledAddedMethodKeys ??= Array.Empty<string>();
+            TransformWorkerClient.CoalesceOutput(omitted);
+            Assert.That(omitted.removedMembers, Is.Not.Null);
             Assert.That(omitted.removedMembers, Is.Empty);
+            Assert.That(omitted.entries[0].calledAddedMethodKeys, Is.Not.Null);
             Assert.That(omitted.entries[0].calledAddedMethodKeys, Is.Empty);
+            Assert.That(omitted.declarationDriftWarnings, Is.Not.Null);
+            Assert.That(omitted.unchangedMethods, Is.Not.Null);
+            Assert.That(omitted.parseErrors, Is.Not.Null);
+            Assert.That(omitted.skipped, Is.Not.Null);
+            Assert.That(omitted.entries[0].parameterTypeFullNames, Is.Not.Null);
+            Assert.That(omitted.shimSource, Is.Not.Null);
 
             string emptyJson =
                 "{\"shimSource\":\"\",\"entries\":[{\"methodName\":\"Caller\",\"calledAddedMethodKeys\":[]}],"

@@ -17,6 +17,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // first compile round; the retry worker run drops these methods entirely.
         public string[] excludedMethodKeys;
 
+        // Added-method keys whose shim bodies failed the first compile. Distinct from
+        // excludedMethodKeys so a healthy added shim is not dropped when an existing method fails
+        // (G1), while a broken added body can still be excluded together with its callers.
+        public string[] excludedAddedMethodKeys;
+
         // Verified snapshot text for edited-method detection. Null = no baseline, patch all methods.
         // Why pass text (not a path): avoids an IO race between orchestrator verification and worker
         // read that would crash the whole file under the no-try-catch policy.
