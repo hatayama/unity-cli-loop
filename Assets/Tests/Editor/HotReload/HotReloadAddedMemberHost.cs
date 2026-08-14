@@ -97,6 +97,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Compiled struct host so added-field tests can skip struct types against a real type.
+    /// GetOrInit boxes struct receivers and would reinitialize on every access.
+    /// </summary>
+    public struct HotReloadAddedFieldStructHost
+    {
+        public int Existing;
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ReadExisting()
+        {
+            return Existing;
+        }
+    }
+
+    /// <summary>
     /// Compiled MonoBehaviour host so Unity-message added-method warnings can be classified
     /// against a real compiled type rather than a throwaway uncompiled class.
     /// </summary>

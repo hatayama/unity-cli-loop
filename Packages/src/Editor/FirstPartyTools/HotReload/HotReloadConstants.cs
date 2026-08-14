@@ -65,8 +65,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "Run 'uloop compile'.";
 
         // Wire value for TransformWorkerRemovedMemberDto.kind.
-        // Keep in sync with RemovedMemberKinds.Method in TransformWorker~/TransformWorker.cs.
+        // Keep in sync with RemovedMemberKinds in TransformWorker~/TransformWorker.cs.
         public const string RemovedMemberKindMethod = "method";
+
+        public const string RemovedMemberKindField = "field";
 
         // Format: comma-separated removed member names.
         public const string RemovedMembersWarningFormat =

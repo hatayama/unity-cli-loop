@@ -301,6 +301,7 @@ public static class TransformWorkerProgram
         List<UsingDirectiveSyntax> assemblyGlobalUsings =
             CollectAssemblyGlobalUsings(input, parseOptions);
         AddedMethodCatalog addedMethodCatalog = new AddedMethodCatalog();
+        AddedFieldCatalog addedFieldCatalog = new AddedFieldCatalog();
         List<TypeEmitState> typeEmitStates = new List<TypeEmitState>();
 
         foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
@@ -343,6 +344,7 @@ public static class TransformWorkerProgram
                 assemblyGlobalUsings,
                 shimTypes,
                 addedMethodCatalog,
+                addedFieldCatalog,
                 skipped,
                 unchangedMethods,
                 declarationDriftWarnings,
@@ -360,24 +362,38 @@ public static class TransformWorkerProgram
                 plainCurrentMethodMap,
                 addedMethodCatalog,
                 removedMembers);
+            Dictionary<string, VariableDeclaratorSyntax> snapshotFieldMap =
+                BuildSyntaxFieldMapOrNull(baselineSnapshotRoot);
+            Dictionary<string, VariableDeclaratorSyntax> currentFieldMap =
+                BuildSyntaxFieldMapOrNull(plainRoot);
+            if (snapshotFieldMap != null && currentFieldMap != null)
+            {
+                CollectRemovedFields(
+                    snapshotFieldMap,
+                    currentFieldMap,
+                    addedFieldCatalog,
+                    removedMembers);
+            }
         }
 
         SkipBodiesThatCannotUseAddedMethods(
             typeEmitStates,
             semanticModel,
             addedMethodCatalog,
+            addedFieldCatalog,
             skipped);
 
         if (hasBaseline && baselineSnapshotRoot != null)
         {
-            // Why after classification: added/removed method declarations must be stripped
-            // before AreEquivalent, or every method addition would fire "not applied".
+            // Why after classification: added/removed method and field declarations must be
+            // stripped before AreEquivalent, or every addition would fire "not applied".
             AppendOutsideMethodBodyDriftWarningIfNeeded(
                 baselineSnapshotRoot,
                 plainRoot,
                 Path.GetFileName(input.SourcePath),
                 declarationDriftWarnings,
-                addedMethodCatalog);
+                addedMethodCatalog,
+                addedFieldCatalog);
         }
 
         foreach (TypeEmitState typeState in typeEmitStates)
@@ -386,6 +402,7 @@ public static class TransformWorkerProgram
                 typeState,
                 semanticModel,
                 addedMethodCatalog,
+                addedFieldCatalog,
                 entries);
             foreach (PropertyDeclarationSyntax propertyDeclaration in typeState.TypeDeclaration.Members
                 .OfType<PropertyDeclarationSyntax>())
@@ -419,7 +436,8 @@ public static class TransformWorkerProgram
                         globalShimMethodCounter,
                         typeState.CurrentShimType,
                         assemblyGlobalUsings,
-                        addedMethodCatalog);
+                        addedMethodCatalog,
+                        addedFieldCatalog);
                 typeState.CurrentShimType = nextShimType;
                 shimTypeCounter = nextShimTypeCounter;
                 globalShimMethodCounter = nextGlobalShimMethodCounter;
@@ -448,7 +466,7 @@ public static class TransformWorkerProgram
             BaselineDisabledByDuplicateKeys = baselineDisabledByDuplicateKeys,
             RemovedMembers = removedMembers.ToArray(),
             HasAccessorDelegates = hasAccessorDelegates,
-            HasAddedFieldRewrites = false
+            HasAddedFieldRewrites = addedFieldCatalog.HasStoreRewrites
         };
     }
 
@@ -756,6 +774,12 @@ public static class TransformWorkerProgram
             + string.Join(",", parameterKeys) + ")";
     }
 
+    // Keep in sync with HotReloadAddedFieldStore.FormatFieldKey / FieldKeySeparator.
+    private static string BuildSyntaxFieldKey(string typeMetadataName, string fieldName)
+    {
+        return typeMetadataName + TransformWorkerProgramMarker.AddedFieldKeySeparator + fieldName;
+    }
+
     private static string BuildSyntaxParameterTypeKey(ParameterSyntax parameter)
     {
         // Why NormalizeWhitespace: trivia / spacing differences must not invent distinct keys.
@@ -884,6 +908,33 @@ public static class TransformWorkerProgram
         return map;
     }
 
+    private static Dictionary<string, VariableDeclaratorSyntax> BuildSyntaxFieldMapOrNull(
+        CompilationUnitSyntax root)
+    {
+        Dictionary<string, VariableDeclaratorSyntax> map =
+            new Dictionary<string, VariableDeclaratorSyntax>(StringComparer.Ordinal);
+        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
+        {
+            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
+            foreach (FieldDeclarationSyntax fieldDeclaration in typeDeclaration.Members
+                .OfType<FieldDeclarationSyntax>())
+            {
+                foreach (VariableDeclaratorSyntax variable in fieldDeclaration.Declaration.Variables)
+                {
+                    string key = BuildSyntaxFieldKey(typeMetadataName, variable.Identifier.Text);
+                    if (map.ContainsKey(key))
+                    {
+                        return null;
+                    }
+
+                    map[key] = variable;
+                }
+            }
+        }
+
+        return map;
+    }
+
     private static Dictionary<string, PropertyDeclarationSyntax> BuildSyntaxPropertyMapOrNull(
         CompilationUnitSyntax root)
     {
@@ -933,15 +984,32 @@ public static class TransformWorkerProgram
         CompilationUnitSyntax currentRoot,
         string fileName,
         List<string> declarationDriftWarnings,
-        AddedMethodCatalog addedMethodCatalog)
+        AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog)
     {
-        StripHandledMethodDeclarationsRewriter stripSnapshot =
-            new StripHandledMethodDeclarationsRewriter(
-                addedMethodCatalog.RemovedSyntaxKeys,
+        HashSet<string> snapshotKeys = new HashSet<string>(
+            addedMethodCatalog.RemovedSyntaxKeys,
+            StringComparer.Ordinal);
+        foreach (string key in addedFieldCatalog.RemovedSyntaxKeys)
+        {
+            snapshotKeys.Add(key);
+        }
+
+        HashSet<string> currentKeys = new HashSet<string>(
+            addedMethodCatalog.AddedSyntaxKeys,
+            StringComparer.Ordinal);
+        foreach (string key in addedFieldCatalog.AddedSyntaxKeys)
+        {
+            currentKeys.Add(key);
+        }
+
+        StripHandledMemberDeclarationsRewriter stripSnapshot =
+            new StripHandledMemberDeclarationsRewriter(
+                snapshotKeys,
                 Array.Empty<string>());
-        StripHandledMethodDeclarationsRewriter stripCurrent =
-            new StripHandledMethodDeclarationsRewriter(
-                addedMethodCatalog.AddedSyntaxKeys,
+        StripHandledMemberDeclarationsRewriter stripCurrent =
+            new StripHandledMemberDeclarationsRewriter(
+                currentKeys,
                 addedMethodCatalog.AddedTypeSyntaxKeys);
         StripMethodBodiesRewriter bodyStripper = new StripMethodBodiesRewriter();
         SyntaxNode strippedSnapshot = bodyStripper.Visit(stripSnapshot.Visit(snapshotRoot));
@@ -953,12 +1021,12 @@ public static class TransformWorkerProgram
         }
     }
 
-    private sealed class StripHandledMethodDeclarationsRewriter : CSharpSyntaxRewriter
+    private sealed class StripHandledMemberDeclarationsRewriter : CSharpSyntaxRewriter
     {
         private readonly HashSet<string> _syntaxKeysToStrip;
         private readonly HashSet<string> _typeSyntaxKeysToStrip;
 
-        public StripHandledMethodDeclarationsRewriter(
+        public StripHandledMemberDeclarationsRewriter(
             IReadOnlyCollection<string> syntaxKeysToStrip,
             IReadOnlyCollection<string> typeSyntaxKeysToStrip)
         {
@@ -1030,6 +1098,39 @@ public static class TransformWorkerProgram
             }
 
             return base.VisitMethodDeclaration(node);
+        }
+
+        public override SyntaxNode VisitFieldDeclaration(FieldDeclarationSyntax node)
+        {
+            TypeDeclarationSyntax typeDeclaration = node.Parent as TypeDeclarationSyntax;
+            if (typeDeclaration == null)
+            {
+                return base.VisitFieldDeclaration(node);
+            }
+
+            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
+            List<VariableDeclaratorSyntax> remaining = new List<VariableDeclaratorSyntax>();
+            foreach (VariableDeclaratorSyntax variable in node.Declaration.Variables)
+            {
+                string syntaxKey = BuildSyntaxFieldKey(typeMetadataName, variable.Identifier.Text);
+                if (!_syntaxKeysToStrip.Contains(syntaxKey))
+                {
+                    remaining.Add(variable);
+                }
+            }
+
+            if (remaining.Count == 0)
+            {
+                return null;
+            }
+
+            if (remaining.Count == node.Declaration.Variables.Count)
+            {
+                return base.VisitFieldDeclaration(node);
+            }
+
+            return node.WithDeclaration(
+                node.Declaration.WithVariables(SyntaxFactory.SeparatedList(remaining)));
         }
     }
 
@@ -1336,7 +1437,8 @@ public static class TransformWorkerProgram
             int globalShimMethodCounter,
             ShimTypeBuilder currentShimType,
             List<UsingDirectiveSyntax> assemblyGlobalUsings,
-            AddedMethodCatalog addedMethodCatalog)
+            AddedMethodCatalog addedMethodCatalog,
+            AddedFieldCatalog addedFieldCatalog)
     {
         IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
         if (propertySymbol == null || propertySymbol.GetMethod == null)
@@ -1417,7 +1519,8 @@ public static class TransformWorkerProgram
         string addedCallSiteSkip = EvaluateAddedCallSiteSkipReason(
             getterBodyNode,
             semanticModel,
-            addedMethodCatalog);
+            addedMethodCatalog,
+            addedFieldCatalog);
         if (addedCallSiteSkip != null)
         {
             skipped.Add(new WorkerSkipped
@@ -1460,7 +1563,8 @@ public static class TransformWorkerProgram
             typeSymbol,
             semanticModel,
             rewritePlan,
-            addedMethodCatalog);
+            addedMethodCatalog,
+            addedFieldCatalog);
         currentShimType.AddMethod(rewrittenMethod, shimMethodName);
 
         entries.Add(new WorkerEntry
@@ -1561,13 +1665,15 @@ public static class TransformWorkerProgram
         INamedTypeSymbol targetType,
         SemanticModel semanticModel,
         AccessorPlan accessorPlan,
-        AddedMethodCatalog addedMethodCatalog)
+        AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog)
     {
         ShimBodyRewriter rewriter = new ShimBodyRewriter(
             semanticModel,
             targetType,
             accessorPlan,
-            addedMethodCatalog);
+            addedMethodCatalog,
+            addedFieldCatalog);
         SyntaxNode rewrittenBody = rewriter.Visit(getterBodyNode);
         // Why transfer: Visit may rebuild ArrowExpressionClause nodes and drop #line annotations.
         rewrittenBody = TransferUloopLineAnnotations(getterBodyNode, rewrittenBody);
@@ -2125,6 +2231,7 @@ public static class TransformWorkerProgram
         List<UsingDirectiveSyntax> assemblyGlobalUsings,
         List<ShimTypeBuilder> shimTypes,
         AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog,
         List<WorkerSkipped> skipped,
         List<WorkerUnchangedMethod> unchangedMethods,
         List<string> declarationDriftWarnings,
@@ -2137,6 +2244,13 @@ public static class TransformWorkerProgram
             SkipAllMethodsOnUncompiledType(typeState, semanticModel, skipped, addedMethodCatalog);
             return (shimTypeCounter, globalShimMethodCounter);
         }
+
+        ClassifyAddedFields(
+            typeState,
+            semanticModel,
+            compiledType,
+            addedFieldCatalog,
+            declarationDriftWarnings);
 
         foreach (MethodDeclarationSyntax methodDeclaration in typeState.TypeDeclaration.Members
             .OfType<MethodDeclarationSyntax>())
@@ -2335,6 +2449,7 @@ public static class TransformWorkerProgram
         TypeEmitState typeState,
         SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog,
         List<WorkerEntry> entries)
     {
         foreach (QueuedShimMethod queued in typeState.QueuedMethods)
@@ -2348,7 +2463,8 @@ public static class TransformWorkerProgram
                 typeState.TypeSymbol,
                 semanticModel,
                 rewritePlan,
-                addedMethodCatalog);
+                addedMethodCatalog,
+                addedFieldCatalog);
             queued.ShimType.AddMethod(rewrittenMethod, queued.ShimMethodName);
 
             SyntaxNode bodyNode =
@@ -2392,7 +2508,7 @@ public static class TransformWorkerProgram
                 continue;
             }
 
-            addedMethodCatalog.AddRemovedSyntaxKey(pair.Key);
+                addedMethodCatalog.AddRemovedSyntaxKey(pair.Key);
             string name = pair.Value.Identifier.Text;
             if (!seenNames.Add(name))
             {
@@ -2402,6 +2518,35 @@ public static class TransformWorkerProgram
             removedMembers.Add(new WorkerRemovedMember
             {
                 Kind = RemovedMemberKinds.Method,
+                Name = name
+            });
+        }
+    }
+
+    private static void CollectRemovedFields(
+        Dictionary<string, VariableDeclaratorSyntax> snapshotFieldMap,
+        Dictionary<string, VariableDeclaratorSyntax> plainCurrentFieldMap,
+        AddedFieldCatalog addedFieldCatalog,
+        List<WorkerRemovedMember> removedMembers)
+    {
+        HashSet<string> seenNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (KeyValuePair<string, VariableDeclaratorSyntax> pair in snapshotFieldMap)
+        {
+            if (plainCurrentFieldMap.ContainsKey(pair.Key))
+            {
+                continue;
+            }
+
+            addedFieldCatalog.AddRemovedSyntaxKey(pair.Key);
+            string name = pair.Value.Identifier.Text;
+            if (!seenNames.Add(name))
+            {
+                continue;
+            }
+
+            removedMembers.Add(new WorkerRemovedMember
+            {
+                Kind = RemovedMemberKinds.Field,
                 Name = name
             });
         }
@@ -2461,6 +2606,7 @@ public static class TransformWorkerProgram
         List<TypeEmitState> typeEmitStates,
         SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog,
         List<WorkerSkipped> skipped)
     {
         bool progressed;
@@ -2477,7 +2623,8 @@ public static class TransformWorkerProgram
                     string skipReason = EvaluateAddedCallSiteSkipReason(
                         bodyNode,
                         semanticModel,
-                        addedMethodCatalog);
+                        addedMethodCatalog,
+                        addedFieldCatalog);
                     if (skipReason != null)
                     {
                         skipped.Add(new WorkerSkipped
@@ -2507,7 +2654,8 @@ public static class TransformWorkerProgram
     private static string EvaluateAddedCallSiteSkipReason(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
-        AddedMethodCatalog addedMethodCatalog)
+        AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog)
     {
         if (bodyNode == null)
         {
@@ -2549,7 +2697,7 @@ public static class TransformWorkerProgram
             return AddedMethodSkipReasons.MethodGroupReference;
         }
 
-        return null;
+        return EvaluateAddedFieldSkipReason(bodyNode, semanticModel, addedFieldCatalog);
     }
 
     private static bool BodyReferencesAddedMethodGroup(
@@ -2780,6 +2928,619 @@ public static class TransformWorkerProgram
         return false;
     }
 
+    private static bool CompiledTypeHasField(INamedTypeSymbol compiledType, IFieldSymbol sourceField)
+    {
+        foreach (ISymbol member in compiledType.GetMembers(sourceField.Name))
+        {
+            if (member is IFieldSymbol compiledField
+                && compiledField.IsStatic == sourceField.IsStatic
+                && compiledField.IsConst == sourceField.IsConst)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// What: classifies source fields missing from the compiled type as added, and records
+    /// store/const/unavailable bindings used by skip evaluation and body rewrite.
+    /// </summary>
+    private static void ClassifyAddedFields(
+        TypeEmitState typeState,
+        SemanticModel semanticModel,
+        INamedTypeSymbol compiledType,
+        AddedFieldCatalog addedFieldCatalog,
+        List<string> declarationDriftWarnings)
+    {
+        foreach (FieldDeclarationSyntax fieldDeclaration in typeState.TypeDeclaration.Members
+            .OfType<FieldDeclarationSyntax>())
+        {
+            foreach (VariableDeclaratorSyntax variable in fieldDeclaration.Declaration.Variables)
+            {
+                IFieldSymbol fieldSymbol = semanticModel.GetDeclaredSymbol(variable) as IFieldSymbol;
+                if (fieldSymbol == null || CompiledTypeHasField(compiledType, fieldSymbol))
+                {
+                    continue;
+                }
+
+                ClassifyOneAddedField(
+                    typeState,
+                    semanticModel,
+                    fieldDeclaration,
+                    variable,
+                    fieldSymbol,
+                    addedFieldCatalog,
+                    declarationDriftWarnings);
+            }
+        }
+    }
+
+    private static void ClassifyOneAddedField(
+        TypeEmitState typeState,
+        SemanticModel semanticModel,
+        FieldDeclarationSyntax fieldDeclaration,
+        VariableDeclaratorSyntax variable,
+        IFieldSymbol fieldSymbol,
+        AddedFieldCatalog addedFieldCatalog,
+        List<string> declarationDriftWarnings)
+    {
+        string syntaxKey = BuildSyntaxFieldKey(typeState.TypeMetadataNameFromSyntax, fieldSymbol.Name);
+        string fieldKey = FormatAddedFieldStoreKey(
+            CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
+            fieldSymbol.Name);
+        addedFieldCatalog.MarkClassifiedAdded(fieldKey);
+        addedFieldCatalog.AddAddedSyntaxKey(syntaxKey);
+
+        if (FieldHasSerializationAttribute(fieldDeclaration))
+        {
+            declarationDriftWarnings.Add(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    AddedFieldSkipReasons.SerializeWarningFormat,
+                    fieldSymbol.Name));
+        }
+
+        AddedFieldBinding binding = new AddedFieldBinding
+        {
+            FieldKey = fieldKey,
+            SyntaxKey = syntaxKey,
+            FieldName = fieldSymbol.Name,
+            FieldType = fieldSymbol.Type,
+            IsStatic = fieldSymbol.IsStatic,
+            IsConst = fieldSymbol.IsConst,
+            ConstantValue = fieldSymbol.HasConstantValue ? fieldSymbol.ConstantValue : null,
+            Initializer = variable.Initializer != null ? variable.Initializer.Value : null
+        };
+
+        // Why skip struct hosts: GetOrInit boxes the receiver, so every access looks like a
+        // new instance and re-runs the initializer instead of remembering the value.
+        if (typeState.TypeSymbol.TypeKind == TypeKind.Struct)
+        {
+            binding.UnavailableReason = AddedFieldSkipReasons.StructHost;
+            addedFieldCatalog.RegisterUnavailable(binding);
+            return;
+        }
+
+        if (fieldSymbol.IsConst)
+        {
+            if (TryCreateConstantLiteral(binding.ConstantValue, fieldSymbol.Type) == null)
+            {
+                binding.UnavailableReason = AddedFieldSkipReasons.UnavailableAddedField;
+                addedFieldCatalog.RegisterUnavailable(binding);
+                return;
+            }
+
+            addedFieldCatalog.RegisterConst(binding);
+            return;
+        }
+
+        // Why skip private/internal initializer access: the injected static lambda is a normal
+        // method in the shim assembly and does not get Harmony skip-visibility.
+        if (binding.Initializer != null
+            && SubtreeHasInaccessibleMemberAccess(semanticModel, new[] { binding.Initializer }))
+        {
+            binding.UnavailableReason = AddedFieldSkipReasons.InaccessibleInitializer;
+            addedFieldCatalog.RegisterUnavailable(binding);
+            return;
+        }
+
+        addedFieldCatalog.RegisterStore(binding);
+    }
+
+    private static bool FieldHasSerializationAttribute(FieldDeclarationSyntax fieldDeclaration)
+    {
+        foreach (AttributeListSyntax attributeList in fieldDeclaration.AttributeLists)
+        {
+            foreach (AttributeSyntax attribute in attributeList.Attributes)
+            {
+                string name = attribute.Name.ToString();
+                int lastDot = name.LastIndexOf('.');
+                string simpleName = lastDot >= 0 ? name.Substring(lastDot + 1) : name;
+                if (simpleName == "SerializeField"
+                    || simpleName == "SerializeReference"
+                    || simpleName == "FormerlySerializedAs")
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static string FormatAddedFieldStoreKey(string typeMetadataName, string fieldName)
+    {
+        return typeMetadataName + TransformWorkerProgramMarker.AddedFieldKeySeparator + fieldName;
+    }
+
+    private static string EvaluateAddedFieldSkipReason(
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        if (bodyNode == null || addedFieldCatalog == null || !addedFieldCatalog.HasClassifiedAdded)
+        {
+            return null;
+        }
+
+        string unavailable = BodyReferencesUnavailableAddedField(bodyNode, semanticModel, addedFieldCatalog);
+        if (unavailable != null)
+        {
+            return unavailable;
+        }
+
+        if (BodyPassesAddedFieldByRef(bodyNode, semanticModel, addedFieldCatalog))
+        {
+            return AddedFieldSkipReasons.RefOutIn;
+        }
+
+        if (BodyHasUnsupportedAddedFieldCompound(bodyNode, semanticModel, addedFieldCatalog))
+        {
+            return AddedFieldSkipReasons.UnavailableAddedField;
+        }
+
+        if (BodyHasConsumedAddedFieldWrite(bodyNode, semanticModel, addedFieldCatalog))
+        {
+            return AddedFieldSkipReasons.ConsumedWrite;
+        }
+
+        if (BodyHasDoubleEvalAddedFieldReceiver(bodyNode, semanticModel, addedFieldCatalog))
+        {
+            return AddedFieldSkipReasons.DoubleEvalReceiver;
+        }
+
+        if (BodyHasValueTypeAddedFieldMemberWrite(bodyNode, semanticModel, addedFieldCatalog))
+        {
+            return AddedFieldSkipReasons.ValueTypeMemberWrite;
+        }
+
+        return null;
+    }
+
+    private static string BodyReferencesUnavailableAddedField(
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
+        {
+            if (NameofRules.IsInsideNameofArgument(node))
+            {
+                continue;
+            }
+
+            IFieldSymbol field = TryGetFieldSymbol(semanticModel, node);
+            if (field == null)
+            {
+                continue;
+            }
+
+            AddedFieldBinding binding = addedFieldCatalog.FindOrNull(FormatAddedFieldKeyFromSymbol(field));
+            if (binding != null && binding.UnavailableReason != null)
+            {
+                return binding.UnavailableReason;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool BodyPassesAddedFieldByRef(
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        foreach (ArgumentSyntax argument in bodyNode.DescendantNodesAndSelf().OfType<ArgumentSyntax>())
+        {
+            if (argument.RefKindKeyword.Kind() != SyntaxKind.RefKeyword
+                && argument.RefKindKeyword.Kind() != SyntaxKind.OutKeyword
+                && argument.RefKindKeyword.Kind() != SyntaxKind.InKeyword)
+            {
+                continue;
+            }
+
+            if (IsStoreAddedField(semanticModel, argument.Expression, addedFieldCatalog))
+            {
+                return true;
+            }
+        }
+
+        foreach (RefExpressionSyntax refExpression in bodyNode.DescendantNodesAndSelf()
+            .OfType<RefExpressionSyntax>())
+        {
+            if (IsStoreAddedField(semanticModel, refExpression.Expression, addedFieldCatalog))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool BodyHasUnsupportedAddedFieldCompound(
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        foreach (AssignmentExpressionSyntax assignment in bodyNode.DescendantNodesAndSelf()
+            .OfType<AssignmentExpressionSyntax>())
+        {
+            if (assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
+                || AccessorEligibility.IsSupportedCompoundAssignmentKind(assignment.Kind()))
+            {
+                continue;
+            }
+
+            if (IsStoreAddedField(semanticModel, assignment.Left, addedFieldCatalog))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool BodyHasConsumedAddedFieldWrite(
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        foreach (AssignmentExpressionSyntax assignment in bodyNode.DescendantNodesAndSelf()
+            .OfType<AssignmentExpressionSyntax>())
+        {
+            if (assignment.Parent is ExpressionStatementSyntax)
+            {
+                continue;
+            }
+
+            if (IsStoreAddedField(semanticModel, assignment.Left, addedFieldCatalog))
+            {
+                return true;
+            }
+        }
+
+        foreach (PrefixUnaryExpressionSyntax prefix in bodyNode.DescendantNodesAndSelf()
+            .OfType<PrefixUnaryExpressionSyntax>())
+        {
+            if (!IsIncrementOrDecrement(prefix.Kind()) || prefix.Parent is ExpressionStatementSyntax)
+            {
+                continue;
+            }
+
+            if (IsStoreAddedField(semanticModel, prefix.Operand, addedFieldCatalog))
+            {
+                return true;
+            }
+        }
+
+        foreach (PostfixUnaryExpressionSyntax postfix in bodyNode.DescendantNodesAndSelf()
+            .OfType<PostfixUnaryExpressionSyntax>())
+        {
+            if (!IsIncrementOrDecrement(postfix.Kind()) || postfix.Parent is ExpressionStatementSyntax)
+            {
+                continue;
+            }
+
+            if (IsStoreAddedField(semanticModel, postfix.Operand, addedFieldCatalog))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool BodyHasDoubleEvalAddedFieldReceiver(
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        foreach (AssignmentExpressionSyntax assignment in bodyNode.DescendantNodesAndSelf()
+            .OfType<AssignmentExpressionSyntax>())
+        {
+            if (!IsStoreAddedInstanceField(semanticModel, assignment.Left, addedFieldCatalog))
+            {
+                continue;
+            }
+
+            if (!AccessorEligibility.IsSideEffectFreeAssignmentReceiver(semanticModel, assignment.Left))
+            {
+                return true;
+            }
+        }
+
+        foreach (PrefixUnaryExpressionSyntax prefix in bodyNode.DescendantNodesAndSelf()
+            .OfType<PrefixUnaryExpressionSyntax>())
+        {
+            if (!IsIncrementOrDecrement(prefix.Kind())
+                || !IsStoreAddedInstanceField(semanticModel, prefix.Operand, addedFieldCatalog))
+            {
+                continue;
+            }
+
+            if (!AccessorEligibility.IsSideEffectFreeAssignmentReceiver(semanticModel, prefix.Operand))
+            {
+                return true;
+            }
+        }
+
+        foreach (PostfixUnaryExpressionSyntax postfix in bodyNode.DescendantNodesAndSelf()
+            .OfType<PostfixUnaryExpressionSyntax>())
+        {
+            if (!IsIncrementOrDecrement(postfix.Kind())
+                || !IsStoreAddedInstanceField(semanticModel, postfix.Operand, addedFieldCatalog))
+            {
+                continue;
+            }
+
+            if (!AccessorEligibility.IsSideEffectFreeAssignmentReceiver(semanticModel, postfix.Operand))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool BodyHasValueTypeAddedFieldMemberWrite(
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        foreach (AssignmentExpressionSyntax assignment in bodyNode.DescendantNodesAndSelf()
+            .OfType<AssignmentExpressionSyntax>())
+        {
+            if (assignment.Left is MemberAccessExpressionSyntax memberAccess
+                && IsStoreAddedValueTypeField(semanticModel, memberAccess.Expression, addedFieldCatalog))
+            {
+                return true;
+            }
+        }
+
+        foreach (InvocationExpressionSyntax invocation in bodyNode.DescendantNodesAndSelf()
+            .OfType<InvocationExpressionSyntax>())
+        {
+            if (NameofRules.IsNameofInvocation(invocation)
+                || invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+            {
+                continue;
+            }
+
+            ISymbol invoked = semanticModel.GetSymbolInfo(invocation).Symbol;
+            if (invoked is IMethodSymbol methodSymbol
+                && !methodSymbol.IsStatic
+                && IsStoreAddedValueTypeField(semanticModel, memberAccess.Expression, addedFieldCatalog))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    internal static bool IsIncrementOrDecrement(SyntaxKind kind)
+    {
+        return kind == SyntaxKind.PreIncrementExpression
+            || kind == SyntaxKind.PreDecrementExpression
+            || kind == SyntaxKind.PostIncrementExpression
+            || kind == SyntaxKind.PostDecrementExpression;
+    }
+
+    private static bool IsStoreAddedField(
+        SemanticModel semanticModel,
+        ExpressionSyntax expression,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        IFieldSymbol field = TryGetFieldSymbol(semanticModel, expression);
+        if (field == null)
+        {
+            return false;
+        }
+
+        AddedFieldBinding binding = addedFieldCatalog.FindOrNull(FormatAddedFieldKeyFromSymbol(field));
+        return binding != null && binding.IsStoreRewriteable;
+    }
+
+    private static bool IsStoreAddedInstanceField(
+        SemanticModel semanticModel,
+        ExpressionSyntax expression,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        IFieldSymbol field = TryGetFieldSymbol(semanticModel, expression);
+        if (field == null || field.IsStatic)
+        {
+            return false;
+        }
+
+        AddedFieldBinding binding = addedFieldCatalog.FindOrNull(FormatAddedFieldKeyFromSymbol(field));
+        return binding != null && binding.IsStoreRewriteable;
+    }
+
+    private static bool IsStoreAddedValueTypeField(
+        SemanticModel semanticModel,
+        ExpressionSyntax expression,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        IFieldSymbol field = TryGetFieldSymbol(semanticModel, expression);
+        if (field == null || !field.Type.IsValueType)
+        {
+            return false;
+        }
+
+        AddedFieldBinding binding = addedFieldCatalog.FindOrNull(FormatAddedFieldKeyFromSymbol(field));
+        return binding != null && binding.IsStoreRewriteable;
+    }
+
+    private static IFieldSymbol TryGetFieldSymbol(SemanticModel semanticModel, SyntaxNode node)
+    {
+        if (node == null)
+        {
+            return null;
+        }
+
+        ISymbol symbol = semanticModel.GetSymbolInfo(node).Symbol;
+        return symbol as IFieldSymbol;
+    }
+
+    internal static string FormatAddedFieldKeyFromSymbol(IFieldSymbol fieldSymbol)
+    {
+        if (fieldSymbol.ContainingType == null)
+        {
+            return fieldSymbol.Name;
+        }
+
+        return FormatAddedFieldStoreKey(
+            CecilTypeNames.ToMetadataName(fieldSymbol.ContainingType),
+            fieldSymbol.Name);
+    }
+
+    internal static ExpressionSyntax TryCreateConstantLiteral(object value, ITypeSymbol type)
+    {
+        if (value == null)
+        {
+            return SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression);
+        }
+
+        if (type != null && type.TypeKind == TypeKind.Enum)
+        {
+            ExpressionSyntax underlyingLiteral = TryCreateNumericOrBoolLiteral(value);
+            if (underlyingLiteral == null)
+            {
+                return null;
+            }
+
+            return SyntaxFactory.CastExpression(
+                SyntaxFactory.ParseTypeName(type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)),
+                underlyingLiteral);
+        }
+
+        if (value is string text)
+        {
+            return SyntaxFactory.LiteralExpression(
+                SyntaxKind.StringLiteralExpression,
+                SyntaxFactory.Literal(text));
+        }
+
+        if (value is char character)
+        {
+            return SyntaxFactory.LiteralExpression(
+                SyntaxKind.CharacterLiteralExpression,
+                SyntaxFactory.Literal(character));
+        }
+
+        return TryCreateNumericOrBoolLiteral(value);
+    }
+
+    private static ExpressionSyntax TryCreateNumericOrBoolLiteral(object value)
+    {
+        if (value is bool flag)
+        {
+            return SyntaxFactory.LiteralExpression(
+                flag ? SyntaxKind.TrueLiteralExpression : SyntaxKind.FalseLiteralExpression);
+        }
+
+        if (value is int intValue)
+        {
+            return SyntaxFactory.LiteralExpression(
+                SyntaxKind.NumericLiteralExpression,
+                SyntaxFactory.Literal(intValue));
+        }
+
+        if (value is uint uintValue)
+        {
+            return SyntaxFactory.LiteralExpression(
+                SyntaxKind.NumericLiteralExpression,
+                SyntaxFactory.Literal(uintValue));
+        }
+
+        if (value is long longValue)
+        {
+            return SyntaxFactory.LiteralExpression(
+                SyntaxKind.NumericLiteralExpression,
+                SyntaxFactory.Literal(longValue));
+        }
+
+        if (value is ulong ulongValue)
+        {
+            return SyntaxFactory.LiteralExpression(
+                SyntaxKind.NumericLiteralExpression,
+                SyntaxFactory.Literal(ulongValue));
+        }
+
+        if (value is float floatValue)
+        {
+            return SyntaxFactory.LiteralExpression(
+                SyntaxKind.NumericLiteralExpression,
+                SyntaxFactory.Literal(floatValue));
+        }
+
+        if (value is double doubleValue)
+        {
+            return SyntaxFactory.LiteralExpression(
+                SyntaxKind.NumericLiteralExpression,
+                SyntaxFactory.Literal(doubleValue));
+        }
+
+        if (value is decimal decimalValue)
+        {
+            return SyntaxFactory.LiteralExpression(
+                SyntaxKind.NumericLiteralExpression,
+                SyntaxFactory.Literal(decimalValue));
+        }
+
+        if (value is byte byteValue)
+        {
+            return SyntaxFactory.LiteralExpression(
+                SyntaxKind.NumericLiteralExpression,
+                SyntaxFactory.Literal(byteValue));
+        }
+
+        if (value is sbyte sbyteValue)
+        {
+            return SyntaxFactory.LiteralExpression(
+                SyntaxKind.NumericLiteralExpression,
+                SyntaxFactory.Literal(sbyteValue));
+        }
+
+        if (value is short shortValue)
+        {
+            return SyntaxFactory.LiteralExpression(
+                SyntaxKind.NumericLiteralExpression,
+                SyntaxFactory.Literal(shortValue));
+        }
+
+        if (value is ushort ushortValue)
+        {
+            return SyntaxFactory.LiteralExpression(
+                SyntaxKind.NumericLiteralExpression,
+                SyntaxFactory.Literal(ushortValue));
+        }
+
+        return null;
+    }
+
     private static string EvaluateAddedMethodSkipReason(
         IMethodSymbol methodSymbol,
         MethodDeclarationSyntax methodDeclaration)
@@ -2834,7 +3595,8 @@ public static class TransformWorkerProgram
         INamedTypeSymbol targetType,
         SemanticModel semanticModel,
         AccessorPlan accessorPlan,
-        AddedMethodCatalog addedMethodCatalog)
+        AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog)
     {
         // Why a single rewriter: rewriting the tree invalidates SemanticModel for new nodes.
         // Qualify + accessor rewrite both classify symbols on the original tree in one Visit pass.
@@ -2842,7 +3604,8 @@ public static class TransformWorkerProgram
             semanticModel,
             targetType,
             accessorPlan,
-            addedMethodCatalog);
+            addedMethodCatalog,
+            addedFieldCatalog);
         MethodDeclarationSyntax rewritten = (MethodDeclarationSyntax)rewriter.Visit(methodDeclaration);
         return ShimMethodFactory.ToShimMethod(rewritten, methodSymbol);
     }
@@ -4278,7 +5041,7 @@ internal static class AccessorEligibility
         return true;
     }
 
-    private static bool IsSupportedCompoundAssignmentKind(SyntaxKind kind)
+    internal static bool IsSupportedCompoundAssignmentKind(SyntaxKind kind)
     {
         return kind == SyntaxKind.AddAssignmentExpression
             || kind == SyntaxKind.SubtractAssignmentExpression
@@ -4298,7 +5061,7 @@ internal static class AccessorEligibility
     /// (properties/methods). Only this/locals/parameters/fields (and type/namespace qualifiers)
     /// are allowed — FieldRef re-reads the same storage, so field links are idempotent.
     /// </summary>
-    private static bool IsSideEffectFreeAssignmentReceiver(
+    internal static bool IsSideEffectFreeAssignmentReceiver(
         SemanticModel semanticModel,
         ExpressionSyntax left)
     {
@@ -4383,17 +5146,20 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
     private readonly INamedTypeSymbol _targetType;
     private readonly AccessorPlan _accessorPlan;
     private readonly AddedMethodCatalog _addedMethodCatalog;
+    private readonly AddedFieldCatalog _addedFieldCatalog;
 
     public ShimBodyRewriter(
         SemanticModel semanticModel,
         INamedTypeSymbol targetType,
         AccessorPlan accessorPlan,
-        AddedMethodCatalog addedMethodCatalog)
+        AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog)
     {
         _semanticModel = semanticModel;
         _targetType = targetType;
         _accessorPlan = accessorPlan;
         _addedMethodCatalog = addedMethodCatalog ?? new AddedMethodCatalog();
+        _addedFieldCatalog = addedFieldCatalog ?? new AddedFieldCatalog();
     }
 
     public override SyntaxNode VisitThisExpression(ThisExpressionSyntax node)
@@ -4543,16 +5309,26 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
         ExpressionSyntax argument = nameofInvocation.ArgumentList.Arguments[0].Expression;
         ISymbol symbol = ResolveNameofArgumentSymbol(argument);
-        if (symbol is not IMethodSymbol methodSymbol
-            || !_addedMethodCatalog.Contains(BuildAddedMethodKey(methodSymbol)))
+        if (symbol is IMethodSymbol methodSymbol
+            && _addedMethodCatalog.Contains(BuildAddedMethodKey(methodSymbol)))
         {
-            return null;
+            return SyntaxFactory.LiteralExpression(
+                    SyntaxKind.StringLiteralExpression,
+                    SyntaxFactory.Literal(methodSymbol.Name))
+                .WithTriviaFrom(nameofInvocation);
         }
 
-        return SyntaxFactory.LiteralExpression(
-                SyntaxKind.StringLiteralExpression,
-                SyntaxFactory.Literal(methodSymbol.Name))
-            .WithTriviaFrom(nameofInvocation);
+        if (symbol is IFieldSymbol fieldSymbol
+            && _addedFieldCatalog.FindOrNull(
+                TransformWorkerProgram.FormatAddedFieldKeyFromSymbol(fieldSymbol)) != null)
+        {
+            return SyntaxFactory.LiteralExpression(
+                    SyntaxKind.StringLiteralExpression,
+                    SyntaxFactory.Literal(fieldSymbol.Name))
+                .WithTriviaFrom(nameofInvocation);
+        }
+
+        return null;
     }
 
     private ISymbol ResolveNameofArgumentSymbol(ExpressionSyntax argument)
@@ -4625,7 +5401,18 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitAssignmentExpression(node);
         }
 
-        if (_accessorPlan == null || TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+        if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+        {
+            return base.VisitAssignmentExpression(node);
+        }
+
+        AddedFieldBinding assignedField = FindStoreBinding(_semanticModel.GetSymbolInfo(node.Left).Symbol);
+        if (assignedField != null)
+        {
+            return RewriteAddedFieldAssignment(node, assignedField);
+        }
+
+        if (_accessorPlan == null)
         {
             return base.VisitAssignmentExpression(node);
         }
@@ -4657,15 +5444,284 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         return base.VisitAssignmentExpression(node);
     }
 
+    public override SyntaxNode VisitPrefixUnaryExpression(PrefixUnaryExpressionSyntax node)
+    {
+        if (TransformWorkerProgram.IsIncrementOrDecrement(node.Kind()))
+        {
+            AddedFieldBinding binding = FindStoreBinding(_semanticModel.GetSymbolInfo(node.Operand).Symbol);
+            if (binding != null)
+            {
+                return RewriteAddedFieldIncrement(node.Operand, binding, node);
+            }
+        }
+
+        return base.VisitPrefixUnaryExpression(node);
+    }
+
+    public override SyntaxNode VisitPostfixUnaryExpression(PostfixUnaryExpressionSyntax node)
+    {
+        if (TransformWorkerProgram.IsIncrementOrDecrement(node.Kind()))
+        {
+            AddedFieldBinding binding = FindStoreBinding(_semanticModel.GetSymbolInfo(node.Operand).Symbol);
+            if (binding != null)
+            {
+                return RewriteAddedFieldIncrement(node.Operand, binding, node);
+            }
+        }
+
+        return base.VisitPostfixUnaryExpression(node);
+    }
+
+    private AddedFieldBinding FindStoreBinding(ISymbol symbol)
+    {
+        if (symbol is not IFieldSymbol fieldSymbol)
+        {
+            return null;
+        }
+
+        AddedFieldBinding binding = _addedFieldCatalog.FindOrNull(
+            TransformWorkerProgram.FormatAddedFieldKeyFromSymbol(fieldSymbol));
+        if (binding == null || !binding.IsStoreRewriteable)
+        {
+            return null;
+        }
+
+        return binding;
+    }
+
+    private AddedFieldBinding FindAnyAddedBinding(ISymbol symbol)
+    {
+        if (symbol is not IFieldSymbol fieldSymbol)
+        {
+            return null;
+        }
+
+        return _addedFieldCatalog.FindOrNull(
+            TransformWorkerProgram.FormatAddedFieldKeyFromSymbol(fieldSymbol));
+    }
+
+    private SyntaxNode TryRewriteAddedFieldRead(
+        ISymbol symbol,
+        ExpressionSyntax receiverSyntax,
+        SyntaxNode triviaSource)
+    {
+        AddedFieldBinding binding = FindAnyAddedBinding(symbol);
+        if (binding == null || binding.UnavailableReason != null)
+        {
+            return null;
+        }
+
+        if (binding.IsConst)
+        {
+            ExpressionSyntax literal = TransformWorkerProgram.TryCreateConstantLiteral(
+                binding.ConstantValue,
+                binding.FieldType);
+            if (literal == null)
+            {
+                return null;
+            }
+
+            return literal.WithTriviaFrom(triviaSource);
+        }
+
+        if (!binding.IsStoreRewriteable)
+        {
+            return null;
+        }
+
+        return CreateAddedFieldGetOrInit(binding, receiverSyntax).WithTriviaFrom(triviaSource);
+    }
+
+    private SyntaxNode RewriteAddedFieldAssignment(
+        AssignmentExpressionSyntax node,
+        AddedFieldBinding binding)
+    {
+        ExpressionSyntax receiver = ExtractAddedFieldReceiver(node.Left, binding.IsStatic);
+        ExpressionSyntax visitedRight = (ExpressionSyntax)Visit(node.Right);
+        if (node.IsKind(SyntaxKind.SimpleAssignmentExpression))
+        {
+            return CreateAddedFieldSet(binding, receiver, visitedRight).WithTriviaFrom(node);
+        }
+
+        SyntaxKind binaryKind = GetCompoundAssignmentBinaryKind(node.Kind());
+        ExpressionSyntax getCall = CreateAddedFieldGetOrInit(binding, receiver);
+        ExpressionSyntax combined = SyntaxFactory.BinaryExpression(binaryKind, getCall, visitedRight);
+        return CreateAddedFieldSet(binding, receiver, combined).WithTriviaFrom(node);
+    }
+
+    private SyntaxNode RewriteAddedFieldIncrement(
+        ExpressionSyntax operand,
+        AddedFieldBinding binding,
+        SyntaxNode triviaSource)
+    {
+        ExpressionSyntax receiver = ExtractAddedFieldReceiver(operand, binding.IsStatic);
+        ExpressionSyntax getCall = CreateAddedFieldGetOrInit(binding, receiver);
+        ExpressionSyntax combined = SyntaxFactory.BinaryExpression(
+            SyntaxKind.AddExpression,
+            getCall,
+            SyntaxFactory.LiteralExpression(
+                SyntaxKind.NumericLiteralExpression,
+                SyntaxFactory.Literal(1)));
+        if (triviaSource is PrefixUnaryExpressionSyntax prefix
+            && prefix.IsKind(SyntaxKind.PreDecrementExpression))
+        {
+            combined = SyntaxFactory.BinaryExpression(
+                SyntaxKind.SubtractExpression,
+                getCall,
+                SyntaxFactory.LiteralExpression(
+                    SyntaxKind.NumericLiteralExpression,
+                    SyntaxFactory.Literal(1)));
+        }
+        else if (triviaSource is PostfixUnaryExpressionSyntax postfix
+            && postfix.IsKind(SyntaxKind.PostDecrementExpression))
+        {
+            combined = SyntaxFactory.BinaryExpression(
+                SyntaxKind.SubtractExpression,
+                getCall,
+                SyntaxFactory.LiteralExpression(
+                    SyntaxKind.NumericLiteralExpression,
+                    SyntaxFactory.Literal(1)));
+        }
+
+        return CreateAddedFieldSet(binding, receiver, combined).WithTriviaFrom(triviaSource);
+    }
+
+    private ExpressionSyntax ExtractAddedFieldReceiver(ExpressionSyntax expression, bool isStatic)
+    {
+        if (isStatic)
+        {
+            return null;
+        }
+
+        ExpressionSyntax receiver = ExtractReceiver(expression);
+        if (receiver is ThisExpressionSyntax || receiver is BaseExpressionSyntax)
+        {
+            return SyntaxFactory.IdentifierName(TransformWorkerProgramMarker.InstanceParameterName);
+        }
+
+        return VisitReceiver(receiver);
+    }
+
+    private InvocationExpressionSyntax CreateAddedFieldGetOrInit(
+        AddedFieldBinding binding,
+        ExpressionSyntax receiver)
+    {
+        _addedFieldCatalog.MarkStoreRewrite();
+        string methodName = binding.IsStatic
+            ? TransformWorkerProgramMarker.AddedFieldGetOrInitStaticMethodName
+            : TransformWorkerProgramMarker.AddedFieldGetOrInitMethodName;
+        List<ArgumentSyntax> arguments = new List<ArgumentSyntax>();
+        if (!binding.IsStatic)
+        {
+            arguments.Add(SyntaxFactory.Argument(receiver));
+        }
+
+        arguments.Add(
+            SyntaxFactory.Argument(
+                SyntaxFactory.LiteralExpression(
+                    SyntaxKind.StringLiteralExpression,
+                    SyntaxFactory.Literal(binding.FieldKey))));
+        arguments.Add(SyntaxFactory.Argument(CreateAddedFieldInitializer(binding)));
+        return CreateAddedFieldStoreInvocation(methodName, binding.FieldType, arguments);
+    }
+
+    private InvocationExpressionSyntax CreateAddedFieldSet(
+        AddedFieldBinding binding,
+        ExpressionSyntax receiver,
+        ExpressionSyntax value)
+    {
+        _addedFieldCatalog.MarkStoreRewrite();
+        string methodName = binding.IsStatic
+            ? TransformWorkerProgramMarker.AddedFieldSetStaticMethodName
+            : TransformWorkerProgramMarker.AddedFieldSetMethodName;
+        List<ArgumentSyntax> arguments = new List<ArgumentSyntax>();
+        if (!binding.IsStatic)
+        {
+            arguments.Add(SyntaxFactory.Argument(receiver));
+        }
+
+        arguments.Add(
+            SyntaxFactory.Argument(
+                SyntaxFactory.LiteralExpression(
+                    SyntaxKind.StringLiteralExpression,
+                    SyntaxFactory.Literal(binding.FieldKey))));
+        arguments.Add(SyntaxFactory.Argument(value));
+        return CreateAddedFieldStoreInvocation(methodName, binding.FieldType, arguments);
+    }
+
+    private static ExpressionSyntax CreateAddedFieldInitializer(AddedFieldBinding binding)
+    {
+        if (binding.Initializer == null)
+        {
+            return SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression);
+        }
+
+        ExpressionSyntax cloned = SyntaxFactory.ParseExpression(binding.Initializer.ToString());
+        return SyntaxFactory.ParenthesizedLambdaExpression(
+                SyntaxFactory.ParameterList(),
+                cloned)
+            .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.StaticKeyword)));
+    }
+
+    private static InvocationExpressionSyntax CreateAddedFieldStoreInvocation(
+        string methodName,
+        ITypeSymbol fieldType,
+        List<ArgumentSyntax> arguments)
+    {
+        TypeSyntax storeType = SyntaxFactory.ParseTypeName(
+            TransformWorkerProgramMarker.AddedFieldStoreTypeName);
+        TypeSyntax typeArgument = SyntaxFactory.ParseTypeName(
+            fieldType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        GenericNameSyntax genericName = SyntaxFactory.GenericName(SyntaxFactory.Identifier(methodName))
+            .WithTypeArgumentList(
+                SyntaxFactory.TypeArgumentList(SyntaxFactory.SingletonSeparatedList(typeArgument)));
+        return SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                storeType,
+                genericName),
+            SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments)));
+    }
+
+    private static bool IsAssignmentLeft(SyntaxNode node)
+    {
+        return node.Parent is AssignmentExpressionSyntax assignment && assignment.Left == node;
+    }
+
+    private static bool IsIncrementOperand(SyntaxNode node)
+    {
+        if (node.Parent is PrefixUnaryExpressionSyntax prefix
+            && TransformWorkerProgram.IsIncrementOrDecrement(prefix.Kind()))
+        {
+            return true;
+        }
+
+        return node.Parent is PostfixUnaryExpressionSyntax postfix
+            && TransformWorkerProgram.IsIncrementOrDecrement(postfix.Kind());
+    }
+
     public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
     {
-        if (_accessorPlan == null || TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+        if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
         {
             return base.VisitMemberAccessExpression(node);
         }
 
         ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol
             ?? _semanticModel.GetSymbolInfo(node.Name).Symbol;
+        if (!IsAssignmentLeft(node) && !IsIncrementOperand(node))
+        {
+            SyntaxNode addedFieldRead = TryRewriteAddedFieldRead(symbol, node.Expression, node);
+            if (addedFieldRead != null)
+            {
+                return addedFieldRead;
+            }
+        }
+
+        if (_accessorPlan == null)
+        {
+            return base.VisitMemberAccessExpression(node);
+        }
 
         // Method-group invocation targets stay with VisitInvocationExpression; field/property
         // delegate invokes (`this._cb()`) must rewrite here so the call becomes `__F__(recv)()`.
@@ -4704,6 +5760,20 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         if (symbol == null)
         {
             return original;
+        }
+
+        if (!IsAssignmentLeft(node)
+            && !IsIncrementOperand(node)
+            && !TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+        {
+            SyntaxNode addedFieldRead = TryRewriteAddedFieldRead(
+                symbol,
+                SyntaxFactory.IdentifierName(TransformWorkerProgramMarker.InstanceParameterName),
+                node);
+            if (addedFieldRead != null)
+            {
+                return addedFieldRead;
+            }
         }
 
         // Local/anonymous functions are emitted into the shim assembly — keep bare calls.
@@ -4971,6 +6041,21 @@ internal static class TransformWorkerProgramMarker
     // user parameter or local of that name. The uloop-prefixed name makes collisions
     // practically impossible.
     public const string InstanceParameterName = "__uloopInstance";
+
+    // Keep in sync with HotReloadAddedFieldStore in ToolContracts.
+    public const string AddedFieldStoreTypeName =
+        "global::io.github.hatayama.UnityCliLoop.ToolContracts.HotReloadAddedFieldStore";
+
+    public const string AddedFieldGetOrInitMethodName = "GetOrInit";
+
+    public const string AddedFieldSetMethodName = "Set";
+
+    public const string AddedFieldGetOrInitStaticMethodName = "GetOrInitStatic";
+
+    public const string AddedFieldSetStaticMethodName = "SetStatic";
+
+    // Keep in sync with HotReloadAddedFieldStore.FieldKeySeparator.
+    public const string AddedFieldKeySeparator = "::";
 }
 
 internal static class ShimMethodFactory
@@ -5457,6 +6542,129 @@ internal sealed class AddedMethodCatalog
     }
 }
 
+internal sealed class AddedFieldBinding
+{
+    public string FieldKey { get; set; }
+
+    public string SyntaxKey { get; set; }
+
+    public string FieldName { get; set; }
+
+    public ITypeSymbol FieldType { get; set; }
+
+    public bool IsStatic { get; set; }
+
+    public bool IsConst { get; set; }
+
+    public object ConstantValue { get; set; }
+
+    public ExpressionSyntax Initializer { get; set; }
+
+    public string UnavailableReason { get; set; }
+
+    public bool IsStoreRewriteable => UnavailableReason == null && !IsConst;
+}
+
+internal sealed class AddedFieldCatalog
+{
+    private readonly Dictionary<string, AddedFieldBinding> _byKey =
+        new Dictionary<string, AddedFieldBinding>(StringComparer.Ordinal);
+    private readonly HashSet<string> _classifiedAddedKeys = new HashSet<string>(StringComparer.Ordinal);
+    private readonly HashSet<string> _addedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
+    private readonly HashSet<string> _removedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
+
+    public IReadOnlyCollection<string> AddedSyntaxKeys => _addedSyntaxKeys;
+
+    public IReadOnlyCollection<string> RemovedSyntaxKeys => _removedSyntaxKeys;
+
+    public bool HasClassifiedAdded => _classifiedAddedKeys.Count > 0;
+
+    public bool HasStoreRewrites { get; private set; }
+
+    public void MarkClassifiedAdded(string fieldKey)
+    {
+        if (fieldKey != null)
+        {
+            _classifiedAddedKeys.Add(fieldKey);
+        }
+    }
+
+    public void AddAddedSyntaxKey(string syntaxKey)
+    {
+        _addedSyntaxKeys.Add(syntaxKey);
+    }
+
+    public void AddRemovedSyntaxKey(string syntaxKey)
+    {
+        _removedSyntaxKeys.Add(syntaxKey);
+    }
+
+    public void RegisterStore(AddedFieldBinding binding)
+    {
+        _byKey[binding.FieldKey] = binding;
+        MarkClassifiedAdded(binding.FieldKey);
+    }
+
+    public void RegisterConst(AddedFieldBinding binding)
+    {
+        _byKey[binding.FieldKey] = binding;
+        MarkClassifiedAdded(binding.FieldKey);
+    }
+
+    public void RegisterUnavailable(AddedFieldBinding binding)
+    {
+        _byKey[binding.FieldKey] = binding;
+        MarkClassifiedAdded(binding.FieldKey);
+    }
+
+    public AddedFieldBinding FindOrNull(string fieldKey)
+    {
+        if (fieldKey == null)
+        {
+            return null;
+        }
+
+        return _byKey.TryGetValue(fieldKey, out AddedFieldBinding binding) ? binding : null;
+    }
+
+    public void MarkStoreRewrite()
+    {
+        HasStoreRewrites = true;
+    }
+}
+
+internal static class AddedFieldSkipReasons
+{
+    public const string StructHost =
+        "Added fields on struct types are skipped; the store requires a reference-type instance. "
+        + "Run 'uloop compile' to add them.";
+
+    public const string InaccessibleInitializer =
+        "Added field initializer accesses inaccessible members; the initializer lambda cannot skip visibility. "
+        + "Run 'uloop compile'.";
+
+    public const string RefOutIn =
+        "Added fields cannot be passed by ref, out, or in. Run 'uloop compile'.";
+
+    public const string ConsumedWrite =
+        "The value of an assignment to an added field is consumed; the store write returns void. "
+        + "Run 'uloop compile'.";
+
+    public const string DoubleEvalReceiver =
+        "Assignment to an added field would evaluate a receiver with possible side effects twice. "
+        + "Run 'uloop compile'.";
+
+    public const string ValueTypeMemberWrite =
+        "Writes to members of an added value-type field cannot be rewritten. Run 'uloop compile'.";
+
+    public const string UnavailableAddedField =
+        "Uses an added field that hot reload cannot emit. Run 'uloop compile'.";
+
+    public const string SerializeWarningFormat =
+        "Added field '{0}' has a serialization attribute, so it will not appear in the Inspector "
+        + "or serialize until 'uloop compile'.";
+}
+
 internal static class AddedMethodSkipReasons
 {
     public const string VirtualOrAbstract =
@@ -5602,8 +6810,7 @@ internal sealed class WorkerOutput
     public bool HasAccessorDelegates { get; set; }
 
     // True when shim bodies rewrite added-field accesses to HotReloadAddedFieldStore.
-    // Keep in sync with TransformWorkerOutputDto.hasAddedFieldRewrites. Always false until
-    // the added-field rewrite PR starts emitting store calls.
+    // Keep in sync with TransformWorkerOutputDto.hasAddedFieldRewrites.
     public bool HasAddedFieldRewrites { get; set; }
 }
 
@@ -5677,9 +6884,10 @@ internal static class PatchKinds
 
 internal static class RemovedMemberKinds
 {
-    // Keep in sync with HotReloadConstants.RemovedMemberKindMethod.
-    // Method is the only kind in this PR; field classification lands in later PRs.
+    // Keep in sync with HotReloadConstants.RemovedMemberKindMethod / RemovedMemberKindField.
     public const string Method = "method";
+
+    public const string Field = "field";
 }
 
 internal sealed class MethodTransformDecision
