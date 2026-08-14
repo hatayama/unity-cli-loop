@@ -1826,7 +1826,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(result);
             AssertHasPatched(result, nameof(HotReloadAddedMethodApplyFixture.ExistingCaller));
             AssertHasAdded(result, "AddedPing");
-            Assert.That(result.ActivePatchTotal, Is.GreaterThanOrEqualTo(2));
+            Assert.That(result.ActivePatchTotal, Is.EqualTo(2));
 
             bool foundAddedStatus = false;
             foreach (HotReloadAddedMemberInfo added in HotReloadAddedMemberRegistry.Describe())
@@ -1894,6 +1894,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: after applying an added method, a later hot-reload against the on-disk baseline
+        /// (all-unchanged) clears that file's added-member ledger so --status and Play warnings
+        /// do not keep counting it.
+        /// </summary>
+        [Test]
+        public async Task Run_ReapplyOnDiskAfterAddedMethod_ClearsAddedMemberRegistry()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string withAdded = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value);\n        }\n\n"
+                + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }",
+                StringComparison.Ordinal);
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedMethodApplyThenOnDisk1.cs", withAdded),
+                CancellationToken.None);
+            AssertHasAdded(first, "AddedPing");
+            HotReloadAddedMethodApplyFixture host = new HotReloadAddedMethodApplyFixture();
+            Assert.That(host.ExistingCaller(3), Is.EqualTo(4));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                contentPathOverride: null,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(second);
+            Assert.That(second.Methods, Is.Empty, FormatOutcomes(second));
+            Assert.That(second.UnchangedTotal, Is.GreaterThan(0));
+            Assert.That(second.ActivePatchTotal, Is.EqualTo(0));
+            foreach (HotReloadAddedMemberInfo added in HotReloadAddedMemberRegistry.Describe())
+            {
+                Assert.That(
+                    added.MethodKey,
+                    Does.Not.Contain("AddedPing"),
+                    "All-unchanged re-apply must drop AddedPing from the added-member ledger.");
+            }
+
+            Assert.That(host.ExistingCaller(3), Is.EqualTo(3));
+        }
+
+        /// <summary>
         /// What: an added method is not registered on the pause-point shim ledger, so enabling
         /// a marker on its source line follows the existing not-found path and does not crash.
         /// </summary>
@@ -1917,15 +1960,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Assets/Tests/Editor/HotReload/HotReloadAddedMethodApplyFixture.cs";
             HotReloadShimFileLookup lookup =
                 HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(projectRelativePath);
-            if (lookup != null)
+            Assert.That(
+                lookup,
+                Is.Not.Null,
+                "ExistingCaller patch must still expose a pause-point shim lookup.");
+            foreach (HotReloadShimMethodLookup method in lookup.Methods)
             {
-                foreach (HotReloadShimMethodLookup method in lookup.Methods)
-                {
-                    Assert.That(
-                        method.OriginalMethod.Name,
-                        Is.Not.EqualTo("AddedPing"),
-                        "Added methods must not be registered as pause-point shim originals.");
-                }
+                Assert.That(
+                    method.OriginalMethod.Name,
+                    Is.Not.EqualTo("AddedPing"),
+                    "Added methods must not be registered as pause-point shim originals.");
             }
 
             int addedLine = FindLineNumberContaining(edited, "return value + 1;");
@@ -1940,13 +1984,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     TimeoutSeconds = 30,
                     Mode = UloopPausePointCaptureMode.Continuous
                 });
-                if (enable.Success)
-                {
-                    Assert.That(
-                        enable.ResolvedMethod,
-                        Does.Not.Contain("AddedPing"),
-                        "Enable must not bind a pause point onto the added-method shim.");
-                }
+                Assert.That(
+                    enable.Success,
+                    Is.False,
+                    "Enable on an added-method line must take the not-found path, not bind a shim.");
+                Assert.That(
+                    enable.ErrorCode,
+                    Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+                Assert.That(
+                    enable.ResolvedMethod,
+                    Does.Not.Contain("AddedPing"));
             }
             finally
             {

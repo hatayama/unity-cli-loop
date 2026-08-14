@@ -55,6 +55,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // in TransformWorker~/TransformWorker.cs.
         public const string PatchKindAddedMethod = "addedMethod";
 
+        // --status Kind for rows sourced from HotReloadAddedMemberRegistry (no compiled MethodBase).
+        public const string AddedMemberStatusKind = "Added";
+
         // Isolation retry drops callers of a failed added shim so retry does not CS0103; they
         // are not Failed (the compile error was in the added body) and must not stay silent.
         public const string IsolatedAddedMethodCallerSkipReason =

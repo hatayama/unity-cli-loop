@@ -259,7 +259,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(response, Is.Not.Null);
             Assert.That(response.Success, Is.True);
             Assert.That(response.ClearedCount, Is.EqualTo(0));
-            Assert.That(response.Message, Is.EqualTo("No active hot-reload patches to revert."));
+            Assert.That(response.Message, Is.EqualTo("No active hot-reload changes to revert."));
         }
 
         /// <summary>
@@ -348,7 +348,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
 
-            Assert.That(response.Methods[1].Kind, Is.EqualTo("Added"));
+            Assert.That(response.Methods[1].Kind, Is.EqualTo(HotReloadConstants.AddedMemberStatusKind));
             Assert.That(
                 response.Message,
                 Is.EqualTo(

@@ -258,6 +258,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 || workerOutput.entries == null
                 || workerOutput.entries.Length == 0)
             {
+                // Why only on this success path: deleting an added method and restoring callers
+                // yields empty entries, so the post-shim-compile BeginFileGeneration never runs.
+                // Worker failure and shim-compile failure return earlier or later without
+                // clearing — same as leaving existing Harmony patches in place when apply does
+                // not succeed.
+                HotReloadAddedMemberRegistry.BeginFileGeneration(projectRelativePath);
                 return new HotReloadFileProcessResult(
                     outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
             }

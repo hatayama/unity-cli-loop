@@ -130,8 +130,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ClearedCount = clearedCount,
                 ActivePatchTotal = HotReloadPatcher.ActiveChangeCount,
                 Message = clearedCount == 0
-                    ? "No active hot-reload patches to revert."
-                    : "Reverted all active hot-reload patches."
+                    ? "No active hot-reload changes to revert."
+                    : "Reverted all active hot-reload changes."
             };
         }
 
@@ -160,7 +160,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 methods.Add(
                     new HotReloadMethodResult
                     {
-                        Kind = "Added",
+                        Kind = HotReloadConstants.AddedMemberStatusKind,
                         Method = added.MethodKey,
                         FilePath = added.FilePath
                     });
@@ -172,7 +172,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Success = true,
                 Methods = methods,
                 ActivePatchTotal = count,
-                Message = $"{count} method(s) currently patched."
+                Message = $"{count} change(s) currently active."
             };
         }
 
