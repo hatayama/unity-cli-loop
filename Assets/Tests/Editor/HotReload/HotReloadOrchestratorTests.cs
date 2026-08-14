@@ -711,14 +711,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 aggregatedInlineRiskCount,
                 Is.EqualTo(1),
                 "Expected exactly one aggregated inline-risk warning listing the at-risk methods.");
-
-            int declarationDriftCount = CountWarningsContaining(
-                result.Warnings,
-                "Edits outside method bodies");
             Assert.That(
-                result.Warnings,
-                Has.Count.EqualTo(1 + declarationDriftCount),
-                "Expected the aggregated inline-risk warning plus any declaration-drift warning(s).");
+                CountWarningsContaining(result.Warnings, "Edits outside method bodies"),
+                Is.EqualTo(1),
+                "Reconstructed fixture source differs outside method bodies once.");
+            Assert.That(
+                CountWarningsContaining(result.Warnings, "Removed members stay present"),
+                Is.EqualTo(1),
+                "Reconstructed fixture source omits compiled members once.");
+            Assert.That(
+                result.Warnings.Count,
+                Is.EqualTo(3),
+                "Exactly one inline-risk, one drift, and one removed-members warning.");
         }
 
         /// <summary>
@@ -821,13 +825,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(inlineRiskAlphaPatchedOperations, Is.EqualTo(2));
 
-            int declarationDriftCount = CountWarningsContaining(
-                result.Warnings,
-                "Edits outside method bodies");
             Assert.That(
-                result.Warnings,
-                Has.Count.EqualTo(1 + declarationDriftCount),
-                "Expected the aggregated inline-risk warning plus one declaration-drift warning per duplicate file input.");
+                CountWarningsContaining(result.Warnings, "Edits outside method bodies"),
+                Is.EqualTo(2),
+                "Duplicate file inputs each emit a declaration-drift warning.");
+            Assert.That(
+                CountWarningsContaining(result.Warnings, "Removed members stay present"),
+                Is.EqualTo(2),
+                "Duplicate file inputs each emit a removed-members warning.");
+            Assert.That(
+                result.Warnings.Count,
+                Is.EqualTo(5),
+                "One aggregated inline-risk warning plus two drift and two removed-members warnings.");
 
             string aggregatedWarning = null;
             foreach (string warning in result.Warnings)
@@ -845,10 +854,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CountOccurrences(aggregatedWarning, nameof(HotReloadE2EFixture.InlineRiskAlpha)),
                 Is.EqualTo(1),
                 "The aggregated warning must list a re-patched method once, not once per patch operation.");
-            Assert.That(
-                declarationDriftCount,
-                Is.EqualTo(2),
-                "Duplicate file inputs each emit a declaration-drift warning.");
         }
 
         /// <summary>
@@ -1700,6 +1705,241 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
         }
 
+        /// <summary>
+        /// What: an added method plus its caller plus an unrelated shim-compile failure still
+        /// isolates per-method (the file is not collapsed to a single (shim-compile) Failed).
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethodCallerAndUnrelatedShimFailure_IsolatesWithoutWipingFile()
+        {
+            string hostPath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(hostPath);
+            string edited = onDisk.Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public int ExistingValue()\n        {\n            return 10;\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value);\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ExistingFail(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingFail(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n    }",
+                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n\n"
+                + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }\n    }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            string editedPath = WriteEditedSource("AddedMethodIsolation.cs", edited);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            AssertHasSkipped(
+                result,
+                "AddedPing",
+                HotReloadConstants.AddedMethodDeferredSkipReason);
+
+            bool failIsolated = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method.Contains(nameof(HotReloadAddedMemberHost.ExistingFail)))
+                {
+                    failIsolated = true;
+                }
+            }
+
+            Assert.That(
+                failIsolated,
+                Is.True,
+                "ExistingFail must isolate as a per-method Failed.\n" + FormatOutcomes(result));
+
+            HotReloadAddedMemberHost host = new HotReloadAddedMemberHost();
+            Assert.That(host.ExistingValue(), Is.EqualTo(10));
+            Assert.That(host.ExistingCaller(3), Is.EqualTo(4));
+        }
+
+        /// <summary>
+        /// What: an added method that reads a private field still shim-compiles (Harmony is
+        /// injected from hasAccessorDelegates) and the added method itself is Skipped.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethodWithPrivateAccess_ShimCompilesAndSkipsAddedApply()
+        {
+            string hostPath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(hostPath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedReadPrivate();\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }",
+                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n\n"
+                + "        public int AddedReadPrivate()\n        {\n"
+                + "            System.Func<int> read = () => _privateSeed;\n"
+                + "            return read();\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            string editedPath = WriteEditedSource("AddedMethodHarmony.cs", edited);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            AssertHasSkipped(
+                result,
+                "AddedReadPrivate",
+                HotReloadConstants.AddedMethodDeferredSkipReason);
+
+            HotReloadAddedMemberHost host = new HotReloadAddedMemberHost();
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(7));
+        }
+
+        /// <summary>
+        /// What: a private call in a conditional-access argument list inside a lambda is
+        /// accessor-rewritten (Delegation) so the enclosing method Patches (not CS0122 Failed).
+        /// </summary>
+        [Test]
+        public async Task Run_LambdaConditionalAccessArgumentPrivateStaticSeven_AccessorizesAndPatches()
+        {
+            string hostPath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(hostPath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            HotReloadAddedMemberHost other = this;\n"
+                + "            System.Func<int> read = () => other?.ExistingFail(PrivateStaticSeven()) ?? 0;\n"
+                + "            return read();\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            string editedPath = WriteEditedSource("LambdaConditionalAccessPrivateArg.cs", edited);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method.Contains(nameof(HotReloadAddedMemberHost.ExistingCaller)))
+                {
+                    Assert.Fail("ExistingCaller must not Failed: " + outcome.Reason);
+                }
+            }
+
+            HotReloadAddedMemberHost host = new HotReloadAddedMemberHost();
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(7));
+        }
+
+        /// <summary>
+        /// What: deleting a compiled method surfaces the aggregated removed-members warning.
+        /// </summary>
+        [Test]
+        public async Task Run_RemovedMethod_EmitsAggregatedRemovedMembersWarning()
+        {
+            string hostPath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(hostPath);
+            string edited = onDisk.Replace(
+                "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ExistingFail(int value)\n        {\n            return value;\n        }\n\n",
+                string.Empty,
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            string editedPath = WriteEditedSource("RemovedMethodWarning.cs", edited);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                editedPath,
+                CancellationToken.None);
+
+            Assert.That(result.Warnings, Is.Not.Null);
+            bool foundWarning = false;
+            foreach (string warning in result.Warnings)
+            {
+                if (warning.Contains(nameof(HotReloadAddedMemberHost.ExistingFail))
+                    && warning.Contains("'uloop compile'"))
+                {
+                    foundWarning = true;
+                }
+            }
+
+            Assert.That(
+                foundWarning,
+                Is.True,
+                "Removed ExistingFail must appear in the aggregated warning.\n"
+                + string.Join("\n", result.Warnings));
+        }
+
+        /// <summary>
+        /// What: a broken added-method body isolates that added method (and its callers) without
+        /// collapsing the file; an unrelated edited method still patches.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethodBodyFailure_IsolatesWithoutWipingFile()
+        {
+            string hostPath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(hostPath);
+            string edited = onDisk.Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public int ExistingValue()\n        {\n            return 10;\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value);\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }",
+                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n\n"
+                + "        public int AddedPing(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            string editedPath = WriteEditedSource("AddedMethodBodyFailure.cs", edited);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+
+            bool addedFailed = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method.Contains("AddedPing"))
+                {
+                    addedFailed = true;
+                }
+            }
+
+            Assert.That(
+                addedFailed,
+                Is.True,
+                "AddedPing must isolate as a per-method Failed.\n" + FormatOutcomes(result));
+            AssertHasSkipped(
+                result,
+                nameof(HotReloadAddedMemberHost.ExistingCaller),
+                HotReloadConstants.IsolatedAddedMethodCallerSkipReason);
+
+            HotReloadAddedMemberHost host = new HotReloadAddedMemberHost();
+            Assert.That(host.ExistingValue(), Is.EqualTo(10));
+        }
+
         private static int FindLineNumberContaining(string source, string fragment)
         {
             string[] lines = source.Replace("\r\n", "\n").Split('\n');
@@ -1724,6 +1964,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Assert.Fail("Unexpected file-level failure: " + outcome.Reason);
                 }
             }
+        }
+
+        private static void AssertHasSkipped(
+            HotReloadOrchestratorResult result,
+            string methodName,
+            string reasonFragment)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Method.Contains(methodName)
+                    && outcome.Reason != null
+                    && outcome.Reason.Contains(reasonFragment))
+                {
+                    return;
+                }
+            }
+
+            Assert.Fail(
+                "Expected Skipped outcome for " + methodName + " with reason containing '"
+                + reasonFragment + "'.\n" + FormatOutcomes(result));
         }
 
         private static void AssertHasPatched(HotReloadOrchestratorResult result, string methodName)
@@ -1754,6 +2015,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return string.Join("\n", lines);
+        }
+
+        private static string ResolveAddedMemberHostPath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadAddedMemberHost.cs");
+            Assert.That(File.Exists(path), Is.True, "Added-member host source missing: " + path);
+            return Path.GetFullPath(path);
         }
 
         private static string ResolveE2EFixturePath()

@@ -114,6 +114,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 return _score;
             }
         }
+
+        private int _value;
+
+        public int Value
+        {
+            get { return _value; }
+            set { _value = value; }
+        }
     }
 
     /// <summary>
