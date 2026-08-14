@@ -619,8 +619,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "((Host)obj).AddedPing must rewrite to the added shim.\n" + callerSlice);
             Assert.That(
                 callerSlice,
-                Does.Contain("obj"),
+                Does.Contain("((HotReloadAddedMemberHost)obj)"),
                 "Cast receiver must be spliced into the shim call, not replaced with __uloopInstance.\n"
+                + callerSlice);
+            Assert.That(
+                callerSlice,
+                Does.Not.Contain(added.shimMethodName + "(__uloopInstance"),
+                "AddedPing rewrite must pass the cast receiver, not the shim instance parameter.\n"
                 + callerSlice);
         }
 
