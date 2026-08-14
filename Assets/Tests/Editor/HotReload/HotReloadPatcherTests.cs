@@ -109,6 +109,75 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: RevertAll clears the added-field side table so instance and static values
+        /// reinitialize on the next read.
+        /// </summary>
+        [Test]
+        public void RevertAll_ClearsAddedFieldStore()
+        {
+            object host = new object();
+            string instanceKey = HotReloadAddedFieldStore.FormatFieldKey("Host", "count");
+            string staticKey = HotReloadAddedFieldStore.FormatFieldKey("Host", "seed");
+            HotReloadAddedFieldStore.Set(host, instanceKey, 1);
+            HotReloadAddedFieldStore.SetStatic(staticKey, 2);
+
+            HotReloadPatcher.RevertAll();
+
+            Assert.That(HotReloadAddedFieldStore.GetOrInit(host, instanceKey, () => 10), Is.EqualTo(10));
+            Assert.That(HotReloadAddedFieldStore.GetOrInitStatic(staticKey, () => 20), Is.EqualTo(20));
+        }
+
+        /// <summary>
+        /// What: the added-field store assembly is injected only when the store flag is set,
+        /// matching the Harmony optional-reference pattern.
+        /// </summary>
+        [Test]
+        public void AppendOptionalShimAssemblyReferences_StoreFlag_AddsToolContractsAssembly()
+        {
+            List<string> references = new List<string>();
+            HotReloadOrchestrator.AppendOptionalShimAssemblyReferences(
+                references,
+                includeHarmonyReference: false,
+                includeAddedFieldStoreReference: true);
+
+            Assert.That(references.Count, Is.EqualTo(1));
+            Assert.That(
+                references[0],
+                Is.EqualTo(typeof(HotReloadAddedFieldStore).Assembly.Location));
+        }
+
+        /// <summary>
+        /// What: both optional flags false leave the reference list unchanged.
+        /// </summary>
+        [Test]
+        public void AppendOptionalShimAssemblyReferences_BothFlagsFalse_AddsNothing()
+        {
+            List<string> references = new List<string>();
+            HotReloadOrchestrator.AppendOptionalShimAssemblyReferences(
+                references,
+                includeHarmonyReference: false,
+                includeAddedFieldStoreReference: false);
+
+            Assert.That(references, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: the Harmony flag still injects Harmony without also adding the store assembly.
+        /// </summary>
+        [Test]
+        public void AppendOptionalShimAssemblyReferences_HarmonyFlagOnly_AddsHarmony()
+        {
+            List<string> references = new List<string>();
+            HotReloadOrchestrator.AppendOptionalShimAssemblyReferences(
+                references,
+                includeHarmonyReference: true,
+                includeAddedFieldStoreReference: false);
+
+            Assert.That(references.Count, Is.EqualTo(1));
+            Assert.That(references[0], Is.EqualTo(typeof(Harmony).Assembly.Location));
+        }
+
+        /// <summary>
         /// What: DescribeActivePatches lists the patched fixture method after Apply and is empty
         /// after RevertAll.
         /// </summary>

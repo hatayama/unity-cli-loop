@@ -63,6 +63,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // True when any emitted shim type contains Harmony accessor delegates. Drives Harmony
         // reference injection; patchKind "addedMethod" entries can also need accessors (B2).
         public bool hasAccessorDelegates;
+
+        // True when any emitted shim body rewrites an added-field access to HotReloadAddedFieldStore.
+        // Drives ToolContracts assembly injection at both the first compile and isolation retry.
+        public bool hasAddedFieldRewrites;
     }
 
     [Serializable]
