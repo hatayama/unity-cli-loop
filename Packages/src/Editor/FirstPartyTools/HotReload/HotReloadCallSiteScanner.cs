@@ -240,14 +240,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                // Why exclude self: a recursive call inside the old method is moot once that
-                // method becomes unreachable. Reporting it would look like an external caller.
-                if (IsSelfCall(assemblyName, method, target))
+                MethodDefinition reportedCaller = ResolveReportedCaller(method, logicalOwners);
+
+                // Why resolve first: async/iterator self-recursion lives in MoveNext. Matching
+                // the physical caller would miss it, then reporting the logical owner would look
+                // like an external caller of the old method.
+                if (IsSelfCall(assemblyName, reportedCaller, target))
                 {
                     continue;
                 }
 
-                MethodDefinition reportedCaller = ResolveReportedCaller(method, logicalOwners);
                 hits.Add(CreateHit(assemblyName, reportedCaller));
             }
         }
@@ -302,7 +304,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string methodName,
             string[] parameterTypeFullNames)
         {
-            if (methodReference.DeclaringType == null)
+            MethodReference openMethod = methodReference.GetElementMethod();
+            if (openMethod.DeclaringType == null)
             {
                 return false;
             }
@@ -310,16 +313,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why not normalize '/' → '+': Cecil FullName and worker typeMetadataName both use
             // '/' for nested types, and BuildMethodKey keeps that form. Converting here would
             // desync CallerMethodKey from the orchestrator key space on nested types.
-            if (methodReference.DeclaringType.FullName != typeMetadataName)
+            if (ToOpenDeclaringTypeFullName(openMethod.DeclaringType) != typeMetadataName)
             {
                 return false;
             }
 
-            if (methodReference.Name != methodName)
+            if (openMethod.Name != methodName)
             {
                 return false;
             }
 
+            return ParametersMatch(openMethod, parameterTypeFullNames);
+        }
+
+        private static string ToOpenDeclaringTypeFullName(TypeReference declaringType)
+        {
+            GenericInstanceType genericInstance = declaringType as GenericInstanceType;
+            if (genericInstance != null)
+            {
+                return genericInstance.GetElementType().FullName;
+            }
+
+            return declaringType.FullName;
+        }
+
+        private static bool ParametersMatch(MethodReference methodReference, string[] parameterTypeFullNames)
+        {
             if (methodReference.Parameters.Count != parameterTypeFullNames.Length)
             {
                 return false;
@@ -327,7 +346,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             for (int index = 0; index < parameterTypeFullNames.Length; index++)
             {
-                if (methodReference.Parameters[index].ParameterType.FullName != parameterTypeFullNames[index])
+                TypeReference parameterType = methodReference.Parameters[index].ParameterType;
+                if (parameterType.ContainsGenericParameter)
+                {
+                    // Why treat as match: a type-argument-dependent parameter cannot be compared
+                    // to the compiled identity string with certainty. Missing the site would
+                    // fail-open the signature-change gate.
+                    continue;
+                }
+
+                if (parameterType.FullName != parameterTypeFullNames[index])
                 {
                     return false;
                 }
@@ -343,6 +371,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TypeDefinition declaringType = caller.DeclaringType;
             if (!IsCompilerGeneratedType(declaringType))
             {
+                // Why leave local functions as mangled names (<M>g__f|…): they are methods on
+                // the user type, so the state-machine index does not apply. Cover checks then
+                // fail closed (over-Skip) instead of treating an unknown local function as patched.
                 return caller;
             }
 
@@ -389,6 +420,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string typeMetadataName = caller.DeclaringType.FullName;
+
+            // Keep in sync with TransformWorkerProgram.BuildMethodKey (out-of-process worker)
+            // and HotReloadOrchestrator.BuildMethodKey (Unity package side).
             return new CallSiteHit
             {
                 CallerAssemblyName = assemblyName,

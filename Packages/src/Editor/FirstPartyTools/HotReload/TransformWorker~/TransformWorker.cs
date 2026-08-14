@@ -115,7 +115,8 @@ public static class TransformWorkerProgram
         File.WriteAllBytes(outputJsonPath, bytes);
     }
 
-    // Keep in sync with HotReloadOrchestrator.BuildMethodKey (Unity package side).
+    // Keep in sync with HotReloadOrchestrator.BuildMethodKey (Unity package side)
+    // and HotReloadCallSiteScanner.CreateHit.
     private static string BuildMethodKey(string typeMetadataName, string methodName, string[] parameterTypeFullNames)
     {
         return typeMetadataName + "::" + methodName + "(" + string.Join(",", parameterTypeFullNames ?? Array.Empty<string>()) + ")";

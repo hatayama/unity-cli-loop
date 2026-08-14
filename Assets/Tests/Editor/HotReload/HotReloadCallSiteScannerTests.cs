@@ -22,6 +22,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCallSiteScannerFixture";
 
+        private const string GenericHostTypeMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.GenericHost`1";
+
         /// <summary>
         /// What: a method called from an ordinary method is reported with that caller's method key.
         /// </summary>
@@ -29,7 +32,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void FindCallSites_OrdinaryCaller_ReportsCallerMethodKey()
         {
             List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
-                nameof(HotReloadCallSiteScannerFixture.CalledFromOrdinaryMethod));
+                FixtureTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.CalledFromOrdinaryMethod),
+                Array.Empty<string>());
 
             Assert.That(hits.Count, Is.EqualTo(1));
             Assert.That(
@@ -47,7 +52,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void FindCallSites_NeverCalled_ReturnsEmpty()
         {
             List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
-                nameof(HotReloadCallSiteScannerFixture.NeverCalled));
+                FixtureTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.NeverCalled),
+                Array.Empty<string>());
 
             Assert.That(hits, Is.Empty);
         }
@@ -59,7 +66,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void FindCallSites_DelegateAssignment_ReportsLdftnCaller()
         {
             List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
-                nameof(HotReloadCallSiteScannerFixture.CalledOnlyViaDelegate));
+                FixtureTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.CalledOnlyViaDelegate),
+                Array.Empty<string>());
 
             Assert.That(hits.Count, Is.EqualTo(1));
             Assert.That(
@@ -75,7 +84,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void FindCallSites_AsyncCaller_ReportsLogicalOwnerMethodKey()
         {
             List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
-                nameof(HotReloadCallSiteScannerFixture.CalledFromAsyncMethod));
+                FixtureTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.CalledFromAsyncMethod),
+                Array.Empty<string>());
 
             Assert.That(hits.Count, Is.EqualTo(1));
             Assert.That(
@@ -86,7 +97,72 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(nameof(HotReloadCallSiteScannerFixture.AsyncCaller)));
         }
 
-        private static List<HotReloadCallSiteScanner.CallSiteHit> FindHits(string methodName)
+        /// <summary>
+        /// What: a call through GenericHost&lt;int&gt; still hits the open GenericHost`1 Target.
+        /// </summary>
+        [Test]
+        public void FindCallSites_GenericTypeInstantiation_ReportsCaller()
+        {
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+                GenericHostTypeMetadataName,
+                nameof(GenericHost<int>.Target),
+                Array.Empty<string>());
+
+            Assert.That(hits.Count, Is.EqualTo(1));
+            Assert.That(
+                hits[0].CallerMethodKey,
+                Is.EqualTo(FixtureTypeMetadataName + "::CallGenericHostTarget()"));
+        }
+
+        /// <summary>
+        /// What: an instantiated generic method is found both via Call and via Ldftn.
+        /// </summary>
+        [Test]
+        public void FindCallSites_GenericMethodInstantiation_ReportsCallAndLdftn()
+        {
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+                FixtureTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.GenericMethodTarget),
+                Array.Empty<string>());
+
+            List<string> keys = hits.ConvertAll(hit => hit.CallerMethodKey);
+            Assert.That(keys, Does.Contain(FixtureTypeMetadataName + "::CallGenericMethodTarget()"));
+            Assert.That(keys, Does.Contain(FixtureTypeMetadataName + "::CaptureGenericMethodTarget()"));
+            Assert.That(hits.Count, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// What: a recursive call inside the target itself is not reported as a caller.
+        /// </summary>
+        [Test]
+        public void FindCallSites_OrdinarySelfRecursion_ReturnsEmpty()
+        {
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+                FixtureTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.SelfRecursive),
+                new[] { "System.Int32" });
+
+            Assert.That(hits, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: an async method awaiting itself is not reported after logical-owner resolution.
+        /// </summary>
+        [Test]
+        public void FindCallSites_AsyncSelfRecursion_ReturnsEmpty()
+        {
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+                FixtureTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.AsyncSelfRecursive),
+                new[] { "System.Int32" });
+
+            Assert.That(hits, Is.Empty);
+        }
+
+        private static List<HotReloadCallSiteScanner.CallSiteHit> FindHits(
+            string typeMetadataName,
+            string methodName,
+            string[] parameterTypeFullNames)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(
@@ -96,9 +172,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadCallSiteScanner.CompiledMethodIdentity target =
                 new HotReloadCallSiteScanner.CompiledMethodIdentity(
                     assemblyName,
-                    FixtureTypeMetadataName,
+                    typeMetadataName,
                     methodName,
-                    Array.Empty<string>());
+                    parameterTypeFullNames);
 
             return HotReloadCallSiteScanner.FindCallSites(
                 projectRoot,

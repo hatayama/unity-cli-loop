@@ -44,5 +44,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await Task.Yield();
             return CalledFromAsyncMethod();
         }
+
+        public static int CallGenericHostTarget()
+        {
+            GenericHost<int> host = new GenericHost<int>();
+            return host.Target();
+        }
+
+        public static int GenericMethodTarget<T>()
+        {
+            return 1;
+        }
+
+        public static int CallGenericMethodTarget()
+        {
+            return GenericMethodTarget<int>();
+        }
+
+        public static Func<int> CaptureGenericMethodTarget()
+        {
+            Func<int> captured = GenericMethodTarget<int>;
+            return captured;
+        }
+
+        public static int SelfRecursive(int remaining)
+        {
+            if (remaining <= 0)
+            {
+                return 0;
+            }
+
+            return SelfRecursive(remaining - 1);
+        }
+
+        public static async Task<int> AsyncSelfRecursive(int remaining)
+        {
+            if (remaining <= 0)
+            {
+                return 0;
+            }
+
+            return await AsyncSelfRecursive(remaining - 1);
+        }
+    }
+
+    /// <summary>
+    /// Open generic host so call sites go through a constructed <c>GenericHost&lt;int&gt;</c>.
+    /// </summary>
+    public class GenericHost<T>
+    {
+        public int Target()
+        {
+            return 1;
+        }
     }
 }

@@ -947,7 +947,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string.Join(", ", names));
         }
 
-        // Keep in sync with TransformWorkerProgram.BuildMethodKey (out-of-process worker side).
+        // Keep in sync with TransformWorkerProgram.BuildMethodKey (out-of-process worker side)
+        // and HotReloadCallSiteScanner.CreateHit.
         private static string BuildMethodKey(TransformWorkerEntryDto entry)
         {
             return entry.typeMetadataName + "::" + entry.methodName + "("
