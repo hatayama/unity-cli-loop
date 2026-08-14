@@ -21,6 +21,11 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         // original method, or null when the method is not hot-reload patched.
         public static Func<MethodBase, MethodBase> GetActiveShimForMethod { get; set; }
 
+        // Set by HotReloadPatcher. Returns how many methods are currently hot-reload
+        // patched (0 when none). Null means the hot-reload tool has not initialized in
+        // this domain, which also means no patches exist - callers treat null as 0.
+        public static Func<int> GetActiveHotReloadPatchCount { get; set; }
+
         /// <summary>
         /// Set by HotReloadShimRegistry. Argument is a forward-slash path (absolute or
         /// project-relative); returns null when that file has no active shim generation.
