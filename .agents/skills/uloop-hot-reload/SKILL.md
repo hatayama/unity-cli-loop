@@ -30,7 +30,7 @@ consume exactly one value token.
 |-----------|------|---------|-------------|
 | `--files` | array | - | Project-relative `.cs` paths whose method bodies should be hot-reloaded. Required when neither `--revert-all` nor `--status` is set |
 | `--revert-all` | flag | - | Remove every active hot-reload patch and clear the patch ledger. When set, `--files` is ignored |
-| `--status` | flag | - | Lists the currently patched methods without applying or reverting anything. |
+| `--status` | flag | - | Lists the currently active changes (patched methods and added members) without applying or reverting anything. |
 
 ## Checking what is currently patched
 
@@ -64,30 +64,70 @@ ledger across runs.
 
 Only ordinary method declarations and property getters with a body are patched.
 Constructors, finalizers, operators, event accessors, and `interface` members
-(including default interface implementations) are never scanned: edits to them produce
-**no per-method entry at all** and are silently not applied — use `uloop compile` for those.
+(including default interface implementations) are never scanned: **edits** to them
+produce **no per-method entry at all** and are silently not applied — use
+`uloop compile` for those. (**Adding** one of these member kinds is different:
+the addition is detected and reported as `Skipped`, per the next section.)
 
-Hot reload never adds members. A refactor that extracts a new helper method cannot be
-applied piecewise — keep iterating inside existing method bodies, then run
-`uloop compile` once to introduce the new member for real.
+### Added methods and fields
 
-Edits outside method bodies never take effect: changing a `const` value, a field
-initializer, or any declaration other than a method body leaves runtime behavior
-unchanged even though the response reports `Success` — shims resolve those symbols
+Hot reload can add new methods and fields alongside body edits, under one hard rule:
+an added member is visible only to edited code in the same file. Compiled, unedited
+code cannot see it, and neither can anything that resolves members by name at
+runtime: reflection (`GetType().GetMethod("NewM")` returns `null`), Unity's message
+discovery (an added `Update` or `OnCollisionEnter` on a `MonoBehaviour` is never
+invoked — a `Warnings` entry names it), UnityEvent/inspector wiring, and
+serialization. Referencing an added member from a different file fails that file's
+hot reload with the usual new-member hint; run `uloop compile` instead.
+
+An added method reports its own row with Kind `Added`; the edited methods that call
+it report `Patched` as usual. Added `virtual`/`override`/`abstract` methods, explicit
+interface implementations, and generic methods are `Skipped`; a method-group or
+delegate reference to an added instance method skips the referencing method instead.
+Pause points cannot bind to lines inside an added method — enabling one there fails
+with the normal not-found error.
+
+An added field's values live in a side table that follows each instance's lifetime
+(statics live per domain). Its initializer does not run at construction time; it runs
+on the field's first access from edited code — once per instance, or once per domain
+for statics. Initializer expressions are limited to literals and externally visible
+static calls (`= 5`, `= Math.Abs(x)`); anything touching the host type or instance
+state skips the field's readers and writers with a per-method reason. Added `const`
+values are folded into edited bodies as literals, like `nameof`.
+
+Added members are an Editor-session illusion. Any real compile or domain reload
+drops them all: added methods disappear from the ledger and added-field values are
+discarded — they do not migrate into the compiled field's initializer semantics.
+Deleting an added member from the edit and re-applying (or reverting the file to its
+compiled source) removes it from the ledger on that run. Deleting a *compiled*
+member is reported in `Warnings`, but its IL remains callable from unedited code
+until `uloop compile`.
+
+Adding a type (`class`, `struct`, `enum`, `record`), a property, an event, an
+indexer, a constructor, or an operator is still out of scope and reported as
+`Skipped`; land those with `uloop compile`.
+
+Outside method bodies, only member additions (previous section) take effect.
+Every other declaration edit — changing a `const` value, a compiled field's
+initializer, an attribute — leaves runtime behavior unchanged even though the
+response reports `Success` — shims resolve those symbols
 against the already-compiled assembly, and C# bakes `const` values into IL at compile
 time. Changed `const` values (including enum member values) are detected and reported
 as a `Warnings` entry naming the constant and both values. When a verified source
-baseline is available (next paragraph), other outside-body drift — fields,
-initializers, attributes, added or removed members — is reported as a `Warnings`
-entry as well; without a baseline it stays silent. Either way, use `uloop compile`
-for such edits.
+baseline is available (next paragraph), other outside-body drift — existing-field
+initializers, attributes, and other declaration edits — is reported as a `Warnings`
+entry as well (handled added members and reported removed members are excluded
+from this generic warning); without a baseline it stays silent. Either way, use
+`uloop compile` for such edits.
 
 ### Explore with hot reload, land structure with compile
 
 Treat hot reload as the exploration phase and `uloop compile` as the landing phase. While
 diagnosing or tuning, keep every edit inside existing method bodies — inline a would-be
-helper's logic at its call site for now instead of extracting it. When the change needs new
-members (a helper method, a field, a type), collect all of them and run `uloop compile`
+helper's logic at its call site for now instead of extracting it. New helper methods
+and fields can now be explored directly with hot reload inside the same file. When
+the change needs a new type, cross-file visibility, runtime name-based lookup, or
+serialization, collect those and run `uloop compile`
 once: every compile triggers a domain reload that drops all active patches and pause points
 and resets the running PlayMode session, so compiling member-by-member pays that cost
 repeatedly. After the one compile, re-enter PlayMode and continue exploring on the freshly
@@ -203,8 +243,10 @@ a pause is not evidence either way.
   default), not just `uloop compile`. `uloop control-play-mode --action Play` warns with
   the counts when it is about to drop patches or pause points. There is no persistence
   and no automatic re-apply.
-- Never reflected by hot reload: new fields, field initializer changes, new types, and
-  signature changes. Those always need `uloop compile`.
+- Never reflected by hot reload: initializer changes on compiled fields, new types,
+  and signature changes. Those always need `uloop compile`. (Added methods and
+  fields are reflected per the rules above, but only for the current Editor
+  session and only within their own file.)
 - A run with `Failed` outcomes still applies every other patch — outcomes are
   per-method and there is no run-level rollback. `Methods` is the authoritative
   record of which bodies changed.
@@ -256,10 +298,10 @@ cached dispatch can bypass a hot-reload patch too.
 Returns JSON with:
 
 - `Success` (boolean): `false` on parameter validation failure or when any method outcome is `Failed`. `Skipped` outcomes alone never force `false`
-- `Methods` (array): Per-method `{ Kind, Method, Reason, FilePath, InvocationCount, LifecycleNote }` where `Kind` is `Patched`, `Skipped`, or `Failed` on apply runs, or `Active` on `--status` runs; empty on `--revert-all` runs. `InvocationCount` is meaningful on `Active` rows (calls since the current patch was applied); it is `0` on apply/revert outcomes. `LifecycleNote` is set when a patched method is a Unity one-shot lifecycle message (`private void Awake`/`Start`/`OnEnable`/`OnDisable`/`OnDestroy` on a `MonoBehaviour`); empty otherwise — it does not change `Kind`
+- `Methods` (array): Per-method `{ Kind, Method, Reason, FilePath, InvocationCount, LifecycleNote }` where `Kind` is `Patched`, `Skipped`, `Failed`, or `Added` on apply runs, and `Active` or `Added` on `--status` runs; empty on `--revert-all` runs. `InvocationCount` is meaningful on `Active` rows (calls since the current patch was applied); it is `0` on apply/revert outcomes. `LifecycleNote` is set when a patched method is a Unity one-shot lifecycle message (`private void Awake`/`Start`/`OnEnable`/`OnDisable`/`OnDestroy` on a `MonoBehaviour`); empty otherwise — it does not change `Kind`. `Added` rows carry the added member's signature and file; their `InvocationCount` is always `0` (added-member calls are not instrumented). Example `--status` row: `{ "Kind": "Added", "Method": "Ns.Host.NewHelper(System.Int32)", "Reason": "", "FilePath": "Assets/Scripts/Host.cs", "InvocationCount": 0, "LifecycleNote": "" }`
 - `Warnings` (array): Non-fatal notes — one aggregated line listing the patched methods at risk of being already JIT-inlined into existing callers — those marked `[AggressiveInlining]`, plus (only when Code Optimization is Release) those with tiny pre-patch bodies — meaning the change may not show at those call sites, the pause-point interaction above, and the const drift, outside-body drift, and missing-baseline entries described in "Scope and limits"
 - `PatchedTotal` (number): Methods patched in this run
 - `UnchangedTotal` (number): Methods left untouched because their bodies match the source baseline from the last compile; `0` when no baseline was available
-- `ActivePatchTotal` (number): Methods still patched after this run
+- `ActivePatchTotal` (number): Active changes after this run — patched methods plus added members. `--revert-all` clears both and reports the combined count in `ClearedCount`
 - `ClearedCount` (number): Patches removed by `--revert-all` (0 on apply)
 - `Message` (string): Short summary
