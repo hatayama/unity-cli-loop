@@ -587,11 +587,84 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a cast receiver ((Host)obj).AddedPing is not a conditional-access spine, so the
+        /// caller is rewritten to the added-method shim instead of skipped.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_CastReceiverAddedMethodCall_RewritesToShim()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedPing(int value)\n        {\n            return value;\n        }");
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            object obj = this;\n"
+                + "            return ((HotReloadAddedMemberHost)obj).AddedPing(value);\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("RewriteCastReceiverAdded.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto added = FindEntry(result, "AddedPing");
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(added, Is.Not.Null, "AddedPing must still emit.");
+            Assert.That(caller, Is.Not.Null, "((Host)obj).AddedPing must not skip as conditional access.");
+            string callerSlice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(
+                callerSlice,
+                Does.Contain(added.shimMethodName),
+                "((Host)obj).AddedPing must rewrite to the added shim.\n" + callerSlice);
+            Assert.That(
+                callerSlice,
+                Does.Contain("obj"),
+                "Cast receiver must be spliced into the shim call, not replaced with __uloopInstance.\n"
+                + callerSlice);
+        }
+
+        /// <summary>
+        /// What: a private instance call through a cast receiver inside a lambda is
+        /// accessor-rewritten (Delegation); the cast is not treated as a ?. spine.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_CastReceiverPrivateCallInLambda_EmitsMethodAccessor()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            object obj = this;\n"
+                + "            System.Func<int> read = () => ((HotReloadAddedMemberHost)obj).PrivateCall();\n"
+                + "            return read();\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("RewriteCastReceiverPrivateCall.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null, "Cast-receiver PrivateCall in a lambda must not skip.");
+            Assert.That(caller.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
+            Assert.That(result.Output.hasAccessorDelegates, Is.True);
+            string callerSlice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(
+                callerSlice,
+                Does.Contain("__M_PrivateCall"),
+                "((Host)obj).PrivateCall must be accessor-rewritten.\n" + callerSlice);
+            Assert.That(
+                callerSlice,
+                Does.Not.Contain(".PrivateCall()"),
+                "PrivateCall must not remain a verbatim instance call in the shim.\n" + callerSlice);
+        }
+
+        /// <summary>
         /// What: a private call in a conditional-access argument list inside a lambda is
         /// accessor-rewritten (Delegation), not left verbatim.
         /// </summary>
         [Test]
-        public async Task Rewrite_LambdaConditionalAccessArgumentPrivateCall_EmitsMethodAccessor()
+        public async Task Rewrite_LambdaConditionalAccessArgumentPrivateStaticSeven_EmitsMethodAccessor()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = onDisk.Replace(

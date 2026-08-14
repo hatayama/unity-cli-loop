@@ -2617,9 +2617,12 @@ public static class TransformWorkerProgram
         return false;
     }
 
-    // Why conservative unknown→true: false means rewrite. ExtractReceiver cannot recover a
-    // MemberBinding-rooted receiver (other?.Get().AddedPing() / other?.Inner!.AddedPing())
-    // and would emit a parse-invalid shim. Over-skip is safe; under-skip is file-level Failed.
+    // Why unknown→false: MemberBinding/ElementBinding can appear as the leftmost receiver
+    // only along MemberAccess / ElementAccess / Invocation / postfix ! / ConditionalAccess /
+    // Parenthesized. Cast / new / await / ternary / literals are complete expressions;
+    // ExtractReceiver splices them as valid source. Returning true here would skip ordinary
+    // calls with a "conditional access" reason and would suppress accessor rewrite of private
+    // methods on those receivers (fields would still rewrite — VisitMemberAccess has no guard).
     internal static bool IsConditionalAccessReceiverSpine(InvocationExpressionSyntax invocation)
     {
         ExpressionSyntax current = invocation.Expression;
@@ -2637,12 +2640,7 @@ public static class TransformWorkerProgram
                 continue;
             }
 
-            if (IsNormalReceiverTerminal(current))
-            {
-                return false;
-            }
-
-            return true;
+            return false;
         }
 
         return false;
@@ -2665,7 +2663,8 @@ public static class TransformWorkerProgram
             return innerInvocation.Expression;
         }
 
-        if (expression is PostfixUnaryExpressionSyntax postfix)
+        if (expression is PostfixUnaryExpressionSyntax postfix
+            && postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression))
         {
             return postfix.Operand;
         }
@@ -2681,16 +2680,6 @@ public static class TransformWorkerProgram
         }
 
         return null;
-    }
-
-    private static bool IsNormalReceiverTerminal(ExpressionSyntax expression)
-    {
-        return expression is SimpleNameSyntax
-            || expression is ThisExpressionSyntax
-            || expression is BaseExpressionSyntax
-            || expression is PredefinedTypeSyntax
-            || expression is AliasQualifiedNameSyntax
-            || expression is QualifiedNameSyntax;
     }
 
     private static string[] CollectCalledAddedMethodKeys(
@@ -5472,7 +5461,7 @@ internal static class AddedMethodSkipReasons
         "New types are out of scope for hot reload; run 'uloop compile' to add them.";
 
     public const string InterfaceMember =
-        "Interface members are not patchable";
+        "Interface members are not patchable. Run 'uloop compile'.";
 }
 
 internal static class UnityMessageNames

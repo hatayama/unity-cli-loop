@@ -1811,7 +1811,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// accessor-rewritten (Delegation) so the enclosing method Patches (not CS0122 Failed).
         /// </summary>
         [Test]
-        public async Task Run_LambdaConditionalAccessArgumentPrivateCall_AccessorizesAndPatches()
+        public async Task Run_LambdaConditionalAccessArgumentPrivateStaticSeven_AccessorizesAndPatches()
         {
             string hostPath = ResolveAddedMemberHostPath();
             string onDisk = File.ReadAllText(hostPath);
