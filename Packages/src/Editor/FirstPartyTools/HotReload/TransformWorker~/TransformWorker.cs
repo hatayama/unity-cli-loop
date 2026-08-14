@@ -2177,6 +2177,31 @@ public static class TransformWorkerProgram
             string syntaxMethodKey = BuildSyntaxMethodKey(
                 typeState.TypeMetadataNameFromSyntax,
                 methodDeclaration);
+            if (typeState.TypeSymbol.TypeKind == TypeKind.Interface)
+            {
+                if (!isAddedMethod && hasBaseline
+                    && snapshotMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax snapshotDecl)
+                    && plainCurrentMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax plainDecl)
+                    && SyntaxFactory.AreEquivalent(snapshotDecl, plainDecl, topLevel: false))
+                {
+                    // Why not unchangedMethods: RevertUnchangedPatches Resolve/ReadAssembly is
+                    // wasted for members Harmony will never patch. Stay inert.
+                    continue;
+                }
+
+                skipped.Add(new WorkerSkipped
+                {
+                    Method = FormatMethodLabel(methodSymbol),
+                    Reason = AddedMethodSkipReasons.InterfaceMember
+                });
+                if (isAddedMethod)
+                {
+                    addedMethodCatalog.AddAddedSyntaxKey(syntaxMethodKey);
+                }
+
+                continue;
+            }
+
             if (!isAddedMethod && hasBaseline)
             {
                 // Why plainDecl: compare unannotated nodes; annotated methodDeclaration breaks
@@ -2504,7 +2529,7 @@ public static class TransformWorkerProgram
 
             string calledKey = BuildMethodKeyFromSymbol(methodSymbol);
             // Why the receiver spine (not a WhenNotNull ancestor walk): other?.Inner.AddedPing()
-            // is MemberAccess whose leftmost expression is MemberBinding. An ancestor walk also
+            // and other?.Get().AddedPing() walk left to a MemberBinding. An ancestor walk also
             // matches argument-list / lambda invocations that are ordinary rewrite targets.
             if (IsConditionalAccessReceiverSpine(invocation)
                 && addedMethodCatalog.IsClassifiedAdded(calledKey))
@@ -2592,9 +2617,9 @@ public static class TransformWorkerProgram
         return false;
     }
 
-    // Why the receiver spine: other?.Inner.AddedPing() / other?[0].AddedPing() walk left
-    // through MemberAccess/ElementAccess to a MemberBinding/ElementBinding. Argument-list
-    // and lambda invocations (list?.Add(PrivateCall()), other?.Existing(AddedPing(1))) do not.
+    // Why conservative unknown→true: false means rewrite. ExtractReceiver cannot recover a
+    // MemberBinding-rooted receiver (other?.Get().AddedPing() / other?.Inner!.AddedPing())
+    // and would emit a parse-invalid shim. Over-skip is safe; under-skip is file-level Failed.
     internal static bool IsConditionalAccessReceiverSpine(InvocationExpressionSyntax invocation)
     {
         ExpressionSyntax current = invocation.Expression;
@@ -2605,22 +2630,67 @@ public static class TransformWorkerProgram
                 return true;
             }
 
-            if (current is MemberAccessExpressionSyntax memberAccess)
+            ExpressionSyntax unwrapped = TryUnwrapReceiverSpineExpression(current);
+            if (unwrapped != null)
             {
-                current = memberAccess.Expression;
+                current = unwrapped;
                 continue;
             }
 
-            if (current is ElementAccessExpressionSyntax elementAccess)
+            if (IsNormalReceiverTerminal(current))
             {
-                current = elementAccess.Expression;
-                continue;
+                return false;
             }
 
-            return false;
+            return true;
         }
 
         return false;
+    }
+
+    private static ExpressionSyntax TryUnwrapReceiverSpineExpression(ExpressionSyntax expression)
+    {
+        if (expression is MemberAccessExpressionSyntax memberAccess)
+        {
+            return memberAccess.Expression;
+        }
+
+        if (expression is ElementAccessExpressionSyntax elementAccess)
+        {
+            return elementAccess.Expression;
+        }
+
+        if (expression is InvocationExpressionSyntax innerInvocation)
+        {
+            return innerInvocation.Expression;
+        }
+
+        if (expression is PostfixUnaryExpressionSyntax postfix)
+        {
+            return postfix.Operand;
+        }
+
+        if (expression is ConditionalAccessExpressionSyntax conditionalAccess)
+        {
+            return conditionalAccess.Expression;
+        }
+
+        if (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            return parenthesized.Expression;
+        }
+
+        return null;
+    }
+
+    private static bool IsNormalReceiverTerminal(ExpressionSyntax expression)
+    {
+        return expression is SimpleNameSyntax
+            || expression is ThisExpressionSyntax
+            || expression is BaseExpressionSyntax
+            || expression is PredefinedTypeSyntax
+            || expression is AliasQualifiedNameSyntax
+            || expression is QualifiedNameSyntax;
     }
 
     private static string[] CollectCalledAddedMethodKeys(
@@ -5400,6 +5470,9 @@ internal static class AddedMethodSkipReasons
 
     public const string NewTypeOutOfScope =
         "New types are out of scope for hot reload; run 'uloop compile' to add them.";
+
+    public const string InterfaceMember =
+        "Interface members are not patchable";
 }
 
 internal static class UnityMessageNames

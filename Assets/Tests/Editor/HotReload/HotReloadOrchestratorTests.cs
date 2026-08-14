@@ -1807,11 +1807,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a private call in a conditional-access argument list is accessor-rewritten so
-        /// the enclosing method still Patches (it must not Failed with CS0122).
+        /// What: a private call in a conditional-access argument list inside a lambda is
+        /// accessor-rewritten (Delegation) so the enclosing method Patches (not CS0122 Failed).
         /// </summary>
         [Test]
-        public async Task Run_ConditionalAccessArgumentPrivateCall_AccessorizesAndPatches()
+        public async Task Run_LambdaConditionalAccessArgumentPrivateCall_AccessorizesAndPatches()
         {
             string hostPath = ResolveAddedMemberHostPath();
             string onDisk = File.ReadAllText(hostPath);
@@ -1819,10 +1819,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
                 "        public int ExistingCaller(int value)\n        {\n"
                 + "            HotReloadAddedMemberHost other = this;\n"
-                + "            return other?.ExistingFail(PrivateCall()) ?? 0;\n        }",
+                + "            System.Func<int> read = () => other?.ExistingFail(PrivateStaticSeven()) ?? 0;\n"
+                + "            return read();\n        }",
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
-            string editedPath = WriteEditedSource("ConditionalAccessPrivateArg.cs", edited);
+            string editedPath = WriteEditedSource("LambdaConditionalAccessPrivateArg.cs", edited);
 
             HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                 new[] { hostPath },

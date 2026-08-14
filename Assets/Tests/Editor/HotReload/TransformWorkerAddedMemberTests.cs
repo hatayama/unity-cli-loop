@@ -482,6 +482,78 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: other?.Get().AddedPing() is a MemberBinding-rooted invocation spine (Get sits
+        /// between ? and AddedPing) and skips the caller instead of emitting a parse-invalid shim.
+        /// </summary>
+        [Test]
+        public async Task Skip_ConditionalAccessGetThenAddedMethod_DoesNotRewriteCaller()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedPing(int value)\n        {\n            return value;\n        }");
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            HotReloadAddedMemberHost other = this;\n"
+                + "            return other?.Get().AddedPing(value) ?? 0;\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("SkipConditionalAccessGet.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "conditional access");
+            Assert.That(FindEntry(result, "AddedPing"), Is.Not.Null);
+            Assert.That(
+                FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.Null,
+                "other?.Get().AddedPing must skip the caller, not rewrite to Shim(.Get()).");
+            Assert.That(
+                result.Output.shimSource,
+                Does.Not.Contain("?global::"),
+                "ExtractReceiver must not splice a shim call after ?.");
+            Assert.That(
+                result.Output.shimSource,
+                Does.Not.Contain(".Get()"),
+                "MemberBinding-rooted Get() must not be spliced as a shim receiver.");
+        }
+
+        /// <summary>
+        /// What: other?[0].AddedPing() (element binding under WhenNotNull) skips the caller
+        /// instead of rewriting the receiver.
+        /// </summary>
+        [Test]
+        public async Task Skip_ElementBindingConditionalAccessAddedMethod_DoesNotRewriteCaller()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedPing(int value)\n        {\n            return value;\n        }");
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            HotReloadAddedMemberHost other = this;\n"
+                + "            return other?[0].AddedPing(value) ?? 0;\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("SkipConditionalAccessIndexer.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "conditional access");
+            Assert.That(FindEntry(result, "AddedPing"), Is.Not.Null);
+            Assert.That(
+                FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.Null,
+                "other?[0].AddedPing must skip the caller, not rewrite the element-binding receiver.");
+            Assert.That(
+                result.Output.shimSource,
+                Does.Not.Contain("?global::"),
+                "ExtractReceiver must not splice a shim call after ?.");
+        }
+
+        /// <summary>
         /// What: an added-method call in a conditional-access argument list is rewritten to the
         /// shim; the caller is not skipped for ConditionalAccess.
         /// </summary>
@@ -512,6 +584,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 callerSlice,
                 Does.Contain(added.shimMethodName + "(__uloopInstance, 1)"),
                 "AddedPing inside the ?. argument list must rewrite to the shim.\n" + callerSlice);
+        }
+
+        /// <summary>
+        /// What: a private call in a conditional-access argument list inside a lambda is
+        /// accessor-rewritten (Delegation), not left verbatim.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_LambdaConditionalAccessArgumentPrivateCall_EmitsMethodAccessor()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            HotReloadAddedMemberHost other = this;\n"
+                + "            System.Func<int> read = () => other?.ExistingFail(PrivateStaticSeven()) ?? 0;\n"
+                + "            return read();\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("LambdaConditionalAccessPrivateArg.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null, "Lambda ?. argument caller must not skip.");
+            Assert.That(caller.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
+            Assert.That(result.Output.hasAccessorDelegates, Is.True);
+            string callerSlice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(
+                callerSlice,
+                Does.Contain("__M_PrivateStaticSeven()"),
+                "PrivateStaticSeven inside other?.ExistingFail(...) must be accessor-rewritten.\n"
+                + callerSlice);
+            Assert.That(
+                callerSlice,
+                Does.Not.Contain("ExistingFail(PrivateStaticSeven())"),
+                "PrivateStaticSeven must not remain a verbatim call in the shim.\n" + callerSlice);
         }
 
         /// <summary>
@@ -568,6 +676,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result.Output.declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Skipped new-interface declarations must not fire fields/initializers drift.\n"
+                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+        }
+
+        /// <summary>
+        /// What: editing a compiled interface default method is skipped with the interface-member
+        /// reason and does not emit a Transplant entry.
+        /// </summary>
+        [Test]
+        public async Task Skip_CompiledInterfaceDefaultMethodEdit_UsesInterfaceMemberReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        int ExistingDefault() => 1;",
+                "        int ExistingDefault() => 2;",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("SkipCompiledInterfaceDefault.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, "ExistingDefault", "Interface members are not patchable");
+            Assert.That(FindEntry(result, "ExistingDefault"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: adding a member to a compiled interface is reported as Skipped with the
+        /// interface-member reason (not an outside-body drift warning).
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedMemberOnCompiledInterface_UsesInterfaceMemberReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        int Ping(int value);",
+                "        int Ping(int value);\n        int Extra(int value);",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("SkipAddedCompiledInterfaceMember.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, "Extra", "Interface members are not patchable");
+            Assert.That(FindEntry(result, "Extra"), Is.Null);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "Added compiled-interface members must surface as Skipped, not drift.\n"
                 + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
         }
 

@@ -15,6 +15,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         public HotReloadAddedMemberHost Inner;
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public HotReloadAddedMemberHost Get()
+        {
+            return this;
+        }
+
+        public HotReloadAddedMemberHost this[int index]
+        {
+            get { return this; }
+        }
+
         private int _privateSeed = 7;
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -62,6 +73,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        private static int PrivateStaticSeven()
+        {
+            return 7;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private int PrivateCall()
         {
             return _privateSeed;
@@ -92,6 +109,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public interface IHotReloadAddedMemberPing
     {
         int Ping(int value);
+    }
+
+    /// <summary>
+    /// Compiled interface with a default method so edits to interface members can be skipped
+    /// without becoming Harmony patch candidates.
+    /// </summary>
+    public interface IHotReloadAddedMemberDefault
+    {
+        int ExistingDefault() => 1;
     }
 
     /// <summary>
