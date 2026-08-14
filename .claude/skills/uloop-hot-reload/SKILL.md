@@ -101,8 +101,9 @@ initialization helpers called from them, anything that seeds state at startup) p
 successfully but show no effect: the one call they get is already in the past when the
 patch lands. The response marks Unity's one-shot lifecycle messages with `LifecycleNote`
 (see Output). To see an initialization change take effect, run `uloop compile` and restart
-Play Mode — a fresh Play entry reloads the domain and drops the patch, so the patched body
-alone cannot carry the change into the next session. Better, keep values you expect to
+Play Mode — with Domain Reload enabled (the default), a fresh Play entry reloads the
+domain and drops the patch, so the patched body alone cannot carry the change into the
+next session. Better, keep values you expect to
 tune out of one-shot paths entirely: read them in a body that runs per frame or per event,
 and patch that body instead.
 
