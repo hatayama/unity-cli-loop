@@ -1636,5 +1636,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(nested.removedMembers[0].name, Is.EqualTo("Gone"));
             Assert.That(nested.entries[0].calledAddedMethodKeys, Is.EqualTo(new[] { "T::Added()" }));
         }
+
+        /// <summary>
+        /// What: omitted hasAddedFieldRewrites deserializes as false, and an explicit true
+        /// survives Newtonsoft so isolation retry can inject the store assembly.
+        /// </summary>
+        [Test]
+        public void Deserialize_HasAddedFieldRewrites_OmittedFalseAndTrueRoundTrip()
+        {
+            string omittedJson = "{\"shimSource\":\"\",\"entries\":[],\"skipped\":[],\"parseErrors\":[]}";
+            TransformWorkerOutputDto omitted =
+                JsonConvert.DeserializeObject<TransformWorkerOutputDto>(omittedJson);
+            Assert.That(omitted.hasAddedFieldRewrites, Is.False);
+
+            string trueJson =
+                "{\"shimSource\":\"\",\"entries\":[],\"skipped\":[],\"parseErrors\":[],"
+                + "\"hasAddedFieldRewrites\":true}";
+            TransformWorkerOutputDto enabled =
+                JsonConvert.DeserializeObject<TransformWorkerOutputDto>(trueJson);
+            Assert.That(enabled.hasAddedFieldRewrites, Is.True);
+        }
     }
 }

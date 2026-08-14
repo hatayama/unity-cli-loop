@@ -447,7 +447,8 @@ public static class TransformWorkerProgram
             UnchangedMethods = unchangedMethods.ToArray(),
             BaselineDisabledByDuplicateKeys = baselineDisabledByDuplicateKeys,
             RemovedMembers = removedMembers.ToArray(),
-            HasAccessorDelegates = hasAccessorDelegates
+            HasAccessorDelegates = hasAccessorDelegates,
+            HasAddedFieldRewrites = false
         };
     }
 
@@ -5599,6 +5600,11 @@ internal sealed class WorkerOutput
     public WorkerRemovedMember[] RemovedMembers { get; set; }
 
     public bool HasAccessorDelegates { get; set; }
+
+    // True when shim bodies rewrite added-field accesses to HotReloadAddedFieldStore.
+    // Keep in sync with TransformWorkerOutputDto.hasAddedFieldRewrites. Always false until
+    // the added-field rewrite PR starts emitting store calls.
+    public bool HasAddedFieldRewrites { get; set; }
 }
 
 internal sealed class WorkerRemovedMember

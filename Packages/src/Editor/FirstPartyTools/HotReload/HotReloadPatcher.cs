@@ -239,6 +239,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             FilePathByMethod.Clear();
             HotReloadShimRegistry.Clear();
             HotReloadAddedMemberRegistry.Clear();
+            HotReloadAddedFieldStore.Clear();
             TransplantLocalsByMethod.Clear();
             TransplantPreambleLengthByMethod.Clear();
             HotReloadInvocationRegistry.Clear();

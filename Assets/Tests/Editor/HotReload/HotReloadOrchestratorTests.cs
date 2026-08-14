@@ -9,6 +9,8 @@ using NUnit.Framework;
 
 using Newtonsoft.Json.Linq;
 
+using HarmonyLib;
+
 using UnityEditor.Compilation;
 using UnityEngine;
 
@@ -28,6 +30,103 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void TearDown()
         {
             HotReloadPatcher.RevertAll();
+        }
+
+        /// <summary>
+        /// What: the added-field store assembly is injected only when the store flag is set,
+        /// matching the Harmony optional-reference pattern.
+        /// </summary>
+        [Test]
+        public void AppendOptionalShimAssemblyReferences_StoreFlag_AddsToolContractsAssembly()
+        {
+            List<string> references = new List<string>();
+            HotReloadOrchestrator.AppendOptionalShimAssemblyReferences(
+                references,
+                includeHarmonyReference: false,
+                includeAddedFieldStoreReference: true);
+
+            Assert.That(references.Count, Is.EqualTo(1));
+            Assert.That(
+                references[0],
+                Is.EqualTo(typeof(HotReloadAddedFieldStore).Assembly.Location));
+        }
+
+        /// <summary>
+        /// What: both optional flags false leave the reference list unchanged.
+        /// </summary>
+        [Test]
+        public void AppendOptionalShimAssemblyReferences_BothFlagsFalse_AddsNothing()
+        {
+            List<string> references = new List<string>();
+            HotReloadOrchestrator.AppendOptionalShimAssemblyReferences(
+                references,
+                includeHarmonyReference: false,
+                includeAddedFieldStoreReference: false);
+
+            Assert.That(references, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: the Harmony flag still injects Harmony without also adding the store assembly.
+        /// </summary>
+        [Test]
+        public void AppendOptionalShimAssemblyReferences_HarmonyFlagOnly_AddsHarmony()
+        {
+            List<string> references = new List<string>();
+            HotReloadOrchestrator.AppendOptionalShimAssemblyReferences(
+                references,
+                includeHarmonyReference: true,
+                includeAddedFieldStoreReference: false);
+
+            Assert.That(references.Count, Is.EqualTo(1));
+            Assert.That(references[0], Is.EqualTo(typeof(Harmony).Assembly.Location));
+        }
+
+        /// <summary>
+        /// What: a publicized ToolContracts path already in the list is not duplicated when
+        /// the store flag would otherwise append the raw Location (CS1703).
+        /// </summary>
+        [Test]
+        public void AppendOptionalShimAssemblyReferences_ExistingPublicizedStore_DoesNotDuplicate()
+        {
+            string fileName = Path.GetFileName(typeof(HotReloadAddedFieldStore).Assembly.Location);
+            string publicizedPath = Path.Combine(
+                HotReloadConstants.PublicizedRefsRelativeDirectory,
+                fileName);
+            List<string> references = new List<string> { publicizedPath };
+
+            HotReloadOrchestrator.AppendOptionalShimAssemblyReferences(
+                references,
+                includeHarmonyReference: false,
+                includeAddedFieldStoreReference: true);
+
+            Assert.That(references.Count, Is.EqualTo(1));
+            Assert.That(references[0], Is.EqualTo(publicizedPath));
+        }
+
+        /// <summary>
+        /// What: a synthetic worker output with hasAddedFieldRewrites true causes the first-pass
+        /// NeedsAddedFieldStoreReference → AppendOptional chain to include the store assembly.
+        /// </summary>
+        [Test]
+        public void NeedsAddedFieldStoreReference_TrueOutput_AppendsStoreAssembly()
+        {
+            TransformWorkerOutputDto output = new TransformWorkerOutputDto
+            {
+                hasAddedFieldRewrites = true
+            };
+            bool includeStore = HotReloadOrchestrator.NeedsAddedFieldStoreReference(output);
+            List<string> references = new List<string>();
+            HotReloadOrchestrator.AppendOptionalShimAssemblyReferences(
+                references,
+                includeHarmonyReference: false,
+                includeAddedFieldStoreReference: includeStore);
+
+            Assert.That(includeStore, Is.True);
+            Assert.That(references.Count, Is.EqualTo(1));
+            Assert.That(
+                references[0],
+                Is.EqualTo(typeof(HotReloadAddedFieldStore).Assembly.Location));
         }
 
         /// <summary>

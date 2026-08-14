@@ -109,6 +109,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: RevertAll clears the added-field side table so instance and static values
+        /// reinitialize on the next read.
+        /// </summary>
+        [Test]
+        public void RevertAll_ClearsAddedFieldStore()
+        {
+            object host = new object();
+            string instanceKey = HotReloadAddedFieldStore.FormatFieldKey("Host", "count");
+            string staticKey = HotReloadAddedFieldStore.FormatFieldKey("Host", "seed");
+            HotReloadAddedFieldStore.Set(host, instanceKey, 1);
+            HotReloadAddedFieldStore.SetStatic(staticKey, 2);
+
+            HotReloadPatcher.RevertAll();
+
+            Assert.That(HotReloadAddedFieldStore.GetOrInit(host, instanceKey, () => 10), Is.EqualTo(10));
+            Assert.That(HotReloadAddedFieldStore.GetOrInitStatic(staticKey, () => 20), Is.EqualTo(20));
+        }
+
+        /// <summary>
         /// What: DescribeActivePatches lists the patched fixture method after Apply and is empty
         /// after RevertAll.
         /// </summary>

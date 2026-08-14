@@ -271,10 +271,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // BuildShimReferencePaths reads Application.dataPath / platform; stay on main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
             bool includeHarmonyReference = NeedsHarmonyReference(workerOutput);
+            bool includeAddedFieldStoreReference = NeedsAddedFieldStoreReference(workerOutput);
             ShimReferencePathsResult shimReferencePaths = TryBuildShimReferencePaths(
                 compilationAssembly,
                 targetDllPath,
-                includeHarmonyReference);
+                includeHarmonyReference,
+                includeAddedFieldStoreReference);
             if (shimReferencePaths.ErrorMessage != null)
             {
                 outcomes.Add(
@@ -856,6 +858,58 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return HasDelegationEntry(output.entries) || output.hasAccessorDelegates;
         }
 
+        internal static bool NeedsAddedFieldStoreReference(TransformWorkerOutputDto output)
+        {
+            Debug.Assert(output != null, "output must not be null.");
+            return output.hasAddedFieldRewrites;
+        }
+
+        /// <summary>
+        /// Appends Harmony and/or the added-field store assembly when the worker output needs them.
+        /// Visible to tests so injection can be asserted without running CompilationPipeline.
+        /// </summary>
+        internal static void AppendOptionalShimAssemblyReferences(
+            List<string> references,
+            bool includeHarmonyReference,
+            bool includeAddedFieldStoreReference)
+        {
+            Debug.Assert(references != null, "references must not be null.");
+
+            if (includeHarmonyReference)
+            {
+                AppendIfMissingByFileName(references, typeof(Harmony).Assembly.Location);
+            }
+
+            if (includeAddedFieldStoreReference)
+            {
+                AppendIfMissingByFileName(
+                    references,
+                    typeof(HotReloadAddedFieldStore).Assembly.Location);
+            }
+        }
+
+        // Why filename (not full path): ToolContracts lives under ScriptAssemblies and is
+        // publicized, so the list may already hold a publicized copy while Location is the raw
+        // DLL. Adding both is CS1703. Harmony is a plugin outside ScriptAssemblies, so this
+        // collision does not arise there, but the same skip is still correct.
+        private static void AppendIfMissingByFileName(List<string> references, string assemblyPath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(assemblyPath), "assemblyPath must not be empty.");
+            string fileName = Path.GetFileName(assemblyPath);
+            for (int index = 0; index < references.Count; index++)
+            {
+                if (string.Equals(
+                    Path.GetFileName(references[index]),
+                    fileName,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+
+            references.Add(assemblyPath);
+        }
+
         private static bool HasDelegationEntry(TransformWorkerEntryDto[] entries)
         {
             if (entries == null)
@@ -1001,10 +1055,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
             bool includeHarmonyReference = NeedsHarmonyReference(retryOutput);
+            bool includeAddedFieldStoreReference = NeedsAddedFieldStoreReference(retryOutput);
             ShimReferencePathsResult shimReferencePaths = TryBuildShimReferencePaths(
                 compilationAssembly,
                 targetDllPath,
-                includeHarmonyReference);
+                includeHarmonyReference,
+                includeAddedFieldStoreReference);
             if (shimReferencePaths.ErrorMessage != null)
             {
                 // First-pass publicize already succeeded, so a miss here is rare; abandon
@@ -1314,7 +1370,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static ShimReferencePathsResult TryBuildShimReferencePaths(
             UnityCompilationAssembly compilationAssembly,
             string targetDllPath,
-            bool includeHarmonyReference)
+            bool includeHarmonyReference,
+            bool includeAddedFieldStoreReference)
         {
             // Why catch only AssemblyResolutionException: publicize fails when Cecil cannot
             // resolve engine/netstandard types during Write; that is a per-file hot-reload
@@ -1325,7 +1382,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     BuildShimReferencePaths(
                         compilationAssembly,
                         targetDllPath,
-                        includeHarmonyReference),
+                        includeHarmonyReference,
+                        includeAddedFieldStoreReference),
                     null);
             }
             catch (AssemblyResolutionException resolutionException)
@@ -1341,11 +1399,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Publicize ScriptAssemblies references; leave engine/system DLLs untouched. Never include
         /// the original (non-publicized) target assembly. Harmony is added when the worker
         /// emitted a delegation entry or accessor delegates (addedMethod entries can need them).
+        /// The added-field store assembly is added when the worker rewrote added-field accesses.
         /// </summary>
         private static List<string> BuildShimReferencePaths(
             UnityCompilationAssembly compilationAssembly,
             string targetDllPath,
-            bool includeHarmonyReference)
+            bool includeHarmonyReference,
+            bool includeAddedFieldStoreReference)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string scriptAssembliesDirectory = Path.GetFullPath(
@@ -1362,10 +1422,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolverSearchDirectories);
             references.Add(publicizedTarget);
 
-            if (includeHarmonyReference)
-            {
-                references.Add(typeof(Harmony).Assembly.Location);
-            }
+            AppendOptionalShimAssemblyReferences(
+                references,
+                includeHarmonyReference,
+                includeAddedFieldStoreReference);
 
             if (compilationAssembly.allReferences == null)
             {
