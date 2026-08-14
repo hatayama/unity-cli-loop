@@ -259,7 +259,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(response, Is.Not.Null);
             Assert.That(response.Success, Is.True);
             Assert.That(response.ClearedCount, Is.EqualTo(0));
-            Assert.That(response.Message, Is.EqualTo("No active hot-reload patches to revert."));
+            Assert.That(response.Message, Is.EqualTo("No active hot-reload changes to revert."));
         }
 
         /// <summary>
@@ -328,6 +328,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
                     + "7 unchanged methods were left untouched."));
             Assert.That(response.UnchangedTotal, Is.EqualTo(7));
+        }
+
+        /// <summary>
+        /// What: an Added outcome appends Added: N to the apply message.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithAddedOutcome_AppendsAddedCount()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Caller", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Added("Type.AddedPing", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 2);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Methods[1].Kind, Is.EqualTo(HotReloadConstants.AddedMemberStatusKind));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=2. Added: 1."));
         }
 
         /// <summary>

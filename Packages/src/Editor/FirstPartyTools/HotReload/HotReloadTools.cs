@@ -122,23 +122,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static HotReloadResponse ExecuteRevertAll()
         {
-            int clearedCount = HotReloadPatcher.ActivePatchCount;
+            int clearedCount = HotReloadPatcher.ActiveChangeCount;
             HotReloadPatcher.RevertAll();
             return new HotReloadResponse
             {
                 Success = true,
                 ClearedCount = clearedCount,
-                ActivePatchTotal = HotReloadPatcher.ActivePatchCount,
+                ActivePatchTotal = HotReloadPatcher.ActiveChangeCount,
                 Message = clearedCount == 0
-                    ? "No active hot-reload patches to revert."
-                    : "Reverted all active hot-reload patches."
+                    ? "No active hot-reload changes to revert."
+                    : "Reverted all active hot-reload changes."
             };
         }
 
         private static HotReloadResponse ExecuteStatus()
         {
             IReadOnlyList<HotReloadActivePatchInfo> active = HotReloadPatcher.DescribeActivePatches();
-            List<HotReloadMethodResult> methods = new List<HotReloadMethodResult>(active.Count);
+            IReadOnlyList<HotReloadAddedMemberInfo> addedMembers = HotReloadAddedMemberRegistry.Describe();
+            List<HotReloadMethodResult> methods =
+                new List<HotReloadMethodResult>(active.Count + addedMembers.Count);
             for (int index = 0; index < active.Count; index++)
             {
                 HotReloadActivePatchInfo patch = active[index];
@@ -152,13 +154,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     });
             }
 
-            int count = active.Count;
+            for (int index = 0; index < addedMembers.Count; index++)
+            {
+                HotReloadAddedMemberInfo added = addedMembers[index];
+                methods.Add(
+                    new HotReloadMethodResult
+                    {
+                        Kind = HotReloadConstants.AddedMemberStatusKind,
+                        Method = added.MethodKey,
+                        FilePath = added.FilePath
+                    });
+            }
+
+            int count = methods.Count;
             return new HotReloadResponse
             {
                 Success = true,
                 Methods = methods,
                 ActivePatchTotal = count,
-                Message = $"{count} method(s) currently patched."
+                Message = $"{count} change(s) currently active."
             };
         }
 
@@ -305,6 +319,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string message;
+            int addedCount = CountAddedOutcomes(result);
             if (hasFailure)
             {
                 message = "Hot reload finished with one or more Failed method outcomes. See Methods.";
@@ -314,7 +329,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message = "Hot reload found no patchable method bodies in the given files; nothing was changed. "
                     + "Hot reload only replaces existing ordinary method bodies; use uloop compile for other edits.";
             }
-            else if (result.PatchedTotal == 0)
+            else if (result.PatchedTotal == 0 && addedCount == 0)
             {
                 message = "Hot reload finished with no methods patched. See Methods for Skipped reasons.";
             }
@@ -322,6 +337,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 message = "Hot reload applied. PatchedTotal=" + result.PatchedTotal
                     + ", ActivePatchTotal=" + result.ActivePatchTotal + ".";
+                if (addedCount > 0)
+                {
+                    message += " Added: " + addedCount + ".";
+                }
             }
 
             if (result.UnchangedTotal > 0)
@@ -348,6 +367,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return message;
+        }
+
+        private static int CountAddedOutcomes(HotReloadOrchestratorResult result)
+        {
+            int addedCount = 0;
+            for (int index = 0; index < result.Methods.Count; index++)
+            {
+                if (result.Methods[index].Kind == HotReloadMethodOutcomeKind.Added)
+                {
+                    addedCount++;
+                }
+            }
+
+            return addedCount;
         }
 
         private static HotReloadResponse CreateValidationFailure(string message)

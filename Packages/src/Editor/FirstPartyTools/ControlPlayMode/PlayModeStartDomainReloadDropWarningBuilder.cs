@@ -27,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return "Entering Play Mode triggers a domain reload that will discard "
                     + activeHotReloadPatchCount
-                    + " active hot-reload patch(es) and "
+                    + " active hot-reload change(s) and "
                     + activePausePointCount
                     + " enabled pause point(s). The new session runs the last compiled assemblies, so hot-reloaded edits that were never compiled are not in effect — run `uloop compile` before Play to keep them, or re-apply `uloop hot-reload` and re-enable pause points after Play Mode starts.";
             }
@@ -36,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return "Entering Play Mode triggers a domain reload that will discard "
                     + activeHotReloadPatchCount
-                    + " active hot-reload patch(es). The new session runs the last compiled assemblies, so hot-reloaded edits that were never compiled are not in effect — run `uloop compile` before Play to keep them, or re-apply `uloop hot-reload` after Play Mode starts.";
+                    + " active hot-reload change(s). The new session runs the last compiled assemblies, so hot-reloaded edits that were never compiled are not in effect — run `uloop compile` before Play to keep them, or re-apply `uloop hot-reload` after Play Mode starts.";
             }
 
             return "Entering Play Mode triggers a domain reload that will discard "

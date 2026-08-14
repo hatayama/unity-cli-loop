@@ -44,21 +44,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string BurstCompileAttributeFullName = "Unity.Burst.BurstCompileAttribute";
 
-        // Why not "applied": this PR defers added-method ApplyEntry (Skipped). Call sites in
-        // edited bodies already route to the shim; PR-2 replaces the skip with Added.
+        // Why not "applied": this sentence is the cross-file / unsupported-kind hint appended
+        // to NewMember compile failures. Same-file added methods are applied through the shim.
         public const string NewMemberCompileHint =
-            "Same-file added methods are not applied in this pass; call sites in edited bodies already "
-            + "route to the shim. Cross-file references and unsupported member kinds still require a "
-            + "real compile (uloop compile).";
+            "Same-file added methods are applied through the shim assembly. Cross-file references "
+            + "and unsupported member kinds still require a real compile (uloop compile).";
 
         // Wire value for TransformWorkerEntryDto.patchKind when the worker emits a shim for a
         // method that exists only in the edited source. Keep in sync with PatchKinds.AddedMethod
         // in TransformWorker~/TransformWorker.cs.
         public const string PatchKindAddedMethod = "addedMethod";
 
-        // Why Skipped (not Failed): ApplyEntry cannot Resolve an added method until PR-2.
-        public const string AddedMethodDeferredSkipReason =
-            "Added-method application lands in the next change; call sites in edited bodies already route to the shim.";
+        // --status Kind for rows sourced from HotReloadAddedMemberRegistry (no compiled MethodBase).
+        public const string AddedMemberStatusKind = "Added";
 
         // Isolation retry drops callers of a failed added shim so retry does not CS0103; they
         // are not Failed (the compile error was in the added body) and must not stay silent.
